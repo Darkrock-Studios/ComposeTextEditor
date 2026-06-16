@@ -136,6 +136,15 @@ fun TextEditorState.moveToPreviousWord() {
 	cursor.updatePosition(getOffsetAtCharacter(newPosition))
 }
 
+fun TextEditorState.moveToDocumentStart() {
+	cursor.updatePosition(CharLineOffset(0, 0))
+}
+
+fun TextEditorState.moveToDocumentEnd() {
+	val lastLine = textLines.size - 1
+	cursor.updatePosition(CharLineOffset(lastLine, textLines[lastLine].length))
+}
+
 internal fun TextEditorState.moveCursorPageUp() {
 	// Get current viewport boundaries
 	val viewportTop = scrollState.value

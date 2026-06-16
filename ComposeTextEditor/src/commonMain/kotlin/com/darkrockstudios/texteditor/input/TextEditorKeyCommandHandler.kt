@@ -1,10 +1,31 @@
 package com.darkrockstudios.texteditor.input
 
-import androidx.compose.ui.input.key.*
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEvent
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isMetaPressed
+import androidx.compose.ui.input.key.isShiftPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.key.utf16CodePoint
 import androidx.compose.ui.platform.Clipboard
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.buildAnnotatedString
 import com.darkrockstudios.texteditor.CharLineOffset
+import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.clipboard.ClipboardHelper
-import com.darkrockstudios.texteditor.state.*
+import com.darkrockstudios.texteditor.input.TextEditorKeyCommandHandler.Companion.TAB_SIZE
+import com.darkrockstudios.texteditor.state.TextEditorState
+import com.darkrockstudios.texteditor.state.moveCursorDown
+import com.darkrockstudios.texteditor.state.moveCursorPageDown
+import com.darkrockstudios.texteditor.state.moveCursorPageUp
+import com.darkrockstudios.texteditor.state.moveCursorToLineEnd
+import com.darkrockstudios.texteditor.state.moveCursorUp
+import com.darkrockstudios.texteditor.state.moveToDocumentEnd
+import com.darkrockstudios.texteditor.state.moveToDocumentStart
+import com.darkrockstudios.texteditor.state.moveToNextWord
+import com.darkrockstudios.texteditor.state.moveToPreviousWord
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
@@ -13,6 +34,10 @@ import kotlinx.coroutines.launch
  * Also handles character input for desktop platforms via KEY_TYPED events.
  */
 internal class TextEditorKeyCommandHandler {
+
+	private companion object {
+		const val TAB_SIZE = 4
+	}
 
 	/**
 	 * Handle a key event and return true if it was consumed.
@@ -93,6 +118,11 @@ internal class TextEditorKeyCommandHandler {
 				true
 			}
 
+			keyEvent.isCtrlPressed && keyEvent.isShiftPressed && keyEvent.key == Key.Z -> {
+				state.redo()
+				true
+			}
+
 			keyEvent.isCtrlPressed && keyEvent.key == Key.Z -> {
 				state.undo()
 				true
@@ -103,13 +133,28 @@ internal class TextEditorKeyCommandHandler {
 				true
 			}
 
+			keyEvent.isCtrlPressed && keyEvent.key == Key.Delete -> {
+				handleDeleteNextWord(state)
+				true
+			}
+
 			keyEvent.key == Key.Delete -> {
 				handleDelete(state)
 				true
 			}
 
+			keyEvent.isCtrlPressed && keyEvent.key == Key.Backspace -> {
+				handleDeletePreviousWord(state)
+				true
+			}
+
 			keyEvent.key == Key.Backspace -> {
 				handleBackspace(state)
+				true
+			}
+
+			keyEvent.key == Key.Tab -> {
+				handleTab(keyEvent, state)
 				true
 			}
 
@@ -220,6 +265,124 @@ internal class TextEditorKeyCommandHandler {
 		}
 	}
 
+	private fun handleDeletePreviousWord(state: TextEditorState) {
+		if (state.selector.selection != null) {
+			state.selector.deleteSelection()
+			return
+		}
+		val wordEnd = state.cursorPosition
+		state.moveToPreviousWord()
+		val wordStart = state.cursorPosition
+		if (wordStart != wordEnd) {
+			state.delete(TextEditorRange(wordStart, wordEnd))
+		}
+	}
+
+	private fun handleDeleteNextWord(state: TextEditorState) {
+		if (state.selector.selection != null) {
+			state.selector.deleteSelection()
+			return
+		}
+		val wordStart = state.cursorPosition
+		state.moveToNextWord()
+		val wordEnd = state.cursorPosition
+		if (wordStart != wordEnd) {
+			state.delete(TextEditorRange(wordStart, wordEnd))
+		}
+	}
+
+	private fun handleTab(keyEvent: KeyEvent, state: TextEditorState) {
+		if (keyEvent.isShiftPressed) {
+			handleOutdent(state)
+		} else {
+			handleIndent(state)
+		}
+	}
+
+	private fun handleIndent(state: TextEditorState) {
+		val selection = state.selector.selection
+		if (selection != null && selection.start.line != selection.end.line) {
+			indentLineRange(state, selection.start.line, selection.end.line)
+		} else {
+			if (selection != null) {
+				state.selector.deleteSelection()
+			}
+			state.insertStringAtCursor(" ".repeat(TAB_SIZE))
+		}
+	}
+
+	private fun handleOutdent(state: TextEditorState) {
+		val selection = state.selector.selection
+		if (selection != null) {
+			outdentLineRange(state, selection.start.line, selection.end.line)
+		} else {
+			outdentCurrentLine(state)
+		}
+	}
+
+	private fun indentLineRange(state: TextEditorState, startLine: Int, endLine: Int) {
+		val prefix = " ".repeat(TAB_SIZE)
+		val newText = buildAnnotatedString {
+			for (i in startLine..endLine) {
+				if (i > startLine) append('\n')
+				append(prefix)
+				append(state.textLines[i])
+			}
+		}
+		val range = TextEditorRange(
+			CharLineOffset(startLine, 0),
+			CharLineOffset(endLine, state.textLines[endLine].length)
+		)
+		state.replace(range, newText)
+		state.selector.updateSelection(
+			CharLineOffset(startLine, 0),
+			CharLineOffset(endLine, state.textLines[endLine].length)
+		)
+	}
+
+	private fun outdentLineRange(state: TextEditorState, startLine: Int, endLine: Int) {
+		var changed = false
+		val newText = buildAnnotatedString {
+			for (i in startLine..endLine) {
+				if (i > startLine) append('\n')
+				val line = state.textLines[i]
+				val remove = leadingOutdentWidth(line)
+				if (remove > 0) changed = true
+				append(line.subSequence(remove, line.length))
+			}
+		}
+		if (!changed) return
+
+		val range = TextEditorRange(
+			CharLineOffset(startLine, 0),
+			CharLineOffset(endLine, state.textLines[endLine].length)
+		)
+		state.replace(range, newText)
+		state.selector.updateSelection(
+			CharLineOffset(startLine, 0),
+			CharLineOffset(endLine, state.textLines[endLine].length)
+		)
+	}
+
+	private fun outdentCurrentLine(state: TextEditorState) {
+		val line = state.cursorPosition.line
+		val remove = leadingOutdentWidth(state.textLines[line])
+		if (remove == 0) return
+
+		val cursorChar = state.cursorPosition.char
+		state.delete(TextEditorRange(CharLineOffset(line, 0), CharLineOffset(line, remove)))
+		state.cursor.updatePosition(CharLineOffset(line, (cursorChar - remove).coerceAtLeast(0)))
+	}
+
+	/** Leading indentation to strip for one outdent level: a single hard tab, else up to [TAB_SIZE] spaces. */
+	private fun leadingOutdentWidth(line: AnnotatedString): Int {
+		if (line.isEmpty()) return 0
+		if (line[0] == '\t') return 1
+		var count = 0
+		while (count < TAB_SIZE && count < line.length && line[count] == ' ') count++
+		return count
+	}
+
 	private fun handleEnter(state: TextEditorState) {
 		if (state.selector.selection != null) {
 			state.selector.deleteSelection()
@@ -286,22 +449,34 @@ internal class TextEditorKeyCommandHandler {
 	private fun handleHome(keyEvent: KeyEvent, state: TextEditorState) {
 		if (keyEvent.isShiftPressed) {
 			val initialPosition = state.cursorPosition
-			state.cursor.moveToLineStart()
+			if (keyEvent.isCtrlPressed)
+				state.moveToDocumentStart()
+			else
+				state.cursor.moveToLineStart()
 			updateSelectionForCursorMovement(state, initialPosition)
 		} else {
 			state.selector.clearSelection()
-			state.cursor.moveToLineStart()
+			if (keyEvent.isCtrlPressed)
+				state.moveToDocumentStart()
+			else
+				state.cursor.moveToLineStart()
 		}
 	}
 
 	private fun handleEnd(keyEvent: KeyEvent, state: TextEditorState) {
 		if (keyEvent.isShiftPressed) {
 			val initialPosition = state.cursorPosition
-			state.moveCursorToLineEnd()
+			if (keyEvent.isCtrlPressed)
+				state.moveToDocumentEnd()
+			else
+				state.moveCursorToLineEnd()
 			updateSelectionForCursorMovement(state, initialPosition)
 		} else {
 			state.selector.clearSelection()
-			state.moveCursorToLineEnd()
+			if (keyEvent.isCtrlPressed)
+				state.moveToDocumentEnd()
+			else
+				state.moveCursorToLineEnd()
 		}
 	}
 
