@@ -53,16 +53,20 @@ class TextEditManager(private val state: TextEditorState) {
 		state.cursor.updatePosition(operation.cursorAfter)
 		state.invalidateCopiedRichSpans()
 		state.richSpanManager.updateSpans(operation, metadata)
-		// Decoration spans (spell-check underlines) are view overlays, not user
-		// edits: they must never enter the undo history or clear the pending redo.
-		val isDecoration = operation is TextEditOperation.RichSpan && !operation.style.isUndoable
+		// Decoration spans (spell-check underlines, find highlights) are view
+		// overlays, not changes to the document's content. They must stay out of
+		// the undo history (no recordEdit / redo clear) AND off the edit stream, so
+		// consumers watching editOperations don't mistake an overlay for a real edit.
+		val isDecoration = operation is TextEditOperation.RichSpan && operation.style.isDecoration
 		if (addToHistory && !isDecoration) {
 			history.recordEdit(operation, metadata ?: OperationMetadata())
 		}
 
 		state.updateBookKeeping()
 
-		_editOperations.tryEmit(operation)
+		if (!isDecoration) {
+			_editOperations.tryEmit(operation)
+		}
 	}
 
 	private fun applyInsert(operation: TextEditOperation.Insert): OperationMetadata? {

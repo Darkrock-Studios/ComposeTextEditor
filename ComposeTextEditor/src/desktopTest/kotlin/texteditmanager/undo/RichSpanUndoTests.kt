@@ -8,6 +8,8 @@ import com.darkrockstudios.texteditor.richstyle.SpellCheckStyle
 import com.darkrockstudios.texteditor.state.TextEditOperation
 import com.darkrockstudios.texteditor.state.TextEditorState
 import io.mockk.mockk
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -148,5 +150,27 @@ class RichSpanUndoTests {
 		// Redo still restores the typed character
 		state.redo()
 		assertEquals("Hello World!", state.textLines[0].text)
+	}
+
+	@Test
+	fun `decoration span stays off the edit stream while content spans emit`() {
+		val emitted = mutableListOf<TextEditOperation>()
+		val collectJob = scope.launch(start = CoroutineStart.UNDISPATCHED) {
+			state.editOperations.collect { emitted.add(it) }
+		}
+
+		state.setText("Hello World")
+		val range = TextEditorRange(
+			start = CharLineOffset(0, 0),
+			end = CharLineOffset(0, 5)
+		)
+		state.addRichSpan(range, SpellCheckStyle)       // decoration: filtered out
+		state.addRichSpan(range, OrderedListSpanStyle)  // content: emits
+		scope.testScheduler.advanceUntilIdle()
+		collectJob.cancel()
+
+		assertEquals(1, emitted.size)
+		val op = emitted.single()
+		assertTrue(op is TextEditOperation.RichSpan && op.style === OrderedListSpanStyle)
 	}
 }

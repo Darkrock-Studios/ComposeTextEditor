@@ -16,7 +16,7 @@ import kotlin.math.PI
 import kotlin.math.sin
 
 object SpellCheckStyle : RichSpanStyle {
-	override val isUndoable: Boolean = false
+	override val isDecoration: Boolean = true
 
 	private val color: Color = Color.Red
 	private val waveLengthDp = 15.dp

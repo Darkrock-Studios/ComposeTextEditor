@@ -60,13 +60,18 @@ interface RichSpanStyle {
 	val stickyAtStart: Boolean get() = false
 
 	/**
-	 * Whether adding or removing a span of this style is a user edit that belongs
-	 * in the undo history. Content spans (highlight, link, horizontal rule, lists)
-	 * default to `true`. Ephemeral decorations painted by the editor itself —
-	 * spell-check underlines, transient find highlights — override this to `false`
-	 * so they never push onto the undo stack or clear the redo stack.
+	 * Whether a span of this style is an ephemeral view overlay rather than a
+	 * change to the document's content. Content spans (highlight, link, horizontal
+	 * rule, lists — the things that round-trip through markdown) default to
+	 * `false`. Decorations painted by the editor itself — spell-check underlines,
+	 * transient find highlights — override this to `true`.
+	 *
+	 * A decoration is structurally invisible: adding or removing one never enters
+	 * the undo history, never clears the redo stack, and never emits on
+	 * [com.darkrockstudios.texteditor.state.TextEditorState.editOperations], so
+	 * consumers watching the edit stream don't mistake an overlay for a real edit.
 	 */
-	val isUndoable: Boolean get() = true
+	val isDecoration: Boolean get() = false
 }
 
 /**
