@@ -14,7 +14,10 @@ import com.darkrockstudios.texteditor.state.WordSegment
 import com.darkrockstudios.texteditor.state.getRichSpansInRange
 import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Before
 import org.junit.Test
@@ -153,6 +156,45 @@ class SpellCheckStateTest {
 		// Assert
 		assertFalse(spellCheckState.spellCheckingEnabled)
 		assertTrue(textState.getRichSpansInRange(range).isEmpty())
+	}
+
+	@Test
+	fun `cancelling a full re-check mid-flight does not wipe existing spans`() = runTest {
+		val word = "helllo"
+		textState.setText(word)
+		val range = TextEditorRange(
+			start = CharLineOffset(0, 0),
+			end = CharLineOffset(0, 6)
+		)
+
+		// Existing state: one spell span on the misspelled word
+		spellChecker.correctWords = emptySet()
+		spellCheckState.runFullSpellCheck()
+		assertEquals(1, textState.getRichSpansInRange(range).count { it.style is SpellCheckStyle })
+
+		// A re-check whose word lookups suspend until released
+		val gate = CompletableDeferred<Unit>()
+		spellCheckState.spellChecker = object : EditorSpellChecker {
+			override suspend fun isCorrectWord(word: String): Boolean {
+				gate.await()
+				return false
+			}
+
+			override suspend fun suggestions(
+				input: String,
+				scope: EditorSpellChecker.Scope,
+				closestOnly: Boolean,
+			): List<Suggestion> = emptyList()
+		}
+
+		val job = launch { spellCheckState.runFullSpellCheck() }
+		runCurrent() // let the re-check reach the suspended word lookup
+		job.cancel() // a recomposition cancels it mid-flight
+		gate.complete(Unit)
+		runCurrent()
+
+		// The original span must survive a cancelled re-check, not be left wiped
+		assertEquals(1, textState.getRichSpansInRange(range).count { it.style is SpellCheckStyle })
 	}
 
 	@Test
