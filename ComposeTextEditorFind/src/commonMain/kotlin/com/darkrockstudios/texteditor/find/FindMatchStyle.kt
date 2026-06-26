@@ -17,6 +17,8 @@ import com.darkrockstudios.texteditor.state.TextEditorState
 class FindMatchStyle(
 	private val color: Color = Color(0x60FFEB3B) // Semi-transparent yellow
 ) : RichSpanStyle {
+	override val isUndoable: Boolean = false
+
 	override fun DrawScope.drawCustomStyle(
 		layoutResult: TextLayoutResult,
 		lineWrap: LineWrap,
@@ -54,6 +56,8 @@ class FindMatchStyle(
 class FindCurrentMatchStyle(
 	private val color: Color = Color(0x80FF9800) // Semi-transparent orange
 ) : RichSpanStyle {
+	override val isUndoable: Boolean = false
+
 	override fun DrawScope.drawCustomStyle(
 		layoutResult: TextLayoutResult,
 		lineWrap: LineWrap,

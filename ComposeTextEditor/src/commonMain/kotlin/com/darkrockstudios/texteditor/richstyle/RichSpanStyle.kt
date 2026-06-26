@@ -58,6 +58,15 @@ interface RichSpanStyle {
 	 * character rather than push the span off the end.
 	 */
 	val stickyAtStart: Boolean get() = false
+
+	/**
+	 * Whether adding or removing a span of this style is a user edit that belongs
+	 * in the undo history. Content spans (highlight, link, horizontal rule, lists)
+	 * default to `true`. Ephemeral decorations painted by the editor itself —
+	 * spell-check underlines, transient find highlights — override this to `false`
+	 * so they never push onto the undo stack or clear the redo stack.
+	 */
+	val isUndoable: Boolean get() = true
 }
 
 /**
