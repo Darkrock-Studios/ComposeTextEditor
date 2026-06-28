@@ -77,7 +77,7 @@ dokka {
 		includes.from("Module.md")
 		sourceLink {
 			localDirectory.set(rootDir)
-			remoteUrl("https://github.com/Wavesonics/ComposeTextEditorLibrary/blob/main")
+			remoteUrl("https://github.com/Darkrock-Studios/ComposeTextEditorLibrary/blob/main")
 			remoteLineSuffix.set("#L")
 		}
 	}
@@ -94,7 +94,7 @@ mavenPublishing {
 	pom {
 		name.set("Compose Text Editor Find")
 		description.set("Find functionality addon for Compose Text Editor.")
-		url.set("https://github.com/Wavesonics/ComposeTextEditorLibrary")
+		url.set("https://github.com/Darkrock-Studios/ComposeTextEditorLibrary")
 
 		licenses {
 			license {
@@ -104,12 +104,12 @@ mavenPublishing {
 		}
 		issueManagement {
 			system.set("Github")
-			url.set("https://github.com/Wavesonics/ComposeTextEditorLibrary/issues")
+			url.set("https://github.com/Darkrock-Studios/ComposeTextEditorLibrary/issues")
 		}
 		scm {
-			connection.set("scm:git:git://github.com/Wavesonics/ComposeTextEditorLibrary.git")
-			developerConnection.set("scm:git:ssh://github.com/Wavesonics/ComposeTextEditorLibrary.git")
-			url.set("https://github.com/Wavesonics/ComposeTextEditorLibrary")
+			connection.set("scm:git:git://github.com/Darkrock-Studios/ComposeTextEditorLibrary.git")
+			developerConnection.set("scm:git:ssh://github.com/Darkrock-Studios/ComposeTextEditorLibrary.git")
+			url.set("https://github.com/Darkrock-Studios/ComposeTextEditorLibrary")
 		}
 		developers {
 			developer {

@@ -2,8 +2,8 @@
 
 [![Maven Central](https://img.shields.io/maven-central/v/com.darkrockstudios/composetexteditor.svg)](https://search.maven.org/artifact/com.darkrockstudios/composetexteditor)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
-[![CI Build](https://github.com/Wavesonics/ComposeTextEditorLibrary/actions/workflows/ci-build.yml/badge.svg)](https://github.com/Wavesonics/ComposeTextEditorLibrary/actions/workflows/ci-build.yml)
-[![API Docs](https://img.shields.io/badge/docs-API_reference-blue.svg)](https://wavesonics.github.io/ComposeTextEditorLibrary/api/)
+[![CI Build](https://github.com/Darkrock-Studios/ComposeTextEditorLibrary/actions/workflows/ci-build.yml/badge.svg)](https://github.com/Darkrock-Studios/ComposeTextEditorLibrary/actions/workflows/ci-build.yml)
+[![API Docs](https://img.shields.io/badge/docs-API_reference-blue.svg)](https://darkrock-studios.github.io/ComposeTextEditorLibrary/api/)
 
 [![KMP](https://img.shields.io/badge/platforms:-blue.svg?logo=kotlin)](http://kotlinlang.org)
 ![badge-jvm] ![badge-android] ![badge-wasm] ![badge-ios]
@@ -36,8 +36,9 @@ And now, it's working, and at this point, working pretty well.
   - Inline styles (bold, italics, ect)
   - Block styles (code fence, lists, images)
 
-You can [Give it a try here](https://wavesonics.github.io/ComposeTextEditorLibrary/), or
-browse the [API reference & recipes](https://wavesonics.github.io/ComposeTextEditorLibrary/api/).
+You can [Give it a try here](https://darkrock-studios.github.io/ComposeTextEditorLibrary/), or
+browse
+the [API reference & recipes](https://darkrock-studios.github.io/ComposeTextEditorLibrary/api/).
 
 ![sample_screenshot_00.png](sample_screenshot_00.png)
 

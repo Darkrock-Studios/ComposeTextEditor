@@ -5,7 +5,7 @@ A Kotlin Multiplatform rich text editor for Compose — a from-scratch alternati
 fences, images), efficient long-form rendering, and a per-edit change stream.
 
 > **Try it live:
-** [interactive demo running on Wasm »](https://wavesonics.github.io/ComposeTextEditorLibrary/)
+** [interactive demo running on Wasm »](https://darkrock-studios.github.io/ComposeTextEditorLibrary/)
 
 ```kotlin
 implementation("com.darkrockstudios:composetexteditor:2.0.0")

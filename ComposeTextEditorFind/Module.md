@@ -4,7 +4,7 @@ A drop-in find & replace UI for the Compose Text Editor: a ready-made search bar
 live-updating match highlighting, next/previous navigation, and replace / replace-all.
 
 > **Try it live:
-** [open the Find demo on Wasm »](https://wavesonics.github.io/ComposeTextEditorLibrary/)
+** [open the Find demo on Wasm »](https://darkrock-studios.github.io/ComposeTextEditorLibrary/)
 
 ```kotlin
 implementation("com.darkrockstudios:composetexteditor-find:2.0.0")

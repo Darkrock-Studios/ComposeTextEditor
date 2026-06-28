@@ -84,7 +84,8 @@ class TextEditorState(
 
 	/**
 	 * Theming colors for line-block gutter markers, mirrored from
-	 * [TextEditorStyle] by `BasicTextEditor`. `Color.Unspecified` means "use the
+	 * [TextEditorStyle][com.darkrockstudios.texteditor.TextEditorStyle] by
+	 * `BasicTextEditor`. `Color.Unspecified` means "use the
 	 * span's hardcoded fallback" so a state created without a host editor (e.g.
 	 * tests) still renders sensibly.
 	 */

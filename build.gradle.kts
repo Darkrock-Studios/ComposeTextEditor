@@ -23,7 +23,7 @@ dokka {
 	moduleName.set("Compose Text Editor")
 	dokkaPublications.html {
 		// Lands in a subfolder of the GitHub Pages site so it coexists with the
-		// WASM sample at the site root: wavesonics.github.io/ComposeTextEditorLibrary/api/
+		// WASM sample at the site root: darkrock-studios.github.io/ComposeTextEditorLibrary/api/
 		outputDirectory.set(rootDir.resolve("docs/api"))
 	}
 }

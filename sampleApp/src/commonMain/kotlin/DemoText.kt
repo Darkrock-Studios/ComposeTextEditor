@@ -193,7 +193,7 @@ Span deduplication plays a significant role by merging overlapping spans to redu
 
 const val EXAMPLE_MARKDOWN = """# ComposeTextEditor
 
-A **rich text** editor for *Compose Multiplatform* with `markdown` support — [try it online](https://wavesonics.github.io/ComposeTextEditorLibrary/).
+A **rich text** editor for *Compose Multiplatform* with `markdown` support — [try it online](https://Darkrock-Studios.github.io/ComposeTextEditorLibrary/).
 
 ![Highway at night](sample.jpg)
 

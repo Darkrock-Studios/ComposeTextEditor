@@ -35,7 +35,8 @@ data class LineWrap(
 	 */
 	val paragraphTop: Float = offset.y,
 	/**
-	 * If non-null, overrides the line's visual height. Used by [BlockSpanStyle]
+	 * If non-null, overrides the line's visual height. Used by
+	 * [BlockSpanStyle][com.darkrockstudios.texteditor.richstyle.BlockSpanStyle]
 	 * spans (e.g. block images) to occupy more vertical space than the underlying
 	 * placeholder text would.
 	 */
