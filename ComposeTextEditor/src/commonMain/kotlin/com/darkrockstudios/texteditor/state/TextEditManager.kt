@@ -40,6 +40,12 @@ class TextEditManager(private val state: TextEditorState) {
 		if (!isSpanOperation && state.selector.selection != null) {
 			state.selector.clearSelection()
 		}
+		// Composing offsets go equally stale when content shifts underneath them.
+		// The IME pipeline re-sets its range after each composition edit, so
+		// clearing here never drops a live composition's freshly set range.
+		if (!isSpanOperation && state.composingRange != null) {
+			state.clearComposingRange()
+		}
 
 		val metadata = when (operation) {
 			is TextEditOperation.Insert -> applyInsert(operation)

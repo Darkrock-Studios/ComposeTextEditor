@@ -113,7 +113,9 @@ internal fun TextEditorState.imePerformNewline() {
  * character index at which the inserted text starts.
  */
 private fun TextEditorState.replaceComposingOrInsert(text: String): Int {
-	val composing = composingRange
+	// A composing range that survived an out-of-pipeline edit can point past the
+	// current document; treating it as no-composition inserts safely at the cursor.
+	val composing = composingRange?.takeIf { isWithinDocument(it) }
 	return if (composing != null) {
 		val start = getCharacterIndex(composing.start)
 		// inheritStyle keeps autocorrect/composition from stripping bold/italic etc.
@@ -125,6 +127,14 @@ private fun TextEditorState.replaceComposingOrInsert(text: String): Int {
 		insertStringAtCursor(text)
 		start
 	}
+}
+
+/** True if [range] is well-ordered and both endpoints index into the current document. */
+private fun TextEditorState.isWithinDocument(range: TextEditorRange): Boolean {
+	if (!range.validate()) return false
+	if (range.start.line !in textLines.indices || range.end.line !in textLines.indices) return false
+	return range.start.char in 0..textLines[range.start.line].length &&
+			range.end.char in 0..textLines[range.end.line].length
 }
 
 /**
