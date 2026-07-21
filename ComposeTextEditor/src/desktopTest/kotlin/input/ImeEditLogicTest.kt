@@ -2,7 +2,9 @@ package input
 
 import androidx.compose.ui.text.AnnotatedString
 import com.darkrockstudios.texteditor.CharLineOffset
+import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.input.imeCommitText
+import com.darkrockstudios.texteditor.input.imeDeleteSurroundingText
 import com.darkrockstudios.texteditor.input.imeDeleteSurroundingTextInCodePoints
 import com.darkrockstudios.texteditor.input.imeFinishComposing
 import com.darkrockstudios.texteditor.input.imeSetComposingText
@@ -136,5 +138,57 @@ class ImeEditLogicTest {
 
 		assertEquals("abc", text(), "Text is kept as-is")
 		assertNull(state.composingRange, "Composing region is dropped")
+	}
+
+	@Test
+	fun `deleteSurroundingText behind the composing text then setComposingText does not crash`() {
+		// AnySoftKeyboard deletes through/behind the composing region with
+		// deleteSurroundingText mid-composition (hammer-editor #732).
+		state.setText("hello ")
+		moveCursorToCharIndex(6)
+		state.imeSetComposingText("wor", newCursorPosition = 1) // "hello wor"
+		state.imeDeleteSurroundingText(beforeLength = 5, afterLength = 0) // "hell"
+
+		state.imeSetComposingText("world", newCursorPosition = 1)
+
+		assertEquals("hellworld", text(), "Composition restarts at the cursor after the delete")
+		assertTrue(state.composingRange != null, "New composition should be active")
+	}
+
+	@Test
+	fun `backspace during composition then setComposingText does not crash`() {
+		// Some keyboards deliver backspace as a raw KEYCODE_DEL key event while a
+		// composition is active, bypassing the IME edit pipeline entirely.
+		state.imeSetComposingText("abc", newCursorPosition = 1)
+		state.backspaceAtCursor() // "ab"
+
+		state.imeSetComposingText("abcd", newCursorPosition = 1)
+
+		assertEquals("ababcd", text(), "Composition restarts at the cursor after the backspace")
+	}
+
+	@Test
+	fun `deleting a line during composition then setComposingText does not crash`() {
+		state.setText("line1\nline2")
+		moveCursorToCharIndex(11)
+		state.imeSetComposingText("xyz", newCursorPosition = 1) // "line1\nline2xyz"
+		state.delete(
+			TextEditorRange(CharLineOffset(0, 0), CharLineOffset(1, 0))
+		) // "line2xyz" — the composing region's line index no longer exists
+
+		state.imeSetComposingText("xy", newCursorPosition = 1)
+
+		assertEquals("xyline2xyz", text())
+	}
+
+	@Test
+	fun `out-of-bounds composing range is ignored instead of crashing`() {
+		state.setText("ab")
+		moveCursorToCharIndex(2)
+		state.composingRange = TextEditorRange(CharLineOffset(0, 5), CharLineOffset(0, 9))
+
+		state.imeSetComposingText("c", newCursorPosition = 1)
+
+		assertEquals("abc", text(), "Stale range is treated as no-composition")
 	}
 }
