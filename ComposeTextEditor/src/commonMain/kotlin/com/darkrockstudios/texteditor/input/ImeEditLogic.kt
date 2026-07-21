@@ -27,7 +27,8 @@ import com.darkrockstudios.texteditor.state.TextEditorState
 internal fun TextEditorState.imeCommitText(text: String, newCursorPosition: Int) {
 	val insertStart = replaceComposingOrInsert(text)
 	val insertEnd = insertStart + text.length
-	// replace / insertStringAtCursor don't touch composingRange — clear it explicitly.
+	// Commit semantics end the composition even when no mutation ran (empty text
+	// with nothing composing), so clear explicitly rather than rely on applyOperation.
 	clearComposingRange()
 	applyNewCursorPosition(insertStart, insertEnd, newCursorPosition)
 }
