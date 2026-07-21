@@ -9,6 +9,7 @@ import android.text.TextUtils
 import android.view.KeyEvent
 import android.view.inputmethod.*
 import androidx.annotation.RequiresApi
+import androidx.annotation.VisibleForTesting
 import androidx.compose.ui.platform.PlatformTextInputMethodRequest
 import androidx.compose.ui.platform.PlatformTextInputSession
 import com.darkrockstudios.texteditor.TextEditorRange
@@ -144,7 +145,8 @@ private object PerformImeNewlineCommand : EditCommand {
  *   handle arrows, Home/End, Backspace/Delete, Ctrl+letter shortcuts, and
  *   printable characters in one place.
  */
-private class TextEditorInputConnection(
+@VisibleForTesting
+internal class TextEditorInputConnection(
 	private val state: TextEditorState
 ) : InputConnection {
 
@@ -166,7 +168,10 @@ private class TextEditorInputConnection(
 	}
 
 	private fun endBatchEditInternal() {
-		batchDepth--
+		// Some IMEs (Huawei Celia, SwiftKey) send endBatchEdit without a matching begin.
+		// Floor at 0 — matching the platform counter — so a stray end can't drive the
+		// depth negative and permanently block the drain condition below.
+		batchDepth = (batchDepth - 1).coerceAtLeast(0)
 		// End the platform batch FIRST, so the drain runs with isInBatchEdit == false.
 		// That lets ImeCursorSync's flow collectors observe each state mutation and
 		// push updateSelection / updateExtractedText to the IMM.

@@ -21,6 +21,8 @@ kotlin {
 		compilerOptions {
 			jvmTarget.set(JvmTarget.fromTarget(libs.versions.jvm.get()))
         }
+
+		withHostTestBuilder {}
     }
     @OptIn(ExperimentalWasmDsl::class)
     wasmJs {
@@ -56,6 +58,15 @@ kotlin {
             dependencies {
                 implementation(compose.desktop.currentOs)
                 implementation(libs.kotlinx.coroutines.swing)
+            }
+        }
+
+        val androidHostTest by getting {
+            dependencies {
+                implementation(libs.jetbrains.kotlin.test)
+                implementation(libs.jetbrains.kotlin.test.junit)
+                implementation(libs.mockk)
+                implementation(libs.kotlinx.coroutines.test)
             }
         }
 
