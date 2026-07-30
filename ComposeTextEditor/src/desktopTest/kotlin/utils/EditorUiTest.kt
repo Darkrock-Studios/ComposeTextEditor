@@ -1,9 +1,11 @@
 package utils
 
 import androidx.compose.foundation.layout.size
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SkikoComposeUiTest
 import androidx.compose.ui.test.click
@@ -18,6 +20,7 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.darkrockstudios.texteditor.BasicTextEditor
+import com.darkrockstudios.texteditor.RichSpanClickListener
 import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.rememberTextEditorState
 
@@ -26,40 +29,55 @@ import com.darkrockstudios.texteditor.state.rememberTextEditorState
  * drives it with synthetic keyboard/mouse events, and exposes [state] for
  * data-level assertions. Character-index-based helpers ([clickAtCharacter],
  * [dragSelect]) resolve pixel positions through the editor's own layout, so
- * tests never hard-code coordinates.
+ * tests never hard-code coordinates. Clipboard operations go through an
+ * isolated [InMemoryClipboard], never the OS clipboard.
  */
 @OptIn(ExperimentalTestApi::class)
 fun editorUiTest(
 	initialText: AnnotatedString = AnnotatedString(""),
 	width: Dp = 400.dp,
 	height: Dp = 300.dp,
+	enabled: Boolean = true,
+	onRichSpanClick: RichSpanClickListener? = null,
 	block: EditorUiTestScope.() -> Unit,
 ) = runSkikoComposeUiTest {
+	val clipboard = InMemoryClipboard()
 	lateinit var state: TextEditorState
 	setContent {
 		state = rememberTextEditorState(initialText = initialText)
-		BasicTextEditor(
-			state = state,
-			modifier = Modifier.size(width, height),
-			autoFocus = true,
-		)
+		CompositionLocalProvider(LocalClipboard provides clipboard) {
+			BasicTextEditor(
+				state = state,
+				modifier = Modifier.size(width, height),
+				enabled = enabled,
+				autoFocus = enabled,
+				onRichSpanClick = onRichSpanClick,
+			)
+		}
 	}
 	waitForIdle()
-	EditorUiTestScope(this, state).block()
+	EditorUiTestScope(this, state, clipboard).block()
 }
 
 @OptIn(ExperimentalTestApi::class)
 class EditorUiTestScope(
 	val test: SkikoComposeUiTest,
 	val state: TextEditorState,
+	val clipboard: InMemoryClipboard,
 ) {
 	/** Plain text of the whole document. */
 	val text: String get() = state.getAllText().text
 
+	/** Plain text of each line of the document. */
+	val lines: List<String> get() = state.textLines.map { it.text }
+
 	/** Plain text of the current selection, or empty when there is none. */
 	val selectedText: String get() = state.selector.getSelectedText().text
 
-	/** Types printable characters through real desktop key events. */
+	/** The cursor position as a flat character index into [text]. */
+	val cursorIndex: Int get() = state.getCharacterIndex(state.cursorPosition)
+
+	/** Types printable characters through real desktop key events; `\n` and `\t` become Enter/Tab. */
 	fun typeText(text: String) = test.typeText(text)
 
 	/** Presses [key] with optional modifiers held, e.g. `press(Key.Z, ctrl = true)`. */
@@ -78,20 +96,28 @@ class EditorUiTestScope(
 
 	/** Left-clicks the character at flat index [charIndex]. */
 	fun clickAtCharacter(charIndex: Int, shift: Boolean = false) {
+		clickAt(positionOfCharacter(charIndex), shift)
+	}
+
+	/** Left-clicks an arbitrary pixel [position], optionally with shift held. */
+	fun clickAt(position: Offset, shift: Boolean = false) {
+		defeatMultiClickDetection()
 		if (shift) test.onRoot().performKeyInput { keyDown(Key.ShiftLeft) }
-		test.onRoot().performMouseInput { click(positionOfCharacter(charIndex)) }
+		test.onRoot().performMouseInput { click(position) }
 		if (shift) test.onRoot().performKeyInput { keyUp(Key.ShiftLeft) }
 		test.waitForIdle()
 	}
 
 	/** Double-clicks the character at flat index [charIndex] (word select). */
 	fun doubleClickAtCharacter(charIndex: Int) {
+		defeatMultiClickDetection()
 		test.onRoot().performMouseInput { doubleClick(positionOfCharacter(charIndex)) }
 		test.waitForIdle()
 	}
 
 	/** Presses at [fromChar], drags to [toChar], and releases. */
 	fun dragSelect(fromChar: Int, toChar: Int) {
+		defeatMultiClickDetection()
 		val from = positionOfCharacter(fromChar)
 		val to = positionOfCharacter(toChar)
 		test.onRoot().performMouseInput {
@@ -101,6 +127,13 @@ class EditorUiTestScope(
 			release()
 		}
 		test.waitForIdle()
+	}
+
+	// The editor's double/triple-click detection compares wall-clock timestamps
+	// (Clock.System.now, 300ms window), not the virtual test clock, so gestures
+	// issued back-to-back by a fast test read as multi-clicks and word-select.
+	private fun defeatMultiClickDetection() {
+		Thread.sleep(350)
 	}
 
 	/** Pixel position of the character at flat index [charIndex], vertically centered on its line. */

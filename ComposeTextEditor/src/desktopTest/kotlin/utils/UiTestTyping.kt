@@ -14,20 +14,28 @@ import androidx.compose.ui.test.SkikoComposeUiTest
  * only synthesizes KeyDown/KeyUp, and on desktop printable characters are
  * consumed exclusively from the KEY_TYPED event (see
  * PlatformCharacterInput.desktop.kt).
+ *
+ * `\n` and `\t` are typed as Enter and Tab keystrokes, matching how those
+ * characters actually enter the editor (handled on KeyDown, with the KEY_TYPED
+ * control character filtered out).
  */
 @OptIn(ExperimentalTestApi::class, InternalComposeUiApi::class)
 fun SkikoComposeUiTest.typeText(text: String) {
 	for (ch in text) {
-		val keyCode = java.awt.event.KeyEvent.getExtendedKeyCodeForChar(ch.code)
+		val key = when (ch) {
+			'\n' -> Key.Enter
+			'\t' -> Key.Tab
+			else -> Key(java.awt.event.KeyEvent.getExtendedKeyCodeForChar(ch.code))
+		}
 		runOnUiThread {
 			scene.sendKeyEvent(
-				KeyEvent(key = Key(keyCode), type = KeyEventType.KeyDown, codePoint = ch.code)
+				KeyEvent(key = key, type = KeyEventType.KeyDown, codePoint = ch.code)
 			)
 			scene.sendKeyEvent(
 				KeyEvent(key = Key.Unknown, type = KeyEventType.Unknown, codePoint = ch.code)
 			)
 			scene.sendKeyEvent(
-				KeyEvent(key = Key(keyCode), type = KeyEventType.KeyUp, codePoint = ch.code)
+				KeyEvent(key = key, type = KeyEventType.KeyUp, codePoint = ch.code)
 			)
 		}
 	}
