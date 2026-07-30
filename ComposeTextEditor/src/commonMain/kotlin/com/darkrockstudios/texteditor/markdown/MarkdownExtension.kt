@@ -97,10 +97,15 @@ class MarkdownExtension(
 		set(value) {
 			field = value
 			markdownStyles = MarkdownStyles(markdownConfiguration)
+			editorState.markdownConfiguration = value
 		}
 
 	var markdownStyles: MarkdownStyles = MarkdownStyles(markdownConfiguration)
 		private set
+
+	init {
+		editorState.markdownConfiguration = markdownConfiguration
+	}
 
 	fun exportAsMarkdown(): String {
 		val allSpans = editorState.richSpanManager.getAllRichSpans()

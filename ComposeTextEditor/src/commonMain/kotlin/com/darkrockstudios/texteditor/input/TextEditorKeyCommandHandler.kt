@@ -215,7 +215,7 @@ internal class TextEditorKeyCommandHandler {
 			val selectedText = state.selector.getSelectedText()
 			state.copyRichSpans(selection)
 			scope.launch {
-				ClipboardHelper.setText(clipboard, selectedText)
+				ClipboardHelper.setText(clipboard, selectedText, state.markdownConfiguration)
 			}
 		}
 	}
@@ -227,14 +227,14 @@ internal class TextEditorKeyCommandHandler {
 			state.preserveCopiedRichSpansThroughNextEdit()
 			state.selector.deleteSelection()
 			scope.launch {
-				ClipboardHelper.setText(clipboard, selectedText)
+				ClipboardHelper.setText(clipboard, selectedText, state.markdownConfiguration)
 			}
 		}
 	}
 
 	private fun handlePaste(state: TextEditorState, clipboard: Clipboard, scope: CoroutineScope) {
 		scope.launch {
-			ClipboardHelper.getText(clipboard)?.let { text ->
+			ClipboardHelper.getText(clipboard, state.markdownConfiguration)?.let { text ->
 				val curSelection = state.selector.selection
 				val insertPosition = curSelection?.start ?: state.cursorPosition
 				state.preserveCopiedRichSpansThroughNextEdit()

@@ -51,6 +51,7 @@ kotlin {
                 implementation(libs.androidx.lifecycle.viewmodel)
                 implementation(libs.androidx.lifecycle.runtime.compose)
                 implementation(libs.markdown)
+                implementation(libs.ksoup)
             }
         }
 

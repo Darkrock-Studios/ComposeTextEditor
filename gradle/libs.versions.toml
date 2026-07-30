@@ -8,6 +8,7 @@ compose-multiplatform = "1.11.1"
 compose-hot-reload = "1.2.0-alpha02"
 kotlin = "2.3.21"
 kotlinx-coroutines = "1.11.0"
+ksoup = "0.2.6"
 markdown = "0.7.5"
 mockk = "1.14.11"
 
@@ -30,6 +31,7 @@ androidx-lifecycle-runtime-compose = { group = "org.jetbrains.androidx.lifecycle
 kotlinx-coroutines-swing = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-swing", version.ref = "kotlinx-coroutines" }
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "kotlinx-coroutines" }
 kotlinx-coroutines-test-jvm = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test-jvm", version.ref = "kotlinx-coroutines" }
+ksoup = { module = "com.fleeksoft.ksoup:ksoup", version.ref = "ksoup" }
 markdown = { module = "org.jetbrains:markdown", version.ref = "markdown" }
 mockk = { module = "io.mockk:mockk", version.ref = "mockk" }
 platform-spellchecker = { module = "com.darkrockstudios:platform-spellcheckerkt", version.ref = "spellcheckerkt" }

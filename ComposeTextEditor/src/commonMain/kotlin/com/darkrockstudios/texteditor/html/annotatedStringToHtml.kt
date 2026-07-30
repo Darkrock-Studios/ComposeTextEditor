@@ -1,6 +1,7 @@
 package com.darkrockstudios.texteditor.html
 
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
 import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
 
 /**
@@ -15,16 +16,18 @@ fun AnnotatedString.toHtml(
 ): String {
 	if (text.isEmpty()) return ""
 
-	val activeTags = Array(text.length) { LinkedHashSet<HtmlTag>() }
+	// Overlapping spans are resolved into one effective style per character before
+	// any tag is chosen. Unioning each span's tags instead would let a wider bold
+	// span re-apply over a narrower one that turned bold back off.
+	val resolved = Array(text.length) { SpanStyle() }
 	spanStyles.forEach { range ->
-		val tags = range.item.htmlTags(configuration)
-		if (tags.isEmpty()) return@forEach
 		val start = range.start.coerceAtLeast(0)
 		val end = range.end.coerceAtMost(text.length)
 		for (i in start until end) {
-			activeTags[i].addAll(tags)
+			resolved[i] = resolved[i].merge(range.item)
 		}
 	}
+	val activeTags = Array(text.length) { resolved[it].htmlTags(configuration) }
 
 	val builder = StringBuilder()
 	var open = emptyList<HtmlTag>()

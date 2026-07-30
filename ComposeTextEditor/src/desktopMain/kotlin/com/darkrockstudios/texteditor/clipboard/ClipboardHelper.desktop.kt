@@ -6,6 +6,7 @@ import androidx.compose.ui.platform.Clipboard
 import androidx.compose.ui.text.AnnotatedString
 import com.darkrockstudios.texteditor.html.toAnnotatedStringFromHtml
 import com.darkrockstudios.texteditor.html.toHtml
+import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
 import java.awt.datatransfer.DataFlavor
 import java.awt.datatransfer.Transferable
 import java.awt.datatransfer.UnsupportedFlavorException
@@ -14,15 +15,22 @@ import java.awt.datatransfer.UnsupportedFlavorException
 actual object ClipboardHelper {
 	private val annotatedStringFlavor = DataFlavor(AnnotatedString::class.java, "AnnotatedString")
 
-	actual suspend fun getText(clipboard: Clipboard): AnnotatedString? {
+	actual suspend fun getText(
+		clipboard: Clipboard,
+		configuration: MarkdownConfiguration,
+	): AnnotatedString? {
 		val transferable = clipboard.getClipEntry()?.nativeClipEntry as? Transferable ?: return null
 		return transferable.readAnnotatedString()
-			?: transferable.readHtml()
+			?: transferable.readHtml(configuration)
 			?: transferable.readPlainText()
 	}
 
-	actual suspend fun setText(clipboard: Clipboard, text: AnnotatedString) {
-		clipboard.setClipEntry(ClipEntry(AnnotatedStringTransferable(text)))
+	actual suspend fun setText(
+		clipboard: Clipboard,
+		text: AnnotatedString,
+		configuration: MarkdownConfiguration,
+	) {
+		clipboard.setClipEntry(ClipEntry(AnnotatedStringTransferable(text, configuration)))
 	}
 
 	private fun Transferable.readAnnotatedString(): AnnotatedString? = runCatching {
@@ -30,11 +38,12 @@ actual object ClipboardHelper {
 		getTransferData(annotatedStringFlavor) as? AnnotatedString
 	}.getOrNull()
 
-	private fun Transferable.readHtml(): AnnotatedString? = runCatching {
-		val flavor = transferDataFlavors.firstOrNull { it.isHtmlStringFlavor() } ?: return null
-		val html = getTransferData(flavor) as? String ?: return null
-		html.toAnnotatedStringFromHtml().takeIf { it.text.isNotEmpty() }
-	}.getOrNull()
+	private fun Transferable.readHtml(configuration: MarkdownConfiguration): AnnotatedString? =
+		runCatching {
+			val flavor = transferDataFlavors.firstOrNull { it.isHtmlStringFlavor() } ?: return null
+			val html = getTransferData(flavor) as? String ?: return null
+			html.toAnnotatedStringFromHtml(configuration).takeIf { it.text.isNotEmpty() }
+		}.getOrNull()
 
 	private fun Transferable.readPlainText(): AnnotatedString? = runCatching {
 		if (!isDataFlavorSupported(DataFlavor.stringFlavor)) return null
@@ -51,13 +60,14 @@ actual object ClipboardHelper {
  * editor in this process takes the [AnnotatedString] and keeps it exactly.
  */
 internal class AnnotatedStringTransferable(
-	private val annotatedString: AnnotatedString
+	private val annotatedString: AnnotatedString,
+	private val configuration: MarkdownConfiguration = MarkdownConfiguration.DEFAULT,
 ) : Transferable {
 
 	private val annotatedStringFlavor = DataFlavor(AnnotatedString::class.java, "AnnotatedString")
 	private val htmlFlavor = DataFlavor("text/html;class=java.lang.String;charset=Unicode")
 
-	private val html by lazy { annotatedString.toHtml() }
+	private val html by lazy { annotatedString.toHtml(configuration) }
 
 	override fun getTransferDataFlavors(): Array<DataFlavor> =
 		arrayOf(annotatedStringFlavor, htmlFlavor, DataFlavor.stringFlavor)

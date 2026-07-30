@@ -40,7 +40,7 @@ class ContextMenuActions(
 			val selectedText = state.selector.getSelectedText()
 			state.selector.deleteSelection()
 			scope.launch {
-				ClipboardHelper.setText(clipboard, selectedText)
+				ClipboardHelper.setText(clipboard, selectedText, state.markdownConfiguration)
 			}
 		}
 	}
@@ -52,7 +52,7 @@ class ContextMenuActions(
 		state.selector.selection?.let {
 			val selectedText = state.selector.getSelectedText()
 			scope.launch {
-				ClipboardHelper.setText(clipboard, selectedText)
+				ClipboardHelper.setText(clipboard, selectedText, state.markdownConfiguration)
 			}
 		}
 	}
@@ -63,7 +63,7 @@ class ContextMenuActions(
 	 */
 	fun paste() {
 		scope.launch {
-			ClipboardHelper.getText(clipboard)?.let { text ->
+			ClipboardHelper.getText(clipboard, state.markdownConfiguration)?.let { text ->
 				val curSelection = state.selector.selection
 				if (curSelection != null) {
 					state.replace(curSelection, text)

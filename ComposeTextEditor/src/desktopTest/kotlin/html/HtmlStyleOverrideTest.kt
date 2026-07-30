@@ -90,16 +90,28 @@ class HtmlStyleOverrideTest {
 	}
 
 	@Test
-	fun `outer spans are listed before inner ones`() {
+	fun `an inner style survives its outer wrapper`() {
 		val html = """<b>outer <i>inner</i></b>"""
 		val result = html.toAnnotatedStringFromHtml(config)
 
-		val boldIndex = result.spanStyles.indexOfFirst { it.item.fontWeight == FontWeight.Bold }
-		val italicIndex = result.spanStyles.indexOfFirst { it.item.fontStyle == FontStyle.Italic }
+		assertEquals("outer inner", result.text)
+		val inner = result.text.indexOf("inner")
+		assertTrue(result.isBoldAt(inner), "expected inner text to keep the outer bold")
+		assertTrue(result.isItalicAt(inner), "expected inner italic")
+		assertTrue(!result.isItalicAt(0), "did not expect italic on the outer text")
+	}
 
+	@Test
+	fun `a cancelled style produces no span rather than a competing one`() {
+		val html = """<b>bold <span style="font-weight:normal">plain</span></b>"""
+		val result = html.toAnnotatedStringFromHtml(config)
+
+		val plain = result.text.indexOf("plain")
+		val covering = result.spanStyles.filter { plain >= it.start && plain < it.end }
 		assertTrue(
-			boldIndex < italicIndex,
-			"outer bold must precede inner italic so the inner one wins: ${result.spanStyles}",
+			covering.none { it.item.fontWeight == FontWeight.Normal },
+			"cancellation should be resolved during parsing, not left as a span: $covering",
 		)
+		assertTrue(!result.isBoldAt(plain), "expected 'plain' not bold")
 	}
 }

@@ -2,23 +2,26 @@ package com.darkrockstudios.texteditor.html
 
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontStyle
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextDecoration
 import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
+import com.fleeksoft.ksoup.Ksoup
+import com.fleeksoft.ksoup.nodes.Element
+import com.fleeksoft.ksoup.nodes.Node
+import com.fleeksoft.ksoup.nodes.TextNode
 
 /**
  * Parses an HTML fragment (as found on the system clipboard's `text/html`
  * flavor) into a styled [AnnotatedString].
  *
- * Tolerant by design: unknown tags are ignored, unbalanced tags are closed
- * implicitly, and whitespace follows HTML collapsing rules so markup pasted
- * from a browser or word processor does not arrive full of layout indentation.
+ * Tokenizing is delegated to Ksoup, so malformed markup, unbalanced tags and the
+ * full HTML5 entity set are handled to spec. What happens here is the mapping
+ * from the resulting document onto Compose spans.
  */
 fun String.toAnnotatedStringFromHtml(
 	configuration: MarkdownConfiguration = MarkdownConfiguration.DEFAULT
-): AnnotatedString = HtmlFragmentParser(configuration).parse(unwrapClipboardHtml(this))
+): AnnotatedString {
+	val body = Ksoup.parseBodyFragment(unwrapClipboardHtml(this)).body()
+	return HtmlSpanBuilder(configuration).build(body)
+}
 
 private val START_FRAGMENT = Regex("""<!--\s*StartFragment\s*-->""", RegexOption.IGNORE_CASE)
 private val END_FRAGMENT = Regex("""<!--\s*EndFragment\s*-->""", RegexOption.IGNORE_CASE)
@@ -57,11 +60,13 @@ private val BLOCK_TAGS = setOf(
 	"footer", "figure", "figcaption", "dd", "dt", "dl", "hr",
 )
 
-private val VOID_TAGS = setOf(
-	"br", "hr", "img", "meta", "link", "input", "col", "source", "area", "base", "wbr",
-)
+/** Cells separate with a tab rather than a line break, matching a plain-text copy of a table. */
+private val CELL_TAGS = setOf("td", "th")
 
-private val SKIPPED_CONTENT_TAGS = setOf("script", "style", "head", "title", "noscript")
+private val SKIPPED_TAGS = setOf("script", "style", "head", "title", "noscript")
+
+/** What `&nbsp;` decodes to. Content rather than layout, so it escapes whitespace collapsing. */
+private const val NO_BREAK_SPACE = '\u00A0'
 
 private val TAG_STYLES = mapOf(
 	"b" to HtmlTag.STRONG,
@@ -86,337 +91,246 @@ private val TAG_STYLES = mapOf(
 	"h6" to HtmlTag.H6,
 )
 
-private val STYLE_ATTRIBUTE = Regex("""style\s*=\s*("([^"]*)"|'([^']*)')""", RegexOption.IGNORE_CASE)
-
-private class OpenElement(
-	val name: String,
-	val style: SpanStyle?,
-	val startIndex: Int,
-	val order: Int,
-)
-
-private class ParsedSpan(
-	val style: SpanStyle,
-	val start: Int,
-	val end: Int,
-	val order: Int,
-)
-
-private class HtmlFragmentParser(private val config: MarkdownConfiguration) {
+/**
+ * Walks the parsed document and records which styles are in force over each run
+ * of text.
+ *
+ * Style cancellation is resolved during the walk rather than emitted as a
+ * competing span: `<b style="font-weight:normal">`, which Word and Google Docs
+ * wrap whole fragments in, simply does not contribute bold to its subtree. That
+ * keeps the resulting span list free of styles that exist only to undo another
+ * one, which nothing downstream would know to apply in the right order.
+ */
+private class HtmlSpanBuilder(private val config: MarkdownConfiguration) {
 
 	private val out = StringBuilder()
-	private val spans = mutableListOf<ParsedSpan>()
-	private val stack = ArrayDeque<OpenElement>()
-	private var nextOrder = 0
+	private val spans = mutableListOf<AnnotatedString.Range<SpanStyle>>()
+
+	private var currentActive = emptySet<HtmlTag>()
+	private val runStart = HashMap<HtmlTag, Int>()
 
 	private var pendingBlockBreak = false
 	private var pendingExplicitBreaks = 0
+	private var pendingCellBreak = false
 	private var lastWasSpace = true
-	private var lastWasEntity = false
-	private var preDepth = 0
+	private var trailingSpaceIsLiteral = false
 
-	private val pendingNewlines: Int
-		get() = maxOf(pendingExplicitBreaks, if (pendingBlockBreak) 1 else 0)
-
-	fun parse(html: String): AnnotatedString {
-		var i = 0
-		while (i < html.length) {
-			val ch = html[i]
-			if (ch != '<') {
-				val next = html.indexOf('<', i).let { if (it == -1) html.length else it }
-				appendTextRun(html, i, next)
-				i = next
-				continue
-			}
-
-			if (html.startsWith("<!--", i)) {
-				val end = html.indexOf("-->", i)
-				i = if (end == -1) html.length else end + 3
-				continue
-			}
-			if (html.startsWith("<!", i) || html.startsWith("<?", i)) {
-				val end = html.indexOf('>', i)
-				i = if (end == -1) html.length else end + 1
-				continue
-			}
-
-			val tag = readTag(html, i)
-			if (tag == null) {
-				appendChar('<')
-				i++
-				continue
-			}
-			i = tag.endIndex
-
-			if (tag.name in SKIPPED_CONTENT_TAGS) {
-				if (!tag.isClose && !tag.isSelfClosing) {
-					i = skipContent(html, tag.name, i)
-				}
-				continue
-			}
-
-			if (tag.isClose) handleCloseTag(tag) else handleOpenTag(tag)
-		}
-
-		while (stack.isNotEmpty()) closeElement(stack.removeLast())
+	fun build(body: Element): AnnotatedString {
+		visitChildren(body, emptySet(), preformatted = false)
 		trimTrailingLayoutSpace()
+		syncActive(emptySet())
+		repeat(pendingExplicitBreaks) { out.append('\n') }
 
 		val text = out.toString()
-		// Sorted by the order the elements opened, so an outer span lands earlier in
-		// the list than the elements it contains. Rendering merges later spans over
-		// earlier ones, which is what lets an inner style override its wrapper.
-		val clamped = spans.sortedBy { it.order }.mapNotNull { span ->
+		val clamped = spans.mapNotNull { span ->
 			val end = span.end.coerceAtMost(text.length)
-			if (span.start >= end) null else AnnotatedString.Range(span.style, span.start, end)
+			if (span.start >= end) null else AnnotatedString.Range(span.item, span.start, end)
 		}
 		return AnnotatedString(text, clamped)
 	}
 
-	private fun handleOpenTag(tag: Tag) {
-		if (tag.name == "br") {
+	private fun visitChildren(parent: Element, active: Set<HtmlTag>, preformatted: Boolean) {
+		parent.childNodes().forEach { node -> visit(node, active, preformatted) }
+	}
+
+	private fun visit(node: Node, active: Set<HtmlTag>, preformatted: Boolean) {
+		when (node) {
+			is TextNode -> appendText(node.getWholeText(), active, preformatted)
+			is Element -> visitElement(node, active, preformatted)
+			else -> {}
+		}
+	}
+
+	private fun visitElement(element: Element, active: Set<HtmlTag>, preformatted: Boolean) {
+		val name = element.tagName().lowercase()
+		if (name in SKIPPED_TAGS) return
+
+		if (name == "br") {
 			pendingExplicitBreaks++
 			lastWasSpace = true
 			return
 		}
-		if (tag.name in BLOCK_TAGS) requestBlockBreak()
-		if (tag.name == "pre") preDepth++
-		if (tag.name in VOID_TAGS || tag.isSelfClosing) return
 
-		// The inline style is layered over the tag's own meaning rather than replacing
-		// it, so `<b style="font-weight:normal">` (which Word and Google Docs wrap
-		// whole fragments in) cancels the bold instead of applying it.
-		val tagStyle = TAG_STYLES[tag.name]?.spanStyle(config)
-		val inlineStyle = styleFromAttributes(tag.attributes)
-		val style = when {
-			tagStyle != null && inlineStyle != null -> tagStyle.merge(inlineStyle)
-			else -> tagStyle ?: inlineStyle
-		}
-		stack.addLast(OpenElement(tag.name, style, out.length, nextOrder++))
-	}
+		val isBlock = name in BLOCK_TAGS
+		val isCell = name in CELL_TAGS
+		if (isBlock) requestBlockBreak() else if (isCell) requestCellBreak()
 
-	private fun handleCloseTag(tag: Tag) {
-		if (tag.name == "pre" && preDepth > 0) preDepth--
-		if (tag.name in BLOCK_TAGS) requestBlockBreak()
+		val style = element.attr("style")
+		val nested = resolveTags(name, style, active)
+		val nestedPre = preformatted || name == "pre" || isPreformatted(style)
 
-		val depth = stack.indexOfLast { it.name == tag.name }
-		if (depth == -1) return
-		while (stack.size > depth) closeElement(stack.removeLast())
-	}
+		visitChildren(element, nested, nestedPre)
 
-	private fun closeElement(element: OpenElement) {
-		val style = element.style ?: return
-		if (out.length > element.startIndex) {
-			spans += ParsedSpan(style, element.startIndex, out.length, element.order)
-		}
-	}
-
-	private fun requestBlockBreak() {
-		if (out.isNotEmpty()) pendingBlockBreak = true
-		lastWasSpace = true
-	}
-
-	private fun flushNewlines() {
-		val count = pendingNewlines
-		pendingBlockBreak = false
-		pendingExplicitBreaks = 0
-		if (count == 0) return
-
-		trimTrailingLayoutSpace()
-		repeat(count) { out.append('\n') }
-		lastWasSpace = true
-		lastWasEntity = false
+		if (isBlock) requestBlockBreak() else if (isCell) requestCellBreak()
 	}
 
 	/**
-	 * Drops a collapsed space sitting at a line break or at the end of the
-	 * document. A space that came from a character entity is literal content, so
-	 * it is left alone.
+	 * Closes the runs of any style no longer in force and opens runs for any newly
+	 * in force, both at the current output position.
+	 *
+	 * Driven from the text being appended rather than from element boundaries: a
+	 * descendant that cancels a style has to end its ancestor's run, so an element
+	 * cannot simply claim its whole subtree.
 	 */
-	private fun trimTrailingLayoutSpace() {
-		if (lastWasEntity || preDepth > 0) return
-		if (out.isNotEmpty() && out.last() == ' ') out.deleteAt(out.length - 1)
-	}
-
-	private fun appendTextRun(html: String, start: Int, end: Int) {
-		var i = start
-		while (i < end) {
-			val ch = html[i]
-			if (ch == '&') {
-				val decoded = decodeEntity(html, i, end)
-				if (decoded != null) {
-					// Entity-encoded whitespace is literal, so it bypasses collapsing.
-					// That is what keeps `&nbsp;` runs from being squashed to one space.
-					flushNewlines()
-					out.append(decoded.value)
-					lastWasSpace = false
-					lastWasEntity = true
-					i = decoded.endIndex
-					continue
+	private fun syncActive(active: Set<HtmlTag>) {
+		if (active == currentActive) return
+		currentActive.forEach { tag ->
+			if (tag !in active) {
+				val start = runStart.remove(tag) ?: return@forEach
+				if (out.length > start) {
+					spans += AnnotatedString.Range(tag.spanStyle(config), start, out.length)
 				}
 			}
-			appendChar(ch)
-			i++
 		}
+		active.forEach { tag ->
+			if (tag !in currentActive) runStart[tag] = out.length
+		}
+		currentActive = active
 	}
 
-	private fun appendChar(ch: Char) {
-		if (preDepth > 0) {
-			flushNewlines()
-			out.append(ch)
-			lastWasSpace = ch == ' '
-			lastWasEntity = false
-			return
-		}
-		if (ch.isWhitespace()) {
-			if (!lastWasSpace && pendingNewlines == 0 && out.isNotEmpty()) {
-				out.append(' ')
-				lastWasSpace = true
-				lastWasEntity = false
-			}
-			return
-		}
-		flushNewlines()
-		out.append(ch)
-		lastWasSpace = false
-		lastWasEntity = false
-	}
+	private fun resolveTags(name: String, style: String, active: Set<HtmlTag>): Set<HtmlTag> {
+		val result = LinkedHashSet(active)
+		TAG_STYLES[name]?.let { result += it }
+		if (style.isEmpty()) return result
 
-	private fun styleFromAttributes(attributes: String): SpanStyle? {
-		val match = STYLE_ATTRIBUTE.find(attributes) ?: return null
-		val declarations = (match.groupValues[2].ifEmpty { match.groupValues[3] })
-		var style = SpanStyle()
-		var matched = false
-		declarations.split(';').forEach { declaration ->
-			val separator = declaration.indexOf(':')
-			if (separator == -1) return@forEach
-			val property = declaration.substring(0, separator).trim().lowercase()
-			val value = declaration.substring(separator + 1).trim().lowercase()
+		// Each directive settles its own tag in both directions, so an inline style
+		// always beats the meaning the element's tag name carries.
+		forEachDeclaration(style) { property, value ->
 			when (property) {
 				"font-weight" -> {
 					val weight = value.toIntOrNull()
-					val bold = value == "bold" || value == "bolder" ||
-						(weight != null && weight >= 600)
-					val normal = value == "normal" || value == "lighter" ||
-						(weight != null && weight < 600)
-					if (bold || normal) {
-						style = style.copy(
-							fontWeight = if (bold) FontWeight.Bold else FontWeight.Normal
-						)
-						matched = true
+					when {
+						value == "bold" || value == "bolder" ||
+							(weight != null && weight >= 600) -> result += HtmlTag.STRONG
+
+						value == "normal" || value == "lighter" ||
+							(weight != null && weight < 600) -> result -= HtmlTag.STRONG
 					}
 				}
 
-				"font-style" -> if (value == "italic" || value == "oblique") {
-					style = style.copy(fontStyle = FontStyle.Italic)
-					matched = true
-				} else if (value == "normal") {
-					style = style.copy(fontStyle = FontStyle.Normal)
-					matched = true
+				"font-style" -> when (value) {
+					"italic", "oblique" -> result += HtmlTag.EM
+					"normal" -> result -= HtmlTag.EM
 				}
 
 				"font-family" -> if (
 					value.contains("monospace") || value.contains("courier") ||
 					value.contains("consolas") || value.contains("menlo")
 				) {
-					style = style.copy(fontFamily = FontFamily.Monospace)
-					matched = true
+					result += HtmlTag.CODE
 				}
 
 				"text-decoration", "text-decoration-line" -> {
-					val decorations = buildList {
-						if (value.contains("underline")) add(TextDecoration.Underline)
-						if (value.contains("line-through")) add(TextDecoration.LineThrough)
-					}
-					if (decorations.isNotEmpty()) {
-						style = style.copy(textDecoration = TextDecoration.combine(decorations))
-						matched = true
-					} else if (value.contains("none")) {
-						style = style.copy(textDecoration = TextDecoration.None)
-						matched = true
+					if (value.contains("underline")) result += HtmlTag.UNDERLINE
+					if (value.contains("line-through")) result += HtmlTag.STRIKE
+					if (value.contains("none")) {
+						result -= HtmlTag.UNDERLINE
+						result -= HtmlTag.STRIKE
 					}
 				}
 			}
 		}
-		return if (matched) style else null
+		return result
 	}
 
-	private fun skipContent(html: String, name: String, from: Int): Int {
-		var i = from
-		while (i < html.length) {
-			val next = html.indexOf('<', i)
-			if (next == -1) return html.length
-			val tag = readTag(html, next)
-			if (tag != null && tag.isClose && tag.name == name) return tag.endIndex
-			i = next + 1
-		}
-		return html.length
-	}
-}
-
-private class Tag(
-	val name: String,
-	val isClose: Boolean,
-	val isSelfClosing: Boolean,
-	val attributes: String,
-	val endIndex: Int,
-)
-
-private fun readTag(html: String, start: Int): Tag? {
-	var i = start + 1
-	if (i >= html.length) return null
-
-	val isClose = html[i] == '/'
-	if (isClose) i++
-
-	val nameStart = i
-	while (i < html.length && (html[i].isLetterOrDigit() || html[i] == '-')) i++
-	if (i == nameStart) return null
-	val name = html.substring(nameStart, i).lowercase()
-
-	val attributesStart = i
-	var quote: Char? = null
-	while (i < html.length) {
-		val ch = html[i]
-		when {
-			quote != null -> if (ch == quote) quote = null
-			ch == '"' || ch == '\'' -> quote = ch
-			ch == '>' -> {
-				val raw = html.substring(attributesStart, i)
-				val selfClosing = raw.trimEnd().endsWith("/")
-				return Tag(name, isClose, selfClosing, raw, i + 1)
+	private fun isPreformatted(style: String): Boolean {
+		var preformatted = false
+		forEachDeclaration(style) { property, value ->
+			if (property == "white-space" &&
+				(value == "pre" || value.startsWith("pre-wrap") || value.startsWith("break-spaces"))
+			) {
+				preformatted = true
 			}
 		}
-		i++
-	}
-	return null
-}
-
-private class DecodedEntity(val value: Char, val endIndex: Int)
-
-private fun decodeEntity(html: String, start: Int, limit: Int): DecodedEntity? {
-	val semicolon = html.indexOf(';', start)
-	if (semicolon == -1 || semicolon >= limit || semicolon - start > 10) return null
-	val body = html.substring(start + 1, semicolon)
-	if (body.isEmpty()) return null
-
-	if (body[0] == '#') {
-		val code = if (body.length > 1 && (body[1] == 'x' || body[1] == 'X')) {
-			body.substring(2).toIntOrNull(16)
-		} else {
-			body.substring(1).toIntOrNull()
-		} ?: return null
-		if (code !in 1..0xFFFF) return null
-		return DecodedEntity(code.toChar(), semicolon + 1)
+		return preformatted
 	}
 
-	val value = when (body.lowercase()) {
-		"amp" -> '&'
-		"lt" -> '<'
-		"gt" -> '>'
-		"quot" -> '"'
-		"apos" -> '\''
-		"nbsp" -> ' '
-		else -> return null
+	private inline fun forEachDeclaration(style: String, action: (String, String) -> Unit) {
+		style.split(';').forEach { declaration ->
+			val separator = declaration.indexOf(':')
+			if (separator == -1) return@forEach
+			action(
+				declaration.substring(0, separator).trim().lowercase(),
+				declaration.substring(separator + 1).trim().lowercase(),
+			)
+		}
 	}
-	return DecodedEntity(value, semicolon + 1)
+
+	private fun requestBlockBreak() {
+		if (out.isNotEmpty()) pendingBlockBreak = true
+		pendingCellBreak = false
+		lastWasSpace = true
+	}
+
+	private fun requestCellBreak() {
+		if (out.isNotEmpty() && pendingNewlines() == 0) pendingCellBreak = true
+		lastWasSpace = true
+	}
+
+	private fun pendingNewlines(): Int =
+		maxOf(pendingExplicitBreaks, if (pendingBlockBreak) 1 else 0)
+
+	private fun flushPendingBreaks() {
+		val newlines = pendingNewlines()
+		val cell = pendingCellBreak
+		pendingBlockBreak = false
+		pendingExplicitBreaks = 0
+		pendingCellBreak = false
+		if (newlines == 0 && !cell) return
+
+		trimTrailingLayoutSpace()
+		if (newlines > 0) repeat(newlines) { out.append('\n') } else out.append('\t')
+		lastWasSpace = true
+		trailingSpaceIsLiteral = false
+	}
+
+	/**
+	 * Drops a collapsed space sitting at a line break or at the end of the
+	 * document. A no-break space is literal content, so it is left alone.
+	 */
+	private fun trimTrailingLayoutSpace() {
+		if (trailingSpaceIsLiteral) return
+		if (out.isNotEmpty() && out.last() == ' ') out.deleteAt(out.length - 1)
+	}
+
+	private fun appendText(raw: String, active: Set<HtmlTag>, preformatted: Boolean) {
+		if (raw.isEmpty()) return
+		if (preformatted) {
+			flushPendingBreaks()
+			syncActive(active)
+			out.append(raw)
+			lastWasSpace = raw.last() == ' '
+			trailingSpaceIsLiteral = true
+			return
+		}
+
+		raw.forEach { ch ->
+			// A no-break space is content rather than layout, so it survives both
+			// collapsing and the trim at line ends. That is what lets a run of spaces
+			// round-trip: the serializer encodes the run's edges as `&nbsp;`, which
+			// arrives back here as U+00A0.
+			if (ch == NO_BREAK_SPACE) {
+				flushPendingBreaks()
+				syncActive(active)
+				out.append(' ')
+				lastWasSpace = false
+				trailingSpaceIsLiteral = true
+				return@forEach
+			}
+			if (ch.isWhitespace()) {
+				if (!lastWasSpace && pendingNewlines() == 0 && !pendingCellBreak && out.isNotEmpty()) {
+					syncActive(active)
+					out.append(' ')
+					lastWasSpace = true
+					trailingSpaceIsLiteral = false
+				}
+				return@forEach
+			}
+			flushPendingBreaks()
+			syncActive(active)
+			out.append(ch)
+			lastWasSpace = false
+			trailingSpaceIsLiteral = false
+		}
+	}
 }

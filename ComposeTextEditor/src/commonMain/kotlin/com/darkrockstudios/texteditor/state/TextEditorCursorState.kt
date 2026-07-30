@@ -117,15 +117,19 @@ class TextEditorCursorState(
 	 * typing and plain pastes continue the surrounding formatting.
 	 */
 	fun applyCursorStyle(text: AnnotatedString): AnnotatedString {
-		if (styles.isEmpty() || text.spanStyles.isNotEmpty()) {
-			return text
+		// Paragraph styles belong to the line, which already carries its own over its
+		// whole length. Letting an inserted one through would nest a second paragraph
+		// inside that range and split one logical line into several rendered ones.
+		val content = AnnotatedString(text.text, text.spanStyles)
+		if (styles.isEmpty() || content.spanStyles.isNotEmpty()) {
+			return content
 		}
 
 		return buildAnnotatedString {
 			styles.forEach { style ->
 				pushStyle(style)
 			}
-			append(text)
+			append(content)
 			repeat(styles.size) {
 				pop()
 			}

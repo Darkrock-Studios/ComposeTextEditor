@@ -5,6 +5,10 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.ParagraphStyle
+import androidx.compose.ui.text.style.TextIndent
+import androidx.compose.ui.unit.sp
+import com.darkrockstudios.texteditor.html.toAnnotatedStringFromHtml
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.state.TextEditorState
@@ -117,5 +121,47 @@ class InsertStyledTextTest {
 		val line = state.textLines[0]
 		assertEquals("just text", line.text)
 		assertTrue(line.boldRanges().isEmpty(), "expected no styling, got ${line.spanStyles}")
+	}
+
+	@Test
+	fun `pasted bold survives the caret sitting next to existing bold`() = runTest {
+		val state = createState("X")
+		state.addStyleSpan(TextEditorRange(CharLineOffset(0, 0), CharLineOffset(0, 1)), bold)
+		state.cursor.updatePosition(CharLineOffset(0, 1))
+
+		val pasted = """<b style="font-weight:normal"><span style="font-weight:700">bold</span>plain</b>"""
+			.toAnnotatedStringFromHtml()
+		state.insertStringAtCursor(pasted)
+
+		val line = state.textLines[0]
+		assertEquals("Xboldplain", line.text)
+
+		val boldAt = { i: Int ->
+			line.spanStyles.filter { i >= it.start && i < it.end }
+				.fold(SpanStyle()) { acc, r -> acc.merge(r.item) }
+				.fontWeight == FontWeight.Bold
+		}
+		assertTrue(boldAt(line.text.indexOf("bold")), "pasted bold was lost: ${line.spanStyles}")
+		assertTrue(!boldAt(line.text.indexOf("plain")), "unstyled run became bold: ${line.spanStyles}")
+	}
+
+	@Test
+	fun `an inserted paragraph style does not split the line`() = runTest {
+		val state = createState("line")
+		state.cursor.updatePosition(CharLineOffset(0, 2))
+
+		val pasted = buildAnnotatedString {
+			pushStyle(ParagraphStyle(textIndent = TextIndent(firstLine = 12.sp)))
+			append("xx")
+			pop()
+		}
+		state.insertStringAtCursor(pasted)
+
+		val line = state.textLines[0]
+		assertEquals("lixxne", line.text)
+		assertTrue(
+			line.paragraphStyles.isEmpty(),
+			"a pasted paragraph style nested inside the line: ${line.paragraphStyles}",
+		)
 	}
 }
