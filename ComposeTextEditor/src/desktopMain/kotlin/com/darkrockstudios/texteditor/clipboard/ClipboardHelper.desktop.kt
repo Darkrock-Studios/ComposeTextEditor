@@ -4,61 +4,81 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.Clipboard
 import androidx.compose.ui.text.AnnotatedString
+import com.darkrockstudios.texteditor.html.toAnnotatedStringFromHtml
+import com.darkrockstudios.texteditor.html.toHtml
+import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
 import java.awt.datatransfer.DataFlavor
 import java.awt.datatransfer.Transferable
 import java.awt.datatransfer.UnsupportedFlavorException
 
 @OptIn(ExperimentalComposeUiApi::class)
 actual object ClipboardHelper {
-	// Custom DataFlavor for AnnotatedString
 	private val annotatedStringFlavor = DataFlavor(AnnotatedString::class.java, "AnnotatedString")
 
-	actual suspend fun getText(clipboard: Clipboard): AnnotatedString? {
-		val transferable = clipboard.getClipEntry()?.nativeClipEntry as? Transferable
-		return transferable?.let {
-			// Try AnnotatedString first, fall back to plain text
-			when {
-				it.isDataFlavorSupported(annotatedStringFlavor) ->
-					it.getTransferData(annotatedStringFlavor) as? AnnotatedString
-
-				it.isDataFlavorSupported(DataFlavor.stringFlavor) ->
-					AnnotatedString(it.getTransferData(DataFlavor.stringFlavor) as String)
-
-				else -> null
-			}
-		}
+	actual suspend fun getText(
+		clipboard: Clipboard,
+		configuration: MarkdownConfiguration,
+	): AnnotatedString? {
+		val transferable = clipboard.getClipEntry()?.nativeClipEntry as? Transferable ?: return null
+		return transferable.readAnnotatedString()
+			?: transferable.readHtml(configuration)
+			?: transferable.readPlainText()
 	}
 
-	actual suspend fun setText(clipboard: Clipboard, text: AnnotatedString) {
-		val transferable = AnnotatedStringTransferable(text)
-		clipboard.setClipEntry(ClipEntry(transferable))
+	actual suspend fun setText(
+		clipboard: Clipboard,
+		text: AnnotatedString,
+		configuration: MarkdownConfiguration,
+	) {
+		clipboard.setClipEntry(ClipEntry(AnnotatedStringTransferable(text, configuration)))
 	}
+
+	private fun Transferable.readAnnotatedString(): AnnotatedString? = runCatching {
+		if (!isDataFlavorSupported(annotatedStringFlavor)) return null
+		getTransferData(annotatedStringFlavor) as? AnnotatedString
+	}.getOrNull()
+
+	private fun Transferable.readHtml(configuration: MarkdownConfiguration): AnnotatedString? =
+		runCatching {
+			val flavor = transferDataFlavors.firstOrNull { it.isHtmlStringFlavor() } ?: return null
+			val html = getTransferData(flavor) as? String ?: return null
+			html.toAnnotatedStringFromHtml(configuration).takeIf { it.text.isNotEmpty() }
+		}.getOrNull()
+
+	private fun Transferable.readPlainText(): AnnotatedString? = runCatching {
+		if (!isDataFlavorSupported(DataFlavor.stringFlavor)) return null
+		(getTransferData(DataFlavor.stringFlavor) as? String)?.let { AnnotatedString(it) }
+	}.getOrNull()
+
+	private fun DataFlavor.isHtmlStringFlavor(): Boolean =
+		mimeType.startsWith("text/html") && representationClass == String::class.java
 }
 
 /**
- * A Transferable that supports both AnnotatedString and plain String data flavors.
- * This allows copying styled text within the editor while also supporting
- * pasting as plain text in external applications.
+ * Offers the selection as HTML, as an in-process [AnnotatedString], and as plain
+ * text. External applications take the HTML and keep the formatting; another
+ * editor in this process takes the [AnnotatedString] and keeps it exactly.
  */
-private class AnnotatedStringTransferable(
-	private val annotatedString: AnnotatedString
+internal class AnnotatedStringTransferable(
+	private val annotatedString: AnnotatedString,
+	private val configuration: MarkdownConfiguration = MarkdownConfiguration.DEFAULT,
 ) : Transferable {
 
 	private val annotatedStringFlavor = DataFlavor(AnnotatedString::class.java, "AnnotatedString")
+	private val htmlFlavor = DataFlavor("text/html;class=java.lang.String;charset=Unicode")
 
-	override fun getTransferDataFlavors(): Array<DataFlavor> {
-		return arrayOf(annotatedStringFlavor, DataFlavor.stringFlavor)
-	}
+	private val html by lazy { annotatedString.toHtml(configuration) }
 
-	override fun isDataFlavorSupported(flavor: DataFlavor): Boolean {
-		return flavor == annotatedStringFlavor || flavor == DataFlavor.stringFlavor
-	}
+	override fun getTransferDataFlavors(): Array<DataFlavor> =
+		arrayOf(annotatedStringFlavor, htmlFlavor, DataFlavor.stringFlavor)
 
-	override fun getTransferData(flavor: DataFlavor): Any {
-		return when {
-			flavor == annotatedStringFlavor -> annotatedString
-			flavor == DataFlavor.stringFlavor -> annotatedString.text
-			else -> throw UnsupportedFlavorException(flavor)
-		}
+	override fun isDataFlavorSupported(flavor: DataFlavor): Boolean =
+		transferDataFlavors.any { it.match(flavor) }
+
+	override fun getTransferData(flavor: DataFlavor): Any = when {
+		flavor.match(annotatedStringFlavor) -> annotatedString
+		flavor.match(htmlFlavor) -> html
+		flavor.match(DataFlavor.stringFlavor) -> annotatedString.text
+		else -> throw UnsupportedFlavorException(flavor)
 	}
 }

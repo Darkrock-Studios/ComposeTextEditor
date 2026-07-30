@@ -4,12 +4,16 @@ package com.darkrockstudios.texteditor.clipboard
 
 import androidx.compose.ui.platform.Clipboard
 import androidx.compose.ui.text.AnnotatedString
+import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
 import kotlin.js.ExperimentalWasmJsInterop
 import kotlin.js.Promise
 import kotlinx.coroutines.await
 
 actual object ClipboardHelper {
-	actual suspend fun getText(clipboard: Clipboard): AnnotatedString? {
+	actual suspend fun getText(
+		clipboard: Clipboard,
+		configuration: MarkdownConfiguration,
+	): AnnotatedString? {
 		return try {
 			val text = readClipboardText().await<JsString>().toString()
 			AnnotatedString(text)
@@ -19,7 +23,11 @@ actual object ClipboardHelper {
 		}
 	}
 
-	actual suspend fun setText(clipboard: Clipboard, text: AnnotatedString) {
+	actual suspend fun setText(
+		clipboard: Clipboard,
+		text: AnnotatedString,
+		configuration: MarkdownConfiguration,
+	) {
 		try {
 			writeClipboardText(text.text).await<JsAny?>()
 		} catch (e: Exception) {

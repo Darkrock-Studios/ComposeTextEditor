@@ -28,6 +28,7 @@ import com.darkrockstudios.texteditor.coerceInto
 import com.darkrockstudios.texteditor.cursor.CursorMetrics
 import com.darkrockstudios.texteditor.cursor.getWrappedLineIndex
 import com.darkrockstudios.texteditor.effectiveHeight
+import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
 import com.darkrockstudios.texteditor.richstyle.BlockSpanStyle
 import com.darkrockstudios.texteditor.richstyle.CodeFenceSpanStyle
 import com.darkrockstudios.texteditor.richstyle.OrderedListSpanStyle
@@ -81,6 +82,19 @@ class TextEditorState(
 				updateBookKeeping()
 			}
 		}
+
+	/**
+	 * Styling used when converting styled text to and from an external
+	 * representation, currently the clipboard's HTML flavor. Header levels are
+	 * recognised by matching font sizes against this, so a mismatch silently
+	 * downgrades headings to plain bold text.
+	 *
+	 * Kept in sync by
+	 * [MarkdownExtension][com.darkrockstudios.texteditor.markdown.MarkdownExtension];
+	 * editors that do not use markdown keep the default.
+	 */
+	var markdownConfiguration: MarkdownConfiguration = MarkdownConfiguration.DEFAULT
+		internal set
 
 	/**
 	 * Theming colors for line-block gutter markers, mirrored from

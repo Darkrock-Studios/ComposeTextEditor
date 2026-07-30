@@ -106,8 +106,34 @@ class TextEditorCursorState(
 		}
 	}
 
+	/**
+	 * Applies the cursor's active styles to [text], unless [text] carries
+	 * formatting of its own.
+	 *
+	 * Text that arrives already styled is inserted verbatim. A rich paste
+	 * describes its own formatting completely, so letting the typing style at the
+	 * insertion point apply as well would bold the unstyled runs of the pasted
+	 * content. Plain text still picks up the cursor style, which is what makes
+	 * typing and plain pastes continue the surrounding formatting.
+	 */
 	fun applyCursorStyle(text: AnnotatedString): AnnotatedString {
-		return applyCursorStyle(text.text)
+		// Paragraph styles belong to the line, which already carries its own over its
+		// whole length. Letting an inserted one through would nest a second paragraph
+		// inside that range and split one logical line into several rendered ones.
+		val content = AnnotatedString(text.text, text.spanStyles)
+		if (styles.isEmpty() || content.spanStyles.isNotEmpty()) {
+			return content
+		}
+
+		return buildAnnotatedString {
+			styles.forEach { style ->
+				pushStyle(style)
+			}
+			append(content)
+			repeat(styles.size) {
+				pop()
+			}
+		}
 	}
 
 	fun applyCursorStyle(string: String): AnnotatedString {
