@@ -67,6 +67,25 @@ class ClipboardE2eTest {
 	}
 
 	@Test
+	fun `paste at the cursor preserves character styling`() = editorUiTest(
+		initialText = AnnotatedString("The quick brown fox"),
+	) {
+		dragSelect(fromChar = 4, toChar = 9)
+		state.addStyleSpan(state.selector.selection!!, BOLD)
+
+		dragSelect(fromChar = 4, toChar = 9)
+		press(Key.C, ctrl = true)
+		press(Key.MoveEnd, ctrl = true)
+		press(Key.V, ctrl = true)
+
+		assertEquals("The quick brown foxquick", text)
+		assertTrue(
+			stylesAt(20).contains(BOLD),
+			"text pasted at a plain cursor must keep the bold span from the copied region",
+		)
+	}
+
+	@Test
 	fun `paste over a selection preserves character styling`() = editorUiTest(
 		initialText = AnnotatedString("The quick brown fox"),
 	) {
