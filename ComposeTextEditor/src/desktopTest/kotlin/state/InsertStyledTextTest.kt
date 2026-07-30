@@ -5,6 +5,8 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import com.darkrockstudios.texteditor.CharLineOffset
+import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.state.TextEditorState
 import io.mockk.mockk
 import kotlinx.coroutines.test.TestScope
@@ -77,6 +79,33 @@ class InsertStyledTextTest {
 		assertTrue(
 			line.spanStyles.any { it.item.fontStyle == FontStyle.Italic && it.start == 5 },
 			"expected italic at 'italic', got ${line.spanStyles}",
+		)
+	}
+
+	@Test
+	fun `styled text does not inherit the cursor style`() = runTest {
+		val state = createState("bold start")
+		state.addStyleSpan(
+			TextEditorRange(CharLineOffset(0, 0), CharLineOffset(0, 10)),
+			bold,
+		)
+		state.cursor.updatePosition(CharLineOffset(0, 10))
+
+		val styled = buildAnnotatedString {
+			pushStyle(italic)
+			append("italic")
+			pop()
+			append(" plain")
+		}
+		state.insertStringAtCursor(styled)
+
+		val line = state.textLines[0]
+		assertEquals("bold startitalic plain", line.text)
+
+		val plainStart = line.text.indexOf(" plain")
+		assertTrue(
+			line.boldRanges().none { plainStart in it },
+			"pasted unstyled text inherited the cursor's bold: ${line.spanStyles}",
 		)
 	}
 

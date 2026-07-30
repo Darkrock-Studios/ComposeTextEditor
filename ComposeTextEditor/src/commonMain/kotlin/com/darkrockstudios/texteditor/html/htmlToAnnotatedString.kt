@@ -92,13 +92,22 @@ private class OpenElement(
 	val name: String,
 	val style: SpanStyle?,
 	val startIndex: Int,
+	val order: Int,
+)
+
+private class ParsedSpan(
+	val style: SpanStyle,
+	val start: Int,
+	val end: Int,
+	val order: Int,
 )
 
 private class HtmlFragmentParser(private val config: MarkdownConfiguration) {
 
 	private val out = StringBuilder()
-	private val spans = mutableListOf<AnnotatedString.Range<SpanStyle>>()
+	private val spans = mutableListOf<ParsedSpan>()
 	private val stack = ArrayDeque<OpenElement>()
+	private var nextOrder = 0
 
 	private var pendingBlockBreak = false
 	private var pendingExplicitBreaks = 0
@@ -153,9 +162,12 @@ private class HtmlFragmentParser(private val config: MarkdownConfiguration) {
 		trimTrailingLayoutSpace()
 
 		val text = out.toString()
-		val clamped = spans.mapNotNull { span ->
+		// Sorted by the order the elements opened, so an outer span lands earlier in
+		// the list than the elements it contains. Rendering merges later spans over
+		// earlier ones, which is what lets an inner style override its wrapper.
+		val clamped = spans.sortedBy { it.order }.mapNotNull { span ->
 			val end = span.end.coerceAtMost(text.length)
-			if (span.start >= end) null else AnnotatedString.Range(span.item, span.start, end)
+			if (span.start >= end) null else AnnotatedString.Range(span.style, span.start, end)
 		}
 		return AnnotatedString(text, clamped)
 	}
@@ -170,8 +182,16 @@ private class HtmlFragmentParser(private val config: MarkdownConfiguration) {
 		if (tag.name == "pre") preDepth++
 		if (tag.name in VOID_TAGS || tag.isSelfClosing) return
 
-		val style = TAG_STYLES[tag.name]?.spanStyle(config) ?: styleFromAttributes(tag.attributes)
-		stack.addLast(OpenElement(tag.name, style, out.length))
+		// The inline style is layered over the tag's own meaning rather than replacing
+		// it, so `<b style="font-weight:normal">` (which Word and Google Docs wrap
+		// whole fragments in) cancels the bold instead of applying it.
+		val tagStyle = TAG_STYLES[tag.name]?.spanStyle(config)
+		val inlineStyle = styleFromAttributes(tag.attributes)
+		val style = when {
+			tagStyle != null && inlineStyle != null -> tagStyle.merge(inlineStyle)
+			else -> tagStyle ?: inlineStyle
+		}
+		stack.addLast(OpenElement(tag.name, style, out.length, nextOrder++))
 	}
 
 	private fun handleCloseTag(tag: Tag) {
@@ -186,7 +206,7 @@ private class HtmlFragmentParser(private val config: MarkdownConfiguration) {
 	private fun closeElement(element: OpenElement) {
 		val style = element.style ?: return
 		if (out.length > element.startIndex) {
-			spans += AnnotatedString.Range(style, element.startIndex, out.length)
+			spans += ParsedSpan(style, element.startIndex, out.length, element.order)
 		}
 	}
 
@@ -272,15 +292,25 @@ private class HtmlFragmentParser(private val config: MarkdownConfiguration) {
 			val property = declaration.substring(0, separator).trim().lowercase()
 			val value = declaration.substring(separator + 1).trim().lowercase()
 			when (property) {
-				"font-weight" -> if (value == "bold" || value == "bolder" ||
-					(value.toIntOrNull() ?: 0) >= 600
-				) {
-					style = style.copy(fontWeight = FontWeight.Bold)
-					matched = true
+				"font-weight" -> {
+					val weight = value.toIntOrNull()
+					val bold = value == "bold" || value == "bolder" ||
+						(weight != null && weight >= 600)
+					val normal = value == "normal" || value == "lighter" ||
+						(weight != null && weight < 600)
+					if (bold || normal) {
+						style = style.copy(
+							fontWeight = if (bold) FontWeight.Bold else FontWeight.Normal
+						)
+						matched = true
+					}
 				}
 
 				"font-style" -> if (value == "italic" || value == "oblique") {
 					style = style.copy(fontStyle = FontStyle.Italic)
+					matched = true
+				} else if (value == "normal") {
+					style = style.copy(fontStyle = FontStyle.Normal)
 					matched = true
 				}
 
@@ -299,6 +329,9 @@ private class HtmlFragmentParser(private val config: MarkdownConfiguration) {
 					}
 					if (decorations.isNotEmpty()) {
 						style = style.copy(textDecoration = TextDecoration.combine(decorations))
+						matched = true
+					} else if (value.contains("none")) {
+						style = style.copy(textDecoration = TextDecoration.None)
 						matched = true
 					}
 				}

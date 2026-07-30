@@ -81,6 +81,9 @@ class ClipboardHtmlUnwrapTest {
 		val options = text.indexOf("options")
 		assertTrue(result.hasBoldAt(options), "expected 'options' bold")
 		assertTrue(result.hasItalicAt(options), "expected 'options' italic")
+
+		assertFalse(result.hasBoldAt(text.indexOf("asdasd")), "did not expect 'asdasd' bold")
+		assertFalse(result.hasBoldAt(text.indexOf("hello!")), "did not expect 'hello!' bold")
 	}
 
 	@Test

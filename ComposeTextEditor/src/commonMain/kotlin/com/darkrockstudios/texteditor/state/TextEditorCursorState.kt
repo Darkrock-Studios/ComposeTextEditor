@@ -107,12 +107,17 @@ class TextEditorCursorState(
 	}
 
 	/**
-	 * Layers the cursor's active styles under [text]'s own spans. The incoming
-	 * spans are kept: pasted or programmatically inserted text carries its own
-	 * formatting, and the cursor style only fills in where that text is unstyled.
+	 * Applies the cursor's active styles to [text], unless [text] carries
+	 * formatting of its own.
+	 *
+	 * Text that arrives already styled is inserted verbatim. A rich paste
+	 * describes its own formatting completely, so letting the typing style at the
+	 * insertion point apply as well would bold the unstyled runs of the pasted
+	 * content. Plain text still picks up the cursor style, which is what makes
+	 * typing and plain pastes continue the surrounding formatting.
 	 */
 	fun applyCursorStyle(text: AnnotatedString): AnnotatedString {
-		if (styles.isEmpty()) {
+		if (styles.isEmpty() || text.spanStyles.isNotEmpty()) {
 			return text
 		}
 
