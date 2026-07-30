@@ -106,8 +106,25 @@ class TextEditorCursorState(
 		}
 	}
 
+	/**
+	 * Layers the cursor's active styles under [text]'s own spans. The incoming
+	 * spans are kept: pasted or programmatically inserted text carries its own
+	 * formatting, and the cursor style only fills in where that text is unstyled.
+	 */
 	fun applyCursorStyle(text: AnnotatedString): AnnotatedString {
-		return applyCursorStyle(text.text)
+		if (styles.isEmpty()) {
+			return text
+		}
+
+		return buildAnnotatedString {
+			styles.forEach { style ->
+				pushStyle(style)
+			}
+			append(text)
+			repeat(styles.size) {
+				pop()
+			}
+		}
 	}
 
 	fun applyCursorStyle(string: String): AnnotatedString {

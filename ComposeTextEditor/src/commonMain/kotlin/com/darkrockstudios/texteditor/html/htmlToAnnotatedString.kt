@@ -18,7 +18,38 @@ import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
  */
 fun String.toAnnotatedStringFromHtml(
 	configuration: MarkdownConfiguration = MarkdownConfiguration.DEFAULT
-): AnnotatedString = HtmlFragmentParser(configuration).parse(this)
+): AnnotatedString = HtmlFragmentParser(configuration).parse(unwrapClipboardHtml(this))
+
+private val START_FRAGMENT = Regex("""<!--\s*StartFragment\s*-->""", RegexOption.IGNORE_CASE)
+private val END_FRAGMENT = Regex("""<!--\s*EndFragment\s*-->""", RegexOption.IGNORE_CASE)
+
+/**
+ * Removes the wrappers the platform puts around clipboard markup.
+ *
+ * Windows hands over the CF_HTML format, which prefixes the document with
+ * `Version:`/`StartHTML:`/`StartFragment:` descriptor lines. Those are not
+ * markup, so without this they parse as body text and land in the document.
+ *
+ * When the source app marked a fragment, only the fragment is kept: the rest of
+ * the document is the surrounding page, not what the user selected.
+ */
+internal fun unwrapClipboardHtml(raw: String): String {
+	var content = raw
+	if (content.trimStart().startsWith("Version:", ignoreCase = true)) {
+		val markupStart = content.indexOf('<')
+		content = if (markupStart == -1) "" else content.substring(markupStart)
+	}
+
+	val start = START_FRAGMENT.find(content)
+	val end = END_FRAGMENT.find(content)
+	return when {
+		start != null && end != null && end.range.first >= start.range.last ->
+			content.substring(start.range.last + 1, end.range.first)
+
+		start != null -> content.substring(start.range.last + 1)
+		else -> content
+	}
+}
 
 private val BLOCK_TAGS = setOf(
 	"p", "div", "h1", "h2", "h3", "h4", "h5", "h6", "li", "ul", "ol",
