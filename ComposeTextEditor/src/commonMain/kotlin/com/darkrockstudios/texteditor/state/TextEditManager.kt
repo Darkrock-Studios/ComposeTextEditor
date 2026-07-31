@@ -80,11 +80,14 @@ class TextEditManager(private val state: TextEditorState) {
 			handleMultiLineInsert(operation)
 		} else {
 			// Single line insert with span merging
-			val line = state._textLines[operation.position.line]
-			state._textLines[operation.position.line] = spanManager.mergeAnnotatedStrings(
-				original = line,
-				start = operation.position.char,
-				newText = operation.text
+			val line = state.textLines[operation.position.line]
+			state.setLine(
+				operation.position.line,
+				spanManager.mergeAnnotatedStrings(
+					original = line,
+					start = operation.position.char,
+					newText = operation.text
+				)
 			)
 		}
 		return null
@@ -115,15 +118,18 @@ class TextEditManager(private val state: TextEditorState) {
 
 	private fun handleMultiLineInsert(operation: TextEditOperation.Insert) {
 		val insertLines = operation.text.splitAnnotatedString()
-		val currentLine = state._textLines[operation.position.line]
+		val currentLine = state.textLines[operation.position.line]
 
 		// Split current line content
 		val prefixEndIndex = operation.position.char.coerceIn(0, currentLine.length)
 		val prefix = currentLine.subSequence(0, prefixEndIndex)
-		state._textLines[operation.position.line] = spanManager.mergeAnnotatedStrings(
-			original = prefix,
-			start = prefix.length,
-			newText = insertLines.first()
+		state.setLine(
+			operation.position.line,
+			spanManager.mergeAnnotatedStrings(
+				original = prefix,
+				start = prefix.length,
+				newText = insertLines.first()
+			)
 		)
 
 		// Insert middle lines (if any)
@@ -167,7 +173,7 @@ class TextEditManager(private val state: TextEditorState) {
 		when {
 			// Single line replacement (no newlines in range or new text)
 			operation.range.isSingleLine() && !operation.newText.contains('\n') -> {
-				val line = state._textLines[operation.range.start.line]
+				val line = state.textLines[operation.range.start.line]
 
 				// Handle inherited styles if needed
 				val inheritedStyles = if (operation.inheritStyle) {
@@ -191,11 +197,14 @@ class TextEditManager(private val state: TextEditorState) {
 					operation.newText
 				}
 
-				state._textLines[operation.range.start.line] = handleReplace(
-					line,
-					operation.range.start.char,
-					operation.range.end.char,
-					newText
+				state.setLine(
+					operation.range.start.line,
+					handleReplace(
+						line,
+						operation.range.start.char,
+						operation.range.end.char,
+						newText
+					)
 				)
 			}
 			// Multi-line range or replacement text contains newlines
@@ -241,14 +250,17 @@ class TextEditManager(private val state: TextEditorState) {
 
 		when {
 			operation.range.isSingleLine() -> {
-				val line = state._textLines[operation.range.start.line]
+				val line = state.textLines[operation.range.start.line]
 				val safeStart = operation.range.start.char.coerceIn(0, line.text.length)
 				val safeEnd = operation.range.end.char.coerceIn(safeStart, line.text.length)
 
-				state._textLines[operation.range.start.line] = handleDelete(
-					line,
-					safeStart,
-					safeEnd
+				state.setLine(
+					operation.range.start.line,
+					handleDelete(
+						line,
+						safeStart,
+						safeEnd
+					)
 				)
 			}
 
@@ -355,30 +367,30 @@ class TextEditManager(private val state: TextEditorState) {
 
 	private fun handleMultiLineDelete(operation: TextEditOperation.Delete) {
 		// Add bounds checking for line indices
-		val startLine = operation.range.start.line.coerceIn(0, state._textLines.lastIndex)
-		val endLine = operation.range.end.line.coerceIn(0, state._textLines.lastIndex)
+		val lines = state.textLines
+		val startLine = operation.range.start.line.coerceIn(0, lines.lastIndex)
+		val endLine = operation.range.end.line.coerceIn(0, lines.lastIndex)
 
 		// Edge case: no lines to delete
-		if (startLine > endLine || state._textLines.isEmpty()) {
-			if (state._textLines.isEmpty()) {
-				state._textLines.add(AnnotatedString(""))
+		if (startLine > endLine || lines.isEmpty()) {
+			if (lines.isEmpty()) {
+				state.setLines(listOf(AnnotatedString("")))
 			}
 			return
 		}
 
 		// Process the first and last lines
-		val firstLine = state._textLines[startLine]
-		val lastLine = state._textLines[endLine]
+		val firstLine = lines[startLine]
+		val lastLine = lines[endLine]
 
 		val startChar = operation.range.start.char.coerceIn(0, firstLine.text.length)
 		val endChar = operation.range.end.char.coerceIn(0, lastLine.text.length)
 
-		if (startLine == 0 && endLine == state._textLines.lastIndex &&
+		if (startLine == 0 && endLine == lines.lastIndex &&
 			startChar == 0 && endChar == lastLine.text.length
 		) {
 			// If deleting all content, leave one empty line
-			state._textLines.clear()
-			state._textLines.add(AnnotatedString(""))
+			state.setLines(listOf(AnnotatedString("")))
 		} else {
 			val startText = firstLine.text.substring(0, startChar)
 			val endText = lastLine.text.substring(endChar)

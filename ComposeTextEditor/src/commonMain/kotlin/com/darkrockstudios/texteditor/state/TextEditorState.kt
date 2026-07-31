@@ -40,6 +40,7 @@ import com.darkrockstudios.texteditor.richstyle.detectLineBlock
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlin.concurrent.Volatile
 import kotlin.math.min
 
 /**
@@ -116,13 +117,30 @@ class TextEditorState(
 	var codeFenceBorderColor: Color by mutableStateOf(Color.Unspecified)
 		internal set
 
-	internal val _textLines = mutableListOf<AnnotatedString>()
+	/**
+	 * The document's text and rich spans in one immutable holder, so a single read
+	 * of [content] yields both halves as they stood after the same edit.
+	 */
+	internal data class DocumentContent(
+		val lines: List<AnnotatedString>,
+		val richSpans: Set<RichSpan>,
+	)
 
 	/**
-	 * The document content as one [AnnotatedString] per line, in order. Read-only;
-	 * mutate through the edit operations or replace wholesale with [setText].
+	 * The current document content. Every mutation publishes a whole new
+	 * [DocumentContent] rather than editing the previous one in place, so a reader
+	 * on any thread sees a complete, self-consistent snapshot and can never observe
+	 * a collection mid-mutation. Writes must all come from the thread driving edits.
 	 */
-	val textLines: List<AnnotatedString> get() = _textLines
+	@Volatile
+	internal var content = DocumentContent(emptyList(), emptySet())
+		private set
+
+	/**
+	 * The document content as one [AnnotatedString] per line, in order. An immutable
+	 * snapshot; mutate through the edit operations or replace wholesale with [setText].
+	 */
+	val textLines: List<AnnotatedString> get() = content.lines
 
 	/** The caret: its [CharLineOffset] position, movement, and active typing style. */
 	val cursor = TextEditorCursorState(this)
@@ -267,9 +285,7 @@ class TextEditorState(
 	 * operations.
 	 */
 	fun setText(text: String) {
-		_textLines.clear()
-		richSpanManager.clear()
-		_textLines.addAll(text.split("\n").map { it.toAnnotatedString() })
+		replaceContent(text.split("\n").map { it.toAnnotatedString() })
 		updateBookKeeping()
 	}
 
@@ -279,9 +295,7 @@ class TextEditorState(
 	 * instead, use [replace] or the cursor operations.
 	 */
 	fun setText(text: AnnotatedString) {
-		_textLines.clear()
-		richSpanManager.clear()
-		_textLines.addAll(text.splitAnnotatedString())
+		replaceContent(text.splitAnnotatedString())
 		updateBookKeeping()
 	}
 
@@ -550,39 +564,39 @@ class TextEditorState(
 		updateLine(index, text.toAnnotatedString())
 
 	internal fun updateLine(index: Int, text: AnnotatedString) {
-		_textLines[index] = text
+		setLine(index, text)
 		updateBookKeeping(index..index)
 	}
 
 	/**
-	 * Rewrites every line in place by passing each line index and content through
-	 * [processor] and storing its result, then relays out the document.
+	 * Rewrites the document by passing each line index and content through [processor],
+	 * then relays out the result. [processor] sees the document as it stood on entry;
+	 * the rewritten lines are published as one batch once every line has been visited.
 	 */
 	fun processLines(processor: (index: Int, line: AnnotatedString) -> AnnotatedString) {
-		for (i in textLines.indices) {
-			val line = textLines[i]
-			_textLines[i] = processor(i, line)
-		}
+		setLines(textLines.mapIndexed(processor))
 		updateBookKeeping()
 	}
 
 	internal fun removeLines(startIndex: Int, count: Int) {
+		val lines = textLines
 		// If there are no lines, or we're trying to remove more lines than exist, abort
-		if (_textLines.isEmpty() || startIndex >= _textLines.size) {
+		if (lines.isEmpty() || startIndex >= lines.size) {
 			return
 		}
 
 		// Ensure we don't remove more lines than available
-		val safeCount = minOf(count, _textLines.size - startIndex)
+		val safeCount = minOf(count, lines.size - startIndex)
 
 		// Always keep at least one empty line
-		if (_textLines.size <= safeCount) {
-			_textLines.clear()
-			_textLines.add(AnnotatedString(""))
+		if (lines.size <= safeCount) {
+			setLines(listOf(AnnotatedString("")))
 		} else {
-			repeat(safeCount) {
-				_textLines.removeAt(startIndex)
-			}
+			setLines(
+				lines.toMutableList().also {
+					it.subList(startIndex, startIndex + safeCount).clear()
+				}
+			)
 		}
 
 		updateBookKeeping()
@@ -590,8 +604,31 @@ class TextEditorState(
 
 	internal fun insertLine(index: Int, text: String) = insertLine(index, text.toAnnotatedString())
 	internal fun insertLine(index: Int, text: AnnotatedString) {
-		_textLines.add(index, text)
+		setLines(textLines.toMutableList().also { it.add(index, text) })
 		updateBookKeeping()
+	}
+
+	/**
+	 * Publishes [lines] as the entire document and drops every rich span in a single
+	 * write. A full content replacement leaves any prior spans pointing at stale line
+	 * indices: on a markdown roundtrip, leftover bullet/blockquote spans would block
+	 * `applyLineBlock` from re-attaching the paragraph indent and the gutter marker
+	 * would draw over the first character of the line.
+	 */
+	private fun replaceContent(lines: List<AnnotatedString>) {
+		content = DocumentContent(lines, emptySet())
+	}
+
+	internal fun setLines(lines: List<AnnotatedString>) {
+		content = content.copy(lines = lines)
+	}
+
+	internal fun setLine(index: Int, text: AnnotatedString) {
+		setLines(content.lines.toMutableList().also { it[index] = text })
+	}
+
+	internal fun setRichSpans(richSpans: Set<RichSpan>) {
+		content = content.copy(richSpans = richSpans)
 	}
 
 	/** True when the document holds a single empty line. */
@@ -1219,11 +1256,14 @@ class TextEditorState(
 	 * Returns the entire document as a single [AnnotatedString], joining [textLines]
 	 * with newlines and preserving character-level spans.
 	 */
-	fun getAllText(): AnnotatedString {
+	fun getAllText(): AnnotatedString = joinLines(textLines)
+
+	/** Joins [lines] with newlines into one [AnnotatedString], preserving spans. */
+	internal fun joinLines(lines: List<AnnotatedString>): AnnotatedString {
 		return buildAnnotatedString {
-			textLines.forEachIndexed { index, line ->
+			lines.forEachIndexed { index, line ->
 				append(line)
-				if (index < textLines.lastIndex) {
+				if (index < lines.lastIndex) {
 					append('\n')
 				}
 			}

@@ -107,8 +107,18 @@ class MarkdownExtension(
 		editorState.markdownConfiguration = markdownConfiguration
 	}
 
+	/**
+	 * Serializes the document to markdown.
+	 *
+	 * Safe to call from any thread: the whole document (text and rich spans) is read
+	 * once, up front, as a single immutable snapshot, so a concurrent edit can neither
+	 * interrupt the walk nor tear the output across two revisions. It does not wait for
+	 * the user to stop typing, though; an edit made after the snapshot is taken simply
+	 * isn't in the result.
+	 */
 	fun exportAsMarkdown(): String {
-		val allSpans = editorState.richSpanManager.getAllRichSpans()
+		val content = editorState.content
+		val allSpans = content.richSpans
 		val hrLines = allSpans
 			.asSequence()
 			.filter { it.style === HorizontalRuleSpanStyle }
@@ -133,7 +143,7 @@ class MarkdownExtension(
 			.map { it.range.start.line }
 			.toHashSet()
 
-		val annotated = editorState.getAllText()
+		val annotated = editorState.joinLines(content.lines)
 		val text = annotated.text
 		if (text.isEmpty() && hrLines.isEmpty() && imageLines.isEmpty() && codeFenceLines.isEmpty()) return ""
 

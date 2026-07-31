@@ -45,7 +45,7 @@ class TextEditorWrapTest {
 		)
 
 		println("\n=== Initial State ===")
-		println("Initial text: ${state._textLines[0].text}")
+		println("Initial text: ${state.textLines[0].text}")
 		println("Line offsets size: ${state.lineOffsets.size}")
 		state.richSpanManager.debugPrintSpans()
 
@@ -67,7 +67,7 @@ class TextEditorWrapTest {
 		state.insertStringAtCursor(insertText)
 
 		println("\n=== Final State ===")
-		println("Final text: ${state._textLines[0].text}")
+		println("Final text: ${state.textLines[0].text}")
 		state.richSpanManager.debugPrintSpans()
 
 		state.lineOffsets.forEachIndexed { index, lineWrap ->
@@ -125,23 +125,14 @@ class TextEditorWrapTest {
 
 // Extension function to help debug RichSpanManager
 fun RichSpanManager.debugPrintSpans(prefix: String = "Spans:") {
-	val field = this::class.java.getDeclaredField("spans")
-	field.isAccessible = true
-	@Suppress("UNCHECKED_CAST")
-	val spans = field.get(this) as Collection<*>
 	println(prefix)
-	spans.forEachIndexed { index, span ->
+	getSpans().forEachIndexed { index, span ->
 		println("    $index: $span")
 	}
 }
 
 // Extension function to get spans from RichSpanManager for testing
-fun RichSpanManager.getSpans(): Collection<RichSpan> {
-	val field = this::class.java.getDeclaredField("spans")
-	field.isAccessible = true
-	@Suppress("UNCHECKED_CAST")
-	return field.get(this) as Collection<RichSpan>
-}
+fun RichSpanManager.getSpans(): Collection<RichSpan> = getAllRichSpans()
 
 private fun createMockTextMeasurer(): TextMeasurer {
 	val measurer = mockk<TextMeasurer>()
