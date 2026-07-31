@@ -34,9 +34,10 @@ import com.darkrockstudios.texteditor.state.TextEditorState
  * cards without the editor chrome.
  *
  * When [isSelectable] is true, users can select text (mouse drag / double-click word /
- * triple-click line / long-press on touch), copy to the clipboard via Ctrl+C / Cmd+C, select
- * all via Ctrl+A, and open a right-click "Copy / Select All" context menu. The text cursor
- * caret is still never drawn — only selection.
+ * triple-click line / long-press on touch), copy to the clipboard, select all, and open a
+ * right-click "Copy / Select All" context menu. The copy and select-all shortcuts follow the
+ * host platform: Ctrl+C / Ctrl+A on Windows and Linux, Cmd+C / Cmd+A on macOS and iOS. The
+ * text cursor caret is still never drawn — only selection.
  *
  * The caller owns the [TextEditorState] and is responsible for seeding it with content
  * (e.g. via `rememberTextEditorState(initialText)` or `withMarkdown(...)`).

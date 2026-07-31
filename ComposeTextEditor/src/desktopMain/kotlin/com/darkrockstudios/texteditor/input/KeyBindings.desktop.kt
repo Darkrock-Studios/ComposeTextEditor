@@ -1,7 +1,12 @@
 package com.darkrockstudios.texteditor.input
 
-private val isMacOs: Boolean =
-	System.getProperty("os.name").orEmpty().startsWith("Mac", ignoreCase = true)
+/** Split out from [platformKeyBindings] so the host detection itself is testable. */
+internal fun keyBindingsForOs(osName: String): KeyBindings =
+	if (osName.startsWith("Mac", ignoreCase = true) || osName.startsWith("Darwin", ignoreCase = true)) {
+		MacKeyBindings
+	} else {
+		CtrlKeyBindings
+	}
 
 internal actual fun platformKeyBindings(): KeyBindings =
-	if (isMacOs) MacKeyBindings else CtrlKeyBindings
+	keyBindingsForOs(System.getProperty("os.name").orEmpty())

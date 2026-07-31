@@ -53,8 +53,8 @@ internal object CtrlKeyBindings : KeyBindings {
 
 /**
  * macOS conventions: Cmd for shortcuts, Option+Arrow for word jumps, Cmd+Arrow for line and
- * document bounds. Ctrl is deliberately unbound, since on macOS it belongs to the system and to
- * the Emacs-style text bindings.
+ * document bounds. Ctrl never selects a different command than the unmodified key would, since
+ * on macOS it belongs to the system and to the Emacs-style text bindings.
  *
  * Option is also the macOS compose modifier (Option+8 types '{'), so only the chords claimed here
  * may consume an Option event; everything else must fall through to

@@ -189,7 +189,7 @@ internal class TextEditorKeyCommandHandler(
 		state.moveToPreviousWord()
 		val wordStart = state.cursorPosition
 		if (wordStart != wordEnd) {
-			state.delete(TextEditorRange(wordStart, wordEnd))
+			deleteRange(state, TextEditorRange(wordStart, wordEnd), caretBefore = wordEnd)
 		}
 	}
 
@@ -202,7 +202,7 @@ internal class TextEditorKeyCommandHandler(
 		state.moveToNextWord()
 		val wordEnd = state.cursorPosition
 		if (wordStart != wordEnd) {
-			state.delete(TextEditorRange(wordStart, wordEnd))
+			deleteRange(state, TextEditorRange(wordStart, wordEnd), caretBefore = wordStart)
 		}
 	}
 
@@ -215,8 +215,22 @@ internal class TextEditorKeyCommandHandler(
 		state.cursor.moveToLineStart()
 		val lineStart = state.cursorPosition
 		if (lineStart != lineEnd) {
-			state.delete(TextEditorRange(lineStart, lineEnd))
+			deleteRange(state, TextEditorRange(lineStart, lineEnd), caretBefore = lineEnd)
 		}
+	}
+
+	/**
+	 * Deletes [range] as if the caret were at [caretBefore]. The word and line motions
+	 * that locate the range leave the caret at the far end of it, and [TextEditorState.delete]
+	 * records wherever the caret is as the position undo restores.
+	 */
+	private fun deleteRange(
+		state: TextEditorState,
+		range: TextEditorRange,
+		caretBefore: CharLineOffset
+	) {
+		state.cursor.updatePosition(caretBefore)
+		state.delete(range)
 	}
 
 	private fun handleIndent(state: TextEditorState) {

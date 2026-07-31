@@ -143,6 +143,34 @@ class MacShortcutsE2eTest {
 	}
 
 	@Test
+	fun `undo after cmd+backspace returns the caret to where the user had it`() = editorUiTest(
+		initialText = AnnotatedString("first\nsecond line"),
+		keyBindings = MacKeyBindings,
+	) {
+		clickAtCharacter(13)
+		press(Key.Backspace, meta = true)
+		assertEquals(listOf("first", "line"), lines)
+
+		press(Key.Z, meta = true)
+		assertEquals(listOf("first", "second line"), lines)
+		assertEquals(13, cursorIndex)
+	}
+
+	@Test
+	fun `undo after option+backspace returns the caret to where the user had it`() = editorUiTest(
+		initialText = AnnotatedString("The quick brown fox"),
+		keyBindings = MacKeyBindings,
+	) {
+		clickAtCharacter(10)
+		press(Key.Backspace, alt = true)
+		assertEquals("The brown fox", text)
+
+		press(Key.Z, meta = true)
+		assertEquals("The quick brown fox", text)
+		assertEquals(10, cursorIndex)
+	}
+
+	@Test
 	fun `option+delete deletes the next word`() = editorUiTest(
 		initialText = AnnotatedString("The quick brown fox"),
 		keyBindings = MacKeyBindings,
