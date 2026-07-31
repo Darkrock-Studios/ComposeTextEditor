@@ -4,6 +4,7 @@ import androidx.compose.ui.platform.Clipboard
 import com.darkrockstudios.texteditor.clipboard.ClipboardHelper
 import com.darkrockstudios.texteditor.clipboard.pasteHtmlBlocks
 import com.darkrockstudios.texteditor.state.TextEditorState
+import com.darkrockstudios.texteditor.state.applyStyleForEditAt
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
@@ -72,7 +73,7 @@ class ContextMenuActions(
 				val insertPosition = curSelection?.start ?: state.cursorPosition
 				state.preserveCopiedRichSpansThroughNextEdit()
 				if (curSelection != null) {
-					state.replace(curSelection, text)
+					state.replace(curSelection, state.applyStyleForEditAt(curSelection.start, text))
 				} else {
 					state.insertStringAtCursor(text)
 				}

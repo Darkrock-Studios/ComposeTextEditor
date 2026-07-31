@@ -18,6 +18,7 @@ import com.darkrockstudios.texteditor.clipboard.ClipboardHelper
 import com.darkrockstudios.texteditor.clipboard.pasteHtmlBlocks
 import com.darkrockstudios.texteditor.input.TextEditorKeyCommandHandler.Companion.TAB_SIZE
 import com.darkrockstudios.texteditor.state.TextEditorState
+import com.darkrockstudios.texteditor.state.applyStyleForEditAt
 import com.darkrockstudios.texteditor.state.moveCursorDown
 import com.darkrockstudios.texteditor.state.moveCursorPageDown
 import com.darkrockstudios.texteditor.state.moveCursorPageUp
@@ -240,7 +241,7 @@ internal class TextEditorKeyCommandHandler {
 				val insertPosition = curSelection?.start ?: state.cursorPosition
 				state.preserveCopiedRichSpansThroughNextEdit()
 				if (curSelection != null) {
-					state.replace(curSelection, text)
+					state.replace(curSelection, state.applyStyleForEditAt(curSelection.start, text))
 				} else {
 					state.insertStringAtCursor(text)
 				}

@@ -271,6 +271,7 @@ class TextEditorState(
 		richSpanManager.clear()
 		_textLines.addAll(text.split("\n").map { it.toAnnotatedString() })
 		updateBookKeeping()
+		cursor.refreshStyles()
 	}
 
 	/**
@@ -283,6 +284,7 @@ class TextEditorState(
 		richSpanManager.clear()
 		_textLines.addAll(text.splitAnnotatedString())
 		updateBookKeeping()
+		cursor.refreshStyles()
 	}
 
 	/** Sets [isFocused]; losing focus also clears any pending IME composing region. */

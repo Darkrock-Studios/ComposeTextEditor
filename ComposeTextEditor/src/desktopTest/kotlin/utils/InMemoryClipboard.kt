@@ -31,4 +31,9 @@ class InMemoryClipboard : Clipboard {
 	fun seed(clipEntry: ClipEntry?) {
 		entry = clipEntry
 	}
+
+	/** Offers [value] on the string flavor only, as an external application would. */
+	fun setPlainText(value: String) {
+		seed(ClipEntry(java.awt.datatransfer.StringSelection(value)))
+	}
 }

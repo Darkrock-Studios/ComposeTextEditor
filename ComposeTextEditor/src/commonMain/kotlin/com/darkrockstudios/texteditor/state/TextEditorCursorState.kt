@@ -7,6 +7,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import com.darkrockstudios.texteditor.CharLineOffset
+import com.darkrockstudios.texteditor.annotatedstring.withInheritedStyles
 import com.darkrockstudios.texteditor.coerceInto
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -84,57 +85,21 @@ class TextEditorCursorState(
 		styles = emptySet()
 	}
 
-	private fun updateStylesFromPosition(position: CharLineOffset) {
-		// If we're at the start of the line and it's not the first line,
-		// check the end of the previous line
-		if (position.char == 0 && position.line > 0) {
-			val previousLine = position.line - 1
-			val previousLineLength = editorState.textLines[previousLine].length - 1
-			if (previousLineLength >= 0) {
-				val previousPosition = CharLineOffset(previousLine, previousLineLength)
-				styles = editorState.getSpanStylesAtPosition(previousPosition)
-			}
-		} else {
-			// If we're not at the start of the text, look at the character before the cursor
-			if (position.char > 0) {
-				val beforePosition = position.copy(char = position.char - 1)
-				styles = editorState.getSpanStylesAtPosition(beforePosition)
-			} else {
-				// If we're at the start of text or there's no style before us, clear styles
-				styles = emptySet()
-			}
-		}
-	}
-
 	/**
-	 * Applies the cursor's active styles to [text], unless [text] carries
-	 * formatting of its own.
-	 *
-	 * Text that arrives already styled is inserted verbatim. A rich paste
-	 * describes its own formatting completely, so letting the typing style at the
-	 * insertion point apply as well would bold the unstyled runs of the pasted
-	 * content. Plain text still picks up the cursor style, which is what makes
-	 * typing and plain pastes continue the surrounding formatting.
+	 * Recomputes the typing style from the text around the caret. Needed after the
+	 * document is replaced wholesale, which leaves the caret where it is and so never
+	 * goes through [updatePosition].
 	 */
-	fun applyCursorStyle(text: AnnotatedString): AnnotatedString {
-		// Paragraph styles belong to the line, which already carries its own over its
-		// whole length. Letting an inserted one through would nest a second paragraph
-		// inside that range and split one logical line into several rendered ones.
-		val content = AnnotatedString(text.text, text.spanStyles)
-		if (styles.isEmpty() || content.spanStyles.isNotEmpty()) {
-			return content
-		}
-
-		return buildAnnotatedString {
-			styles.forEach { style ->
-				pushStyle(style)
-			}
-			append(content)
-			repeat(styles.size) {
-				pop()
-			}
-		}
+	internal fun refreshStyles() {
+		updateStylesFromPosition(_position)
 	}
+
+	private fun updateStylesFromPosition(position: CharLineOffset) {
+		styles = editorState.getSpanStylesForEditAt(position)
+	}
+
+	/** @see withInheritedStyles */
+	fun applyCursorStyle(text: AnnotatedString): AnnotatedString = text.withInheritedStyles(styles)
 
 	fun applyCursorStyle(string: String): AnnotatedString {
 		if (styles.isEmpty()) {
