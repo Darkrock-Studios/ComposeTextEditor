@@ -50,14 +50,13 @@ class MarkdownExportConcurrencyTest {
 
 		val exporters = List(4) {
 			thread {
-				try {
-					while (exporting.get()) {
-						extension.exportAsMarkdown()
-						exportCount.incrementAndGet()
-					}
-				} catch (t: Throwable) {
-					failure.compareAndSet(null, t)
-					exporting.set(false)
+				while (exporting.get()) {
+					runCatching { extension.exportAsMarkdown() }
+						.onSuccess { exportCount.incrementAndGet() }
+						.onFailure {
+							failure.compareAndSet(null, it)
+							exporting.set(false)
+						}
 				}
 			}
 		}
@@ -100,20 +99,21 @@ class MarkdownExportConcurrencyTest {
 		val torn = AtomicReference<String?>(null)
 
 		val exporter = thread {
-			try {
-				while (exporting.get()) {
-					val markdown = extension.exportAsMarkdown()
-					val bad = markdown.lines()
-						.filter { it.isNotBlank() }
-						.firstOrNull { !it.startsWith("- ") }
-					if (bad != null) {
-						torn.compareAndSet(null, "$bad\n---\n$markdown")
+			while (exporting.get()) {
+				runCatching { extension.exportAsMarkdown() }
+					.onSuccess { markdown ->
+						val bad = markdown.lines()
+							.filter { it.isNotBlank() }
+							.firstOrNull { !it.startsWith("- ") }
+						if (bad != null) {
+							torn.compareAndSet(null, "$bad\n---\n$markdown")
+							exporting.set(false)
+						}
+					}
+					.onFailure {
+						failure.compareAndSet(null, it)
 						exporting.set(false)
 					}
-				}
-			} catch (t: Throwable) {
-				failure.compareAndSet(null, t)
-				exporting.set(false)
 			}
 		}
 
