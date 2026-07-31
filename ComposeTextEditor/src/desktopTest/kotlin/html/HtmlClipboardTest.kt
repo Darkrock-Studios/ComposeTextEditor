@@ -225,4 +225,26 @@ class HtmlClipboardTest {
 		val html = "<pre>line one\n    indented</pre>"
 		assertEquals("line one\n    indented", html.toAnnotatedStringFromHtml(config).text)
 	}
+
+	@Test
+	fun `bold text at the body size is not mistaken for a heading`() {
+		val input = buildAnnotatedString {
+			pushStyle(config.defaultTextStyle.merge(config.boldStyle))
+			append("bold")
+			pop()
+		}
+		// The default h4 is bold at the body font size, so size alone cannot tell
+		// the two apart.
+		assertEquals("<strong>bold</strong>", input.toHtml(config))
+	}
+
+	@Test
+	fun `a heading larger than body text still serializes as a heading`() {
+		val input = buildAnnotatedString {
+			pushStyle(config.header2Style)
+			append("Title")
+			pop()
+		}
+		assertEquals("<h2>Title</h2>", input.toHtml(config))
+	}
 }

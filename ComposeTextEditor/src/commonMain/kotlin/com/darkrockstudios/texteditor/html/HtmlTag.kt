@@ -24,6 +24,10 @@ internal enum class HtmlTag(val tag: String) {
 	EM("em"),
 	STRIKE("s"),
 	UNDERLINE("u"),
+	;
+
+	/** Heading elements are block-level, so they replace a line's `<p>` rather than nest inside it. */
+	val isHeading: Boolean get() = this <= H6
 }
 
 internal fun SpanStyle.htmlTags(config: MarkdownConfiguration): Set<HtmlTag> {
@@ -43,6 +47,21 @@ internal fun SpanStyle.htmlTags(config: MarkdownConfiguration): Set<HtmlTag> {
 }
 
 private fun SpanStyle.headerTag(config: MarkdownConfiguration): HtmlTag? {
+	val heading = headingTagBySize(config) ?: return null
+	// A run whose style is identical to emphasized body text carries nothing that
+	// says which of the two it is. Under the default configuration h4 is exactly
+	// that — bold at the body font size — so mid-sentence runs are read as the far
+	// likelier bold, and it takes a whole uniformly styled line ([uniformHeadingTag])
+	// to be read as a heading.
+	if (heading.spanStyle(config) == config.defaultTextStyle.merge(config.boldStyle)) return null
+	return heading
+}
+
+/**
+ * The heading level whose configured size this style matches, ignoring whether
+ * anything else could have produced the same style.
+ */
+internal fun SpanStyle.headingTagBySize(config: MarkdownConfiguration): HtmlTag? {
 	if (fontWeight != FontWeight.Bold || fontSize == TextUnit.Unspecified) return null
 	return when (fontSize.value) {
 		config.header1Style.fontSize.value -> HtmlTag.H1

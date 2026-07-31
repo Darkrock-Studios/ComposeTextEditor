@@ -16,17 +16,7 @@ fun AnnotatedString.toHtml(
 ): String {
 	if (text.isEmpty()) return ""
 
-	// Overlapping spans are resolved into one effective style per character before
-	// any tag is chosen. Unioning each span's tags instead would let a wider bold
-	// span re-apply over a narrower one that turned bold back off.
-	val resolved = Array(text.length) { SpanStyle() }
-	spanStyles.forEach { range ->
-		val start = range.start.coerceAtLeast(0)
-		val end = range.end.coerceAtMost(text.length)
-		for (i in start until end) {
-			resolved[i] = resolved[i].merge(range.item)
-		}
-	}
+	val resolved = resolveSpanStyles()
 	val activeTags = Array(text.length) { resolved[it].htmlTags(configuration) }
 
 	val builder = StringBuilder()
@@ -66,6 +56,65 @@ fun AnnotatedString.toHtml(
 	}
 	closeAll()
 
+	return builder.toString()
+}
+
+/**
+ * The effective style of each character.
+ *
+ * Overlapping spans are resolved into one style per character before any tag is
+ * chosen. Unioning each span's tags instead would let a wider bold span re-apply
+ * over a narrower one that turned bold back off.
+ */
+private fun AnnotatedString.resolveSpanStyles(): Array<SpanStyle> {
+	val resolved = Array(text.length) { SpanStyle() }
+	spanStyles.forEach { range ->
+		val start = range.start.coerceAtLeast(0)
+		val end = range.end.coerceAtMost(text.length)
+		for (i in start until end) {
+			resolved[i] = resolved[i].merge(range.item)
+		}
+	}
+	return resolved
+}
+
+/**
+ * The heading element covering this entire string, or null if the string is not
+ * one heading style from end to end.
+ *
+ * Headings are a span style here rather than a line block, so a document
+ * exporter has to ask the text itself whether a line is a heading before it can
+ * decide between `<h2>` and wrapping the line in `<p>`.
+ *
+ * Unlike [toHtml] this accepts a level indistinguishable from emphasized body
+ * text, because a whole line carrying nothing but that style is a heading far
+ * more often than it is a bold paragraph — and refusing it would make the
+ * default h4 unwritable.
+ */
+internal fun AnnotatedString.uniformHeadingTag(config: MarkdownConfiguration): HtmlTag? {
+	if (text.isEmpty()) return null
+	val resolved = resolveSpanStyles()
+	val style = resolved[0]
+	if (resolved.any { it != style }) return null
+	return style.headingTagBySize(config)
+}
+
+/** Escapes the characters that would otherwise be read as markup in text content. */
+internal fun String.escapeHtmlText(): String {
+	val builder = StringBuilder(length)
+	forEach { builder.appendEscaped(it) }
+	return builder.toString()
+}
+
+/** Escapes the characters that would otherwise terminate a double-quoted attribute. */
+internal fun String.escapeHtmlAttribute(): String {
+	val builder = StringBuilder(length)
+	forEach { ch ->
+		when (ch) {
+			'"' -> builder.append("&quot;")
+			else -> builder.appendEscaped(ch)
+		}
+	}
 	return builder.toString()
 }
 

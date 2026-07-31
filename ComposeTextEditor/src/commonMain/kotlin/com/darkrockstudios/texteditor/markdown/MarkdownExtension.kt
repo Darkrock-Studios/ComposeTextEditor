@@ -1,19 +1,17 @@
 package com.darkrockstudios.texteditor.markdown
 
-import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.richstyle.Blockquote
 import com.darkrockstudios.texteditor.richstyle.BulletList
 import com.darkrockstudios.texteditor.richstyle.CodeFence
-import com.darkrockstudios.texteditor.richstyle.CodeFenceSpanStyle
 import com.darkrockstudios.texteditor.richstyle.HR_PLACEHOLDER
-import com.darkrockstudios.texteditor.richstyle.HorizontalRuleSpanStyle
 import com.darkrockstudios.texteditor.richstyle.IMAGE_PLACEHOLDER
 import com.darkrockstudios.texteditor.richstyle.ImageBlockSpanStyle
 import com.darkrockstudios.texteditor.richstyle.ImageProvider
 import com.darkrockstudios.texteditor.richstyle.LINE_BLOCK_STYLES
 import com.darkrockstudios.texteditor.richstyle.LineBlockStyle
 import com.darkrockstudios.texteditor.richstyle.OrderedList
-import com.darkrockstudios.texteditor.richstyle.applyLineBlock
+import com.darkrockstudios.texteditor.richstyle.applyDocumentBlocks
+import com.darkrockstudios.texteditor.richstyle.documentBlocks
 import com.darkrockstudios.texteditor.richstyle.hasLineBlock
 import com.darkrockstudios.texteditor.state.TextEditorState
 
@@ -108,30 +106,10 @@ class MarkdownExtension(
 	}
 
 	fun exportAsMarkdown(): String {
-		val allSpans = editorState.richSpanManager.getAllRichSpans()
-		val hrLines = allSpans
-			.asSequence()
-			.filter { it.style === HorizontalRuleSpanStyle }
-			.map { it.range.start.line }
-			.toHashSet()
-		val imageLines: Map<Int, ImageBlockSpanStyle> = allSpans
-			.asSequence()
-			.mapNotNull { span ->
-				val style = span.style as? ImageBlockSpanStyle ?: return@mapNotNull null
-				span.range.start.line to style
-			}
-			.toMap()
-		val blockLines: Map<LineBlockStyle, Set<Int>> = LINE_BLOCK_STYLES.associateWith { block ->
-			allSpans.asSequence()
-				.filter { it.style === block.spanStyle }
-				.map { it.range.start.line }
-				.toHashSet()
-		}
-		val codeFenceLines = allSpans
-			.asSequence()
-			.filter { it.style === CodeFenceSpanStyle }
-			.map { it.range.start.line }
-			.toHashSet()
+		val blocks = editorState.documentBlocks()
+		val hrLines = blocks.horizontalRuleLines
+		val imageLines = blocks.imageLines
+		val codeFenceLines = blocks.linesFor(CodeFence)
 
 		val annotated = editorState.getAllText()
 		val text = annotated.text
@@ -185,7 +163,7 @@ class MarkdownExtension(
 				LINE_BLOCK_STYLES.forEach { runPositions.remove(it) }
 			} else {
 				LINE_BLOCK_STYLES.forEach { block ->
-					if (lineIndex in blockLines.getValue(block)) {
+					if (blocks.has(lineIndex, block)) {
 						val pos = runPositions[block] ?: 0
 						sb.append(block.markdownPrefix(pos))
 						runPositions[block] = pos + 1
@@ -258,26 +236,11 @@ class MarkdownExtension(
 		val processedMarkdown = processedLines.joinToString("\n")
 		val annotatedString = processedMarkdown.toAnnotatedStringFromMarkdown(markdownConfiguration)
 		editorState.setText(annotatedString)
-		// Direct manager calls: importing a document populates spans as part of
-		// loading content, not as a user edit, so it must not enter undo history.
-		hrLineIndices.forEach { lineIdx ->
-			editorState.richSpanManager.addRichSpan(
-				start = CharLineOffset(lineIdx, 0),
-				end = CharLineOffset(lineIdx, HR_PLACEHOLDER.length),
-				style = HorizontalRuleSpanStyle,
-			)
-		}
-		imageLines.forEach { (lineIdx, style) ->
-			editorState.richSpanManager.addRichSpan(
-				start = CharLineOffset(lineIdx, 0),
-				end = CharLineOffset(lineIdx, IMAGE_PLACEHOLDER.length),
-				style = style,
-			)
-		}
-		blockHits.forEach { (block, lineIndices) ->
-			lineIndices.forEach { editorState.applyLineBlock(it, block) }
-		}
-		codeFenceLineIndices.forEach { editorState.applyLineBlock(it, CodeFence) }
+		editorState.applyDocumentBlocks(
+			horizontalRuleLines = hrLineIndices,
+			imageLines = imageLines.toMap(),
+			blockLines = blockHits + (CodeFence to codeFenceLineIndices),
+		)
 	}
 
 	/** Returns whether [line] is currently rendered as a blockquote. */
