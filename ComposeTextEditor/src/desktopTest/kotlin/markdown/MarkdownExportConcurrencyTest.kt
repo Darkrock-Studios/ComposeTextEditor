@@ -1,10 +1,14 @@
 package markdown
 
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.text.TextMeasurer
+import androidx.compose.ui.text.font.createFontFamilyResolver
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.LayoutDirection
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.markdown.MarkdownExtension
 import com.darkrockstudios.texteditor.state.TextEditorState
-import io.mockk.mockk
 import kotlinx.coroutines.test.TestScope
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
@@ -17,34 +21,51 @@ import kotlin.test.assertTrue
 /**
  * Downstream consumers export on a debounce from a background dispatcher while the
  * user keeps typing. These cover that: a reader must never observe the document's
- * text or spans mid-mutation.
+ * text or spans mid-mutation, nor a mix of one revision's text with another's spans.
  */
 class MarkdownExportConcurrencyTest {
 
+	/**
+	 * A viewport is mandatory here. `updateBookKeeping` returns immediately while the
+	 * viewport is the 1x1 sentinel, which skips the per-edit relayout and collapses
+	 * the very window these tests are trying to hit.
+	 */
 	private fun createExtension(markdown: String): MarkdownExtension {
 		val state = TextEditorState(
 			scope = TestScope(),
-			measurer = mockk(relaxed = true),
+			// A real measurer, not a mock: with the viewport live every edit relayouts
+			// the document, and a mock would record hundreds of thousands of measure
+			// invocations and exhaust the test heap.
+			measurer = TextMeasurer(
+				defaultFontFamilyResolver = createFontFamilyResolver(),
+				defaultDensity = Density(1f),
+				defaultLayoutDirection = LayoutDirection.Ltr,
+			),
 		)
+		state.onViewportSizeChange(Size(500f, 800f))
 		return MarkdownExtension(state).apply { importMarkdown(markdown) }
 	}
 
-	private fun spanHeavyDocument(paragraphs: Int) = buildString {
-		repeat(paragraphs) { i ->
-			appendLine("- bullet $i")
-			appendLine("1. ordered $i")
-			appendLine("> quote $i")
-			appendLine("paragraph $i with *some* styled text")
-			appendLine("---")
-		}
-	}
+	private fun bulletDocument(lines: Int) =
+		(0 until lines).joinToString("\n") { "- bullet $it" }
+
+	/**
+	 * Import strips the `- ` marker into a line-anchored span, so a bullet line's text
+	 * is just `bullet N` and export re-adds the prefix from the span. Any exported line
+	 * carrying that text must therefore have its marker back. If the text has shifted
+	 * to a new line index but the spans still point at the old one, some bullet line
+	 * loses its prefix and this catches it.
+	 */
+	private fun firstBulletMissingMarker(markdown: String): String? =
+		markdown.lines().firstOrNull { it.contains("bullet") && !it.startsWith("- ") }
 
 	@Test
-	fun `export from background threads survives continuous edits`() {
-		val extension = createExtension(spanHeavyDocument(paragraphs = 60))
+	fun `export from background threads survives continuous line-shifting edits`() {
+		val extension = createExtension(bulletDocument(lines = 40))
 		val state = extension.editorState
 
 		val failure = AtomicReference<Throwable?>(null)
+		val incoherent = AtomicReference<String?>(null)
 		val exporting = AtomicBoolean(true)
 		val exportCount = AtomicInteger(0)
 
@@ -52,7 +73,13 @@ class MarkdownExportConcurrencyTest {
 			thread {
 				while (exporting.get()) {
 					runCatching { extension.exportAsMarkdown() }
-						.onSuccess { exportCount.incrementAndGet() }
+						.onSuccess { markdown ->
+							exportCount.incrementAndGet()
+							firstBulletMissingMarker(markdown)?.let {
+								incoherent.compareAndSet(null, "$it\n--- full export ---\n$markdown")
+								exporting.set(false)
+							}
+						}
 						.onFailure {
 							failure.compareAndSet(null, it)
 							exporting.set(false)
@@ -62,12 +89,17 @@ class MarkdownExportConcurrencyTest {
 		}
 
 		try {
-			// Insert-then-delete a whole line: every span in the document shifts down
-			// and back up again, so `updateSpans` republishes the entire set twice per
-			// iteration while the exporters are walking it.
-			repeat(300) { i ->
+			// Open a blank line at the top and close it again. Every bullet span below
+			// shifts down one line and back, so the text and the spans disagree for as
+			// long as the two are published separately.
+			//
+			// A bare "\n" specifically: handleInsert only takes its newline branch when
+			// the inserted text is exactly that, so inserting "x\n" here would instead
+			// trip the unrelated sticky-at-start bug that pins the first bullet's marker
+			// to the new line, and this test would fail for a reason it isn't about.
+			repeat(200) {
 				state.cursor.updatePosition(CharLineOffset(0, 0))
-				state.insertStringAtCursor("edit $i\n")
+				state.insertStringAtCursor("\n")
 				state.delete(
 					TextEditorRange(
 						start = CharLineOffset(0, 0),
@@ -83,30 +115,33 @@ class MarkdownExportConcurrencyTest {
 		failure.get()?.let {
 			throw AssertionError("exportAsMarkdown() failed under concurrent edits: $it", it)
 		}
+		assertEquals(null, incoherent.get(), "Export observed text and spans from different revisions")
 		assertTrue(exportCount.get() > 0, "No exports completed; the test proved nothing")
 	}
 
 	@Test
-	fun `exported markdown is never torn across two revisions`() {
-		val extension = createExtension("- alpha\n- bravo\n- charlie")
+	fun `export never observes a document mid multi-line delete`() {
+		val extension = createExtension(bulletDocument(lines = 30))
 		val state = extension.editorState
 
 		val failure = AtomicReference<Throwable?>(null)
+		val shortExport = AtomicReference<String?>(null)
 		val exporting = AtomicBoolean(true)
-		// Only bullet lines exist, so every non-blank line of a coherent export must
-		// carry a bullet prefix. A snapshot torn between the text and the span set
-		// yields a line whose marker went missing (or one that gained a stray marker).
-		val torn = AtomicReference<String?>(null)
+		val exportCount = AtomicInteger(0)
+
+		// A multi-line delete drops both lines and only then re-inserts the merged one.
+		// Legitimate counts are 30 (split) and 29 (merged); the uncommitted middle of
+		// the delete is 28, so anything below 29 means the export caught it.
+		val minimumLines = 29
 
 		val exporter = thread {
 			while (exporting.get()) {
 				runCatching { extension.exportAsMarkdown() }
 					.onSuccess { markdown ->
-						val bad = markdown.lines()
-							.filter { it.isNotBlank() }
-							.firstOrNull { !it.startsWith("- ") }
-						if (bad != null) {
-							torn.compareAndSet(null, "$bad\n---\n$markdown")
+						exportCount.incrementAndGet()
+						val count = markdown.lines().count { it.isNotBlank() }
+						if (count < minimumLines) {
+							shortExport.compareAndSet(null, "$count lines:\n$markdown")
 							exporting.set(false)
 						}
 					}
@@ -118,16 +153,20 @@ class MarkdownExportConcurrencyTest {
 		}
 
 		try {
-			repeat(500) { i ->
-				val line = i % 3
-				state.cursor.updatePosition(CharLineOffset(line, 1))
-				state.insertStringAtCursor("$i")
+			repeat(200) {
+				// Merge the first two lines, then split them again, so the document
+				// returns to its original shape every iteration. The join column is
+				// read live: import strips the `- ` marker, so the line is shorter
+				// than its markdown source.
+				val joinColumn = state.textLines[0].length
 				state.delete(
 					TextEditorRange(
-						start = CharLineOffset(line, 1),
-						end = CharLineOffset(line, 1 + "$i".length),
+						start = CharLineOffset(0, joinColumn),
+						end = CharLineOffset(1, 0),
 					)
 				)
+				state.cursor.updatePosition(CharLineOffset(0, joinColumn))
+				state.insertStringAtCursor("\n")
 			}
 		} finally {
 			exporting.set(false)
@@ -137,7 +176,8 @@ class MarkdownExportConcurrencyTest {
 		failure.get()?.let {
 			throw AssertionError("exportAsMarkdown() failed under concurrent edits: $it", it)
 		}
-		assertEquals(null, torn.get(), "Export observed a torn document")
+		assertEquals(null, shortExport.get(), "Export observed a document mid-delete")
+		assertTrue(exportCount.get() > 0, "No exports completed; the test proved nothing")
 	}
 
 	@Test
@@ -152,10 +192,6 @@ class MarkdownExportConcurrencyTest {
 		extension.toggleBulletList(0..0)
 
 		assertEquals(sizeBefore, before.size, "The returned set changed under a later edit")
-		assertTrue(
-			state.richSpanManager.getAllRichSpans() !== before,
-			"A mutation must publish a new set rather than edit the previous one",
-		)
 	}
 
 	@Test

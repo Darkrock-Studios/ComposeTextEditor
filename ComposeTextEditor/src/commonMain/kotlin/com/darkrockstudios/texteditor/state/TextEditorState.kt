@@ -127,20 +127,68 @@ class TextEditorState(
 	)
 
 	/**
-	 * The current document content. Every mutation publishes a whole new
+	 * The last committed document content. Every mutation publishes a whole new
 	 * [DocumentContent] rather than editing the previous one in place, so a reader
 	 * on any thread sees a complete, self-consistent snapshot and can never observe
 	 * a collection mid-mutation. Writes must all come from the thread driving edits.
+	 *
+	 * This is the coherent-snapshot API: it only ever holds a fully applied revision,
+	 * never a half-finished one. Read it once and use that value throughout.
 	 */
 	@Volatile
 	internal var content = DocumentContent(emptyList(), emptySet())
 		private set
 
 	/**
+	 * Content staged by an open [withAtomicEdit] transaction, or null when none is
+	 * running. Written only by the thread inside the transaction; readers elsewhere
+	 * keep seeing [content] until it commits. Volatile so the edit thread's own
+	 * nested reads through [workingContent] can never see a stale draft.
+	 */
+	@Volatile
+	private var draft: DocumentContent? = null
+
+	/** Content as the current edit sees it: the open draft if there is one, else [content]. */
+	internal val workingContent: DocumentContent get() = draft ?: content
+
+	/**
+	 * Runs [block] as a single atomic revision: mutations inside it accumulate in a
+	 * draft and reach [content] in one write when it returns.
+	 *
+	 * Every edit touches lines and rich spans separately (the text first, then
+	 * `updateSpans` re-anchors the spans onto it). Without this, the intermediate
+	 * state is publicly observable, and a reader that catches it gets new text
+	 * paired with span line indices from the previous revision, which serializes
+	 * block markers onto the wrong lines.
+	 *
+	 * Re-entrant: a nested call joins the outer transaction and commits with it.
+	 * A throwing [block] still commits what it staged, matching the partially
+	 * applied state a failed edit left behind before transactions existed.
+	 */
+	internal fun <T> withAtomicEdit(block: () -> T): T {
+		if (draft != null) return block()
+		draft = content
+		try {
+			return block()
+		} finally {
+			val staged = draft
+			draft = null
+			if (staged != null) content = staged
+		}
+	}
+
+	private fun mutateContent(transform: (DocumentContent) -> DocumentContent) {
+		if (draft != null) draft = transform(workingContent) else content = transform(content)
+	}
+
+	/**
 	 * The document content as one [AnnotatedString] per line, in order. An immutable
 	 * snapshot; mutate through the edit operations or replace wholesale with [setText].
+	 *
+	 * Inside an edit this reflects the in-progress revision. Callers that need a
+	 * revision guaranteed to be fully applied should go through [content].
 	 */
-	val textLines: List<AnnotatedString> get() = content.lines
+	val textLines: List<AnnotatedString> get() = workingContent.lines
 
 	/** The caret: its [CharLineOffset] position, movement, and active typing style. */
 	val cursor = TextEditorCursorState(this)
@@ -570,11 +618,15 @@ class TextEditorState(
 
 	/**
 	 * Rewrites the document by passing each line index and content through [processor],
-	 * then relays out the result. [processor] sees the document as it stood on entry;
-	 * the rewritten lines are published as one batch once every line has been visited.
+	 * then relays out the result. [processor] sees the document as it stood on entry
+	 * and the rewritten lines land as a single revision once every line is visited.
+	 *
+	 * [processor] must be a pure function of its arguments. Editing this state from
+	 * inside it (adding a span, replacing a range) does not compose: those writes are
+	 * computed against the entry snapshot and overwritten by the batch.
 	 */
 	fun processLines(processor: (index: Int, line: AnnotatedString) -> AnnotatedString) {
-		setLines(textLines.mapIndexed(processor))
+		withAtomicEdit { setLines(textLines.mapIndexed(processor)) }
 		updateBookKeeping()
 	}
 
@@ -585,8 +637,10 @@ class TextEditorState(
 			return
 		}
 
-		// Ensure we don't remove more lines than available
-		val safeCount = minOf(count, lines.size - startIndex)
+		// Ensure we don't remove more lines than available. The floor matters: an
+		// inverted range reaches here with a negative count, which subList would
+		// reject outright.
+		val safeCount = minOf(count, lines.size - startIndex).coerceAtLeast(0)
 
 		// Always keep at least one empty line
 		if (lines.size <= safeCount) {
@@ -616,19 +670,19 @@ class TextEditorState(
 	 * would draw over the first character of the line.
 	 */
 	private fun replaceContent(lines: List<AnnotatedString>) {
-		content = DocumentContent(lines, emptySet())
+		mutateContent { DocumentContent(lines, emptySet()) }
 	}
 
 	internal fun setLines(lines: List<AnnotatedString>) {
-		content = content.copy(lines = lines)
+		mutateContent { it.copy(lines = lines) }
 	}
 
 	internal fun setLine(index: Int, text: AnnotatedString) {
-		setLines(content.lines.toMutableList().also { it[index] = text })
+		setLines(workingContent.lines.toMutableList().also { it[index] = text })
 	}
 
 	internal fun setRichSpans(richSpans: Set<RichSpan>) {
-		content = content.copy(richSpans = richSpans)
+		mutateContent { it.copy(richSpans = richSpans) }
 	}
 
 	/** True when the document holds a single empty line. */

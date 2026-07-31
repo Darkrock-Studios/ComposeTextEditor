@@ -110,11 +110,12 @@ class MarkdownExtension(
 	/**
 	 * Serializes the document to markdown.
 	 *
-	 * Safe to call from any thread: the whole document (text and rich spans) is read
+	 * Safe to call from any thread. The whole document (text and rich spans) is read
 	 * once, up front, as a single immutable snapshot, so a concurrent edit can neither
-	 * interrupt the walk nor tear the output across two revisions. It does not wait for
-	 * the user to stop typing, though; an edit made after the snapshot is taken simply
-	 * isn't in the result.
+	 * interrupt the walk nor tear the output across two revisions: edits commit their
+	 * text and their span re-anchoring together, so the snapshot is always a fully
+	 * applied revision. It does not wait for the user to stop typing, though; an edit
+	 * made after the snapshot is taken simply isn't in the result.
 	 */
 	fun exportAsMarkdown(): String {
 		val content = editorState.content
@@ -267,27 +268,32 @@ class MarkdownExtension(
 		}
 		val processedMarkdown = processedLines.joinToString("\n")
 		val annotatedString = processedMarkdown.toAnnotatedStringFromMarkdown(markdownConfiguration)
-		editorState.setText(annotatedString)
-		// Direct manager calls: importing a document populates spans as part of
-		// loading content, not as a user edit, so it must not enter undo history.
-		hrLineIndices.forEach { lineIdx ->
-			editorState.richSpanManager.addRichSpan(
-				start = CharLineOffset(lineIdx, 0),
-				end = CharLineOffset(lineIdx, HR_PLACEHOLDER.length),
-				style = HorizontalRuleSpanStyle,
-			)
+		// setText publishes the text with no spans, and the loops below re-attach
+		// them one at a time. As one revision, so a concurrent export can't catch
+		// the document fully loaded but entirely unstyled.
+		editorState.withAtomicEdit {
+			editorState.setText(annotatedString)
+			// Direct manager calls: importing a document populates spans as part of
+			// loading content, not as a user edit, so it must not enter undo history.
+			hrLineIndices.forEach { lineIdx ->
+				editorState.richSpanManager.addRichSpan(
+					start = CharLineOffset(lineIdx, 0),
+					end = CharLineOffset(lineIdx, HR_PLACEHOLDER.length),
+					style = HorizontalRuleSpanStyle,
+				)
+			}
+			imageLines.forEach { (lineIdx, style) ->
+				editorState.richSpanManager.addRichSpan(
+					start = CharLineOffset(lineIdx, 0),
+					end = CharLineOffset(lineIdx, IMAGE_PLACEHOLDER.length),
+					style = style,
+				)
+			}
+			blockHits.forEach { (block, lineIndices) ->
+				lineIndices.forEach { editorState.applyLineBlock(it, block) }
+			}
+			codeFenceLineIndices.forEach { editorState.applyLineBlock(it, CodeFence) }
 		}
-		imageLines.forEach { (lineIdx, style) ->
-			editorState.richSpanManager.addRichSpan(
-				start = CharLineOffset(lineIdx, 0),
-				end = CharLineOffset(lineIdx, IMAGE_PLACEHOLDER.length),
-				style = style,
-			)
-		}
-		blockHits.forEach { (block, lineIndices) ->
-			lineIndices.forEach { editorState.applyLineBlock(it, block) }
-		}
-		codeFenceLineIndices.forEach { editorState.applyLineBlock(it, CodeFence) }
 	}
 
 	/** Returns whether [line] is currently rendered as a blockquote. */

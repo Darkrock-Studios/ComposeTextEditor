@@ -47,25 +47,31 @@ class TextEditManager(private val state: TextEditorState) {
 			state.clearComposingRange()
 		}
 
-		val metadata = when (operation) {
-			is TextEditOperation.Insert -> applyInsert(operation)
-			is TextEditOperation.Delete -> applyDelete(addToHistory, operation)
-			is TextEditOperation.Replace -> applyReplace(addToHistory, operation)
-			is TextEditOperation.StyleSpan -> applyStyleOperation(operation)
-			is TextEditOperation.RichSpan -> applyRichSpanOperation(operation)
-			is TextEditOperation.LineBlock -> applyLineBlockOperation(operation)
-		}
-
-		state.cursor.updatePosition(operation.cursorAfter)
-		state.invalidateCopiedRichSpans()
-		state.richSpanManager.updateSpans(operation, metadata)
 		// Decoration spans (spell-check underlines, find highlights) are view
 		// overlays, not changes to the document's content. They must stay out of
 		// the undo history (no recordEdit / redo clear) AND off the edit stream, so
 		// consumers watching editOperations don't mistake an overlay for a real edit.
 		val isDecoration = operation is TextEditOperation.RichSpan && operation.style.isDecoration
-		if (addToHistory && !isDecoration) {
-			history.recordEdit(operation, metadata ?: OperationMetadata())
+
+		// The text mutation and the span re-anchoring must land as one revision.
+		// Published separately they are observable as new text carrying the
+		// previous revision's span line indices.
+		state.withAtomicEdit {
+			val metadata = when (operation) {
+				is TextEditOperation.Insert -> applyInsert(operation)
+				is TextEditOperation.Delete -> applyDelete(addToHistory, operation)
+				is TextEditOperation.Replace -> applyReplace(addToHistory, operation)
+				is TextEditOperation.StyleSpan -> applyStyleOperation(operation)
+				is TextEditOperation.RichSpan -> applyRichSpanOperation(operation)
+				is TextEditOperation.LineBlock -> applyLineBlockOperation(operation)
+			}
+
+			state.cursor.updatePosition(operation.cursorAfter)
+			state.invalidateCopiedRichSpans()
+			state.richSpanManager.updateSpans(operation, metadata)
+			if (addToHistory && !isDecoration) {
+				history.recordEdit(operation, metadata ?: OperationMetadata())
+			}
 		}
 
 		state.updateBookKeeping()
@@ -368,14 +374,18 @@ class TextEditManager(private val state: TextEditorState) {
 	private fun handleMultiLineDelete(operation: TextEditOperation.Delete) {
 		// Add bounds checking for line indices
 		val lines = state.textLines
+		// Must precede the coercions: lastIndex is -1 on an empty document, and
+		// coerceIn rejects an empty range rather than clamping.
+		if (lines.isEmpty()) {
+			state.setLines(listOf(AnnotatedString("")))
+			return
+		}
+
 		val startLine = operation.range.start.line.coerceIn(0, lines.lastIndex)
 		val endLine = operation.range.end.line.coerceIn(0, lines.lastIndex)
 
 		// Edge case: no lines to delete
-		if (startLine > endLine || lines.isEmpty()) {
-			if (lines.isEmpty()) {
-				state.setLines(listOf(AnnotatedString("")))
-			}
+		if (startLine > endLine) {
 			return
 		}
 
@@ -613,10 +623,12 @@ class TextEditManager(private val state: TextEditorState) {
 	 * Captures each line's before/after content + block spans, applies the toggle
 	 * via the direct (non-recording) path, then records ONE atomic LineBlock entry.
 	 */
-	internal fun toggleLineBlock(lines: IntRange, block: LineBlockStyle) {
+	internal fun toggleLineBlock(lines: IntRange, block: LineBlockStyle) = state.withAtomicEdit {
 		val anyOff = lines.any { !state.hasLineBlock(it, block) }
 		val cursorBefore = state.cursorPosition
 
+		// The toggle mutates lines and spans here, before applyOperation records it;
+		// this outer transaction keeps that prelude out of public view too.
 		val changes = lines.map { lineIdx ->
 			val contentBefore = state.getLine(lineIdx)
 			val spansBefore = state.lineBlockSpanStyles(lineIdx)
@@ -657,9 +669,13 @@ class TextEditManager(private val state: TextEditorState) {
 	}
 
 	private fun undoLineBlock(operation: TextEditOperation.LineBlock) {
-		applyLineBlockState(operation.lines, undo = true)
-		state.cursor.updatePosition(operation.cursorBefore)
-		state.invalidateCopiedRichSpans()
+		// Restores line content and block spans per line; without the transaction
+		// each of those is its own publicly visible revision.
+		state.withAtomicEdit {
+			applyLineBlockState(operation.lines, undo = true)
+			state.cursor.updatePosition(operation.cursorBefore)
+			state.invalidateCopiedRichSpans()
+		}
 		state.updateBookKeeping()
 	}
 

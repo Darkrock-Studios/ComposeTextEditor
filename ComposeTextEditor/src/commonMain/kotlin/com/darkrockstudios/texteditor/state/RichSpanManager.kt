@@ -15,7 +15,7 @@ class RichSpanManager(
 	 * queries below can never be modified underneath a reader.
 	 */
 	private var spans: Set<RichSpan>
-		get() = state.content.richSpans
+		get() = state.workingContent.richSpans
 		set(value) = state.setRichSpans(value)
 
 	/**
