@@ -21,6 +21,10 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.darkrockstudios.texteditor.BasicTextEditor
 import com.darkrockstudios.texteditor.RichSpanClickListener
+import com.darkrockstudios.texteditor.input.CtrlKeyBindings
+import com.darkrockstudios.texteditor.input.KeyBindings
+import com.darkrockstudios.texteditor.input.LocalKeyBindings
+import com.darkrockstudios.texteditor.input.MacKeyBindings
 import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.rememberTextEditorState
 
@@ -31,13 +35,18 @@ import com.darkrockstudios.texteditor.state.rememberTextEditorState
  * [dragSelect]) resolve pixel positions through the editor's own layout, so
  * tests never hard-code coordinates. Clipboard operations go through an
  * isolated [InMemoryClipboard], never the OS clipboard.
+ *
+ * [keyBindings] is pinned rather than taken from the host, so the same shortcuts
+ * are exercised no matter which OS runs the suite; pass [MacKeyBindings] to test
+ * the macOS chords.
  */
 @OptIn(ExperimentalTestApi::class)
-fun editorUiTest(
+internal fun editorUiTest(
 	initialText: AnnotatedString = AnnotatedString(""),
 	width: Dp = 400.dp,
 	height: Dp = 300.dp,
 	enabled: Boolean = true,
+	keyBindings: KeyBindings = CtrlKeyBindings,
 	onRichSpanClick: RichSpanClickListener? = null,
 	block: EditorUiTestScope.() -> Unit,
 ) = runSkikoComposeUiTest {
@@ -45,7 +54,10 @@ fun editorUiTest(
 	lateinit var state: TextEditorState
 	setContent {
 		state = rememberTextEditorState(initialText = initialText)
-		CompositionLocalProvider(LocalClipboard provides clipboard) {
+		CompositionLocalProvider(
+			LocalClipboard provides clipboard,
+			LocalKeyBindings provides keyBindings,
+		) {
 			BasicTextEditor(
 				state = state,
 				modifier = Modifier.size(width, height),
@@ -80,13 +92,24 @@ class EditorUiTestScope(
 	/** Types printable characters through real desktop key events; `\n` and `\t` become Enter/Tab. */
 	fun typeText(text: String) = test.typeText(text)
 
+	/** Types [char] as a macOS Option chord over [key], the way Option+8 composes '{'. */
+	fun typeWithOption(key: Key, char: Char) = test.typeWithOption(key, char)
+
 	/** Presses [key] with optional modifiers held, e.g. `press(Key.Z, ctrl = true)`. */
-	fun press(key: Key, ctrl: Boolean = false, shift: Boolean = false, alt: Boolean = false) {
+	fun press(
+		key: Key,
+		ctrl: Boolean = false,
+		shift: Boolean = false,
+		alt: Boolean = false,
+		meta: Boolean = false,
+	) {
 		test.onRoot().performKeyInput {
 			if (ctrl) keyDown(Key.CtrlLeft)
 			if (shift) keyDown(Key.ShiftLeft)
 			if (alt) keyDown(Key.AltLeft)
+			if (meta) keyDown(Key.MetaLeft)
 			pressKey(key)
+			if (meta) keyUp(Key.MetaLeft)
 			if (alt) keyUp(Key.AltLeft)
 			if (shift) keyUp(Key.ShiftLeft)
 			if (ctrl) keyUp(Key.CtrlLeft)

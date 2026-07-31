@@ -1,12 +1,10 @@
 package com.darkrockstudios.texteditor.input
 
-import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.isCtrlPressed
 import androidx.compose.ui.input.key.isMetaPressed
 import androidx.compose.ui.input.key.isShiftPressed
-import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.key.utf16CodePoint
 import androidx.compose.ui.platform.Clipboard
@@ -15,6 +13,8 @@ import androidx.compose.ui.text.buildAnnotatedString
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.clipboard.ClipboardHelper
+import com.darkrockstudios.texteditor.input.EditorCommand.Action
+import com.darkrockstudios.texteditor.input.EditorCommand.Motion
 import com.darkrockstudios.texteditor.input.TextEditorKeyCommandHandler.Companion.TAB_SIZE
 import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.moveCursorDown
@@ -32,8 +32,13 @@ import kotlinx.coroutines.launch
 /**
  * Handles keyboard commands (shortcuts and navigation) for the text editor.
  * Also handles character input for desktop platforms via KEY_TYPED events.
+ *
+ * Which chord triggers which command is [keyBindings]' business; this class only
+ * knows what the commands do.
  */
-internal class TextEditorKeyCommandHandler {
+internal class TextEditorKeyCommandHandler(
+	var keyBindings: KeyBindings,
+) {
 
 	private companion object {
 		const val TAB_SIZE = 4
@@ -53,118 +58,28 @@ internal class TextEditorKeyCommandHandler {
 	): Boolean {
 		if (keyEvent.type != KeyEventType.KeyDown) return false
 
-		return when {
-			// Selection, copy and navigation operations are always allowed
-			keyEvent.isCtrlPressed && keyEvent.key == Key.A -> {
-				state.selector.selectAll()
-				true
-			}
+		val command = keyBindings.commandFor(keyEvent) ?: return false
+		// Selection, copy and navigation stay available in a disabled editor.
+		if (command.isEdit && !enabled) return false
 
-			keyEvent.isCtrlPressed && keyEvent.key == Key.C -> {
-				handleCopy(state, clipboard, scope)
-				true
-			}
-
-			keyEvent.key == Key.DirectionLeft -> {
-				handleLeftArrow(keyEvent, state)
-				true
-			}
-
-			keyEvent.key == Key.DirectionRight -> {
-				handleRightArrow(keyEvent, state)
-				true
-			}
-
-			keyEvent.key == Key.DirectionUp -> {
-				handleUpArrow(keyEvent, state)
-				true
-			}
-
-			keyEvent.key == Key.DirectionDown -> {
-				handleDownArrow(keyEvent, state)
-				true
-			}
-
-			keyEvent.key == Key.MoveHome -> {
-				handleHome(keyEvent, state)
-				true
-			}
-
-			keyEvent.key == Key.MoveEnd -> {
-				handleEnd(keyEvent, state)
-				true
-			}
-
-			keyEvent.key == Key.PageUp -> {
-				handlePageUp(keyEvent, state)
-				true
-			}
-
-			keyEvent.key == Key.PageDown -> {
-				handlePageDown(keyEvent, state)
-				true
-			}
-
-			// Editing operations require enabled=true
-			!enabled -> false
-
-			keyEvent.isCtrlPressed && keyEvent.key == Key.X -> {
-				handleCut(state, clipboard, scope)
-				true
-			}
-
-			keyEvent.isCtrlPressed && keyEvent.key == Key.V -> {
-				handlePaste(state, clipboard, scope)
-				true
-			}
-
-			keyEvent.isCtrlPressed && keyEvent.isShiftPressed && keyEvent.key == Key.Z -> {
-				state.redo()
-				true
-			}
-
-			keyEvent.isCtrlPressed && keyEvent.key == Key.Z -> {
-				state.undo()
-				true
-			}
-
-			keyEvent.isCtrlPressed && keyEvent.key == Key.Y -> {
-				state.redo()
-				true
-			}
-
-			keyEvent.isCtrlPressed && keyEvent.key == Key.Delete -> {
-				handleDeleteNextWord(state)
-				true
-			}
-
-			keyEvent.key == Key.Delete -> {
-				handleDelete(state)
-				true
-			}
-
-			keyEvent.isCtrlPressed && keyEvent.key == Key.Backspace -> {
-				handleDeletePreviousWord(state)
-				true
-			}
-
-			keyEvent.key == Key.Backspace -> {
-				handleBackspace(state)
-				true
-			}
-
-			keyEvent.key == Key.Tab -> {
-				handleTab(keyEvent, state)
-				true
-			}
-
-			keyEvent.key == Key.Enter || keyEvent.key == Key.NumPadEnter -> {
-				handleEnter(state)
-				true
-			}
-
-			else -> false
+		when (command) {
+			is Motion -> moveCursor(command, state, extendSelection = keyEvent.isShiftPressed)
+			Action.SelectAll -> state.selector.selectAll()
+			Action.Copy -> handleCopy(state, clipboard, scope)
+			Action.Cut -> handleCut(state, clipboard, scope)
+			Action.Paste -> handlePaste(state, clipboard, scope)
+			Action.Undo -> state.undo()
+			Action.Redo -> state.redo()
+			Action.DeleteBackward -> handleBackspace(state)
+			Action.DeleteForward -> handleDelete(state)
+			Action.DeleteWordBackward -> handleDeletePreviousWord(state)
+			Action.DeleteWordForward -> handleDeleteNextWord(state)
+			Action.DeleteToLineStart -> handleDeleteToLineStart(state)
+			Action.Indent -> handleIndent(state)
+			Action.Outdent -> handleOutdent(state)
+			Action.NewLine -> handleEnter(state)
 		}
+		return true
 	}
 
 	/**
@@ -291,11 +206,16 @@ internal class TextEditorKeyCommandHandler {
 		}
 	}
 
-	private fun handleTab(keyEvent: KeyEvent, state: TextEditorState) {
-		if (keyEvent.isShiftPressed) {
-			handleOutdent(state)
-		} else {
-			handleIndent(state)
+	private fun handleDeleteToLineStart(state: TextEditorState) {
+		if (state.selector.selection != null) {
+			state.selector.deleteSelection()
+			return
+		}
+		val lineEnd = state.cursorPosition
+		state.cursor.moveToLineStart()
+		val lineStart = state.cursorPosition
+		if (lineStart != lineEnd) {
+			state.delete(TextEditorRange(lineStart, lineEnd))
 		}
 	}
 
@@ -390,123 +310,28 @@ internal class TextEditorKeyCommandHandler {
 		state.insertNewlineAtCursor()
 	}
 
-	private fun handleLeftArrow(keyEvent: KeyEvent, state: TextEditorState) {
-		if (keyEvent.isShiftPressed) {
-			val initialPosition = state.cursorPosition
-			if (keyEvent.isCtrlPressed)
-				state.moveToPreviousWord()
-			else
-				state.cursor.moveLeft()
-			updateSelectionForCursorMovement(state, initialPosition)
-		} else {
-			state.selector.clearSelection()
-			if (keyEvent.isCtrlPressed)
-				state.moveToPreviousWord()
-			else
-				state.cursor.moveLeft()
-		}
-	}
+	private fun moveCursor(motion: Motion, state: TextEditorState, extendSelection: Boolean) {
+		val initialPosition = state.cursorPosition
+		if (!extendSelection) state.selector.clearSelection()
 
-	private fun handleRightArrow(keyEvent: KeyEvent, state: TextEditorState) {
-		if (keyEvent.isShiftPressed) {
-			val initialPosition = state.cursorPosition
-			if (keyEvent.isCtrlPressed)
-				state.moveToNextWord()
-			else
-				state.cursor.moveRight()
-			updateSelectionForCursorMovement(state, initialPosition)
-		} else {
-			state.selector.clearSelection()
-			if (keyEvent.isCtrlPressed)
-				state.moveToNextWord()
-			else
-				state.cursor.moveRight()
+		when (motion) {
+			Motion.Left -> state.cursor.moveLeft()
+			Motion.Right -> state.cursor.moveRight()
+			Motion.Up -> state.moveCursorUp()
+			Motion.Down -> state.moveCursorDown()
+			Motion.WordLeft -> state.moveToPreviousWord()
+			Motion.WordRight -> state.moveToNextWord()
+			Motion.LineStart -> state.cursor.moveToLineStart()
+			Motion.LineEnd -> state.moveCursorToLineEnd()
+			Motion.DocumentStart -> state.moveToDocumentStart()
+			Motion.DocumentEnd -> state.moveToDocumentEnd()
+			Motion.PageUp -> state.moveCursorPageUp()
+			Motion.PageDown -> state.moveCursorPageDown()
 		}
-	}
 
-	private fun handleUpArrow(keyEvent: KeyEvent, state: TextEditorState) {
-		if (keyEvent.isShiftPressed) {
-			val initialPosition = state.cursorPosition
-			state.moveCursorUp()
-			updateSelectionForCursorMovement(state, initialPosition)
-		} else {
-			state.selector.clearSelection()
-			state.moveCursorUp()
+		if (extendSelection) {
+			state.selector.extendSelection(initialPosition, state.cursorPosition)
 		}
-	}
-
-	private fun handleDownArrow(keyEvent: KeyEvent, state: TextEditorState) {
-		if (keyEvent.isShiftPressed) {
-			val initialPosition = state.cursorPosition
-			state.moveCursorDown()
-			updateSelectionForCursorMovement(state, initialPosition)
-		} else {
-			state.selector.clearSelection()
-			state.moveCursorDown()
-		}
-	}
-
-	private fun handleHome(keyEvent: KeyEvent, state: TextEditorState) {
-		if (keyEvent.isShiftPressed) {
-			val initialPosition = state.cursorPosition
-			if (keyEvent.isCtrlPressed)
-				state.moveToDocumentStart()
-			else
-				state.cursor.moveToLineStart()
-			updateSelectionForCursorMovement(state, initialPosition)
-		} else {
-			state.selector.clearSelection()
-			if (keyEvent.isCtrlPressed)
-				state.moveToDocumentStart()
-			else
-				state.cursor.moveToLineStart()
-		}
-	}
-
-	private fun handleEnd(keyEvent: KeyEvent, state: TextEditorState) {
-		if (keyEvent.isShiftPressed) {
-			val initialPosition = state.cursorPosition
-			if (keyEvent.isCtrlPressed)
-				state.moveToDocumentEnd()
-			else
-				state.moveCursorToLineEnd()
-			updateSelectionForCursorMovement(state, initialPosition)
-		} else {
-			state.selector.clearSelection()
-			if (keyEvent.isCtrlPressed)
-				state.moveToDocumentEnd()
-			else
-				state.moveCursorToLineEnd()
-		}
-	}
-
-	private fun handlePageUp(keyEvent: KeyEvent, state: TextEditorState) {
-		if (keyEvent.isShiftPressed) {
-			val initialPosition = state.cursorPosition
-			state.moveCursorPageUp()
-			updateSelectionForCursorMovement(state, initialPosition)
-		} else {
-			state.selector.clearSelection()
-			state.moveCursorPageUp()
-		}
-	}
-
-	private fun handlePageDown(keyEvent: KeyEvent, state: TextEditorState) {
-		if (keyEvent.isShiftPressed) {
-			val initialPosition = state.cursorPosition
-			state.moveCursorPageDown()
-			updateSelectionForCursorMovement(state, initialPosition)
-		} else {
-			state.selector.clearSelection()
-			state.moveCursorPageDown()
-		}
-	}
-
-	private fun updateSelectionForCursorMovement(
-		state: TextEditorState,
-		initialPosition: CharLineOffset
-	) {
-		state.selector.extendSelection(initialPosition, state.cursorPosition)
 	}
 
 	/**

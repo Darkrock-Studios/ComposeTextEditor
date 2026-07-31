@@ -23,6 +23,7 @@ import com.darkrockstudios.texteditor.contextmenu.ContextMenuActions
 import com.darkrockstudios.texteditor.contextmenu.ContextMenuStrings
 import com.darkrockstudios.texteditor.contextmenu.TextEditorContextMenuProvider
 import com.darkrockstudios.texteditor.contextmenu.TextEditorContextMenuState
+import com.darkrockstudios.texteditor.input.LocalKeyBindings
 import com.darkrockstudios.texteditor.input.TextEditorInputModifierElement
 import com.darkrockstudios.texteditor.state.TextEditorState
 
@@ -63,8 +64,9 @@ fun RichTextView(
 		val focusRequester = remember { FocusRequester() }
 		val interactionSource = remember { MutableInteractionSource() }
 		val contextMenuState = remember { TextEditorContextMenuState() }
-		val inputModifierElement = remember(state, clipboard) {
-			TextEditorInputModifierElement(state, clipboard, enabled = false)
+		val keyBindings = LocalKeyBindings.current
+		val inputModifierElement = remember(state, clipboard, keyBindings) {
+			TextEditorInputModifierElement(state, clipboard, enabled = false, keyBindings = keyBindings)
 		}
 		val contextMenuActions = remember(state, clipboard) {
 			ContextMenuActions(state, clipboard, state.scope)

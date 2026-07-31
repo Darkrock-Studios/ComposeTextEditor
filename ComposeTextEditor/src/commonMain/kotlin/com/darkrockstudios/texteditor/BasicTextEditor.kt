@@ -45,6 +45,7 @@ import com.darkrockstudios.texteditor.contextmenu.TextEditorContextMenuProvider
 import com.darkrockstudios.texteditor.contextmenu.TextEditorContextMenuState
 import com.darkrockstudios.texteditor.cursor.DrawCursor
 import com.darkrockstudios.texteditor.input.CaptureViewForIme
+import com.darkrockstudios.texteditor.input.LocalKeyBindings
 import com.darkrockstudios.texteditor.input.TextEditorInputModifierElement
 import com.darkrockstudios.texteditor.input.selectionAsTextRange
 import com.darkrockstudios.texteditor.richstyle.BlockSpanStyle
@@ -100,8 +101,10 @@ fun BasicTextEditor(
 	val density = LocalDensity.current
 	val layoutDirection = LocalLayoutDirection.current
 
-	val inputModifierElement = remember(state, clipboard, enabled) {
-		TextEditorInputModifierElement(state, clipboard, enabled)
+	val keyBindings = LocalKeyBindings.current
+
+	val inputModifierElement = remember(state, clipboard, enabled, keyBindings) {
+		TextEditorInputModifierElement(state, clipboard, enabled, keyBindings)
 	}
 
 	val horizontalPadding = remember(contentPadding, layoutDirection) {

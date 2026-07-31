@@ -6,6 +6,8 @@ import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SkikoComposeUiTest
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performKeyInput
 
 /**
  * Types [text] into the focused editor by replaying the event sequence a real
@@ -39,5 +41,25 @@ fun SkikoComposeUiTest.typeText(text: String) {
 			)
 		}
 	}
+	waitForIdle()
+}
+
+/**
+ * Types [char] the way a macOS Option chord composes one: Option is held down over
+ * a [key] whose KEY_TYPED event carries the composed character (Option+8 types '{').
+ * The scene fills in the held modifiers on events that don't specify any, so the
+ * KeyDown the editor sees is a real Option chord.
+ */
+@OptIn(ExperimentalTestApi::class, InternalComposeUiApi::class)
+fun SkikoComposeUiTest.typeWithOption(key: Key, char: Char) {
+	onRoot().performKeyInput { keyDown(Key.AltLeft) }
+	runOnUiThread {
+		scene.sendKeyEvent(KeyEvent(key = key, type = KeyEventType.KeyDown, codePoint = char.code))
+		scene.sendKeyEvent(
+			KeyEvent(key = Key.Unknown, type = KeyEventType.Unknown, codePoint = char.code)
+		)
+		scene.sendKeyEvent(KeyEvent(key = key, type = KeyEventType.KeyUp, codePoint = char.code))
+	}
+	onRoot().performKeyInput { keyUp(Key.AltLeft) }
 	waitForIdle()
 }

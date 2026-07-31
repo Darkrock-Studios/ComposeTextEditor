@@ -29,14 +29,15 @@ import kotlinx.coroutines.launch
 internal class TextEditorInputModifierNode(
 	var state: TextEditorState,
 	var clipboard: Clipboard,
-	var enabled: Boolean
+	var enabled: Boolean,
+	keyBindings: KeyBindings
 ) : androidx.compose.ui.Modifier.Node(),
 	KeyInputModifierNode,
 	SoftKeyboardInterceptionModifierNode,
 	FocusEventModifierNode,
 	PlatformTextInputModifierNode {
 
-	private val keyCommandHandler = TextEditorKeyCommandHandler()
+	private val keyCommandHandler = TextEditorKeyCommandHandler(keyBindings)
 	private var inputSessionJob: Job? = null
 	private var imeCursorSync: ImeCursorSync? = null
 
@@ -111,11 +112,13 @@ internal class TextEditorInputModifierNode(
 	fun update(
 		state: TextEditorState,
 		clipboard: Clipboard,
-		enabled: Boolean
+		enabled: Boolean,
+		keyBindings: KeyBindings
 	) {
 		this.state = state
 		this.clipboard = clipboard
 		this.enabled = enabled
+		keyCommandHandler.keyBindings = keyBindings
 	}
 }
 
@@ -125,15 +128,16 @@ internal class TextEditorInputModifierNode(
 internal data class TextEditorInputModifierElement(
 	val state: TextEditorState,
 	val clipboard: Clipboard,
-	val enabled: Boolean
+	val enabled: Boolean,
+	val keyBindings: KeyBindings
 ) : ModifierNodeElement<TextEditorInputModifierNode>() {
 
 	override fun create(): TextEditorInputModifierNode {
-		return TextEditorInputModifierNode(state, clipboard, enabled)
+		return TextEditorInputModifierNode(state, clipboard, enabled, keyBindings)
 	}
 
 	override fun update(node: TextEditorInputModifierNode) {
-		node.update(state, clipboard, enabled)
+		node.update(state, clipboard, enabled, keyBindings)
 	}
 
 	override fun InspectorInfo.inspectableProperties() {
