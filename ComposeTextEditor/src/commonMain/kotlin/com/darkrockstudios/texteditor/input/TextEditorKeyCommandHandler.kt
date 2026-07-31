@@ -15,6 +15,7 @@ import androidx.compose.ui.text.buildAnnotatedString
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.clipboard.ClipboardHelper
+import com.darkrockstudios.texteditor.clipboard.pasteHtmlBlocks
 import com.darkrockstudios.texteditor.input.TextEditorKeyCommandHandler.Companion.TAB_SIZE
 import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.moveCursorDown
@@ -244,6 +245,7 @@ internal class TextEditorKeyCommandHandler {
 					state.insertStringAtCursor(text)
 				}
 				state.pasteRichSpans(insertPosition, text)
+				state.pasteHtmlBlocks(clipboard, insertPosition, text)
 				state.selector.clearSelection()
 			}
 		}
