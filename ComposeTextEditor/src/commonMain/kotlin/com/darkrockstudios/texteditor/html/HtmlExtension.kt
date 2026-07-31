@@ -10,7 +10,7 @@ import com.darkrockstudios.texteditor.richstyle.ImageBlockSpanStyle
 import com.darkrockstudios.texteditor.richstyle.ImageProvider
 import com.darkrockstudios.texteditor.richstyle.OrderedList
 import com.darkrockstudios.texteditor.richstyle.applyDocumentBlocks
-import com.darkrockstudios.texteditor.richstyle.documentBlocks
+import com.darkrockstudios.texteditor.richstyle.documentBlocksOf
 import com.darkrockstudios.texteditor.state.TextEditorState
 
 /**
@@ -43,10 +43,15 @@ class HtmlExtension(
 	/**
 	 * Serializes the document to an HTML fragment: no `<html>` or `<body>`
 	 * wrapper, so it can be embedded directly or written to a file as-is.
+	 *
+	 * Safe to call from any thread: the text and the blocks come from one snapshot,
+	 * so a concurrent edit can neither interrupt the walk nor place a block on a
+	 * line index belonging to a different revision.
 	 */
 	fun exportAsHtml(): String {
-		val blocks = editorState.documentBlocks()
-		val lines = editorState.textLines
+		val content = editorState.content
+		val blocks = documentBlocksOf(content.richSpans)
+		val lines = content.lines
 		if (lines.size == 1 && lines[0].isEmpty() && blocks.isEmpty()) return ""
 
 		val writer = HtmlWriter()
@@ -70,18 +75,22 @@ class HtmlExtension(
 			configuration = configuration,
 			includeImages = provider != null,
 		)
-		editorState.setText(document.text)
-		editorState.applyDocumentBlocks(
-			horizontalRuleLines = document.horizontalRuleLines,
-			imageLines = if (provider == null) {
-				emptyMap()
-			} else {
-				document.imageLines.mapValues { (_, image) ->
-					ImageBlockSpanStyle(source = image.source, alt = image.alt, provider = provider)
-				}
-			},
-			blockLines = document.blockLines,
-		)
+		// One revision, so a concurrent export can't catch the document loaded but
+		// not yet styled.
+		editorState.withAtomicEdit {
+			editorState.setText(document.text)
+			editorState.applyDocumentBlocks(
+				horizontalRuleLines = document.horizontalRuleLines,
+				imageLines = if (provider == null) {
+					emptyMap()
+				} else {
+					document.imageLines.mapValues { (_, image) ->
+						ImageBlockSpanStyle(source = image.source, alt = image.alt, provider = provider)
+					}
+				},
+				blockLines = document.blockLines,
+			)
+		}
 	}
 
 	/** The elements wrapping [line], outermost first. */

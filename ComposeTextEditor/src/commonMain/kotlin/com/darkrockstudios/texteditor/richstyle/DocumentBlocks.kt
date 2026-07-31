@@ -27,8 +27,17 @@ internal class DocumentBlocks(
 }
 
 /** Collects every line-anchored decoration currently attached to this document. */
-internal fun TextEditorState.documentBlocks(): DocumentBlocks {
-	val allSpans = richSpanManager.getAllRichSpans()
+internal fun TextEditorState.documentBlocks(): DocumentBlocks =
+	documentBlocksOf(richSpanManager.getAllRichSpans())
+
+/**
+ * Collects the decorations in [allSpans].
+ *
+ * Serializers take this from the same [TextEditorState.content] snapshot they read
+ * the text from, so the blocks they place and the lines they place them on come
+ * from one revision.
+ */
+internal fun documentBlocksOf(allSpans: Set<RichSpan>): DocumentBlocks {
 	return DocumentBlocks(
 		horizontalRuleLines = allSpans
 			.asSequence()
