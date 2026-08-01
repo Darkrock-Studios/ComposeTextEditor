@@ -9,10 +9,12 @@ import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.annotatedstring.splitAnnotatedString
 import com.darkrockstudios.texteditor.richstyle.LineBlockStyle
 import com.darkrockstudios.texteditor.richstyle.RichSpanStyle
+import com.darkrockstudios.texteditor.richstyle.allowedOn
 import com.darkrockstudios.texteditor.richstyle.applyLineBlock
 import com.darkrockstudios.texteditor.richstyle.demoteLineBlock
 import com.darkrockstudios.texteditor.richstyle.hasLineBlock
 import com.darkrockstudios.texteditor.richstyle.lineBlockSpanStyles
+import com.darkrockstudios.texteditor.richstyle.placeholderKinds
 import com.darkrockstudios.texteditor.richstyle.setLineBlockSpans
 import com.darkrockstudios.texteditor.utils.appendAnnotatedStrings
 import com.darkrockstudios.texteditor.utils.buildAnnotatedStringWithSpans
@@ -623,14 +625,24 @@ class TextEditManager(private val state: TextEditorState) {
 	/**
 	 * Captures each line's before/after content + block spans, applies the toggle
 	 * via the direct (non-recording) path, then records ONE atomic LineBlock entry.
+	 *
+	 * Acts on the in-range lines that can carry [block]: placeholder lines count
+	 * for the styles that stack on them (blockquote on any, a list style on an
+	 * image, nothing else). The toggle direction is decided from the same set, so
+	 * a rule inside the selection cannot wedge a list toggle into always-apply.
 	 */
 	internal fun toggleLineBlock(lines: IntRange, block: LineBlockStyle) = state.withAtomicEdit {
-		val anyOff = lines.any { !state.hasLineBlock(it, block) }
+		val kinds = placeholderKinds(state.richSpanManager.getAllRichSpans(), state.textLines)
+		val targets = lines.filter { line ->
+			line in state.textLines.indices && block.allowedOn(kinds[line])
+		}
+		if (targets.isEmpty()) return@withAtomicEdit
+		val anyOff = targets.any { !state.hasLineBlock(it, block) }
 		val cursorBefore = state.cursorPosition
 
 		// The toggle mutates lines and spans here, before applyOperation records it;
 		// this outer transaction keeps that prelude out of public view too.
-		val changes = lines.map { lineIdx ->
+		val changes = targets.map { lineIdx ->
 			val contentBefore = state.getLine(lineIdx)
 			val spansBefore = state.lineBlockSpanStyles(lineIdx)
 			if (anyOff) {

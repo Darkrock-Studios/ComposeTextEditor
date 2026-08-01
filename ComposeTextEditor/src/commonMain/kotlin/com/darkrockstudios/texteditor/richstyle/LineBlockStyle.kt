@@ -121,6 +121,52 @@ internal fun mutuallyExcluded(applied: LineBlockStyle): Set<LineBlockStyle> = wh
 	else -> emptySet()
 }
 
+/**
+ * What owns a placeholder line, for stacking policy: an image can be a list
+ * item, any other full-line block (a rule) cannot.
+ */
+internal enum class PlaceholderKind { IMAGE, OTHER }
+
+/**
+ * The lines whose content is a placeholder owned by a full-line block span
+ * ([BlockSpanStyle.replacesText]) and whose text is still just that
+ * placeholder. A line holding real text is not a placeholder no matter which
+ * spans it carries: a line merge can re-anchor a rule's span onto a text line,
+ * and the text keeps its own formatting there.
+ */
+internal fun placeholderKinds(
+	spans: Set<RichSpan>,
+	lines: List<AnnotatedString>,
+): Map<Int, PlaceholderKind> {
+	val kinds = mutableMapOf<Int, PlaceholderKind>()
+	spans.forEach { span ->
+		if ((span.style as? BlockSpanStyle)?.replacesText() != true) return@forEach
+		val line = span.range.start.line
+		if (lines.getOrNull(line)?.isBlank() != true) return@forEach
+		val kind = if (span.style is ImageBlockSpanStyle) {
+			PlaceholderKind.IMAGE
+		} else {
+			PlaceholderKind.OTHER
+		}
+		// When two full-line spans share a line, the stricter policy applies.
+		if (kinds[line] != PlaceholderKind.OTHER) kinds[line] = kind
+	}
+	return kinds
+}
+
+/**
+ * Whether this block style may sit on a line of [kind]: null means an ordinary
+ * line (anything may), an image takes a stacked quote or one list style
+ * (`1. ![shot](url)` is a numbered figure), any other placeholder takes only a
+ * quote (`> ---`).
+ */
+internal fun LineBlockStyle.allowedOn(kind: PlaceholderKind?): Boolean = when {
+	kind == null -> true
+	this === Blockquote -> true
+	kind == PlaceholderKind.IMAGE -> this === BulletList || this === OrderedList
+	else -> false
+}
+
 internal fun TextEditorState.hasLineBlock(line: Int, block: LineBlockStyle): Boolean =
 	richSpanManager.getRichSpansStartingOn(line).any { it.style === block.spanStyle }
 

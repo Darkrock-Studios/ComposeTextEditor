@@ -1,5 +1,6 @@
 package com.darkrockstudios.texteditor.richstyle
 
+import androidx.compose.ui.text.AnnotatedString
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.state.TextEditorState
@@ -77,14 +78,28 @@ internal fun TextEditorState.applyDocumentBlocks(
 ) = withAtomicEdit {
 	val added = mutableListOf<RichSpan>()
 	val removed = mutableListOf<RichSpan>()
+	val lines = textLines.toMutableList()
+	var rebuiltAnyLine = false
+
+	// The GFM parser drops a lone leading space at document start, so a
+	// placeholder line at index 0 can arrive empty; restore the character the
+	// span's range addresses.
+	fun ensurePlaceholder(line: Int, placeholder: String) {
+		if (lines.getOrNull(line)?.isEmpty() == true) {
+			lines[line] = AnnotatedString(placeholder)
+			rebuiltAnyLine = true
+		}
+	}
 
 	horizontalRuleLines.forEach { line ->
+		ensurePlaceholder(line, HR_PLACEHOLDER)
 		added += RichSpan(
 			range = lineRange(line, HR_PLACEHOLDER.length),
 			style = HorizontalRuleSpanStyle,
 		)
 	}
 	imageLines.forEach { (line, style) ->
+		ensurePlaceholder(line, IMAGE_PLACEHOLDER)
 		added += RichSpan(range = lineRange(line, IMAGE_PLACEHOLDER.length), style = style)
 	}
 
@@ -98,8 +113,6 @@ internal fun TextEditorState.applyDocumentBlocks(
 		}
 	}
 
-	val lines = textLines.toMutableList()
-	var rebuiltAnyLine = false
 	for ((line, blocks) in requested) {
 		var text = lines.getOrNull(line) ?: continue
 		val present = ALL_BLOCK_STYLES.filter { hasLineBlock(line, it) }.toMutableList()

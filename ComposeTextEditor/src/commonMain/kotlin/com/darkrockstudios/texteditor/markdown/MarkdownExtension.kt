@@ -10,9 +10,12 @@ import com.darkrockstudios.texteditor.richstyle.ImageProvider
 import com.darkrockstudios.texteditor.richstyle.LINE_BLOCK_STYLES
 import com.darkrockstudios.texteditor.richstyle.LineBlockStyle
 import com.darkrockstudios.texteditor.richstyle.OrderedList
+import com.darkrockstudios.texteditor.richstyle.PlaceholderKind
+import com.darkrockstudios.texteditor.richstyle.allowedOn
 import com.darkrockstudios.texteditor.richstyle.applyDocumentBlocks
 import com.darkrockstudios.texteditor.richstyle.documentBlocksOf
 import com.darkrockstudios.texteditor.richstyle.hasLineBlock
+import com.darkrockstudios.texteditor.richstyle.mutuallyExcluded
 import com.darkrockstudios.texteditor.state.TextEditorState
 
 private val HR_LINE_TOKENS = setOf("---", "***", "___")
@@ -82,6 +85,56 @@ private fun stripCodeFences(markdown: String): CodeFenceStripResult {
 	)
 }
 
+/** A line's body once its stacked block markers are peeled, and the styles peeled. */
+private data class PeeledLine(
+	val body: String,
+	val blocks: List<LineBlockStyle>,
+)
+
+/**
+ * Peels stacked block markers off [line] as the exact mirror of how export
+ * emits them: styles are tried in [LINE_BLOCK_STYLES] registry order, each at
+ * most once, and only when it can stack with everything already peeled.
+ * `> - item` peels quote then bullet; `- 1990. plans` peels only the bullet,
+ * because the two list styles are mutually exclusive, so `1990. ` stays in the
+ * body text. A nested `> > quoted` keeps its second level as body text.
+ */
+private fun peelLineBlocks(line: String): PeeledLine {
+	var body = line
+	val peeled = mutableListOf<LineBlockStyle>()
+	for (block in LINE_BLOCK_STYLES) {
+		if (peeled.any { block in mutuallyExcluded(it) }) continue
+		val match = block.markdownPattern.matchEntire(body) ?: continue
+		peeled += block
+		body = match.groupValues[1]
+	}
+	return PeeledLine(body, peeled)
+}
+
+private val RESIDUAL_BULLET_MARKER = Regex("""^([-*+])(\s)""")
+private val RESIDUAL_QUOTE_MARKER = Regex("""^>""")
+
+/**
+ * Escapes a marker-shaped lead left in a peeled body. The peel already consumed
+ * every marker the line's spans account for, so whatever still looks like one is
+ * literal text and must not reach the GFM parser bare, or it parses as markup
+ * and the author's characters are consumed. The parser strips the escapes back
+ * out via `removeMarkdownEscapes`. Ordered markers go through export's own
+ * escape helper so the two sides cannot drift apart.
+ */
+private fun String.escapeResidualMarker(): String {
+	escapeOrderedListMarkers(this).let { if (it != this) return it }
+	return when {
+		RESIDUAL_BULLET_MARKER.containsMatchIn(this) ->
+			replaceFirst(RESIDUAL_BULLET_MARKER, "\\\\$1$2")
+
+		RESIDUAL_QUOTE_MARKER.containsMatchIn(this) ->
+			replaceFirst(RESIDUAL_QUOTE_MARKER, "\\\\>")
+
+		else -> this
+	}
+}
+
 /**
  * An extension to TextEditorState that provides markdown functionality.
  * This separates markdown concerns from the core text editor functionality.
@@ -124,7 +177,9 @@ class MarkdownExtension(
 
 		val annotated = content.getAllText()
 		val text = annotated.text
-		if (text.isEmpty() && hrLines.isEmpty() && imageLines.isEmpty() && codeFenceLines.isEmpty()) return ""
+		// An empty document with any block decoration still serializes: a lone
+		// empty quote line is `> `, not nothing.
+		if (text.isEmpty() && blocks.isEmpty()) return ""
 
 		val sb = StringBuilder()
 		var lineIndex = 0
@@ -214,13 +269,20 @@ class MarkdownExtension(
 			if (index in codeFenceLineIndices) {
 				return@mapIndexed line.escapeMarkdownSpecials()
 			}
-			val imageMatch = STANDALONE_IMAGE_REGEX.matchEntire(line)
-			val blockMatch = LINE_BLOCK_STYLES.firstNotNullOfOrNull { block ->
-				block.markdownPattern.matchEntire(line)?.let { block to it }
+			// Markers peel before the body is classified, so a rule or image keeps
+			// a stacked blockquote (`> ---`), and a `- ---` line comes back as the
+			// rule it once was rather than a bullet holding literal dashes.
+			val peeled = peelLineBlocks(line)
+			val imageMatch = STANDALONE_IMAGE_REGEX.matchEntire(peeled.body)
+			fun record(blocks: List<LineBlockStyle>) = blocks.forEach { block ->
+				blockHits.getOrPut(block) { mutableListOf() } += index
 			}
 			when {
-				line.trim() in HR_LINE_TOKENS -> {
+				peeled.body.trim() in HR_LINE_TOKENS -> {
 					hrLineIndices += index
+					// A rule takes only a stacked quote; a peeled list marker has
+					// no meaning on one and is dropped.
+					record(peeled.blocks.filter { it.allowedOn(PlaceholderKind.OTHER) })
 					HR_PLACEHOLDER
 				}
 
@@ -232,13 +294,15 @@ class MarkdownExtension(
 						alt = alt,
 						provider = provider,
 					)
+					// An image can be a quoted line or a list item, so its
+					// peeled markers all attach (`1. ![shot](url)`).
+					record(peeled.blocks.filter { it.allowedOn(PlaceholderKind.IMAGE) })
 					IMAGE_PLACEHOLDER
 				}
 
-				blockMatch != null -> {
-					val (block, match) = blockMatch
-					blockHits.getOrPut(block) { mutableListOf() } += index
-					match.groupValues[1]
+				peeled.blocks.isNotEmpty() -> {
+					record(peeled.blocks)
+					peeled.body.escapeResidualMarker()
 				}
 
 				else -> line
