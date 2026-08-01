@@ -8,12 +8,9 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextRange
-import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import com.darkrockstudios.texteditor.LineWrap
 import com.darkrockstudios.texteditor.state.TextEditorState
-import kotlin.math.PI
-import kotlin.math.sin
 
 /**
  * A [RichSpanStyle] that draws a red wavy underline beneath misspelled text.
@@ -26,7 +23,6 @@ object SpellCheckStyle : RichSpanStyle {
 	private val waveLengthDp = 15.dp
 	private val amplitudeDp = 2.dp
 	private val strokeWidthDp = 1.5.dp
-	private const val pointsPerWave: Int = 6
 
 	override fun DrawScope.drawCustomStyle(
 		layoutResult: TextLayoutResult,
@@ -34,9 +30,9 @@ object SpellCheckStyle : RichSpanStyle {
 		textRange: TextRange,
 		state: TextEditorState,
 	) {
-		val waveLength = with(Density(density)) { waveLengthDp.toPx() }
-		val amplitude = with(Density(density)) { amplitudeDp.toPx() }
-		val strokeWidth = with(Density(density)) { strokeWidthDp.toPx() }
+		val waveLength = waveLengthDp.toPx()
+		val amplitude = amplitudeDp.toPx()
+		val strokeWidth = strokeWidthDp.toPx()
 
 		val lineHeight = layoutResult.multiParagraph.getLineHeight(lineWrap.virtualLineIndex)
 		val baselineY = lineHeight - 2f // Slightly above the bottom
@@ -60,23 +56,23 @@ object SpellCheckStyle : RichSpanStyle {
 		}
 
 		if (endX > startX) {
+			// One quadratic per half wave rather than a polyline sampled across it:
+			// a third of the segments to stroke for a smoother curve, and stroking
+			// cost tracks segment count closely enough to show up in frame time.
+			val halfWave = waveLength / 2f
 			val path = Path().apply {
 				moveTo(startX, baselineY)
 
-				val width = endX - startX
-				val numPoints = ((width / waveLength) * pointsPerWave).toInt().coerceAtLeast(2)
-				val dx = width / (numPoints - 1)
-
-				for (i in 0 until numPoints) {
-					val x = startX + (i * dx)
-					val phase = (x - startX) * (2 * PI / waveLength)
-					val y = baselineY + (amplitude * sin(phase)).toFloat()
-
-					if (i == 0) {
-						moveTo(x, y)
-					} else {
-						lineTo(x, y)
-					}
+				var x = startX
+				var crestBelow = true
+				while (x < endX) {
+					val next = (x + halfWave).coerceAtMost(endX)
+					// A quadratic reaches half its control offset, so double the
+					// amplitude to put the crest on the sine's peak.
+					val control = if (crestBelow) amplitude * 2f else -amplitude * 2f
+					quadraticTo((x + next) / 2f, baselineY + control, next, baselineY)
+					x = next
+					crestBelow = !crestBelow
 				}
 			}
 
