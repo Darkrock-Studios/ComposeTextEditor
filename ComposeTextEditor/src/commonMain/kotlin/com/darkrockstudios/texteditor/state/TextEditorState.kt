@@ -40,6 +40,7 @@ import com.darkrockstudios.texteditor.richstyle.detectLineBlock
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlin.concurrent.Volatile
 import kotlin.math.min
 
 /**
@@ -116,13 +117,97 @@ class TextEditorState(
 	var codeFenceBorderColor: Color by mutableStateOf(Color.Unspecified)
 		internal set
 
-	internal val _textLines = mutableListOf<AnnotatedString>()
+	/**
+	 * The last committed document content. Every mutation publishes a whole new
+	 * [DocumentSnapshot] rather than editing the previous one in place, so a reader
+	 * on any thread sees a complete, self-consistent snapshot and can never observe
+	 * a collection mid-mutation. Writes must all come from the thread driving edits.
+	 *
+	 * Only ever holds a fully applied revision, never a half-finished one. [snapshot]
+	 * exposes it to callers outside this module.
+	 */
+	@Volatile
+	internal var content = DocumentSnapshot(emptyList(), emptySet())
+		private set
 
 	/**
-	 * The document content as one [AnnotatedString] per line, in order. Read-only;
-	 * mutate through the edit operations or replace wholesale with [setText].
+	 * Content staged by an open [withAtomicEdit] transaction, or null when none is
+	 * running. Written only by the thread inside the transaction; readers elsewhere
+	 * keep seeing [content] until it commits. Volatile so the edit thread's own
+	 * nested reads through [workingContent] can never see a stale draft.
 	 */
-	val textLines: List<AnnotatedString> get() = _textLines
+	@Volatile
+	private var draft: DocumentSnapshot? = null
+
+	/** Actions deferred by [onCommit] until the outermost transaction commits. */
+	private val pendingCommitActions = mutableListOf<() -> Unit>()
+
+	/** Content as the current edit sees it: the open draft if there is one, else [content]. */
+	internal val workingContent: DocumentSnapshot get() = draft ?: content
+
+	/**
+	 * Returns the document's text and rich spans as they stood after the same edit.
+	 *
+	 * Safe to call from any thread. [textLines] and [RichSpanManager.getAllRichSpans]
+	 * are separate reads, so pairing them can straddle an edit and yield text from one
+	 * revision with span line indices from another; anything that serializes the whole
+	 * document (an exporter, an autosave) wants this instead.
+	 */
+	fun snapshot(): DocumentSnapshot = content
+
+	/**
+	 * Runs [block] as a single atomic revision: mutations inside it accumulate in a
+	 * draft and reach [content] in one write when it returns.
+	 *
+	 * Every edit touches lines and rich spans separately (the text first, then
+	 * `updateSpans` re-anchors the spans onto it). Without this, the intermediate
+	 * state is publicly observable, and a reader that catches it gets new text
+	 * paired with span line indices from the previous revision, which serializes
+	 * block markers onto the wrong lines.
+	 *
+	 * Re-entrant: a nested call joins the outer transaction and commits with it. A
+	 * throwing [block] discards the draft and leaves [content] on the previous
+	 * revision, because a half-applied revision would keep serializing block markers
+	 * onto the wrong lines long after the failure rather than only during it.
+	 */
+	internal fun <T> withAtomicEdit(block: () -> T): T {
+		if (draft != null) return block()
+		draft = content
+		try {
+			val result = block()
+			draft?.let { content = it }
+			return result
+		} finally {
+			draft = null
+			// Drop the queue on the throwing path too: those actions announce an edit
+			// that no longer exists.
+			val actions = pendingCommitActions.toList()
+			pendingCommitActions.clear()
+			actions.forEach { it() }
+		}
+	}
+
+	/**
+	 * Runs [action] once the outermost transaction has committed, or immediately when
+	 * there is none. For work that announces an edit to the outside world and must not
+	 * run while the revision it describes is still staged.
+	 */
+	internal fun onCommit(action: () -> Unit) {
+		if (draft != null) pendingCommitActions += action else action()
+	}
+
+	private fun mutateContent(transform: (DocumentSnapshot) -> DocumentSnapshot) {
+		if (draft != null) draft = transform(workingContent) else content = transform(content)
+	}
+
+	/**
+	 * The document content as one [AnnotatedString] per line, in order. An immutable
+	 * list; mutate through the edit operations or replace wholesale with [setText].
+	 *
+	 * Reflects the in-progress revision while an edit is running. To read the document
+	 * from another thread, or to pair the text with its rich spans, use [snapshot].
+	 */
+	val textLines: List<AnnotatedString> get() = workingContent.lines
 
 	/** The caret: its [CharLineOffset] position, movement, and active typing style. */
 	val cursor = TextEditorCursorState(this)
@@ -267,9 +352,7 @@ class TextEditorState(
 	 * operations.
 	 */
 	fun setText(text: String) {
-		_textLines.clear()
-		richSpanManager.clear()
-		_textLines.addAll(text.split("\n").map { it.toAnnotatedString() })
+		replaceContent(text.split("\n").map { it.toAnnotatedString() })
 		updateBookKeeping()
 		cursor.refreshStyles()
 	}
@@ -280,9 +363,7 @@ class TextEditorState(
 	 * instead, use [replace] or the cursor operations.
 	 */
 	fun setText(text: AnnotatedString) {
-		_textLines.clear()
-		richSpanManager.clear()
-		_textLines.addAll(text.splitAnnotatedString())
+		replaceContent(text.splitAnnotatedString())
 		updateBookKeeping()
 		cursor.refreshStyles()
 	}
@@ -343,14 +424,18 @@ class TextEditorState(
 			cursorBefore = cursorPosition,
 			cursorAfter = CharLineOffset(originalLine + 1, 0)
 		)
-		editManager.applyOperation(operation)
+		// The split and the block markers are one revision. Published separately, a
+		// reader between them sees the new half-line with its marker missing.
+		withAtomicEdit {
+			editManager.applyOperation(operation)
 
-		// RichSpanManager's newline handling only keeps the span on one side when
-		// the cursor was at a span boundary, so apply to both lines so both halves
-		// of the split keep the gutter marker. applyLineBlock is idempotent.
-		activeBlock?.let {
-			applyLineBlock(originalLine, it)
-			applyLineBlock(originalLine + 1, it)
+			// RichSpanManager's newline handling only keeps the span on one side when
+			// the cursor was at a span boundary, so apply to both lines so both halves
+			// of the split keep the gutter marker. applyLineBlock is idempotent.
+			activeBlock?.let {
+				applyLineBlock(originalLine, it)
+				applyLineBlock(originalLine + 1, it)
+			}
 		}
 	}
 
@@ -559,39 +644,45 @@ class TextEditorState(
 		updateLine(index, text.toAnnotatedString())
 
 	internal fun updateLine(index: Int, text: AnnotatedString) {
-		_textLines[index] = text
+		setLine(index, text)
 		updateBookKeeping(index..index)
 	}
 
 	/**
-	 * Rewrites every line in place by passing each line index and content through
-	 * [processor] and storing its result, then relays out the document.
+	 * Rewrites the document by passing each line index and content through [processor],
+	 * then relays out the result. [processor] sees the document as it stood on entry
+	 * and the rewritten lines land as a single revision once every line is visited.
+	 *
+	 * [processor] must be a pure function of its arguments. Editing this state from
+	 * inside it (adding a span, replacing a range) does not compose: those writes are
+	 * computed against the entry snapshot and overwritten by the batch.
 	 */
 	fun processLines(processor: (index: Int, line: AnnotatedString) -> AnnotatedString) {
-		for (i in textLines.indices) {
-			val line = textLines[i]
-			_textLines[i] = processor(i, line)
-		}
+		withAtomicEdit { setLines(textLines.mapIndexed(processor)) }
 		updateBookKeeping()
 	}
 
 	internal fun removeLines(startIndex: Int, count: Int) {
+		val lines = textLines
 		// If there are no lines, or we're trying to remove more lines than exist, abort
-		if (_textLines.isEmpty() || startIndex >= _textLines.size) {
+		if (lines.isEmpty() || startIndex >= lines.size) {
 			return
 		}
 
-		// Ensure we don't remove more lines than available
-		val safeCount = minOf(count, _textLines.size - startIndex)
+		// Ensure we don't remove more lines than available. The floor matters: an
+		// inverted range reaches here with a negative count, which subList would
+		// reject outright.
+		val safeCount = minOf(count, lines.size - startIndex).coerceAtLeast(0)
 
 		// Always keep at least one empty line
-		if (_textLines.size <= safeCount) {
-			_textLines.clear()
-			_textLines.add(AnnotatedString(""))
+		if (lines.size <= safeCount) {
+			setLines(listOf(AnnotatedString("")))
 		} else {
-			repeat(safeCount) {
-				_textLines.removeAt(startIndex)
-			}
+			setLines(
+				lines.toMutableList().also {
+					it.subList(startIndex, startIndex + safeCount).clear()
+				}
+			)
 		}
 
 		updateBookKeeping()
@@ -599,8 +690,31 @@ class TextEditorState(
 
 	internal fun insertLine(index: Int, text: String) = insertLine(index, text.toAnnotatedString())
 	internal fun insertLine(index: Int, text: AnnotatedString) {
-		_textLines.add(index, text)
+		setLines(textLines.toMutableList().also { it.add(index, text) })
 		updateBookKeeping()
+	}
+
+	/**
+	 * Publishes [lines] as the entire document and drops every rich span in a single
+	 * write. A full content replacement leaves any prior spans pointing at stale line
+	 * indices: on a markdown roundtrip, leftover bullet/blockquote spans would block
+	 * `applyLineBlock` from re-attaching the paragraph indent and the gutter marker
+	 * would draw over the first character of the line.
+	 */
+	private fun replaceContent(lines: List<AnnotatedString>) {
+		mutateContent { DocumentSnapshot(lines, emptySet()) }
+	}
+
+	internal fun setLines(lines: List<AnnotatedString>) {
+		mutateContent { it.withLines(lines) }
+	}
+
+	internal fun setLine(index: Int, text: AnnotatedString) {
+		setLines(workingContent.lines.toMutableList().also { it[index] = text })
+	}
+
+	internal fun setRichSpans(richSpans: Set<RichSpan>) {
+		mutateContent { it.withRichSpans(richSpans) }
 	}
 
 	/** True when the document holds a single empty line. */
@@ -1012,8 +1126,12 @@ class TextEditorState(
 	 * would relayout the whole document once per span.
 	 */
 	fun updateRichSpans(remove: Collection<RichSpan>, add: Collection<RichSpan>) {
-		remove.forEach { richSpanManager.removeRichSpan(it) }
-		add.forEach { richSpanManager.addRichSpan(it.range, it.style) }
+		// One revision as well as one relayout: published per span, a reader between
+		// the removals and the additions sees the batch half-applied.
+		withAtomicEdit {
+			remove.forEach { richSpanManager.removeRichSpan(it) }
+			add.forEach { richSpanManager.addRichSpan(it.range, it.style) }
+		}
 		updateBookKeeping()
 	}
 
@@ -1134,9 +1252,9 @@ class TextEditorState(
 	 * spans apply. Fully closing this needs platform-clipboard ownership tracking,
 	 * which is out of scope here.
 	 */
-	fun pasteRichSpans(insertPosition: CharLineOffset, pastedText: AnnotatedString) {
-		val copied = copiedRichSpans ?: return
-		if (copied.text != pastedText.text) return
+	fun pasteRichSpans(insertPosition: CharLineOffset, pastedText: AnnotatedString) = withAtomicEdit {
+		val copied = copiedRichSpans ?: return@withAtomicEdit
+		if (copied.text != pastedText.text) return@withAtomicEdit
 		copied.spans.forEach { preserved ->
 			val startPos = CharLineOffset(
 				line = insertPosition.line + preserved.relativeStart.lineDiff,
@@ -1228,16 +1346,7 @@ class TextEditorState(
 	 * Returns the entire document as a single [AnnotatedString], joining [textLines]
 	 * with newlines and preserving character-level spans.
 	 */
-	fun getAllText(): AnnotatedString {
-		return buildAnnotatedString {
-			textLines.forEachIndexed { index, line ->
-				append(line)
-				if (index < textLines.lastIndex) {
-					append('\n')
-				}
-			}
-		}
-	}
+	fun getAllText(): AnnotatedString = workingContent.getAllText()
 
 	/** Returns the total character count of the document, counting newlines between lines. */
 	fun getTextLength(): Int {

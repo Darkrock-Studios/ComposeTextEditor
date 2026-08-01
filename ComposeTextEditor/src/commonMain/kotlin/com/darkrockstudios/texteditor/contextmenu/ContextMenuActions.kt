@@ -2,7 +2,8 @@ package com.darkrockstudios.texteditor.contextmenu
 
 import androidx.compose.ui.platform.Clipboard
 import com.darkrockstudios.texteditor.clipboard.ClipboardHelper
-import com.darkrockstudios.texteditor.clipboard.pasteHtmlBlocks
+import com.darkrockstudios.texteditor.clipboard.applyHtmlPasteBlocks
+import com.darkrockstudios.texteditor.clipboard.readHtmlPasteDocument
 import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.applyStyleForEditAt
 import kotlinx.coroutines.CoroutineScope
@@ -71,14 +72,19 @@ class ContextMenuActions(
 			ClipboardHelper.getText(clipboard, state.markdownConfiguration)?.let { text ->
 				val curSelection = state.selector.selection
 				val insertPosition = curSelection?.start ?: state.cursorPosition
+				// Read the clipboard's HTML before mutating: the text, the in-editor
+				// rich spans and the pasted block structure then land as one revision.
+				val htmlDocument = state.readHtmlPasteDocument(clipboard, text)
 				state.preserveCopiedRichSpansThroughNextEdit()
-				if (curSelection != null) {
-					state.replace(curSelection, state.applyStyleForEditAt(curSelection.start, text))
-				} else {
-					state.insertStringAtCursor(text)
+				state.withAtomicEdit {
+					if (curSelection != null) {
+						state.replace(curSelection, state.applyStyleForEditAt(curSelection.start, text))
+					} else {
+						state.insertStringAtCursor(text)
+					}
+					state.pasteRichSpans(insertPosition, text)
+					htmlDocument?.let { state.applyHtmlPasteBlocks(it, insertPosition, text) }
 				}
-				state.pasteRichSpans(insertPosition, text)
-				state.pasteHtmlBlocks(clipboard, insertPosition, text)
 				state.selector.clearSelection()
 			}
 		}

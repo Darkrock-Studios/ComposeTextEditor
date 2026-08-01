@@ -11,7 +11,7 @@ import com.darkrockstudios.texteditor.richstyle.LINE_BLOCK_STYLES
 import com.darkrockstudios.texteditor.richstyle.LineBlockStyle
 import com.darkrockstudios.texteditor.richstyle.OrderedList
 import com.darkrockstudios.texteditor.richstyle.applyDocumentBlocks
-import com.darkrockstudios.texteditor.richstyle.documentBlocks
+import com.darkrockstudios.texteditor.richstyle.documentBlocksOf
 import com.darkrockstudios.texteditor.richstyle.hasLineBlock
 import com.darkrockstudios.texteditor.state.TextEditorState
 
@@ -105,13 +105,24 @@ class MarkdownExtension(
 		editorState.markdownConfiguration = markdownConfiguration
 	}
 
+	/**
+	 * Serializes the document to markdown.
+	 *
+	 * Safe to call from any thread. The whole document (text and rich spans) is read
+	 * once, up front, as a single immutable snapshot, so a concurrent edit can neither
+	 * interrupt the walk nor tear the output across two revisions: edits commit their
+	 * text and their span re-anchoring together, so the snapshot is always a fully
+	 * applied revision. It does not wait for the user to stop typing, though; an edit
+	 * made after the snapshot is taken simply isn't in the result.
+	 */
 	fun exportAsMarkdown(): String {
-		val blocks = editorState.documentBlocks()
+		val content = editorState.content
+		val blocks = documentBlocksOf(content.richSpans)
 		val hrLines = blocks.horizontalRuleLines
 		val imageLines = blocks.imageLines
 		val codeFenceLines = blocks.linesFor(CodeFence)
 
-		val annotated = editorState.getAllText()
+		val annotated = content.getAllText()
 		val text = annotated.text
 		if (text.isEmpty() && hrLines.isEmpty() && imageLines.isEmpty() && codeFenceLines.isEmpty()) return ""
 
@@ -235,12 +246,17 @@ class MarkdownExtension(
 		}
 		val processedMarkdown = processedLines.joinToString("\n")
 		val annotatedString = processedMarkdown.toAnnotatedStringFromMarkdown(markdownConfiguration)
-		editorState.setText(annotatedString)
-		editorState.applyDocumentBlocks(
-			horizontalRuleLines = hrLineIndices,
-			imageLines = imageLines.toMap(),
-			blockLines = blockHits + (CodeFence to codeFenceLineIndices),
-		)
+		// setText publishes the text with no spans and applyDocumentBlocks re-attaches
+		// them one at a time. As one revision, so a concurrent export can't catch the
+		// document fully loaded but entirely unstyled.
+		editorState.withAtomicEdit {
+			editorState.setText(annotatedString)
+			editorState.applyDocumentBlocks(
+				horizontalRuleLines = hrLineIndices,
+				imageLines = imageLines.toMap(),
+				blockLines = blockHits + (CodeFence to codeFenceLineIndices),
+			)
+		}
 	}
 
 	/** Returns whether [line] is currently rendered as a blockquote. */

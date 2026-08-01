@@ -9,35 +9,35 @@ import com.darkrockstudios.texteditor.richstyle.RichSpanStyle
 class RichSpanManager(
 	private val state: TextEditorState
 ) {
-	private val spans = mutableSetOf<RichSpan>()
-
-	fun getAllRichSpans(): Set<RichSpan> = spans
+	/**
+	 * Copy-on-write: every mutation publishes a brand new set rather than editing the
+	 * previous one, so the sets handed out by [getAllRichSpans] and iterated by the
+	 * queries below can never be modified underneath a reader.
+	 */
+	private var spans: Set<RichSpan>
+		get() = state.workingContent.richSpans
+		set(value) = state.setRichSpans(value)
 
 	/**
-	 * Drops every rich span. Called by [TextEditorState.setText] because a full
-	 * content replacement leaves any prior spans pointing at stale line indices —
-	 * e.g. on a markdown roundtrip, leftover bullet/blockquote spans would block
-	 * `applyLineBlock` from re-attaching the paragraph indent and the gutter
-	 * marker would draw over the first character of the line.
+	 * Every rich span in the document, as an immutable snapshot. Safe to hold onto and
+	 * to iterate from any thread; it will not reflect later edits.
 	 */
-	internal fun clear() {
-		spans.clear()
-	}
+	fun getAllRichSpans(): Set<RichSpan> = spans
 
 	internal fun addRichSpan(range: TextEditorRange, style: RichSpanStyle) {
-		spans.add(RichSpan(range, style))
+		spans = spans + RichSpan(range, style)
 	}
 
 	internal fun addRichSpan(start: CharLineOffset, end: CharLineOffset, style: RichSpanStyle) {
-		spans.add(RichSpan(TextEditorRange(start, end), style))
+		addRichSpan(TextEditorRange(start, end), style)
 	}
 
 	internal fun removeRichSpan(start: CharLineOffset, end: CharLineOffset, style: RichSpanStyle) {
-		spans.remove(RichSpan(TextEditorRange(start, end), style))
+		removeRichSpan(RichSpan(TextEditorRange(start, end), style))
 	}
 
 	internal fun removeRichSpan(span: RichSpan) {
-		spans.remove(span)
+		spans = spans - span
 	}
 
 	fun getSpansForLineWrap(lineWrap: LineWrap): List<RichSpan> {
@@ -65,8 +65,7 @@ class RichSpanManager(
 			}
 		}
 
-		spans.clear()
-		spans.addAll(mergeLineAnchoredDuplicates(updatedSpans))
+		spans = mergeLineAnchoredDuplicates(updatedSpans)
 	}
 
 	/**
