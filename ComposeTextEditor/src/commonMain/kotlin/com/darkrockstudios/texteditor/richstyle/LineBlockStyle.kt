@@ -201,36 +201,65 @@ internal fun rebuildWithoutBlock(existing: AnnotatedString, block: LineBlockStyl
 	}
 
 /**
- * Idempotent — no-op if [line] already carries [block]. Otherwise demotes any
- * mutually-exclusive block on the same line, wraps the line's text in the
- * indent paragraph style (and the optional [LineBlockStyle.textStyle]), and
- * attaches a fresh rich span.
- *
- * On an empty line the span is zero-width `[0, 0)` — `RichSpan.intersectsWith`
- * special-cases sticky-at-start spans so the gutter marker still renders.
- * As soon as the user types a character, sticky-at-start keeps the span anchored
- * at column 0 while the end shifts forward, naturally tracking the line length.
+ * What putting one line block on a line comes to: the blocks already there that
+ * have to give way, and the line's text with those stripped and the new block's
+ * wrapping added.
  */
-internal fun TextEditorState.applyLineBlock(line: Int, block: LineBlockStyle) = withAtomicEdit {
-	if (hasLineBlock(line, block)) return@withAtomicEdit
+internal class ResolvedLineBlock(
+	val demoted: List<LineBlockStyle>,
+	val text: AnnotatedString,
+)
+
+/**
+ * Resolves [block] against a line holding [present] with content [text], or
+ * returns null when [block] is already there and there is nothing to do.
+ *
+ * The one place [mutuallyExcluded] is turned into an actual demotion and rebuild:
+ * the per-line toggle and the batched importer both resolve through this, so a
+ * stack of blocks produces the same line whether the user typed it or an import
+ * placed it.
+ */
+internal fun resolveLineBlock(
+	present: Collection<LineBlockStyle>,
+	block: LineBlockStyle,
+	text: AnnotatedString,
+): ResolvedLineBlock? {
+	if (block in present) return null
 	// Demote any conflicting block before applying — otherwise the new
 	// paragraph-style indent would overlap the old one and Compose blanks the
 	// line on the next measure pass.
-	mutuallyExcluded(block)
-		.filter { hasLineBlock(line, it) }
-		.forEach { demoteLineBlock(line, it) }
+	val demoted = mutuallyExcluded(block).filter { it in present }
+	var rebuilt = text
+	demoted.forEach { rebuilt = rebuildWithoutBlock(rebuilt, it) }
+	return ResolvedLineBlock(demoted, rebuildWithBlock(rebuilt, block))
+}
+
+/**
+ * Puts [block] on [line] and commits it in a single relayout. The demotions and
+ * the rebuilt line come from [resolveLineBlock], which also makes this a no-op
+ * when [line] already carries [block].
+ */
+internal fun TextEditorState.applyLineBlock(line: Int, block: LineBlockStyle) = withAtomicEdit {
 	val existing = textLines.getOrNull(line) ?: return@withAtomicEdit
+	val resolved = resolveLineBlock(lineBlocks(line), block, existing)
+		?: return@withAtomicEdit
+	resolved.demoted.forEach { removeLineBlockSpans(line, it) }
 	// Attach the span before rebuilding the line: updateLine triggers the relayout
 	// that resolves each line's gutter marker (bullet/numeral), so the span must be
 	// present first or the marker won't render until the next edit forces another pass.
-	addLineBlockSpan(line, existing.length, block)
-	updateLine(line, rebuildWithBlock(existing, block))
+	addLineBlockSpan(line, resolved.text.length, block)
+	updateLine(line, resolved.text)
 }
 
 /**
  * Attaches the line-anchored span for [block] to [line] via the direct, non-
  * recording manager path. Callers that want the toggle in undo history record a
  * [TextEditOperation.LineBlock] separately — recording here too would double-count.
+ *
+ * On an empty line the span is zero-width `[0, 0)`: `RichSpan.intersectsWith`
+ * special-cases sticky-at-start spans so the gutter marker still renders. As soon
+ * as the user types a character, sticky-at-start keeps the span anchored at column
+ * 0 while the end shifts forward, naturally tracking the line length.
  */
 internal fun TextEditorState.addLineBlockSpan(line: Int, length: Int, block: LineBlockStyle) {
 	richSpanManager.addRichSpan(
@@ -265,9 +294,13 @@ internal fun TextEditorState.demoteLineBlock(line: Int, block: LineBlockStyle) =
 internal fun TextEditorState.detectLineBlock(line: Int): LineBlockStyle? =
 	ALL_BLOCK_STYLES.firstOrNull { hasLineBlock(line, it) }
 
+/** The line blocks currently attached to [line], in [ALL_BLOCK_STYLES] order. */
+internal fun TextEditorState.lineBlocks(line: Int): List<LineBlockStyle> =
+	ALL_BLOCK_STYLES.filter { hasLineBlock(line, it) }
+
 /** The line-anchored block span styles currently attached to [line]. */
 internal fun TextEditorState.lineBlockSpanStyles(line: Int): List<RichSpanStyle> =
-	ALL_BLOCK_STYLES.filter { hasLineBlock(line, it) }.map { it.spanStyle }
+	lineBlocks(line).map { it.spanStyle }
 
 /**
  * Replaces every line-anchored block span on [line] so that exactly [spanStyles]
