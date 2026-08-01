@@ -102,20 +102,19 @@ internal fun TextEditorState.applyDocumentBlocks(
 	var rebuiltAnyLine = false
 	for ((line, blocks) in requested) {
 		var text = lines.getOrNull(line) ?: continue
-		val present = ALL_BLOCK_STYLES.filter { hasLineBlock(line, it) }.toMutableList()
+		val present = lineBlocks(line).toMutableList()
 		// Spans staged for this line, so a block demoted after being applied in this
 		// same pass is withdrawn rather than published alongside the block that
 		// replaced it.
 		val staged = linkedMapOf<LineBlockStyle, RichSpan>()
 		for (block in blocks) {
-			if (block in present) continue
-			for (excluded in mutuallyExcluded(block)) {
-				if (!present.remove(excluded)) continue
+			val resolved = resolveLineBlock(present, block, text) ?: continue
+			for (excluded in resolved.demoted) {
+				present.remove(excluded)
 				if (staged.remove(excluded) == null) removed += lineBlockSpans(line, excluded)
-				text = rebuildWithoutBlock(text, excluded)
 			}
+			text = resolved.text
 			staged[block] = RichSpan(lineRange(line, text.length), block.spanStyle)
-			text = rebuildWithBlock(text, block)
 			present += block
 		}
 		if (staged.isEmpty()) continue

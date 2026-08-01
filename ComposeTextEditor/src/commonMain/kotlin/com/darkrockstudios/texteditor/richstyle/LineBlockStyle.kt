@@ -155,6 +155,40 @@ internal fun rebuildWithoutBlock(existing: AnnotatedString, block: LineBlockStyl
 	}
 
 /**
+ * What putting one line block on a line comes to: the blocks already there that
+ * have to give way, and the line's text with those stripped and the new block's
+ * wrapping added.
+ */
+internal class ResolvedLineBlock(
+	val demoted: List<LineBlockStyle>,
+	val text: AnnotatedString,
+)
+
+/**
+ * Resolves [block] against a line holding [present] with content [text], or
+ * returns null when [block] is already there and there is nothing to do.
+ *
+ * The one place [mutuallyExcluded] is turned into an actual demotion and rebuild:
+ * the per-line toggle and the batched importer both resolve through this, so a
+ * stack of blocks produces the same line whether the user typed it or an import
+ * placed it.
+ */
+internal fun resolveLineBlock(
+	present: Collection<LineBlockStyle>,
+	block: LineBlockStyle,
+	text: AnnotatedString,
+): ResolvedLineBlock? {
+	if (block in present) return null
+	// Demote any conflicting block before applying — otherwise the new
+	// paragraph-style indent would overlap the old one and Compose blanks the
+	// line on the next measure pass.
+	val demoted = mutuallyExcluded(block).filter { it in present }
+	var rebuilt = text
+	demoted.forEach { rebuilt = rebuildWithoutBlock(rebuilt, it) }
+	return ResolvedLineBlock(demoted, rebuildWithBlock(rebuilt, block))
+}
+
+/**
  * Idempotent — no-op if [line] already carries [block]. Otherwise demotes any
  * mutually-exclusive block on the same line, wraps the line's text in the
  * indent paragraph style (and the optional [LineBlockStyle.textStyle]), and
@@ -166,19 +200,15 @@ internal fun rebuildWithoutBlock(existing: AnnotatedString, block: LineBlockStyl
  * at column 0 while the end shifts forward, naturally tracking the line length.
  */
 internal fun TextEditorState.applyLineBlock(line: Int, block: LineBlockStyle) = withAtomicEdit {
-	if (hasLineBlock(line, block)) return@withAtomicEdit
-	// Demote any conflicting block before applying — otherwise the new
-	// paragraph-style indent would overlap the old one and Compose blanks the
-	// line on the next measure pass.
-	mutuallyExcluded(block)
-		.filter { hasLineBlock(line, it) }
-		.forEach { demoteLineBlock(line, it) }
 	val existing = textLines.getOrNull(line) ?: return@withAtomicEdit
+	val resolved = resolveLineBlock(lineBlocks(line), block, existing)
+		?: return@withAtomicEdit
+	resolved.demoted.forEach { removeLineBlockSpans(line, it) }
 	// Attach the span before rebuilding the line: updateLine triggers the relayout
 	// that resolves each line's gutter marker (bullet/numeral), so the span must be
 	// present first or the marker won't render until the next edit forces another pass.
-	addLineBlockSpan(line, existing.length, block)
-	updateLine(line, rebuildWithBlock(existing, block))
+	addLineBlockSpan(line, resolved.text.length, block)
+	updateLine(line, resolved.text)
 }
 
 /**
@@ -219,9 +249,13 @@ internal fun TextEditorState.demoteLineBlock(line: Int, block: LineBlockStyle) =
 internal fun TextEditorState.detectLineBlock(line: Int): LineBlockStyle? =
 	ALL_BLOCK_STYLES.firstOrNull { hasLineBlock(line, it) }
 
+/** The line blocks currently attached to [line], in [ALL_BLOCK_STYLES] order. */
+internal fun TextEditorState.lineBlocks(line: Int): List<LineBlockStyle> =
+	ALL_BLOCK_STYLES.filter { hasLineBlock(line, it) }
+
 /** The line-anchored block span styles currently attached to [line]. */
 internal fun TextEditorState.lineBlockSpanStyles(line: Int): List<RichSpanStyle> =
-	ALL_BLOCK_STYLES.filter { hasLineBlock(line, it) }.map { it.spanStyle }
+	lineBlocks(line).map { it.spanStyle }
 
 /**
  * Replaces every line-anchored block span on [line] so that exactly [spanStyles]
