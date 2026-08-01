@@ -19,6 +19,35 @@ fun String.toAnnotatedString(fontFamily: FontFamily? = null): AnnotatedString {
 internal fun AnnotatedString.subSequence(startIndex: Int = 0, endIndex: Int = length) =
 	subSequence(startIndex = startIndex, endIndex = endIndex)
 
+/**
+ * Applies [styles] to this text, unless it carries formatting of its own.
+ *
+ * Text that arrives already styled is returned verbatim. A rich paste describes its
+ * own formatting completely, so letting the style at the insertion point apply as
+ * well would bold the unstyled runs of the pasted content. Plain text still picks up
+ * the surrounding style, which is what makes typing and plain pastes continue the
+ * formatting around them.
+ */
+internal fun AnnotatedString.withInheritedStyles(styles: Set<SpanStyle>): AnnotatedString {
+	// Paragraph styles belong to the line, which already carries its own over its
+	// whole length. Letting an inserted one through would nest a second paragraph
+	// inside that range and split one logical line into several rendered ones.
+	val content = AnnotatedString(text, spanStyles)
+	if (styles.isEmpty() || content.spanStyles.isNotEmpty()) {
+		return content
+	}
+
+	return buildAnnotatedString {
+		styles.forEach { style ->
+			pushStyle(style)
+		}
+		append(content)
+		repeat(styles.size) {
+			pop()
+		}
+	}
+}
+
 internal fun AnnotatedString.splitAnnotatedString(): List<AnnotatedString> {
 	if (this.isEmpty()) return listOf(AnnotatedString(""))
 

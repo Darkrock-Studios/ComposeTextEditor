@@ -142,6 +142,15 @@ class EditorUiTestScope(
 		return Offset(metrics.position.x, metrics.position.y + metrics.height / 2f)
 	}
 
+	/**
+	 * Seeds the clipboard with unstyled text, as an external application or a
+	 * plain-text-only platform clipboard would leave it.
+	 */
+	fun setPlainClipboardText(value: String) {
+		clipboard.setPlainText(value)
+		test.waitForIdle()
+	}
+
 	/** All [SpanStyle]s covering the character at flat index [charIndex]. */
 	fun stylesAt(charIndex: Int): List<SpanStyle> =
 		state.getAllText().spanStyles
