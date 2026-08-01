@@ -81,6 +81,14 @@ fun EditorUiTestScope.assertBlockState(
 	assertEquals(fence, markdown.isCodeFence(line), "line $line code-fence state")
 }
 
+/** The block styles present on [line], as readable names; empty set means a plain line. */
+fun EditorUiTestScope.blockFlags(line: Int): Set<String> = buildSet {
+	if (markdown.isBlockquote(line)) add("quote")
+	if (markdown.isBulletList(line)) add("bullet")
+	if (markdown.isOrderedList(line)) add("ordered")
+	if (markdown.isCodeFence(line)) add("fence")
+}
+
 /** Structural sanity of every rich span: ordered, in bounds, no duplicate (range, style) pairs. */
 fun EditorUiTestScope.assertRichSpanInvariants() = state.assertRichSpanInvariants()
 
