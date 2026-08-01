@@ -59,7 +59,7 @@ class TextEditManager(private val state: TextEditorState) {
 		state.withAtomicEdit {
 			val metadata = when (operation) {
 				is TextEditOperation.Insert -> applyInsert(operation)
-				is TextEditOperation.Delete -> applyDelete(addToHistory, operation)
+				is TextEditOperation.Delete -> applyDelete(operation)
 				is TextEditOperation.Replace -> applyReplace(addToHistory, operation)
 				is TextEditOperation.StyleSpan -> applyStyleOperation(operation)
 				is TextEditOperation.RichSpan -> applyRichSpanOperation(operation)
@@ -248,15 +248,12 @@ class TextEditManager(private val state: TextEditorState) {
 		return metadata
 	}
 
-	private fun applyDelete(
-		addToHistory: Boolean,
-		operation: TextEditOperation.Delete
-	): OperationMetadata? {
-		val metadata = if (addToHistory) {
-			state.captureMetadata(operation.range)
-		} else {
-			null
-		}
+	private fun applyDelete(operation: TextEditOperation.Delete): OperationMetadata {
+		// Captured whether or not this delete is recorded: the rich span transformer
+		// needs the deleted text to re-anchor spans, and the two non-recording paths
+		// (undo of an insert, redo of a delete) are exactly where spans would
+		// otherwise be dropped.
+		val metadata = state.captureMetadata(operation.range)
 
 		when {
 			operation.range.isSingleLine() -> {
