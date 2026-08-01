@@ -189,15 +189,9 @@ internal fun resolveLineBlock(
 }
 
 /**
- * Idempotent — no-op if [line] already carries [block]. Otherwise demotes any
- * mutually-exclusive block on the same line, wraps the line's text in the
- * indent paragraph style (and the optional [LineBlockStyle.textStyle]), and
- * attaches a fresh rich span.
- *
- * On an empty line the span is zero-width `[0, 0)` — `RichSpan.intersectsWith`
- * special-cases sticky-at-start spans so the gutter marker still renders.
- * As soon as the user types a character, sticky-at-start keeps the span anchored
- * at column 0 while the end shifts forward, naturally tracking the line length.
+ * Puts [block] on [line] and commits it in a single relayout. The demotions and
+ * the rebuilt line come from [resolveLineBlock], which also makes this a no-op
+ * when [line] already carries [block].
  */
 internal fun TextEditorState.applyLineBlock(line: Int, block: LineBlockStyle) = withAtomicEdit {
 	val existing = textLines.getOrNull(line) ?: return@withAtomicEdit
@@ -215,6 +209,11 @@ internal fun TextEditorState.applyLineBlock(line: Int, block: LineBlockStyle) = 
  * Attaches the line-anchored span for [block] to [line] via the direct, non-
  * recording manager path. Callers that want the toggle in undo history record a
  * [TextEditOperation.LineBlock] separately — recording here too would double-count.
+ *
+ * On an empty line the span is zero-width `[0, 0)`: `RichSpan.intersectsWith`
+ * special-cases sticky-at-start spans so the gutter marker still renders. As soon
+ * as the user types a character, sticky-at-start keeps the span anchored at column
+ * 0 while the end shifts forward, naturally tracking the line length.
  */
 internal fun TextEditorState.addLineBlockSpan(line: Int, length: Int, block: LineBlockStyle) {
 	richSpanManager.addRichSpan(
