@@ -1,7 +1,17 @@
 package e2e
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.runSkikoComposeUiTest
+import androidx.compose.ui.text.AnnotatedString
+import com.darkrockstudios.texteditor.richstyle.SpellCheckStyle
 import com.darkrockstudios.texteditor.spellcheck.SpellCheckGuard
+import com.darkrockstudios.texteditor.spellcheck.SpellCheckState
 import com.darkrockstudios.texteditor.spellcheck.SpellCheckSuspension
+import com.darkrockstudios.texteditor.spellcheck.SpellCheckingTextEditor
+import com.darkrockstudios.texteditor.spellcheck.rememberSpellCheckState
 import utils.CountingSpellChecker
 import utils.spellCheckUiTest
 import kotlin.test.Test
@@ -99,5 +109,32 @@ class SpellCheckGuardE2eTest {
 			assertEquals(5, suspension.limit)
 			assertEquals(0, spellCheckSpanCount, "Tripping the cap must clear every squiggle")
 		}
+	}
+
+	@OptIn(ExperimentalTestApi::class)
+	@Test
+	fun `swapping in a laxer guard on recomposition lifts the suspension`() = runSkikoComposeUiTest {
+		val checker = CountingSpellChecker()
+		val text = List(60) { "wordnumber$it" }.joinToString(" ")
+		lateinit var state: SpellCheckState
+		var guard by mutableStateOf(SpellCheckGuard.Default)
+		setContent {
+			state = rememberSpellCheckState(
+				spellChecker = checker,
+				initialText = AnnotatedString(text),
+				guard = guard,
+			)
+			SpellCheckingTextEditor(spellChecker = checker, state = state)
+		}
+		waitForIdle()
+		assertIs<SpellCheckSuspension.LikelyWrongLanguage>(state.suspension)
+
+		guard = SpellCheckGuard.Disabled
+		waitForIdle()
+
+		assertNull(state.suspension, "A guard changed on recomposition must take effect")
+		val spans = state.textState.richSpanManager.getAllRichSpans()
+			.count { it.style is SpellCheckStyle }
+		assertEquals(60, spans, "The disabled guard re-check must restore the squiggles")
 	}
 }

@@ -45,10 +45,12 @@ suggestion menu for you. Toggle checking at runtime with
 A checker loaded with the wrong dictionary flags *every* word: the document turns
 into a wall of red squiggles and every lookup is wasted. The
 [SpellCheckGuard][com.darkrockstudios.texteditor.spellcheck.SpellCheckGuard] watches for
-that. When too large a share of a large-enough sample comes back misspelled — or more
-than `maxMisspellings` pile up — the state drops every squiggle and stops checking
-instead of flagging the whole document. A full check bails as soon as the sample is
-conclusive, so a big document isn't dragged through a checker that can't read it.
+that. When too large a share of the whole document comes back misspelled (or more
+than `maxMisspellings` pile up) the state drops every squiggle and stops checking
+instead of flagging everything. The ratio is judged against the full document's word
+count, so a foreign-language passage inside an otherwise fine document never trips
+it, and a full check still bails as soon as the outcome is decided, so a big
+document isn't dragged through a checker that can't read it.
 
 ```kotlin
 val state = rememberSpellCheckState(
@@ -60,19 +62,20 @@ state.suspension?.let { reason ->
     Text(
         when (reason) {
             is SpellCheckSuspension.LikelyWrongLanguage ->
-                "Spell checking paused — the dictionary may not match this document's language."
+                "Spell checking paused: the dictionary may not match this document's language."
             is SpellCheckSuspension.TooManyMisspellings ->
-                "Spell checking paused — too many misspellings."
+                "Spell checking paused: too many misspellings."
         }
     )
 }
 ```
 
 `suspension` is Compose state, so a banner like the one above recomposes on its own. A
-suspension is sticky — checking stays off until the checker is replaced (passing a new
-`spellChecker` to `rememberSpellCheckState` resumes automatically), `resumeSpellChecking()`
-is called, or checking is toggled back on with `setSpellCheckingEnabled(true)`. Pass
-`SpellCheckGuard.Disabled` to opt out entirely.
+suspension is sticky: checking stays off until the checker is replaced (passing a new
+`spellChecker` to `rememberSpellCheckState` resumes automatically), a full check is
+explicitly requested via `resumeSpellChecking()` or `runFullSpellCheck()`, or checking
+is toggled back on with `setSpellCheckingEnabled(true)`. Pass `SpellCheckGuard.Disabled`
+to opt out entirely.
 
 ## Choosing a backend
 
