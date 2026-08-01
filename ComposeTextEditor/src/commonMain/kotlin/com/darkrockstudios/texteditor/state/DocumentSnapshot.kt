@@ -19,6 +19,14 @@ class DocumentSnapshot internal constructor(
 	/** Every rich span in the document, its ranges addressing [lines]. */
 	val richSpans: Set<RichSpan>,
 ) {
+	/**
+	 * [richSpans] grouped by the line each one starts on. Built on first read and
+	 * reused for the rest of the revision, so the line-anchored block queries cost a
+	 * map lookup instead of a scan of every span in the document.
+	 */
+	internal val richSpansByStartLine: Map<Int, List<RichSpan>> by
+		lazy(LazyThreadSafetyMode.PUBLICATION) { richSpans.groupBy { it.range.start.line } }
+
 	/** The whole document as a single [AnnotatedString], lines joined with newlines. */
 	fun getAllText(): AnnotatedString = buildAnnotatedString {
 		lines.forEachIndexed { index, line ->

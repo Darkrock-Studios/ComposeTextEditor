@@ -1,6 +1,7 @@
 package com.darkrockstudios.texteditor.richstyle
 
 import com.darkrockstudios.texteditor.CharLineOffset
+import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.state.TextEditorState
 
 /**
@@ -63,34 +64,72 @@ internal fun documentBlocksOf(allSpans: Set<RichSpan>): DocumentBlocks {
 /**
  * Attaches the decorations an importer parsed out of a source document.
  *
- * Rules and images go through the manager directly while block styles go through
- * [applyLineBlock], which also installs the indent paragraph style. Neither path
- * records an edit: loading a document is not something the user should be able to
- * undo one list item at a time.
+ * Every span is published and every block line rebuilt against the current content
+ * before a single relayout runs at the end. A relayout re-measures from the line it
+ * is given to the end of the document, so one per block line would measure an
+ * n-line import O(n²) times. No edit is recorded: loading a document is not
+ * something the user should be able to undo one list item at a time.
  */
 internal fun TextEditorState.applyDocumentBlocks(
 	horizontalRuleLines: Collection<Int> = emptyList(),
 	imageLines: Map<Int, ImageBlockSpanStyle> = emptyMap(),
 	blockLines: Map<LineBlockStyle, Collection<Int>> = emptyMap(),
 ) = withAtomicEdit {
+	val added = mutableListOf<RichSpan>()
+	val removed = mutableListOf<RichSpan>()
+
 	horizontalRuleLines.forEach { line ->
-		richSpanManager.addRichSpan(
-			start = CharLineOffset(line, 0),
-			end = CharLineOffset(line, HR_PLACEHOLDER.length),
+		added += RichSpan(
+			range = lineRange(line, HR_PLACEHOLDER.length),
 			style = HorizontalRuleSpanStyle,
 		)
 	}
 	imageLines.forEach { (line, style) ->
-		richSpanManager.addRichSpan(
-			start = CharLineOffset(line, 0),
-			end = CharLineOffset(line, IMAGE_PLACEHOLDER.length),
-			style = style,
-		)
+		added += RichSpan(range = lineRange(line, IMAGE_PLACEHOLDER.length), style = style)
 	}
-	// Blockquote before the list styles: `applyLineBlock` demotes anything
-	// mutually exclusive with what it is applying, and the two stack, so the
-	// order only has to keep a list from arriving while a fence is pending.
+
+	// Invert to line -> requested blocks so each line is visited once. Within a line
+	// the [ALL_BLOCK_STYLES] order decides how a stack resolves: each block demotes
+	// whatever it excludes, so a fence beats a list and blockquote stacks with both.
+	val requested = mutableMapOf<Int, MutableList<LineBlockStyle>>()
 	ALL_BLOCK_STYLES.forEach { block ->
-		blockLines[block]?.forEach { applyLineBlock(it, block) }
+		blockLines[block]?.forEach { line ->
+			requested.getOrPut(line) { mutableListOf() } += block
+		}
 	}
+
+	val lines = textLines.toMutableList()
+	var rebuiltAnyLine = false
+	for ((line, blocks) in requested) {
+		var text = lines.getOrNull(line) ?: continue
+		val present = ALL_BLOCK_STYLES.filter { hasLineBlock(line, it) }.toMutableList()
+		// Spans staged for this line, so a block demoted after being applied in this
+		// same pass is withdrawn rather than published alongside the block that
+		// replaced it.
+		val staged = linkedMapOf<LineBlockStyle, RichSpan>()
+		for (block in blocks) {
+			if (block in present) continue
+			for (excluded in mutuallyExcluded(block)) {
+				if (!present.remove(excluded)) continue
+				if (staged.remove(excluded) == null) removed += lineBlockSpans(line, excluded)
+				text = rebuildWithoutBlock(text, excluded)
+			}
+			staged[block] = RichSpan(lineRange(line, text.length), block.spanStyle)
+			text = rebuildWithBlock(text, block)
+			present += block
+		}
+		if (staged.isEmpty()) continue
+		added += staged.values
+		lines[line] = text
+		rebuiltAnyLine = true
+	}
+
+	richSpanManager.removeRichSpans(removed)
+	richSpanManager.addRichSpans(added)
+	if (rebuiltAnyLine) setLines(lines)
+	updateBookKeeping()
 }
+
+/** The range covering [length] characters from the start of [line]. */
+private fun lineRange(line: Int, length: Int) =
+	TextEditorRange(CharLineOffset(line, 0), CharLineOffset(line, length))
