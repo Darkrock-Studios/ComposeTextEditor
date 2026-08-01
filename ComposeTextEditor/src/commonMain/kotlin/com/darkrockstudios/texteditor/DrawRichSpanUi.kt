@@ -2,6 +2,7 @@ package com.darkrockstudios.texteditor
 
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.util.fastForEach
 import com.darkrockstudios.texteditor.state.TextEditorState
 
 /**
@@ -17,30 +18,32 @@ internal fun DrawScope.drawRichSpans(
 	state: TextEditorState,
 	phase: RichSpanDrawPhase = RichSpanDrawPhase.Foreground,
 ) {
+	val spans = lineWrap.richSpans
+	if (spans.isEmpty()) return
+
 	val textLayoutResult = lineWrap.textLayoutResult
 
-	lineWrap.richSpans.forEach { richSpan ->
-		// Get the range of text visible in this wrap
-		val wrapVisibleStart = textLayoutResult.getLineStart(lineWrap.virtualLineIndex)
-		val wrapVisibleEnd =
-			textLayoutResult.getLineEnd(lineWrap.virtualLineIndex, visibleEnd = true)
+	// Every value below describes the wrap, not the span, so it is computed once
+	// per line instead of once per span. Draw runs these on each visible line each
+	// frame, and the character-index conversions are the expensive part.
+	val wrapVisibleStart = textLayoutResult.getLineStart(lineWrap.virtualLineIndex)
+	val wrapVisibleEnd = textLayoutResult.getLineEnd(lineWrap.virtualLineIndex, visibleEnd = true)
 
-		// Calculate where in the original line this wrapped segment starts and ends
-		val lineStart = CharLineOffset(line = lineWrap.line, char = lineWrap.wrapStartsAtIndex)
-		val lineEnd = CharLineOffset(
-			line = lineWrap.line,
-			char = lineWrap.wrapStartsAtIndex + (wrapVisibleEnd - wrapVisibleStart)
-		)
+	val lineStart = CharLineOffset(line = lineWrap.line, char = lineWrap.wrapStartsAtIndex)
+	val lineEnd = CharLineOffset(
+		line = lineWrap.line,
+		char = lineWrap.wrapStartsAtIndex + (wrapVisibleEnd - wrapVisibleStart)
+	)
+	val lineStartAbsChar = lineStart.toCharacterIndex(state)
+	val lineEndAbsChar = lineEnd.toCharacterIndex(state)
+	val translateY = lineWrap.offset.y - state.scrollState.value
 
-		// Convert to absolute character indices
+	spans.fastForEach { richSpan ->
 		val spanStartAbsChar = richSpan.range.start.toCharacterIndex(state)
 		val spanEndAbsChar = richSpan.range.end.toCharacterIndex(state)
-		val lineStartAbsChar = lineStart.toCharacterIndex(state)
 
 		// If this wrapped segment intersects with our span
-		if (spanStartAbsChar <= lineEnd.toCharacterIndex(state) &&
-			spanEndAbsChar >= lineStart.toCharacterIndex(state)
-		) {
+		if (spanStartAbsChar <= lineEndAbsChar && spanEndAbsChar >= lineStartAbsChar) {
 			// Calculate position adjustment based on whether this is a wrapped line
 			// Calculate the local range within this wrapped segment
 			val localStart = if (spanStartAbsChar <= lineStartAbsChar) {
@@ -49,7 +52,7 @@ internal fun DrawScope.drawRichSpans(
 				(spanStartAbsChar - lineStartAbsChar) + wrapVisibleStart
 			}
 
-			val localEnd = if (spanEndAbsChar >= lineEnd.toCharacterIndex(state)) {
+			val localEnd = if (spanEndAbsChar >= lineEndAbsChar) {
 				wrapVisibleEnd
 			} else {
 				((spanEndAbsChar - lineStartAbsChar) + wrapVisibleStart)
@@ -62,7 +65,7 @@ internal fun DrawScope.drawRichSpans(
 			)
 
 			with(richSpan.style) {
-				translate(top = lineWrap.offset.y - state.scrollState.value) {
+				translate(top = translateY) {
 					when (phase) {
 						RichSpanDrawPhase.Background -> drawBackground(
 							layoutResult = textLayoutResult,

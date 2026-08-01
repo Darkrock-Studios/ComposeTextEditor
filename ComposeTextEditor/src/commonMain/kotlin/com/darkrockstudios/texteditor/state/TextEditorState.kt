@@ -831,20 +831,29 @@ class TextEditorState(
 	 * The inverse of [getCharacterIndex]; clamps to the document end when out of range.
 	 */
 	fun getOffsetAtCharacter(index: Int): CharLineOffset {
-		var remainingChars = index
-
-		for (lineIndex in textLines.indices) {
-			val lineLength = textLines[lineIndex].length + 1  // +1 for newline
-			if (remainingChars < lineLength) {
-				return CharLineOffset(lineIndex, remainingChars)
-			}
-			remainingChars -= lineLength
+		val starts = workingContent.lineStartOffsets
+		val lineCount = textLines.size
+		if (index < 0) return CharLineOffset(0, index)
+		if (index >= starts[lineCount]) {
+			return CharLineOffset(textLines.lastIndex, textLines.last().length)
 		}
 
-		return CharLineOffset(
-			textLines.lastIndex,
-			textLines.last().length
-		)
+		val line = lineOfCharacter(starts, lineCount, index)
+		return CharLineOffset(line, index - starts[line])
+	}
+
+	/**
+	 * Index of the line containing flat character [index], by binary search over the
+	 * snapshot's line starts. [index] must be within the document.
+	 */
+	private fun lineOfCharacter(starts: IntArray, lineCount: Int, index: Int): Int {
+		var low = 0
+		var high = lineCount - 1
+		while (low < high) {
+			val mid = (low + high + 1) ushr 1
+			if (starts[mid] <= index) low = mid else high = mid - 1
+		}
+		return low
 	}
 
 	/**
@@ -861,36 +870,14 @@ class TextEditorState(
 			println("TextEditor warning: getCharacterIndex clamped $offset to $safe (textLines.size=${textLines.size})")
 		}
 
-		var totalChars = 0
-		for (lineIndex in 0 until safe.line) {
-			totalChars += textLines[lineIndex].length + 1
-		}
-		return totalChars + safe.char
+		return workingContent.lineStartOffsets[safe.line] + safe.char
 	}
 
-	fun CharLineOffset.toCharacterIndex(): Int {
-		var totalChars = 0
-		for (lineIndex in 0 until line) {
-			totalChars += textLines[lineIndex].length + 1  // +1 for newline
-		}
-		return totalChars + char
-	}
+	fun CharLineOffset.toCharacterIndex(): Int =
+		workingContent.lineStartOffsets[line] + char
 
 	// Convert character index to CharLineOffset
-	fun Int.toCharLineOffset(): CharLineOffset {
-		var remainingChars = this
-		for (lineIndex in textLines.indices) {
-			val lineLength = textLines[lineIndex].length + 1  // +1 for newline
-			if (remainingChars < lineLength) {
-				return CharLineOffset(lineIndex, remainingChars)
-			}
-			remainingChars -= lineLength
-		}
-		return CharLineOffset(
-			textLines.lastIndex,
-			textLines.last().length
-		)
-	}
+	fun Int.toCharLineOffset(): CharLineOffset = getOffsetAtCharacter(this)
 
 	fun wrapStartToCharacterIndex(lineWrap: LineWrap): Int {
 		// First get the physical line start offset
@@ -903,15 +890,7 @@ class TextEditorState(
 		require(lineIndex >= 0) { "Line index must be non-negative" }
 		require(lineIndex < textLines.size) { "Line index $lineIndex out of bounds for ${textLines.size} lines" }
 
-		var offset = 0
-		// Sum up lengths of all previous lines
-		for (i in 0 until lineIndex) {
-			offset += textLines[i].length
-			// Add 1 for the newline character at the end of each line
-			// except for the last line if it doesn't end with a newline
-			offset += 1
-		}
-		return offset
+		return workingContent.lineStartOffsets[lineIndex]
 	}
 
 	internal fun updateBookKeeping(affectedLines: IntRange? = null) {
@@ -1360,10 +1339,8 @@ class TextEditorState(
 
 	/** Returns the total character count of the document, counting newlines between lines. */
 	fun getTextLength(): Int {
-		val length = textLines.sumOf { line ->
-			line.length + 1
-		}
-		return length - 1
+		val starts = workingContent.lineStartOffsets
+		return starts[starts.lastIndex] - 1
 	}
 
 	/**
