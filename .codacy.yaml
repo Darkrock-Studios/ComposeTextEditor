@@ -1,0 +1,5 @@
+---
+# Design documents are prose references, not shipped artifacts; markdownlint's
+# 80-column and table rules fight their long table rows.
+exclude_paths:
+  - "docs/design/**"
