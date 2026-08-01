@@ -13,14 +13,15 @@ import com.darkrockstudios.texteditor.state.rememberTextEditorState
  * Pass a STABLE [spellChecker] instance: `remember` it across recompositions and
  * only create a new one when the underlying dictionary actually changes. A fresh
  * instance every recomposition re-keys the full-rescan effect below and re-scans
- * the whole document on each frame. Re-scans are cancellation-safe and won't lose
- * spans, but the churn is pure waste, and it also clears any guard suspension each
- * frame, defeating the suspension's stickiness.
+ * the whole document on each frame. Re-scans are cancellation-safe, bail at the
+ * guard's trip point, and never lift a suspension unless they complete with
+ * plausible results, but the churn is pure waste.
  *
  * @param guard Sanity limits that suspend checking when its results stop looking plausible;
  *   see [SpellCheckGuard] and [SpellCheckState.suspension]. Changing [guard] or [spellChecker]
- *   on recomposition clears any standing suspension, since swapping the checker (or loosening
- *   the limits) is how a wrong-language suspension gets fixed.
+ *   on recomposition triggers a re-check that lifts any standing suspension when its results
+ *   come back clean, since swapping the checker (or loosening the limits) is how a
+ *   wrong-language suspension gets fixed.
  */
 @Composable
 fun rememberSpellCheckState(
@@ -35,9 +36,10 @@ fun rememberSpellCheckState(
 		SpellCheckState(richTextState, spellChecker, enableSpellChecking, spellCheckMode, guard)
 	}
 
-	// Run SpellCheck as soon as it is ready. A full check clears any guard suspension,
-	// so a replacement checker gets a fresh chance: it may well be the right-language
-	// one the previous suspension was asking for.
+	// Run SpellCheck as soon as it is ready. A full check scans even while suspended
+	// and lifts the suspension only on plausible results, so a replacement checker
+	// gets a fresh chance (it may well be the right-language one the previous
+	// suspension was asking for) without the banner flickering when it isn't.
 	LaunchedEffect(spellChecker) {
 		if (spellChecker != null) {
 			state.spellChecker = spellChecker

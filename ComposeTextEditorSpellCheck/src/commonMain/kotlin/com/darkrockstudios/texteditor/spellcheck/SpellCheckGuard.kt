@@ -56,11 +56,11 @@ data class SpellCheckGuard(
 /**
  * Why spell checking suspended itself. See [SpellCheckGuard].
  *
- * A suspension is sticky: checking stays off until the checker is replaced, a full check is
- * explicitly requested ([SpellCheckState.resumeSpellChecking] or
- * [SpellCheckState.runFullSpellCheck]), or checking is re-enabled via
- * [SpellCheckState.setSpellCheckingEnabled]. This way a wrong-language checker isn't asked
- * to re-scan the document on every keystroke.
+ * A suspension is sticky: automatic checking stays off so a wrong-language checker isn't
+ * asked to re-scan the document on every keystroke. A full re-check (a replaced checker,
+ * [SpellCheckState.resumeSpellChecking], [SpellCheckState.runFullSpellCheck], or re-enabling
+ * via [SpellCheckState.setSpellCheckingEnabled]) re-tries the checker and lifts the
+ * suspension once a scan completes with plausible results.
  */
 sealed interface SpellCheckSuspension {
 	/**

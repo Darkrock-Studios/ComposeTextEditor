@@ -71,11 +71,12 @@ state.suspension?.let { reason ->
 ```
 
 `suspension` is Compose state, so a banner like the one above recomposes on its own. A
-suspension is sticky: checking stays off until the checker is replaced (passing a new
-`spellChecker` to `rememberSpellCheckState` resumes automatically), a full check is
-explicitly requested via `resumeSpellChecking()` or `runFullSpellCheck()`, or checking
-is toggled back on with `setSpellCheckingEnabled(true)`. Pass `SpellCheckGuard.Disabled`
-to opt out entirely.
+suspension is sticky: automatic checking stays off until a full re-check completes with
+plausible results. Replacing the checker (passing a new `spellChecker` to
+`rememberSpellCheckState` re-checks automatically), calling `resumeSpellChecking()` or
+`runFullSpellCheck()`, and toggling checking back on with `setSpellCheckingEnabled(true)`
+all trigger that re-check; if the checker is still flagging everything, the suspension
+simply stays in place. Pass `SpellCheckGuard.Disabled` to opt out entirely.
 
 ## Choosing a backend
 

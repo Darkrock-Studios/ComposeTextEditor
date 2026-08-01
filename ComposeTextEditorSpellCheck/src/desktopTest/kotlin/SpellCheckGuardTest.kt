@@ -227,6 +227,24 @@ class SpellCheckGuardTest {
 	}
 
 	@Test
+	fun `an explicit full check with a still-bad checker stays suspended`() = runTest {
+		textState.setText(words(60).joinToString(" "))
+		spellChecker.correctWords = emptySet()
+		val state = SpellCheckState(textState, spellChecker)
+		state.runFullSpellCheck()
+		assertIs<SpellCheckSuspension.LikelyWrongLanguage>(state.suspension)
+
+		val lookupsBefore = spellChecker.lookups
+		state.runFullSpellCheck()
+
+		// The checker got its re-try, but implausible results keep the suspension in
+		// place the whole time rather than flickering it off and on.
+		assertTrue(spellChecker.lookups > lookupsBefore, "The re-check must actually re-try")
+		assertIs<SpellCheckSuspension.LikelyWrongLanguage>(state.suspension)
+		assertEquals(0, spellCheckSpanCount())
+	}
+
+	@Test
 	fun `enabling checking while suspended clears the suspension`() = runTest {
 		val words = words(60)
 		textState.setText(words.joinToString(" "))
