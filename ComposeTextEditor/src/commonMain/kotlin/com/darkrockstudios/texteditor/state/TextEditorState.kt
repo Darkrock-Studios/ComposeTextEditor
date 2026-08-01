@@ -482,10 +482,17 @@ class TextEditorState(
 	}
 
 	/** Deletes the text covered by [range], leaving the cursor at the range start. */
-	fun delete(range: TextEditorRange) {
+	fun delete(range: TextEditorRange) = delete(range, cursorBefore = cursorPosition)
+
+	/**
+	 * Deletes the text covered by [range], recording [cursorBefore] as the position undo
+	 * returns to. Callers that located [range] by running a cursor motion have already moved
+	 * the caret off the position the user actually had, and pass it explicitly.
+	 */
+	internal fun delete(range: TextEditorRange, cursorBefore: CharLineOffset) {
 		val operation = TextEditOperation.Delete(
 			range = range,
-			cursorBefore = cursorPosition,
+			cursorBefore = cursorBefore,
 			cursorAfter = range.start
 		)
 		editManager.applyOperation(operation)
