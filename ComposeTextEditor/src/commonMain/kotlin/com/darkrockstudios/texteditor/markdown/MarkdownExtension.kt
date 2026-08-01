@@ -122,7 +122,7 @@ class MarkdownExtension(
 		val imageLines = blocks.imageLines
 		val codeFenceLines = blocks.linesFor(CodeFence)
 
-		val annotated = editorState.joinLines(content.lines)
+		val annotated = content.getAllText()
 		val text = annotated.text
 		if (text.isEmpty() && hrLines.isEmpty() && imageLines.isEmpty() && codeFenceLines.isEmpty()) return ""
 

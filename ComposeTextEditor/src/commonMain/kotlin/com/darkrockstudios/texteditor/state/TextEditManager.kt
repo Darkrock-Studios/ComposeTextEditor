@@ -77,7 +77,11 @@ class TextEditManager(private val state: TextEditorState) {
 		state.updateBookKeeping()
 
 		if (!isDecoration) {
-			_editOperations.tryEmit(operation)
+			// Deferred to the outermost commit: callers that wrap applyOperation in
+			// their own transaction would otherwise announce an edit whose revision
+			// is still staged, and a subscriber that serializes on the announcement
+			// would write the document as it stood before the edit.
+			state.onCommit { _editOperations.tryEmit(operation) }
 		}
 	}
 
@@ -717,14 +721,14 @@ class TextEditManager(private val state: TextEditorState) {
 			inheritStyle = false
 		)
 
-		// Apply the operation atomically
-		applyOperation(undoOperation, addToHistory = false)
-
-		// Restore any preserved rich spans
-		restorePreservedRichSpans(
-			entry.metadata.preservedRichSpans,
-			operation.range.start
-		)
+		// The restored text and the spans that belong to it are one revision.
+		state.withAtomicEdit {
+			applyOperation(undoOperation, addToHistory = false)
+			restorePreservedRichSpans(
+				entry.metadata.preservedRichSpans,
+				operation.range.start
+			)
+		}
 	}
 
 	private fun undoDelete(
@@ -738,12 +742,14 @@ class TextEditManager(private val state: TextEditorState) {
 				cursorBefore = entry.operation.cursorAfter,
 				cursorAfter = entry.operation.cursorBefore
 			)
-			applyOperation(insertOperation, addToHistory = false)
-
-			restorePreservedRichSpans(
-				entry.metadata.preservedRichSpans,
-				operation.range.start
-			)
+			// The restored text and the spans that belong to it are one revision.
+			state.withAtomicEdit {
+				applyOperation(insertOperation, addToHistory = false)
+				restorePreservedRichSpans(
+					entry.metadata.preservedRichSpans,
+					operation.range.start
+				)
+			}
 		}
 	}
 

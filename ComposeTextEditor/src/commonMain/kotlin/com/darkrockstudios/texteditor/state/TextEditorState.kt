@@ -118,25 +118,16 @@ class TextEditorState(
 		internal set
 
 	/**
-	 * The document's text and rich spans in one immutable holder, so a single read
-	 * of [content] yields both halves as they stood after the same edit.
-	 */
-	internal data class DocumentContent(
-		val lines: List<AnnotatedString>,
-		val richSpans: Set<RichSpan>,
-	)
-
-	/**
 	 * The last committed document content. Every mutation publishes a whole new
-	 * [DocumentContent] rather than editing the previous one in place, so a reader
+	 * [DocumentSnapshot] rather than editing the previous one in place, so a reader
 	 * on any thread sees a complete, self-consistent snapshot and can never observe
 	 * a collection mid-mutation. Writes must all come from the thread driving edits.
 	 *
-	 * This is the coherent-snapshot API: it only ever holds a fully applied revision,
-	 * never a half-finished one. Read it once and use that value throughout.
+	 * Only ever holds a fully applied revision, never a half-finished one. [snapshot]
+	 * exposes it to callers outside this module.
 	 */
 	@Volatile
-	internal var content = DocumentContent(emptyList(), emptySet())
+	internal var content = DocumentSnapshot(emptyList(), emptySet())
 		private set
 
 	/**
@@ -146,10 +137,23 @@ class TextEditorState(
 	 * nested reads through [workingContent] can never see a stale draft.
 	 */
 	@Volatile
-	private var draft: DocumentContent? = null
+	private var draft: DocumentSnapshot? = null
+
+	/** Actions deferred by [onCommit] until the outermost transaction commits. */
+	private val pendingCommitActions = mutableListOf<() -> Unit>()
 
 	/** Content as the current edit sees it: the open draft if there is one, else [content]. */
-	internal val workingContent: DocumentContent get() = draft ?: content
+	internal val workingContent: DocumentSnapshot get() = draft ?: content
+
+	/**
+	 * Returns the document's text and rich spans as they stood after the same edit.
+	 *
+	 * Safe to call from any thread. [textLines] and [RichSpanManager.getAllRichSpans]
+	 * are separate reads, so pairing them can straddle an edit and yield text from one
+	 * revision with span line indices from another; anything that serializes the whole
+	 * document (an exporter, an autosave) wants this instead.
+	 */
+	fun snapshot(): DocumentSnapshot = content
 
 	/**
 	 * Runs [block] as a single atomic revision: mutations inside it accumulate in a
@@ -161,32 +165,47 @@ class TextEditorState(
 	 * paired with span line indices from the previous revision, which serializes
 	 * block markers onto the wrong lines.
 	 *
-	 * Re-entrant: a nested call joins the outer transaction and commits with it.
-	 * A throwing [block] still commits what it staged, matching the partially
-	 * applied state a failed edit left behind before transactions existed.
+	 * Re-entrant: a nested call joins the outer transaction and commits with it. A
+	 * throwing [block] discards the draft and leaves [content] on the previous
+	 * revision, because a half-applied revision would keep serializing block markers
+	 * onto the wrong lines long after the failure rather than only during it.
 	 */
 	internal fun <T> withAtomicEdit(block: () -> T): T {
 		if (draft != null) return block()
 		draft = content
 		try {
-			return block()
+			val result = block()
+			draft?.let { content = it }
+			return result
 		} finally {
-			val staged = draft
 			draft = null
-			if (staged != null) content = staged
+			// Drop the queue on the throwing path too: those actions announce an edit
+			// that no longer exists.
+			val actions = pendingCommitActions.toList()
+			pendingCommitActions.clear()
+			actions.forEach { it() }
 		}
 	}
 
-	private fun mutateContent(transform: (DocumentContent) -> DocumentContent) {
+	/**
+	 * Runs [action] once the outermost transaction has committed, or immediately when
+	 * there is none. For work that announces an edit to the outside world and must not
+	 * run while the revision it describes is still staged.
+	 */
+	internal fun onCommit(action: () -> Unit) {
+		if (draft != null) pendingCommitActions += action else action()
+	}
+
+	private fun mutateContent(transform: (DocumentSnapshot) -> DocumentSnapshot) {
 		if (draft != null) draft = transform(workingContent) else content = transform(content)
 	}
 
 	/**
 	 * The document content as one [AnnotatedString] per line, in order. An immutable
-	 * snapshot; mutate through the edit operations or replace wholesale with [setText].
+	 * list; mutate through the edit operations or replace wholesale with [setText].
 	 *
-	 * Inside an edit this reflects the in-progress revision. Callers that need a
-	 * revision guaranteed to be fully applied should go through [content].
+	 * Reflects the in-progress revision while an edit is running. To read the document
+	 * from another thread, or to pair the text with its rich spans, use [snapshot].
 	 */
 	val textLines: List<AnnotatedString> get() = workingContent.lines
 
@@ -674,11 +693,11 @@ class TextEditorState(
 	 * would draw over the first character of the line.
 	 */
 	private fun replaceContent(lines: List<AnnotatedString>) {
-		mutateContent { DocumentContent(lines, emptySet()) }
+		mutateContent { DocumentSnapshot(lines, emptySet()) }
 	}
 
 	internal fun setLines(lines: List<AnnotatedString>) {
-		mutateContent { it.copy(lines = lines) }
+		mutateContent { it.withLines(lines) }
 	}
 
 	internal fun setLine(index: Int, text: AnnotatedString) {
@@ -686,7 +705,7 @@ class TextEditorState(
 	}
 
 	internal fun setRichSpans(richSpans: Set<RichSpan>) {
-		mutateContent { it.copy(richSpans = richSpans) }
+		mutateContent { it.withRichSpans(richSpans) }
 	}
 
 	/** True when the document holds a single empty line. */
@@ -1224,9 +1243,9 @@ class TextEditorState(
 	 * spans apply. Fully closing this needs platform-clipboard ownership tracking,
 	 * which is out of scope here.
 	 */
-	fun pasteRichSpans(insertPosition: CharLineOffset, pastedText: AnnotatedString) {
-		val copied = copiedRichSpans ?: return
-		if (copied.text != pastedText.text) return
+	fun pasteRichSpans(insertPosition: CharLineOffset, pastedText: AnnotatedString) = withAtomicEdit {
+		val copied = copiedRichSpans ?: return@withAtomicEdit
+		if (copied.text != pastedText.text) return@withAtomicEdit
 		copied.spans.forEach { preserved ->
 			val startPos = CharLineOffset(
 				line = insertPosition.line + preserved.relativeStart.lineDiff,
@@ -1318,19 +1337,7 @@ class TextEditorState(
 	 * Returns the entire document as a single [AnnotatedString], joining [textLines]
 	 * with newlines and preserving character-level spans.
 	 */
-	fun getAllText(): AnnotatedString = joinLines(textLines)
-
-	/** Joins [lines] with newlines into one [AnnotatedString], preserving spans. */
-	internal fun joinLines(lines: List<AnnotatedString>): AnnotatedString {
-		return buildAnnotatedString {
-			lines.forEachIndexed { index, line ->
-				append(line)
-				if (index < lines.lastIndex) {
-					append('\n')
-				}
-			}
-		}
-	}
+	fun getAllText(): AnnotatedString = workingContent.getAllText()
 
 	/** Returns the total character count of the document, counting newlines between lines. */
 	fun getTextLength(): Int {
