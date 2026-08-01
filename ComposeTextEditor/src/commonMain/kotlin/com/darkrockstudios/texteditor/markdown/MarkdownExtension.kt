@@ -246,9 +246,9 @@ class MarkdownExtension(
 		}
 		val processedMarkdown = processedLines.joinToString("\n")
 		val annotatedString = processedMarkdown.toAnnotatedStringFromMarkdown(markdownConfiguration)
-		// setText publishes the text with no spans and applyDocumentBlocks re-attaches
-		// them one at a time. As one revision, so a concurrent export can't catch the
-		// document fully loaded but entirely unstyled.
+		// setText publishes the text with no spans and applyDocumentBlocks attaches them
+		// afterwards. As one revision, so a concurrent export can't catch the document
+		// fully loaded but entirely unstyled.
 		editorState.withAtomicEdit {
 			editorState.setText(annotatedString)
 			editorState.applyDocumentBlocks(

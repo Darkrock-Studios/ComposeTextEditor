@@ -113,7 +113,7 @@ internal val ALL_BLOCK_STYLES: List<LineBlockStyle> =
  * - [CodeFence] stacks with nothing — quoted/listed code blocks aren't
  *   meaningful in our editor's model and the visual treatments would conflict.
  */
-private fun mutuallyExcluded(applied: LineBlockStyle): Set<LineBlockStyle> = when (applied) {
+internal fun mutuallyExcluded(applied: LineBlockStyle): Set<LineBlockStyle> = when (applied) {
 	CodeFence -> setOf(Blockquote, BulletList, OrderedList)
 	BulletList -> setOf(OrderedList, CodeFence)
 	OrderedList -> setOf(BulletList, CodeFence)
@@ -122,9 +122,7 @@ private fun mutuallyExcluded(applied: LineBlockStyle): Set<LineBlockStyle> = whe
 }
 
 internal fun TextEditorState.hasLineBlock(line: Int, block: LineBlockStyle): Boolean =
-	richSpanManager.getAllRichSpans().any { span ->
-		span.style === block.spanStyle && span.range.start.line == line
-	}
+	richSpanManager.getRichSpansStartingOn(line).any { it.style === block.spanStyle }
 
 /** Wraps [existing] in [block]'s indent paragraph style (and optional text style). */
 internal fun rebuildWithBlock(existing: AnnotatedString, block: LineBlockStyle): AnnotatedString =
@@ -198,10 +196,12 @@ internal fun TextEditorState.addLineBlockSpan(line: Int, length: Int, block: Lin
 
 /** Drops every span anchored to [line] for [block] via the direct manager path. */
 internal fun TextEditorState.removeLineBlockSpans(line: Int, block: LineBlockStyle) {
-	richSpanManager.getAllRichSpans()
-		.filter { it.style === block.spanStyle && it.range.start.line == line }
-		.forEach { richSpanManager.removeRichSpan(it) }
+	richSpanManager.removeRichSpans(lineBlockSpans(line, block))
 }
+
+/** The spans anchored to [line] that carry [block]'s decoration. */
+internal fun TextEditorState.lineBlockSpans(line: Int, block: LineBlockStyle): List<RichSpan> =
+	richSpanManager.getRichSpansStartingOn(line).filter { it.style === block.spanStyle }
 
 /**
  * Drops every span anchored to [line] for [block] and rebuilds the line without

@@ -24,6 +24,14 @@ class RichSpanManager(
 	 */
 	fun getAllRichSpans(): Set<RichSpan> = spans
 
+	/**
+	 * Every span anchored to (starting on) [line]. Reads a per-revision index rather
+	 * than scanning the whole set, so the line-block queries stay cheap on documents
+	 * carrying thousands of spans.
+	 */
+	internal fun getRichSpansStartingOn(line: Int): List<RichSpan> =
+		state.workingContent.richSpansByStartLine[line] ?: emptyList()
+
 	internal fun addRichSpan(range: TextEditorRange, style: RichSpanStyle) {
 		spans = spans + RichSpan(range, style)
 	}
@@ -32,12 +40,24 @@ class RichSpanManager(
 		addRichSpan(TextEditorRange(start, end), style)
 	}
 
+	/** Adds every span in [newSpans] in one publish, for bulk callers like an import. */
+	internal fun addRichSpans(newSpans: Collection<RichSpan>) {
+		if (newSpans.isEmpty()) return
+		spans = spans + newSpans
+	}
+
 	internal fun removeRichSpan(start: CharLineOffset, end: CharLineOffset, style: RichSpanStyle) {
 		removeRichSpan(RichSpan(TextEditorRange(start, end), style))
 	}
 
 	internal fun removeRichSpan(span: RichSpan) {
 		spans = spans - span
+	}
+
+	/** Drops every span in [doomed] in one publish. */
+	internal fun removeRichSpans(doomed: Collection<RichSpan>) {
+		if (doomed.isEmpty()) return
+		spans = spans - doomed.toSet()
 	}
 
 	fun getSpansForLineWrap(lineWrap: LineWrap): List<RichSpan> {
