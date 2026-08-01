@@ -181,6 +181,67 @@ class MarkdownExportConcurrencyTest {
 	}
 
 	@Test
+	fun `export never observes a split bullet line without its marker`() {
+		val extension = createExtension(bulletDocument(lines = 20))
+		val state = extension.editorState
+
+		val failure = AtomicReference<Throwable?>(null)
+		val unmarked = AtomicReference<String?>(null)
+		val exporting = AtomicBoolean(true)
+		val exportCount = AtomicInteger(0)
+
+		// Every line in the fixture is a bullet, and the empty line Enter opens is a
+		// bullet too, so every exported line must carry a marker. An empty bullet
+		// exports as the bare marker, which still satisfies this; an empty line that
+		// lost its span exports as nothing at all, which does not.
+		val exporter = thread {
+			while (exporting.get()) {
+				runCatching { extension.exportAsMarkdown() }
+					.onSuccess { markdown ->
+						exportCount.incrementAndGet()
+						markdown.lines()
+							.firstOrNull { !it.startsWith("- ") }
+							?.let {
+								unmarked.compareAndSet(null, "[$it]\n--- full export ---\n$markdown")
+								exporting.set(false)
+							}
+					}
+					.onFailure {
+						failure.compareAndSet(null, it)
+						exporting.set(false)
+					}
+			}
+		}
+
+		try {
+			// Enter at the end of the line specifically. RichSpanManager keeps the span
+			// on the original line in that case, leaving the new line unmarked until
+			// applyLineBlock runs; splitting mid-line instead divides the span across
+			// both halves, making the re-application a no-op and this test vacuous.
+			repeat(200) {
+				val end = state.textLines[0].length
+				state.cursor.updatePosition(CharLineOffset(0, end))
+				state.insertNewlineAtCursor()
+				state.delete(
+					TextEditorRange(
+						start = CharLineOffset(0, end),
+						end = CharLineOffset(1, 0),
+					)
+				)
+			}
+		} finally {
+			exporting.set(false)
+			exporter.join()
+		}
+
+		failure.get()?.let {
+			throw AssertionError("exportAsMarkdown() failed under concurrent edits: $it", it)
+		}
+		assertEquals(null, unmarked.get(), "Export observed a bullet line without its marker")
+		assertTrue(exportCount.get() > 0, "No exports completed; the test proved nothing")
+	}
+
+	@Test
 	fun `getAllRichSpans hands out a snapshot, not the live set`() {
 		val extension = createExtension("- alpha\n- bravo")
 		val state = extension.editorState

@@ -403,14 +403,18 @@ class TextEditorState(
 			cursorBefore = cursorPosition,
 			cursorAfter = CharLineOffset(originalLine + 1, 0)
 		)
-		editManager.applyOperation(operation)
+		// The split and the block markers are one revision. Published separately, a
+		// reader between them sees the new half-line with its marker missing.
+		withAtomicEdit {
+			editManager.applyOperation(operation)
 
-		// RichSpanManager's newline handling only keeps the span on one side when
-		// the cursor was at a span boundary, so apply to both lines so both halves
-		// of the split keep the gutter marker. applyLineBlock is idempotent.
-		activeBlock?.let {
-			applyLineBlock(originalLine, it)
-			applyLineBlock(originalLine + 1, it)
+			// RichSpanManager's newline handling only keeps the span on one side when
+			// the cursor was at a span boundary, so apply to both lines so both halves
+			// of the split keep the gutter marker. applyLineBlock is idempotent.
+			activeBlock?.let {
+				applyLineBlock(originalLine, it)
+				applyLineBlock(originalLine + 1, it)
+			}
 		}
 	}
 
@@ -1094,8 +1098,12 @@ class TextEditorState(
 	 * would relayout the whole document once per span.
 	 */
 	fun updateRichSpans(remove: Collection<RichSpan>, add: Collection<RichSpan>) {
-		remove.forEach { richSpanManager.removeRichSpan(it) }
-		add.forEach { richSpanManager.addRichSpan(it.range, it.style) }
+		// One revision as well as one relayout: published per span, a reader between
+		// the removals and the additions sees the batch half-applied.
+		withAtomicEdit {
+			remove.forEach { richSpanManager.removeRichSpan(it) }
+			add.forEach { richSpanManager.addRichSpan(it.range, it.style) }
+		}
 		updateBookKeeping()
 	}
 

@@ -167,15 +167,15 @@ internal fun rebuildWithoutBlock(existing: AnnotatedString, block: LineBlockStyl
  * As soon as the user types a character, sticky-at-start keeps the span anchored
  * at column 0 while the end shifts forward, naturally tracking the line length.
  */
-internal fun TextEditorState.applyLineBlock(line: Int, block: LineBlockStyle) {
-	if (hasLineBlock(line, block)) return
+internal fun TextEditorState.applyLineBlock(line: Int, block: LineBlockStyle) = withAtomicEdit {
+	if (hasLineBlock(line, block)) return@withAtomicEdit
 	// Demote any conflicting block before applying — otherwise the new
 	// paragraph-style indent would overlap the old one and Compose blanks the
 	// line on the next measure pass.
 	mutuallyExcluded(block)
 		.filter { hasLineBlock(line, it) }
 		.forEach { demoteLineBlock(line, it) }
-	val existing = textLines.getOrNull(line) ?: return
+	val existing = textLines.getOrNull(line) ?: return@withAtomicEdit
 	// Attach the span before rebuilding the line: updateLine triggers the relayout
 	// that resolves each line's gutter marker (bullet/numeral), so the span must be
 	// present first or the marker won't render until the next edit forces another pass.
@@ -208,9 +208,9 @@ internal fun TextEditorState.removeLineBlockSpans(line: Int, block: LineBlockSty
  * its indent paragraph style (and without the baked-in text style, if any).
  * No-op if [line] is out of range or has no such span.
  */
-internal fun TextEditorState.demoteLineBlock(line: Int, block: LineBlockStyle) {
-	val existing = textLines.getOrNull(line) ?: return
-	if (!hasLineBlock(line, block)) return
+internal fun TextEditorState.demoteLineBlock(line: Int, block: LineBlockStyle) = withAtomicEdit {
+	val existing = textLines.getOrNull(line) ?: return@withAtomicEdit
+	if (!hasLineBlock(line, block)) return@withAtomicEdit
 	removeLineBlockSpans(line, block)
 	updateLine(line, rebuildWithoutBlock(existing, block))
 }
@@ -228,9 +228,12 @@ internal fun TextEditorState.lineBlockSpanStyles(line: Int): List<RichSpanStyle>
  * are attached, spanning the full line content. Used to restore the precise span
  * set captured for an atomic line-block undo/redo.
  */
-internal fun TextEditorState.setLineBlockSpans(line: Int, spanStyles: List<RichSpanStyle>) {
+internal fun TextEditorState.setLineBlockSpans(
+	line: Int,
+	spanStyles: List<RichSpanStyle>,
+) = withAtomicEdit {
 	ALL_BLOCK_STYLES.forEach { removeLineBlockSpans(line, it) }
-	val length = textLines.getOrNull(line)?.length ?: return
+	val length = textLines.getOrNull(line)?.length ?: return@withAtomicEdit
 	spanStyles.forEach { style ->
 		richSpanManager.addRichSpan(
 			start = CharLineOffset(line, 0),

@@ -72,7 +72,7 @@ internal fun TextEditorState.applyDocumentBlocks(
 	horizontalRuleLines: Collection<Int> = emptyList(),
 	imageLines: Map<Int, ImageBlockSpanStyle> = emptyMap(),
 	blockLines: Map<LineBlockStyle, Collection<Int>> = emptyMap(),
-) {
+) = withAtomicEdit {
 	horizontalRuleLines.forEach { line ->
 		richSpanManager.addRichSpan(
 			start = CharLineOffset(line, 0),
