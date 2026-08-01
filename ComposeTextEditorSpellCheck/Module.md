@@ -42,15 +42,16 @@ suggestion menu for you. Toggle checking at runtime with
 
 ## Wrong-language protection
 
-A checker loaded with the wrong dictionary flags *every* word: the document turns
-into a wall of red squiggles and every lookup is wasted. The
-[SpellCheckGuard][com.darkrockstudios.texteditor.spellcheck.SpellCheckGuard] watches for
-that. When too large a share of the whole document comes back misspelled (or more
-than `maxMisspellings` pile up) the state drops every squiggle and stops checking
-instead of flagging everything. The ratio is judged against the full document's word
-count, so a foreign-language passage inside an otherwise fine document never trips
-it, and a full check still bails as soon as the outcome is decided, so a big
-document isn't dragged through a checker that can't read it.
+A checker loaded with the wrong dictionary flags *every* word: the document
+turns into a wall of red squiggles and every lookup is wasted. The
+[SpellCheckGuard][com.darkrockstudios.texteditor.spellcheck.SpellCheckGuard]
+watches for that. When too large a share of the whole document comes back
+misspelled (or more than `maxMisspellings` pile up) the state drops every
+squiggle and stops checking instead of flagging everything. The ratio is
+judged against the full document's word count, so a foreign-language passage
+inside an otherwise fine document never trips it, and a full check still
+bails as soon as the outcome is decided, so a big document isn't dragged
+through a checker that can't read it.
 
 ```kotlin
 val state = rememberSpellCheckState(
@@ -62,21 +63,22 @@ state.suspension?.let { reason ->
     Text(
         when (reason) {
             is SpellCheckSuspension.LikelyWrongLanguage ->
-                "Spell checking paused: the dictionary may not match this document's language."
+                "Spell check paused: wrong dictionary language?"
             is SpellCheckSuspension.TooManyMisspellings ->
-                "Spell checking paused: too many misspellings."
+                "Spell check paused: too many misspellings."
         }
     )
 }
 ```
 
-`suspension` is Compose state, so a banner like the one above recomposes on its own. A
-suspension is sticky: automatic checking stays off until a full re-check completes with
-plausible results. Replacing the checker (passing a new `spellChecker` to
-`rememberSpellCheckState` re-checks automatically), calling `resumeSpellChecking()` or
-`runFullSpellCheck()`, and toggling checking back on with `setSpellCheckingEnabled(true)`
-all trigger that re-check; if the checker is still flagging everything, the suspension
-simply stays in place. Pass `SpellCheckGuard.Disabled` to opt out entirely.
+`suspension` is Compose state, so a banner like the one above recomposes on
+its own. A suspension is sticky: automatic checking stays off until a full
+re-check completes with plausible results. Replacing the checker (passing a
+new `spellChecker` to `rememberSpellCheckState` re-checks automatically),
+calling `resumeSpellChecking()` or `runFullSpellCheck()`, and toggling
+checking back on with `setSpellCheckingEnabled(true)` all trigger that
+re-check; if the checker is still flagging everything, the suspension simply
+stays in place. Pass `SpellCheckGuard.Disabled` to opt out entirely.
 
 ## Choosing a backend
 
@@ -119,10 +121,11 @@ The spell-checking
 editor: [SpellCheckingTextEditor][com.darkrockstudios.texteditor.spellcheck.SpellCheckingTextEditor],
 the [SpellCheckState][com.darkrockstudios.texteditor.spellcheck.SpellCheckState] holder
 and its [rememberSpellCheckState][com.darkrockstudios.texteditor.spellcheck.rememberSpellCheckState]
-factory, the [SpellCheckMode][com.darkrockstudios.texteditor.spellcheck.SpellCheckMode]
+factory, the
+[SpellCheckMode][com.darkrockstudios.texteditor.spellcheck.SpellCheckMode]
 (word vs. sentence) selector, and the
-[SpellCheckGuard][com.darkrockstudios.texteditor.spellcheck.SpellCheckGuard] that suspends
-checking when a checker starts flagging everything.
+[SpellCheckGuard][com.darkrockstudios.texteditor.spellcheck.SpellCheckGuard]
+that suspends checking when a checker starts flagging everything.
 
 # Package com.darkrockstudios.texteditor.spellcheck.api
 
