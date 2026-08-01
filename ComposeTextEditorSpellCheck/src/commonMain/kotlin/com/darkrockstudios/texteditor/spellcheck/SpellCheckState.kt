@@ -65,8 +65,9 @@ class SpellCheckState(
 	 * Why the [guard] suspended spell checking, or `null` while checking is running normally.
 	 *
 	 * Observable from composition, so UI can surface "spell checking paused: the dictionary may
-	 * not match this document's language". Cleared by [resumeSpellChecking], an explicit
-	 * [runFullSpellCheck], or [setSpellCheckingEnabled] with `true`.
+	 * not match this document's language". A full re-check ([resumeSpellChecking], an explicit
+	 * [runFullSpellCheck], or [setSpellCheckingEnabled] with `true`) re-tries the checker and
+	 * lifts this once a scan completes with plausible results.
 	 */
 	var suspension: SpellCheckSuspension? by mutableStateOf(null)
 		private set
@@ -75,8 +76,8 @@ class SpellCheckState(
 	 * Enable or disable spell checking.
 	 *
 	 * Enabling triggers a full re-check when checking was previously disabled or suspended by
-	 * the [guard], clearing any [suspension]; disabling clears all existing spell-check
-	 * decorations.
+	 * the [guard]; a clean re-check lifts any [suspension]. Disabling clears all existing
+	 * spell-check decorations.
 	 *
 	 * @param value The new enabled state.
 	 */
@@ -91,11 +92,11 @@ class SpellCheckState(
 	}
 
 	/**
-	 * Clear a [suspension] and re-check the document.
+	 * Re-check the document, lifting a [suspension] if the results come back plausible.
 	 *
 	 * Intended for after the underlying problem is addressed, typically by swapping
 	 * [spellChecker] for one with the right language. Re-checking with the same checker over
-	 * the same text will simply trip the [guard] again.
+	 * the same text will simply trip the [guard] again, and the suspension stays in place.
 	 */
 	suspend fun resumeSpellChecking() {
 		runFullSpellCheck()
@@ -213,12 +214,12 @@ class SpellCheckState(
 	/**
 	 * Run full spell check based on the current mode.
 	 *
-	 * An explicit full check is a fresh chance for the checker: any [guard] [suspension] is
-	 * cleared before scanning, and the scan may trip the guard again if the results still look
-	 * implausible. No-op while checking is disabled via [setSpellCheckingEnabled].
+	 * An explicit full check is a fresh chance for the checker: it scans even while the [guard]
+	 * has checking suspended, and a clean completion lifts the [suspension]. Implausible
+	 * results trip the guard again, leaving the suspension in place the whole time rather than
+	 * flickering it off and on. No-op while checking is disabled via [setSpellCheckingEnabled].
 	 */
 	suspend fun runFullSpellCheck() {
-		suspension = null
 		when (spellCheckMode) {
 			SpellCheckMode.Word -> runFullWordCheck()
 			SpellCheckMode.Sentence -> runFullSentenceCheck()
@@ -241,7 +242,7 @@ class SpellCheckState(
 	 */
 	private suspend fun runFullWordCheck() {
 		val sp = spellChecker ?: return
-		if (canSpellCheck().not()) return
+		if (spellCheckingEnabled.not()) return
 
 		println("Running full Word Spell Check")
 
@@ -268,9 +269,11 @@ class SpellCheckState(
 			}
 		}
 
-		// A concurrent partial check may have tripped the guard while this check was
-		// suspended on lookups; adding spans now would undo its cleanup.
-		if (canSpellCheck().not()) return
+		// Re-check after the async lookups: a concurrent disable must not have its
+		// clearing undone by this swap. A concurrent guard trip, in contrast, is
+		// superseded; this scan just judged the whole document and passed.
+		if (spellCheckingEnabled.not()) return
+		suspension = null
 
 		// Swap atomically: no suspension points between removal and re-add.
 		textState.apply {
@@ -289,7 +292,7 @@ class SpellCheckState(
 	 */
 	private suspend fun runFullSentenceCheck() {
 		val sp = spellChecker ?: return
-		if (canSpellCheck().not()) return
+		if (spellCheckingEnabled.not()) return
 
 		println("Running full Sentence Spell Check")
 
@@ -314,9 +317,11 @@ class SpellCheckState(
 			}
 		}
 
-		// A concurrent partial check may have tripped the guard while this check was
-		// suspended on lookups; adding spans now would undo its cleanup.
-		if (canSpellCheck().not()) return
+		// Re-check after the async lookups: a concurrent disable must not have its
+		// clearing undone by this swap. A concurrent guard trip, in contrast, is
+		// superseded; this scan just judged the whole document and passed.
+		if (spellCheckingEnabled.not()) return
+		suspension = null
 
 		textState.apply {
 			richSpanManager.getAllRichSpans()
