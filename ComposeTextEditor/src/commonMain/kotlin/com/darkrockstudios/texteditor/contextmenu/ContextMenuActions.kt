@@ -5,6 +5,7 @@ import com.darkrockstudios.texteditor.clipboard.ClipboardHelper
 import com.darkrockstudios.texteditor.clipboard.applyHtmlPasteBlocks
 import com.darkrockstudios.texteditor.clipboard.readHtmlPasteDocument
 import com.darkrockstudios.texteditor.state.TextEditorState
+import com.darkrockstudios.texteditor.state.applyStyleForEditAt
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
@@ -77,7 +78,7 @@ class ContextMenuActions(
 				state.preserveCopiedRichSpansThroughNextEdit()
 				state.withAtomicEdit {
 					if (curSelection != null) {
-						state.replace(curSelection, text)
+						state.replace(curSelection, state.applyStyleForEditAt(curSelection.start, text))
 					} else {
 						state.insertStringAtCursor(text)
 					}

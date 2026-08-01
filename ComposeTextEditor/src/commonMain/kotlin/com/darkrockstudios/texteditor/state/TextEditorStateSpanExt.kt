@@ -1,8 +1,10 @@
 package com.darkrockstudios.texteditor.state
 
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
+import com.darkrockstudios.texteditor.annotatedstring.withInheritedStyles
 
 /**
  * Returns all unique SpanStyles that are active at the given position.
@@ -27,6 +29,38 @@ fun TextEditorState.getSpanStylesAtPosition(position: CharLineOffset): Set<SpanS
 			position.char >= span.start && position.char < span.end
 		}
 		.mapTo(mutableSetOf()) { span -> span.item }
+}
+
+/**
+ * The character styles text inserted at [position] should adopt: those of the
+ * character before it, or of the character it sits in front of when nothing precedes
+ * it. Without the second case, text entered at the very start of a document carries
+ * no style and renders at the bare default size rather than the document's.
+ */
+internal fun TextEditorState.getSpanStylesForEditAt(position: CharLineOffset): Set<SpanStyle> =
+	getSpanStylesAtPosition(precedingCharacter(position) ?: position)
+
+/**
+ * Stamps the character styling in effect at [position] onto [text], unless [text]
+ * carries formatting of its own. Reads the document as it stands, so callers must
+ * apply this before the edit that consumes the result.
+ */
+internal fun TextEditorState.applyStyleForEditAt(
+	position: CharLineOffset,
+	text: AnnotatedString,
+): AnnotatedString = text.withInheritedStyles(getSpanStylesForEditAt(position))
+
+/**
+ * The position of the character immediately before [position], walking to the end of
+ * the previous line when [position] sits at the start of one. Null when nothing
+ * precedes it.
+ */
+private fun TextEditorState.precedingCharacter(position: CharLineOffset): CharLineOffset? {
+	if (position.char > 0) return position.copy(char = position.char - 1)
+	if (position.line <= 0) return null
+	val previousLineLength = textLines.getOrNull(position.line - 1)?.length ?: return null
+	if (previousLineLength == 0) return null
+	return CharLineOffset(position.line - 1, previousLineLength - 1)
 }
 
 /**
