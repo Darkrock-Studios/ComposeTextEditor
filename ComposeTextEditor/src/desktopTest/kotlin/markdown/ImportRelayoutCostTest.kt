@@ -25,8 +25,8 @@ import kotlin.test.assertEquals
  */
 class ImportRelayoutCostTest {
 
-	/** Whole-document layout passes an import runs: one for the text, one for the blocks. */
-	private val passesPerImport = 2
+	/** Whole-document layout passes an import runs; the text and the blocks share one. */
+	private val passesPerImport = 1
 
 	private class MeasureCounter {
 		var calls = 0

@@ -76,20 +76,22 @@ class HtmlExtension(
 			includeImages = provider != null,
 		)
 		// One revision, so a concurrent export can't catch the document loaded but
-		// not yet styled.
+		// not yet styled, and one relayout rather than one per import step.
 		editorState.withAtomicEdit {
-			editorState.setText(document.text)
-			editorState.applyDocumentBlocks(
-				horizontalRuleLines = document.horizontalRuleLines,
-				imageLines = if (provider == null) {
-					emptyMap()
-				} else {
-					document.imageLines.mapValues { (_, image) ->
-						ImageBlockSpanStyle(source = image.source, alt = image.alt, provider = provider)
-					}
-				},
-				blockLines = document.blockLines,
-			)
+			editorState.withDeferredBookKeeping {
+				editorState.setText(document.text)
+				editorState.applyDocumentBlocks(
+					horizontalRuleLines = document.horizontalRuleLines,
+					imageLines = if (provider == null) {
+						emptyMap()
+					} else {
+						document.imageLines.mapValues { (_, image) ->
+							ImageBlockSpanStyle(source = image.source, alt = image.alt, provider = provider)
+						}
+					},
+					blockLines = document.blockLines,
+				)
+			}
 		}
 	}
 

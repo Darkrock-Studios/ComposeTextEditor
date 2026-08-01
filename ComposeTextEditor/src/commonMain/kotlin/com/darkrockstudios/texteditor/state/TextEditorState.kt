@@ -187,6 +187,30 @@ class TextEditorState(
 		}
 	}
 
+	/** Nesting depth of [withDeferredBookKeeping]; relayout is suppressed above zero. */
+	private var deferredBookKeepingDepth = 0
+
+	/**
+	 * Runs [block] with relayout suppressed, then relays the whole document out once.
+	 *
+	 * For a bulk rewrite whose steps each end in their own [updateBookKeeping]: an
+	 * import replaces the text and then decorates it, and measuring the document
+	 * between those two only produces a layout the next step throws away.
+	 *
+	 * [block] must not read [lineOffsets] or anything derived from it (pixel
+	 * positions, content height): until it returns, they describe the document as it
+	 * stood before.
+	 */
+	internal fun <T> withDeferredBookKeeping(block: () -> T): T {
+		deferredBookKeepingDepth++
+		try {
+			return block()
+		} finally {
+			deferredBookKeepingDepth--
+			if (deferredBookKeepingDepth == 0) updateBookKeeping()
+		}
+	}
+
 	/**
 	 * Runs [action] once the outermost transaction has committed, or immediately when
 	 * there is none. For work that announces an edit to the outside world and must not
@@ -905,6 +929,9 @@ class TextEditorState(
 	}
 
 	internal fun updateBookKeeping(affectedLines: IntRange? = null) {
+		// A bulk rewrite runs one pass of its own once it is done; measuring per step
+		// only lays out a document the next step invalidates.
+		if (deferredBookKeepingDepth > 0) return
 		// Defer until the viewport has a real size; the 1×1 sentinel forces character-wide wraps.
 		if (viewportSize.width <= 1f || viewportSize.height <= 1f) return
 

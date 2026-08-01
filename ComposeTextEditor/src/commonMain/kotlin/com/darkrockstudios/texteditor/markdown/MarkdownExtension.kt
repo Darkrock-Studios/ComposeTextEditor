@@ -248,14 +248,17 @@ class MarkdownExtension(
 		val annotatedString = processedMarkdown.toAnnotatedStringFromMarkdown(markdownConfiguration)
 		// setText publishes the text with no spans and applyDocumentBlocks attaches them
 		// afterwards. As one revision, so a concurrent export can't catch the document
-		// fully loaded but entirely unstyled.
+		// fully loaded but entirely unstyled, and as one relayout, so the document isn't
+		// measured once bare and again decorated.
 		editorState.withAtomicEdit {
-			editorState.setText(annotatedString)
-			editorState.applyDocumentBlocks(
-				horizontalRuleLines = hrLineIndices,
-				imageLines = imageLines.toMap(),
-				blockLines = blockHits + (CodeFence to codeFenceLineIndices),
-			)
+			editorState.withDeferredBookKeeping {
+				editorState.setText(annotatedString)
+				editorState.applyDocumentBlocks(
+					horizontalRuleLines = hrLineIndices,
+					imageLines = imageLines.toMap(),
+					blockLines = blockHits + (CodeFence to codeFenceLineIndices),
+				)
+			}
 		}
 	}
 
