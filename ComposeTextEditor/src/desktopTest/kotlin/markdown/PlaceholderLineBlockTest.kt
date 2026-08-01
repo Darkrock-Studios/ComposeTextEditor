@@ -10,9 +10,8 @@ import com.darkrockstudios.texteditor.richstyle.BlockquoteSpanStyle
 import com.darkrockstudios.texteditor.richstyle.BulletListSpanStyle
 import com.darkrockstudios.texteditor.richstyle.HR_PLACEHOLDER
 import com.darkrockstudios.texteditor.richstyle.HorizontalRuleSpanStyle
-import com.darkrockstudios.texteditor.richstyle.ImageBlockSpanStyle
 import com.darkrockstudios.texteditor.richstyle.InMemoryImageProvider
-import com.darkrockstudios.texteditor.richstyle.RichSpanStyle
+import com.darkrockstudios.texteditor.richstyle.OrderedListSpanStyle
 import com.darkrockstudios.texteditor.state.TextEditorState
 import io.mockk.mockk
 import kotlinx.coroutines.test.TestScope
@@ -22,10 +21,13 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * Placeholder lines (horizontal rules, images) own their line through a
- * placeholder character. A blockquote may stack on one, serialized as `> ---`
- * or `> ![alt](src)`; list and fence spans may not, and every publish strips
- * them via normalization no matter which path attached them.
+ * Placeholder lines own their content through a placeholder character and a
+ * full-line span. A blockquote may stack on any of them (`> ---`,
+ * `> ![alt](src)`); an image may also be a list item (`1. ![shot](url)`); any
+ * other combination is stripped at publish by normalization, no matter which
+ * path attached it. A line only classifies as a placeholder while its text is
+ * blank, so a span re-anchored onto real text never costs that text its own
+ * formatting.
  */
 class PlaceholderLineBlockTest {
 
@@ -39,18 +41,6 @@ class PlaceholderLineBlockTest {
 		)
 		return MarkdownExtension(state, MarkdownConfiguration.DEFAULT, imageProvider = provider)
 	}
-
-	private fun MarkdownExtension.linesWith(style: RichSpanStyle): List<Int> =
-		editorState.richSpanManager.getAllRichSpans()
-			.filter { it.style === style }
-			.map { it.range.start.line }
-			.sorted()
-
-	private fun MarkdownExtension.imageLines(): List<Int> =
-		editorState.richSpanManager.getAllRichSpans()
-			.filter { it.style is ImageBlockSpanStyle }
-			.map { it.range.start.line }
-			.sorted()
 
 	@Test
 	fun `import reads a rule inside a blockquote`() = runTest {
@@ -112,9 +102,25 @@ class PlaceholderLineBlockTest {
 	}
 
 	@Test
-	fun `normalization strips a bullet when a rule span lands on its line`() = runTest {
+	fun `a rule span landing on a text line leaves the line's bullet alone`() = runTest {
+		// The line still holds real text, so it is not a placeholder and the
+		// text keeps its own formatting.
 		val extension = createMarkdownExtension()
 		extension.importMarkdown("- item")
+		val state = extension.editorState
+
+		state.addRichSpan(
+			TextEditorRange(CharLineOffset(0, 0), CharLineOffset(0, 1)),
+			HorizontalRuleSpanStyle,
+		)
+
+		assertEquals(listOf(0), extension.linesWith(BulletListSpanStyle))
+	}
+
+	@Test
+	fun `normalization strips a bullet when a rule span lands on a blank line`() = runTest {
+		val extension = createMarkdownExtension()
+		extension.importMarkdown("- ")
 		assertEquals(listOf(0), extension.linesWith(BulletListSpanStyle))
 		val state = extension.editorState
 
@@ -124,6 +130,47 @@ class PlaceholderLineBlockTest {
 		)
 
 		assertTrue(extension.linesWith(BulletListSpanStyle).isEmpty())
+	}
+
+	@Test
+	fun `merging a rule line into a bullet line keeps the bullet`() = runTest {
+		// The delete pulls the rule's span onto the text line; the merged line is
+		// not a placeholder, so the bullet and its indent survive.
+		val extension = createMarkdownExtension()
+		extension.importMarkdown("- item\n---")
+		val state = extension.editorState
+
+		state.delete(
+			TextEditorRange(CharLineOffset(0, 4), CharLineOffset(1, 0)),
+		)
+
+		assertEquals(1, state.textLines.size)
+		assertEquals(listOf(0), extension.linesWith(BulletListSpanStyle))
+	}
+
+	@Test
+	fun `import reads a numbered image list`() = runTest {
+		val extension = createMarkdownExtension(provider = InMemoryImageProvider())
+		extension.importMarkdown("1. ![shot1](u1.png)\n2. ![shot2](u2.png)")
+
+		assertEquals(listOf(0, 1), extension.imageLines())
+		assertEquals(listOf(0, 1), extension.linesWith(OrderedListSpanStyle))
+	}
+
+	@Test
+	fun `roundtrip preserves a numbered image list`() = runTest {
+		val extension = createMarkdownExtension(provider = InMemoryImageProvider())
+		val original = "1. ![shot1](u1.png)\n2. ![shot2](u2.png)"
+		extension.importMarkdown(original)
+		assertEquals(original, extension.exportAsMarkdown())
+	}
+
+	@Test
+	fun `roundtrip preserves a bulleted image`() = runTest {
+		val extension = createMarkdownExtension(provider = InMemoryImageProvider())
+		val original = "- ![alt](img.png)"
+		extension.importMarkdown(original)
+		assertEquals(original, extension.exportAsMarkdown())
 	}
 
 	@Test

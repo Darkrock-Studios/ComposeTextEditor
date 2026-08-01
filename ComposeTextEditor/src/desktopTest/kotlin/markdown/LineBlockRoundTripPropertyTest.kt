@@ -6,6 +6,9 @@ import com.darkrockstudios.texteditor.markdown.MarkdownExtension
 import com.darkrockstudios.texteditor.richstyle.Blockquote
 import com.darkrockstudios.texteditor.richstyle.BulletList
 import com.darkrockstudios.texteditor.richstyle.HR_PLACEHOLDER
+import com.darkrockstudios.texteditor.richstyle.IMAGE_PLACEHOLDER
+import com.darkrockstudios.texteditor.richstyle.ImageBlockSpanStyle
+import com.darkrockstudios.texteditor.richstyle.InMemoryImageProvider
 import com.darkrockstudios.texteditor.richstyle.LineBlockStyle
 import com.darkrockstudios.texteditor.richstyle.OrderedList
 import com.darkrockstudios.texteditor.richstyle.applyDocumentBlocks
@@ -29,7 +32,8 @@ class LineBlockRoundTripPropertyTest {
 
 	private data class GeneratedLine(
 		val text: String,
-		val isRule: Boolean,
+		val isRule: Boolean = false,
+		val isImage: Boolean = false,
 		val quote: Boolean,
 		val list: LineBlockStyle?,
 	)
@@ -50,25 +54,32 @@ class LineBlockRoundTripPropertyTest {
 	)
 
 	private fun generateLine(random: Random): GeneratedLine {
-		if (random.nextInt(8) == 0) {
-			return GeneratedLine(
-				text = HR_PLACEHOLDER,
-				isRule = true,
-				quote = random.nextBoolean(),
-				list = null,
-			)
-		}
 		val list = when (random.nextInt(4)) {
 			0 -> BulletList
 			1 -> OrderedList
 			else -> null
 		}
-		return GeneratedLine(
-			text = bodyPool.random(random),
-			isRule = false,
-			quote = random.nextInt(3) == 0,
-			list = list,
-		)
+		return when (random.nextInt(10)) {
+			0 -> GeneratedLine(
+				text = HR_PLACEHOLDER,
+				isRule = true,
+				quote = random.nextBoolean(),
+				list = null,
+			)
+
+			1 -> GeneratedLine(
+				text = IMAGE_PLACEHOLDER,
+				isImage = true,
+				quote = random.nextBoolean(),
+				list = list,
+			)
+
+			else -> GeneratedLine(
+				text = bodyPool.random(random),
+				quote = random.nextInt(3) == 0,
+				list = list,
+			)
+		}
 	}
 
 	private fun TestScope.buildDocument(lines: List<GeneratedLine>): MarkdownExtension {
@@ -77,10 +88,16 @@ class LineBlockRoundTripPropertyTest {
 			measurer = mockk(relaxed = true),
 			initialText = null as AnnotatedString?,
 		)
-		val extension = MarkdownExtension(state, MarkdownConfiguration.DEFAULT)
+		val provider = InMemoryImageProvider()
+		val extension = MarkdownExtension(state, MarkdownConfiguration.DEFAULT, imageProvider = provider)
 		state.setText(AnnotatedString(lines.joinToString("\n") { it.text }))
 		state.applyDocumentBlocks(
 			horizontalRuleLines = lines.withIndex().filter { it.value.isRule }.map { it.index },
+			imageLines = lines.withIndex()
+				.filter { it.value.isImage }
+				.associate { (index, _) ->
+					index to ImageBlockSpanStyle(source = "img.png", alt = "alt", provider = provider)
+				},
 			blockLines = mapOf(
 				Blockquote to lines.withIndex().filter { it.value.quote }.map { it.index },
 				BulletList to lines.withIndex()

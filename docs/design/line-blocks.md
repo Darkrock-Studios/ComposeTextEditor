@@ -290,8 +290,10 @@ otherwise text). Consequences:
   placeholder line. Export already emits this form today; only import must learn it.
 - The HTML `<blockquote>a<hr>b</blockquote>` case stops being a conflict: the quote
   span stays on the rule line, both exporters render it correctly.
-- List and fence spans on a placeholder line remain invalid (a bullet on a rule has
-  no meaning in the model) and are stripped by normalization.
+- On a rule line, list and fence spans remain invalid (a bullet on a rule has no
+  meaning) and are stripped by normalization. On an image line, one list style is
+  valid alongside the quote: an image can be a list item, and markdown expresses
+  it directly.
 - A first-generation D2 save (`- ---`) heals on load: peel `- `, classify `---` as
   a rule, normalization strips the bullet span. The rule comes back.
 
@@ -301,10 +303,14 @@ and a style may only peel if it is not `mutuallyExcluded` with anything already
 peeled. This is what fixes Mechanism C's `- 1990. The year` text loss: after a list
 marker, the other list style is excluded, so `1990. ` stays in the body.
 
-3. **Placeholder stacking: quote may stack on placeholder lines; lists and fences
-   may not.** Import peels markers first, then classifies the residual body. `> ---`
-   and `> ![alt](src)` become representable and round-trip; normalization strips
-   only list/fence spans from placeholder lines.
+3. **Placeholder stacking is kind-aware: quote may stack on any placeholder
+   line; an image may also carry one list style; nothing else stacks.** Import
+   peels markers first, then classifies the residual body. `> ---`,
+   `> ![alt](src)`, and `1. ![shot](url)` (a numbered figure list) are all
+   representable and round-trip. A line only classifies as a placeholder while
+   its text is blank: a rule span re-anchored onto a text line by a line merge
+   does not make that line a placeholder, so the text keeps its own formatting
+   and the merge round-trips through undo.
 4. **Branch mechanics: reset to `main` and rebuild clean**, force-pushed to PR #57.
 5. **Property tests: yes.** Round-trip property testing over generated documents is
    the regression gate for this subsystem, alongside the example tests.
@@ -320,15 +326,21 @@ marker, the other list style is excluded, so `1990. ` stays in the body.
    else keeps all peels and the body goes to the GFM parser.
 2. **Commit-time normalization** (`TextEditorState`): every published revision
    passes through a pure `DocumentSnapshot -> DocumentSnapshot` step that removes
-   list/fence spans from placeholder lines and rebuilds those lines without the
-   orphaned indent. No-op fast path when the document has no placeholder lines.
-   The `applyLineBlock` primitive stays permissive, as on `main`.
-3. **Toggle** (`TextEditManager.toggleLineBlock`): eligibility is per style, from
-   one span-set snapshot: every in-range line for `Blockquote`; every in-range
-   non-placeholder line for the others. Blank lines are always eligible. Both
-   directions act on the eligible set, and the direction is decided from it. This
-   preserves "clear is never blocked" because the only excluded lines are ones that
-   cannot carry the style at all.
+   disallowed block spans from placeholder lines and rebuilds those lines without
+   the orphaned indent. A placeholder line is one whose full-line span's
+   `replacesText()` is true AND whose text is blank, so a span re-anchored onto
+   real text never strips that text's formatting. The repair is deterministic and
+   outside the undo history; given the blank-text rule, the most it can ever
+   discard is a marker on empty content. No-op fast path when nothing changed or
+   no placeholder lines exist. The `applyLineBlock` primitive stays permissive,
+   as on `main`.
+3. **Toggle** (`TextEditManager.toggleLineBlock`): eligibility is per style and
+   per placeholder kind, from one span-set snapshot: `Blockquote` takes every
+   in-range line; the list styles take every line except rule lines; `CodeFence`
+   takes only non-placeholder lines. Blank lines are always eligible. Both
+   directions act on the eligible set, and the direction is decided from it.
+   This preserves "clear is never blocked" because the only excluded lines are
+   ones that cannot carry the style at all.
 4. **Tests**: example tests for each defect and each decision, plus a seeded
    generator-based round-trip property test (`export` then `import` then `export`
    must be stable, text and block placement preserved).

@@ -10,7 +10,8 @@ import com.darkrockstudios.texteditor.richstyle.ImageProvider
 import com.darkrockstudios.texteditor.richstyle.LINE_BLOCK_STYLES
 import com.darkrockstudios.texteditor.richstyle.LineBlockStyle
 import com.darkrockstudios.texteditor.richstyle.OrderedList
-import com.darkrockstudios.texteditor.richstyle.allowedOnPlaceholderLine
+import com.darkrockstudios.texteditor.richstyle.PlaceholderKind
+import com.darkrockstudios.texteditor.richstyle.allowedOn
 import com.darkrockstudios.texteditor.richstyle.applyDocumentBlocks
 import com.darkrockstudios.texteditor.richstyle.documentBlocksOf
 import com.darkrockstudios.texteditor.richstyle.hasLineBlock
@@ -102,7 +103,7 @@ private fun peelLineBlocks(line: String): PeeledLine {
 	var body = line
 	val peeled = mutableListOf<LineBlockStyle>()
 	for (block in LINE_BLOCK_STYLES) {
-		if (peeled.any { block in mutuallyExcluded(it) || it in mutuallyExcluded(block) }) continue
+		if (peeled.any { block in mutuallyExcluded(it) }) continue
 		val match = block.markdownPattern.matchEntire(body) ?: continue
 		peeled += block
 		body = match.groupValues[1]
@@ -110,7 +111,6 @@ private fun peelLineBlocks(line: String): PeeledLine {
 	return PeeledLine(body, peeled)
 }
 
-private val RESIDUAL_ORDERED_MARKER = Regex("""^(\d+)\.""")
 private val RESIDUAL_BULLET_MARKER = Regex("""^([-*+])(\s)""")
 private val RESIDUAL_QUOTE_MARKER = Regex("""^>""")
 
@@ -119,19 +119,20 @@ private val RESIDUAL_QUOTE_MARKER = Regex("""^>""")
  * every marker the line's spans account for, so whatever still looks like one is
  * literal text and must not reach the GFM parser bare, or it parses as markup
  * and the author's characters are consumed. The parser strips the escapes back
- * out via `removeMarkdownEscapes`.
+ * out via `removeMarkdownEscapes`. Ordered markers go through export's own
+ * escape helper so the two sides cannot drift apart.
  */
-private fun String.escapeResidualMarker(): String = when {
-	RESIDUAL_ORDERED_MARKER.containsMatchIn(this) ->
-		replaceFirst(RESIDUAL_ORDERED_MARKER, "$1\\\\.")
+private fun String.escapeResidualMarker(): String {
+	escapeOrderedListMarkers(this).let { if (it != this) return it }
+	return when {
+		RESIDUAL_BULLET_MARKER.containsMatchIn(this) ->
+			replaceFirst(RESIDUAL_BULLET_MARKER, "\\\\$1$2")
 
-	RESIDUAL_BULLET_MARKER.containsMatchIn(this) ->
-		replaceFirst(RESIDUAL_BULLET_MARKER, "\\\\$1$2")
+		RESIDUAL_QUOTE_MARKER.containsMatchIn(this) ->
+			replaceFirst(RESIDUAL_QUOTE_MARKER, "\\\\>")
 
-	RESIDUAL_QUOTE_MARKER.containsMatchIn(this) ->
-		replaceFirst(RESIDUAL_QUOTE_MARKER, "\\\\>")
-
-	else -> this
+		else -> this
+	}
 }
 
 /**
@@ -273,16 +274,15 @@ class MarkdownExtension(
 			// rule it once was rather than a bullet holding literal dashes.
 			val peeled = peelLineBlocks(line)
 			val imageMatch = STANDALONE_IMAGE_REGEX.matchEntire(peeled.body)
-			// On a placeholder line only the styles that may stack there attach;
-			// a peeled list marker is dropped, not recorded.
-			val placeholderBlocks = peeled.blocks.filter { allowedOnPlaceholderLine(it) }
 			fun record(blocks: List<LineBlockStyle>) = blocks.forEach { block ->
 				blockHits.getOrPut(block) { mutableListOf() } += index
 			}
 			when {
 				peeled.body.trim() in HR_LINE_TOKENS -> {
 					hrLineIndices += index
-					record(placeholderBlocks)
+					// A rule takes only a stacked quote; a peeled list marker has
+					// no meaning on one and is dropped.
+					record(peeled.blocks.filter { it.allowedOn(PlaceholderKind.OTHER) })
 					HR_PLACEHOLDER
 				}
 
@@ -294,7 +294,9 @@ class MarkdownExtension(
 						alt = alt,
 						provider = provider,
 					)
-					record(placeholderBlocks)
+					// An image can be a quoted line or a list item, so its
+					// peeled markers all attach (`1. ![shot](url)`).
+					record(peeled.blocks.filter { it.allowedOn(PlaceholderKind.IMAGE) })
 					IMAGE_PLACEHOLDER
 				}
 

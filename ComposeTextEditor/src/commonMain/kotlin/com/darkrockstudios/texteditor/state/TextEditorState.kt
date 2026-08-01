@@ -177,8 +177,9 @@ class TextEditorState(
 		try {
 			val result = block()
 			// Every publish passes through line-block normalization, so no caller
-			// can commit a revision violating the placeholder-line invariant.
-			draft?.let { content = normalizeLineBlocks(it) }
+			// can commit a revision violating the placeholder-line invariant. A
+			// transaction that mutated nothing skips the scan and the republish.
+			draft?.let { if (it !== content) content = normalizeLineBlocks(it) }
 			return result
 		} finally {
 			draft = null

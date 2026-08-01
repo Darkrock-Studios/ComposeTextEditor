@@ -7,7 +7,7 @@ import com.darkrockstudios.texteditor.richstyle.BlockquoteSpanStyle
 import com.darkrockstudios.texteditor.richstyle.BulletListSpanStyle
 import com.darkrockstudios.texteditor.richstyle.CodeFenceSpanStyle
 import com.darkrockstudios.texteditor.richstyle.HorizontalRuleSpanStyle
-import com.darkrockstudios.texteditor.richstyle.RichSpanStyle
+import com.darkrockstudios.texteditor.richstyle.InMemoryImageProvider
 import com.darkrockstudios.texteditor.state.TextEditorState
 import io.mockk.mockk
 import kotlinx.coroutines.test.TestScope
@@ -18,30 +18,25 @@ import kotlin.test.assertTrue
 
 /**
  * Multi-line block toggles act on every selected line that can carry the style:
- * blank lines are included (an empty list item, as in Word and Google Docs) and
- * placeholder lines (rules, images) are excluded for every style except
- * blockquote, the one style that stacks on them. The toggle direction is decided
- * from the same set of lines, so both directions always reach every line they
- * could change.
+ * blank lines are included (an empty list item, as in Word and Google Docs),
+ * rule lines count only for blockquote, and image lines count for blockquote
+ * and the list styles. The toggle direction is decided from the same set of
+ * lines, so both directions always reach every line they could change.
  */
 class LineBlockSweepTest {
 
-	private fun TestScope.createMarkdownExtension(): MarkdownExtension {
+	private fun TestScope.createMarkdownExtension(
+		provider: InMemoryImageProvider? = null,
+	): MarkdownExtension {
 		val state = TextEditorState(
 			scope = this,
 			measurer = mockk(relaxed = true),
 			initialText = null as AnnotatedString?,
 		)
-		return MarkdownExtension(state, MarkdownConfiguration.DEFAULT)
+		return MarkdownExtension(state, MarkdownConfiguration.DEFAULT, imageProvider = provider)
 	}
 
 	private fun MarkdownExtension.selectAll(): IntRange = 0..editorState.textLines.lastIndex
-
-	private fun MarkdownExtension.linesWith(style: RichSpanStyle): List<Int> =
-		editorState.richSpanManager.getAllRichSpans()
-			.filter { it.style === style }
-			.map { it.range.start.line }
-			.sorted()
 
 	@Test
 	fun `select-all bullet includes blank separator lines as empty items`() = runTest {
@@ -151,6 +146,20 @@ class LineBlockSweepTest {
 		assertEquals(listOf(0, 1, 2), extension.linesWith(BlockquoteSpanStyle))
 		assertEquals(listOf(1), extension.linesWith(HorizontalRuleSpanStyle))
 		assertEquals("> before\n> ---\n> after", extension.exportAsMarkdown())
+	}
+
+	@Test
+	fun `select-all bullet includes image lines`() = runTest {
+		val extension = createMarkdownExtension(provider = InMemoryImageProvider())
+		extension.importMarkdown("before\n![alt](img.png)\nafter")
+
+		extension.toggleBulletList(extension.selectAll())
+
+		assertEquals(listOf(0, 1, 2), extension.linesWith(BulletListSpanStyle))
+		assertEquals(
+			"- before\n- ![alt](img.png)\n- after",
+			extension.exportAsMarkdown(),
+		)
 	}
 
 	@Test
