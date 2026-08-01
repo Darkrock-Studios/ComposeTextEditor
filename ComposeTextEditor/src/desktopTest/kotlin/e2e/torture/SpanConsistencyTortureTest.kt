@@ -138,6 +138,23 @@ class SpanConsistencyTortureTest {
 	}
 
 	@Test
+	fun `replacing across a quoted line keeps spans inside the document`() {
+		val state = editor()
+		val markdown = com.darkrockstudios.texteditor.markdown.MarkdownExtension(state)
+		markdown.importMarkdown("first\n> quoted line here")
+
+		// Found by EditorStateFuzzTest seed 987654321: a multi-line selection replaced
+		// with shorter single-line text leaves the quote span ending past its line.
+		state.replace(
+			TextEditorRange(CharLineOffset(0, 3), CharLineOffset(1, 4)),
+			AnnotatedString("XX"),
+			inheritStyle = false,
+		)
+
+		state.assertRichSpanInvariants()
+	}
+
+	@Test
 	fun `rich spans stay inside the document as it shrinks`() {
 		val state = editor(AnnotatedString("hello world"))
 		state.addRichSpan(6, 11, HighlightSpanStyle(Color.Yellow))

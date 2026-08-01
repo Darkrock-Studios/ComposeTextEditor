@@ -145,6 +145,28 @@ class MarkdownRoundTripTortureE2eTest {
 	}
 
 	@Test
+	fun `a bold run ending in a space round trips`() = editorUiTest {
+		markdown.importMarkdown("word tail")
+		state.addStyleSpan(
+			com.darkrockstudios.texteditor.TextEditorRange(
+				state.getOffsetAtCharacter(0),
+				state.getOffsetAtCharacter(5),
+			),
+			SpanStyle(fontWeight = FontWeight.Bold),
+		)
+
+		// Found by EditorStateFuzzTest: emphasis wrapped around a range with an edge
+		// space ("**word **") is not valid markdown, so the next import keeps the
+		// asterisks as text and the following export escapes them.
+		val first = markdown.exportAsMarkdown()
+		markdown.importMarkdown(first)
+		val second = markdown.exportAsMarkdown()
+
+		assertEquals(first, second)
+		assertEquals("word tail", text, "no emphasis markers may leak into the text")
+	}
+
+	@Test
 	fun `empty list items round trip stably`() = editorUiTest {
 		markdown.importMarkdown("- a\n- \n- b")
 

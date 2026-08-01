@@ -214,6 +214,39 @@ class BlockToggleTortureE2eTest {
 	}
 
 	@Test
+	fun `a smart backspace demotion is undoable`() = editorUiTest(
+		initialText = AnnotatedString("plain\nitem"),
+	) {
+		markdown.toggleBulletList(1..1)
+		press(Key.MoveEnd, ctrl = true)
+		press(Key.MoveHome)
+
+		press(Key.Backspace)
+		assertBlockState(1)
+
+		press(Key.Z, ctrl = true)
+
+		// demoteLineBlock mutates the line directly without recording a history
+		// entry, so the marker a user removed by accident cannot come back.
+		assertEquals(listOf("plain", "item"), lines, "undo must not fall through to an older edit")
+		assertBlockState(1, bullet = true)
+	}
+
+	@Test
+	fun `a smart enter exit from a list is undoable`() = editorUiTest {
+		markdown.toggleBulletList(0..0)
+		typeText("item")
+		press(Key.Enter)
+		press(Key.Enter)
+		assertBlockState(1)
+
+		press(Key.Z, ctrl = true)
+
+		assertEquals(listOf("item", ""), lines, "undo must not fall through to an older edit")
+		assertBlockState(1, bullet = true)
+	}
+
+	@Test
 	fun `fencing 50 lines and unfencing is symmetric`() = editorUiTest(
 		initialText = AnnotatedString((0 until 50).joinToString("\n") { "line$it" }),
 	) {
