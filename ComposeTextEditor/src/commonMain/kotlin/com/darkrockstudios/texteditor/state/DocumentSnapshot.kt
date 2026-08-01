@@ -13,19 +13,33 @@ import com.darkrockstudios.texteditor.richstyle.RichSpan
  * [TextEditorState.snapshot]; it is safe to hold and to read from any thread, and it
  * does not reflect later edits.
  */
-class DocumentSnapshot internal constructor(
+class DocumentSnapshot private constructor(
 	/** The document as one [AnnotatedString] per line, in order. */
 	val lines: List<AnnotatedString>,
 	/** Every rich span in the document, its ranges addressing [lines]. */
 	val richSpans: Set<RichSpan>,
+	/**
+	 * Backs [richSpansByStartLine]. Held as the [Lazy] rather than the map so
+	 * [withLines] can hand the same one to the revision it produces, which keeps the
+	 * memoized index alive across a text-only edit. Sharing it also carries the
+	 * `PUBLICATION` safety over, where a plain field would publish the map unsafely.
+	 */
+	private val spansByStartLine: Lazy<Map<Int, List<RichSpan>>>,
 ) {
+	internal constructor(lines: List<AnnotatedString>, richSpans: Set<RichSpan>) : this(
+		lines = lines,
+		richSpans = richSpans,
+		spansByStartLine = lazy(LazyThreadSafetyMode.PUBLICATION) {
+			richSpans.groupBy { it.range.start.line }
+		},
+	)
+
 	/**
 	 * [richSpans] grouped by the line each one starts on. Built on first read and
-	 * reused for the rest of the revision, so the line-anchored block queries cost a
-	 * map lookup instead of a scan of every span in the document.
+	 * reused until a revision changes the spans, so the line-anchored block queries
+	 * cost a map lookup instead of a scan of every span in the document.
 	 */
-	internal val richSpansByStartLine: Map<Int, List<RichSpan>> by
-		lazy(LazyThreadSafetyMode.PUBLICATION) { richSpans.groupBy { it.range.start.line } }
+	internal val richSpansByStartLine: Map<Int, List<RichSpan>> get() = spansByStartLine.value
 
 	/** The whole document as a single [AnnotatedString], lines joined with newlines. */
 	fun getAllText(): AnnotatedString = buildAnnotatedString {
@@ -35,7 +49,12 @@ class DocumentSnapshot internal constructor(
 		}
 	}
 
-	internal fun withLines(lines: List<AnnotatedString>) = DocumentSnapshot(lines, richSpans)
+	/**
+	 * Keeps the span index: the ranges are untouched by a text edit, so the lines they
+	 * start on are the same ones they started on before.
+	 */
+	internal fun withLines(lines: List<AnnotatedString>) =
+		DocumentSnapshot(lines, richSpans, spansByStartLine)
 
 	internal fun withRichSpans(richSpans: Set<RichSpan>) = DocumentSnapshot(lines, richSpans)
 }
