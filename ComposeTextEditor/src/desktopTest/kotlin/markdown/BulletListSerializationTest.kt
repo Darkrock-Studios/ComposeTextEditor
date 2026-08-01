@@ -144,6 +144,63 @@ class BulletListSerializationTest {
 	}
 
 	@Test
+	fun `import peels a bullet marker stacked inside a blockquote`() = runTest {
+		// Quote stacks with a list, so `> - item` carries two markers; both peel,
+		// leaving the body as the document text.
+		val extension = createMarkdownExtension()
+		extension.importMarkdown("> - quoted item")
+
+		assertEquals("quoted item", extension.editorState.getAllText().text)
+		assertEquals(listOf(0), extension.bulletLines())
+	}
+
+	@Test
+	fun `roundtrip preserves a bullet stacked inside a blockquote`() = runTest {
+		val extension = createMarkdownExtension()
+		val original = "> - quoted item"
+		extension.importMarkdown(original)
+		assertEquals(original, extension.exportAsMarkdown())
+	}
+
+	@Test
+	fun `import keeps a nested blockquote marker as body text`() = runTest {
+		// Each style peels at most once; a second quote level is not representable,
+		// so its marker stays in the body.
+		val extension = createMarkdownExtension()
+		extension.importMarkdown("> > quoted")
+
+		assertEquals("> quoted", extension.editorState.getAllText().text)
+		assertTrue(extension.bulletLines().isEmpty())
+	}
+
+	@Test
+	fun `import keeps an ordered lookalike inside a bullet body`() = runTest {
+		// The two list styles are mutually exclusive, so after the bullet peels,
+		// a numeral-period lead is the author's text, not a second marker.
+		val extension = createMarkdownExtension()
+		extension.importMarkdown("- 1990. The year everything changed")
+
+		assertEquals("1990. The year everything changed", extension.editorState.getAllText().text)
+		assertEquals(listOf(0), extension.bulletLines())
+	}
+
+	@Test
+	fun `roundtrip preserves an ordered lookalike inside a bullet body`() = runTest {
+		// Export escapes the numeral-period lead (`- 1990\. ...`) so no parser can
+		// read it as a second marker; the text and the bullet survive unchanged and
+		// the serialized form is stable from the first save.
+		val extension = createMarkdownExtension()
+		extension.importMarkdown("- 1990. The year everything changed")
+		val exported = extension.exportAsMarkdown()
+
+		extension.importMarkdown(exported)
+
+		assertEquals("1990. The year everything changed", extension.editorState.getAllText().text)
+		assertEquals(listOf(0), extension.bulletLines())
+		assertEquals(exported, extension.exportAsMarkdown())
+	}
+
+	@Test
 	fun `roundtrip preserves bold inside bullet`() = runTest {
 		val extension = createMarkdownExtension()
 		val original = "- **bold** in item"

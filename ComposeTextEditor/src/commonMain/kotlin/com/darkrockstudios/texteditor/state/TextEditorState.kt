@@ -37,6 +37,7 @@ import com.darkrockstudios.texteditor.richstyle.RichSpanStyle
 import com.darkrockstudios.texteditor.richstyle.applyLineBlock
 import com.darkrockstudios.texteditor.richstyle.demoteLineBlock
 import com.darkrockstudios.texteditor.richstyle.detectLineBlock
+import com.darkrockstudios.texteditor.richstyle.normalizeLineBlocks
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
@@ -175,7 +176,9 @@ class TextEditorState(
 		draft = content
 		try {
 			val result = block()
-			draft?.let { content = it }
+			// Every publish passes through line-block normalization, so no caller
+			// can commit a revision violating the placeholder-line invariant.
+			draft?.let { content = normalizeLineBlocks(it) }
 			return result
 		} finally {
 			draft = null
@@ -197,7 +200,13 @@ class TextEditorState(
 	}
 
 	private fun mutateContent(transform: (DocumentSnapshot) -> DocumentSnapshot) {
-		if (draft != null) draft = transform(workingContent) else content = transform(content)
+		// The no-draft branch publishes directly, so it normalizes like a commit;
+		// drafted mutations wait for the transaction's own commit to normalize once.
+		if (draft != null) {
+			draft = transform(workingContent)
+		} else {
+			content = normalizeLineBlocks(transform(content))
+		}
 	}
 
 	/**

@@ -121,6 +121,24 @@ internal fun mutuallyExcluded(applied: LineBlockStyle): Set<LineBlockStyle> = wh
 	else -> emptySet()
 }
 
+/**
+ * Whether [block] may sit on a placeholder line (a horizontal rule or an image,
+ * whose text is a placeholder owned by the full-line span). Blockquote may:
+ * `> ---` is legitimate markdown, and HTML nests `<hr>`/`<img>` inside
+ * `<blockquote>`. Lists and fences have nothing to number or fence there, and
+ * their markers cannot survive a serialization round trip.
+ */
+internal fun allowedOnPlaceholderLine(block: LineBlockStyle): Boolean = block === Blockquote
+
+/**
+ * The lines in [spans] whose text is a placeholder owned by a full-line block
+ * span (rule, image): every style where [BlockSpanStyle.replacesText] is true.
+ */
+internal fun placeholderLines(spans: Set<RichSpan>): Set<Int> =
+	spans.mapNotNullTo(mutableSetOf()) { span ->
+		span.range.start.line.takeIf { (span.style as? BlockSpanStyle)?.replacesText() == true }
+	}
+
 internal fun TextEditorState.hasLineBlock(line: Int, block: LineBlockStyle): Boolean =
 	richSpanManager.getRichSpansStartingOn(line).any { it.style === block.spanStyle }
 
