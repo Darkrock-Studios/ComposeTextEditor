@@ -180,57 +180,37 @@ internal class TextEditorKeyCommandHandler(
 		}
 	}
 
-	private fun handleDeletePreviousWord(state: TextEditorState) {
-		if (state.selector.selection != null) {
-			state.selector.deleteSelection()
-			return
-		}
-		val wordEnd = state.cursorPosition
-		state.moveToPreviousWord()
-		val wordStart = state.cursorPosition
-		if (wordStart != wordEnd) {
-			deleteRange(state, TextEditorRange(wordStart, wordEnd), caretBefore = wordEnd)
-		}
-	}
+	private fun handleDeletePreviousWord(state: TextEditorState) =
+		deleteByMotion(state) { state.moveToPreviousWord() }
 
-	private fun handleDeleteNextWord(state: TextEditorState) {
-		if (state.selector.selection != null) {
-			state.selector.deleteSelection()
-			return
-		}
-		val wordStart = state.cursorPosition
-		state.moveToNextWord()
-		val wordEnd = state.cursorPosition
-		if (wordStart != wordEnd) {
-			deleteRange(state, TextEditorRange(wordStart, wordEnd), caretBefore = wordStart)
-		}
-	}
+	private fun handleDeleteNextWord(state: TextEditorState) =
+		deleteByMotion(state) { state.moveToNextWord() }
 
-	private fun handleDeleteToLineStart(state: TextEditorState) {
-		if (state.selector.selection != null) {
-			state.selector.deleteSelection()
-			return
-		}
-		val lineEnd = state.cursorPosition
-		state.cursor.moveToLineStart()
-		val lineStart = state.cursorPosition
-		if (lineStart != lineEnd) {
-			deleteRange(state, TextEditorRange(lineStart, lineEnd), caretBefore = lineEnd)
-		}
-	}
+	private fun handleDeleteToLineStart(state: TextEditorState) =
+		deleteByMotion(state) { state.cursor.moveToLineStart() }
 
 	/**
-	 * Deletes [range] as if the caret were at [caretBefore]. The word and line motions
-	 * that locate the range leave the caret at the far end of it, and [TextEditorState.delete]
-	 * records wherever the caret is as the position undo restores.
+	 * Deletes between the caret and wherever [locateRangeEdge] moves it, or the selection when
+	 * there is one. The caret the user had is handed to [TextEditorState.delete] explicitly:
+	 * [locateRangeEdge] has already moved it off that position, and delete otherwise records
+	 * wherever the caret currently sits as the position undo returns to.
 	 */
-	private fun deleteRange(
-		state: TextEditorState,
-		range: TextEditorRange,
-		caretBefore: CharLineOffset
-	) {
-		state.cursor.updatePosition(caretBefore)
-		state.delete(range)
+	private fun deleteByMotion(state: TextEditorState, locateRangeEdge: () -> Unit) {
+		if (state.selector.selection != null) {
+			state.selector.deleteSelection()
+			return
+		}
+		val origin = state.cursorPosition
+		locateRangeEdge()
+		val edge = state.cursorPosition
+		if (edge == origin) return
+
+		val range = if (edge < origin) {
+			TextEditorRange(edge, origin)
+		} else {
+			TextEditorRange(origin, edge)
+		}
+		state.delete(range, cursorBefore = origin)
 	}
 
 	private fun handleIndent(state: TextEditorState) {
