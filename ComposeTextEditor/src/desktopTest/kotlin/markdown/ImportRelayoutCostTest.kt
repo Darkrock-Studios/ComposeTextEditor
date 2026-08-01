@@ -25,8 +25,11 @@ import kotlin.test.assertEquals
  */
 class ImportRelayoutCostTest {
 
-	/** Whole-document layout passes an import runs: one for the text, one for the blocks. */
-	private val passesPerImport = 2
+	/** Layout passes a decorated import runs: one for the text, one for the decorations. */
+	private val decoratedImportPasses = 2
+
+	/** A document with nothing to decorate skips the second pass. */
+	private val plainImportPasses = 1
 
 	private class MeasureCounter {
 		var calls = 0
@@ -73,7 +76,27 @@ class ImportRelayoutCostTest {
 
 	@Test
 	fun `import measures the document a fixed number of times`() = runTest {
-		assertEquals(passesPerImport * 50, measuresToImport(bulletDocument(50)))
+		assertEquals(decoratedImportPasses * 50, measuresToImport(bulletDocument(50)))
+	}
+
+	@Test
+	fun `import of a document with nothing to decorate lays it out once`() = runTest {
+		val plain = (0 until 50).joinToString("\n") { "plain line $it" }
+		assertEquals(plainImportPasses * 50, measuresToImport(plain))
+	}
+
+	@Test
+	fun `a rule still gets the decoration pass with no block line to rebuild`() = runTest {
+		// A horizontal rule attaches a span without rebuilding any line, and its height
+		// is resolved from that span during book-keeping. Skipping the pass whenever no
+		// line changed would leave the rule unmeasured.
+		val withRule = "before\n---\nafter"
+		val state = TextEditorState(scope = this, measurer = countingMeasurer(MeasureCounter()))
+
+		assertEquals(decoratedImportPasses * 3, measuresToImport(withRule))
+		// Guard the arithmetic above: the document really is three lines.
+		MarkdownExtension(state).importMarkdown(withRule)
+		assertEquals(3, state.textLines.size)
 	}
 
 	@Test
@@ -106,6 +129,6 @@ class ImportRelayoutCostTest {
 		val state = editorWithCounter(counter)
 		MarkdownExtension(state).importMarkdown(markdown)
 
-		assertEquals(passesPerImport * state.textLines.size, counter.calls)
+		assertEquals(decoratedImportPasses * state.textLines.size, counter.calls)
 	}
 }
