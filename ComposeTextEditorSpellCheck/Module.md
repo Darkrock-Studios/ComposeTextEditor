@@ -40,6 +40,40 @@ suggestion menu for you. Toggle checking at runtime with
 `state.setSpellCheckingEnabled(...)`, or fetch suggestions yourself via
 `state.getSuggestions(word)`.
 
+## Wrong-language protection
+
+A checker loaded with the wrong dictionary flags *every* word: the document turns
+into a wall of red squiggles and every lookup is wasted. The
+[SpellCheckGuard][com.darkrockstudios.texteditor.spellcheck.SpellCheckGuard] watches for
+that. When too large a share of a large-enough sample comes back misspelled — or more
+than `maxMisspellings` pile up — the state drops every squiggle and stops checking
+instead of flagging the whole document. A full check bails as soon as the sample is
+conclusive, so a big document isn't dragged through a checker that can't read it.
+
+```kotlin
+val state = rememberSpellCheckState(
+    spellChecker = spellChecker,
+    guard = SpellCheckGuard(maxMisspellings = 500, maxFlaggedRatio = 0.7f),
+)
+
+state.suspension?.let { reason ->
+    Text(
+        when (reason) {
+            is SpellCheckSuspension.LikelyWrongLanguage ->
+                "Spell checking paused — the dictionary may not match this document's language."
+            is SpellCheckSuspension.TooManyMisspellings ->
+                "Spell checking paused — too many misspellings."
+        }
+    )
+}
+```
+
+`suspension` is Compose state, so a banner like the one above recomposes on its own. A
+suspension is sticky — checking stays off until the checker is replaced (passing a new
+`spellChecker` to `rememberSpellCheckState` resumes automatically), `resumeSpellChecking()`
+is called, or checking is toggled back on with `setSpellCheckingEnabled(true)`. Pass
+`SpellCheckGuard.Disabled` to opt out entirely.
+
 ## Choosing a backend
 
 [EditorSpellChecker][com.darkrockstudios.texteditor.spellcheck.api.EditorSpellChecker] is
@@ -81,8 +115,10 @@ The spell-checking
 editor: [SpellCheckingTextEditor][com.darkrockstudios.texteditor.spellcheck.SpellCheckingTextEditor],
 the [SpellCheckState][com.darkrockstudios.texteditor.spellcheck.SpellCheckState] holder
 and its [rememberSpellCheckState][com.darkrockstudios.texteditor.spellcheck.rememberSpellCheckState]
-factory, and the [SpellCheckMode][com.darkrockstudios.texteditor.spellcheck.SpellCheckMode]
-(word vs. sentence) selector.
+factory, the [SpellCheckMode][com.darkrockstudios.texteditor.spellcheck.SpellCheckMode]
+(word vs. sentence) selector, and the
+[SpellCheckGuard][com.darkrockstudios.texteditor.spellcheck.SpellCheckGuard] that suspends
+checking when a checker starts flagging everything.
 
 # Package com.darkrockstudios.texteditor.spellcheck.api
 

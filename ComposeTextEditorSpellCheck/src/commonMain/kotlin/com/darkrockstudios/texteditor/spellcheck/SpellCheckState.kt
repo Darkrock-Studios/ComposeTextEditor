@@ -1,5 +1,8 @@
 package com.darkrockstudios.texteditor.spellcheck
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.util.fastForEach
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.richstyle.RichSpan
@@ -43,22 +46,36 @@ enum class SpellCheckMode {
  * @param enableSpellChecking Whether spell checking is active initially; exposed via
  *   [spellCheckingEnabled].
  * @property spellCheckMode Whether checking operates per-word or per-sentence; see [SpellCheckMode].
+ * @property guard Sanity limits that suspend checking when its results stop looking plausible —
+ *   most importantly a checker loaded with the wrong language, which flags every word. See
+ *   [SpellCheckGuard] and [suspension]; pass [SpellCheckGuard.Disabled] to opt out.
  */
 class SpellCheckState(
 	val textState: TextEditorState,
 	var spellChecker: EditorSpellChecker?,
 	enableSpellChecking: Boolean = true,
 	var spellCheckMode: SpellCheckMode = SpellCheckMode.Word,
+	var guard: SpellCheckGuard = SpellCheckGuard.Default,
 ) {
 	/** Whether spell checking is currently active. Toggle via [setSpellCheckingEnabled]. */
 	var spellCheckingEnabled: Boolean = enableSpellChecking
 		private set
 
 	/**
+	 * Why the [guard] suspended spell checking, or `null` while checking is running normally.
+	 *
+	 * Observable from composition, so UI can surface "spell checking paused — the dictionary may
+	 * not match this document's language". Cleared by [resumeSpellChecking] or by re-enabling
+	 * checking via [setSpellCheckingEnabled].
+	 */
+	var suspension: SpellCheckSuspension? by mutableStateOf(null)
+		private set
+
+	/**
 	 * Enable or disable spell checking.
 	 *
-	 * Enabling when previously disabled triggers a full re-check; disabling clears all existing
-	 * spell-check decorations.
+	 * Enabling when previously disabled triggers a full re-check and clears any [suspension];
+	 * disabling clears all existing spell-check decorations.
 	 *
 	 * @param value The new enabled state.
 	 */
@@ -66,10 +83,36 @@ class SpellCheckState(
 		val wasEnabled = spellCheckingEnabled
 		spellCheckingEnabled = value
 		if (value && !wasEnabled) {
+			suspension = null
 			runFullSpellCheck()
 		} else if (!value) {
 			clearSpellCheck()
 		}
+	}
+
+	/**
+	 * Clear a [suspension] and re-check the document.
+	 *
+	 * Intended for after the underlying problem is addressed — typically swapping [spellChecker]
+	 * for one with the right language. Re-checking with the same checker over the same text will
+	 * simply trip the [guard] again.
+	 */
+	suspend fun resumeSpellChecking() {
+		suspension = null
+		runFullSpellCheck()
+	}
+
+	/** Checks only run when the caller wants them and the guard hasn't tripped. */
+	private fun canSpellCheck(): Boolean = spellCheckingEnabled && suspension == null
+
+	/**
+	 * Drop every decoration and stop checking until the checker changes or the caller calls
+	 * [resumeSpellChecking].
+	 */
+	private fun suspendSpellChecking(reason: SpellCheckSuspension) {
+		println("Suspending spell check: $reason")
+		clearSpellCheck()
+		suspension = reason
 	}
 
 	private var lastTextHash = -1
@@ -195,15 +238,30 @@ class SpellCheckState(
 	 */
 	private suspend fun runFullWordCheck() {
 		val sp = spellChecker ?: return
-		if (spellCheckingEnabled.not()) return
+		if (canSpellCheck().not()) return
 
 		println("Running full Word Spell Check")
 
 		// Compute the misspellings under suspension WITHOUT touching spans. A
 		// cancellation here (e.g. a recomposition restarting the check) leaves the
 		// existing spans intact rather than wiping them.
-		val candidates = textState.wordSegments().filter(::shouldSpellCheck).toList()
-		val misspelled = candidates.filterNot { sp.isCorrectWord(it.text) }
+		val misspelled = mutableListOf<WordSegment>()
+		var checked = 0
+		for (candidate in textState.wordSegments().filter(::shouldSpellCheck)) {
+			checked++
+			if (sp.isCorrectWord(candidate.text).not()) {
+				misspelled.add(candidate)
+			}
+
+			// Evaluated as we go so a wrong-language checker doesn't get dragged
+			// through every word of a large document before we give up on it.
+			val trip = guard.evaluateCount(misspelled.size)
+				?: guard.evaluateWordRatio(checked, misspelled.size)
+			if (trip != null) {
+				suspendSpellChecking(trip)
+				return
+			}
+		}
 
 		// Swap atomically: no suspension points between removal and re-add.
 		textState.apply {
@@ -222,14 +280,29 @@ class SpellCheckState(
 	 */
 	private suspend fun runFullSentenceCheck() {
 		val sp = spellChecker ?: return
-		if (spellCheckingEnabled.not()) return
+		if (canSpellCheck().not()) return
 
 		println("Running full Sentence Spell Check")
 
 		// Compute corrections under suspension first; only mutate spans once the
 		// async work is done, so a cancellation can't leave the document wiped.
-		val corrections = textState.sentenceSegments().toList().flatMap { sentence ->
-			sp.checkSentence(sentence.text, sentence.range)
+		val corrections = mutableListOf<Correction>()
+		var checked = 0
+		var flaggedSentences = 0
+		for (sentence in textState.sentenceSegments()) {
+			checked++
+			val found = sp.checkSentence(sentence.text, sentence.range)
+			if (found.isNotEmpty()) flaggedSentences++
+			corrections.addAll(found)
+
+			// Evaluated as we go so a wrong-language checker doesn't get dragged
+			// through every sentence of a large document before we give up on it.
+			val trip = guard.evaluateCount(corrections.size)
+				?: guard.evaluateSentenceRatio(checked, flaggedSentences)
+			if (trip != null) {
+				suspendSpellChecking(trip)
+				return
+			}
 		}
 
 		textState.apply {
@@ -245,7 +318,7 @@ class SpellCheckState(
 
 	private suspend fun runPartialWordCheck(range: TextEditorRange) {
 		val sp = spellChecker ?: return
-		if (spellCheckingEnabled.not()) return
+		if (canSpellCheck().not()) return
 
 		// Compute misspellings under suspension before touching spans, so a
 		// cancellation leaves the range's existing spans intact.
@@ -259,6 +332,10 @@ class SpellCheckState(
 		removeMissSpellingsInRange(range)
 		misspelled.forEach { textState.addRichSpan(it.range, SpellCheckStyle) }
 		misspelledWords.addAll(misspelled)
+
+		// A partial check's sample is far too small to judge the ratio on, but the
+		// running total still has to stay under the cap as edits pile up.
+		guard.evaluateCount(misspelledWords.size)?.let { suspendSpellChecking(it) }
 	}
 
 	/**
@@ -266,7 +343,7 @@ class SpellCheckState(
 	 */
 	private suspend fun runPartialSentenceCheck(range: TextEditorRange) {
 		val sp = spellChecker ?: return
-		if (spellCheckingEnabled.not()) return
+		if (canSpellCheck().not()) return
 
 		// Compute corrections under suspension before touching spans, so a
 		// cancellation leaves the range's existing spans intact.
@@ -281,17 +358,25 @@ class SpellCheckState(
 		removeSentenceCorrectionsInRange(range)
 		corrections.forEach { textState.addRichSpan(it.range, SpellCheckStyle) }
 		sentenceCorrections.addAll(corrections)
+
+		// A partial check's sample is far too small to judge the ratio on, but the
+		// running total still has to stay under the cap as edits pile up.
+		guard.evaluateCount(sentenceCorrections.size)?.let { suspendSpellChecking(it) }
 	}
 
 	/**
 	 * Run spell check on a specific word segment.
 	 * This will remove any existing spell check spans for the word and add a new one if misspelled.
 	 *
+	 * Returns false without touching the document while checking is disabled or the [guard] has
+	 * suspended it.
+	 *
 	 * @param segment The word segment to check
 	 * @return true if the word is misspelled and a new span was added, false otherwise
 	 */
 	suspend fun checkWordSegment(segment: WordSegment): Boolean {
 		val sp = spellChecker ?: return false
+		if (canSpellCheck().not()) return false
 
 		// Resolve the async lookup first; only mutate spans afterward so a
 		// cancellation can't leave the word's span removed-but-not-restored.
@@ -310,7 +395,10 @@ class SpellCheckState(
 			}
 		}
 
-		return !isSpelledCorrectly
+		// One more word can be the one that pushes the running total over the cap.
+		guard.evaluateCount(misspelledWords.size)?.let { suspendSpellChecking(it) }
+
+		return !isSpelledCorrectly && suspension == null
 	}
 
 	private fun shouldSpellCheck(segment: WordSegment): Boolean {

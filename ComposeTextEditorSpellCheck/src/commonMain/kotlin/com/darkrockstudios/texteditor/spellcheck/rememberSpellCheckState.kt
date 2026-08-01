@@ -15,6 +15,10 @@ import com.darkrockstudios.texteditor.state.rememberTextEditorState
  * instance every recomposition re-keys the full-rescan effect below and re-scans
  * the whole document on each frame. (Re-scans are cancellation-safe and won't lose
  * spans, but the churn is pure waste.)
+ *
+ * @param guard Sanity limits that suspend checking when its results stop looking plausible;
+ *   see [SpellCheckGuard] and [SpellCheckState.suspension]. A new [spellChecker] clears any
+ *   suspension, since swapping the checker is how a wrong-language one gets fixed.
  */
 @Composable
 fun rememberSpellCheckState(
@@ -22,15 +26,20 @@ fun rememberSpellCheckState(
 	initialText: AnnotatedString? = null,
 	enableSpellChecking: Boolean = true,
 	spellCheckMode: SpellCheckMode = SpellCheckMode.Word,
+	guard: SpellCheckGuard = SpellCheckGuard.Default,
 ): SpellCheckState {
 	val richTextState = rememberTextEditorState(initialText)
-	val state = remember { SpellCheckState(richTextState, spellChecker, enableSpellChecking, spellCheckMode) }
+	val state = remember {
+		SpellCheckState(richTextState, spellChecker, enableSpellChecking, spellCheckMode, guard)
+	}
 
-	// Run SpellCheck as soon as it is ready
+	// Run SpellCheck as soon as it is ready. A different checker is a fresh chance for
+	// the guard, so `resumeSpellChecking` rather than a plain re-check: the new checker
+	// may well be the right-language one the previous suspension was asking for.
 	LaunchedEffect(spellChecker) {
 		if (spellChecker != null) {
 			state.spellChecker = spellChecker
-			state.runFullSpellCheck()
+			state.resumeSpellChecking()
 		}
 	}
 
