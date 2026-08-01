@@ -3,13 +3,26 @@ package e2e
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
 import utils.editorUiTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 private val BOLD = SpanStyle(fontWeight = FontWeight.Bold)
+
+/**
+ * Body text that carries its font size as a span, the way a `MarkdownConfiguration`
+ * with a scaled `defaultTextStyle` produces it.
+ */
+private val BASE_SIZE = SpanStyle(fontSize = 24.sp)
+
+private fun sized(text: String) = buildAnnotatedString {
+	append(text)
+	addStyle(BASE_SIZE, 0, length)
+}
 
 /** Copy, cut, and paste through real Ctrl+C/X/V against an isolated in-memory clipboard. */
 class ClipboardE2eTest {
@@ -101,6 +114,51 @@ class ClipboardE2eTest {
 		assertTrue(
 			stylesAt(12).contains(BOLD),
 			"pasted text must keep the bold span from the copied region",
+		)
+	}
+
+	@Test
+	fun `plain paste over a selection takes the surrounding text size`() = editorUiTest(
+		initialText = sized("The quick brown fox"),
+	) {
+		setPlainClipboardText("PASTED")
+		dragSelect(fromChar = 0, toChar = 9)
+		press(Key.V, ctrl = true)
+
+		assertEquals("PASTED brown fox", text)
+		assertTrue(
+			stylesAt(2).contains(BASE_SIZE),
+			"text pasted over a selection must render at the size of the text around it, got ${stylesAt(2)}",
+		)
+	}
+
+	@Test
+	fun `plain paste over the whole document takes the surrounding text size`() = editorUiTest(
+		initialText = sized("The quick brown fox"),
+	) {
+		setPlainClipboardText("PASTED")
+		dragSelect(fromChar = 0, toChar = 19)
+		press(Key.V, ctrl = true)
+
+		assertEquals("PASTED", text)
+		assertTrue(
+			stylesAt(2).contains(BASE_SIZE),
+			"text pasted over the whole document must keep its size, got ${stylesAt(2)}",
+		)
+	}
+
+	@Test
+	fun `plain paste at the start of the document takes the surrounding text size`() = editorUiTest(
+		initialText = sized("The quick brown fox"),
+	) {
+		setPlainClipboardText("PASTED")
+		press(Key.MoveHome, ctrl = true)
+		press(Key.V, ctrl = true)
+
+		assertEquals("PASTEDThe quick brown fox", text)
+		assertTrue(
+			stylesAt(2).contains(BASE_SIZE),
+			"text pasted at the document start must render at the size of the text after it, got ${stylesAt(2)}",
 		)
 	}
 }

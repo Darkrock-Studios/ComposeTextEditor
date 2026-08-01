@@ -2,7 +2,9 @@ package com.darkrockstudios.texteditor.contextmenu
 
 import androidx.compose.ui.platform.Clipboard
 import com.darkrockstudios.texteditor.clipboard.ClipboardHelper
+import com.darkrockstudios.texteditor.clipboard.pasteHtmlBlocks
 import com.darkrockstudios.texteditor.state.TextEditorState
+import com.darkrockstudios.texteditor.state.applyStyleForEditAt
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
@@ -36,8 +38,10 @@ class ContextMenuActions(
 	 * Cut the selected text to clipboard and delete it from the editor.
 	 */
 	fun cut() {
-		state.selector.selection?.let {
+		state.selector.selection?.let { selection ->
 			val selectedText = state.selector.getSelectedText()
+			state.copyRichSpans(selection)
+			state.preserveCopiedRichSpansThroughNextEdit()
 			state.selector.deleteSelection()
 			scope.launch {
 				ClipboardHelper.setText(clipboard, selectedText, state.markdownConfiguration)
@@ -49,8 +53,9 @@ class ContextMenuActions(
 	 * Copy the selected text to clipboard.
 	 */
 	fun copy() {
-		state.selector.selection?.let {
+		state.selector.selection?.let { selection ->
 			val selectedText = state.selector.getSelectedText()
+			state.copyRichSpans(selection)
 			scope.launch {
 				ClipboardHelper.setText(clipboard, selectedText, state.markdownConfiguration)
 			}
@@ -65,11 +70,15 @@ class ContextMenuActions(
 		scope.launch {
 			ClipboardHelper.getText(clipboard, state.markdownConfiguration)?.let { text ->
 				val curSelection = state.selector.selection
+				val insertPosition = curSelection?.start ?: state.cursorPosition
+				state.preserveCopiedRichSpansThroughNextEdit()
 				if (curSelection != null) {
-					state.replace(curSelection, text)
+					state.replace(curSelection, state.applyStyleForEditAt(curSelection.start, text))
 				} else {
 					state.insertStringAtCursor(text)
 				}
+				state.pasteRichSpans(insertPosition, text)
+				state.pasteHtmlBlocks(clipboard, insertPosition, text)
 				state.selector.clearSelection()
 			}
 		}
