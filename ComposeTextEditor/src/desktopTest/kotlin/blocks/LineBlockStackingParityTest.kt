@@ -6,6 +6,8 @@ import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.font.createFontFamilyResolver
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
+import com.darkrockstudios.texteditor.CharLineOffset
+import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.richstyle.ALL_BLOCK_STYLES
 import com.darkrockstudios.texteditor.richstyle.Blockquote
 import com.darkrockstudios.texteditor.richstyle.BulletList
@@ -53,11 +55,16 @@ class LineBlockStackingParityTest {
 
 	/**
 	 * Applies [blocks] to line 0 of a one-line document down both paths and asserts
-	 * they land on the same structure. [existing] is applied to both first, so the
-	 * demotion rules are exercised against a line that already carries a block.
+	 * they land on the same structure, and that the structure is [expected].
+	 *
+	 * Parity alone would also hold if both paths stopped placing blocks entirely, so
+	 * [expected] pins the outcome as well as the agreement. [existing] is applied to
+	 * both first, so the demotion rules are exercised against a line that already
+	 * carries a block.
 	 */
 	private fun assertPathsAgree(
 		vararg blocks: LineBlockStyle,
+		expected: List<LineBlockStyle>,
 		existing: List<LineBlockStyle> = emptyList(),
 	) {
 		val perLine = freshState("line text")
@@ -72,41 +79,58 @@ class LineBlockStackingParityTest {
 		batched.applyDocumentBlocks(blockLines = blocks.associateWith { listOf(0) })
 
 		assertEquals(perLine.blockStructure(), batched.blockStructure())
+		assertEquals(expected.map { it.spanStyle }, perLine.lineBlockSpanStyles(0))
 	}
 
 	@Test
 	fun `blockquote stacks with bullet the same way on both paths`() {
-		assertPathsAgree(Blockquote, BulletList)
+		assertPathsAgree(Blockquote, BulletList, expected = listOf(Blockquote, BulletList))
 	}
 
 	@Test
 	fun `blockquote stacks with an ordered list the same way on both paths`() {
-		assertPathsAgree(Blockquote, OrderedList)
+		assertPathsAgree(Blockquote, OrderedList, expected = listOf(Blockquote, OrderedList))
 	}
 
 	@Test
 	fun `mutually exclusive lists resolve the same way on both paths`() {
-		assertPathsAgree(BulletList, OrderedList)
+		// ALL_BLOCK_STYLES puts OrderedList first, so BulletList demotes it.
+		assertPathsAgree(BulletList, OrderedList, expected = listOf(BulletList))
 	}
 
 	@Test
 	fun `a fence beats every other block the same way on both paths`() {
-		assertPathsAgree(CodeFence, Blockquote, BulletList, OrderedList)
+		assertPathsAgree(
+			CodeFence, Blockquote, BulletList, OrderedList,
+			expected = listOf(CodeFence),
+		)
 	}
 
 	@Test
 	fun `a block already on the line is a no-op on both paths`() {
-		assertPathsAgree(BulletList, existing = listOf(BulletList))
+		assertPathsAgree(
+			BulletList,
+			expected = listOf(BulletList),
+			existing = listOf(BulletList),
+		)
 	}
 
 	@Test
 	fun `a fence demotes a quoted list the same way on both paths`() {
-		assertPathsAgree(CodeFence, existing = listOf(Blockquote, BulletList))
+		assertPathsAgree(
+			CodeFence,
+			expected = listOf(CodeFence),
+			existing = listOf(Blockquote, BulletList),
+		)
 	}
 
 	@Test
 	fun `a list demotes an existing fence the same way on both paths`() {
-		assertPathsAgree(OrderedList, existing = listOf(CodeFence))
+		assertPathsAgree(
+			OrderedList,
+			expected = listOf(OrderedList),
+			existing = listOf(CodeFence),
+		)
 	}
 
 	@Test
@@ -118,6 +142,12 @@ class LineBlockStackingParityTest {
 		batched.applyDocumentBlocks(blockLines = mapOf(BulletList to listOf(0)))
 
 		assertEquals(perLine.blockStructure(), batched.blockStructure())
+		assertEquals(listOf(BulletList.spanStyle), perLine.lineBlockSpanStyles(0))
+		val zeroWidth = TextEditorRange(CharLineOffset(0, 0), CharLineOffset(0, 0))
+		assertEquals(
+			setOf(zeroWidth),
+			perLine.richSpanManager.getAllRichSpans().mapTo(mutableSetOf()) { it.range },
+		)
 		assertEquals(
 			perLine.richSpanManager.getAllRichSpans().mapTo(mutableSetOf()) { it.range },
 			batched.richSpanManager.getAllRichSpans().mapTo(mutableSetOf()) { it.range },
