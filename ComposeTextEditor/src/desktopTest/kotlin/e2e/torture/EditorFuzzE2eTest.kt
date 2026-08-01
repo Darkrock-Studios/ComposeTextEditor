@@ -32,7 +32,7 @@ class EditorFuzzE2eTest {
 		)
 
 		runFuzzScript(fuzzSeed(seed), script) { op ->
-			applyFuzzOpUi(op, skipDemotions = true, replaceOverSelection = false)
+			applyFuzzOpUi(op, skipDemotions = true)
 			checkCheapInvariants(state)
 		}
 

@@ -315,7 +315,7 @@ class TextEditManager(private val state: TextEditorState) {
 				buildAnnotatedStringWithSpans { addSpan ->
 					append(newText.text)
 					inheritedStyles.forEach { style ->
-						addSpan(style, 0, newText.lastIndex)
+						addSpan(style, 0, newText.length)
 					}
 				}.splitAnnotatedString()
 			} else {
@@ -336,12 +336,14 @@ class TextEditManager(private val state: TextEditorState) {
 				buildAnnotatedString {
 					append(prefix)
 					if (inheritStyle) {
-						buildAnnotatedStringWithSpans { addSpan ->
-							append(newText.text)
-							inheritedStyles.forEach { style ->
-								addSpan(style, 0, newText.lastIndex)
+						append(
+							buildAnnotatedStringWithSpans { addSpan ->
+								append(newText.text)
+								inheritedStyles.forEach { style ->
+									addSpan(style, 0, newText.length)
+								}
 							}
-						}
+						)
 					} else {
 						append(newText)
 					}

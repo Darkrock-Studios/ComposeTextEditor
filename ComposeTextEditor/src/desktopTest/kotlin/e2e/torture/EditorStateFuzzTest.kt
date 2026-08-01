@@ -38,11 +38,7 @@ class EditorStateFuzzTest {
 			mutatingBudget = 80,
 			includeBlocks = false,
 		)
-		val interpreter = StateFuzzInterpreter(
-			state, markdown,
-			skipDemotions = true,
-			replaceOverSelection = false,
-		)
+		val interpreter = StateFuzzInterpreter(state, markdown, skipDemotions = true)
 
 		runFuzzScript(fuzzSeed(seed), script) { op ->
 			interpreter.apply(op)

@@ -290,19 +290,11 @@ private fun trimmedStyleRange(text: String, rawA: Int, rawB: Int): Pair<Int, Int
 	return start to end
 }
 
-/**
- * Applies [op] directly to the state, the pure-state twin of [applyFuzzOpUi].
- *
- * With [replaceOverSelection] off, typing and pasting collapse any selection
- * instead of replacing through it: undoing a Replace can crash in
- * captureMetadata (see UndoReplayCrashTest), so the undo-to-origin scripts
- * avoid creating Replace history entries. Lift when that crash is fixed.
- */
+/** Applies [op] directly to the state, the pure-state twin of [applyFuzzOpUi]. */
 class StateFuzzInterpreter(
 	private val state: TextEditorState,
 	private val markdown: MarkdownExtension,
 	private val skipDemotions: Boolean,
-	private val replaceOverSelection: Boolean = true,
 ) {
 	private fun clampIndex(raw: Int): Int = raw % (state.getAllText().text.length + 1)
 
@@ -315,7 +307,7 @@ class StateFuzzInterpreter(
 	}
 
 	private fun typeOrReplace(text: String) {
-		if (!replaceOverSelection || selectionTouchesBlockLine(state, markdown)) {
+		if (selectionTouchesBlockLine(state, markdown)) {
 			collapseSelection()
 		}
 		val selection = state.selector.selection
@@ -407,18 +399,15 @@ class StateFuzzInterpreter(
 }
 
 /** Applies [op] through real key events and the clipboard, the UI twin of [StateFuzzInterpreter]. */
-fun EditorUiTestScope.applyFuzzOpUi(
-	op: FuzzOp,
-	skipDemotions: Boolean,
-	replaceOverSelection: Boolean = true,
-) {
+fun EditorUiTestScope.applyFuzzOpUi(op: FuzzOp, skipDemotions: Boolean) {
 	fun clampIndex(raw: Int): Int = raw % (text.length + 1)
 
 	// An unshifted arrow collapses the selection, sidestepping the replace-over-block
-	// rebase defect and the Replace-undo crash the same way the state interpreter does.
+	// rebase defect the same way the state interpreter does.
 	fun collapseSelectionIfGuarded() {
-		val guarded = !replaceOverSelection || selectionTouchesBlockLine(state, markdown)
-		if (guarded && state.selector.selection != null) press(Key.DirectionLeft)
+		if (selectionTouchesBlockLine(state, markdown) && state.selector.selection != null) {
+			press(Key.DirectionLeft)
+		}
 	}
 
 	when (op) {
