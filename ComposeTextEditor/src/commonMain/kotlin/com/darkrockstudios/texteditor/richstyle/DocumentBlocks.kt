@@ -127,7 +127,10 @@ internal fun TextEditorState.applyDocumentBlocks(
 	richSpanManager.removeRichSpans(removed)
 	richSpanManager.addRichSpans(added)
 	if (rebuiltAnyLine) setLines(lines)
-	updateBookKeeping()
+	// Attaching a span is enough on its own to need the relayout, even with no line
+	// rebuilt: a rule or an image resolves its height from the spans on its line wrap,
+	// which only book-keeping works out.
+	if (added.isNotEmpty() || removed.isNotEmpty() || rebuiltAnyLine) updateBookKeeping()
 }
 
 /** The range covering [length] characters from the start of [line]. */
