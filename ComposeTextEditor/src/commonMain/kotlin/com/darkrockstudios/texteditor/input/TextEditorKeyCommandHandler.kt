@@ -2,7 +2,6 @@ package com.darkrockstudios.texteditor.input
 
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
-import androidx.compose.ui.input.key.isCtrlPressed
 import androidx.compose.ui.input.key.isMetaPressed
 import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.type
@@ -100,8 +99,8 @@ internal class TextEditorKeyCommandHandler(
 		if (!keyEvent.isCharacterInputCandidate()) return false
 
 		// Skip unrecognized shortcuts so they don't insert a literal char.
-		// Alt is excluded: macOS Option is text composition (Option+8 = '{').
-		if (keyEvent.isCtrlPressed || keyEvent.isMetaPressed) {
+		// Alt is excluded: it composes text (macOS Option+8 = '{', Windows AltGr+V = '@').
+		if (keyEvent.isCtrlShortcut || keyEvent.isMetaPressed) {
 			return false
 		}
 

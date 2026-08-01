@@ -95,6 +95,48 @@ class KeyBindingsTest {
 	}
 
 	@Test
+	fun `windows and linux leave altgr chords unbound so they can compose characters`() {
+		// Windows delivers AltGr as Ctrl+Alt: these chords type a character on the
+		// Hungarian, Croatian and Polish layouts.
+		assertNull(CtrlKeyBindings.commandFor(chord(Key.A, ctrl = true, alt = true)))
+		assertNull(CtrlKeyBindings.commandFor(chord(Key.C, ctrl = true, alt = true)))
+		assertNull(CtrlKeyBindings.commandFor(chord(Key.X, ctrl = true, alt = true)))
+		assertNull(CtrlKeyBindings.commandFor(chord(Key.V, ctrl = true, alt = true)))
+		assertNull(CtrlKeyBindings.commandFor(chord(Key.Y, ctrl = true, alt = true)))
+		assertNull(CtrlKeyBindings.commandFor(chord(Key.Z, ctrl = true, alt = true)))
+		assertNull(CtrlKeyBindings.commandFor(chord(Key.Z, ctrl = true, alt = true, shift = true)))
+	}
+
+	@Test
+	fun `windows and linux treat altgr navigation as its unmodified form`() {
+		// AltGr reaches no navigation chord, so the Ctrl meaning must not apply.
+		assertEquals(
+			Motion.Left,
+			CtrlKeyBindings.commandFor(chord(Key.DirectionLeft, ctrl = true, alt = true)),
+		)
+		assertEquals(
+			Motion.Right,
+			CtrlKeyBindings.commandFor(chord(Key.DirectionRight, ctrl = true, alt = true)),
+		)
+		assertEquals(
+			Motion.LineStart,
+			CtrlKeyBindings.commandFor(chord(Key.MoveHome, ctrl = true, alt = true)),
+		)
+		assertEquals(
+			Motion.LineEnd,
+			CtrlKeyBindings.commandFor(chord(Key.MoveEnd, ctrl = true, alt = true)),
+		)
+		assertEquals(
+			Action.DeleteBackward,
+			CtrlKeyBindings.commandFor(chord(Key.Backspace, ctrl = true, alt = true)),
+		)
+		assertEquals(
+			Action.DeleteForward,
+			CtrlKeyBindings.commandFor(chord(Key.Delete, ctrl = true, alt = true)),
+		)
+	}
+
+	@Test
 	fun `windows and linux leave option arrows as plain movement`() {
 		assertEquals(Motion.Left, CtrlKeyBindings.commandFor(chord(Key.DirectionLeft, alt = true)))
 		assertEquals(

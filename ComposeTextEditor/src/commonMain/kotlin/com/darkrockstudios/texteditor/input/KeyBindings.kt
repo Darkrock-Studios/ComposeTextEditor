@@ -11,6 +11,15 @@ import androidx.compose.ui.input.key.key
 import com.darkrockstudios.texteditor.input.EditorCommand.Action
 import com.darkrockstudios.texteditor.input.EditorCommand.Motion
 
+/**
+ * A Ctrl chord that is a real shortcut rather than an AltGr composition. Windows
+ * synthesizes AltGr as left-Ctrl + right-Alt, so a Ctrl-only test steals the layout
+ * chords that type a character (Hungarian AltGr+X is `#`, Polish AltGr+Z is `ż`).
+ * Compose folds AltGraph into `isAltPressed`, and no Ctrl+Alt chord is bound.
+ */
+internal val KeyEvent.isCtrlShortcut: Boolean
+	get() = isCtrlPressed && !isAltPressed
+
 /** Maps a platform's key chords onto the editor's [EditorCommand] vocabulary. */
 internal fun interface KeyBindings {
 	/** The command [event] triggers, or null when the chord is unbound. */
@@ -25,7 +34,7 @@ internal val LocalKeyBindings = staticCompositionLocalOf { platformKeyBindings()
 /** Windows and Linux conventions: Ctrl for shortcuts, Ctrl+Arrow for word jumps, Home/End for line bounds. */
 internal object CtrlKeyBindings : KeyBindings {
 	override fun commandFor(event: KeyEvent): EditorCommand? {
-		val ctrl = event.isCtrlPressed
+		val ctrl = event.isCtrlShortcut
 		return when (event.key) {
 			Key.A -> if (ctrl) Action.SelectAll else null
 			Key.C -> if (ctrl) Action.Copy else null
