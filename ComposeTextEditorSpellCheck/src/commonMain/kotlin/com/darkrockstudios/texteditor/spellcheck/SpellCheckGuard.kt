@@ -12,14 +12,15 @@ package com.darkrockstudios.texteditor.spellcheck
  * @property maxMisspellings The most flagged items that may accumulate before checking is
  *   suspended. Counts misspelled words in [SpellCheckMode.Word] and corrections in
  *   [SpellCheckMode.Sentence].
- * @property maxFlaggedRatio The fraction of checked items that may be flagged before the
- *   checker is presumed to be checking the wrong language. Only applied once the sample is
- *   large enough to be meaningful — see [minWordSample] and [minSentenceSample].
- * @property minWordSample How many words a full [SpellCheckMode.Word] check must evaluate
- *   before [maxFlaggedRatio] is applied. Documents shorter than this are never suspended by
- *   ratio; a handful of squiggles is not worth a false positive.
- * @property minSentenceSample How many sentences a full [SpellCheckMode.Sentence] check must
- *   evaluate before [maxFlaggedRatio] is applied.
+ * @property maxFlaggedRatio The fraction of the document that may be flagged before the
+ *   checker is presumed to be checking the wrong language. Judged against the whole
+ *   document's word (or sentence) count, and only once the document is large enough to be
+ *   meaningful; see [minWordSample] and [minSentenceSample].
+ * @property minWordSample How many checkable words the document must contain before
+ *   [maxFlaggedRatio] is applied in [SpellCheckMode.Word]. Documents shorter than this are
+ *   never suspended by ratio; a handful of squiggles is not worth a false positive.
+ * @property minSentenceSample How many sentences the document must contain before
+ *   [maxFlaggedRatio] is applied in [SpellCheckMode.Sentence].
  */
 data class SpellCheckGuard(
 	val maxMisspellings: Int = DEFAULT_MAX_MISSPELLINGS,
@@ -55,8 +56,10 @@ data class SpellCheckGuard(
 /**
  * Why spell checking suspended itself. See [SpellCheckGuard].
  *
- * A suspension is sticky: checking stays off until the checker is replaced or
- * [SpellCheckState.resumeSpellChecking] is called, so a wrong-language checker isn't asked
+ * A suspension is sticky: checking stays off until the checker is replaced, a full check is
+ * explicitly requested ([SpellCheckState.resumeSpellChecking] or
+ * [SpellCheckState.runFullSpellCheck]), or checking is re-enabled via
+ * [SpellCheckState.setSpellCheckingEnabled]. This way a wrong-language checker isn't asked
  * to re-scan the document on every keystroke.
  */
 sealed interface SpellCheckSuspension {
@@ -64,8 +67,9 @@ sealed interface SpellCheckSuspension {
 	 * Nearly everything checked came back wrong, which usually means the checker's dictionary
 	 * doesn't match the document's language.
 	 *
-	 * @property checked How many items were evaluated (words or sentences, per [SpellCheckMode]).
-	 * @property flagged How many of those were flagged.
+	 * @property checked The sample the ratio was judged against: the document's checkable
+	 *   words or sentences, per [SpellCheckMode].
+	 * @property flagged How many flagged items the guard had seen when it tripped.
 	 */
 	data class LikelyWrongLanguage(val checked: Int, val flagged: Int) : SpellCheckSuspension
 
