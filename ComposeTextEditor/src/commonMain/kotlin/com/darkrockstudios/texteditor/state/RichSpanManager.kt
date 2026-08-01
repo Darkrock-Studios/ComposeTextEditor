@@ -302,79 +302,51 @@ class RichSpanManager(
 		updatedSpans: MutableSet<RichSpan>,
 		span: RichSpan
 	) {
-		if (metadata != null) {
-			if (metadata.deletedText?.text == "\n") {
-				// Special handling for newline deletion
-				val deletionPoint = operation.range.start
-				val nextLineStart = operation.range.end
+		// updateSpans rebuilds the whole set from what these handlers contribute, so a
+		// handler that adds nothing erases the span. With no metadata to transform
+		// against, a stale position beats deleting the span outright.
+		if (metadata == null) {
+			updatedSpans.add(span)
+			return
+		}
 
-				when {
-					// Span is entirely before the deletion point on the first line
-					end.line < deletionPoint.line ||
-							(end.line == deletionPoint.line && end.char <= deletionPoint.char) -> {
-						updatedSpans.add(span)
-					}
-					// Span is entirely below the joined line — the deleted newline pulls
-					// every following line up by one, so decrement its line index.
-					start.line > nextLineStart.line -> {
-						updatedSpans.add(
-							span.copy(
-								range = TextEditorRange(
-									start = CharLineOffset(start.line - 1, start.char),
-									end = CharLineOffset(end.line - 1, end.char)
-								)
-							)
-						)
-					}
-					// Span is entirely on the second line
-					start.line == nextLineStart.line -> {
-						val newStart = CharLineOffset(
-							deletionPoint.line,
-							deletionPoint.char + start.char
-						)
-						val newEnd = CharLineOffset(
-							deletionPoint.line,
-							deletionPoint.char + end.char
-						)
-						updatedSpans.add(
-							span.copy(
-								range = TextEditorRange(
-									start = newStart,
-									end = newEnd
-								)
-							)
-						)
-					}
-					// Span crosses the newline
-					start.line == deletionPoint.line &&
-							end.line == nextLineStart.line -> {
-						val newEnd = CharLineOffset(
-							deletionPoint.line,
-							deletionPoint.char + end.char
-						)
+		if (metadata.deletedText?.text == "\n") {
+			// A pure newline delete joins two lines: nothing on the first line moves,
+			// the second line's content slides onto the join point, and everything
+			// below is pulled up one line.
+			val deletionPoint = operation.range.start
+			val nextLineStart = operation.range.end
 
-						updatedSpans.add(
-							span.copy(
-								range = span.range.copy(
-									end = newEnd
-								)
-							)
-						)
-					}
-				}
-			} else {
-				// Regular delete operation
-				val newStart = operation.transformOffset(start, state)
-				val newEnd = operation.transformOffset(end, state)
-				if (newStart != newEnd) {
-					updatedSpans.add(
-						span.copy(
-							range = TextEditorRange(
-								start = newStart, end = newEnd
-							)
+			fun joinOffset(offset: CharLineOffset): CharLineOffset = when {
+				offset.line < nextLineStart.line -> offset
+				offset.line == nextLineStart.line -> CharLineOffset(
+					deletionPoint.line,
+					deletionPoint.char + offset.char
+				)
+
+				else -> CharLineOffset(offset.line - 1, offset.char)
+			}
+
+			updatedSpans.add(
+				span.copy(
+					range = TextEditorRange(
+						start = joinOffset(start),
+						end = joinOffset(end)
+					)
+				)
+			)
+		} else {
+			// Regular delete operation
+			val newStart = operation.transformOffset(start, state)
+			val newEnd = operation.transformOffset(end, state)
+			if (newStart != newEnd) {
+				updatedSpans.add(
+					span.copy(
+						range = TextEditorRange(
+							start = newStart, end = newEnd
 						)
 					)
-				}
+				)
 			}
 		}
 	}
