@@ -6,7 +6,6 @@ import utils.checkCheapInvariants
 import utils.editorUiTest
 import utils.fuzzSeed
 import utils.generateFuzzScript
-import utils.markdown
 import utils.runFuzzScript
 import utils.snapshotOf
 import utils.undoAll

@@ -5,7 +5,6 @@ import androidx.compose.ui.text.AnnotatedString
 import utils.assertBlockState
 import utils.assertRichSpanInvariants
 import utils.editorUiTest
-import utils.markdown
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -226,8 +225,6 @@ class BlockToggleTortureE2eTest {
 
 		press(Key.Z, ctrl = true)
 
-		// demoteLineBlock mutates the line directly without recording a history
-		// entry, so the marker a user removed by accident cannot come back.
 		assertEquals(listOf("plain", "item"), lines, "undo must not fall through to an older edit")
 		assertBlockState(1, bullet = true)
 	}

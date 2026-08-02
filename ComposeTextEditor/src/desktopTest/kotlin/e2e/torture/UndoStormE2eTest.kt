@@ -11,7 +11,6 @@ import com.darkrockstudios.texteditor.richstyle.RichSpan
 import utils.assertBlockState
 import utils.assertRichSpanInvariants
 import utils.editorUiTest
-import utils.markdown
 import utils.selectChars
 import utils.undoAll
 import kotlin.test.Test

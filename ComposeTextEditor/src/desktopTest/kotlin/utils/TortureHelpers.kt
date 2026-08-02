@@ -4,21 +4,12 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.ClipEntry
 import com.darkrockstudios.texteditor.TextEditorRange
-import com.darkrockstudios.texteditor.markdown.MarkdownExtension
-import com.darkrockstudios.texteditor.markdown.withMarkdown
 import com.darkrockstudios.texteditor.richstyle.RichSpan
 import com.darkrockstudios.texteditor.richstyle.RichSpanStyle
 import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.getRichSpansInRange
-import java.util.WeakHashMap
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
-
-private val markdownExtensions = WeakHashMap<TextEditorState, MarkdownExtension>()
-
-/** Markdown extension for this editor's state, created once per test. */
-val EditorUiTestScope.markdown: MarkdownExtension
-	get() = markdownExtensions.getOrPut(state) { state.withMarkdown() }
 
 /** Pastes [html] the way a foreign application would: a text/html clipboard flavor, then Ctrl+V. */
 @OptIn(ExperimentalComposeUiApi::class)

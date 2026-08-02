@@ -8,7 +8,6 @@ import com.darkrockstudios.texteditor.richstyle.HorizontalRuleSpanStyle
 import utils.blockFlags
 import utils.editorUiTest
 import utils.linesWith
-import utils.markdown
 import utils.pasteHtml
 import kotlin.test.Test
 import kotlin.test.assertEquals

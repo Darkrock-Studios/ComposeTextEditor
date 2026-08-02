@@ -92,8 +92,10 @@ class RichSpanSurvivalTests {
 		state.redo()
 
 		assertEquals("", state.textLines[1].text)
+		// Deleting all of an item's text within its own line empties the item but
+		// does not remove it; the marker stays on the now-empty line.
 		val lines = state.richSpanManager.getAllRichSpans().map { it.range.start.line }
-		assertEquals(listOf(0, 2), lines.sorted())
+		assertEquals(listOf(0, 1, 2), lines.sorted())
 	}
 
 	@Test

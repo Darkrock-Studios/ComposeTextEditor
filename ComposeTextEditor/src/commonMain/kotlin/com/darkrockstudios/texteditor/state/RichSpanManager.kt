@@ -400,6 +400,28 @@ class RichSpanManager(
 			return
 		}
 
+		fun addTransformed(newStart: CharLineOffset, newEnd: CharLineOffset) {
+			val lineAnchored = span.style.stickyAtStart || span.style is BlockSpanStyle
+			if (lineAnchored && newStart.char != 0) {
+				// The marker was pulled off column 0: its line was consumed by a join.
+				// It survives only onto a receiving line that is already the same kind
+				// of item (rejoining split halves); otherwise the receiving line keeps
+				// its own identity and the marker dies with its line.
+				val receivingLineHasSameStyle = spans.any { other ->
+					other.style == span.style &&
+						other.range.start.line == newStart.line &&
+						other.range.start.char == 0
+				}
+				if (!receivingLineHasSameStyle) return
+			}
+			if (newStart == newEnd) {
+				// Emptied within its own line, an item survives as an empty item; a
+				// marker consumed by a multi-line delete goes with its deleted line.
+				if (!span.style.rendersWhenEmpty || !operation.range.isSingleLine()) return
+			}
+			updatedSpans.add(span.copy(range = TextEditorRange(newStart, newEnd)))
+		}
+
 		if (metadata.deletedText?.text == "\n") {
 			// A pure newline delete joins two lines: nothing on the first line moves,
 			// the second line's content slides onto the join point, and everything
@@ -417,27 +439,13 @@ class RichSpanManager(
 				else -> CharLineOffset(offset.line - 1, offset.char)
 			}
 
-			updatedSpans.add(
-				span.copy(
-					range = TextEditorRange(
-						start = joinOffset(start),
-						end = joinOffset(end)
-					)
-				)
-			)
+			addTransformed(joinOffset(start), joinOffset(end))
 		} else {
 			// Regular delete operation
-			val newStart = operation.transformOffset(start, state)
-			val newEnd = operation.transformOffset(end, state)
-			if (newStart != newEnd) {
-				updatedSpans.add(
-					span.copy(
-						range = TextEditorRange(
-							start = newStart, end = newEnd
-						)
-					)
-				)
-			}
+			addTransformed(
+				operation.transformOffset(start, state),
+				operation.transformOffset(end, state),
+			)
 		}
 	}
 
