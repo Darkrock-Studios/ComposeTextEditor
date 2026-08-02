@@ -207,10 +207,10 @@ private fun blockToggleTarget(
 
 /**
  * True when the live selection touches any block-styled line. Replacing across a
- * block line leaves spans out of bounds today (a known red-test defect, see
- * SpanConsistencyTortureTest `replacing across a quoted line keeps spans inside
- * the document`), so the fuzz interpreters collapse such selections before
- * typing instead of replacing through them. Lift when the rebase is fixed.
+ * block line can leave block spans past the line end (a known red-test defect,
+ * see the PasteOverSelectionTortureE2eTest reds), so the fuzz interpreters
+ * collapse such selections before typing instead of replacing through them.
+ * Lift when the handleReplace rebase is fixed.
  */
 private fun selectionTouchesBlockLine(state: TextEditorState, markdown: MarkdownExtension): Boolean {
 	val selection = state.selector.selection ?: return false
@@ -218,41 +218,6 @@ private fun selectionTouchesBlockLine(state: TextEditorState, markdown: Markdown
 		markdown.isBlockquote(line) || markdown.isBulletList(line) ||
 			markdown.isOrderedList(line) || markdown.isCodeFence(line)
 	}
-}
-
-/**
- * True when deleting the live selection would join lines across a block boundary.
- * That join can bake overlapping ParagraphStyles and crash the next insert (a
- * known red-test defect, see ParagraphOverlapCrashTest), so the fuzz interpreters
- * collapse such selections instead of deleting through them.
- */
-private fun selectionDeleteIsGuarded(state: TextEditorState, markdown: MarkdownExtension): Boolean {
-	val selection = state.selector.selection ?: return false
-	if (selection.start.line == selection.end.line) return false
-	return selectionTouchesBlockLine(state, markdown)
-}
-
-private fun blockSetOf(markdown: MarkdownExtension, line: Int): Set<String> = buildSet {
-	if (markdown.isBlockquote(line)) add("quote")
-	if (markdown.isBulletList(line)) add("bullet")
-	if (markdown.isOrderedList(line)) add("ordered")
-	if (markdown.isCodeFence(line)) add("fence")
-}
-
-/**
- * True when a forward delete at the cursor would join two lines with different
- * block styles. Unlike backspace, forward delete has no demote-first step, so the
- * join stacks both blocks onto one line (a known red-test defect, see
- * BlockBoundaryDeletionE2eTest); the fuzz interpreters skip those deletes.
- */
-private fun forwardJoinIsGuarded(state: TextEditorState, markdown: MarkdownExtension): Boolean {
-	val pos = state.cursorPosition
-	if (pos.char != state.textLines[pos.line].length) return false
-	val next = pos.line + 1
-	if (next >= state.textLines.size) return false
-	val current = blockSetOf(markdown, pos.line)
-	val below = blockSetOf(markdown, next)
-	return current != below && (current.isNotEmpty() || below.isNotEmpty())
 }
 
 /**
@@ -330,7 +295,6 @@ class StateFuzzInterpreter(
 			}
 
 			is FuzzOp.Backspace -> {
-				if (selectionDeleteIsGuarded(state, markdown)) collapseSelection()
 				if (skipDemotions && state.selector.selection == null &&
 					wouldDemote(state, markdown, enter = false)
 				) return
@@ -344,13 +308,11 @@ class StateFuzzInterpreter(
 			}
 
 			is FuzzOp.DeleteForward -> {
-				if (selectionDeleteIsGuarded(state, markdown)) collapseSelection()
 				val selection = state.selector.selection
 				if (selection != null) {
 					state.delete(selection)
 					state.selector.clearSelection()
 				} else {
-					if (forwardJoinIsGuarded(state, markdown)) return
 					state.deleteAtCursor()
 				}
 			}
@@ -422,18 +384,13 @@ fun EditorUiTestScope.applyFuzzOpUi(op: FuzzOp, skipDemotions: Boolean) {
 		}
 
 		is FuzzOp.Backspace -> {
-			if (selectionDeleteIsGuarded(state, markdown)) press(Key.DirectionLeft)
 			if (skipDemotions && state.selector.selection == null &&
 				wouldDemote(state, markdown, enter = false)
 			) return
 			press(Key.Backspace)
 		}
 
-		is FuzzOp.DeleteForward -> {
-			if (selectionDeleteIsGuarded(state, markdown)) press(Key.DirectionLeft)
-			if (state.selector.selection == null && forwardJoinIsGuarded(state, markdown)) return
-			press(Key.Delete)
-		}
+		is FuzzOp.DeleteForward -> press(Key.Delete)
 
 		is FuzzOp.MoveCursor -> when (op.slot % 8) {
 			0 -> press(Key.MoveHome, ctrl = true)

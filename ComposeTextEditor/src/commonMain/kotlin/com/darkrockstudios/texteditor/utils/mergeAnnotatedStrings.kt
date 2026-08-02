@@ -69,18 +69,33 @@ internal fun SpanManager.mergeAnnotatedStrings(
 	val insertedLen = newText?.length ?: 0
 	val deletedLen = (end - start).coerceAtLeast(0)
 	val finalLen = original.length - deletedLen + insertedLen
-	original.paragraphStyles.forEach { para ->
-		val newStart = adjustStartForEdit(para.start, start, end, insertedLen)
-		val newEnd = adjustEndForEdit(para.end, start, end, insertedLen)
-		if (newStart < newEnd && newEnd <= finalLen) {
-			addStyle(para.item, newStart, newEnd)
+	val adjusted = buildList {
+		original.paragraphStyles.forEach { para ->
+			val newStart = adjustStartForEdit(para.start, start, end, insertedLen)
+			val newEnd = adjustEndForEdit(para.end, start, end, insertedLen)
+			if (newStart < newEnd && newEnd <= finalLen) {
+				add(AnnotatedString.Range(para.item, newStart, newEnd))
+			}
+		}
+		newText?.paragraphStyles?.forEach { para ->
+			val newStart = (para.start + start).coerceAtMost(finalLen)
+			val newEnd = (para.end + start).coerceAtMost(finalLen)
+			if (newStart < newEnd) {
+				add(AnnotatedString.Range(para.item, newStart, newEnd))
+			}
 		}
 	}
-	newText?.paragraphStyles?.forEach { para ->
-		val newStart = (para.start + start).coerceAtMost(finalLen)
-		val newEnd = (para.end + start).coerceAtMost(finalLen)
-		if (newStart < newEnd) {
-			addStyle(para.item, newStart, newEnd)
+	// Two paragraphs that touch at the edit point both claim the inserted text
+	// (greedy end on the left, sticky start on the right), and AnnotatedString
+	// rejects overlapping paragraphs. The left paragraph wins — typing at a
+	// boundary stays in the paragraph the caret came from — and the right one
+	// is pushed to where the left ends.
+	var previousEnd = 0
+	adjusted.sortedBy { it.start }.forEach { para ->
+		val clampedStart = maxOf(para.start, previousEnd)
+		if (clampedStart < para.end) {
+			addStyle(para.item, clampedStart, para.end)
+			previousEnd = para.end
 		}
 	}
 }
