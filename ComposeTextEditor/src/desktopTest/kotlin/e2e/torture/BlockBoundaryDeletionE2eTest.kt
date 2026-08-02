@@ -63,7 +63,7 @@ class BlockBoundaryDeletionE2eTest {
 		press(Key.Delete)
 
 		assertEquals(listOf("quode"), lines)
-		// Fence stacks with nothing (mutuallyExcluded), so whatever the join keeps,
+		// Fence stacks with nothing (conflicts), so whatever the join keeps,
 		// a quote+fence combination on one line is an invalid document.
 		assertEquals(setOf("quote"), blockFlags(0), "joined line must keep one valid block style")
 		assertRichSpanInvariants()

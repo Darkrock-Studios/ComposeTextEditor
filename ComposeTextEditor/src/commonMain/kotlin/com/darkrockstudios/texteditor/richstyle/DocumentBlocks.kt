@@ -3,6 +3,7 @@ package com.darkrockstudios.texteditor.richstyle
 import androidx.compose.ui.text.AnnotatedString
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
+import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
 import com.darkrockstudios.texteditor.state.TextEditorState
 
 /**
@@ -30,16 +31,19 @@ internal class DocumentBlocks(
 
 /** Collects every line-anchored decoration currently attached to this document. */
 internal fun TextEditorState.documentBlocks(): DocumentBlocks =
-	documentBlocksOf(richSpanManager.getAllRichSpans())
+	documentBlocksOf(richSpanManager.getAllRichSpans(), markdownConfiguration)
 
 /**
- * Collects the decorations in [allSpans].
+ * Collects the decorations in [allSpans], keyed by [config]'s block registry.
  *
  * Serializers take this from the same [TextEditorState.content] snapshot they read
  * the text from, so the blocks they place and the lines they place them on come
  * from one revision.
  */
-internal fun documentBlocksOf(allSpans: Set<RichSpan>): DocumentBlocks {
+internal fun documentBlocksOf(
+	allSpans: Set<RichSpan>,
+	config: MarkdownConfiguration,
+): DocumentBlocks {
 	return DocumentBlocks(
 		horizontalRuleLines = allSpans
 			.asSequence()
@@ -53,7 +57,7 @@ internal fun documentBlocksOf(allSpans: Set<RichSpan>): DocumentBlocks {
 				span.range.start.line to style
 			}
 			.toMap(),
-		blockLines = ALL_BLOCK_STYLES.associateWith { block ->
+		blockLines = allBlockStyles(config).associateWith { block ->
 			allSpans.asSequence()
 				.filter { it.style === block.spanStyle }
 				.map { it.range.start.line }
@@ -104,10 +108,10 @@ internal fun TextEditorState.applyDocumentBlocks(
 	}
 
 	// Invert to line -> requested blocks so each line is visited once. Within a line
-	// the [ALL_BLOCK_STYLES] order decides how a stack resolves: each block demotes
+	// the [allBlockRegistry] order decides how a stack resolves: each block demotes
 	// whatever it excludes, so a fence beats a list and blockquote stacks with both.
 	val requested = mutableMapOf<Int, MutableList<LineBlockStyle>>()
-	ALL_BLOCK_STYLES.forEach { block ->
+	allBlockRegistry.forEach { block ->
 		blockLines[block]?.forEach { line ->
 			requested.getOrPut(line) { mutableListOf() } += block
 		}

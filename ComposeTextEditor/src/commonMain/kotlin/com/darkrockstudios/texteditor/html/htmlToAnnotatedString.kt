@@ -10,6 +10,7 @@ import com.darkrockstudios.texteditor.richstyle.HR_PLACEHOLDER
 import com.darkrockstudios.texteditor.richstyle.IMAGE_PLACEHOLDER
 import com.darkrockstudios.texteditor.richstyle.LineBlockStyle
 import com.darkrockstudios.texteditor.richstyle.OrderedList
+import com.darkrockstudios.texteditor.richstyle.headerBlock
 import com.fleeksoft.ksoup.Ksoup
 import com.fleeksoft.ksoup.nodes.Element
 import com.fleeksoft.ksoup.nodes.Node
@@ -316,6 +317,9 @@ private class HtmlSpanBuilder(
 		// A bare `<li>` with no list ancestor still reads as a bullet.
 		"li" -> scope.listBlock ?: BulletList
 		"pre" -> CodeFence
+		// Heading elements land as heading blocks so the level survives as a
+		// HeaderSpanStyle span, the same way markdown import attaches it.
+		"h1", "h2", "h3", "h4", "h5", "h6" -> headerBlock(name[1] - '0', config)
 		else -> null
 	}
 

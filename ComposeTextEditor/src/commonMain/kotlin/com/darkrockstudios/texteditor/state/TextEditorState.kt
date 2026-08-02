@@ -179,7 +179,7 @@ class TextEditorState(
 			// Every publish passes through line-block normalization, so no caller
 			// can commit a revision violating the placeholder-line invariant. A
 			// transaction that mutated nothing skips the scan and the republish.
-			draft?.let { if (it !== content) content = normalizeLineBlocks(it) }
+			draft?.let { if (it !== content) content = normalizeLineBlocks(it, markdownConfiguration) }
 			return result
 		} finally {
 			draft = null
@@ -206,7 +206,7 @@ class TextEditorState(
 		if (draft != null) {
 			draft = transform(workingContent)
 		} else {
-			content = normalizeLineBlocks(transform(content))
+			content = normalizeLineBlocks(transform(content), markdownConfiguration)
 		}
 	}
 

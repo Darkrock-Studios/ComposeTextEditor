@@ -2,10 +2,7 @@ package com.darkrockstudios.texteditor.markdown
 
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.TextUnit
 
 /**
@@ -179,6 +176,11 @@ private fun getStyleMarker(
 	style: SpanStyle,
 	config: MarkdownConfiguration = MarkdownConfiguration.DEFAULT
 ): StyleMarkerPair? {
+	// Legacy heading path for content styled without a HeaderSpanStyle span
+	// (old documents, host apps writing raw font sizes). Checked first so a
+	// bold style with an explicit size never reads as inline bold. Heading
+	// lines carrying a span never reach here; export strips their baked style
+	// before serializing the line.
 	if (style.fontWeight == FontWeight.Bold && style.fontSize != TextUnit.Unspecified) {
 		return when (style.fontSize.value) {
 			config.header1Style.fontSize.value -> StyleMarkerPair("# ", "\n")
@@ -192,23 +194,12 @@ private fun getStyleMarker(
 	}
 
 	return when {
-		style.matches(config.boldStyle) -> StyleMarkerPair("**", "**")
-		style.matches(config.italicStyle) -> StyleMarkerPair("*", "*")
-		style.matches(config.codeStyle) -> StyleMarkerPair("`", "`")
-		style.matches(config.strikethroughStyle) -> StyleMarkerPair("~~", "~~")
-		style.matches(config.linkStyle) -> StyleMarkerPair("[", "]()")
+		style.isBoldStyle -> StyleMarkerPair("**", "**")
+		style.isItalicStyle -> StyleMarkerPair("*", "*")
+		style.isCodeStyle -> StyleMarkerPair("`", "`")
+		style.isStrikethroughStyle -> StyleMarkerPair("~~", "~~")
+		style.isUnderlineStyle -> StyleMarkerPair("[", "]()")
 		else -> null
-	}
-}
-
-private fun SpanStyle.matches(other: SpanStyle): Boolean {
-	return when {
-		this.fontWeight == FontWeight.Bold && other.fontWeight == FontWeight.Bold -> true
-		this.fontStyle == FontStyle.Italic && other.fontStyle == FontStyle.Italic -> true
-		this.fontFamily == FontFamily.Monospace && other.fontFamily == FontFamily.Monospace -> true
-		this.textDecoration == TextDecoration.LineThrough && other.textDecoration == TextDecoration.LineThrough -> true
-		this.textDecoration == TextDecoration.Underline && other.textDecoration == TextDecoration.Underline -> true
-		else -> false
 	}
 }
 

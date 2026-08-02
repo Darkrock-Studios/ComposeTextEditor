@@ -6,6 +6,7 @@ import com.darkrockstudios.texteditor.richstyle.Blockquote
 import com.darkrockstudios.texteditor.richstyle.BulletList
 import com.darkrockstudios.texteditor.richstyle.CodeFence
 import com.darkrockstudios.texteditor.richstyle.DocumentBlocks
+import com.darkrockstudios.texteditor.richstyle.HeaderSpanStyle
 import com.darkrockstudios.texteditor.richstyle.ImageBlockSpanStyle
 import com.darkrockstudios.texteditor.richstyle.ImageProvider
 import com.darkrockstudios.texteditor.richstyle.OrderedList
@@ -50,14 +51,26 @@ class HtmlExtension(
 	 */
 	fun exportAsHtml(): String {
 		val content = editorState.content
-		val blocks = documentBlocksOf(content.richSpans)
+		val blocks = documentBlocksOf(content.richSpans, configuration)
+		// Semantic heading levels, read from the spans rather than by matching
+		// font sizes, so a heading keeps its tag under any configuration.
+		val headerLevels = content.richSpans
+			.mapNotNull { span ->
+				(span.style as? HeaderSpanStyle)?.let { span.range.start.line to it.level }
+			}
+			.toMap()
 		val lines = content.lines
-		if (lines.size == 1 && lines[0].isEmpty() && blocks.isEmpty()) return ""
+		if (lines.size == 1 && lines[0].isEmpty() && blocks.isEmpty() && headerLevels.isEmpty()) {
+			return ""
+		}
 
 		val writer = HtmlWriter()
 		lines.forEachIndexed { index, line ->
 			writer.openContainers(containersFor(index, blocks))
-			writer.appendLine(lineHtml(index, line, blocks), inCodeFence = blocks.has(index, CodeFence))
+			writer.appendLine(
+				lineHtml(index, line, blocks, headerLevels[index]),
+				inCodeFence = blocks.has(index, CodeFence),
+			)
 		}
 		return writer.finish()
 	}
@@ -107,17 +120,28 @@ class HtmlExtension(
 		return containers
 	}
 
-	private fun lineHtml(index: Int, line: AnnotatedString, blocks: DocumentBlocks): String {
+	private fun lineHtml(
+		index: Int,
+		line: AnnotatedString,
+		blocks: DocumentBlocks,
+		headerLevel: Int?,
+	): String {
 		// Fenced lines are literal code: running them through `toHtml` would see the
 		// baked-in monospace as an inline code run and wrap every line in `<code>`.
 		if (blocks.has(index, CodeFence)) return line.text.escapeHtmlText()
 
 		val image = blocks.imageLines[index]
 		val isRule = index in blocks.horizontalRuleLines
-		// A uniformly styled heading line has no inner formatting left to render,
-		// so the tag is written here rather than by `toHtml` — which declines any
-		// heading level it cannot tell apart from bold body text.
-		val heading = if (isRule || image != null) null else line.uniformHeadingTag(configuration)
+		// A heading's span carries its level; font-size matching remains only as
+		// the fallback for spanless content. A uniformly styled heading line has
+		// no inner formatting left to render, so the tag is written here rather
+		// than by `toHtml`, which declines any heading level it cannot tell
+		// apart from bold body text.
+		val heading = when {
+			isRule || image != null -> null
+			headerLevel != null -> HtmlTag.entries[headerLevel - 1]
+			else -> line.uniformHeadingTag(configuration)
+		}
 		val content = when {
 			isRule -> "<hr>"
 			image != null -> "<img src=\"${image.source.escapeHtmlAttribute()}\"" +

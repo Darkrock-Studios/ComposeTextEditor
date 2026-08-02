@@ -1,5 +1,6 @@
 package com.darkrockstudios.texteditor.richstyle
 
+import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
 import com.darkrockstudios.texteditor.state.DocumentSnapshot
 
 /**
@@ -19,12 +20,16 @@ import com.darkrockstudios.texteditor.state.DocumentSnapshot
  * (no line allocation) when the document is already valid, the overwhelmingly
  * common case.
  */
-internal fun normalizeLineBlocks(snapshot: DocumentSnapshot): DocumentSnapshot {
+internal fun normalizeLineBlocks(
+	snapshot: DocumentSnapshot,
+	config: MarkdownConfiguration,
+): DocumentSnapshot {
 	val kinds = placeholderKinds(snapshot.richSpans, snapshot.lines)
 	if (kinds.isEmpty()) return snapshot
 
+	val registry = allBlockStyles(config)
 	val violations = snapshot.richSpans.mapNotNull { span ->
-		val block = ALL_BLOCK_STYLES.firstOrNull { it.spanStyle === span.style }
+		val block = registry.firstOrNull { it.spanStyle === span.style }
 			?: return@mapNotNull null
 		val kind = kinds[span.range.start.line] ?: return@mapNotNull null
 		if (block.allowedOn(kind)) null else span to block

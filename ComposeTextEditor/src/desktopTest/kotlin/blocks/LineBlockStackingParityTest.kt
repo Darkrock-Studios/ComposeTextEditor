@@ -8,13 +8,14 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
-import com.darkrockstudios.texteditor.richstyle.ALL_BLOCK_STYLES
+import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
 import com.darkrockstudios.texteditor.richstyle.Blockquote
 import com.darkrockstudios.texteditor.richstyle.BulletList
 import com.darkrockstudios.texteditor.richstyle.CodeFence
 import com.darkrockstudios.texteditor.richstyle.LineBlockStyle
 import com.darkrockstudios.texteditor.richstyle.OrderedList
 import com.darkrockstudios.texteditor.richstyle.RichSpanStyle
+import com.darkrockstudios.texteditor.richstyle.allBlockStyles
 import com.darkrockstudios.texteditor.richstyle.applyDocumentBlocks
 import com.darkrockstudios.texteditor.richstyle.applyLineBlock
 import com.darkrockstudios.texteditor.richstyle.lineBlockSpanStyles
@@ -69,10 +70,12 @@ class LineBlockStackingParityTest {
 	) {
 		val perLine = freshState("line text")
 		existing.forEach { perLine.applyLineBlock(0, it) }
-		// The batched path visits a line's blocks in ALL_BLOCK_STYLES order whatever
+		// The batched path visits a line's blocks in registry order whatever
 		// order they were requested in, so the per-line path has to be driven that way
 		// for the comparison to be about the rules rather than about the ordering.
-		ALL_BLOCK_STYLES.filter { it in blocks }.forEach { perLine.applyLineBlock(0, it) }
+		allBlockStyles(MarkdownConfiguration.DEFAULT)
+			.filter { it in blocks }
+			.forEach { perLine.applyLineBlock(0, it) }
 
 		val batched = freshState("line text")
 		existing.forEach { batched.applyLineBlock(0, it) }
@@ -94,7 +97,7 @@ class LineBlockStackingParityTest {
 
 	@Test
 	fun `mutually exclusive lists resolve the same way on both paths`() {
-		// ALL_BLOCK_STYLES puts OrderedList first, so BulletList demotes it.
+		// The registry puts OrderedList first, so BulletList demotes it.
 		assertPathsAgree(BulletList, OrderedList, expected = listOf(BulletList))
 	}
 
