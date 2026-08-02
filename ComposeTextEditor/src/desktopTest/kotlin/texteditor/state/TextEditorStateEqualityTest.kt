@@ -21,73 +21,85 @@ class TextEditorStateEqualityTest {
 		)
 
 	@Test
-	fun `test equals same object reference`() = runTest {
-		val state = createState("")
+	fun `equals is reference identity`() = runTest {
+		val state = createState("content")
 		assertEquals(state, state)
 	}
 
 	@Test
-	fun `test equals null object`() = runTest {
-		val state = createState("")
-		assertFalse(state.equals(null))
+	fun `distinct instances with same content are not equal`() = runTest {
+		val state1 = createState("Line 1\nLine 2")
+		val state2 = createState("Line 1\nLine 2")
+
+		assertNotEquals(state1, state2)
 	}
 
 	@Test
-	fun `test equals different type`() = runTest {
-		val state = createState("")
-		assertFalse(state.equals("not a TextEditorState"))
+	fun `hashCode is stable across edits`() = runTest {
+		val state = createState("Line 1")
+		val before = state.hashCode()
+
+		state.setText("completely different content\nwith more lines")
+
+		assertEquals(before, state.hashCode())
 	}
 
 	@Test
-	fun `test equals same content`() = runTest {
-		val lines = listOf(
-			"Line 1",
-			"Line 2"
-		)
+	fun `instances are usable as hash keys`() = runTest {
+		val state1 = createState("same")
+		val state2 = createState("same")
 
-		// Add same content to both states
-		val state1 = createState(lines.joinToString("\n"))
-		val state2 = createState(lines.joinToString("\n"))
+		val map = HashMap<TextEditorState, String>()
+		map[state1] = "first"
+		map[state2] = "second"
 
-		assertTrue(state1 == state2)
+		assertEquals(2, map.size)
+		assertEquals("first", map[state1])
+		assertEquals("second", map[state2])
+
+		state1.setText("edited")
+		assertEquals("first", map[state1])
 	}
 
 	@Test
-	fun `test equals different content`() = runTest {
+	fun `contentEquals same instance`() = runTest {
+		val state = createState("content")
+		assertTrue(state.contentEquals(state))
+	}
+
+	@Test
+	fun `contentEquals same content`() = runTest {
+		val state1 = createState("Line 1\nLine 2")
+		val state2 = createState("Line 1\nLine 2")
+
+		assertTrue(state1.contentEquals(state2))
+		assertTrue(state2.contentEquals(state1))
+	}
+
+	@Test
+	fun `contentEquals different content`() = runTest {
 		val state1 = createState("Line 1")
 		val state2 = createState("Different line")
 
-		assertFalse(state1 == state2)
+		assertFalse(state1.contentEquals(state2))
 	}
 
 	@Test
-	fun `test equals different number of lines`() = runTest {
+	fun `contentEquals different number of lines`() = runTest {
 		val state1 = createState("Line 1")
 		val state2 = createState("Line 1\nLine 2")
 
-		assertFalse(state1 == state2)
+		assertFalse(state1.contentEquals(state2))
 	}
 
 	@Test
-	fun `test hashCode consistency`() = runTest {
-		val lines = listOf(
-			"Line 1",
-			"Line 2"
-		)
+	fun `contentEquals diverges after an edit`() = runTest {
+		val state1 = createState("shared")
+		val state2 = createState("shared")
+		assertTrue(state1.contentEquals(state2))
 
-		val state1 = createState(lines.joinToString("\n"))
-		val state2 = createState(lines.joinToString("\n"))
+		state1.setText("changed")
 
-		// Equal objects should have equal hash codes
-		assertEquals(state1.hashCode(), state2.hashCode())
-	}
-
-	@Test
-	fun `test hashCode different content`() = runTest {
-		val state1 = createState("Line 1")
-		val state2 = createState("Different line")
-
-		// Different content should (likely) have different hash codes
-		assertNotEquals(state1.hashCode(), state2.hashCode())
+		assertFalse(state1.contentEquals(state2))
 	}
 }
