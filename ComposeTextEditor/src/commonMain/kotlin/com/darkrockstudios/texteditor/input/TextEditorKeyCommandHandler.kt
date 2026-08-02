@@ -80,6 +80,9 @@ internal class TextEditorKeyCommandHandler(
 			Action.Indent -> handleIndent(state)
 			Action.Outdent -> handleOutdent(state)
 			Action.NewLine -> handleEnter(state)
+			// An action nothing here implements must not swallow the keystroke, or a
+			// chord bound to it would eat the character instead of typing it.
+			else -> return false
 		}
 		return true
 	}

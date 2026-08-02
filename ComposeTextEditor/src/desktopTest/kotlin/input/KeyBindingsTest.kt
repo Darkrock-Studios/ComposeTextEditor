@@ -251,7 +251,7 @@ class KeyBindingsTest {
 		for (command in readOnly) {
 			assertEquals(false, command.isEdit, "$command must be allowed in a disabled editor")
 		}
-		for (command in Action.entries - Action.SelectAll - Action.Copy) {
+		for (command in Action.Builtins - Action.SelectAll - Action.Copy) {
 			assertEquals(true, command.isEdit, "$command changes the document")
 		}
 	}
