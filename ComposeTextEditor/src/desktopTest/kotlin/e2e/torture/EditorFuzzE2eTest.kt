@@ -27,11 +27,10 @@ class EditorFuzzE2eTest {
 			seed = fuzzSeed(seed),
 			count = 60,
 			mutatingBudget = 80,
-			includeBlocks = false,
 		)
 
 		runFuzzScript(fuzzSeed(seed), script) { op ->
-			applyFuzzOpUi(op, skipDemotions = true)
+			applyFuzzOpUi(op)
 			checkCheapInvariants(state)
 		}
 
@@ -48,7 +47,7 @@ class EditorFuzzE2eTest {
 		val script = generateFuzzScript(seed = fuzzSeed(seed), count = 60)
 
 		runFuzzScript(fuzzSeed(seed), script) { op ->
-			applyFuzzOpUi(op, skipDemotions = false)
+			applyFuzzOpUi(op)
 			checkCheapInvariants(state)
 		}
 
