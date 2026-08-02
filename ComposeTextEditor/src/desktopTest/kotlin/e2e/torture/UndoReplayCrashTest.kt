@@ -22,7 +22,7 @@ class UndoReplayCrashTest {
 		val state = TextEditorState(scope = TestScope(), measurer = mockk(relaxed = true))
 		val markdown = MarkdownExtension(state)
 		markdown.importMarkdown("seed line\nsecond line")
-		val interpreter = StateFuzzInterpreter(state, markdown, skipDemotions = true)
+		val interpreter = StateFuzzInterpreter(state, markdown)
 
 		val script = listOf(
 			FuzzOp.SelectAllType("日本"),

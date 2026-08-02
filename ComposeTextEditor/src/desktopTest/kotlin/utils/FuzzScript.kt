@@ -62,25 +62,17 @@ private fun FuzzOp.historyCost(): Int = when (this) {
  * (per keystroke, see [historyCost]) reach [mutatingBudget], which keeps a whole
  * script inside the 100-entry undo cap so the undo-to-origin invariant is honest;
  * the rest are navigation and undo/redo.
- *
- * [includeBlocks] excludes block toggles from the vocabulary. The undo-to-origin
- * scripts need this because block undo has known red-test defects (cross-block
- * restore); those stay covered by the hand-written tests.
  */
 fun generateFuzzScript(
 	seed: Long,
 	count: Int,
 	mutatingBudget: Int = Int.MAX_VALUE,
-	includeBlocks: Boolean = true,
 ): List<FuzzOp> {
 	val random = Random(seed)
 	var budget = mutatingBudget
 	val script = mutableListOf<FuzzOp>()
 	while (script.size < count) {
-		var op = randomOp(random)
-		if (!includeBlocks && op is FuzzOp.ToggleBlock) {
-			op = FuzzOp.TypeText(WORDS.random(random))
-		}
+		val op = randomOp(random)
 		if (op.isMutating()) {
 			val cost = op.historyCost()
 			if (cost > budget) {
@@ -184,32 +176,8 @@ private fun blockToggleTarget(
 	val lineCount = state.textLines.size
 	val start = op.lineSeed % lineCount
 	val range = start..minOf(start + op.extent, lineCount - 1)
-	val (name, toggle) = BLOCK_TOGGLES[op.styleIndex % BLOCK_TOGGLES.size]
-	// D3-shaped documents (quote stacked on a list) corrupt on round trip today, so
-	// the fuzzers refuse to create them. Lift this guard when D2-D4 are fixed.
-	val wouldStack = when (name) {
-		"quote" -> range.any { markdown.isBulletList(it) || markdown.isOrderedList(it) }
-		"bullet", "ordered" -> range.any { markdown.isBlockquote(it) }
-		else -> false
-	}
-	return if (wouldStack) null else range to toggle
-}
-
-/**
- * True when a Backspace at the current cursor, or an Enter on the current line,
- * would trigger the smart block demotion. Demotions bypass undo history (a known
- * red-test defect), so the undo-to-origin fuzz scripts step around them.
- */
-private fun wouldDemote(state: TextEditorState, markdown: MarkdownExtension, enter: Boolean): Boolean {
-	val line = state.cursorPosition.line
-	val hasBlock = markdown.isBlockquote(line) || markdown.isBulletList(line) ||
-		markdown.isOrderedList(line) || markdown.isCodeFence(line)
-	if (!hasBlock) return false
-	return if (enter) {
-		state.textLines[line].text.isEmpty()
-	} else {
-		state.cursorPosition.char == 0
-	}
+	val (_, toggle) = BLOCK_TOGGLES[op.styleIndex % BLOCK_TOGGLES.size]
+	return range to toggle
 }
 
 /**
@@ -232,7 +200,6 @@ private fun trimmedStyleRange(text: String, rawA: Int, rawB: Int): Pair<Int, Int
 class StateFuzzInterpreter(
 	private val state: TextEditorState,
 	private val markdown: MarkdownExtension,
-	private val skipDemotions: Boolean,
 ) {
 	private fun clampIndex(raw: Int): Int = raw % (state.getAllText().text.length + 1)
 
@@ -253,15 +220,11 @@ class StateFuzzInterpreter(
 			is FuzzOp.TypeText -> typeOrReplace(op.text)
 
 			is FuzzOp.Enter -> {
-				if (skipDemotions && wouldDemote(state, markdown, enter = true)) return
 				state.selector.clearSelection()
 				state.insertNewlineAtCursor()
 			}
 
 			is FuzzOp.Backspace -> {
-				if (skipDemotions && state.selector.selection == null &&
-					wouldDemote(state, markdown, enter = false)
-				) return
 				val selection = state.selector.selection
 				if (selection != null) {
 					state.delete(selection)
@@ -325,23 +288,15 @@ class StateFuzzInterpreter(
 }
 
 /** Applies [op] through real key events and the clipboard, the UI twin of [StateFuzzInterpreter]. */
-fun EditorUiTestScope.applyFuzzOpUi(op: FuzzOp, skipDemotions: Boolean) {
+fun EditorUiTestScope.applyFuzzOpUi(op: FuzzOp) {
 	fun clampIndex(raw: Int): Int = raw % (text.length + 1)
 
 	when (op) {
 		is FuzzOp.TypeText -> typeText(op.text)
 
-		is FuzzOp.Enter -> {
-			if (skipDemotions && wouldDemote(state, markdown, enter = true)) return
-			press(Key.Enter)
-		}
+		is FuzzOp.Enter -> press(Key.Enter)
 
-		is FuzzOp.Backspace -> {
-			if (skipDemotions && state.selector.selection == null &&
-				wouldDemote(state, markdown, enter = false)
-			) return
-			press(Key.Backspace)
-		}
+		is FuzzOp.Backspace -> press(Key.Backspace)
 
 		is FuzzOp.DeleteForward -> press(Key.Delete)
 
