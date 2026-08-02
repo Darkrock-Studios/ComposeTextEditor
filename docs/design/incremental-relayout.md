@@ -173,11 +173,18 @@ shared across modules):
 - `LayoutUpdateMergeTest` and `UpdateRichSpansClampTest`: the merge soundness
   rules and batch clamping.
 
-## 7. Deferred follow-ups (from issue #36)
+## 7. Per-line span queries
 
-- **Per-line span index.** `getSpansForLineWrap` still filters the flat span
-  set once per virtual line, O(virtual lines x spans) per pass. Measure-free
-  passes made this the dominant remaining term on span-heavy documents.
+`DocumentSnapshot` memoizes a per-line span index (`richSpansByLine`, every
+span grouped under each line it covers), built lazily once per span revision
+and shared across text-only revisions. `getSpansForLineWrap`,
+`getSpansInRange`, and the line-anchored block queries all read it, so each
+per-line query the layout pass runs costs the spans on that line, not the
+spans in the document. `SpanScanCostTest` pins a relayout to a constant number
+of flat span-set iterations.
+
+## 8. Deferred follow-ups (from issue #36)
+
 - **Semantics versioning.** `BasicTextEditor` still rebuilds
   `editableText = state.getAllText()` (an O(document) concatenation) whenever
   semantics are rebuilt.

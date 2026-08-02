@@ -31,7 +31,11 @@ class RichSpanManager(
 	 * carrying thousands of spans.
 	 */
 	internal fun getRichSpansStartingOn(line: Int): List<RichSpan> =
-		state.workingContent.richSpansByStartLine[line] ?: emptyList()
+		spansOnLine(line).filter { it.range.start.line == line }
+
+	/** Every span covering [line], from the snapshot's memoized per-line index. */
+	private fun spansOnLine(line: Int): List<RichSpan> =
+		state.workingContent.richSpansByLine[line] ?: emptyList()
 
 	internal fun addRichSpan(range: TextEditorRange, style: RichSpanStyle) {
 		spans = spans + RichSpan(range, style)
@@ -119,27 +123,40 @@ class RichSpanManager(
 	}
 
 	fun getSpansForLineWrap(lineWrap: LineWrap): List<RichSpan> {
-		return spans.filter { it.intersectsWith(lineWrap) }
+		// The layout pass runs this once per visual line; the per-line index keeps
+		// each call proportional to the spans on that line, not in the document.
+		return spansOnLine(lineWrap.line).filter { it.intersectsWith(lineWrap) }
 	}
 
 	fun updateSpans(operation: TextEditOperation, metadata: OperationMetadata?) {
-		val updatedSpans = mutableSetOf<RichSpan>()
+		// Span-only operations move no text, so every existing span keeps its range
+		// verbatim; only the shared clamp and duplicate-merge passes apply.
+		val updatedSpans = when (operation) {
+			is TextEditOperation.StyleSpan,
+			is TextEditOperation.RichSpan,
+			is TextEditOperation.LineBlock -> spans
 
-		spans.forEach { span ->
-			span.range.apply {
-				when (operation) {
-					is TextEditOperation.Insert -> handleInsert(operation, updatedSpans, span)
-					is TextEditOperation.Delete -> handleDelete(
-						metadata,
-						operation,
-						updatedSpans,
-						span
-					)
-					is TextEditOperation.Replace -> handleReplace(operation, updatedSpans, span)
-					is TextEditOperation.StyleSpan -> handleSpanOnly(updatedSpans, span)
-					is TextEditOperation.RichSpan -> handleSpanOnly(updatedSpans, span)
-					is TextEditOperation.LineBlock -> handleSpanOnly(updatedSpans, span)
+			is TextEditOperation.Insert,
+			is TextEditOperation.Delete,
+			is TextEditOperation.Replace -> {
+				val transformed = mutableSetOf<RichSpan>()
+				spans.forEach { span ->
+					span.range.apply {
+						when (operation) {
+							is TextEditOperation.Insert ->
+								handleInsert(operation, transformed, span)
+
+							is TextEditOperation.Delete ->
+								handleDelete(metadata, operation, transformed, span)
+
+							is TextEditOperation.Replace ->
+								handleReplace(operation, transformed, span)
+
+							else -> error("unreachable")
+						}
+					}
 				}
+				transformed
 			}
 		}
 
@@ -469,17 +486,20 @@ class RichSpanManager(
 		}
 	}
 
-	private fun handleSpanOnly(
-		updatedSpans: MutableSet<RichSpan>,
-		span: RichSpan
-	) {
-		// Span-only operations leave existing spans in place.
-		updatedSpans.add(span)
-	}
-
 	fun getSpansInRange(range: TextEditorRange): List<RichSpan> {
-		return spans.filter { span ->
-			span.range.start isBeforeOrEqual range.end && span.range.end isAfterOrEqual range.start
+		// Any span whose character range intersects [range] covers at least one of
+		// its lines, so walking the per-line index misses nothing. A multi-line
+		// span appears under several lines; the set keeps it once.
+		val result = linkedSetOf<RichSpan>()
+		for (line in range.start.line..range.end.line) {
+			spansOnLine(line).forEach { span ->
+				if (span.range.start isBeforeOrEqual range.end &&
+					span.range.end isAfterOrEqual range.start
+				) {
+					result.add(span)
+				}
+			}
 		}
+		return result.toList()
 	}
 }
