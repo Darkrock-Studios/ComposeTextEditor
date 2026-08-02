@@ -33,12 +33,10 @@ import com.darkrockstudios.texteditor.input.EditorActionRegistry
 import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
 import com.darkrockstudios.texteditor.richstyle.BlockSpanStyle
 import com.darkrockstudios.texteditor.richstyle.CodeFenceSpanStyle
+import com.darkrockstudios.texteditor.richstyle.LineBlockEditBehavior
 import com.darkrockstudios.texteditor.richstyle.OrderedListSpanStyle
 import com.darkrockstudios.texteditor.richstyle.RichSpan
 import com.darkrockstudios.texteditor.richstyle.RichSpanStyle
-import com.darkrockstudios.texteditor.richstyle.applyLineBlock
-import com.darkrockstudios.texteditor.richstyle.demoteLineBlock
-import com.darkrockstudios.texteditor.richstyle.detectLineBlock
 import com.darkrockstudios.texteditor.richstyle.normalizeLineBlocks
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
@@ -395,6 +393,17 @@ class TextEditorState(
 	/** Book-keeping for the document's [RichSpan] block decorations (lists, quotes, code fences, highlights). */
 	val richSpanManager = RichSpanManager(this)
 
+	/**
+	 * Behaviors consulted before [insertNewlineAtCursor], [backspaceAtCursor] and
+	 * [deleteAtCursor], in order; the first to claim an edit wins. Every input
+	 * path reaches these three, so a behavior applies to hardware keys and to an
+	 * IME alike.
+	 *
+	 * Pre-loaded with [LineBlockEditBehavior]. Add your own, reorder them, or
+	 * clear the list for an editor that wants the primitives untouched.
+	 */
+	val editBehaviors: MutableList<EditBehavior> = mutableListOf(LineBlockEditBehavior)
+
 	// In-editor rich-span clipboard. The system clipboard only carries the
 	// AnnotatedString (text + character-level spans), so line-anchored rich spans
 	// like ordered/bullet lists would be lost on a copy→paste round-trip. We
@@ -492,73 +501,35 @@ class TextEditorState(
 	}
 
 	/**
-	 * Inserts a line break at the cursor, splitting the current line. On an empty
-	 * list or blockquote item this instead exits the block (dropping its gutter
-	 * marker) and consumes the keystroke.
+	 * Inserts a line break at the cursor, splitting the current line, unless an
+	 * [EditBehavior] claims the edit first.
 	 */
 	fun insertNewlineAtCursor() {
-		val originalLine = cursorPosition.line
-		val activeBlock = detectLineBlock(originalLine)
-		val lineText = textLines.getOrNull(originalLine)?.text ?: ""
+		if (editBehaviors.any { it.onNewline(this) }) return
+		insertNewlineRaw()
+	}
 
-		// Enter on an empty bullet/quote item exits the block — drop the gutter
-		// marker and indent, eat the keystroke. Matches Notion / Google Docs and
-		// gives a discoverable way to leave a list or quote without backspacing.
-		// Routed through the toggle so the demotion lands in undo history.
-		if (lineText.isEmpty() && activeBlock != null) {
-			editManager.toggleLineBlock(originalLine..originalLine, activeBlock)
-			return
-		}
-
+	/**
+	 * Splits the line at the cursor with no [EditBehavior] consulted, for a
+	 * behavior that needs the plain split as part of the edit it is claiming.
+	 */
+	internal fun insertNewlineRaw() {
 		val operation = TextEditOperation.Insert(
 			position = cursorPosition,
 			text = cursor.applyCursorStyle("\n"),
 			cursorBefore = cursorPosition,
-			cursorAfter = CharLineOffset(originalLine + 1, 0)
+			cursorAfter = CharLineOffset(cursorPosition.line + 1, 0)
 		)
-		// The split and the block markers are one revision. Published separately, a
-		// reader between them sees the new half-line with its marker missing.
-		withAtomicEdit {
-			editManager.applyOperation(operation)
-
-			// RichSpanManager's newline handling only keeps the span on one side when
-			// the cursor was at a span boundary, so apply to both lines so both halves
-			// of the split keep the gutter marker. applyLineBlock is idempotent.
-			activeBlock?.let {
-				applyLineBlock(originalLine, it)
-				applyLineBlock(originalLine + 1, it)
-			}
-		}
+		editManager.applyOperation(operation)
 	}
 
 	/**
-	 * Deletes the character before the cursor, merging with the previous line when at
-	 * column 0. At the start of a list or blockquote item it first demotes the block
-	 * (removing its gutter marker) unless the previous line shares the same block.
+	 * Deletes the character before the cursor, merging with the previous line when
+	 * at column 0, unless an [EditBehavior] claims the edit first.
 	 */
 	fun backspaceAtCursor() {
-		// Backspace at column 0 of a line-block (blockquote, bullet) first demotes
-		// (removes the gutter marker and indent); a follow-up backspace then merges
-		// with the previous line. Matches Notion / Google Docs — discoverable way
-		// to exit a block prefix without nuking the line content.
-		//
-		// Exception: if the previous line is the SAME line-block, fall through to
-		// merge directly. Otherwise demote-first turns "join two adjacent items"
-		// into a two-keystroke operation, which feels worse than Docs/Notion.
-		if (cursorPosition.char == 0) {
-			val activeBlock = detectLineBlock(cursorPosition.line)
-			if (activeBlock != null) {
-				val prevBlock = detectLineBlock(cursorPosition.line - 1)
-				if (prevBlock != activeBlock) {
-					// Routed through the toggle so the demotion lands in undo history.
-					editManager.toggleLineBlock(
-						cursorPosition.line..cursorPosition.line,
-						activeBlock,
-					)
-					return
-				}
-			}
-		}
+		if (editBehaviors.any { it.onBackspace(this) }) return
+
 		if (cursorPosition.char > 0) {
 			val deleteRange = TextEditorRange(
 				CharLineOffset(cursorPosition.line, cursorPosition.char - 1),
@@ -589,9 +560,12 @@ class TextEditorState(
 
 	/**
 	 * Deletes the character after the cursor, merging the next line into the current
-	 * one when at end of line (forward delete).
+	 * one when at end of line (forward delete), unless an [EditBehavior] claims the
+	 * edit first.
 	 */
 	fun deleteAtCursor() {
+		if (editBehaviors.any { it.onDeleteForward(this) }) return
+
 		if (cursorPosition.char < textLines[cursorPosition.line].length) {
 			val deleteRange = TextEditorRange(
 				cursorPosition,
