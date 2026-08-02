@@ -227,7 +227,10 @@ class SpanManager {
 
 		for (i in 1 until spanRanges.size) {
 			val (nextStart, nextEnd) = spanRanges[i]
-			if (nextStart <= currentEnd + 1) {
+			// Adjacency means touching (nextStart == currentEnd), matching
+			// SpanInfo.isAdjacent on the edit path; `+ 1` here would swallow the
+			// unstyled character sitting between two same-style runs.
+			if (nextStart <= currentEnd) {
 				// Ranges overlap or are adjacent, extend current range
 				currentEnd = maxOf(currentEnd, nextEnd)
 			} else {
