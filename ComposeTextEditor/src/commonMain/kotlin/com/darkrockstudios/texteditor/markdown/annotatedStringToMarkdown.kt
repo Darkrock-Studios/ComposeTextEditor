@@ -38,14 +38,45 @@ fun AnnotatedString.toMarkdown(
 
 	// Coalesce touching/overlapping same-marker ranges into one run, so fragmented
 	// spans emit a single marker pair: **E****n****d** -> **End**.
+	fun coalesceRuns(ranges: List<IntRange>): List<Pair<Int, Int>> {
+		val sorted = ranges.sortedBy { it.first }
+		val runs = mutableListOf<Pair<Int, Int>>()
+		var runStart = sorted.first().first
+		var runEnd = sorted.first().last + 1
+		for (i in 1 until sorted.size) {
+			val nextStart = sorted[i].first
+			val nextEnd = sorted[i].last + 1
+			if (nextStart <= runEnd) {
+				// Touching or overlapping — extend the current run.
+				if (nextEnd > runEnd) runEnd = nextEnd
+			} else {
+				runs.add(runStart to runEnd)
+				runStart = nextStart
+				runEnd = nextEnd
+			}
+		}
+		runs.add(runStart to runEnd)
+		return runs
+	}
+
+	val codeRuns = rangesByMarker.entries
+		.firstOrNull { it.key.openMarker == "`" }
+		?.let { coalesceRuns(it.value) }
+		?: emptyList()
+
 	val boundaries = mutableListOf<StyleBoundary>()
 	rangesByMarker.forEach { (marker, ranges) ->
-		ranges.sortBy { it.first }
-		var runStart = ranges.first().first
-		var runEnd = ranges.first().last + 1
-		fun emit() {
-			var start = runStart
-			var end = runEnd
+		var runs = coalesceRuns(ranges)
+		if (marker.trimsWhitespaceEdges) {
+			// CommonMark code spans take their content literally, so an emphasis run
+			// crossing one would open its markers inside the backticks and corrupt on
+			// the next import. The run splits around code spans; markdown cannot
+			// express styled code, so the overlap itself is unrepresentable anyway.
+			runs = runs.flatMap { run -> subtractRuns(run, codeRuns) }
+		}
+		runs.forEach { (rawStart, rawEnd) ->
+			var start = rawStart
+			var end = rawEnd
 			// CommonMark emphasis cannot open before or close after whitespace:
 			// "**word **" is literal asterisks to any parser, and re-importing it
 			// escalates into escaped garbage. Shrink the markers onto the text.
@@ -53,24 +84,11 @@ fun AnnotatedString.toMarkdown(
 				while (start < end && text[start].isWhitespace()) start++
 				while (end > start && text[end - 1].isWhitespace()) end--
 			}
-			if (start >= end) return
+			if (start >= end) return@forEach
 			val length = end - start
 			boundaries.add(StyleBoundary(start, true, marker, length))
 			boundaries.add(StyleBoundary(end, false, marker, length))
 		}
-		for (i in 1 until ranges.size) {
-			val nextStart = ranges[i].first
-			val nextEnd = ranges[i].last + 1
-			if (nextStart <= runEnd) {
-				// Touching or overlapping — extend the current run.
-				if (nextEnd > runEnd) runEnd = nextEnd
-			} else {
-				emit()
-				runStart = nextStart
-				runEnd = nextEnd
-			}
-		}
-		emit()
 	}
 
 	// Sort boundaries:
@@ -135,6 +153,26 @@ fun AnnotatedString.toMarkdown(
 	}
 
 	return escapeOrderedListMarkers(result.toString())
+}
+
+/** Splits [run] into the segments left after removing every overlap with [holes]. */
+private fun subtractRuns(
+	run: Pair<Int, Int>,
+	holes: List<Pair<Int, Int>>,
+): List<Pair<Int, Int>> {
+	var segments = listOf(run)
+	holes.forEach { (holeStart, holeEnd) ->
+		segments = segments.flatMap { (start, end) ->
+			when {
+				holeEnd <= start || holeStart >= end -> listOf(start to end)
+				else -> buildList {
+					if (start < holeStart) add(start to holeStart)
+					if (holeEnd < end) add(holeEnd to end)
+				}
+			}
+		}
+	}
+	return segments
 }
 
 private fun getStyleMarker(

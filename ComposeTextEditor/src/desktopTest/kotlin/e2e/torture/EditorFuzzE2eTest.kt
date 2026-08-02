@@ -45,7 +45,7 @@ class EditorFuzzE2eTest {
 
 	private fun markdownFixpoint(seed: Long) = editorUiTest {
 		markdown.importMarkdown("seed line\n- item\n> quoted")
-		val script = generateFuzzScript(seed = fuzzSeed(seed), count = 60, includeBold = false)
+		val script = generateFuzzScript(seed = fuzzSeed(seed), count = 60)
 
 		runFuzzScript(fuzzSeed(seed), script) { op ->
 			applyFuzzOpUi(op, skipDemotions = false)
