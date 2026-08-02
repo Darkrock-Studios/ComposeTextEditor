@@ -206,21 +206,6 @@ private fun blockToggleTarget(
 }
 
 /**
- * True when the live selection touches any block-styled line. Replacing across a
- * block line can leave block spans past the line end (a known red-test defect,
- * see the PasteOverSelectionTortureE2eTest reds), so the fuzz interpreters
- * collapse such selections before typing instead of replacing through them.
- * Lift when the handleReplace rebase is fixed.
- */
-private fun selectionTouchesBlockLine(state: TextEditorState, markdown: MarkdownExtension): Boolean {
-	val selection = state.selector.selection ?: return false
-	return selection.affectedLines().any { line ->
-		markdown.isBlockquote(line) || markdown.isBulletList(line) ||
-			markdown.isOrderedList(line) || markdown.isCodeFence(line)
-	}
-}
-
-/**
  * True when a Backspace at the current cursor, or an Enter on the current line,
  * would trigger the smart block demotion. Demotions bypass undo history (a known
  * red-test defect), so the undo-to-origin fuzz scripts step around them.
@@ -265,16 +250,7 @@ class StateFuzzInterpreter(
 
 	private fun offset(raw: Int): CharLineOffset = state.getOffsetAtCharacter(clampIndex(raw))
 
-	private fun collapseSelection() {
-		val start = state.selector.selection?.start
-		state.selector.clearSelection()
-		start?.let { state.cursor.updatePosition(it) }
-	}
-
 	private fun typeOrReplace(text: String) {
-		if (selectionTouchesBlockLine(state, markdown)) {
-			collapseSelection()
-		}
 		val selection = state.selector.selection
 		if (selection != null) {
 			state.replace(selection, AnnotatedString(text), inheritStyle = true)
@@ -364,19 +340,8 @@ class StateFuzzInterpreter(
 fun EditorUiTestScope.applyFuzzOpUi(op: FuzzOp, skipDemotions: Boolean) {
 	fun clampIndex(raw: Int): Int = raw % (text.length + 1)
 
-	// An unshifted arrow collapses the selection, sidestepping the replace-over-block
-	// rebase defect the same way the state interpreter does.
-	fun collapseSelectionIfGuarded() {
-		if (selectionTouchesBlockLine(state, markdown) && state.selector.selection != null) {
-			press(Key.DirectionLeft)
-		}
-	}
-
 	when (op) {
-		is FuzzOp.TypeText -> {
-			collapseSelectionIfGuarded()
-			typeText(op.text)
-		}
+		is FuzzOp.TypeText -> typeText(op.text)
 
 		is FuzzOp.Enter -> {
 			if (skipDemotions && wouldDemote(state, markdown, enter = true)) return
@@ -429,7 +394,6 @@ fun EditorUiTestScope.applyFuzzOpUi(op: FuzzOp, skipDemotions: Boolean) {
 		}
 
 		is FuzzOp.PastePlain -> {
-			collapseSelectionIfGuarded()
 			setPlainClipboardText(op.text)
 			press(Key.V, ctrl = true)
 		}
@@ -440,7 +404,6 @@ fun EditorUiTestScope.applyFuzzOpUi(op: FuzzOp, skipDemotions: Boolean) {
 
 		is FuzzOp.SelectAllType -> {
 			press(Key.A, ctrl = true)
-			collapseSelectionIfGuarded()
 			typeText(op.text)
 		}
 	}

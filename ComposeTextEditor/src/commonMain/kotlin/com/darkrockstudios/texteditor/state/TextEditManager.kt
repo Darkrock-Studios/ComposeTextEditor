@@ -846,8 +846,12 @@ class TextEditManager(private val state: TextEditorState) {
 			)
 
 			// Bypass the history-recording path: this restoration is itself part of
-			// an undo/redo and must not push a new edit onto the queue.
-			state.richSpanManager.addRichSpan(startPos, endPos, preserved.style)
+			// an undo/redo and must not push a new edit onto the queue. The recorded
+			// offsets predate the undo's text mutation, so land them clamped.
+			state.richSpanManager.addRichSpanClamped(
+				TextEditorRange(startPos, endPos),
+				preserved.style,
+			)
 		}
 	}
 
