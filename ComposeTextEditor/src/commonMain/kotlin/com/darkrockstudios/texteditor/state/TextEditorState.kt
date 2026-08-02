@@ -1196,6 +1196,15 @@ class TextEditorState(
 		// offset and a corrupt span on paste, so clamp each span to the copy range
 		// and drop any that collapse to empty/inverted.
 		val preserved = richSpanManager.getSpansInRange(range).mapNotNull { span ->
+			// A line marker or placeholder block belongs to its line, not to the
+			// characters copied out of it: a fragment of an item's text pastes as
+			// plain text, only a copy covering the whole span carries the marker.
+			val lineAnchored = span.style.stickyAtStart || span.style is BlockSpanStyle
+			if (lineAnchored &&
+				(span.range.start < range.start || span.range.end > range.end)
+			) {
+				return@mapNotNull null
+			}
 			val clampedStart = maxOf(span.range.start, range.start)
 			val clampedEnd = minOf(span.range.end, range.end)
 			if (clampedStart >= clampedEnd) return@mapNotNull null
