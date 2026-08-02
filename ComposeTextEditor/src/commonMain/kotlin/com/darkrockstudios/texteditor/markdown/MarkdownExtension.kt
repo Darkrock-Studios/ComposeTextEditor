@@ -2,6 +2,8 @@ package com.darkrockstudios.texteditor.markdown
 
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
+import com.darkrockstudios.texteditor.CharLineOffset
+import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.richstyle.Blockquote
 import com.darkrockstudios.texteditor.richstyle.BulletList
 import com.darkrockstudios.texteditor.richstyle.CodeFence
@@ -11,6 +13,7 @@ import com.darkrockstudios.texteditor.richstyle.IMAGE_PLACEHOLDER
 import com.darkrockstudios.texteditor.richstyle.ImageBlockSpanStyle
 import com.darkrockstudios.texteditor.richstyle.ImageProvider
 import com.darkrockstudios.texteditor.richstyle.LineBlockStyle
+import com.darkrockstudios.texteditor.richstyle.LinkSpanStyle
 import com.darkrockstudios.texteditor.richstyle.OrderedList
 import com.darkrockstudios.texteditor.richstyle.PlaceholderKind
 import com.darkrockstudios.texteditor.richstyle.allowedOn
@@ -20,6 +23,7 @@ import com.darkrockstudios.texteditor.richstyle.documentBlocksOf
 import com.darkrockstudios.texteditor.richstyle.hasLineBlock
 import com.darkrockstudios.texteditor.richstyle.headerBlock
 import com.darkrockstudios.texteditor.richstyle.lineBlockStyles
+import com.darkrockstudios.texteditor.richstyle.RichSpan
 import com.darkrockstudios.texteditor.richstyle.rebuildWithBlock
 import com.darkrockstudios.texteditor.richstyle.rebuildWithoutBlock
 import com.darkrockstudios.texteditor.state.TextEditorState
@@ -213,6 +217,9 @@ class MarkdownExtension(
 		val hrLines = blocks.horizontalRuleLines
 		val imageLines = blocks.imageLines
 		val codeFenceLines = blocks.linesFor(CodeFence)
+		val linkSpansByLine = content.richSpans
+			.filter { it.style is LinkSpanStyle }
+			.groupBy { it.range.start.line }
 
 		val annotated = content.getAllText()
 		val text = annotated.text
@@ -265,9 +272,25 @@ class MarkdownExtension(
 					val baked = registry.mapNotNull { block ->
 						block.textStyle?.takeIf { blocks.has(lineIndex, block) }
 					}
+					// Link spans live on the state, not in the AnnotatedString, so
+					// the serializer is handed this line's links in line-local
+					// character offsets.
+					val lineLength = end - cursor
+					val links = linkSpansByLine[lineIndex].orEmpty().mapNotNull { span ->
+						val start = span.range.start.char.coerceIn(0, lineLength)
+						val endChar = when (span.range.end.line) {
+							lineIndex -> span.range.end.char.coerceIn(start, lineLength)
+							else -> lineLength
+						}
+						if (endChar > start) {
+							(start until endChar) to (span.style as LinkSpanStyle).url
+						} else {
+							null
+						}
+					}
 					annotated.subSequence(cursor, end)
 						.withoutSpanStyles(baked)
-						.toMarkdown(markdownConfiguration)
+						.toMarkdown(markdownConfiguration, links)
 				}
 			}
 			// Fenced lines aren't subject to per-line block prefixes — code fences
@@ -359,7 +382,8 @@ class MarkdownExtension(
 			}
 		}
 		val processedMarkdown = processedLines.joinToString("\n")
-		val annotatedString = processedMarkdown.toAnnotatedStringFromMarkdown(markdownConfiguration)
+		val parsed = processedMarkdown.parseMarkdownWithLinks(markdownConfiguration)
+		val annotatedString = parsed.annotatedString
 		// setText publishes the text with no spans and applyDocumentBlocks attaches them
 		// afterwards. As one revision, so a concurrent export can't catch the document
 		// fully loaded but entirely unstyled.
@@ -370,8 +394,66 @@ class MarkdownExtension(
 				imageLines = imageLines.toMap(),
 				blockLines = blockHits + (CodeFence to codeFenceLineIndices),
 			)
+			attachLinkSpans(parsed.links, annotatedString.text)
 		}
 	}
+
+	/**
+	 * Attaches a [LinkSpanStyle] over each parsed link. Like
+	 * [applyDocumentBlocks] this goes through the direct span-manager path:
+	 * loading a document is not something the user should undo one link at a
+	 * time. Markdown links cannot span lines; a range that somehow does is
+	 * clamped to its first line.
+	 */
+	private fun attachLinkSpans(links: List<ParsedLink>, text: String) {
+		if (links.isEmpty()) return
+		val lineStarts = mutableListOf(0)
+		text.forEachIndexed { index, char ->
+			if (char == '\n') lineStarts += index + 1
+		}
+
+		fun lineOf(flat: Int): Int {
+			val found = lineStarts.binarySearch(flat)
+			return if (found >= 0) found else -found - 2
+		}
+
+		val spans = links.map { link ->
+			val line = lineOf(link.start)
+			val lineEnd = (lineStarts.getOrNull(line + 1)?.minus(1)) ?: text.length
+			RichSpan(
+				range = TextEditorRange(
+					start = CharLineOffset(line, link.start - lineStarts[line]),
+					end = CharLineOffset(line, link.end.coerceAtMost(lineEnd) - lineStarts[line]),
+				),
+				style = LinkSpanStyle(link.url),
+			)
+		}
+		editorState.richSpanManager.addRichSpans(spans)
+		editorState.updateBookKeeping()
+	}
+
+	/**
+	 * Makes [range] a hyperlink to [url]: bakes the configuration's link display
+	 * style over the text and attaches the [LinkSpanStyle] that carries the
+	 * destination through serialization. Both go through the undoable edit
+	 * pipeline as two recorded operations (the display style and the span), so
+	 * fully reverting a `setLink` takes two undo steps.
+	 */
+	fun setLink(range: TextEditorRange, url: String) {
+		editorState.withAtomicEdit {
+			editorState.addStyleSpan(range, markdownConfiguration.linkStyle)
+			editorState.addRichSpan(range, LinkSpanStyle(url))
+		}
+	}
+
+	/**
+	 * The destination URL of the link covering [position], or null when the
+	 * position is not inside a link.
+	 */
+	fun linkAt(position: CharLineOffset): String? =
+		editorState.richSpanManager.getRichSpansStartingOn(position.line)
+			.firstOrNull { it.style is LinkSpanStyle && it.containsPosition(position) }
+			?.let { (it.style as LinkSpanStyle).url }
 
 	/** Returns whether [line] is currently rendered as a blockquote. */
 	fun isBlockquote(line: Int): Boolean = editorState.hasLineBlock(line, Blockquote)

@@ -9,10 +9,13 @@ import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.text.AnnotatedString
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.richstyle.HighlightSpanStyle
+import com.darkrockstudios.texteditor.richstyle.LinkSpanStyle
+import com.darkrockstudios.texteditor.richstyle.RichSpan
 import com.darkrockstudios.texteditor.state.SpanClickType
 import utils.editorUiTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 /** Boundary conditions, disabled state, unicode, rich span clicks, and scrolling. */
@@ -116,6 +119,26 @@ class EditorEdgeCasesE2eTest {
 			clickAtCharacter(6)
 
 			assertEquals(SpanClickType.PRIMARY_CLICK, clickedType)
+		}
+	}
+
+	@Test
+	fun `clicking a link fires the callback with its span and url`() {
+		var clickedSpan: RichSpan? = null
+		editorUiTest(
+			onRichSpanClick = { span, type, _ ->
+				if (type == SpanClickType.PRIMARY_CLICK) clickedSpan = span
+				true
+			},
+		) {
+			markdown.importMarkdown("go to [site](https://example.com) now")
+			waitForIdle()
+
+			clickAtCharacter(8)
+
+			val style = clickedSpan?.style
+			assertIs<LinkSpanStyle>(style, "the click must deliver the link span")
+			assertEquals("https://example.com", style.url)
 		}
 	}
 

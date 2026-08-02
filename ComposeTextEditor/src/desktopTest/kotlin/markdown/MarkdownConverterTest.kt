@@ -116,6 +116,20 @@ class MarkdownConverterTest {
 	}
 
 	@Test
+	fun `underlined text without a link span stays plain text`() {
+		val input = buildAnnotatedString {
+			append("Click ")
+			withStyle(SpanStyle(color = Color.Blue, textDecoration = TextDecoration.Underline)) {
+				append("here")
+			}
+			append(" to continue")
+		}
+		// Markdown has no underline; a link's identity is its LinkSpanStyle, so
+		// bare decoration must not fabricate an empty link.
+		assertEquals("Click here to continue", input.toMarkdown())
+	}
+
+	@Test
 	fun `test link conversion`() {
 		val input = buildAnnotatedString {
 			append("Click ")
@@ -124,7 +138,10 @@ class MarkdownConverterTest {
 			}
 			append(" to continue")
 		}
-		assertEquals("Click [here]() to continue", input.toMarkdown())
+		assertEquals(
+			"Click [here](https://example.com) to continue",
+			input.toMarkdown(links = listOf(6..9 to "https://example.com")),
+		)
 	}
 
 //	@Test

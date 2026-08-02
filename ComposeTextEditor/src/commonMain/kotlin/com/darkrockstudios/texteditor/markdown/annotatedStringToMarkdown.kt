@@ -8,9 +8,14 @@ import androidx.compose.ui.unit.TextUnit
 /**
  * Converts an AnnotatedString to a markdown string, handling supported markdown styles.
  * Only converts styles that match our supported markdown styles, dropping any unsupported styles.
+ *
+ * @param links Hyperlinks to emit, as text ranges (in this string's character
+ * offsets) paired with their destination URLs. Each becomes `[text](url)`,
+ * with the markers enclosing any emphasis inside the range.
  */
 fun AnnotatedString.toMarkdown(
-	configuration: MarkdownConfiguration = MarkdownConfiguration.DEFAULT
+	configuration: MarkdownConfiguration = MarkdownConfiguration.DEFAULT,
+	links: List<Pair<IntRange, String>> = emptyList(),
 ): String {
 	if (text.isEmpty()) return ""
 
@@ -88,12 +93,31 @@ fun AnnotatedString.toMarkdown(
 		}
 	}
 
+	// The destination is emitted verbatim inside `(...)`; a URL whose characters
+	// would terminate or corrupt the destination gets the CommonMark
+	// angle-bracket form instead.
+	links.forEach { (range, url) ->
+		val start = range.first.coerceAtLeast(0)
+		val end = (range.last + 1).coerceAtMost(text.length)
+		if (start >= end) return@forEach
+		val marker = StyleMarkerPair(
+			openMarker = "[",
+			closeMarker = "](${markdownLinkDestination(url)})",
+			isLink = true,
+		)
+		boundaries.add(StyleBoundary(start, true, marker, end - start))
+		boundaries.add(StyleBoundary(end, false, marker, end - start))
+	}
+
 	// Sort boundaries:
 	// 1. By index
 	// 2. For same index, close markers come before open markers
-	// 3. For same index and type, sort by run length (longer runs close first)
+	// 3. Link markers enclose inline emphasis sharing the boundary: a link
+	//    opens before and closes after any other marker at the same index
+	// 4. For same index and type, sort by run length (longer runs close first)
 	boundaries.sortWith(compareBy<StyleBoundary> { it.index }
 		.thenBy { it.isStart }
+		.thenBy { if (it.marker.isLink == it.isStart) 0 else 1 }
 		.thenByDescending { it.length })
 
 	val result = StringBuilder()
@@ -198,14 +222,21 @@ private fun getStyleMarker(
 		style.isItalicStyle -> StyleMarkerPair("*", "*")
 		style.isCodeStyle -> StyleMarkerPair("`", "`")
 		style.isStrikethroughStyle -> StyleMarkerPair("~~", "~~")
-		style.isUnderlineStyle -> StyleMarkerPair("[", "]()")
 		else -> null
 	}
 }
 
+/**
+ * The destination as it appears inside `(...)`: angle-bracketed when it holds
+ * a character CommonMark cannot take in a bare destination.
+ */
+private fun markdownLinkDestination(url: String): String =
+	if (url.any { it == ')' || it == ' ' || it == '\n' }) "<$url>" else url
+
 private data class StyleMarkerPair(
 	val openMarker: String,
-	val closeMarker: String
+	val closeMarker: String,
+	val isLink: Boolean = false,
 ) {
 	/** Emphasis delimiters; code spans and headers tolerate edge whitespace. */
 	val trimsWhitespaceEdges: Boolean
