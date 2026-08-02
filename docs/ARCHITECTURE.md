@@ -147,6 +147,53 @@ module converts to and from markdown text, and the spell-check and find modules
 decoration rich spans through `updateRichSpans`, without ever touching editor
 internals.
 
+## Input: from raw event to operation
+
+Input is the front of the one-way loop, and its whole job is translation:
+everything the user does becomes a cursor move, a selection change, or a
+`TextEditOperation`. Input code never mutates lines. Three sources, three
+translation paths:
+
+- **Commands.** `KeyBindings` maps the platform's key chords onto the
+  `EditorCommand` vocabulary: motions and actions named by intent
+  (`WordLeft`, `DeleteWordBackward`, `Paste`), not by keys.
+  `TextEditorKeyCommandHandler` is the single executor. The split is strict:
+  bindings know which chord means what, the handler knows what commands do,
+  and nothing else knows either. Windows/Linux and macOS conventions ship as
+  two `KeyBindings` values; hosts can substitute their own.
+- **Typed characters.** Printable typing that arrives as raw key events
+  (desktop `KEY_TYPED`, hardware keyboards on Android, browser keydown on
+  wasm) inserts through the same handler, gated by a per-platform predicate
+  for "this event is a typed character", because every platform signals that
+  differently and guessing wrong either drops or double-inserts keystrokes.
+- **The IME.** Everything that *composes* text (soft keyboards, autocorrect,
+  dead keys and accents, CJK input, emoji pickers) arrives through a platform
+  text-input session rather than as key events.
+
+All of this converges on one modifier node, `TextEditorInputModifierNode`,
+which also owns the session lifecycle: gaining focus launches the platform
+input session, losing focus (or disabling the editor) cancels it.
+
+The IME contract runs in two directions. Commands flow in, and each one lands
+in a single shared implementation (`ImeEditLogic` in commonMain) so that
+composing-region and cursor semantics are byte-for-byte identical on every
+platform; the per-platform adapters are pure translation. State flows out,
+because an IME keeps its own mirror of the text around the cursor and will
+issue commands against a stale buffer unless it is told about every change.
+On Android that direction is driven entirely by observing the state's flows,
+never by manual notify calls. The session machinery, the Android
+`InputConnection`, and the per-platform differences:
+[design/text-input-sessions.md](design/text-input-sessions.md).
+
+Pointer input is three cooperating handlers on the canvas: caret placement
+and span clicks, drag selection, and multi-click (word, then line). The
+load-bearing distinction is *mouse-like versus finger*, detected from pointer
+buttons rather than pointer type because Android reports external mice as
+`Touch`. Mouse-like input places the caret on press, drags to select, and
+extends with shift-click; finger input places the caret on release,
+long-presses to select a word or open the context menu, and drags selection
+handles.
+
 ## Document model and transactions
 
 The document is an immutable `DocumentSnapshot`: one `AnnotatedString` per line
