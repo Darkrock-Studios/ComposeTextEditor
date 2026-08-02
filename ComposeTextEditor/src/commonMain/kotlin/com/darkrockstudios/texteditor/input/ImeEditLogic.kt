@@ -25,6 +25,15 @@ import com.darkrockstudios.texteditor.state.TextEditorState
  * `newCursorPosition` contract.
  */
 internal fun TextEditorState.imeCommitText(text: String, newCursorPosition: Int) {
+	// A committed bare newline is an Enter. An IME that commits "\n" as text never
+	// produces a key event, so routing here is the only way an EditBehavior sees it.
+	// Restricted to the cursor-after-the-insert contract because a claimed newline
+	// may insert nothing at all, leaving no insert position to place a cursor from.
+	if (text == "\n" && newCursorPosition == 1 && composingRange == null) {
+		imePerformNewline()
+		return
+	}
+
 	val insertStart = replaceComposingOrInsert(text)
 	val insertEnd = insertStart + text.length
 	// Commit semantics end the composition even when no mutation ran (empty text
@@ -67,9 +76,7 @@ internal fun TextEditorState.imeDeleteSurroundingText(beforeLength: Int, afterLe
 	val cursorIndex = getCharacterIndex(cursorPosition)
 	val deleteStart = maxOf(0, cursorIndex - beforeLength)
 	val deleteEnd = minOf(getTextLength(), cursorIndex + afterLength)
-	if (deleteStart < deleteEnd) {
-		delete(TextEditorRange(getOffsetAtCharacter(deleteStart), getOffsetAtCharacter(deleteEnd)))
-	}
+	deleteSurroundingRange(cursorIndex, deleteStart, deleteEnd)
 }
 
 /** `deleteSurroundingTextInCodePoints`: same as [imeDeleteSurroundingText] but counted in code points. */
@@ -80,9 +87,39 @@ internal fun TextEditorState.imeDeleteSurroundingTextInCodePoints(beforeLength: 
 	val charsAfter = codePointsToChars(fullText, cursorIndex, afterLength, backwards = false)
 	val deleteStart = maxOf(0, cursorIndex - charsBefore)
 	val deleteEnd = minOf(getTextLength(), cursorIndex + charsAfter)
-	if (deleteStart < deleteEnd) {
-		delete(TextEditorRange(getOffsetAtCharacter(deleteStart), getOffsetAtCharacter(deleteEnd)))
+	deleteSurroundingRange(cursorIndex, deleteStart, deleteEnd)
+}
+
+/**
+ * Deletes [deleteStart]..[deleteEnd], as a backspace when that is exactly what the
+ * range describes so an [EditBehavior][com.darkrockstudios.texteditor.state.EditBehavior]
+ * can claim it, and as a plain range delete otherwise. Both produce the same text
+ * and leave the cursor at the range start; only the behavior hook differs.
+ *
+ * Thar be dragons: `deleteSurroundingText` is not unambiguously a keypress.
+ * Autocorrect and prediction engines call it to rewrite what was already typed,
+ * and treating one of those as a backspace would demote a line block in the
+ * middle of a word correction. Requiring no composing region, no selection, and
+ * exactly one character before the cursor excludes the rewrite shapes; widen
+ * these conditions only with device evidence.
+ */
+private fun TextEditorState.deleteSurroundingRange(
+	cursorIndex: Int,
+	deleteStart: Int,
+	deleteEnd: Int,
+) {
+	if (deleteStart >= deleteEnd) return
+
+	val isBackspace = deleteEnd == cursorIndex &&
+			cursorIndex - deleteStart == 1 &&
+			composingRange == null &&
+			!selector.hasSelection()
+	if (isBackspace) {
+		backspaceAtCursor()
+		return
 	}
+
+	delete(TextEditorRange(getOffsetAtCharacter(deleteStart), getOffsetAtCharacter(deleteEnd)))
 }
 
 /** `setSelection`: collapse to a cursor when start == end, otherwise select; cursor goes to `end`. */
