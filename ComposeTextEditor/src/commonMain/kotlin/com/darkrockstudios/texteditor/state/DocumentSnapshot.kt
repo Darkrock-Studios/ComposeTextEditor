@@ -19,12 +19,12 @@ class DocumentSnapshot private constructor(
 	/** Every rich span in the document, its ranges addressing [lines]. */
 	val richSpans: Set<RichSpan>,
 	/**
-	 * Backs [richSpansByStartLine]. Held as the [Lazy] rather than the map so
+	 * Backs [richSpansByLine]. Held as the [Lazy] rather than the map so
 	 * [withLines] can hand the same one to the revision it produces, which keeps the
 	 * memoized index alive across a text-only edit. Sharing it also carries the
 	 * `PUBLICATION` safety over, where a plain field would publish the map unsafely.
 	 */
-	private val spansByStartLine: Lazy<Map<Int, List<RichSpan>>>,
+	private val spansByLine: Lazy<Map<Int, List<RichSpan>>>,
 	/**
 	 * Backs [lineStartOffsets]. Held as the [Lazy] for the same reasons as
 	 * [spansByStartLine], and shared with the revision [withRichSpans] produces
@@ -35,18 +35,17 @@ class DocumentSnapshot private constructor(
 	internal constructor(lines: List<AnnotatedString>, richSpans: Set<RichSpan>) : this(
 		lines = lines,
 		richSpans = richSpans,
-		spansByStartLine = lazy(LazyThreadSafetyMode.PUBLICATION) {
-			richSpans.groupBy { it.range.start.line }
-		},
+		spansByLine = spansByLineOf(richSpans),
 		lineStarts = lineStartsOf(lines),
 	)
 
 	/**
-	 * [richSpans] grouped by the line each one starts on. Built on first read and
-	 * reused until a revision changes the spans, so the line-anchored block queries
-	 * cost a map lookup instead of a scan of every span in the document.
+	 * [richSpans] grouped by every line each one covers; a multi-line span appears
+	 * under each of its lines. Built on first read and reused until a revision
+	 * changes the spans, so the per-line queries the layout pass runs once per
+	 * visual line cost a map lookup instead of a scan of every span in the document.
 	 */
-	internal val richSpansByStartLine: Map<Int, List<RichSpan>> get() = spansByStartLine.value
+	internal val richSpansByLine: Map<Int, List<RichSpan>> get() = spansByLine.value
 
 	/**
 	 * Flat character index at which each line starts, counting one newline between
@@ -74,17 +73,26 @@ class DocumentSnapshot private constructor(
 	 * start on are the same ones they started on before.
 	 */
 	internal fun withLines(lines: List<AnnotatedString>) =
-		DocumentSnapshot(lines, richSpans, spansByStartLine, lineStartsOf(lines))
+		DocumentSnapshot(lines, richSpans, spansByLine, lineStartsOf(lines))
 
 	internal fun withRichSpans(richSpans: Set<RichSpan>) = DocumentSnapshot(
 		lines = lines,
 		richSpans = richSpans,
-		spansByStartLine = lazy(LazyThreadSafetyMode.PUBLICATION) {
-			richSpans.groupBy { it.range.start.line }
-		},
+		spansByLine = spansByLineOf(richSpans),
 		lineStarts = lineStarts,
 	)
 }
+
+private fun spansByLineOf(richSpans: Set<RichSpan>): Lazy<Map<Int, List<RichSpan>>> =
+	lazy(LazyThreadSafetyMode.PUBLICATION) {
+		val byLine = mutableMapOf<Int, MutableList<RichSpan>>()
+		for (span in richSpans) {
+			for (line in span.range.start.line..span.range.end.line) {
+				byLine.getOrPut(line) { mutableListOf() }.add(span)
+			}
+		}
+		byLine
+	}
 
 private fun lineStartsOf(lines: List<AnnotatedString>): Lazy<IntArray> =
 	lazy(LazyThreadSafetyMode.PUBLICATION) {
