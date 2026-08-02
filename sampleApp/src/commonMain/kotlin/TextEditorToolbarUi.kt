@@ -72,9 +72,7 @@ fun TextEditorToolbar(
 			isBulletListActive = richSpans.any { it.style === BulletListSpanStyle }
 			isOrderedListActive = richSpans.any { it.style === OrderedListSpanStyle }
 			isCodeFenceActive = richSpans.any { it.style === CodeFenceSpanStyle }
-			currentHeaderLevel = (1..6).firstOrNull { lvl ->
-				styles.contains(mardkown.markdownStyles.header(lvl))
-			} ?: 0
+			currentHeaderLevel = mardkown.headerLevel(position.line) ?: 0
 			isHighlightActive = richSpans.any { it.style == HIGHLIGHT }
 		}
 	}
@@ -473,6 +471,9 @@ private fun toggleStyle(
 	}
 }
 
+// Cycles none -> H1 -> H2 -> ... -> H6 -> none over the selected lines (or the
+// cursor's line). Headings are semantic line blocks: toggling the same level
+// removes it, toggling a new level swaps it.
 private fun cycleHeader(
 	state: TextEditorState,
 	markdown: MarkdownExtension,
@@ -480,20 +481,15 @@ private fun cycleHeader(
 ) {
 	val nextLevel = (currentLevel + 1) % 7
 	val selection = state.selector.selection
-	if (selection != null) {
-		(1..6).forEach { lvl ->
-			state.removeStyleSpan(selection, markdown.markdownStyles.header(lvl))
-		}
-		if (nextLevel != 0) {
-			state.addStyleSpan(selection, markdown.markdownStyles.header(nextLevel))
-		}
+	val lines = if (selection != null) {
+		selection.start.line..selection.end.line
 	} else {
-		(1..6).forEach { lvl ->
-			state.cursor.removeStyle(markdown.markdownStyles.header(lvl))
-		}
-		if (nextLevel != 0) {
-			state.cursor.addStyle(markdown.markdownStyles.header(nextLevel))
-		}
+		state.cursorPosition.line..state.cursorPosition.line
+	}
+	if (nextLevel != 0) {
+		markdown.toggleHeader(lines, nextLevel)
+	} else if (currentLevel != 0) {
+		markdown.toggleHeader(lines, currentLevel)
 	}
 }
 

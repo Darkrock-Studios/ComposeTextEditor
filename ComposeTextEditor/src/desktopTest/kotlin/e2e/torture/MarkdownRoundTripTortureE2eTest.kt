@@ -144,6 +144,19 @@ class MarkdownRoundTripTortureE2eTest {
 	}
 
 	@Test
+	fun `a link url survives a round trip`() = editorUiTest {
+		markdown.importMarkdown("[text](https://example.com)")
+
+		// Import styles the link text but drops the URL, so export emits an
+		// empty target and the destination is silently lost.
+		val exported = markdown.exportAsMarkdown()
+		assertTrue(
+			exported.contains("https://example.com"),
+			"the link destination must survive a save; got: $exported",
+		)
+	}
+
+	@Test
 	fun `a bold run ending in a space round trips`() = editorUiTest {
 		markdown.importMarkdown("word tail")
 		state.addStyleSpan(

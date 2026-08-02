@@ -1,21 +1,27 @@
 package com.darkrockstudios.texteditor.markdown
 
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
 import com.darkrockstudios.texteditor.richstyle.Blockquote
 import com.darkrockstudios.texteditor.richstyle.BulletList
 import com.darkrockstudios.texteditor.richstyle.CodeFence
 import com.darkrockstudios.texteditor.richstyle.HR_PLACEHOLDER
+import com.darkrockstudios.texteditor.richstyle.HeaderSpanStyle
 import com.darkrockstudios.texteditor.richstyle.IMAGE_PLACEHOLDER
 import com.darkrockstudios.texteditor.richstyle.ImageBlockSpanStyle
 import com.darkrockstudios.texteditor.richstyle.ImageProvider
-import com.darkrockstudios.texteditor.richstyle.LINE_BLOCK_STYLES
 import com.darkrockstudios.texteditor.richstyle.LineBlockStyle
 import com.darkrockstudios.texteditor.richstyle.OrderedList
 import com.darkrockstudios.texteditor.richstyle.PlaceholderKind
 import com.darkrockstudios.texteditor.richstyle.allowedOn
 import com.darkrockstudios.texteditor.richstyle.applyDocumentBlocks
+import com.darkrockstudios.texteditor.richstyle.conflicts
 import com.darkrockstudios.texteditor.richstyle.documentBlocksOf
 import com.darkrockstudios.texteditor.richstyle.hasLineBlock
-import com.darkrockstudios.texteditor.richstyle.mutuallyExcluded
+import com.darkrockstudios.texteditor.richstyle.headerBlock
+import com.darkrockstudios.texteditor.richstyle.lineBlockStyles
+import com.darkrockstudios.texteditor.richstyle.rebuildWithBlock
+import com.darkrockstudios.texteditor.richstyle.rebuildWithoutBlock
 import com.darkrockstudios.texteditor.state.TextEditorState
 
 private val HR_LINE_TOKENS = setOf("---", "***", "___")
@@ -93,17 +99,18 @@ private data class PeeledLine(
 
 /**
  * Peels stacked block markers off [line] as the exact mirror of how export
- * emits them: styles are tried in [LINE_BLOCK_STYLES] registry order, each at
+ * emits them: styles are tried in [registry] order (see
+ * [com.darkrockstudios.texteditor.richstyle.lineBlockStyles]), each at
  * most once, and only when it can stack with everything already peeled.
  * `> - item` peels quote then bullet; `- 1990. plans` peels only the bullet,
  * because the two list styles are mutually exclusive, so `1990. ` stays in the
  * body text. A nested `> > quoted` keeps its second level as body text.
  */
-private fun peelLineBlocks(line: String): PeeledLine {
+private fun peelLineBlocks(line: String, registry: List<LineBlockStyle>): PeeledLine {
 	var body = line
 	val peeled = mutableListOf<LineBlockStyle>()
-	for (block in LINE_BLOCK_STYLES) {
-		if (peeled.any { block in mutuallyExcluded(it) }) continue
+	for (block in registry) {
+		if (peeled.any { conflicts(block.spanStyle, it.spanStyle) }) continue
 		val match = block.markdownPattern.matchEntire(body) ?: continue
 		peeled += block
 		body = match.groupValues[1]
@@ -135,6 +142,16 @@ private fun String.escapeResidualMarker(): String {
 	}
 }
 
+/** This string with every span range whose style equals one of [styles] dropped. */
+private fun AnnotatedString.withoutSpanStyles(styles: Collection<SpanStyle>): AnnotatedString {
+	if (styles.isEmpty() || spanStyles.none { it.item in styles }) return this
+	return AnnotatedString(
+		text = text,
+		spanStyles = spanStyles.filter { it.item !in styles },
+		paragraphStyles = paragraphStyles,
+	)
+}
+
 /**
  * An extension to TextEditorState that provides markdown functionality.
  * This separates markdown concerns from the core text editor functionality.
@@ -146,10 +163,31 @@ class MarkdownExtension(
 ) {
 	var markdownConfiguration: MarkdownConfiguration = initialConfiguration
 		set(value) {
+			val previous = field
 			field = value
 			markdownStyles = MarkdownStyles(markdownConfiguration)
 			editorState.markdownConfiguration = value
+			if (previous != value) rebakeHeaderLines(previous, value)
 		}
+
+	/**
+	 * Swaps every heading line's baked display style from [previous]'s to
+	 * [current]'s. A heading's identity lives in its [HeaderSpanStyle] span; the
+	 * baked SpanStyle is presentation only, so this is a display migration on
+	 * the direct line-update path, not an undoable edit.
+	 */
+	private fun rebakeHeaderLines(
+		previous: MarkdownConfiguration,
+		current: MarkdownConfiguration,
+	) {
+		editorState.withAtomicEdit {
+			editorState.textLines.forEachIndexed { line, existing ->
+				val level = headerLevel(line) ?: return@forEachIndexed
+				val stripped = rebuildWithoutBlock(existing, headerBlock(level, previous))
+				editorState.updateLine(line, rebuildWithBlock(stripped, headerBlock(level, current)))
+			}
+		}
+	}
 
 	var markdownStyles: MarkdownStyles = MarkdownStyles(markdownConfiguration)
 		private set
@@ -170,7 +208,8 @@ class MarkdownExtension(
 	 */
 	fun exportAsMarkdown(): String {
 		val content = editorState.content
-		val blocks = documentBlocksOf(content.richSpans)
+		val registry = lineBlockStyles(markdownConfiguration)
+		val blocks = documentBlocksOf(content.richSpans, markdownConfiguration)
 		val hrLines = blocks.horizontalRuleLines
 		val imageLines = blocks.imageLines
 		val codeFenceLines = blocks.linesFor(CodeFence)
@@ -219,16 +258,26 @@ class MarkdownExtension(
 				// backticks. Inside a fence the content is literal anyway.
 				isFenceLine -> text.substring(cursor, end)
 
-				else -> annotated.subSequence(cursor, end).toMarkdown(markdownConfiguration)
+				else -> {
+					// A prefix block's baked display style must not reach the
+					// inline serializer: a heading's SpanStyle would also match
+					// the legacy font-size branch and emit a second `# ` inline.
+					val baked = registry.mapNotNull { block ->
+						block.textStyle?.takeIf { blocks.has(lineIndex, block) }
+					}
+					annotated.subSequence(cursor, end)
+						.withoutSpanStyles(baked)
+						.toMarkdown(markdownConfiguration)
+				}
 			}
 			// Fenced lines aren't subject to per-line block prefixes — code fences
 			// don't stack with bullet/blockquote/ordered, and the mutual-exclusion
 			// rule in `applyLineBlock` already enforces this. Reset the run
 			// positions so a fence between two OL runs doesn't continue numbering.
 			if (isFenceLine) {
-				LINE_BLOCK_STYLES.forEach { runPositions.remove(it) }
+				registry.forEach { runPositions.remove(it) }
 			} else {
-				LINE_BLOCK_STYLES.forEach { block ->
+				registry.forEach { block ->
 					if (blocks.has(lineIndex, block)) {
 						val pos = runPositions[block] ?: 0
 						sb.append(block.markdownPrefix(pos))
@@ -265,6 +314,7 @@ class MarkdownExtension(
 		val imageLines = mutableListOf<Pair<Int, ImageBlockSpanStyle>>()
 		val blockHits = mutableMapOf<LineBlockStyle, MutableList<Int>>()
 		val provider = imageProvider
+		val registry = lineBlockStyles(markdownConfiguration)
 		val processedLines = fenceStrip.text.lines().mapIndexed { index, line ->
 			if (index in codeFenceLineIndices) {
 				return@mapIndexed line.escapeMarkdownSpecials()
@@ -272,7 +322,7 @@ class MarkdownExtension(
 			// Markers peel before the body is classified, so a rule or image keeps
 			// a stacked blockquote (`> ---`), and a `- ---` line comes back as the
 			// rule it once was rather than a bullet holding literal dashes.
-			val peeled = peelLineBlocks(line)
+			val peeled = peelLineBlocks(line, registry)
 			val imageMatch = STANDALONE_IMAGE_REGEX.matchEntire(peeled.body)
 			fun record(blocks: List<LineBlockStyle>) = blocks.forEach { block ->
 				blockHits.getOrPut(block) { mutableListOf() } += index
@@ -365,6 +415,28 @@ class MarkdownExtension(
 	 * line — the four block styles can't coexist visually.
 	 */
 	fun toggleCodeFence(lines: IntRange) = toggleLineBlock(lines, CodeFence)
+
+	/**
+	 * Makes each line in [lines] a heading of [level] (1..6), or removes the
+	 * heading where every targeted line already carries that exact level.
+	 * Applying over a different heading level swaps the level. The heading is
+	 * semantic: it survives configuration changes and exports as `#` markers
+	 * regardless of the display style in force. One atomic undo entry covers
+	 * the whole toggle.
+	 */
+	fun toggleHeader(lines: IntRange, level: Int) {
+		editorState.editManager.toggleLineBlock(lines, headerBlock(level, markdownConfiguration))
+	}
+
+	/**
+	 * The heading level (1..6) of [line], or null when the line is not a
+	 * heading. Reads the line's [HeaderSpanStyle] span, so the answer is
+	 * independent of the display styles in the active configuration.
+	 */
+	fun headerLevel(line: Int): Int? =
+		editorState.richSpanManager.getRichSpansStartingOn(line)
+			.firstNotNullOfOrNull { it.style as? HeaderSpanStyle }
+			?.level
 
 	private fun toggleLineBlock(lines: IntRange, block: LineBlockStyle) {
 		editorState.editManager.toggleLineBlock(lines, block)
