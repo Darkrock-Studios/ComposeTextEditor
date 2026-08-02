@@ -14,18 +14,18 @@ import kotlin.test.assertEquals
  * An import lays the document out a fixed number of times, however many decorated
  * lines it carries.
  *
- * A relayout re-measures from the line it is handed to the end of the document, so
- * applying block styles a line at a time walks a triangle and makes an import cost
- * quadratic in line count. Counting measure calls pins the cost to a constant number
- * of whole-document passes, so a regression fails the build instead of waiting to be
- * found by profiling.
+ * Applying block styles a line at a time once made an import cost quadratic in line
+ * count. Counting measure calls pins the cost to a constant number of whole-document
+ * passes, so a regression fails the build instead of waiting to be found by profiling.
  */
 class ImportRelayoutCostTest {
 
-	/** Layout passes a decorated import runs: one for the text, one for the decorations. */
-	private val decoratedImportPasses = 2
+	/**
+	 * The import runs inside one transaction, so the text publish and the block
+	 * decorations coalesce into a single layout pass at commit.
+	 */
+	private val decoratedImportPasses = 1
 
-	/** A document with nothing to decorate skips the second pass. */
 	private val plainImportPasses = 1
 
 	/** Returns how many times importing [markdown] measured a line. */
@@ -52,8 +52,8 @@ class ImportRelayoutCostTest {
 	@Test
 	fun `a rule still gets the decoration pass with no block line to rebuild`() = runTest {
 		// A horizontal rule attaches a span without rebuilding any line, and its height
-		// is resolved from that span during book-keeping. Skipping the pass whenever no
-		// line changed would leave the rule unmeasured.
+		// is resolved from that span during book-keeping. Skipping the layout pass
+		// whenever no line changed would leave the rule unmeasured.
 		val withRule = "before\n---\nafter"
 		val state = TextEditorState(scope = this, measurer = countingMeasurer(MeasureCounter()))
 

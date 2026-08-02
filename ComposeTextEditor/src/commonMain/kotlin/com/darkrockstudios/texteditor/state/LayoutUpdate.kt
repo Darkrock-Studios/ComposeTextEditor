@@ -27,3 +27,26 @@ internal sealed class LayoutUpdate {
 		val SpansOnly = Partial(0, -1, 0)
 	}
 }
+
+/**
+ * Combines two deferred updates into one that covers both. Two updates that both
+ * change the line count cannot be composed by range arithmetic alone, so that case
+ * degrades to [LayoutUpdate.Full], which is always sound.
+ */
+internal fun LayoutUpdate.mergedWith(other: LayoutUpdate): LayoutUpdate {
+	if (this is LayoutUpdate.Full || other is LayoutUpdate.Full) return LayoutUpdate.Full
+	val a = this as LayoutUpdate.Partial
+	val b = other as LayoutUpdate.Partial
+	val aEmpty = a.remeasureLast < a.remeasureFirst && a.lineDelta == 0
+	val bEmpty = b.remeasureLast < b.remeasureFirst && b.lineDelta == 0
+	return when {
+		aEmpty -> b
+		bEmpty -> a
+		a.lineDelta != 0 && b.lineDelta != 0 -> LayoutUpdate.Full
+		else -> LayoutUpdate.Partial(
+			remeasureFirst = minOf(a.remeasureFirst, b.remeasureFirst),
+			remeasureLast = maxOf(a.remeasureLast, b.remeasureLast),
+			lineDelta = a.lineDelta + b.lineDelta,
+		)
+	}
+}

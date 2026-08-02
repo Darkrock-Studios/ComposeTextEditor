@@ -146,6 +146,13 @@ class TextEditorState(
 	/** Actions deferred by [onCommit] until the outermost transaction commits. */
 	private val pendingCommitActions = mutableListOf<() -> Unit>()
 
+	/**
+	 * Layout work requested while a transaction is open, merged across requests and
+	 * flushed as one pass at commit. Laying out mid-transaction would both waste the
+	 * work and read a half-applied revision.
+	 */
+	private var pendingLayoutUpdate: LayoutUpdate? = null
+
 	/** Content as the current edit sees it: the open draft if there is one, else [content]. */
 	internal val workingContent: DocumentSnapshot get() = draft ?: content
 
@@ -182,10 +189,26 @@ class TextEditorState(
 			// Every publish passes through line-block normalization, so no caller
 			// can commit a revision violating the placeholder-line invariant. A
 			// transaction that mutated nothing skips the scan and the republish.
-			draft?.let { if (it !== content) content = normalizeLineBlocks(it, markdownConfiguration) }
+			draft?.let {
+				if (it !== content) {
+					val normalized = normalizeLineBlocks(it, markdownConfiguration)
+					// Normalization can rewrite lines no operation declared dirty,
+					// so a rewrite invalidates any deferred partial relayout.
+					if (normalized !== it) invalidateLayoutInputs()
+					content = normalized
+				}
+			}
+			draft = null
+			// Flush the deferred relayout only on the committing path; a discarded
+			// draft leaves the previous layout correct as-is.
+			pendingLayoutUpdate?.let {
+				pendingLayoutUpdate = null
+				updateBookKeeping(it)
+			}
 			return result
 		} finally {
 			draft = null
+			pendingLayoutUpdate = null
 			// Drop the queue on the throwing path too: those actions announce an edit
 			// that no longer exists.
 			val actions = pendingCommitActions.toList()
@@ -209,7 +232,10 @@ class TextEditorState(
 		if (draft != null) {
 			draft = transform(workingContent)
 		} else {
-			content = normalizeLineBlocks(transform(content), markdownConfiguration)
+			val transformed = transform(content)
+			val normalized = normalizeLineBlocks(transformed, markdownConfiguration)
+			if (normalized !== transformed) invalidateLayoutInputs()
+			content = normalized
 		}
 	}
 
@@ -717,14 +743,11 @@ class TextEditorState(
 				}
 			)
 		}
-
-		updateBookKeeping()
 	}
 
 	internal fun insertLine(index: Int, text: String) = insertLine(index, text.toAnnotatedString())
 	internal fun insertLine(index: Int, text: AnnotatedString) {
 		setLines(textLines.toMutableList().also { it.add(index, text) })
-		updateBookKeeping()
 	}
 
 	/**
@@ -918,6 +941,13 @@ class TextEditorState(
 	}
 
 	internal fun updateBookKeeping(update: LayoutUpdate = LayoutUpdate.Full) {
+		// Inside a transaction the content is a half-applied draft; merge the request
+		// and lay out once at commit.
+		if (draft != null) {
+			pendingLayoutUpdate = pendingLayoutUpdate?.mergedWith(update) ?: update
+			return
+		}
+
 		// Defer until the viewport has a real size; the 1×1 sentinel forces character-wide wraps.
 		if (viewportSize.width <= 1f || viewportSize.height <= 1f) return
 
@@ -1094,13 +1124,11 @@ class TextEditorState(
 	 */
 	fun addStyleSpan(range: TextEditorRange, style: SpanStyle) {
 		editManager.addSpanStyle(range, style)
-		updateBookKeeping()
 	}
 
 	/** Removes a previously applied character-level [SpanStyle] from [range]. */
 	fun removeStyleSpan(range: TextEditorRange, style: SpanStyle) {
 		editManager.removeStyleSpan(range, style)
-		updateBookKeeping()
 	}
 
 	/**
@@ -1109,13 +1137,11 @@ class TextEditorState(
 	 */
 	fun addRichSpan(range: TextEditorRange, style: RichSpanStyle) {
 		editManager.addRichSpan(range, style)
-		updateBookKeeping()
 	}
 
 	/** Adds a [RichSpan] block decoration spanning [start] to [end]. */
 	fun addRichSpan(start: CharLineOffset, end: CharLineOffset, style: RichSpanStyle) {
 		editManager.addRichSpan(TextEditorRange(start, end), style)
-		updateBookKeeping()
 	}
 
 	/** Adds a [RichSpan] block decoration over the flat character range [start] until [end]. */
@@ -1124,19 +1150,16 @@ class TextEditorState(
 			TextEditorRange(start.toCharLineOffset(), end.toCharLineOffset()),
 			style
 		)
-		updateBookKeeping()
 	}
 
 	/** Removes the [RichSpan] block decoration of [style] spanning [start] to [end]. */
 	fun removeRichSpan(start: CharLineOffset, end: CharLineOffset, style: RichSpanStyle) {
 		editManager.removeRichSpan(TextEditorRange(start, end), style)
-		updateBookKeeping()
 	}
 
 	/** Removes the given [RichSpan], e.g. one returned by [findSpanAtPosition]. */
 	fun removeRichSpan(span: RichSpan) {
 		editManager.removeRichSpan(span.range, span.style)
-		updateBookKeeping()
 	}
 
 	/**
