@@ -12,6 +12,18 @@ import org.intellij.markdown.flavours.gfm.GFMTokenTypes
 import org.intellij.markdown.parser.MarkdownParser
 
 /**
+ * A hyperlink found during a parse: [start] until [end] are flat character
+ * offsets into the produced [AnnotatedString]'s text, [url] the destination.
+ */
+internal data class ParsedLink(val start: Int, val end: Int, val url: String)
+
+/** A parse's styled text together with the links found inside it. */
+internal class MarkdownParseResult(
+	val annotatedString: AnnotatedString,
+	val links: List<ParsedLink>,
+)
+
+/**
  * Parses this string as GitHub Flavored Markdown and renders it into a styled
  * [AnnotatedString].
  *
@@ -20,25 +32,37 @@ import org.intellij.markdown.parser.MarkdownParser
  */
 fun String.toAnnotatedStringFromMarkdown(
 	configuration: MarkdownConfiguration = MarkdownConfiguration.DEFAULT
-): AnnotatedString {
+): AnnotatedString = parseMarkdownWithLinks(configuration).annotatedString
+
+/**
+ * Parses like [toAnnotatedStringFromMarkdown] but also reports every inline
+ * link's text range and destination, so an importer can attach the semantic
+ * link spans the [AnnotatedString] itself cannot carry.
+ */
+internal fun String.parseMarkdownWithLinks(
+	configuration: MarkdownConfiguration = MarkdownConfiguration.DEFAULT
+): MarkdownParseResult {
 	val styles = MarkdownStyles(configuration)
 
 	val flavour = GFMFlavourDescriptor()
 	val parsedTree = MarkdownParser(flavour).buildMarkdownTreeFromString(this)
-	return buildAnnotatedString {
-		appendMarkdownChildren(this@toAnnotatedStringFromMarkdown, parsedTree, 0, styles)
+	val links = mutableListOf<ParsedLink>()
+	val annotated = buildAnnotatedString {
+		appendMarkdownChildren(this@parseMarkdownWithLinks, parsedTree, 0, styles, links)
 	}
+	return MarkdownParseResult(annotated, links)
 }
 
 internal fun AnnotatedString.Builder.appendMarkdownChildren(
 	original: String,
 	node: ASTNode,
 	startOffset: Int,
-	styles: MarkdownStyles
+	styles: MarkdownStyles,
+	links: MutableList<ParsedLink> = mutableListOf(),
 ) {
 	var childOffset = startOffset
 	node.children.forEach { child ->
-		appendMarkdownNode(original, child, childOffset, styles)
+		appendMarkdownNode(original, child, childOffset, styles, links)
 		childOffset += child.getTextInNode(original).length
 	}
 }
@@ -47,14 +71,15 @@ private fun AnnotatedString.Builder.appendMarkdownNode(
 	original: String,
 	node: ASTNode,
 	startOffset: Int,
-	styles: MarkdownStyles
+	styles: MarkdownStyles,
+	links: MutableList<ParsedLink>,
 ) {
 	val nodeText = node.getTextInNode(original).toString()
 
 	when (node.type) {
 		MarkdownElementTypes.PARAGRAPH -> {
 			pushStyle(styles.BASE_TEXT)
-			appendMarkdownChildren(original, node, startOffset, styles)
+			appendMarkdownChildren(original, node, startOffset, styles, links)
 			pop()
 		}
 
@@ -67,19 +92,19 @@ private fun AnnotatedString.Builder.appendMarkdownNode(
 
 		MarkdownElementTypes.EMPH -> {
 			pushStyle(styles.ITALICS)
-			appendStyledContent(node, original, startOffset, styles)
+			appendStyledContent(node, original, startOffset, styles, links)
 			pop()
 		}
 
 		MarkdownElementTypes.STRONG -> {
 			pushStyle(styles.BOLD)
-			appendStyledContent(node, original, startOffset, styles)
+			appendStyledContent(node, original, startOffset, styles, links)
 			pop()
 		}
 
 		GFMElementTypes.STRIKETHROUGH -> {
 			pushStyle(styles.STRIKETHROUGH)
-			appendStyledContent(node, original, startOffset, styles)
+			appendStyledContent(node, original, startOffset, styles, links)
 			pop()
 		}
 
@@ -126,23 +151,47 @@ private fun AnnotatedString.Builder.appendMarkdownNode(
 			pop()
 		}
 
-		MarkdownElementTypes.ATX_1 -> handleHeader(original, node, startOffset, 1, styles)
-		MarkdownElementTypes.ATX_2 -> handleHeader(original, node, startOffset, 2, styles)
-		MarkdownElementTypes.ATX_3 -> handleHeader(original, node, startOffset, 3, styles)
-		MarkdownElementTypes.ATX_4 -> handleHeader(original, node, startOffset, 4, styles)
-		MarkdownElementTypes.ATX_5 -> handleHeader(original, node, startOffset, 5, styles)
-		MarkdownElementTypes.ATX_6 -> handleHeader(original, node, startOffset, 6, styles)
+		MarkdownElementTypes.ATX_1 -> handleHeader(original, node, startOffset, 1, styles, links)
+		MarkdownElementTypes.ATX_2 -> handleHeader(original, node, startOffset, 2, styles, links)
+		MarkdownElementTypes.ATX_3 -> handleHeader(original, node, startOffset, 3, styles, links)
+		MarkdownElementTypes.ATX_4 -> handleHeader(original, node, startOffset, 4, styles, links)
+		MarkdownElementTypes.ATX_5 -> handleHeader(original, node, startOffset, 5, styles, links)
+		MarkdownElementTypes.ATX_6 -> handleHeader(original, node, startOffset, 6, styles, links)
 
 		MarkdownElementTypes.INLINE_LINK -> {
 			pushStyle(styles.LINK)
+			val textStart = length
+			var childOffset = startOffset
 			node.children.forEach { child ->
-				if (child.type.toString() == "Markdown:LINK_TEXT") {
-					val text = child.getTextInNode(original).toString()
-						.removeSurrounding("[", "]")
-					append(text)
+				if (child.type == MarkdownElementTypes.LINK_TEXT) {
+					// The first and last children are the bracket tokens; the
+					// nodes between them are the link text, styles and all.
+					var gcOffset = childOffset
+					child.children.forEachIndexed { i, gc ->
+						if (i != 0 && i != child.children.lastIndex) {
+							appendMarkdownNode(original, gc, gcOffset, styles, links)
+						}
+						gcOffset += gc.getTextInNode(original).length
+					}
 				}
+				childOffset += child.getTextInNode(original).length
 			}
+			val textEnd = length
 			pop()
+			// A bare destination parses as LINK_DESTINATION; the GFM flavour
+			// reads an angle-bracketed one as an AUTOLINK child instead. Both
+			// carry any angle brackets in the node text; the URL itself is
+			// what round-trips.
+			val url = node.children
+				.firstOrNull {
+					it.type == MarkdownElementTypes.LINK_DESTINATION ||
+						it.type == MarkdownElementTypes.AUTOLINK
+				}
+				?.getTextInNode(original)?.toString()
+				?.removeSurrounding("<", ">")
+			if (url != null && textEnd > textStart) {
+				links += ParsedLink(textStart, textEnd, url)
+			}
 		}
 
 		MarkdownElementTypes.ORDERED_LIST,
@@ -153,11 +202,11 @@ private fun AnnotatedString.Builder.appendMarkdownNode(
 			// recurse into children — no glyph injection — so the body text survives
 			// without spurious bullet characters leaking into the AnnotatedString.
 			// Ordered list numbering is a follow-up.
-			appendMarkdownChildren(original, node, startOffset, styles)
+			appendMarkdownChildren(original, node, startOffset, styles, links)
 		}
 
 		MarkdownElementTypes.LIST_ITEM -> {
-			appendMarkdownChildren(original, node, startOffset, styles)
+			appendMarkdownChildren(original, node, startOffset, styles, links)
 		}
 
 		MarkdownElementTypes.BLOCK_QUOTE -> {
@@ -165,7 +214,7 @@ private fun AnnotatedString.Builder.appendMarkdownNode(
 			// this branch only fires for blockquotes outside that pipeline (e.g. callers
 			// of toAnnotatedStringFromMarkdown directly). Recurse without injecting a
 			// literal `> ` marker so the body text isn't visually corrupted.
-			appendMarkdownChildren(original, node, startOffset, styles)
+			appendMarkdownChildren(original, node, startOffset, styles, links)
 		}
 
 		MarkdownTokenTypes.TEXT -> {
@@ -178,7 +227,7 @@ private fun AnnotatedString.Builder.appendMarkdownNode(
 		}
 
 		MarkdownElementTypes.MARKDOWN_FILE -> {
-			appendMarkdownChildren(original, node, startOffset, styles)
+			appendMarkdownChildren(original, node, startOffset, styles, links)
 		}
 
 		else -> {
@@ -186,7 +235,7 @@ private fun AnnotatedString.Builder.appendMarkdownNode(
 			if (nodeText.isNotEmpty()) {
 				append(nodeText.removeMarkdownEscapes())
 			} else {
-				appendMarkdownChildren(original, node, startOffset, styles)
+				appendMarkdownChildren(original, node, startOffset, styles, links)
 			}
 		}
 	}
@@ -196,7 +245,8 @@ private fun AnnotatedString.Builder.appendStyledContent(
 	node: ASTNode,
 	original: String,
 	startOffset: Int,
-	styles: MarkdownStyles
+	styles: MarkdownStyles,
+	links: MutableList<ParsedLink>,
 ) {
 	var currentText = StringBuilder()
 
@@ -220,7 +270,7 @@ private fun AnnotatedString.Builder.appendStyledContent(
 					append(currentText.toString().removeMarkdownEscapes())
 					currentText.clear()
 				}
-				appendMarkdownNode(original, child, startOffset, styles)
+				appendMarkdownNode(original, child, startOffset, styles, links)
 			}
 		}
 	}
@@ -236,7 +286,8 @@ private fun AnnotatedString.Builder.handleHeader(
 	node: ASTNode,
 	startOffset: Int,
 	level: Int,
-	styles: MarkdownStyles
+	styles: MarkdownStyles,
+	links: MutableList<ParsedLink>,
 ) {
 	// Apply the header style
 	pushStyle(styles.header(level))
@@ -267,14 +318,14 @@ private fun AnnotatedString.Builder.handleHeader(
 						return@forEach
 					}
 					seenContent = true
-					appendMarkdownNode(original, gc, contentOffset, styles)
+					appendMarkdownNode(original, gc, contentOffset, styles, links)
 					contentOffset += gc.getTextInNode(original).length
 				}
 			}
 
 			else -> {
 				// Process any other nested styles or text
-				appendMarkdownNode(original, child, startOffset, styles)
+				appendMarkdownNode(original, child, startOffset, styles, links)
 			}
 		}
 	}

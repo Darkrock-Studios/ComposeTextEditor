@@ -29,6 +29,3 @@ internal val SpanStyle.isCodeStyle: Boolean
 
 internal val SpanStyle.isStrikethroughStyle: Boolean
 	get() = textDecoration == TextDecoration.LineThrough
-
-internal val SpanStyle.isUnderlineStyle: Boolean
-	get() = textDecoration == TextDecoration.Underline
