@@ -3,6 +3,7 @@ package com.darkrockstudios.texteditor.state
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.LineWrap
 import com.darkrockstudios.texteditor.TextEditorRange
+import com.darkrockstudios.texteditor.richstyle.BlockSpanStyle
 import com.darkrockstudios.texteditor.richstyle.RichSpan
 import com.darkrockstudios.texteditor.richstyle.RichSpanStyle
 
@@ -34,6 +35,43 @@ class RichSpanManager(
 
 	internal fun addRichSpan(range: TextEditorRange, style: RichSpanStyle) {
 		spans = spans + RichSpan(range, style)
+	}
+
+	/**
+	 * Adds a span whose range was computed against an earlier revision of the
+	 * document, coerced onto the lines that exist now. Undo restoration and rich
+	 * paste replay recorded offsets; the document they land in may have shifted.
+	 */
+	internal fun addRichSpanClamped(range: TextEditorRange, style: RichSpanStyle) {
+		val clamped = clampRangeToDocument(range) ?: return
+		if (clamped.start == clamped.end && !style.rendersWhenEmpty) return
+		spans = spans + RichSpan(clamped, style)
+	}
+
+	// Sticky gutter markers render on empty lines, and placeholder blocks (rules,
+	// images) own their whole line no matter how wide its text is.
+	private val RichSpanStyle.rendersWhenEmpty: Boolean
+		get() = stickyAtStart || this is BlockSpanStyle
+
+	/**
+	 * Coerces [range] onto lines and columns that exist right now, or null when the
+	 * document has no lines at all. Zero-width results are the caller's decision:
+	 * sticky gutter markers render on empty lines, other styles do not.
+	 */
+	private fun clampRangeToDocument(range: TextEditorRange): TextEditorRange? {
+		val lastLine = state.textLines.lastIndex
+		if (lastLine < 0) return null
+		val startLine = range.start.line.coerceIn(0, lastLine)
+		val endLine = range.end.line.coerceIn(startLine, lastLine)
+		val startChar = range.start.char.coerceIn(0, state.textLines[startLine].length)
+		val endChar = range.end.char.coerceIn(
+			if (startLine == endLine) startChar else 0,
+			state.textLines[endLine].length,
+		)
+		return TextEditorRange(
+			CharLineOffset(startLine, startChar),
+			CharLineOffset(endLine, endChar),
+		)
 	}
 
 	internal fun addRichSpan(start: CharLineOffset, end: CharLineOffset, style: RichSpanStyle) {
@@ -85,8 +123,24 @@ class RichSpanManager(
 			}
 		}
 
-		spans = mergeLineAnchoredDuplicates(updatedSpans)
+		spans = clampAllToDocument(mergeLineAnchoredDuplicates(updatedSpans))
 	}
+
+	/**
+	 * Coerces every transformed span onto the already-mutated document. Handler
+	 * arithmetic near line joins can land a hair past a shortened line; a span
+	 * shrunk to nothing dies unless its sticky marker renders on empty lines.
+	 */
+	private fun clampAllToDocument(updatedSpans: Set<RichSpan>): Set<RichSpan> =
+		updatedSpans.mapNotNullTo(mutableSetOf()) { span ->
+			clampRangeToDocument(span.range)?.let { clamped ->
+				if (clamped.start == clamped.end && !span.style.rendersWhenEmpty) {
+					null
+				} else {
+					span.copy(range = clamped)
+				}
+			}
+		}
 
 	/**
 	 * Collapses any same-line duplicates of line-anchored (sticky-at-start) styles
@@ -97,17 +151,19 @@ class RichSpanManager(
 	 */
 	private fun mergeLineAnchoredDuplicates(spans: Set<RichSpan>): Set<RichSpan> {
 		val (anchored, others) = spans.partition { it.style.stickyAtStart }
+		val positionOrder = compareBy<CharLineOffset>({ it.line }, { it.char })
 		val merged = anchored
 			.groupBy { it.style to it.range.start.line }
 			.map { (key, group) ->
 				if (group.size == 1) group.first() else {
-					val (style, line) = key
+					// The union must respect multi-line members: collapsing everything
+					// onto the start line invents columns past that line's end.
 					RichSpan(
 						range = TextEditorRange(
-							start = CharLineOffset(line, group.minOf { it.range.start.char }),
-							end = CharLineOffset(line, group.maxOf { it.range.end.char }),
+							start = group.minOfWith(positionOrder) { it.range.start },
+							end = group.maxOfWith(positionOrder) { it.range.end },
 						),
-						style = style,
+						style = key.first,
 					)
 				}
 			}
@@ -267,7 +323,6 @@ class RichSpanManager(
 						(span.range.end.line == operation.range.end.line &&
 								span.range.end.char > operation.range.end.char)
 					) {
-						// Create spanning span
 						updatedSpans.add(
 							span.copy(
 								range = TextEditorRange(
@@ -284,29 +339,44 @@ class RichSpanManager(
 					} else {
 						// Span ends within replacement - truncate at replacement start
 						updatedSpans.add(
-							span.copy(
-								range = TextEditorRange(
-									span.range.start,
-									operation.range.start
-								)
-							)
+							span.copy(range = TextEditorRange(span.range.start, operation.range.start))
 						)
 					}
 				} else if (span.range.end.line > operation.range.end.line ||
 					(span.range.end.line == operation.range.end.line &&
 							span.range.end.char > operation.range.end.char)
 				) {
-					// Span starts within replacement but ends after - preserve end portion
+					// Span starts within replacement but ends after - preserve the end
+					// portion. A line-anchored marker re-anchors to the start of the
+					// line its tail survives on; without the sticky start, replacing a
+					// selection that begins at the item start detaches the gutter marker.
+					val newStart = if (span.style.stickyAtStart) {
+						CharLineOffset(newEnd.line, 0)
+					} else {
+						newEnd
+					}
 					updatedSpans.add(
 						span.copy(
 							range = TextEditorRange(
-								newEnd,
+								newStart,
 								CharLineOffset(
 									newEnd.line + (span.range.end.line - operation.range.end.line),
 									if (span.range.end.line == operation.range.end.line)
 										newEnd.char + (span.range.end.char - operation.range.end.char)
 									else span.range.end.char
 								)
+							)
+						)
+					)
+				} else if (span.style.stickyAtStart && operation.range.isSingleLine()) {
+					// A line-anchored marker whose text is replaced within its own line
+					// survives: that is editing the item, not deleting it. A multi-line
+					// replacement removed the marker's line, so the marker goes with it.
+					updatedSpans.add(
+						span.copy(
+							range = TextEditorRange(
+								CharLineOffset(operation.range.start.line, 0),
+								newEnd,
 							)
 						)
 					)
