@@ -1367,8 +1367,9 @@ class TextEditorState(
 	}
 
 	/**
-	 * Returns a hash of the document content (text and spans), suitable for cheaply
-	 * detecting whether the document has changed.
+	 * Returns a hash of the document text and inline character spans, suitable for
+	 * cheaply detecting whether the document has changed. Rich spans (headings,
+	 * links, line blocks) live outside [textLines] and do not affect the hash.
 	 */
 	fun computeTextHash(): Int {
 		var hash = 3
@@ -1380,7 +1381,9 @@ class TextEditorState(
 	}
 
 	/**
-	 * Returns true when [other] holds the same document content (text and spans).
+	 * Returns true when [other] holds the same document text and inline character
+	 * spans. Rich spans (headings, links, line blocks) live outside [textLines]
+	 * and are not compared.
 	 *
 	 * Equality on the state itself is reference identity: a mutable controller
 	 * object is not a value, and content-based equals/hashCode would make

@@ -161,7 +161,6 @@ class HtmlExtension(
 			else -> "<p>$content</p>"
 		}
 	}
-
 }
 
 /**
