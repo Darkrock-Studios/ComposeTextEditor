@@ -963,7 +963,9 @@ class TextEditorState(
 
 		val previousLayouts: Map<Int, TextLayoutResult>? = if (partial != null) {
 			HashMap<Int, TextLayoutResult>(lastLayoutLineCount * 2).also { map ->
-				for (wrap in _lineOffsets) map.putIfAbsent(wrap.line, wrap.textLayoutResult)
+				for (wrap in _lineOffsets) {
+					if (!map.containsKey(wrap.line)) map[wrap.line] = wrap.textLayoutResult
+				}
 			}
 		} else null
 
