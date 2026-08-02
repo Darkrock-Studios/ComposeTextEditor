@@ -61,9 +61,20 @@ class UndoStormE2eTest {
 
 		undoAll()
 
-		// The history silently caps at 100 entries; the 101st keystroke pushes the
-		// first edit off the stack and this document can never be fully restored.
+		// Typing coalesces into wordwise history entries, so a keystroke count far
+		// beyond the old per-keystroke cap still undoes back to the origin.
 		assertEquals("seed", text)
+	}
+
+	@Test
+	fun `undo removes the last word not the last letter`() = editorUiTest {
+		typeText("alpha beta")
+
+		press(Key.Z, ctrl = true)
+		assertEquals("alpha ", text)
+
+		press(Key.Z, ctrl = true)
+		assertEquals("", text)
 	}
 
 	@Test
