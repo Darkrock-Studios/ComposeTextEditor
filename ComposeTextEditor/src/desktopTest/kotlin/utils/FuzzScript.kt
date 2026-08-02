@@ -68,10 +68,10 @@ private fun FuzzOp.historyCost(): Int = when (this) {
  * restore, unrecorded demotions); those stay covered by the hand-written tests.
  *
  * [includeBold] excludes character styling. The fixpoint scripts need this
- * because any typing near a bold edge can grow the span onto a space, and
- * emphasis with edge spaces exports as invalid markdown (a known red-test
- * defect, see MarkdownRoundTripTortureE2eTest `a bold run ending in a space
- * round trips`). Lift both when the underlying defects are fixed.
+ * because edits can land bold onto fence-baked monospace, and emphasis
+ * overlapping a code span opens its markers inside the backticks (a known
+ * red-test defect, see MarkdownRoundTripTortureE2eTest `bold overlapping an
+ * inline code span round trips`). Lift both when the underlying defects are fixed.
  */
 fun generateFuzzScript(
 	seed: Long,
@@ -224,9 +224,7 @@ private fun wouldDemote(state: TextEditorState, markdown: MarkdownExtension, ent
 
 /**
  * Trims edge spaces off a candidate style range and rejects multi-line or empty
- * results. Emphasis wrapped around an edge space exports as invalid markdown (a
- * known red-test defect, see MarkdownRoundTripTortureE2eTest `a bold run ending
- * in a space round trips`), so the fuzzers only bold clean single-line ranges.
+ * results, so the fuzzers only bold clean single-line ranges.
  */
 private fun trimmedStyleRange(text: String, rawA: Int, rawB: Int): Pair<Int, Int>? {
 	val clampedA = rawA % (text.length + 1)

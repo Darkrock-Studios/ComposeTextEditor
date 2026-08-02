@@ -167,6 +167,28 @@ class MarkdownRoundTripTortureE2eTest {
 	}
 
 	@Test
+	fun `bold overlapping an inline code span round trips`() = editorUiTest {
+		markdown.importMarkdown("`code` tail")
+		state.addStyleSpan(
+			com.darkrockstudios.texteditor.TextEditorRange(
+				state.getOffsetAtCharacter(2),
+				state.getOffsetAtCharacter(8),
+			),
+			SpanStyle(fontWeight = FontWeight.Bold),
+		)
+
+		// Emphasis markers are emitted positionally, so a bold run overlapping a
+		// code span opens inside the backticks; the parser reads literal asterisks
+		// and the following export escapes them.
+		val first = markdown.exportAsMarkdown()
+		markdown.importMarkdown(first)
+		val second = markdown.exportAsMarkdown()
+
+		assertEquals(first, second)
+		assertEquals("code tail", text, "no emphasis markers may leak into the text")
+	}
+
+	@Test
 	fun `empty list items round trip stably`() = editorUiTest {
 		markdown.importMarkdown("- a\n- \n- b")
 

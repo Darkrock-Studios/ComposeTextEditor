@@ -44,9 +44,19 @@ fun AnnotatedString.toMarkdown(
 		var runStart = ranges.first().first
 		var runEnd = ranges.first().last + 1
 		fun emit() {
-			val length = runEnd - runStart
-			boundaries.add(StyleBoundary(runStart, true, marker, length))
-			boundaries.add(StyleBoundary(runEnd, false, marker, length))
+			var start = runStart
+			var end = runEnd
+			// CommonMark emphasis cannot open before or close after whitespace:
+			// "**word **" is literal asterisks to any parser, and re-importing it
+			// escalates into escaped garbage. Shrink the markers onto the text.
+			if (marker.trimsWhitespaceEdges) {
+				while (start < end && text[start].isWhitespace()) start++
+				while (end > start && text[end - 1].isWhitespace()) end--
+			}
+			if (start >= end) return
+			val length = end - start
+			boundaries.add(StyleBoundary(start, true, marker, length))
+			boundaries.add(StyleBoundary(end, false, marker, length))
 		}
 		for (i in 1 until ranges.size) {
 			val nextStart = ranges[i].first
@@ -167,5 +177,9 @@ private fun SpanStyle.matches(other: SpanStyle): Boolean {
 private data class StyleMarkerPair(
 	val openMarker: String,
 	val closeMarker: String
-)
+) {
+	/** Emphasis delimiters; code spans and headers tolerate edge whitespace. */
+	val trimsWhitespaceEdges: Boolean
+		get() = openMarker == "**" || openMarker == "*" || openMarker == "~~"
+}
 

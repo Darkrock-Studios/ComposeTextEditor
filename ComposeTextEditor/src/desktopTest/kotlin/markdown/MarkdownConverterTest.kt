@@ -175,7 +175,9 @@ class MarkdownConverterTest {
 				append(" and universe")
 			}
 		}
-		assertEquals("**Hello *beautiful *world*** and universe*", input.toMarkdown())
+		// The italic ranges carry an edge space; the emphasis markers shrink onto the
+		// text because delimiters touching whitespace are not emphasis in CommonMark.
+		assertEquals("**Hello *beautiful* world** *and universe*", input.toMarkdown())
 	}
 
 	@Test
