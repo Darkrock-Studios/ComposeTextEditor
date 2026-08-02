@@ -1367,8 +1367,9 @@ class TextEditorState(
 	}
 
 	/**
-	 * Returns a hash of the document content (text and spans), suitable for cheaply
-	 * detecting whether the document has changed.
+	 * Returns a hash of the document text and inline character spans, suitable for
+	 * cheaply detecting whether the document has changed. Rich spans (headings,
+	 * links, line blocks) live outside [textLines] and do not affect the hash.
 	 */
 	fun computeTextHash(): Int {
 		var hash = 3
@@ -1379,34 +1380,30 @@ class TextEditorState(
 		return hash
 	}
 
-	init {
-		setText(initialText ?: AnnotatedString(""))
-	}
-
-	override fun equals(other: Any?): Boolean {
-		if (this === other) return true
-		if (other == null || this::class != other::class) return false
-
-		other as TextEditorState
-
-		if (compareLines(textLines, other.textLines).not()) return false
-
-		return true
-	}
-
-	private fun compareLines(list1: List<AnnotatedString>, list2: List<AnnotatedString>): Boolean {
-		if (list1 === list2) return true
-		if (list1.size != list2.size) return false
-		for (i in list1.indices) {
-			if (list1[i] != list2[i]) {
+	/**
+	 * Returns true when [other] holds the same document text and inline character
+	 * spans. Rich spans (headings, links, line blocks) live outside [textLines]
+	 * and are not compared.
+	 *
+	 * Equality on the state itself is reference identity: a mutable controller
+	 * object is not a value, and content-based equals/hashCode would make
+	 * instances unusable as keys in hash-keyed collections or `remember` keys.
+	 */
+	fun contentEquals(other: TextEditorState): Boolean {
+		val mine = textLines
+		val theirs = other.textLines
+		if (mine === theirs) return true
+		if (mine.size != theirs.size) return false
+		for (i in mine.indices) {
+			if (mine[i] != theirs[i]) {
 				return false
 			}
 		}
 		return true
 	}
 
-	override fun hashCode(): Int {
-		return 31 + textLines.hashCode()
+	init {
+		setText(initialText ?: AnnotatedString(""))
 	}
 }
 
