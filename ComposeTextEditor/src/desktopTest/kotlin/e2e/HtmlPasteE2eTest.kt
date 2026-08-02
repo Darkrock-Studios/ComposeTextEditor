@@ -1,20 +1,14 @@
 package e2e
 
-import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.text.AnnotatedString
 import com.darkrockstudios.texteditor.richstyle.BlockquoteSpanStyle
 import com.darkrockstudios.texteditor.richstyle.BulletListSpanStyle
 import com.darkrockstudios.texteditor.richstyle.CodeFenceSpanStyle
 import com.darkrockstudios.texteditor.richstyle.OrderedListSpanStyle
-import com.darkrockstudios.texteditor.richstyle.RichSpanStyle
-import com.darkrockstudios.texteditor.state.TextEditorState
-import utils.EditorUiTestScope
 import utils.editorUiTest
-import java.awt.datatransfer.DataFlavor
-import java.awt.datatransfer.Transferable
-import java.awt.datatransfer.UnsupportedFlavorException
+import utils.linesWith
+import utils.pasteHtml
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -23,18 +17,6 @@ import kotlin.test.assertEquals
  * nothing this editor put there itself.
  */
 class HtmlPasteE2eTest {
-
-	private fun TextEditorState.linesWith(style: RichSpanStyle): List<Int> =
-		richSpanManager.getAllRichSpans()
-			.filter { it.style === style }
-			.map { it.range.start.line }
-			.sorted()
-
-	@OptIn(ExperimentalComposeUiApi::class)
-	private fun EditorUiTestScope.pasteHtml(html: String) {
-		clipboard.seed(ClipEntry(ForeignHtmlTransferable(html)))
-		press(Key.V, ctrl = true)
-	}
 
 	@Test
 	fun `pasting a bulleted list keeps the bullets`() = editorUiTest {
@@ -144,17 +126,4 @@ class HtmlPasteE2eTest {
 		assertEquals("one\ntwoone\ntwo", text)
 		assertEquals(listOf(0, 1, 2), state.linesWith(BulletListSpanStyle))
 	}
-}
-
-/** Offers markup the way a browser or word processor does: HTML, and nothing editor-specific. */
-private class ForeignHtmlTransferable(private val html: String) : Transferable {
-	private val htmlFlavor = DataFlavor("text/html;class=java.lang.String;charset=Unicode")
-
-	override fun getTransferDataFlavors(): Array<DataFlavor> = arrayOf(htmlFlavor)
-
-	override fun isDataFlavorSupported(flavor: DataFlavor): Boolean =
-		transferDataFlavors.any { it.match(flavor) }
-
-	override fun getTransferData(flavor: DataFlavor): Any =
-		if (flavor.match(htmlFlavor)) html else throw UnsupportedFlavorException(flavor)
 }
