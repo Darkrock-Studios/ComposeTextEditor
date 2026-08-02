@@ -7,18 +7,9 @@ import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.key.utf16CodePoint
 import androidx.compose.ui.platform.Clipboard
-import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.buildAnnotatedString
-import com.darkrockstudios.texteditor.CharLineOffset
-import com.darkrockstudios.texteditor.TextEditorRange
-import com.darkrockstudios.texteditor.clipboard.ClipboardHelper
-import com.darkrockstudios.texteditor.clipboard.applyHtmlPasteBlocks
-import com.darkrockstudios.texteditor.clipboard.readHtmlPasteDocument
 import com.darkrockstudios.texteditor.input.EditorCommand.Action
 import com.darkrockstudios.texteditor.input.EditorCommand.Motion
-import com.darkrockstudios.texteditor.input.TextEditorKeyCommandHandler.Companion.TAB_SIZE
 import com.darkrockstudios.texteditor.state.TextEditorState
-import com.darkrockstudios.texteditor.state.applyStyleForEditAt
 import com.darkrockstudios.texteditor.state.moveCursorDown
 import com.darkrockstudios.texteditor.state.moveCursorPageDown
 import com.darkrockstudios.texteditor.state.moveCursorPageUp
@@ -29,22 +20,19 @@ import com.darkrockstudios.texteditor.state.moveToDocumentStart
 import com.darkrockstudios.texteditor.state.moveToNextWord
 import com.darkrockstudios.texteditor.state.moveToPreviousWord
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.launch
 
 /**
  * Handles keyboard commands (shortcuts and navigation) for the text editor.
  * Also handles character input for desktop platforms via KEY_TYPED events.
  *
- * Which chord triggers which command is [keyBindings]' business; this class only
- * knows what the commands do.
+ * Pure translation, three ways: which chord means what is [keyBindings]'
+ * business, what an action does belongs to the [EditorActionRegistry] on the
+ * state, and only caret motion is implemented here, because a motion is not
+ * something a host can register.
  */
 internal class TextEditorKeyCommandHandler(
 	var keyBindings: KeyBindings,
 ) {
-
-	private companion object {
-		const val TAB_SIZE = 4
-	}
 
 	/**
 	 * Handle a key event and return true if it was consumed.
@@ -64,27 +52,20 @@ internal class TextEditorKeyCommandHandler(
 		// Selection, copy and navigation stay available in a disabled editor.
 		if (command.isEdit && !enabled) return false
 
-		when (command) {
-			is Motion -> moveCursor(command, state, extendSelection = keyEvent.isShiftPressed)
-			Action.SelectAll -> state.selector.selectAll()
-			Action.Copy -> handleCopy(state, clipboard, scope)
-			Action.Cut -> handleCut(state, clipboard, scope)
-			Action.Paste -> handlePaste(state, clipboard, scope)
-			Action.Undo -> state.undo()
-			Action.Redo -> state.redo()
-			Action.DeleteBackward -> handleBackspace(state)
-			Action.DeleteForward -> handleDelete(state)
-			Action.DeleteWordBackward -> handleDeletePreviousWord(state)
-			Action.DeleteWordForward -> handleDeleteNextWord(state)
-			Action.DeleteToLineStart -> handleDeleteToLineStart(state)
-			Action.Indent -> handleIndent(state)
-			Action.Outdent -> handleOutdent(state)
-			Action.NewLine -> handleEnter(state)
-			// An action nothing here implements must not swallow the keystroke, or a
-			// chord bound to it would eat the character instead of typing it.
-			else -> return false
+		return when (command) {
+			is Motion -> {
+				moveCursor(command, state, extendSelection = keyEvent.isShiftPressed)
+				true
+			}
+
+			is Action -> {
+				// An action nobody registered must not swallow the keystroke, or a
+				// chord bound to it would eat the character instead of typing it.
+				val spec = state.actions[command] ?: return false
+				spec.perform(EditorActionContext(state, clipboard, scope))
+				true
+			}
 		}
-		return true
 	}
 
 	/**
@@ -128,197 +109,6 @@ internal class TextEditorKeyCommandHandler(
 		state.insertStringAtCursor(character)
 
 		return true
-	}
-
-	private fun handleCopy(state: TextEditorState, clipboard: Clipboard, scope: CoroutineScope) {
-		state.selector.selection?.let { selection ->
-			val selectedText = state.selector.getSelectedText()
-			val copyId = state.copyRichSpans(selection)
-			scope.launch {
-				ClipboardHelper.setText(clipboard, selectedText, state.markdownConfiguration, copyId)
-			}
-		}
-	}
-
-	private fun handleCut(state: TextEditorState, clipboard: Clipboard, scope: CoroutineScope) {
-		state.selector.selection?.let { selection ->
-			val selectedText = state.selector.getSelectedText()
-			val copyId = state.copyRichSpans(selection)
-			state.preserveCopiedRichSpansThroughNextEdit()
-			state.selector.deleteSelection()
-			scope.launch {
-				ClipboardHelper.setText(clipboard, selectedText, state.markdownConfiguration, copyId)
-			}
-		}
-	}
-
-	private fun handlePaste(state: TextEditorState, clipboard: Clipboard, scope: CoroutineScope) {
-		scope.launch {
-			ClipboardHelper.getText(clipboard, state.markdownConfiguration)?.let { text ->
-				val curSelection = state.selector.selection
-				val insertPosition = curSelection?.start ?: state.cursorPosition
-				// Read the clipboard's HTML before mutating: the text, the in-editor
-				// rich spans and the pasted block structure then land as one revision.
-				val htmlDocument = state.readHtmlPasteDocument(clipboard, text)
-				val clipboardCopyId = ClipboardHelper.readCopyId(clipboard)
-				state.preserveCopiedRichSpansThroughNextEdit()
-				state.withAtomicEdit {
-					if (curSelection != null) {
-						state.replace(curSelection, state.applyStyleForEditAt(curSelection.start, text))
-					} else {
-						state.insertStringAtCursor(text)
-					}
-					state.pasteRichSpans(
-						insertPosition,
-						text,
-						clipboardCopyId,
-						requireCopyIdMatch = ClipboardHelper.supportsCopyProvenance,
-					)
-					htmlDocument?.let { state.applyHtmlPasteBlocks(it, insertPosition, text) }
-				}
-				state.selector.clearSelection()
-			}
-		}
-	}
-
-	private fun handleDelete(state: TextEditorState) {
-		if (state.selector.selection != null) {
-			state.selector.deleteSelection()
-		} else {
-			state.deleteAtCursor()
-		}
-	}
-
-	private fun handleBackspace(state: TextEditorState) {
-		if (state.selector.selection != null) {
-			state.selector.deleteSelection()
-		} else {
-			state.backspaceAtCursor()
-		}
-	}
-
-	private fun handleDeletePreviousWord(state: TextEditorState) =
-		deleteByMotion(state) { state.moveToPreviousWord() }
-
-	private fun handleDeleteNextWord(state: TextEditorState) =
-		deleteByMotion(state) { state.moveToNextWord() }
-
-	private fun handleDeleteToLineStart(state: TextEditorState) =
-		deleteByMotion(state) { state.cursor.moveToLineStart() }
-
-	/**
-	 * Deletes between the caret and wherever [locateRangeEdge] moves it, or the selection when
-	 * there is one. The caret the user had is handed to [TextEditorState.delete] explicitly:
-	 * [locateRangeEdge] has already moved it off that position, and delete otherwise records
-	 * wherever the caret currently sits as the position undo returns to.
-	 */
-	private fun deleteByMotion(state: TextEditorState, locateRangeEdge: () -> Unit) {
-		if (state.selector.selection != null) {
-			state.selector.deleteSelection()
-			return
-		}
-		val origin = state.cursorPosition
-		locateRangeEdge()
-		val edge = state.cursorPosition
-		if (edge == origin) return
-
-		val range = if (edge < origin) {
-			TextEditorRange(edge, origin)
-		} else {
-			TextEditorRange(origin, edge)
-		}
-		state.delete(range, cursorBefore = origin)
-	}
-
-	private fun handleIndent(state: TextEditorState) {
-		val selection = state.selector.selection
-		if (selection != null && selection.start.line != selection.end.line) {
-			indentLineRange(state, selection.start.line, selection.end.line)
-		} else {
-			if (selection != null) {
-				state.selector.deleteSelection()
-			}
-			state.insertStringAtCursor(" ".repeat(TAB_SIZE))
-		}
-	}
-
-	private fun handleOutdent(state: TextEditorState) {
-		val selection = state.selector.selection
-		if (selection != null) {
-			outdentLineRange(state, selection.start.line, selection.end.line)
-		} else {
-			outdentCurrentLine(state)
-		}
-	}
-
-	private fun indentLineRange(state: TextEditorState, startLine: Int, endLine: Int) {
-		val prefix = " ".repeat(TAB_SIZE)
-		val newText = buildAnnotatedString {
-			for (i in startLine..endLine) {
-				if (i > startLine) append('\n')
-				append(prefix)
-				append(state.textLines[i])
-			}
-		}
-		val range = TextEditorRange(
-			CharLineOffset(startLine, 0),
-			CharLineOffset(endLine, state.textLines[endLine].length)
-		)
-		state.replace(range, newText)
-		state.selector.updateSelection(
-			CharLineOffset(startLine, 0),
-			CharLineOffset(endLine, state.textLines[endLine].length)
-		)
-	}
-
-	private fun outdentLineRange(state: TextEditorState, startLine: Int, endLine: Int) {
-		var changed = false
-		val newText = buildAnnotatedString {
-			for (i in startLine..endLine) {
-				if (i > startLine) append('\n')
-				val line = state.textLines[i]
-				val remove = leadingOutdentWidth(line)
-				if (remove > 0) changed = true
-				append(line.subSequence(remove, line.length))
-			}
-		}
-		if (!changed) return
-
-		val range = TextEditorRange(
-			CharLineOffset(startLine, 0),
-			CharLineOffset(endLine, state.textLines[endLine].length)
-		)
-		state.replace(range, newText)
-		state.selector.updateSelection(
-			CharLineOffset(startLine, 0),
-			CharLineOffset(endLine, state.textLines[endLine].length)
-		)
-	}
-
-	private fun outdentCurrentLine(state: TextEditorState) {
-		val line = state.cursorPosition.line
-		val remove = leadingOutdentWidth(state.textLines[line])
-		if (remove == 0) return
-
-		val cursorChar = state.cursorPosition.char
-		state.delete(TextEditorRange(CharLineOffset(line, 0), CharLineOffset(line, remove)))
-		state.cursor.updatePosition(CharLineOffset(line, (cursorChar - remove).coerceAtLeast(0)))
-	}
-
-	/** Leading indentation to strip for one outdent level: a single hard tab, else up to [TAB_SIZE] spaces. */
-	private fun leadingOutdentWidth(line: AnnotatedString): Int {
-		if (line.isEmpty()) return 0
-		if (line[0] == '\t') return 1
-		var count = 0
-		while (count < TAB_SIZE && count < line.length && line[count] == ' ') count++
-		return count
-	}
-
-	private fun handleEnter(state: TextEditorState) {
-		if (state.selector.selection != null) {
-			state.selector.deleteSelection()
-		}
-		state.insertNewlineAtCursor()
 	}
 
 	private fun moveCursor(motion: Motion, state: TextEditorState, extendSelection: Boolean) {

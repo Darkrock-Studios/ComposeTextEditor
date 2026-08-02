@@ -29,6 +29,7 @@ import com.darkrockstudios.texteditor.coerceInto
 import com.darkrockstudios.texteditor.cursor.CursorMetrics
 import com.darkrockstudios.texteditor.cursor.getWrappedLineIndex
 import com.darkrockstudios.texteditor.effectiveHeight
+import com.darkrockstudios.texteditor.input.EditorActionRegistry
 import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
 import com.darkrockstudios.texteditor.richstyle.BlockSpanStyle
 import com.darkrockstudios.texteditor.richstyle.CodeFenceSpanStyle
@@ -427,6 +428,14 @@ class TextEditorState(
 	 * Collect this to observe the edit stream; decoration-only changes are excluded.
 	 */
 	val editOperations = editManager.editOperations
+
+	/**
+	 * Everything this editor can be asked to do, keyed by action id, pre-loaded
+	 * with the built-ins. Register here to add an action a custom
+	 * [KeyBindings][com.darkrockstudios.texteditor.input.KeyBindings] can bind or
+	 * a menu can invoke, or to replace a built-in with your own implementation.
+	 */
+	val actions: EditorActionRegistry = EditorActionRegistry()
 
 	/**
 	 * Replaces the entire document with [text], clearing rich spans and resetting
