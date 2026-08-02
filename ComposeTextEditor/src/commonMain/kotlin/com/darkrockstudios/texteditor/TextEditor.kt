@@ -5,6 +5,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.darkrockstudios.texteditor.input.KeyBindings
+import com.darkrockstudios.texteditor.input.LocalKeyBindings
 import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.rememberTextEditorState
 
@@ -28,6 +30,9 @@ private val DefaultContentPadding = PaddingValues(16.dp)
  * @param onRichSpanClick Invoked when a rich span (link, list, blockquote, code
  *   block, …) is tapped or right-clicked; see [RichSpanClickListener] for what
  *   the return value does (and does not do).
+ * @param keyBindings Chord-to-command mapping, defaulting to [LocalKeyBindings].
+ *   Bind chords to actions registered on [TextEditorState.actions] to add
+ *   shortcuts of your own.
  */
 @Composable
 fun TextEditor(
@@ -38,6 +43,7 @@ fun TextEditor(
 	autoFocus: Boolean = false,
 	style: TextEditorStyle = rememberTextEditorStyle(),
 	onRichSpanClick: RichSpanClickListener? = null,
+	keyBindings: KeyBindings = LocalKeyBindings.current,
 ) {
 	Surface(modifier = modifier.focusBorder(state.isFocused && enabled, style)) {
 		BasicTextEditor(
@@ -48,6 +54,7 @@ fun TextEditor(
 			autoFocus = autoFocus,
 			style = style,
 			onRichSpanClick = onRichSpanClick,
+			keyBindings = keyBindings,
 		)
 	}
 }

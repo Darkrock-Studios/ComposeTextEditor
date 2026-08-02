@@ -8,5 +8,5 @@ package com.darkrockstudios.texteditor.input
 private fun isMacHost(): Boolean =
 	js("/Mac|iPhone|iPad|iPod/.test((navigator.platform || '') + ' ' + (navigator.userAgent || ''))")
 
-internal actual fun platformKeyBindings(): KeyBindings =
+actual fun platformKeyBindings(): KeyBindings =
 	if (isMacHost()) MacKeyBindings else CtrlKeyBindings

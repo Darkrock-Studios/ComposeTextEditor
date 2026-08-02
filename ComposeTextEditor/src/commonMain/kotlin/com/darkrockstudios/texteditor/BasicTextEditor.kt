@@ -48,6 +48,7 @@ import com.darkrockstudios.texteditor.contextmenu.TextEditorContextMenuProvider
 import com.darkrockstudios.texteditor.contextmenu.TextEditorContextMenuState
 import com.darkrockstudios.texteditor.cursor.DrawCursor
 import com.darkrockstudios.texteditor.input.CaptureViewForIme
+import com.darkrockstudios.texteditor.input.KeyBindings
 import com.darkrockstudios.texteditor.input.LocalKeyBindings
 import com.darkrockstudios.texteditor.input.TextEditorInputModifierElement
 import com.darkrockstudios.texteditor.input.selectionAsTextRange
@@ -82,6 +83,9 @@ private const val CURSOR_BLINK_SPEED_MS = 500L
  *   see [RichSpanClickListener] for what the return value does (and does not do).
  * @param decorateLine Optional per-line decorator drawn behind each line, keyed by
  *   line index — useful for gutters, current-line highlights, or diff markers.
+ * @param keyBindings Chord-to-command mapping, defaulting to [LocalKeyBindings].
+ *   Bind chords to actions registered on [TextEditorState.actions] to add
+ *   shortcuts of your own.
  */
 @Composable
 fun BasicTextEditor(
@@ -95,6 +99,7 @@ fun BasicTextEditor(
 	contextMenuState: TextEditorContextMenuState? = null,
 	onRichSpanClick: RichSpanClickListener? = null,
 	decorateLine: LineDecorator? = null,
+	keyBindings: KeyBindings = LocalKeyBindings.current,
 ) {
 	// Capture platform view for IME cursor synchronization (Android only)
 	CaptureViewForIme(state)
@@ -104,8 +109,6 @@ fun BasicTextEditor(
 	val clipboard = LocalClipboard.current
 	val density = LocalDensity.current
 	val layoutDirection = LocalLayoutDirection.current
-
-	val keyBindings = LocalKeyBindings.current
 
 	val inputModifierElement = remember(state, clipboard, enabled, keyBindings) {
 		TextEditorInputModifierElement(state, clipboard, enabled, keyBindings)
