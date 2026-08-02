@@ -29,7 +29,9 @@ fun rememberTextEditorState(initialText: AnnotatedString? = null): TextEditorSta
 
 	// Trigger recomposition when window info changes
 	val measuringKey = remember(density, windowInfo) { Uuid.random() }
-	val textMeasurer = rememberTextMeasurer()
+	// The default 8-entry cache thrashes on any document taller than a few lines
+	// whenever a full pass runs (style, density, or viewport changes).
+	val textMeasurer = rememberTextMeasurer(cacheSize = 32)
 
 	val state = remember {
 		TextEditorState(

@@ -10,6 +10,7 @@ import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.ParagraphStyle
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -74,6 +75,7 @@ class TextEditorState(
 	var textMeasurer: TextMeasurer = measurer
 		internal set(value) {
 			field = value
+			invalidateLayoutInputs()
 			updateBookKeeping()
 		}
 
@@ -81,6 +83,7 @@ class TextEditorState(
 		internal set(value) {
 			if (field != value) {
 				field = value
+				invalidateLayoutInputs()
 				updateBookKeeping()
 			}
 		}
@@ -143,6 +146,33 @@ class TextEditorState(
 	/** Actions deferred by [onCommit] until the outermost transaction commits. */
 	private val pendingCommitActions = mutableListOf<() -> Unit>()
 
+	/**
+	 * Layout work requested while a transaction is open, merged across requests and
+	 * flushed as one pass at commit. Laying out mid-transaction would both waste the
+	 * work and read a half-applied revision.
+	 */
+	private var pendingLayoutUpdate: LayoutUpdate? = null
+
+	/**
+	 * Whether a cursor move inside the open transaction still needs its
+	 * scroll-into-view. Deferred with the layout: scrolling mid-transaction computes
+	 * the target from the stale pre-edit offsets and can fling the viewport to the
+	 * document top.
+	 */
+	private var pendingCursorScroll = false
+
+	/**
+	 * Scrolls the cursor into view, or defers the scroll to the transaction commit
+	 * so it reads the freshly flushed layout.
+	 */
+	internal fun requestCursorVisible() {
+		if (draft != null) {
+			pendingCursorScroll = true
+		} else {
+			scrollManager.ensureCursorVisible()
+		}
+	}
+
 	/** Content as the current edit sees it: the open draft if there is one, else [content]. */
 	internal val workingContent: DocumentSnapshot get() = draft ?: content
 
@@ -179,15 +209,39 @@ class TextEditorState(
 			// Every publish passes through line-block normalization, so no caller
 			// can commit a revision violating the placeholder-line invariant. A
 			// transaction that mutated nothing skips the scan and the republish.
-			draft?.let { if (it !== content) content = normalizeLineBlocks(it, markdownConfiguration) }
-			return result
-		} finally {
+			draft?.let {
+				if (it !== content) {
+					val normalized = normalizeLineBlocks(it, markdownConfiguration)
+					// Normalization can rewrite lines no operation declared dirty,
+					// so a rewrite invalidates any deferred partial relayout.
+					if (normalized !== it) invalidateLayoutInputs()
+					content = normalized
+				}
+			}
 			draft = null
-			// Drop the queue on the throwing path too: those actions announce an edit
-			// that no longer exists.
+			// Flush the deferred relayout, then the cursor scroll that must read the
+			// fresh offsets, then the commit actions that announce the edit. All of
+			// this runs only on the committing path.
+			pendingLayoutUpdate?.let {
+				pendingLayoutUpdate = null
+				updateBookKeeping(it)
+			}
+			if (pendingCursorScroll) {
+				pendingCursorScroll = false
+				scrollManager.ensureCursorVisible()
+			}
 			val actions = pendingCommitActions.toList()
 			pendingCommitActions.clear()
 			actions.forEach { it() }
+			return result
+		} finally {
+			// The throwing path discards everything staged: the draft, the relayout,
+			// the scroll, and the queued actions, which would announce an edit that
+			// no longer exists.
+			draft = null
+			pendingLayoutUpdate = null
+			pendingCursorScroll = false
+			pendingCommitActions.clear()
 		}
 	}
 
@@ -206,7 +260,10 @@ class TextEditorState(
 		if (draft != null) {
 			draft = transform(workingContent)
 		} else {
-			content = normalizeLineBlocks(transform(content), markdownConfiguration)
+			val transformed = transform(content)
+			val normalized = normalizeLineBlocks(transformed, markdownConfiguration)
+			if (normalized !== transformed) invalidateLayoutInputs()
+			content = normalized
 		}
 	}
 
@@ -256,6 +313,20 @@ class TextEditorState(
 	private var _lineOffsets by mutableStateOf(emptyList<LineWrap>())
 
 	/**
+	 * Guards partial relayout. [layoutInputGeneration] advances whenever an input that
+	 * shapes every line changes (style, measurer, density, viewport, normalization
+	 * rewrites); a partial [updateBookKeeping] runs only when the last completed pass
+	 * saw the same generation and a line count consistent with the update's delta.
+	 */
+	private var layoutInputGeneration = 0
+	private var lastLayoutGeneration = -1
+	private var lastLayoutLineCount = -1
+
+	internal fun invalidateLayoutInputs() {
+		layoutInputGeneration++
+	}
+
+	/**
 	 * The laid-out [LineWrap]s for the document: each visual (wrapped) line with its
 	 * pixel offset, text-layout result, and resolved rich spans. Recomputed on every
 	 * edit, style, or viewport change.
@@ -301,6 +372,7 @@ class TextEditorState(
 		set(value) {
 			if (field != value) {
 				field = value
+				invalidateLayoutInputs()
 				updateBookKeeping()
 			}
 		}
@@ -660,7 +732,7 @@ class TextEditorState(
 
 	internal fun updateLine(index: Int, text: AnnotatedString) {
 		setLine(index, text)
-		updateBookKeeping(index..index)
+		updateBookKeeping(LayoutUpdate.Partial(index, index, 0))
 	}
 
 	/**
@@ -699,14 +771,11 @@ class TextEditorState(
 				}
 			)
 		}
-
-		updateBookKeeping()
 	}
 
 	internal fun insertLine(index: Int, text: String) = insertLine(index, text.toAnnotatedString())
 	internal fun insertLine(index: Int, text: AnnotatedString) {
 		setLines(textLines.toMutableList().also { it.add(index, text) })
-		updateBookKeeping()
 	}
 
 	/**
@@ -770,6 +839,7 @@ class TextEditorState(
 	/** Records the editor's new viewport [size] and re-wraps the document to fit. */
 	fun onViewportSizeChange(size: Size) {
 		viewportSize = size
+		invalidateLayoutInputs()
 		updateBookKeeping()
 	}
 
@@ -898,9 +968,34 @@ class TextEditorState(
 		return workingContent.lineStartOffsets[lineIndex]
 	}
 
-	internal fun updateBookKeeping(affectedLines: IntRange? = null) {
+	internal fun updateBookKeeping(update: LayoutUpdate = LayoutUpdate.Full) {
+		// Inside a transaction the content is a half-applied draft; merge the request
+		// and lay out once at commit.
+		if (draft != null) {
+			pendingLayoutUpdate = pendingLayoutUpdate?.mergedWith(update) ?: update
+			return
+		}
+
 		// Defer until the viewport has a real size; the 1×1 sentinel forces character-wide wraps.
 		if (viewportSize.width <= 1f || viewportSize.height <= 1f) return
+
+		// A partial pass is only sound against the exact layout the last pass produced.
+		// Degrade to full when the cache is missing, a full invalidator (style, measurer,
+		// density, viewport, normalization) fired since, or the line count disagrees
+		// with the update's own delta; reusing stale layouts corrupts every consumer.
+		val partial = (update as? LayoutUpdate.Partial)?.takeIf {
+			_lineOffsets.isNotEmpty() &&
+					lastLayoutGeneration == layoutInputGeneration &&
+					lastLayoutLineCount == textLines.size - it.lineDelta
+		}
+
+		val previousLayouts: Map<Int, TextLayoutResult>? = if (partial != null) {
+			HashMap<Int, TextLayoutResult>(lastLayoutLineCount * 2).also { map ->
+				for (wrap in _lineOffsets) {
+					if (!map.containsKey(wrap.line)) map[wrap.line] = wrap.textLayoutResult
+				}
+			}
+		} else null
 
 		val offsets = mutableListOf<LineWrap>()
 		var yOffset = 0f
@@ -933,33 +1028,37 @@ class TextEditorState(
 		val measureStyle = if (needsIndentBaking) textStyle.copy(textIndent = TextIndent.None) else textStyle
 		val bakedIndentStyle = if (needsIndentBaking) ParagraphStyle(textIndent = outerIndent) else null
 
+		// Use a tight width constraint (minWidth == maxWidth) so the paragraph lays out
+		// at the full viewport width rather than shrinking to its natural content width.
+		// The shrinking behavior interacts badly with TextIndent: if the paragraph
+		// shrinks to its natural width W and then TextIndent consumes X pixels of
+		// first-line width, the first line has only W-X pixels available instead of
+		// viewportWidth-X, causing wraps that shouldn't happen.
+		val lineConstraints = Constraints(
+			minWidth = maxOf(1, viewportSize.width.toInt()),
+			maxWidth = maxOf(1, viewportSize.width.toInt()),
+			minHeight = 0,
+			maxHeight = Constraints.Infinity
+		)
+
 		textLines.forEachIndexed { lineIndex, line ->
-			val shouldRemeasure = affectedLines == null ||
-					lineIndex in affectedLines ||
-					lineIndex > (affectedLines.lastOrNull() ?: -1)
-
-			// Use a tight width constraint (minWidth == maxWidth) so the paragraph lays out
-			// at the full viewport width rather than shrinking to its natural content width.
-			// The shrinking behavior interacts badly with TextIndent: if the paragraph
-			// shrinks to its natural width W and then TextIndent consumes X pixels of
-			// first-line width, the first line has only W-X pixels available instead of
-			// viewportWidth-X — causing wraps that shouldn't happen.
-			val lineConstraints = Constraints(
-				minWidth = maxOf(1, viewportSize.width.toInt()),
-				maxWidth = maxOf(1, viewportSize.width.toInt()),
-				minHeight = 0,
-				maxHeight = Constraints.Infinity
-			)
-
-			// Skip if the line already has a ParagraphStyle (block line) —
-			// Compose forbids overlapping ParagraphStyle ranges.
-			val measureLine = if (bakedIndentStyle != null && line.paragraphStyles.isEmpty()) {
-				buildAnnotatedString { withStyle(bakedIndentStyle) { append(line) } }
-			} else {
-				line
+			// Lines outside the dirty range kept their content; only their position
+			// changed, so their previous shaping result is reused as-is.
+			val cachedLayout: TextLayoutResult? = when {
+				partial == null -> null
+				lineIndex < partial.remeasureFirst -> previousLayouts?.get(lineIndex)
+				lineIndex > partial.remeasureLast -> previousLayouts?.get(lineIndex - partial.lineDelta)
+				else -> null
 			}
 
-			val textLayoutResult = if (shouldRemeasure) {
+			val textLayoutResult = cachedLayout ?: run {
+				// Skip if the line already has a ParagraphStyle (block line):
+				// Compose forbids overlapping ParagraphStyle ranges.
+				val measureLine = if (bakedIndentStyle != null && line.paragraphStyles.isEmpty()) {
+					buildAnnotatedString { withStyle(bakedIndentStyle) { append(line) } }
+				} else {
+					line
+				}
 				try {
 					textMeasurer.measure(
 						text = measureLine,
@@ -971,17 +1070,6 @@ class TextEditorState(
 					// If measurement fails, create an empty layout result
 					textMeasurer.measure(
 						text = AnnotatedString(""),
-						style = measureStyle,
-						constraints = lineConstraints
-					)
-				}
-			} else {
-				val existing = _lineOffsets.find { it.line == lineIndex }?.textLayoutResult
-				if (existing != null) {
-					existing
-				} else {
-					textMeasurer.measure(
-						text = measureLine,
 						style = measureStyle,
 						constraints = lineConstraints
 					)
@@ -1028,13 +1116,10 @@ class TextEditorState(
 					paragraphTop = paragraphTop,
 				)
 
-				val richSpans = if (shouldRemeasure) {
-					richSpanManager.getSpansForLineWrap(lineWrap)
-				} else {
-					_lineOffsets.find {
-						it.line == lineIndex && it.wrapStartsAtIndex == lineWrapsAt
-					}?.richSpans ?: emptyList()
-				}
+				// Spans are re-resolved even for reused layouts: after a line-shifting
+				// edit the span set holds re-anchored copies, so a cached list would
+				// carry pre-edit ranges into drawing and hit testing.
+				val richSpans = richSpanManager.getSpansForLineWrap(lineWrap)
 
 				val blockHeight = density?.let { d ->
 					richSpans.firstNotNullOfOrNull { span ->
@@ -1055,6 +1140,8 @@ class TextEditorState(
 
 		_lineOffsets = offsets
 		scrollManager.updateContentHeight(yOffset.toInt())
+		lastLayoutLineCount = textLines.size
+		lastLayoutGeneration = layoutInputGeneration
 
 		_canUndo = editManager.history.hasUndoLevels()
 		_canRedo = editManager.history.hasRedoLevels()
@@ -1067,13 +1154,11 @@ class TextEditorState(
 	 */
 	fun addStyleSpan(range: TextEditorRange, style: SpanStyle) {
 		editManager.addSpanStyle(range, style)
-		updateBookKeeping()
 	}
 
 	/** Removes a previously applied character-level [SpanStyle] from [range]. */
 	fun removeStyleSpan(range: TextEditorRange, style: SpanStyle) {
 		editManager.removeStyleSpan(range, style)
-		updateBookKeeping()
 	}
 
 	/**
@@ -1082,13 +1167,11 @@ class TextEditorState(
 	 */
 	fun addRichSpan(range: TextEditorRange, style: RichSpanStyle) {
 		editManager.addRichSpan(range, style)
-		updateBookKeeping()
 	}
 
 	/** Adds a [RichSpan] block decoration spanning [start] to [end]. */
 	fun addRichSpan(start: CharLineOffset, end: CharLineOffset, style: RichSpanStyle) {
 		editManager.addRichSpan(TextEditorRange(start, end), style)
-		updateBookKeeping()
 	}
 
 	/** Adds a [RichSpan] block decoration over the flat character range [start] until [end]. */
@@ -1097,19 +1180,16 @@ class TextEditorState(
 			TextEditorRange(start.toCharLineOffset(), end.toCharLineOffset()),
 			style
 		)
-		updateBookKeeping()
 	}
 
 	/** Removes the [RichSpan] block decoration of [style] spanning [start] to [end]. */
 	fun removeRichSpan(start: CharLineOffset, end: CharLineOffset, style: RichSpanStyle) {
 		editManager.removeRichSpan(TextEditorRange(start, end), style)
-		updateBookKeeping()
 	}
 
 	/** Removes the given [RichSpan], e.g. one returned by [findSpanAtPosition]. */
 	fun removeRichSpan(span: RichSpan) {
 		editManager.removeRichSpan(span.range, span.style)
-		updateBookKeeping()
 	}
 
 	/**
@@ -1120,13 +1200,16 @@ class TextEditorState(
 	 * would relayout the whole document once per span.
 	 */
 	fun updateRichSpans(remove: Collection<RichSpan>, add: Collection<RichSpan>) {
+		if (remove.isEmpty() && add.isEmpty()) return
 		// One revision as well as one relayout: published per span, a reader between
 		// the removals and the additions sees the batch half-applied.
 		withAtomicEdit {
-			remove.forEach { richSpanManager.removeRichSpan(it) }
-			add.forEach { richSpanManager.addRichSpan(it.range, it.style) }
+			richSpanManager.removeRichSpans(remove)
+			richSpanManager.addRichSpansClamped(add)
+			// Span overlays don't move text, so the flushed pass re-resolves spans
+			// and offsets without shaping a single line.
+			updateBookKeeping(LayoutUpdate.SpansOnly)
 		}
-		updateBookKeeping()
 	}
 
 	/**

@@ -50,7 +50,7 @@ class TextEditorCursorState(
 			updateStylesFromPosition(newPosition)
 		}
 
-		editorState.scrollManager.ensureCursorVisible()
+		editorState.requestCursorVisible()
 	}
 
 	fun updateVisibility(visible: Boolean) {

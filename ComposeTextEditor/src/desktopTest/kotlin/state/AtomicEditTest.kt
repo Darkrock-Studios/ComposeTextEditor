@@ -72,6 +72,32 @@ class AtomicEditTest {
 	}
 
 	@Test
+	fun `a failed edit does not announce its discarded operations`() = runTest {
+		val state = TextEditorState(scope = this, measurer = mockk(relaxed = true))
+		val extension = MarkdownExtension(state).apply { importMarkdown("- alpha\n- bravo") }
+
+		val seen = mutableListOf<Any>()
+		val job = launch(UnconfinedTestDispatcher(testScheduler)) {
+			extension.editorState.editOperations.collect { seen += it }
+		}
+
+		assertFailsWith<IllegalStateException> {
+			state.withAtomicEdit {
+				state.cursor.updatePosition(CharLineOffset(0, 7))
+				state.insertStringAtCursor("staged")
+				error("edit failed after the operation was applied")
+			}
+		}
+		advanceUntilIdle()
+		job.cancel()
+
+		assertTrue(
+			seen.isEmpty(),
+			"editOperations announced an edit whose revision was discarded: $seen",
+		)
+	}
+
+	@Test
 	fun `an edit announced on editOperations is already published`() = runTest {
 		val state = TextEditorState(scope = this, measurer = mockk(relaxed = true))
 		val extension = MarkdownExtension(state).apply { importMarkdown("- alpha\n- bravo") }

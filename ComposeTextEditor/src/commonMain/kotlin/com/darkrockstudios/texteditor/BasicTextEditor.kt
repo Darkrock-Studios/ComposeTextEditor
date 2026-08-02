@@ -49,6 +49,7 @@ import com.darkrockstudios.texteditor.input.LocalKeyBindings
 import com.darkrockstudios.texteditor.input.TextEditorInputModifierElement
 import com.darkrockstudios.texteditor.input.selectionAsTextRange
 import com.darkrockstudios.texteditor.richstyle.BlockSpanStyle
+import com.darkrockstudios.texteditor.state.LayoutUpdate
 import com.darkrockstudios.texteditor.richstyle.RichSpan
 import com.darkrockstudios.texteditor.scrollbar.TextEditorScrollbar
 import com.darkrockstudios.texteditor.state.SpanClickType
@@ -184,7 +185,9 @@ fun BasicTextEditor(
 			}
 		}
 			.distinctUntilChanged()
-			.collect { state.updateBookKeeping() }
+			// A block height change moves Y offsets but no line content, so the
+			// pass can skip shaping entirely.
+			.collect { state.updateBookKeeping(LayoutUpdate.SpansOnly) }
 	}
 
 	TextEditorContextMenuProvider(
