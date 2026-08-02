@@ -66,6 +66,10 @@ that round-trip through markdown) enter undo history and announce themselves on
 the edit stream; decorations (spell-check underlines, find highlights) do
 neither, so an overlay pass can never pollute undo or masquerade as an edit.
 
+The block decorations that pair a rich span with a paragraph indent (lists,
+quotes, headings, fences) are a subsystem of their own with validity and
+round-trip rules: [design/line-blocks.md](design/line-blocks.md).
+
 ### The edit pipeline: `TextEditOperation`, `TextEditManager`, `TextEditHistory`
 
 Every mutation of the document is described by a `TextEditOperation` value:
@@ -88,6 +92,9 @@ span re-anchoring, and the edit stream all at once.
 operation with the `OperationMetadata` needed to reverse it (deleted text,
 deleted spans). Consecutive single-character typing and backspacing coalesce
 into wordwise runs, so undo peels words, not keystrokes.
+
+How positions (cursor, selection, spans, history) are carried across edits:
+[design/edit-operation-offset-transforms.md](design/edit-operation-offset-transforms.md).
 
 ### `RichSpanManager`: keeping spans anchored
 
