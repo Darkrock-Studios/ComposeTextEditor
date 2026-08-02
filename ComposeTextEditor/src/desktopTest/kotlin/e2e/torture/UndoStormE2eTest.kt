@@ -78,6 +78,73 @@ class UndoStormE2eTest {
 	}
 
 	@Test
+	fun `redo restores a whole coalesced word`() = editorUiTest {
+		typeText("alpha beta")
+
+		press(Key.Z, ctrl = true)
+		assertEquals("alpha ", text)
+
+		press(Key.Y, ctrl = true)
+		assertEquals("alpha beta", text)
+		assertEquals(10, cursorIndex, "the caret lands at the end of the redone word")
+	}
+
+	@Test
+	fun `undo restores a backspaced word in one step`() = editorUiTest(
+		initialText = AnnotatedString("alpha beta"),
+	) {
+		press(Key.MoveEnd)
+		repeat(4) { press(Key.Backspace) }
+		assertEquals("alpha ", text)
+
+		press(Key.Z, ctrl = true)
+
+		assertEquals("alpha beta", text)
+	}
+
+	@Test
+	fun `undo separates typing from the paste it followed`() = editorUiTest {
+		setPlainClipboardText("pasted")
+		press(Key.V, ctrl = true)
+		typeText("x")
+
+		press(Key.Z, ctrl = true)
+		assertEquals("pasted", text, "the typed character undoes without the paste")
+
+		press(Key.Z, ctrl = true)
+		assertEquals("", text)
+	}
+
+	@Test
+	fun `enter breaks a typing run into separate undo steps`() = editorUiTest {
+		typeText("ab\ncd")
+
+		press(Key.Z, ctrl = true)
+		assertEquals(listOf("ab", ""), lines)
+
+		press(Key.Z, ctrl = true)
+		assertEquals(listOf("ab"), lines)
+
+		press(Key.Z, ctrl = true)
+		assertEquals("", text)
+	}
+
+	@Test
+	fun `clicking elsewhere breaks the typing run`() = editorUiTest(
+		initialText = AnnotatedString("stub "),
+	) {
+		press(Key.MoveEnd)
+		typeText("tail")
+		clickAtCharacter(0)
+		typeText("x")
+		assertEquals("xstub tail", text)
+
+		press(Key.Z, ctrl = true)
+
+		assertEquals("stub tail", text, "only the character typed after the click undoes")
+	}
+
+	@Test
 	fun `alternating type and undo leaves a bold span untouched`() = editorUiTest(
 		initialText = AnnotatedString("bold word"),
 	) {
