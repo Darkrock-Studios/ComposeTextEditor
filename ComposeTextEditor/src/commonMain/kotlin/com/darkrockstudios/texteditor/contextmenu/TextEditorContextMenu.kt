@@ -10,6 +10,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.IntOffset
+import com.darkrockstudios.texteditor.input.EditorCommand
 import kotlin.math.roundToInt
 
 /**
@@ -82,7 +83,7 @@ internal fun TextEditorContextMenu(
 			}
 
 			// Paste - requires enabled
-			if (enabled) {
+			if (enabled && actions.canPaste()) {
 				DropdownMenuItem(
 					text = { Text(strings.paste) },
 					onClick = {
@@ -92,14 +93,15 @@ internal fun TextEditorContextMenu(
 				)
 			}
 
-			// Select All - always available
-			DropdownMenuItem(
-				text = { Text(strings.selectAll) },
-				onClick = {
-					actions.selectAll()
-					onDismiss()
-				},
-			)
+			if (actions.canPerform(EditorCommand.Action.SelectAll)) {
+				DropdownMenuItem(
+					text = { Text(strings.selectAll) },
+					onClick = {
+						actions.selectAll()
+						onDismiss()
+					},
+				)
+			}
 		}
 	}
 }
