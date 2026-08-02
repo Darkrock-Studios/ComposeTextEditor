@@ -84,6 +84,26 @@ class RichSpanManager(
 		spans = spans + newSpans
 	}
 
+	/**
+	 * Adds every span in [newSpans] in one publish, each coerced onto the current
+	 * document like [clampAllToDocument] does after an edit. Batched overlay callers
+	 * (spell check, find) compute ranges asynchronously, so a range can arrive
+	 * pointing past a document that shrank in the meantime; unclamped, such a span is
+	 * invisible, uncollectable by range queries, and still counted by span scans.
+	 */
+	internal fun addRichSpansClamped(newSpans: Collection<RichSpan>) {
+		val clamped = newSpans.mapNotNull { span ->
+			clampRangeToDocument(span.range)?.let { range ->
+				if (range.start == range.end && !span.style.rendersWhenEmpty) {
+					null
+				} else {
+					span.copy(range = range)
+				}
+			}
+		}
+		addRichSpans(clamped)
+	}
+
 	internal fun removeRichSpan(start: CharLineOffset, end: CharLineOffset, style: RichSpanStyle) {
 		removeRichSpan(RichSpan(TextEditorRange(start, end), style))
 	}

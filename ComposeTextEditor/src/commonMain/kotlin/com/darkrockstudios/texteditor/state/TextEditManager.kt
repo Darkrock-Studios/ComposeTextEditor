@@ -77,17 +77,23 @@ class TextEditManager(private val state: TextEditorState) {
 
 			is TextEditOperation.RichSpan -> LayoutUpdate.SpansOnly
 
-			is TextEditOperation.LineBlock -> {
-				val lines = operation.lines.map { it.lineIndex }
-				if (lines.isEmpty()) LayoutUpdate.SpansOnly
-				else LayoutUpdate.Partial(lines.min(), lines.max(), 0)
-			}
+			is TextEditOperation.LineBlock -> lineBlockLayoutUpdate(operation.lines)
 		}
 		return when {
 			update.lineDelta != newLineCount - oldLineCount -> LayoutUpdate.Full
 			update.remeasureLast > newLineCount - 1 -> update.copy(remeasureLast = newLineCount - 1)
 			else -> update
 		}
+	}
+
+	/**
+	 * The layout work a set of line-block changes requires. Block toggles rewrite
+	 * line content (paragraph styles), so the touched lines must re-shape.
+	 */
+	private fun lineBlockLayoutUpdate(changes: List<LineBlockChange>): LayoutUpdate.Partial {
+		val lines = changes.map { it.lineIndex }
+		return if (lines.isEmpty()) LayoutUpdate.SpansOnly
+		else LayoutUpdate.Partial(lines.min(), lines.max(), 0)
 	}
 
 	fun applyOperation(operation: TextEditOperation, addToHistory: Boolean = true) {
@@ -295,11 +301,11 @@ class TextEditManager(private val state: TextEditorState) {
 					operation.range.end.line - operation.range.start.line + 1
 				)
 				if (newLines.size == 1 && state.isEmpty()) {
-					state.updateLine(0, newLines[0])
+					state.setLine(0, newLines[0])
 				} else {
 					newLines.forEachIndexed { index, line ->
 						if (state.isEmpty() && index == 0) {
-							state.updateLine(0, newLines[0])
+							state.setLine(0, newLines[0])
 						} else {
 							state.insertLine(operation.range.start.line + index, line)
 						}
@@ -591,7 +597,7 @@ class TextEditManager(private val state: TextEditorState) {
 			}
 
 			if (state.isEmpty()) {
-				state.updateLine(0, newText)
+				state.setLine(0, newText)
 			} else {
 				state.insertLine(
 					startLine,
@@ -610,7 +616,7 @@ class TextEditManager(private val state: TextEditorState) {
 					end = operation.range.end.char,
 					spanStyle = operation.style
 				)
-				state.updateLine(operation.range.start.line, updatedLine)
+				state.setLine(operation.range.start.line, updatedLine)
 			} else {
 				val updatedLine = spanManager.removeSingleLineSpanStyle(
 					line = state.textLines[operation.range.start.line],
@@ -618,7 +624,7 @@ class TextEditManager(private val state: TextEditorState) {
 					end = operation.range.end.char,
 					spanStyle = operation.style
 				)
-				state.updateLine(operation.range.start.line, updatedLine)
+				state.setLine(operation.range.start.line, updatedLine)
 			}
 		} else {
 			// Handle multi-line case
@@ -639,7 +645,7 @@ class TextEditManager(private val state: TextEditorState) {
 						lineEnd,
 						operation.style
 					)
-					state.updateLine(lineIndex, updatedLine)
+					state.setLine(lineIndex, updatedLine)
 				} else {
 					val updatedLine = spanManager.removeSingleLineSpanStyle(
 						state.textLines[lineIndex],
@@ -647,7 +653,7 @@ class TextEditManager(private val state: TextEditorState) {
 						lineEnd,
 						operation.style
 					)
-					state.updateLine(lineIndex, updatedLine)
+					state.setLine(lineIndex, updatedLine)
 				}
 			}
 		}
@@ -680,7 +686,7 @@ class TextEditManager(private val state: TextEditorState) {
 		lines.forEach { change ->
 			val content = if (undo) change.contentBefore else change.contentAfter
 			val spans = if (undo) change.blockSpansBefore else change.blockSpansAfter
-			state.updateLine(change.lineIndex, content)
+			state.setLine(change.lineIndex, content)
 			state.setLineBlockSpans(change.lineIndex, spans)
 		}
 	}
@@ -753,11 +759,7 @@ class TextEditManager(private val state: TextEditorState) {
 			state.invalidateCopiedRichSpans()
 			// Requested inside the transaction so the commit flushes one pass; this
 			// also refreshes canUndo/canRedo after the history pop.
-			val lines = operation.lines.map { it.lineIndex }
-			state.updateBookKeeping(
-				if (lines.isEmpty()) LayoutUpdate.SpansOnly
-				else LayoutUpdate.Partial(lines.min(), lines.max(), 0)
-			)
+			state.updateBookKeeping(lineBlockLayoutUpdate(operation.lines))
 		}
 	}
 

@@ -29,9 +29,11 @@ internal sealed class LayoutUpdate {
 }
 
 /**
- * Combines two deferred updates into one that covers both. Two updates that both
- * change the line count cannot be composed by range arithmetic alone, so that case
- * degrades to [LayoutUpdate.Full], which is always sound.
+ * Combines two deferred updates into one that covers both. A range union is only
+ * sound when neither update can have shifted the other's line coordinates: partials
+ * were posted at different moments of the same transaction, so an earlier delta-0
+ * partial's lines may sit at different indices by commit. Every composition that
+ * cannot be proven shift-free degrades to [LayoutUpdate.Full], which is always sound.
  */
 internal fun LayoutUpdate.mergedWith(other: LayoutUpdate): LayoutUpdate {
 	if (this is LayoutUpdate.Full || other is LayoutUpdate.Full) return LayoutUpdate.Full
@@ -39,14 +41,23 @@ internal fun LayoutUpdate.mergedWith(other: LayoutUpdate): LayoutUpdate {
 	val b = other as LayoutUpdate.Partial
 	val aEmpty = a.remeasureLast < a.remeasureFirst && a.lineDelta == 0
 	val bEmpty = b.remeasureLast < b.remeasureFirst && b.lineDelta == 0
+	val union = LayoutUpdate.Partial(
+		remeasureFirst = minOf(a.remeasureFirst, b.remeasureFirst),
+		remeasureLast = maxOf(a.remeasureLast, b.remeasureLast),
+		lineDelta = a.lineDelta + b.lineDelta,
+	)
 	return when {
 		aEmpty -> b
 		bEmpty -> a
+		// No line moved, so both ranges are in commit coordinates.
+		a.lineDelta == 0 && b.lineDelta == 0 -> union
 		a.lineDelta != 0 && b.lineDelta != 0 -> LayoutUpdate.Full
-		else -> LayoutUpdate.Partial(
-			remeasureFirst = minOf(a.remeasureFirst, b.remeasureFirst),
-			remeasureLast = maxOf(a.remeasureLast, b.remeasureLast),
-			lineDelta = a.lineDelta + b.lineDelta,
-		)
+		// One structural update: the delta-0 range is only trustworthy when it lies
+		// entirely above the shift point, where no coordinate can have moved.
+		else -> {
+			val structural = if (a.lineDelta != 0) a else b
+			val stable = if (a.lineDelta != 0) b else a
+			if (stable.remeasureLast < structural.remeasureFirst) union else LayoutUpdate.Full
+		}
 	}
 }

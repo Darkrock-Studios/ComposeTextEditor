@@ -81,6 +81,7 @@ kotlin {
 			dependsOn(platformSpellMain)
 		}
 		val desktopTest by getting {
+			kotlin.srcDir(rootDir.resolve("testUtils/countingMeasurer"))
 			dependencies {
 				implementation(libs.jetbrains.kotlin.test)
 				implementation(libs.jetbrains.kotlin.test.junit)

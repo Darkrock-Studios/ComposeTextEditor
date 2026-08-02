@@ -153,6 +153,26 @@ class TextEditorState(
 	 */
 	private var pendingLayoutUpdate: LayoutUpdate? = null
 
+	/**
+	 * Whether a cursor move inside the open transaction still needs its
+	 * scroll-into-view. Deferred with the layout: scrolling mid-transaction computes
+	 * the target from the stale pre-edit offsets and can fling the viewport to the
+	 * document top.
+	 */
+	private var pendingCursorScroll = false
+
+	/**
+	 * Scrolls the cursor into view, or defers the scroll to the transaction commit
+	 * so it reads the freshly flushed layout.
+	 */
+	internal fun requestCursorVisible() {
+		if (draft != null) {
+			pendingCursorScroll = true
+		} else {
+			scrollManager.ensureCursorVisible()
+		}
+	}
+
 	/** Content as the current edit sees it: the open draft if there is one, else [content]. */
 	internal val workingContent: DocumentSnapshot get() = draft ?: content
 
@@ -199,21 +219,29 @@ class TextEditorState(
 				}
 			}
 			draft = null
-			// Flush the deferred relayout only on the committing path; a discarded
-			// draft leaves the previous layout correct as-is.
+			// Flush the deferred relayout, then the cursor scroll that must read the
+			// fresh offsets, then the commit actions that announce the edit. All of
+			// this runs only on the committing path.
 			pendingLayoutUpdate?.let {
 				pendingLayoutUpdate = null
 				updateBookKeeping(it)
 			}
-			return result
-		} finally {
-			draft = null
-			pendingLayoutUpdate = null
-			// Drop the queue on the throwing path too: those actions announce an edit
-			// that no longer exists.
+			if (pendingCursorScroll) {
+				pendingCursorScroll = false
+				scrollManager.ensureCursorVisible()
+			}
 			val actions = pendingCommitActions.toList()
 			pendingCommitActions.clear()
 			actions.forEach { it() }
+			return result
+		} finally {
+			// The throwing path discards everything staged: the draft, the relayout,
+			// the scroll, and the queued actions, which would announce an edit that
+			// no longer exists.
+			draft = null
+			pendingLayoutUpdate = null
+			pendingCursorScroll = false
+			pendingCommitActions.clear()
 		}
 	}
 
@@ -1005,7 +1033,7 @@ class TextEditorState(
 		// The shrinking behavior interacts badly with TextIndent: if the paragraph
 		// shrinks to its natural width W and then TextIndent consumes X pixels of
 		// first-line width, the first line has only W-X pixels available instead of
-		// viewportWidth-X — causing wraps that shouldn't happen.
+		// viewportWidth-X, causing wraps that shouldn't happen.
 		val lineConstraints = Constraints(
 			minWidth = maxOf(1, viewportSize.width.toInt()),
 			maxWidth = maxOf(1, viewportSize.width.toInt()),
@@ -1024,7 +1052,7 @@ class TextEditorState(
 			}
 
 			val textLayoutResult = cachedLayout ?: run {
-				// Skip if the line already has a ParagraphStyle (block line) —
+				// Skip if the line already has a ParagraphStyle (block line):
 				// Compose forbids overlapping ParagraphStyle ranges.
 				val measureLine = if (bakedIndentStyle != null && line.paragraphStyles.isEmpty()) {
 					buildAnnotatedString { withStyle(bakedIndentStyle) { append(line) } }
@@ -1177,7 +1205,7 @@ class TextEditorState(
 		// the removals and the additions sees the batch half-applied.
 		withAtomicEdit {
 			richSpanManager.removeRichSpans(remove)
-			richSpanManager.addRichSpans(add)
+			richSpanManager.addRichSpansClamped(add)
 			// Span overlays don't move text, so the flushed pass re-resolves spans
 			// and offsets without shaping a single line.
 			updateBookKeeping(LayoutUpdate.SpansOnly)

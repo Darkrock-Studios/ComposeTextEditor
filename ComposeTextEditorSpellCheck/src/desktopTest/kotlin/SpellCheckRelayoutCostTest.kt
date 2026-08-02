@@ -1,47 +1,25 @@
 package com.darkrockstudios.texteditor.spellcheck
 
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.TextLayoutResult
-import androidx.compose.ui.text.TextMeasurer
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.richstyle.SpellCheckStyle
 import com.darkrockstudios.texteditor.spellcheck.api.EditorSpellChecker
 import com.darkrockstudios.texteditor.spellcheck.api.Suggestion
 import com.darkrockstudios.texteditor.state.TextEditorState
-import io.mockk.every
-import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
+import utils.MeasureCounter
+import utils.countingMeasurer
+import utils.editorWithCounter
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
 /**
  * A spell-check pass decorates the document without shaping a single line. Underlines
- * are span overlays over unchanged text; before batching, each of N misspellings cost
- * two whole-document shaping passes, which is the lockup path on large documents.
+ * are span overlays over unchanged text, so shaping work must not scale with the
+ * number of misspellings; these tests pin it at zero measure calls.
  */
 class SpellCheckRelayoutCostTest {
-
-	private class MeasureCounter {
-		var calls = 0
-	}
-
-	private fun countingMeasurer(counter: MeasureCounter): TextMeasurer {
-		val layout = mockk<TextLayoutResult>(relaxed = true)
-		every { layout.multiParagraph.lineCount } returns 1
-		return mockk(relaxed = true) {
-			every {
-				measure(
-					any<AnnotatedString>(), any(), any(), any(), any(), any(),
-					any(), any(), any(), any(), any(),
-				)
-			} answers {
-				counter.calls++
-				layout
-			}
-		}
-	}
 
 	private class StaticSpellChecker(
 		var correctWords: Set<String> = emptySet(),
@@ -70,8 +48,7 @@ class SpellCheckRelayoutCostTest {
 
 	private fun kotlinx.coroutines.test.TestScope.harness(): Harness {
 		val counter = MeasureCounter()
-		val textState = TextEditorState(scope = this, measurer = countingMeasurer(counter))
-		textState.onViewportSizeChange(Size(800f, 600f))
+		val textState = editorWithCounter(counter)
 		textState.setText(AnnotatedString(document()))
 		val spellCheck = SpellCheckState(textState, StaticSpellChecker(correctWords))
 		counter.calls = 0

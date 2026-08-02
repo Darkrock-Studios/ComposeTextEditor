@@ -12,11 +12,9 @@ import kotlin.test.assertEquals
 
 /**
  * An import lays the document out a fixed number of times, however many decorated
- * lines it carries.
- *
- * Applying block styles a line at a time once made an import cost quadratic in line
- * count. Counting measure calls pins the cost to a constant number of whole-document
- * passes, so a regression fails the build instead of waiting to be found by profiling.
+ * lines it carries. Counting measure calls pins the cost to a constant number of
+ * whole-document passes, so a regression to per-line relayouts fails the build
+ * instead of waiting to be found by profiling.
  */
 class ImportRelayoutCostTest {
 
