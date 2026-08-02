@@ -26,8 +26,13 @@ actual object ClipboardHelper {
 		clipboard: Clipboard,
 		text: AnnotatedString,
 		configuration: MarkdownConfiguration,
+		copyId: Long?,
 	) {
 		val clipData = ClipData.newPlainText("text", text.text)
 		clipboard.setClipEntry(clipData.toClipEntry())
 	}
+
+	actual suspend fun readCopyId(clipboard: Clipboard): Long? = null
+
+	actual val supportsCopyProvenance: Boolean get() = false
 }

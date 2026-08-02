@@ -1187,9 +1187,11 @@ class TextEditorState(
 	/**
 	 * Remembers the rich spans (ordered/bullet list, blockquote, etc.) within
 	 * [range] so a subsequent [pasteRichSpans] can restore them. Call from the
-	 * copy/cut handlers alongside writing the text to the system clipboard.
+	 * copy/cut handlers alongside writing the text to the system clipboard, and
+	 * attach the returned copy id to the clipboard content so paste can prove
+	 * the clipboard still holds this copy.
 	 */
-	fun copyRichSpans(range: TextEditorRange) {
+	fun copyRichSpans(range: TextEditorRange): Long {
 		// getSpansInRange returns spans that merely OVERLAP the copy range. A span
 		// starting before range.start (partial selection of a list item, or a
 		// multi-line span only partly covered) would yield a negative relative
@@ -1214,11 +1216,13 @@ class TextEditorState(
 				style = span.style
 			)
 		}
+		val copyId = nextCopyId++
 		copiedRichSpans = if (preserved.isEmpty()) {
 			null
 		} else {
-			CopiedRichSpans(text = getStringInRange(range), spans = preserved)
+			CopiedRichSpans(text = getStringInRange(range), spans = preserved, copyId = copyId)
 		}
+		return copyId
 	}
 
 	/**
@@ -1246,18 +1250,23 @@ class TextEditorState(
 
 	/**
 	 * Re-applies the rich spans captured by [copyRichSpans] at [insertPosition].
-	 * No-op unless [pastedText] matches the text that was copied. The text match
-	 * is a secondary guard; the primary protection against stale spans is
-	 * [invalidateCopiedRichSpans], which clears the buffer on any intervening edit.
-	 *
-	 * Residual limitation: if the user copies identical text from another app with
-	 * no editor edit in between, the text match still succeeds and the in-editor
-	 * spans apply. Fully closing this needs platform-clipboard ownership tracking,
-	 * which is out of scope here.
+	 * No-op unless [pastedText] matches the text that was copied, and, when
+	 * [requireCopyIdMatch] is set, unless [clipboardCopyId] proves the clipboard
+	 * still holds the copy that filled the buffer. Platforms whose clipboard
+	 * carries a copy id pass both, so identical text written by another
+	 * application can never resurrect stale spans; plain-text-only clipboards
+	 * fall back to the text match, guarded by [invalidateCopiedRichSpans]
+	 * clearing the buffer on any intervening edit.
 	 */
-	fun pasteRichSpans(insertPosition: CharLineOffset, pastedText: AnnotatedString) = withAtomicEdit {
+	fun pasteRichSpans(
+		insertPosition: CharLineOffset,
+		pastedText: AnnotatedString,
+		clipboardCopyId: Long? = null,
+		requireCopyIdMatch: Boolean = false,
+	) = withAtomicEdit {
 		val copied = copiedRichSpans ?: return@withAtomicEdit
 		if (copied.text != pastedText.text) return@withAtomicEdit
+		if (requireCopyIdMatch && clipboardCopyId != copied.copyId) return@withAtomicEdit
 		copied.spans.forEach { preserved ->
 			val startPos = CharLineOffset(
 				line = insertPosition.line + preserved.relativeStart.lineDiff,
@@ -1400,3 +1409,7 @@ class TextEditorState(
 		return 31 + textLines.hashCode()
 	}
 }
+
+// Process-wide so two editors in one window can never mint the same id; copies
+// only happen on the UI thread, so a plain increment is race-free in practice.
+private var nextCopyId: Long = 1L

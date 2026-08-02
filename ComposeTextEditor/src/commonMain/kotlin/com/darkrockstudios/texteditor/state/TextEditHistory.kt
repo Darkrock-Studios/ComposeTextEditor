@@ -152,7 +152,9 @@ data class PreservedRichSpan(
 
 data class CopiedRichSpans(
 	val text: String,
-	val spans: List<PreservedRichSpan>
+	val spans: List<PreservedRichSpan>,
+	/** Identifies the copy that filled this buffer; pasted clipboard content must prove it. */
+	val copyId: Long,
 )
 
 data class OperationMetadata(

@@ -35,12 +35,26 @@ expect object ClipboardHelper {
 	/**
 	 * Writes text to the clipboard.
 	 * On Desktop, offers the selection as HTML for other applications and as an
-	 * exact copy within this process.
-	 * On other platforms, writes plain text only.
+	 * exact copy within this process; [copyId] rides along so a later paste can
+	 * prove the clipboard content is still this copy.
+	 * On other platforms, writes plain text only and [copyId] is ignored.
 	 */
 	suspend fun setText(
 		clipboard: Clipboard,
 		text: AnnotatedString,
 		configuration: MarkdownConfiguration = MarkdownConfiguration.DEFAULT,
+		copyId: Long? = null,
 	)
+
+	/**
+	 * The [copyId] this editor attached to the current clipboard content, or null
+	 * when another application wrote the clipboard or the platform cannot carry it.
+	 */
+	suspend fun readCopyId(clipboard: Clipboard): Long?
+
+	/**
+	 * Whether this platform's clipboard can carry a [copyId]. Where it cannot
+	 * (plain-text-only clipboards), paste falls back to matching copied text.
+	 */
+	val supportsCopyProvenance: Boolean
 }

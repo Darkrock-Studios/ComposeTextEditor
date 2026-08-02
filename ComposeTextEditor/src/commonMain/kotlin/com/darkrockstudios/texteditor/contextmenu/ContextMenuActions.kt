@@ -41,11 +41,11 @@ class ContextMenuActions(
 	fun cut() {
 		state.selector.selection?.let { selection ->
 			val selectedText = state.selector.getSelectedText()
-			state.copyRichSpans(selection)
+			val copyId = state.copyRichSpans(selection)
 			state.preserveCopiedRichSpansThroughNextEdit()
 			state.selector.deleteSelection()
 			scope.launch {
-				ClipboardHelper.setText(clipboard, selectedText, state.markdownConfiguration)
+				ClipboardHelper.setText(clipboard, selectedText, state.markdownConfiguration, copyId)
 			}
 		}
 	}
@@ -56,9 +56,9 @@ class ContextMenuActions(
 	fun copy() {
 		state.selector.selection?.let { selection ->
 			val selectedText = state.selector.getSelectedText()
-			state.copyRichSpans(selection)
+			val copyId = state.copyRichSpans(selection)
 			scope.launch {
-				ClipboardHelper.setText(clipboard, selectedText, state.markdownConfiguration)
+				ClipboardHelper.setText(clipboard, selectedText, state.markdownConfiguration, copyId)
 			}
 		}
 	}
@@ -75,6 +75,7 @@ class ContextMenuActions(
 				// Read the clipboard's HTML before mutating: the text, the in-editor
 				// rich spans and the pasted block structure then land as one revision.
 				val htmlDocument = state.readHtmlPasteDocument(clipboard, text)
+				val clipboardCopyId = ClipboardHelper.readCopyId(clipboard)
 				state.preserveCopiedRichSpansThroughNextEdit()
 				state.withAtomicEdit {
 					if (curSelection != null) {
@@ -82,7 +83,12 @@ class ContextMenuActions(
 					} else {
 						state.insertStringAtCursor(text)
 					}
-					state.pasteRichSpans(insertPosition, text)
+					state.pasteRichSpans(
+						insertPosition,
+						text,
+						clipboardCopyId,
+						requireCopyIdMatch = ClipboardHelper.supportsCopyProvenance,
+					)
 					htmlDocument?.let { state.applyHtmlPasteBlocks(it, insertPosition, text) }
 				}
 				state.selector.clearSelection()
