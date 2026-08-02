@@ -183,8 +183,10 @@ per-line query the layout pass runs costs the spans on that line, not the
 spans in the document. `SpanScanCostTest` pins a relayout to a constant number
 of flat span-set iterations.
 
-## 8. Deferred follow-ups (from issue #36)
+## 8. Semantics text
 
-- **Semantics versioning.** `BasicTextEditor` still rebuilds
-  `editableText = state.getAllText()` (an O(document) concatenation) whenever
-  semantics are rebuilt.
+`DocumentSnapshot.getAllText()` (the whole document as one string, read by the
+semantics block on every rebuild) is memoized per text revision: built on
+first read and shared across span-only revisions, the same pattern as the
+line-start and span indices. With this, every follow-up from issue #36 has
+landed.

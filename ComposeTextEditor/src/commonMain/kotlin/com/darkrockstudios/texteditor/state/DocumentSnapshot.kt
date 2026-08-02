@@ -31,12 +31,18 @@ class DocumentSnapshot private constructor(
 	 * because a span-only edit leaves every line length untouched.
 	 */
 	private val lineStarts: Lazy<IntArray>,
+	/**
+	 * Backs [getAllText]. Depends only on the text, so like [lineStarts] it is
+	 * shared with the revision [withRichSpans] produces.
+	 */
+	private val allText: Lazy<AnnotatedString>,
 ) {
 	internal constructor(lines: List<AnnotatedString>, richSpans: Set<RichSpan>) : this(
 		lines = lines,
 		richSpans = richSpans,
 		spansByLine = spansByLineOf(richSpans),
 		lineStarts = lineStartsOf(lines),
+		allText = allTextOf(lines),
 	)
 
 	/**
@@ -60,28 +66,39 @@ class DocumentSnapshot private constructor(
 	 */
 	internal val lineStartOffsets: IntArray get() = lineStarts.value
 
-	/** The whole document as a single [AnnotatedString], lines joined with newlines. */
-	fun getAllText(): AnnotatedString = buildAnnotatedString {
-		lines.forEachIndexed { index, line ->
-			append(line)
-			if (index < lines.lastIndex) append('\n')
-		}
-	}
+	/**
+	 * The whole document as a single [AnnotatedString], lines joined with newlines.
+	 * Built on first read and reused until a revision changes the text; semantics
+	 * rebuilds read this per frame, so an unmemoized concatenation is O(document)
+	 * each time.
+	 */
+	fun getAllText(): AnnotatedString = allText.value
 
 	/**
 	 * Keeps the span index: the ranges are untouched by a text edit, so the lines they
 	 * start on are the same ones they started on before.
 	 */
 	internal fun withLines(lines: List<AnnotatedString>) =
-		DocumentSnapshot(lines, richSpans, spansByLine, lineStartsOf(lines))
+		DocumentSnapshot(lines, richSpans, spansByLine, lineStartsOf(lines), allTextOf(lines))
 
 	internal fun withRichSpans(richSpans: Set<RichSpan>) = DocumentSnapshot(
 		lines = lines,
 		richSpans = richSpans,
 		spansByLine = spansByLineOf(richSpans),
 		lineStarts = lineStarts,
+		allText = allText,
 	)
 }
+
+private fun allTextOf(lines: List<AnnotatedString>): Lazy<AnnotatedString> =
+	lazy(LazyThreadSafetyMode.PUBLICATION) {
+		buildAnnotatedString {
+			lines.forEachIndexed { index, line ->
+				append(line)
+				if (index < lines.lastIndex) append('\n')
+			}
+		}
+	}
 
 private fun spansByLineOf(richSpans: Set<RichSpan>): Lazy<Map<Int, List<RichSpan>>> =
 	lazy(LazyThreadSafetyMode.PUBLICATION) {
