@@ -1173,10 +1173,12 @@ class TextEditorState(
 		// One revision as well as one relayout: published per span, a reader between
 		// the removals and the additions sees the batch half-applied.
 		withAtomicEdit {
-			remove.forEach { richSpanManager.removeRichSpan(it) }
-			add.forEach { richSpanManager.addRichSpan(it.range, it.style) }
+			richSpanManager.removeRichSpans(remove)
+			richSpanManager.addRichSpans(add)
+			// Span overlays don't move text, so the flushed pass re-resolves spans
+			// and offsets without shaping a single line.
+			updateBookKeeping(LayoutUpdate.SpansOnly)
 		}
-		updateBookKeeping()
 	}
 
 	/**

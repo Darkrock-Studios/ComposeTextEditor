@@ -8,6 +8,7 @@ import androidx.compose.ui.text.font.FontWeight
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.richstyle.HighlightSpanStyle
+import com.darkrockstudios.texteditor.richstyle.RichSpan
 import com.darkrockstudios.texteditor.state.TextEditorState
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
@@ -136,6 +137,28 @@ class EditRelayoutCostTest {
 		state.removeRichSpan(CharLineOffset(10, 0), CharLineOffset(10, 4), style)
 
 		assertEquals(0, counter.calls)
+	}
+
+	@Test
+	fun `bulk span swap measures nothing`() = runTest {
+		val counter = MeasureCounter()
+		val state = editorWithDocument(counter)
+		val style = HighlightSpanStyle(Color.Yellow)
+		val spanOn = { line: Int, start: Int, end: Int ->
+			RichSpan(
+				TextEditorRange(CharLineOffset(line, start), CharLineOffset(line, end)),
+				style,
+			)
+		}
+
+		val first = (0 until 20).map { spanOn(it, 0, 4) }
+		state.updateRichSpans(emptyList(), first)
+
+		val second = (0 until 20).map { spanOn(it, 5, 9) }
+		state.updateRichSpans(first, second)
+
+		assertEquals(0, counter.calls)
+		assertEquals(20, state.richSpanManager.getAllRichSpans().size)
 	}
 
 	@Test
