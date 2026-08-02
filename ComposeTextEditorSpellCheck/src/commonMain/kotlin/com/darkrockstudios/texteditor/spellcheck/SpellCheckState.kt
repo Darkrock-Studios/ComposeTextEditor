@@ -3,7 +3,6 @@ package com.darkrockstudios.texteditor.spellcheck
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.util.fastForEach
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.richstyle.RichSpan
 import com.darkrockstudios.texteditor.richstyle.SpellCheckStyle
@@ -174,11 +173,9 @@ class SpellCheckState(
 	 * @param correction The replacement text.
 	 */
 	fun correctSpelling(segment: WordSegment, correction: String) {
-		textState.getRichSpansInRange(segment.range)
+		val doomed = textState.getRichSpansInRange(segment.range)
 			.filter { it.style == SpellCheckStyle }
-			.forEach { span ->
-				textState.removeRichSpan(span)
-			}
+		textState.updateRichSpans(remove = doomed, add = emptyList())
 		misspelledWords.remove(segment)
 		println("Correcting spelling for $segment, correcting to: $correction")
 		textState.replace(segment.range, correction, true)
@@ -188,24 +185,18 @@ class SpellCheckState(
 	 * Apply a sentence-level correction.
 	 */
 	fun applySentenceCorrection(correction: Correction, selectedSuggestion: String) {
-		textState.getRichSpansInRange(correction.range)
+		val doomed = textState.getRichSpansInRange(correction.range)
 			.filter { it.style == SpellCheckStyle }
-			.forEach { span ->
-				textState.removeRichSpan(span)
-			}
+		textState.updateRichSpans(remove = doomed, add = emptyList())
 		sentenceCorrections.remove(correction)
 		println("Applying sentence correction: ${correction.originalText} -> $selectedSuggestion")
 		textState.replace(correction.range, selectedSuggestion, true)
 	}
 
 	private fun clearSpellCheck() {
-		textState.apply {
-			richSpanManager.getAllRichSpans()
-				.filter { it.style is SpellCheckStyle }
-				.forEach { span ->
-					removeRichSpan(span)
-				}
-		}
+		val doomed = textState.richSpanManager.getAllRichSpans()
+			.filter { it.style is SpellCheckStyle }
+		textState.updateRichSpans(remove = doomed, add = emptyList())
 
 		misspelledWords.clear()
 		sentenceCorrections.clear()
@@ -275,15 +266,16 @@ class SpellCheckState(
 		if (spellCheckingEnabled.not()) return
 		suspension = null
 
-		// Swap atomically: no suspension points between removal and re-add.
-		textState.apply {
-			richSpanManager.getAllRichSpans()
-				.filter { it.style is SpellCheckStyle }
-				.forEach { removeRichSpan(it) }
-			misspelledWords.clear()
-			sentenceCorrections.clear()
-			misspelled.forEach { addRichSpan(it.range, SpellCheckStyle) }
-		}
+		// Swap atomically: no suspension points between removal and re-add, and the
+		// batch lands as one measure-free relayout instead of one per span.
+		val doomed = textState.richSpanManager.getAllRichSpans()
+			.filter { it.style is SpellCheckStyle }
+		misspelledWords.clear()
+		sentenceCorrections.clear()
+		textState.updateRichSpans(
+			remove = doomed,
+			add = misspelled.map { RichSpan(it.range, SpellCheckStyle) },
+		)
 		misspelledWords.addAll(misspelled)
 	}
 
@@ -323,14 +315,15 @@ class SpellCheckState(
 		if (spellCheckingEnabled.not()) return
 		suspension = null
 
-		textState.apply {
-			richSpanManager.getAllRichSpans()
-				.filter { it.style is SpellCheckStyle }
-				.forEach { removeRichSpan(it) }
-			misspelledWords.clear()
-			sentenceCorrections.clear()
-			corrections.forEach { addRichSpan(it.range, SpellCheckStyle) }
-		}
+		// One measure-free relayout for the whole swap instead of one per span.
+		val doomed = textState.richSpanManager.getAllRichSpans()
+			.filter { it.style is SpellCheckStyle }
+		misspelledWords.clear()
+		sentenceCorrections.clear()
+		textState.updateRichSpans(
+			remove = doomed,
+			add = corrections.map { RichSpan(it.range, SpellCheckStyle) },
+		)
 		sentenceCorrections.addAll(corrections)
 	}
 
@@ -347,12 +340,15 @@ class SpellCheckState(
 		// on lookups; adding spans now would undo its cleanup.
 		if (canSpellCheck().not()) return
 
-		// Swap atomically: no suspension points between removal and re-add.
-		textState.richSpanManager.getSpansInRange(range)
+		// Swap atomically: no suspension points between removal and re-add, and the
+		// batch lands as one measure-free relayout instead of one per span.
+		val doomed = textState.richSpanManager.getSpansInRange(range)
 			.filter { it.style is SpellCheckStyle }
-			.forEach { textState.removeRichSpan(it) }
 		removeMissSpellingsInRange(range)
-		misspelled.forEach { textState.addRichSpan(it.range, SpellCheckStyle) }
+		textState.updateRichSpans(
+			remove = doomed,
+			add = misspelled.map { RichSpan(it.range, SpellCheckStyle) },
+		)
 		misspelledWords.addAll(misspelled)
 
 		// Judge the whole document after folding this range in, so a wrong-language
@@ -382,12 +378,15 @@ class SpellCheckState(
 		// on lookups; adding spans now would undo its cleanup.
 		if (canSpellCheck().not()) return
 
-		// Swap atomically: no suspension points between removal and re-add.
-		textState.richSpanManager.getSpansInRange(range)
+		// Swap atomically: no suspension points between removal and re-add, and the
+		// batch lands as one measure-free relayout instead of one per span.
+		val doomed = textState.richSpanManager.getSpansInRange(range)
 			.filter { it.style is SpellCheckStyle }
-			.forEach { textState.removeRichSpan(it) }
 		removeSentenceCorrectionsInRange(range)
-		corrections.forEach { textState.addRichSpan(it.range, SpellCheckStyle) }
+		textState.updateRichSpans(
+			remove = doomed,
+			add = corrections.map { RichSpan(it.range, SpellCheckStyle) },
+		)
 		sentenceCorrections.addAll(corrections)
 
 		// Judge the whole document after folding this range in. Live spans are counted
@@ -421,16 +420,15 @@ class SpellCheckState(
 
 		if (canSpellCheck()) {
 			removeMissSpellingsInRange(segment.range)
-			textState.apply {
-				getRichSpansInRange(segment.range)
-					.filter { it.style is SpellCheckStyle }
-					.forEach { removeRichSpan(it) }
-
-				if (!isSpelledCorrectly) {
-					addRichSpan(segment.range, SpellCheckStyle)
-					misspelledWords.removeAll { it.range == segment.range }
-					misspelledWords.add(segment)
-				}
+			val doomed = textState.getRichSpansInRange(segment.range)
+				.filter { it.style is SpellCheckStyle }
+			val add = if (isSpelledCorrectly) emptyList() else {
+				listOf(RichSpan(segment.range, SpellCheckStyle))
+			}
+			textState.updateRichSpans(remove = doomed, add = add)
+			if (!isSpelledCorrectly) {
+				misspelledWords.removeAll { it.range == segment.range }
+				misspelledWords.add(segment)
 			}
 
 			// One more word can be the one that pushes the total over the cap.
@@ -484,15 +482,12 @@ class SpellCheckState(
 				removeSentenceCorrectionsInRange(range)
 			}
 
-			range?.affectedLineWraps(textState)?.forEach { vLine ->
-				val lineWrap = textState.getWrappedLine(vLine)
-				lineWrap.richSpans
-					.filter { it.style is SpellCheckStyle }
-					.fastForEach { span ->
-						if (range.intersects(span.range)) {
-							textState.removeRichSpan(span)
-						}
-					}
+			range?.let { r ->
+				val doomed = r.affectedLineWraps(textState).flatMap { vLine ->
+					textState.getWrappedLine(vLine).richSpans
+						.filter { it.style is SpellCheckStyle && r.intersects(it.range) }
+				}
+				textState.updateRichSpans(remove = doomed, add = emptyList())
 			}
 
 			lastTextHash = newTextHash

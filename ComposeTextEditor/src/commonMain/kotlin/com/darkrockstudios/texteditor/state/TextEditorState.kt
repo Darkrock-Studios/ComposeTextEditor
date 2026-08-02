@@ -1170,6 +1170,7 @@ class TextEditorState(
 	 * would relayout the whole document once per span.
 	 */
 	fun updateRichSpans(remove: Collection<RichSpan>, add: Collection<RichSpan>) {
+		if (remove.isEmpty() && add.isEmpty()) return
 		// One revision as well as one relayout: published per span, a reader between
 		// the removals and the additions sees the batch half-applied.
 		withAtomicEdit {
