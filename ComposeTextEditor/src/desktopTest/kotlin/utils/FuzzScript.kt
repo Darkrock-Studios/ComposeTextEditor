@@ -65,20 +65,13 @@ private fun FuzzOp.historyCost(): Int = when (this) {
  *
  * [includeBlocks] excludes block toggles from the vocabulary. The undo-to-origin
  * scripts need this because block undo has known red-test defects (cross-block
- * restore, unrecorded demotions); those stay covered by the hand-written tests.
- *
- * [includeBold] excludes character styling. The fixpoint scripts need this
- * because edits can land bold onto fence-baked monospace, and emphasis
- * overlapping a code span opens its markers inside the backticks (a known
- * red-test defect, see MarkdownRoundTripTortureE2eTest `bold overlapping an
- * inline code span round trips`). Lift both when the underlying defects are fixed.
+ * restore); those stay covered by the hand-written tests.
  */
 fun generateFuzzScript(
 	seed: Long,
 	count: Int,
 	mutatingBudget: Int = Int.MAX_VALUE,
 	includeBlocks: Boolean = true,
-	includeBold: Boolean = true,
 ): List<FuzzOp> {
 	val random = Random(seed)
 	var budget = mutatingBudget
@@ -86,9 +79,6 @@ fun generateFuzzScript(
 	while (script.size < count) {
 		var op = randomOp(random)
 		if (!includeBlocks && op is FuzzOp.ToggleBlock) {
-			op = FuzzOp.TypeText(WORDS.random(random))
-		}
-		if (!includeBold && op is FuzzOp.ToggleBold) {
 			op = FuzzOp.TypeText(WORDS.random(random))
 		}
 		if (op.isMutating()) {
