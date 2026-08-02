@@ -25,6 +25,8 @@ import com.darkrockstudios.texteditor.input.CtrlKeyBindings
 import com.darkrockstudios.texteditor.input.KeyBindings
 import com.darkrockstudios.texteditor.input.LocalKeyBindings
 import com.darkrockstudios.texteditor.input.MacKeyBindings
+import com.darkrockstudios.texteditor.markdown.MarkdownExtension
+import com.darkrockstudios.texteditor.markdown.withMarkdown
 import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.rememberTextEditorState
 
@@ -68,6 +70,13 @@ internal fun editorUiTest(
 		}
 	}
 	waitForIdle()
+	// Key events are replayed against the scene's focused node; under a loaded
+	// JVM the autoFocus request can land after the first replayed keystrokes,
+	// which are then silently dropped. Don't hand control to the test until the
+	// editor actually holds focus.
+	if (enabled) {
+		waitUntil(timeoutMillis = 5_000) { state.isFocused }
+	}
 	EditorUiTestScope(this, state, clipboard).block()
 }
 
@@ -77,6 +86,14 @@ class EditorUiTestScope(
 	val state: TextEditorState,
 	val clipboard: InMemoryClipboard,
 ) {
+	/**
+	 * Markdown extension for this editor, created on first use. Deliberately a
+	 * per-scope member: TextEditorState hashes by document content, so caching
+	 * extensions in any shared hash-keyed map hands a test another test's editor
+	 * whenever two documents happen to hold equal text.
+	 */
+	val markdown: MarkdownExtension by lazy { state.withMarkdown() }
+
 	/** Plain text of the whole document. */
 	val text: String get() = state.getAllText().text
 

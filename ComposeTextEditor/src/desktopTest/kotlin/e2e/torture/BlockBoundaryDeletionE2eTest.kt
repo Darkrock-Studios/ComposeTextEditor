@@ -8,7 +8,6 @@ import utils.assertRichSpanInvariants
 import utils.blockFlags
 import utils.editorUiTest
 import utils.linesWith
-import utils.markdown
 import utils.selectChars
 import kotlin.test.Test
 import kotlin.test.assertEquals
