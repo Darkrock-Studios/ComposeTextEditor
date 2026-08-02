@@ -423,8 +423,9 @@ class TextEditorState(
 		// Enter on an empty bullet/quote item exits the block — drop the gutter
 		// marker and indent, eat the keystroke. Matches Notion / Google Docs and
 		// gives a discoverable way to leave a list or quote without backspacing.
+		// Routed through the toggle so the demotion lands in undo history.
 		if (lineText.isEmpty() && activeBlock != null) {
-			demoteLineBlock(originalLine, activeBlock)
+			editManager.toggleLineBlock(originalLine..originalLine, activeBlock)
 			return
 		}
 
@@ -468,7 +469,11 @@ class TextEditorState(
 			if (activeBlock != null) {
 				val prevBlock = detectLineBlock(cursorPosition.line - 1)
 				if (prevBlock != activeBlock) {
-					demoteLineBlock(cursorPosition.line, activeBlock)
+					// Routed through the toggle so the demotion lands in undo history.
+					editManager.toggleLineBlock(
+						cursorPosition.line..cursorPosition.line,
+						activeBlock,
+					)
 					return
 				}
 			}
