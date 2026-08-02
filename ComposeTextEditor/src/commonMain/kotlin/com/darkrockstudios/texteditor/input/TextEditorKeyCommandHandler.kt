@@ -130,9 +130,9 @@ internal class TextEditorKeyCommandHandler(
 	private fun handleCopy(state: TextEditorState, clipboard: Clipboard, scope: CoroutineScope) {
 		state.selector.selection?.let { selection ->
 			val selectedText = state.selector.getSelectedText()
-			state.copyRichSpans(selection)
+			val copyId = state.copyRichSpans(selection)
 			scope.launch {
-				ClipboardHelper.setText(clipboard, selectedText, state.markdownConfiguration)
+				ClipboardHelper.setText(clipboard, selectedText, state.markdownConfiguration, copyId)
 			}
 		}
 	}
@@ -140,11 +140,11 @@ internal class TextEditorKeyCommandHandler(
 	private fun handleCut(state: TextEditorState, clipboard: Clipboard, scope: CoroutineScope) {
 		state.selector.selection?.let { selection ->
 			val selectedText = state.selector.getSelectedText()
-			state.copyRichSpans(selection)
+			val copyId = state.copyRichSpans(selection)
 			state.preserveCopiedRichSpansThroughNextEdit()
 			state.selector.deleteSelection()
 			scope.launch {
-				ClipboardHelper.setText(clipboard, selectedText, state.markdownConfiguration)
+				ClipboardHelper.setText(clipboard, selectedText, state.markdownConfiguration, copyId)
 			}
 		}
 	}
@@ -157,6 +157,7 @@ internal class TextEditorKeyCommandHandler(
 				// Read the clipboard's HTML before mutating: the text, the in-editor
 				// rich spans and the pasted block structure then land as one revision.
 				val htmlDocument = state.readHtmlPasteDocument(clipboard, text)
+				val clipboardCopyId = ClipboardHelper.readCopyId(clipboard)
 				state.preserveCopiedRichSpansThroughNextEdit()
 				state.withAtomicEdit {
 					if (curSelection != null) {
@@ -164,7 +165,12 @@ internal class TextEditorKeyCommandHandler(
 					} else {
 						state.insertStringAtCursor(text)
 					}
-					state.pasteRichSpans(insertPosition, text)
+					state.pasteRichSpans(
+						insertPosition,
+						text,
+						clipboardCopyId,
+						requireCopyIdMatch = ClipboardHelper.supportsCopyProvenance,
+					)
 					htmlDocument?.let { state.applyHtmlPasteBlocks(it, insertPosition, text) }
 				}
 				state.selector.clearSelection()

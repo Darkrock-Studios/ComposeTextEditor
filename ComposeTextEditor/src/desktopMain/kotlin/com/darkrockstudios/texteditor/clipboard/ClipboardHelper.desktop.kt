@@ -14,6 +14,7 @@ import java.awt.datatransfer.UnsupportedFlavorException
 @OptIn(ExperimentalComposeUiApi::class)
 actual object ClipboardHelper {
 	private val annotatedStringFlavor = DataFlavor(AnnotatedString::class.java, "AnnotatedString")
+	internal val copyIdFlavor = DataFlavor(java.lang.Long::class.java, "ComposeTextEditorCopyId")
 
 	actual suspend fun getText(
 		clipboard: Clipboard,
@@ -29,9 +30,20 @@ actual object ClipboardHelper {
 		clipboard: Clipboard,
 		text: AnnotatedString,
 		configuration: MarkdownConfiguration,
+		copyId: Long?,
 	) {
-		clipboard.setClipEntry(ClipEntry(AnnotatedStringTransferable(text, configuration)))
+		clipboard.setClipEntry(ClipEntry(AnnotatedStringTransferable(text, configuration, copyId)))
 	}
+
+	actual suspend fun readCopyId(clipboard: Clipboard): Long? {
+		val transferable = clipboard.getClipEntry()?.nativeClipEntry as? Transferable ?: return null
+		return runCatching {
+			if (!transferable.isDataFlavorSupported(copyIdFlavor)) return null
+			transferable.getTransferData(copyIdFlavor) as? Long
+		}.getOrNull()
+	}
+
+	actual val supportsCopyProvenance: Boolean get() = true
 
 	private fun Transferable.readAnnotatedString(): AnnotatedString? = runCatching {
 		if (!isDataFlavorSupported(annotatedStringFlavor)) return null
@@ -58,10 +70,14 @@ actual object ClipboardHelper {
  * Offers the selection as HTML, as an in-process [AnnotatedString], and as plain
  * text. External applications take the HTML and keep the formatting; another
  * editor in this process takes the [AnnotatedString] and keeps it exactly.
+ * [copyId] identifies the copy that produced this content: pasting consults it
+ * before re-applying the in-editor rich-span buffer, so identical text written
+ * by any other source can never resurrect stale spans.
  */
 internal class AnnotatedStringTransferable(
 	private val annotatedString: AnnotatedString,
 	private val configuration: MarkdownConfiguration = MarkdownConfiguration.DEFAULT,
+	private val copyId: Long? = null,
 ) : Transferable {
 
 	private val annotatedStringFlavor = DataFlavor(AnnotatedString::class.java, "AnnotatedString")
@@ -69,8 +85,12 @@ internal class AnnotatedStringTransferable(
 
 	private val html by lazy { annotatedString.toHtml(configuration) }
 
-	override fun getTransferDataFlavors(): Array<DataFlavor> =
-		arrayOf(annotatedStringFlavor, htmlFlavor, DataFlavor.stringFlavor)
+	override fun getTransferDataFlavors(): Array<DataFlavor> = buildList {
+		add(annotatedStringFlavor)
+		add(htmlFlavor)
+		add(DataFlavor.stringFlavor)
+		if (copyId != null) add(ClipboardHelper.copyIdFlavor)
+	}.toTypedArray()
 
 	override fun isDataFlavorSupported(flavor: DataFlavor): Boolean =
 		transferDataFlavors.any { it.match(flavor) }
@@ -78,6 +98,7 @@ internal class AnnotatedStringTransferable(
 	override fun getTransferData(flavor: DataFlavor): Any = when {
 		flavor.match(annotatedStringFlavor) -> annotatedString
 		flavor.match(htmlFlavor) -> html
+		copyId != null && flavor.match(ClipboardHelper.copyIdFlavor) -> copyId
 		flavor.match(DataFlavor.stringFlavor) -> annotatedString.text
 		else -> throw UnsupportedFlavorException(flavor)
 	}

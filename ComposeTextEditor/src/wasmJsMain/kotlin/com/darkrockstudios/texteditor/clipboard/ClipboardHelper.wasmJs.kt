@@ -27,6 +27,7 @@ actual object ClipboardHelper {
 		clipboard: Clipboard,
 		text: AnnotatedString,
 		configuration: MarkdownConfiguration,
+		copyId: Long?,
 	) {
 		try {
 			writeClipboardText(text.text).await<JsAny?>()
@@ -34,6 +35,10 @@ actual object ClipboardHelper {
 			// Clipboard access may be denied or unavailable
 		}
 	}
+
+	actual suspend fun readCopyId(clipboard: Clipboard): Long? = null
+
+	actual val supportsCopyProvenance: Boolean get() = false
 }
 
 // Top-level external functions for browser clipboard API

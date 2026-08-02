@@ -1,8 +1,11 @@
 package e2e.torture
 
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.text.AnnotatedString
+import com.darkrockstudios.texteditor.clipboard.AnnotatedStringTransferable
 import com.darkrockstudios.texteditor.richstyle.BulletListSpanStyle
 import com.darkrockstudios.texteditor.richstyle.HighlightSpanStyle
 import utils.assertRichSpanInvariants
@@ -196,13 +199,39 @@ class PasteOverSelectionTortureE2eTest {
 		press(Key.V, ctrl = true)
 
 		assertEquals(listOf("item", "plainitem"), lines)
-		// Documented residual limitation: identical text from a foreign source with no
-		// intervening edit still matches the in-editor buffer and re-applies its spans.
+		// Foreign clipboard content carries no copy id, so the span buffer must not
+		// apply no matter how exactly the text matches.
 		assertEquals(
 			setOf<String>(),
 			blockFlags(1),
 			"plain text from another application must never arrive styled",
 		)
+		assertRichSpanInvariants()
+	}
+
+	@OptIn(ExperimentalComposeUiApi::class)
+	@Test
+	fun `a copy from another editor instance must not resurrect this buffer`() = editorUiTest {
+		markdown.importMarkdown("- item\nplain")
+
+		selectChars(0, 4)
+		press(Key.C, ctrl = true)
+		clipboard.seed(
+			ClipEntry(
+				AnnotatedStringTransferable(
+					AnnotatedString("item"),
+					state.markdownConfiguration,
+					copyId = 999_999L,
+				)
+			)
+		)
+		press(Key.MoveEnd, ctrl = true)
+		press(Key.V, ctrl = true)
+
+		assertEquals(listOf("item", "plainitem"), lines)
+		// The other instance's copy id does not match this buffer's, so its text
+		// pastes rich via its own flavors but this editor's stale spans stay dead.
+		assertEquals(setOf<String>(), blockFlags(1))
 		assertRichSpanInvariants()
 	}
 }

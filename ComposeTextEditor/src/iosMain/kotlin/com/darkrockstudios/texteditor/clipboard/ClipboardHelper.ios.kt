@@ -23,7 +23,12 @@ actual object ClipboardHelper {
 		clipboard: Clipboard,
 		text: AnnotatedString,
 		configuration: MarkdownConfiguration,
+		copyId: Long?,
 	) {
 		UIPasteboard.generalPasteboard.string = text.text
 	}
+
+	actual suspend fun readCopyId(clipboard: Clipboard): Long? = null
+
+	actual val supportsCopyProvenance: Boolean get() = false
 }
