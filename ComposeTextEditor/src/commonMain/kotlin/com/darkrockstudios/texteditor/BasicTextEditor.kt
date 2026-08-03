@@ -79,7 +79,7 @@ private const val CURSOR_BLINK_SPEED_MS = 500L
  * @param contextMenuState Drives context-menu visibility; pass your own to add
  *   custom items (e.g. spell-check suggestions), or leave `null` for the default.
  * @param onRichSpanClick Invoked when a rich span is tapped or right-clicked;
- *   return `true` to consume the event.
+ *   see [RichSpanClickListener] for what the return value does (and does not do).
  * @param decorateLine Optional per-line decorator drawn behind each line, keyed by
  *   line index — useful for gutters, current-line highlights, or diff markers.
  */
@@ -100,7 +100,6 @@ fun BasicTextEditor(
 	CaptureViewForIme(state)
 
 	val focusRequester = remember { FocusRequester() }
-	val spanTapGate = remember { SpanTapGate() }
 	val interactionSource = remember { MutableInteractionSource() }
 	val clipboard = LocalClipboard.current
 	val density = LocalDensity.current
@@ -208,7 +207,7 @@ fun BasicTextEditor(
 				modifier = editorModifier
 					.padding(horizontalPadding)
 					.focusRequester(focusRequester)
-					.requestFocusOnPress(focusRequester, spanTapGate)
+					.requestFocusOnPress(focusRequester) { effectiveContextMenuState.isVisible }
 					.then(inputModifierElement)
 					.focusable(enabled = true, interactionSource = interactionSource)
 					// Publish text-editing semantics so the node is recognized as an editable
@@ -264,7 +263,6 @@ fun BasicTextEditor(
 							state = state,
 							onSpanClick = onRichSpanClick,
 							onContextMenuRequest = { offset -> effectiveContextMenuState.showMenu(offset) },
-						spanTapGate = spanTapGate,
 						)
 						// Capture the canvas position so the desktop IME can place the
 						// composition/candidate window relative to the cursor.
@@ -310,19 +308,19 @@ fun BasicTextEditor(
  * landed before this counts as a tap, which matches how the editor already
  * decides caret placement: mouse on press, finger on release.
  *
- * A tap a [RichSpan][com.darkrockstudios.texteditor.richstyle.RichSpan] claimed is
- * skipped as well: the gesture handler reports those through [spanTapGate], and a
- * keyboard sliding up over the suggestion popup it just opened is the thing to
- * avoid.
+ * A tap that opened a popup is skipped as well, reported by [popupIsShowing]. The
+ * thing to avoid is a keyboard sliding up over the spell-check suggestions or the
+ * context menu that same tap just opened. Note this asks what the tap *did*, not
+ * whether a listener said it handled the click: a host is free to answer a rich
+ * span click and still want the editor focused, and most do.
  */
 internal fun Modifier.requestFocusOnPress(
 	focusRequester: FocusRequester,
-	spanTapGate: SpanTapGate,
+	popupIsShowing: () -> Boolean,
 ) = pointerInput(Unit) {
 	val touchSlop = viewConfiguration.touchSlop
 	awaitEachGesture {
 		val down = awaitFirstDown(requireUnconsumed = false)
-		spanTapGate.reset()
 
 		// Android reports an external mouse as PointerType.Touch but still fills in
 		// the buttons, so the button state is what actually separates the two.
@@ -341,7 +339,10 @@ internal fun Modifier.requestFocusOnPress(
 				return@awaitEachGesture
 			}
 			if (!change.pressed) {
-				if (!spanTapGate.claimed) focusRequester.requestFocus()
+				// Safe to read synchronously: the Main pass dispatches child-first, so
+				// the Canvas gesture handler has already run this tap's dispatch (which
+				// opens any menu) before this container-level handler sees the release.
+				if (!popupIsShowing()) focusRequester.requestFocus()
 				return@awaitEachGesture
 			}
 		}
@@ -351,6 +352,12 @@ internal fun Modifier.requestFocusOnPress(
 /**
  * Handles clicks on a [RichSpan]. Receives the clicked span, the [SpanClickType]
  * that distinguishes a tap from a left- or right-click, and the click [Offset] in
- * editor coordinates. Return `true` to consume the event and stop further handling.
+ * editor coordinates.
+ *
+ * The return value is a chaining protocol between listeners: `true` means "this
+ * click was answered here", which lets a wrapping listener (e.g. the spell-check
+ * editor's) decide whether to delegate a click onward to the host's listener.
+ * It does not affect the editor itself: caret placement, selection, scrolling,
+ * focus, and the soft keyboard all behave the same whatever is returned.
  */
 typealias RichSpanClickListener = ((RichSpan, SpanClickType, Offset) -> Boolean)

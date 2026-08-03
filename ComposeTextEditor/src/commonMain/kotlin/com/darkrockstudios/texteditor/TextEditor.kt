@@ -26,7 +26,8 @@ private val DefaultContentPadding = PaddingValues(16.dp)
  * @param autoFocus Requests focus once when first composed.
  * @param style Colors and text style for the editor and its gutter markers.
  * @param onRichSpanClick Invoked when a rich span (link, list, blockquote, code
- *   block, …) is tapped or right-clicked; return `true` to consume the event.
+ *   block, …) is tapped or right-clicked; see [RichSpanClickListener] for what
+ *   the return value does (and does not do).
  */
 @Composable
 fun TextEditor(

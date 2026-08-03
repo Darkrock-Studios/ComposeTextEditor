@@ -60,8 +60,6 @@ fun RichTextView(
 		state.density = density
 	}
 
-	val spanTapGate = remember { SpanTapGate() }
-
 	if (isSelectable) {
 		val clipboard = LocalClipboard.current
 		val focusRequester = remember { FocusRequester() }
@@ -85,14 +83,15 @@ fun RichTextView(
 				state = state,
 				modifier = modifier
 					.focusRequester(focusRequester)
-					.requestFocusOnPress(focusRequester, spanTapGate)
+					// A read-only view never raises a soft keyboard, and its focus exists
+					// only to route copy/select-all shortcuts, so no tap ever suppresses it.
+					.requestFocusOnPress(focusRequester, popupIsShowing = { false })
 					.then(inputModifierElement)
 					.focusable(enabled = true, interactionSource = interactionSource),
 				contentPadding = contentPadding,
 				style = style,
 				isSelectable = true,
 				onContextMenuRequest = { offset -> contextMenuState.showMenu(offset) },
-				spanTapGate = spanTapGate,
 			)
 		}
 	} else {
@@ -103,7 +102,6 @@ fun RichTextView(
 			style = style,
 			isSelectable = false,
 			onContextMenuRequest = null,
-			spanTapGate = spanTapGate,
 		)
 	}
 }
@@ -116,7 +114,6 @@ private fun RichTextViewBody(
 	style: TextEditorStyle,
 	isSelectable: Boolean,
 	onContextMenuRequest: ((Offset) -> Unit)?,
-	spanTapGate: SpanTapGate,
 ) {
 	val density = LocalDensity.current
 	val layoutDirection = LocalLayoutDirection.current
@@ -148,7 +145,6 @@ private fun RichTextViewBody(
 						state = state,
 						onContextMenuRequest = onContextMenuRequest,
 						readOnly = true,
-						spanTapGate = spanTapGate,
 					)
 			} else {
 				Modifier

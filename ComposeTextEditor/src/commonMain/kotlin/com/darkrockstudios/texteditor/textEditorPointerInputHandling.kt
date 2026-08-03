@@ -18,38 +18,15 @@ data class SelectionHandle(
 	val bounds: Offset
 )
 
-/**
- * Whether the tap in flight was answered by a [RichSpan], passed from the gesture
- * handler on the text canvas to the focus handler on the enclosing container.
- *
- * Deliberately a private object rather than pointer consumption. Consumption is
- * broadcast: it changes what every other handler in the tree sees, so using it to
- * carry this one bit also tells the ancestor scroll container its drag was taken,
- * which cancels flings and aborts scrolls.
- */
-internal class SpanTapGate {
-	var claimed: Boolean = false
-		private set
-
-	fun claim() {
-		claimed = true
-	}
-
-	fun reset() {
-		claimed = false
-	}
-}
-
 internal fun Modifier.textEditorPointerInputHandling(
 	state: TextEditorState,
 	onSpanClick: RichSpanClickListener? = null,
 	onContextMenuRequest: ((Offset) -> Unit)? = null,
 	readOnly: Boolean = false,
-	spanTapGate: SpanTapGate? = null,
 ): Modifier {
 	return this
 		.handleDragInput(state, readOnly)
-		.handleTextInteractions(state, onSpanClick, onContextMenuRequest, readOnly, spanTapGate)
+		.handleTextInteractions(state, onSpanClick, onContextMenuRequest, readOnly)
 		.detectMouseClicksImperatively(
 			onClick = { offset: Offset, isShiftPressed: Boolean ->
 				// On shift+click handleDragInput extends the selection; clearing it here
@@ -226,7 +203,6 @@ private fun Modifier.handleTextInteractions(
 	onSpanClick: RichSpanClickListener?,
 	onContextMenuRequest: ((Offset) -> Unit)?,
 	readOnly: Boolean,
-	spanTapGate: SpanTapGate?,
 ): Modifier {
 	return pointerInput(Unit) {
 		val touchSlop = viewConfiguration.touchSlop
@@ -318,18 +294,13 @@ private fun Modifier.handleTextInteractions(
 						// selection a parallel double-click handler just set.
 						if (isFingerTouchGesture && !didLongPress && !wasDrag) {
 							val position = eventChange.position
-							val claimedBySpan = handleSpanInteraction(
+							handleSpanInteraction(
 								state,
 								position,
 								SpanClickType.TAP,
 								onSpanClick,
 								readOnly,
 							)
-							// A tap a span answered opened something — spell-check suggestions,
-							// a followed link — that the keyboard would cover, so tell the focus
-							// handler on the enclosing container not to treat it as a request
-							// to start typing.
-							if (claimedBySpan) spanTapGate?.claim()
 						}
 
 						longPressJob?.cancel()

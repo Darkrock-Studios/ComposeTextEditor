@@ -1,6 +1,8 @@
 package e2e
 
 import androidx.compose.ui.text.AnnotatedString
+import com.darkrockstudios.texteditor.contextmenu.TextEditorContextMenuState
+import com.darkrockstudios.texteditor.richstyle.BulletListSpanStyle
 import com.darkrockstudios.texteditor.richstyle.SpellCheckStyle
 import utils.editorUiTest
 import kotlin.test.Test
@@ -12,8 +14,10 @@ import kotlin.test.assertTrue
  *
  * Focus is what raises the soft keyboard on Android, so every case here is about
  * whether a keyboard slides up over the content. A finger has to lift near where
- * it landed for the gesture to count as a tap, and a tap a rich span answered
- * opened something the keyboard would cover.
+ * it landed for the gesture to count as a tap, and a tap focuses unless it left a
+ * popup showing that the keyboard would cover. What any span click listener
+ * returned never enters into it: hosts return `true` liberally just to observe
+ * clicks, so the listener's answer cannot mean "do not focus".
  */
 class TouchFocusE2eTest {
 
@@ -53,17 +57,49 @@ class TouchFocusE2eTest {
 		assertTrue(state.isFocused)
 	}
 
+	/**
+	 * The spell-check shape: the tap opened a suggestions popup, and a keyboard
+	 * must not slide up over it. The listener opens the menu through the editor's
+	 * own context menu state, exactly as SpellCheckingTextEditor does.
+	 */
 	@Test
-	fun `a tap claimed by a rich span does not focus the editor`() = editorUiTest(
+	fun `a tap that opens a popup does not focus the editor`() {
+		val menuState = TextEditorContextMenuState()
+		editorUiTest(
+			initialText = document,
+			autoFocus = false,
+			contextMenuState = menuState,
+			onRichSpanClick = { _, _, offset ->
+				menuState.showMenu(offset)
+				true
+			},
+		) {
+			state.addRichSpan(0, 5, SpellCheckStyle)
+
+			tapAtCharacter(2)
+
+			assertTrue(menuState.isVisible, "precondition: the tap opened the popup")
+			assertFalse(state.isFocused, "the keyboard would cover the popup this tap opened")
+		}
+	}
+
+	/**
+	 * The bullet/blockquote regression: hosts return `true` for every click just
+	 * to observe them, and list or quote lines are covered by rich spans, so a
+	 * "listener said true" gate makes those lines unfocusable by touch. A claimed
+	 * tap that opened nothing is an ordinary tap and must focus.
+	 */
+	@Test
+	fun `a tap on a span whose listener claims it but opens nothing still focuses`() = editorUiTest(
 		initialText = document,
 		autoFocus = false,
 		onRichSpanClick = { _, _, _ -> true },
 	) {
-		state.addRichSpan(0, 5, SpellCheckStyle)
+		state.addRichSpan(0, 5, BulletListSpanStyle)
 
 		tapAtCharacter(2)
 
-		assertFalse(state.isFocused, "a span answered the tap, so it must not also raise the keyboard")
+		assertTrue(state.isFocused, "no popup opened, so the tap is a request to type here")
 	}
 
 	/**
@@ -109,6 +145,33 @@ class TouchFocusE2eTest {
 
 		assertTrue(selectedText.isNotEmpty(), "expected the long press to select a word")
 		assertTrue(state.isFocused)
+	}
+
+	/**
+	 * A long press on an existing selection opens the context menu rather than
+	 * re-selecting, and the keyboard must not rise over that menu. The popup
+	 * check covers this for free: the menu is showing when the finger lifts.
+	 */
+	@Test
+	fun `a long press on an existing selection opens the menu and does not focus`() {
+		val menuState = TextEditorContextMenuState()
+		editorUiTest(
+			initialText = document,
+			autoFocus = false,
+			contextMenuState = menuState,
+		) {
+			state.selector.updateSelection(
+				state.getOffsetAtCharacter(0),
+				state.getOffsetAtCharacter(11),
+			)
+			waitForIdle()
+
+			longPressAtCharacter(4)
+
+			assertTrue(menuState.isVisible, "precondition: the long press opened the context menu")
+			assertFalse(state.isFocused, "the keyboard would cover the menu this press opened")
+			assertTrue(selectedText.isNotEmpty(), "the existing selection must survive")
+		}
 	}
 
 	/** Focus survives the gesture that placed it, so typing right after a tap works. */

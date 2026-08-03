@@ -6,10 +6,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.LocalClipboard
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SkikoComposeUiTest
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.doubleClick
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performMouseInput
@@ -22,6 +24,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.darkrockstudios.texteditor.BasicTextEditor
 import com.darkrockstudios.texteditor.RichSpanClickListener
+import com.darkrockstudios.texteditor.contextmenu.TextEditorContextMenuState
 import com.darkrockstudios.texteditor.input.CtrlKeyBindings
 import com.darkrockstudios.texteditor.input.KeyBindings
 import com.darkrockstudios.texteditor.input.LocalKeyBindings
@@ -51,6 +54,7 @@ internal fun editorUiTest(
 	enabled: Boolean = true,
 	keyBindings: KeyBindings = CtrlKeyBindings,
 	onRichSpanClick: RichSpanClickListener? = null,
+	contextMenuState: TextEditorContextMenuState? = null,
 	autoFocus: Boolean = enabled,
 	block: EditorUiTestScope.() -> Unit,
 ) = runSkikoComposeUiTest {
@@ -64,9 +68,10 @@ internal fun editorUiTest(
 		) {
 			BasicTextEditor(
 				state = state,
-				modifier = Modifier.size(width, height),
+				modifier = Modifier.size(width, height).testTag(EDITOR_TEST_TAG),
 				enabled = enabled,
 				autoFocus = autoFocus,
+				contextMenuState = contextMenuState,
 				onRichSpanClick = onRichSpanClick,
 			)
 		}
@@ -82,12 +87,18 @@ internal fun editorUiTest(
 	EditorUiTestScope(this, state, clipboard).block()
 }
 
+internal const val EDITOR_TEST_TAG = "editor-under-test"
+
 @OptIn(ExperimentalTestApi::class)
 class EditorUiTestScope(
 	val test: SkikoComposeUiTest,
 	val state: TextEditorState,
 	val clipboard: InMemoryClipboard,
 ) {
+	// Pointer input is injected at the tagged editor node, not onRoot(): once a
+	// context menu popup is open there are two roots and onRoot() refuses to pick.
+	private val editor get() = test.onNodeWithTag(EDITOR_TEST_TAG)
+
 	/**
 	 * Markdown extension for this editor, created on first use. Deliberately a
 	 * per-scope member: TextEditorState hashes by document content, so caching
@@ -138,7 +149,7 @@ class EditorUiTestScope(
 
 	/** Taps [position] with a finger: down and up in the same place, no buttons. */
 	fun tapAt(position: Offset) {
-		test.onRoot().performTouchInput {
+		editor.performTouchInput {
 			down(position)
 			up()
 		}
@@ -151,12 +162,12 @@ class EditorUiTestScope(
 	/** Holds a finger on the character at flat index [charIndex] past the long-press threshold. */
 	fun longPressAtCharacter(charIndex: Int) {
 		val position = positionOfCharacter(charIndex)
-		test.onRoot().performTouchInput { down(position) }
+		editor.performTouchInput { down(position) }
 		// The long-press timer is a coroutine on the editor's scope, which the test
 		// clock drives; sleeping the thread would not move it.
 		test.mainClock.advanceTimeBy(800)
 		test.waitForIdle()
-		test.onRoot().performTouchInput { up() }
+		editor.performTouchInput { up() }
 		test.waitForIdle()
 	}
 
@@ -165,7 +176,7 @@ class EditorUiTestScope(
 	 * Well past touch slop, so it can never be mistaken for a tap.
 	 */
 	fun panFrom(position: Offset, dy: Float = -120f) {
-		test.onRoot().performTouchInput {
+		editor.performTouchInput {
 			down(position)
 			moveTo(position + Offset(0f, dy))
 			up()
@@ -182,7 +193,7 @@ class EditorUiTestScope(
 	fun clickAt(position: Offset, shift: Boolean = false) {
 		defeatMultiClickDetection()
 		if (shift) test.onRoot().performKeyInput { keyDown(Key.ShiftLeft) }
-		test.onRoot().performMouseInput { click(position) }
+		editor.performMouseInput { click(position) }
 		if (shift) test.onRoot().performKeyInput { keyUp(Key.ShiftLeft) }
 		test.waitForIdle()
 	}
@@ -190,7 +201,7 @@ class EditorUiTestScope(
 	/** Double-clicks the character at flat index [charIndex] (word select). */
 	fun doubleClickAtCharacter(charIndex: Int) {
 		defeatMultiClickDetection()
-		test.onRoot().performMouseInput { doubleClick(positionOfCharacter(charIndex)) }
+		editor.performMouseInput { doubleClick(positionOfCharacter(charIndex)) }
 		test.waitForIdle()
 	}
 
@@ -199,7 +210,7 @@ class EditorUiTestScope(
 		defeatMultiClickDetection()
 		val from = positionOfCharacter(fromChar)
 		val to = positionOfCharacter(toChar)
-		test.onRoot().performMouseInput {
+		editor.performMouseInput {
 			moveTo(from)
 			press()
 			moveTo(to)
