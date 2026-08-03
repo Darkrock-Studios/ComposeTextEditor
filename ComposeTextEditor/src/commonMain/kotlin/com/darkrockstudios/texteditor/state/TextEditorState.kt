@@ -40,6 +40,7 @@ import com.darkrockstudios.texteditor.richstyle.RichSpanStyle
 import com.darkrockstudios.texteditor.richstyle.normalizeLineBlocks
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.combine
 import kotlin.concurrent.Volatile
 import kotlin.math.min
@@ -399,10 +400,23 @@ class TextEditorState(
 	 * path reaches these three, so a behavior applies to hardware keys and to an
 	 * IME alike.
 	 *
-	 * Pre-loaded with [LineBlockEditBehavior]. Add your own, reorder them, or
-	 * clear the list for an editor that wants the primitives untouched.
+	 * Pre-loaded with [LineBlockEditBehavior], which sits at index 0 and claims
+	 * every newline and every column-0 backspace on a line carrying a block style
+	 * (header, blockquote, list, code fence). Appending with `add` therefore puts
+	 * your behavior *after* it, where it never sees those edits: an auto-indent
+	 * added that way would be dead inside a code fence, which is where it is most
+	 * wanted. Use `add(0, behavior)` to run first, or remove
+	 * [LineBlockEditBehavior] outright for an editor that wants plain line breaks.
 	 */
 	val editBehaviors: MutableList<EditBehavior> = mutableListOf(LineBlockEditBehavior)
+
+	/**
+	 * Offers the edit to each behavior until one claims it. Iterates a snapshot so
+	 * that a behavior which registers or removes a behavior while handling an edit
+	 * does not fail the keystroke that triggered it.
+	 */
+	private inline fun claimedByBehavior(hook: (EditBehavior) -> Boolean): Boolean =
+		editBehaviors.toList().any(hook)
 
 	// In-editor rich-span clipboard. The system clipboard only carries the
 	// AnnotatedString (text + character-level spans), so line-anchored rich spans
@@ -500,12 +514,25 @@ class TextEditorState(
 		composingRange = null
 	}
 
+	private val _imeResyncRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+
+	/**
+	 * Fires when the editor answered an IME request in a way the IME cannot infer
+	 * from the text or the caret, so its mirror of the buffer has to be pushed
+	 * again rather than deduplicated away. Platforms without an IME ignore it.
+	 */
+	internal val imeResyncRequests: Flow<Unit> = _imeResyncRequests
+
+	internal fun requestImeResync() {
+		_imeResyncRequests.tryEmit(Unit)
+	}
+
 	/**
 	 * Inserts a line break at the cursor, splitting the current line, unless an
 	 * [EditBehavior] claims the edit first.
 	 */
 	fun insertNewlineAtCursor() {
-		if (editBehaviors.any { it.onNewline(this) }) return
+		if (claimedByBehavior { it.onNewline(this) }) return
 		insertNewlineRaw()
 	}
 
@@ -528,7 +555,7 @@ class TextEditorState(
 	 * at column 0, unless an [EditBehavior] claims the edit first.
 	 */
 	fun backspaceAtCursor() {
-		if (editBehaviors.any { it.onBackspace(this) }) return
+		if (claimedByBehavior { it.onBackspace(this) }) return
 
 		if (cursorPosition.char > 0) {
 			val deleteRange = TextEditorRange(
@@ -564,7 +591,7 @@ class TextEditorState(
 	 * edit first.
 	 */
 	fun deleteAtCursor() {
-		if (editBehaviors.any { it.onDeleteForward(this) }) return
+		if (claimedByBehavior { it.onDeleteForward(this) }) return
 
 		if (cursorPosition.char < textLines[cursorPosition.line].length) {
 			val deleteRange = TextEditorRange(

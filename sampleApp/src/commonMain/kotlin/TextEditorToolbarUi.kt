@@ -116,9 +116,7 @@ fun TextEditorToolbar(
 			// Formatting Controls Group
 			Row {
 				FormatButton(
-					onClick = {
-						toggleStyle(state, isBoldActive, mardkown.markdownStyles.BOLD)
-					},
+					onClick = { state.toggleBold(mardkown) },
 					icon = Icons.Default.FormatBold,
 					contentDescription = "Bold",
 					isActive = isBoldActive,

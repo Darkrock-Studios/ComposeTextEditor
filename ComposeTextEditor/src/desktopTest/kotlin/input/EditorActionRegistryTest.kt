@@ -144,6 +144,26 @@ class EditorActionRegistryTest {
 		assertTrue(dispatch(keyDown(Key.C, ctrl = true), Action.Copy))
 	}
 
+	/**
+	 * Action identity is the id alone, so a host writing its own bindings can hand
+	 * back a built-in id carrying the wrong metadata. The read-only gate has to
+	 * read isEdit off the registered spec or that forges its way past.
+	 */
+	@Test
+	fun `a forged isEdit cannot mutate a disabled editor`() {
+		val forged = Action("editor.paste", isEdit = false)
+		var ran = 0
+		state.actions.register(EditorActionSpec(Action.Paste) { ran++ })
+
+		val handler = TextEditorKeyCommandHandler(SingleChordBindings(Key.V, forged))
+		val consumed = handler.handleKeyEvent(
+			keyDown(Key.V, ctrl = true), state, clipboard, scope, enabled = false,
+		)
+
+		assertFalse(consumed)
+		assertEquals(0, ran)
+	}
+
 	@Test
 	fun `an edit action is refused while the editor is disabled`() {
 		var ran = 0

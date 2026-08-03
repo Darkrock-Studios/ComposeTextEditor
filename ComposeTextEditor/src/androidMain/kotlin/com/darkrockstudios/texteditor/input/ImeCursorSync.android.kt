@@ -75,6 +75,36 @@ actual class ImeCursorSync actual constructor(
 				}
 		}
 
+		// Edits the IME cannot infer from text or caret movement: a behavior that
+		// claims a backspace by exiting a list changes neither, so the deduplication
+		// above would drop the correction and leave the keyboard's mirror a character
+		// ahead of the document. Clearing the last-sent values forces the next push.
+		scope.launch {
+			state.imeResyncRequests.collect {
+				if (state.platformExtensions.isInBatchEdit) return@collect
+				val view = state.platformExtensions.view ?: return@collect
+
+				lastSelStart = -1
+				lastSelEnd = -1
+				lastCompStart = -2
+				lastCompEnd = -2
+
+				val cursorIndex = state.getCharacterIndex(state.cursorPosition)
+				val selection = state.selector.selection
+				val selStart = selection?.let { state.getCharacterIndex(it.start) } ?: cursorIndex
+				val selEnd = selection?.let { state.getCharacterIndex(it.end) } ?: cursorIndex
+				val composing = state.composingRange
+				val compStart = composing?.let { state.getCharacterIndex(it.start) } ?: -1
+				val compEnd = composing?.let { state.getCharacterIndex(it.end) } ?: -1
+
+				lastSelStart = selStart
+				lastSelEnd = selEnd
+				lastCompStart = compStart
+				lastCompEnd = compEnd
+				updateImeSelection(view, selStart, selEnd, compStart, compEnd)
+			}
+		}
+
 		// Edit-driven updateExtractedText pushes for IMEs in monitor mode. Edits always
 		// emit on this flow, even if cursor/selection don't change (e.g. autocorrect that
 		// replaces text with a same-length variant).

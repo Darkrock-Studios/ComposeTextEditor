@@ -145,10 +145,14 @@ class EditorActionRegistry {
 enablement predicate the menu can be built from a list of action ids and stop
 knowing what any of them mean.
 
-The core registers its fourteen built-ins when the state is constructed.
-`MarkdownExtension` registers `markdown.toggleBold`, `markdown.toggleBulletList`
-and the rest from its `init`, which is the same place it already reaches into
-`editorState`.
+The core registers its fourteen built-ins when the state is constructed. The
+obvious follow-up is for `MarkdownExtension` to register `markdown.toggleBold`,
+`markdown.toggleBulletList` and the rest from its `init`, which is the same
+place it already reaches into `editorState`, making every toolbar function
+bindable. That is *not* implemented: nothing outside `BuiltinEditorActions`
+registers an action, and `MarkdownExtension` is unchanged by this work. A host
+wanting a markdown chord today registers the action itself, as
+`sampleApp/BoldShortcut.kt` does.
 
 ### Resolution and consumption
 
@@ -156,12 +160,25 @@ and the rest from its `init`, which is the same place it already reaches into
 
 1. `keyBindings.commandFor(event)` or return false.
 2. `Motion`: move the caret, extending on shift. Unchanged.
-3. `Action`: return false if `isEdit && !enabled`. Look it up; **return false
-   if unregistered** (rule 5). Otherwise `perform(context)` and return true.
+3. `Action`: look it up; **return false if unregistered** (rule 5). Then return
+   false if the *registered spec's* `isEdit` and the editor is disabled.
+   Otherwise `perform(context)` and return true.
 
-Returning false for an unregistered action matters more than it looks: a host
-that binds a chord and forgets to register the handler gets the character
-typed, not a dead key.
+The gate reads `isEdit` off the spec rather than off the `EditorCommand.Action`
+the bindings returned, because `Action` identity is its id alone. A host writing
+its own bindings can hand back `Action("editor.paste", isEdit = false)`, which
+resolves the real built-in paste; taking the caller's word for it would let that
+mutate a read-only editor.
+
+Returning false for an unregistered action leaves the event to whatever would
+have handled it otherwise. It is worth being precise about what that means,
+because an earlier draft of this document claimed it always "gets the character
+typed, not a dead key", and that is only true for unmodified printable keys.
+`handleCharacterInput` refuses control characters and refuses any Ctrl or Cmd
+chord, so an unregistered `editor.paste` makes Ctrl+V inert, and an unregistered
+`editor.indent` lets Tab reach the platform's focus traversal and move focus out
+of the editor entirely. A host that wants a chord to do nothing should bind it
+to a registered no-op action rather than unregister the built-in.
 
 ## Edit behaviors
 

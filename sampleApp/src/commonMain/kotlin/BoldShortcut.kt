@@ -1,6 +1,7 @@
 package com.darkrockstudios.texteditor.sample
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.isMetaPressed
@@ -28,22 +29,32 @@ val ToggleBold = EditorCommand.Action("sample.toggleBold", isEdit = true)
  * do not claim is what keeps copy, paste, undo and every motion working.
  */
 @Composable
-fun rememberBoldShortcut(markdown: MarkdownExtension): KeyBindings = remember(markdown) {
-	markdown.editorState.actions.register(
-		EditorActionSpec(ToggleBold) { it.state.toggleBold(markdown) }
-	)
+fun rememberBoldShortcut(markdown: MarkdownExtension): KeyBindings {
+	DisposableEffect(markdown) {
+		val actions = markdown.editorState.actions
+		actions.register(EditorActionSpec(ToggleBold) { it.state.toggleBold(markdown) })
+		// The spec captures this MarkdownExtension, so leaving it registered would
+		// keep a stale closure alive on a state that outlives this screen.
+		onDispose { actions.unregister(ToggleBold) }
+	}
 
-	val platform = platformKeyBindings()
-	// macOS puts shortcuts on Cmd and reserves Ctrl for its Emacs-style bindings,
-	// so which modifier means "shortcut" is the platform's call, not ours.
-	val isMac = platform === MacKeyBindings
-	KeyBindings { event ->
-		val shortcut = if (isMac) event.isMetaPressed else event.isCtrlShortcut
-		if (event.key == Key.B && shortcut) ToggleBold else platform.commandFor(event)
+	return remember {
+		val platform = platformKeyBindings()
+		// macOS puts shortcuts on Cmd and reserves Ctrl for its Emacs-style bindings,
+		// so which modifier means "shortcut" is the platform's call, not ours.
+		val isMac = platform === MacKeyBindings
+		KeyBindings { event ->
+			val shortcut = if (isMac) event.isMetaPressed else event.isCtrlShortcut
+			if (event.key == Key.B && shortcut) ToggleBold else platform.commandFor(event)
+		}
 	}
 }
 
-private fun TextEditorState.toggleBold(markdown: MarkdownExtension) {
+/**
+ * The one bold implementation. The toolbar button calls this too, so the chord
+ * and the button cannot drift apart.
+ */
+fun TextEditorState.toggleBold(markdown: MarkdownExtension) {
 	val bold = markdown.markdownStyles.BOLD
 	val selection = selector.selection
 	if (selection == null) {

@@ -111,6 +111,27 @@ class EditBehaviorTest {
 		assertEquals(0, second.newlines)
 	}
 
+	/** A mode-switching behavior that retires itself must not fail the keystroke. */
+	@Test
+	fun `a behavior may edit the chain while claiming an edit`() = runTest {
+		val state = editor()
+		val oneShot = object : EditBehavior {
+			override fun onNewline(state: TextEditorState): Boolean {
+				state.editBehaviors.remove(this)
+				return true
+			}
+		}
+		state.editBehaviors.add(0, oneShot)
+
+		state.insertNewlineAtCursor()
+
+		assertEquals(listOf<EditBehavior>(LineBlockEditBehavior), state.editBehaviors.toList())
+		assertEquals("hello", state.getAllText().text)
+
+		state.insertNewlineAtCursor()
+		assertEquals("\nhello", state.getAllText().text)
+	}
+
 	@Test
 	fun `enter on an empty bullet exits the block`() = runTest {
 		val extension = bulletedEditor("- one\n- ")

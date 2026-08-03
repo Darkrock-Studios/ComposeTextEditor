@@ -56,7 +56,14 @@ class EditorActionRegistry {
 		specs[spec.action.id] = spec
 	}
 
-	/** Drops [action], after which a chord bound to it types its character instead. */
+	/**
+	 * Drops [action], after which the editor stops consuming any chord bound to it
+	 * and the event falls through to whatever would have seen it otherwise. What
+	 * that means depends on the chord: an unmodified printable key types its
+	 * character, a Ctrl or Cmd chord does nothing at all, and Tab reaches the
+	 * platform's focus traversal and moves focus out of the editor. Bind the chord
+	 * to an action of your own rather than unregistering if you need it inert.
+	 */
 	fun unregister(action: EditorCommand.Action) {
 		specs.remove(action.id)
 	}

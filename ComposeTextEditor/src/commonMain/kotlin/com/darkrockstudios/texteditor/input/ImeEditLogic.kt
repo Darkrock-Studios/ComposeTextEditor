@@ -30,7 +30,7 @@ internal fun TextEditorState.imeCommitText(text: String, newCursorPosition: Int)
 	// Restricted to the cursor-after-the-insert contract because a claimed newline
 	// may insert nothing at all, leaving no insert position to place a cursor from.
 	if (text == "\n" && newCursorPosition == 1 && composingRange == null) {
-		imePerformNewline()
+		asSemanticEdit { imePerformNewline() }
 		return
 	}
 
@@ -76,7 +76,7 @@ internal fun TextEditorState.imeDeleteSurroundingText(beforeLength: Int, afterLe
 	val cursorIndex = getCharacterIndex(cursorPosition)
 	val deleteStart = maxOf(0, cursorIndex - beforeLength)
 	val deleteEnd = minOf(getTextLength(), cursorIndex + afterLength)
-	deleteSurroundingRange(cursorIndex, deleteStart, deleteEnd)
+	deleteSurroundingRange(beforeLength, afterLength, cursorIndex, deleteStart, deleteEnd)
 }
 
 /** `deleteSurroundingTextInCodePoints`: same as [imeDeleteSurroundingText] but counted in code points. */
@@ -87,39 +87,67 @@ internal fun TextEditorState.imeDeleteSurroundingTextInCodePoints(beforeLength: 
 	val charsAfter = codePointsToChars(fullText, cursorIndex, afterLength, backwards = false)
 	val deleteStart = maxOf(0, cursorIndex - charsBefore)
 	val deleteEnd = minOf(getTextLength(), cursorIndex + charsAfter)
-	deleteSurroundingRange(cursorIndex, deleteStart, deleteEnd)
+	deleteSurroundingRange(charsBefore, charsAfter, cursorIndex, deleteStart, deleteEnd)
 }
 
 /**
- * Deletes [deleteStart]..[deleteEnd], as a backspace when that is exactly what the
- * range describes so an [EditBehavior][com.darkrockstudios.texteditor.state.EditBehavior]
- * can claim it, and as a plain range delete otherwise. Both produce the same text
- * and leave the cursor at the range start; only the behavior hook differs.
+ * Deletes [deleteStart]..[deleteEnd], routed through the semantic backspace or
+ * forward delete when that is exactly what was asked for so an
+ * [EditBehavior][com.darkrockstudios.texteditor.state.EditBehavior] can claim it,
+ * and as a plain range delete otherwise.
+ *
+ * Intent is read from [requestedBefore]/[requestedAfter], the widths the caller
+ * asked for, never from the clamped range. Near the edges of the document a
+ * request for several characters shrinks to one, and treating that as a
+ * single-character keystroke would misread a rewrite as a backspace.
  *
  * Thar be dragons: `deleteSurroundingText` is not unambiguously a keypress.
  * Autocorrect and prediction engines call it to rewrite what was already typed,
  * and treating one of those as a backspace would demote a line block in the
  * middle of a word correction. Requiring no composing region, no selection, and
- * exactly one character before the cursor excludes the rewrite shapes; widen
- * these conditions only with device evidence.
+ * a request for exactly one character on exactly one side excludes the rewrite
+ * shapes; widen these conditions only with device evidence.
  */
 private fun TextEditorState.deleteSurroundingRange(
+	requestedBefore: Int,
+	requestedAfter: Int,
 	cursorIndex: Int,
 	deleteStart: Int,
 	deleteEnd: Int,
 ) {
 	if (deleteStart >= deleteEnd) return
 
-	val isBackspace = deleteEnd == cursorIndex &&
-			cursorIndex - deleteStart == 1 &&
-			composingRange == null &&
-			!selector.hasSelection()
-	if (isBackspace) {
-		backspaceAtCursor()
-		return
-	}
+	val undisturbed = composingRange == null && !selector.hasSelection()
+	val available = deleteEnd - deleteStart
+	when {
+		undisturbed && requestedBefore == 1 && requestedAfter == 0 &&
+				available == 1 && deleteEnd == cursorIndex ->
+			asSemanticEdit { backspaceAtCursor() }
 
-	delete(TextEditorRange(getOffsetAtCharacter(deleteStart), getOffsetAtCharacter(deleteEnd)))
+		undisturbed && requestedBefore == 0 && requestedAfter == 1 &&
+				available == 1 && deleteStart == cursorIndex ->
+			asSemanticEdit { deleteAtCursor() }
+
+		else ->
+			delete(TextEditorRange(getOffsetAtCharacter(deleteStart), getOffsetAtCharacter(deleteEnd)))
+	}
+}
+
+/**
+ * Runs an IME request through a semantic edit that an
+ * [EditBehavior][com.darkrockstudios.texteditor.state.EditBehavior] may claim.
+ *
+ * A claiming behavior can satisfy the keystroke without touching text: exiting a
+ * list drops a gutter marker and leaves every character where it was. The IME has
+ * already advanced its own mirror of the buffer on the assumption that the edit it
+ * asked for happened, so leaving it uncorrected desyncs it by a character and its
+ * next request lands on the wrong text. Ask for a resync whenever the document
+ * length did not move.
+ */
+private inline fun TextEditorState.asSemanticEdit(edit: () -> Unit) {
+	val lengthBefore = getTextLength()
+	edit()
+	if (getTextLength() == lengthBefore) requestImeResync()
 }
 
 /** `setSelection`: collapse to a cursor when start == end, otherwise select; cursor goes to `end`. */

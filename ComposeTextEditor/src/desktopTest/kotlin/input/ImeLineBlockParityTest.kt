@@ -12,9 +12,12 @@ import com.darkrockstudios.texteditor.input.imeSetComposingRegion
 import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
 import com.darkrockstudios.texteditor.markdown.MarkdownExtension
 import com.darkrockstudios.texteditor.richstyle.BulletListSpanStyle
+import com.darkrockstudios.texteditor.state.EditBehavior
 import com.darkrockstudios.texteditor.state.TextEditorState
 import io.mockk.mockk
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import utils.InMemoryClipboard
 import kotlin.test.Test
@@ -221,6 +224,114 @@ class ImeLineBlockParityTest {
 		state.imeCommitText("\n", newCursorPosition = 1)
 
 		assertEquals("one\n\n", state.getAllText().text)
+	}
+
+	/**
+	 * Near the start of the document a multi-character request clamps down to the
+	 * one character that exists. Intent has to come from what was asked for, or an
+	 * autocorrect rewrite at the top of the document reads as a backspace and the
+	 * behavior claims it, deleting nothing and demoting the block.
+	 */
+	@Test
+	fun `a clamped multi-character delete is not a backspace`() = runTest {
+		val state = TextEditorState(
+			scope = this,
+			measurer = mockk(relaxed = true),
+			initialText = AnnotatedString("\nitem"),
+		)
+		MarkdownExtension(state, MarkdownConfiguration.DEFAULT).toggleBulletList(1..1)
+		state.cursor.updatePosition(CharLineOffset(1, 0))
+
+		state.imeDeleteSurroundingText(3, 0)
+
+		assertEquals("item", state.getAllText().text)
+		assertEquals(1, state.textLines.size)
+	}
+
+	// --- forward delete reaches the chain too ---
+
+	@Test
+	fun `a forward delete is offered to the behaviors`() = runTest {
+		val state = editorWith("plain\n- item")
+		var claimed = 0
+		state.editBehaviors.add(0, object : EditBehavior {
+			override fun onDeleteForward(state: TextEditorState): Boolean {
+				claimed++
+				return true
+			}
+		})
+		state.cursor.updatePosition(CharLineOffset(1, 0))
+
+		state.imeDeleteSurroundingText(0, 1)
+
+		assertEquals(1, claimed)
+		assertEquals("plain\nitem", state.getAllText().text)
+	}
+
+	@Test
+	fun `a clamped multi-character forward delete is not a forward keystroke`() = runTest {
+		val state = editorWith("ab")
+		var claimed = 0
+		state.editBehaviors.add(0, object : EditBehavior {
+			override fun onDeleteForward(state: TextEditorState): Boolean {
+				claimed++
+				return true
+			}
+		})
+		state.cursor.updatePosition(CharLineOffset(0, 1))
+
+		state.imeDeleteSurroundingText(0, 5)
+
+		assertEquals(0, claimed)
+		assertEquals("a", state.getAllText().text)
+	}
+
+	// --- the IME has to be told when its request was answered without an edit ---
+
+	@Test
+	fun `a behavior-claimed backspace asks the IME to resync`() = runTest {
+		val state = editorWith("plain\n- item")
+		state.cursor.updatePosition(CharLineOffset(1, 0))
+		var resyncs = 0
+		val job = launch { state.imeResyncRequests.collect { resyncs++ } }
+		runCurrent()
+
+		state.imeDeleteSurroundingText(1, 0)
+		runCurrent()
+
+		assertEquals(1, resyncs)
+		job.cancel()
+	}
+
+	@Test
+	fun `a behavior-claimed newline asks the IME to resync`() = runTest {
+		val state = editorWith("- one\n- ")
+		state.cursor.updatePosition(CharLineOffset(1, 0))
+		var resyncs = 0
+		val job = launch { state.imeResyncRequests.collect { resyncs++ } }
+		runCurrent()
+
+		state.imeCommitText("\n", newCursorPosition = 1)
+		runCurrent()
+
+		assertEquals(1, resyncs)
+		job.cancel()
+	}
+
+	/** A delete that really removed text needs no correction; the caret move carries it. */
+	@Test
+	fun `an ordinary backspace does not ask for a resync`() = runTest {
+		val state = editorWith("hello")
+		state.cursor.updatePosition(CharLineOffset(0, 5))
+		var resyncs = 0
+		val job = launch { state.imeResyncRequests.collect { resyncs++ } }
+		runCurrent()
+
+		state.imeDeleteSurroundingText(1, 0)
+		runCurrent()
+
+		assertEquals(0, resyncs)
+		job.cancel()
 	}
 
 	// --- the non-block case must be untouched by the routing ---
