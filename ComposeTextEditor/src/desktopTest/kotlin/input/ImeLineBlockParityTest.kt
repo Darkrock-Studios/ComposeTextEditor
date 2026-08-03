@@ -286,6 +286,32 @@ class ImeLineBlockParityTest {
 		assertEquals("a", state.getAllText().text)
 	}
 
+	/**
+	 * Clamping leaves nothing to delete, but the keystroke still means "exit the
+	 * block", which is what the hardware key does here.
+	 */
+	@Test
+	fun `backspace at the document start still demotes`() = runTest {
+		val state = editorWith("- item")
+		state.cursor.updatePosition(CharLineOffset(0, 0))
+
+		state.imeDeleteSurroundingText(1, 0)
+
+		assertEquals("item", state.getAllText().text)
+		assertTrue(state.bulletLines().isEmpty())
+	}
+
+	@Test
+	fun `hardware backspace at the document start demotes the same way`() = runTest {
+		val state = editorWith("- item")
+		state.cursor.updatePosition(CharLineOffset(0, 0))
+
+		runAction(state, Action.DeleteBackward)
+
+		assertEquals("item", state.getAllText().text)
+		assertTrue(state.bulletLines().isEmpty())
+	}
+
 	// --- the IME has to be told when its request was answered without an edit ---
 
 	@Test

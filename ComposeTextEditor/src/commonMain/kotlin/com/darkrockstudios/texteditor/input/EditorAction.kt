@@ -28,7 +28,19 @@ class EditorActionSpec(
 	val action: EditorCommand.Action,
 	val isEnabled: (EditorActionContext) -> Boolean = { true },
 	val perform: (EditorActionContext) -> Unit,
-)
+) {
+	/**
+	 * Whether this mutates the document, which is what a read-only editor refuses.
+	 *
+	 * For a built-in id the answer comes from the built-in constant, not from
+	 * [action]. An [EditorCommand.Action] is identified by its id alone, so
+	 * replacing `editor.paste` with a spec built from `Action("editor.paste",
+	 * isEdit = false)` resolves as paste everywhere else; taking its word here
+	 * would let it run in an editor the app disabled.
+	 */
+	internal val editsDocument: Boolean
+		get() = EditorCommand.Action.builtinFor(action.id)?.isEdit ?: action.isEdit
+}
 
 /**
  * Everything this editor can do, keyed by [EditorCommand.Action.id]. Lives on

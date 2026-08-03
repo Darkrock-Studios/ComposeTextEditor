@@ -33,6 +33,18 @@ internal fun TextEditorContextMenu(
 	extraItems: List<ContextMenuItem> = emptyList(),
 	onDismiss: () -> Unit,
 ) {
+	val showCut = actions.canCut() && enabled
+	val showCopy = actions.canCopy()
+	val showPaste = enabled && actions.canPaste()
+	val showSelectAll = actions.canPerform(EditorCommand.Action.SelectAll)
+
+	// Every standard item is conditional, so a registry with them all dropped would
+	// otherwise pop an empty dropdown the user has to click away.
+	if (extraItems.isEmpty() && !showCut && !showCopy && !showPaste && !showSelectAll) {
+		onDismiss()
+		return
+	}
+
 	Box(modifier = Modifier.offset {
 		IntOffset(
 			position.x.roundToInt(),
@@ -60,8 +72,7 @@ internal fun TextEditorContextMenu(
 				HorizontalDivider()
 			}
 
-			// Cut - requires selection and enabled
-			if (actions.canCut() && enabled) {
+			if (showCut) {
 				DropdownMenuItem(
 					text = { Text(strings.cut) },
 					onClick = {
@@ -71,8 +82,7 @@ internal fun TextEditorContextMenu(
 				)
 			}
 
-			// Copy - requires selection
-			if (actions.canCopy()) {
+			if (showCopy) {
 				DropdownMenuItem(
 					text = { Text(strings.copy) },
 					onClick = {
@@ -82,8 +92,7 @@ internal fun TextEditorContextMenu(
 				)
 			}
 
-			// Paste - requires enabled
-			if (enabled && actions.canPaste()) {
+			if (showPaste) {
 				DropdownMenuItem(
 					text = { Text(strings.paste) },
 					onClick = {
@@ -93,7 +102,7 @@ internal fun TextEditorContextMenu(
 				)
 			}
 
-			if (actions.canPerform(EditorCommand.Action.SelectAll)) {
+			if (showSelectAll) {
 				DropdownMenuItem(
 					text = { Text(strings.selectAll) },
 					onClick = {

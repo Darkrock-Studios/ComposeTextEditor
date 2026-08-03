@@ -59,6 +59,13 @@ sealed interface EditorCommand {
 			val Outdent = Action("editor.outdent", isEdit = true)
 			val NewLine = Action("editor.newLine", isEdit = true)
 
+			/**
+			 * The built-in carrying [id], or null for a host's own action. Lets the
+			 * editor take a built-in's [isEdit] from here rather than from whatever
+			 * instance a caller handed it, since identity is the id alone.
+			 */
+			internal fun builtinFor(id: String): Action? = builtinsById[id]
+
 			/** Every action the editor ships with. */
 			val Builtins: List<Action> = listOf(
 				SelectAll,
@@ -76,6 +83,8 @@ sealed interface EditorCommand {
 				Outdent,
 				NewLine,
 			)
+
+			private val builtinsById: Map<String, Action> = Builtins.associateBy { it.id }
 		}
 	}
 }

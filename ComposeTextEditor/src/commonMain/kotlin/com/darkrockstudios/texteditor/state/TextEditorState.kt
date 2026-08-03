@@ -410,13 +410,37 @@ class TextEditorState(
 	 */
 	val editBehaviors: MutableList<EditBehavior> = mutableListOf(LineBlockEditBehavior)
 
+	/** Depth of the behavior chain currently dispatching, to break recursion. */
+	private var behaviorDepth = 0
+
 	/**
-	 * Offers the edit to each behavior until one claims it. Iterates a snapshot so
-	 * that a behavior which registers or removes a behavior while handling an edit
-	 * does not fail the keystroke that triggered it.
+	 * Offers the edit to each behavior until one claims it.
+	 *
+	 * Iterates a snapshot so a behavior may register or remove behaviors while
+	 * handling an edit. Nested calls skip the chain entirely, which is what lets a
+	 * behavior finish with the ordinary edit: an auto-indent that inserts its
+	 * whitespace and then calls [insertNewlineAtCursor] gets the plain split rather
+	 * than being offered its own edit again forever.
+	 *
+	 * A claim also asks the IME to resync. Once a behavior has answered the edit,
+	 * the keyboard's assumption about what its request did is unreliable in a way
+	 * no diff of the text can express: the edit may have changed only styling, or
+	 * inserted more than was asked for. The request is cheap and platforms without
+	 * an IME drop it.
 	 */
-	private inline fun claimedByBehavior(hook: (EditBehavior) -> Boolean): Boolean =
-		editBehaviors.toList().any(hook)
+	private fun claimedByBehavior(hook: (EditBehavior) -> Boolean): Boolean {
+		if (behaviorDepth > 0) return false
+
+		behaviorDepth++
+		val claimed = try {
+			editBehaviors.toList().any(hook)
+		} finally {
+			behaviorDepth--
+		}
+
+		if (claimed) requestImeResync()
+		return claimed
+	}
 
 	// In-editor rich-span clipboard. The system clipboard only carries the
 	// AnnotatedString (text + character-level spans), so line-anchored rich spans

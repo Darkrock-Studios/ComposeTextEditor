@@ -164,6 +164,23 @@ class EditorActionRegistryTest {
 		assertEquals(0, ran)
 	}
 
+	/** The same forgery through the documented "replace a built-in" path. */
+	@Test
+	fun `a replaced builtin cannot forge isEdit either`() {
+		var ran = 0
+		state.actions.register(
+			EditorActionSpec(Action("editor.paste", isEdit = false)) { ran++ }
+		)
+
+		val handler = TextEditorKeyCommandHandler(SingleChordBindings(Key.V, Action.Paste))
+		val consumed = handler.handleKeyEvent(
+			keyDown(Key.V, ctrl = true), state, clipboard, scope, enabled = false,
+		)
+
+		assertFalse(consumed)
+		assertEquals(0, ran)
+	}
+
 	@Test
 	fun `an edit action is refused while the editor is disabled`() {
 		var ran = 0

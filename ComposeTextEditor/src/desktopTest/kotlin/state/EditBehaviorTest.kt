@@ -9,7 +9,9 @@ import com.darkrockstudios.texteditor.richstyle.LineBlockEditBehavior
 import com.darkrockstudios.texteditor.state.EditBehavior
 import com.darkrockstudios.texteditor.state.TextEditorState
 import io.mockk.mockk
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -130,6 +132,58 @@ class EditBehaviorTest {
 
 		state.insertNewlineAtCursor()
 		assertEquals("\nhello", state.getAllText().text)
+	}
+
+	/**
+	 * "Do my thing, then the ordinary edit" is the natural way to write a behavior,
+	 * and the only primitive a host can reach is the public one that runs the chain.
+	 * A nested call has to skip the chain or it recurses until the stack goes.
+	 */
+	@Test
+	fun `a behavior may finish by calling the edit it claimed`() = runTest {
+		val state = editor()
+		state.editBehaviors.add(0, object : EditBehavior {
+			override fun onNewline(state: TextEditorState): Boolean {
+				state.insertStringAtCursor(">")
+				state.insertNewlineAtCursor()
+				return true
+			}
+		})
+		state.cursor.updatePosition(CharLineOffset(0, 2))
+
+		state.insertNewlineAtCursor()
+
+		assertEquals("he>\nllo", state.getAllText().text)
+	}
+
+	@Test
+	fun `a claimed edit asks the IME to resync`() = runTest {
+		val extension = bulletedEditor("- one\n- ")
+		val state = extension.editorState
+		state.cursor.updatePosition(CharLineOffset(1, 0))
+		var resyncs = 0
+		val job = launch { state.imeResyncRequests.collect { resyncs++ } }
+		runCurrent()
+
+		state.insertNewlineAtCursor()
+		runCurrent()
+
+		assertEquals(1, resyncs)
+		job.cancel()
+	}
+
+	@Test
+	fun `an unclaimed edit does not ask for a resync`() = runTest {
+		val state = editor()
+		var resyncs = 0
+		val job = launch { state.imeResyncRequests.collect { resyncs++ } }
+		runCurrent()
+
+		state.insertNewlineAtCursor()
+		runCurrent()
+
+		assertEquals(0, resyncs)
+		job.cancel()
 	}
 
 	@Test

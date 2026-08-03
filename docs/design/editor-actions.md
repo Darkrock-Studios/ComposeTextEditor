@@ -269,12 +269,22 @@ no selection) exclude the autocorrect case as far as static reading can tell,
 but this needs verification on a device against at least Gboard and one
 third-party keyboard, not just the `androidHostTest` suite.
 
-As implemented, the guard is written on the computed character range rather
-than the caller's arguments: exactly one character ending at the caret, no
-composing region, no selection. Writing it that way lets
-`deleteSurroundingTextInCodePoints` share it without a one-code-point delete of
-an astral character reaching `backspaceAtCursor`, which deletes a single UTF-16
-char and would split the surrogate pair.
+As implemented, the guard reads intent from the widths the caller asked for, not
+from the range that survives clamping: a request for exactly one character on
+exactly one side, no composing region, no selection. The distinction matters at
+the edges of the document, where a request for several characters shrinks to
+one; reading the survivor would let an autocorrect rewrite at the top of the
+document pass as a backspace.
+
+The code-point variant additionally requires that its request resolved to at
+most one UTF-16 char, so a one-code-point delete of an astral character never
+reaches `backspaceAtCursor`, which deletes a single char and would split the
+surrogate pair.
+
+Both semantic routes also run when clamping leaves an empty range. A backspace
+at the very start of the document removes nothing but can still exit a line
+block, which is what the hardware key does; bailing on the empty range would
+leave the key dead on a soft keyboard for a block on the first line.
 
 ### Device verification still owed
 

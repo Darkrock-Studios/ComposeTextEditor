@@ -99,6 +99,44 @@ class ContextMenuRegistryTest {
 		assertEquals(1, ran)
 	}
 
+	/**
+	 * The keyboard refuses editing actions in a read-only editor; a menu item built
+	 * on the same registry has to refuse them too, or it becomes the way around it.
+	 */
+	@Test
+	fun `a read-only editor refuses editing actions from the menu`() = runTest {
+		val state = editor()
+		val actions = ContextMenuActions(state, InMemoryClipboard(), this, enabled = false)
+		state.selector.updateSelection(CharLineOffset(0, 0), CharLineOffset(0, 5))
+
+		assertFalse(actions.canCut())
+		assertFalse(actions.canPaste())
+		assertTrue(actions.canCopy())
+		assertTrue(actions.canPerform(Action.SelectAll))
+
+		actions.cut()
+		assertEquals("hello world", state.getAllText().text)
+	}
+
+	/**
+	 * Action identity is the id alone, so replacing a built-in with a spec that
+	 * declares itself non-editing must not get that spec past the read-only gate.
+	 */
+	@Test
+	fun `a replaced builtin cannot declare itself non-editing`() = runTest {
+		val state = editor()
+		val actions = ContextMenuActions(state, InMemoryClipboard(), this, enabled = false)
+		var ran = 0
+		state.actions.register(
+			EditorActionSpec(Action("editor.paste", isEdit = false)) { ran++ }
+		)
+
+		assertFalse(actions.canPaste())
+		actions.paste()
+
+		assertEquals(0, ran)
+	}
+
 	@Test
 	fun `an unregistered action is inert rather than fatal`() = runTest {
 		val state = editor()

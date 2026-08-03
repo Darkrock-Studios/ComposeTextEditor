@@ -136,8 +136,8 @@ fun BasicTextEditor(
 	val internalContextMenuState = remember { TextEditorContextMenuState() }
 	val effectiveContextMenuState = contextMenuState ?: internalContextMenuState
 
-	val contextMenuActions = remember(state, clipboard) {
-		ContextMenuActions(state, clipboard, state.scope)
+	val contextMenuActions = remember(state, clipboard, enabled) {
+		ContextMenuActions(state, clipboard, state.scope, enabled)
 	}
 
 	LaunchedEffect(Unit) {

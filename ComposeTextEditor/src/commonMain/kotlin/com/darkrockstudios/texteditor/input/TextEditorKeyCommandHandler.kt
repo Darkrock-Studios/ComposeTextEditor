@@ -60,12 +60,8 @@ internal class TextEditorKeyCommandHandler(
 				// An action nobody registered must not swallow the keystroke, so that a
 				// chord the host forgot to implement stays available to everything below.
 				val spec = state.actions[command] ?: return false
-				// Whether this edits comes from the registered spec, never from the
-				// Action the bindings handed us: identity is the id alone, so a host
-				// writing `Action("editor.paste", isEdit = false)` in its own bindings
-				// would otherwise resolve the real paste and mutate a disabled editor.
 				// Selection, copy and navigation stay available in a disabled editor.
-				if (spec.action.isEdit && !enabled) return false
+				if (spec.editsDocument && !enabled) return false
 				spec.perform(EditorActionContext(state, clipboard, scope))
 				true
 			}

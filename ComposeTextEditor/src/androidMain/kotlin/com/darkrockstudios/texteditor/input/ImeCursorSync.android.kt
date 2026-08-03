@@ -44,64 +44,31 @@ actual class ImeCursorSync actual constructor(
 					if (state.platformExtensions.isInBatchEdit) return@collect
 					val view = state.platformExtensions.view ?: return@collect
 
-					val selStart: Int
-					val selEnd: Int
-					if (selection != null) {
-						selStart = state.getCharacterIndex(selection.start)
-						selEnd = state.getCharacterIndex(selection.end)
-					} else {
-						val cursorIndex = state.getCharacterIndex(cursorPos)
-						selStart = cursorIndex
-						selEnd = cursorIndex
-					}
-
-					val composing = state.composingRange
-					val compStart = composing?.let { state.getCharacterIndex(it.start) } ?: -1
-					val compEnd = composing?.let { state.getCharacterIndex(it.end) } ?: -1
-
-					val changed = selStart != lastSelStart || selEnd != lastSelEnd ||
-							compStart != lastCompStart || compEnd != lastCompEnd
+					val indices = state.currentImeSelection(cursorPos, selection)
+					val changed = indices.selStart != lastSelStart || indices.selEnd != lastSelEnd ||
+							indices.compStart != lastCompStart || indices.compEnd != lastCompEnd
 					if (!changed) return@collect
 
-					lastSelStart = selStart
-					lastSelEnd = selEnd
-					lastCompStart = compStart
-					lastCompEnd = compEnd
-					updateImeSelection(view, selStart, selEnd, compStart, compEnd)
-
-					if (state.platformExtensions.cursorAnchorMonitoringEnabled) {
-						state.platformExtensions.sendCursorAnchorInfo()
-					}
+					pushSelection(view, indices)
 				}
 		}
 
-		// Edits the IME cannot infer from text or caret movement: a behavior that
-		// claims a backspace by exiting a list changes neither, so the deduplication
-		// above would drop the correction and leave the keyboard's mirror a character
-		// ahead of the document. Clearing the last-sent values forces the next push.
+		// Edits the IME cannot infer from what it can see. A behavior that claims a
+		// backspace by exiting a list leaves the text and the caret index exactly
+		// where they were, so there is nothing for `updateSelection` to carry: both
+		// this class and `InputMethodManager` drop a push whose indices match the
+		// last one. Only `restartInput` makes the keyboard discard its mirror and
+		// re-read the buffer, which is what it takes to undo the decrement it
+		// already applied when it issued the request.
 		scope.launch {
 			state.imeResyncRequests.collect {
 				if (state.platformExtensions.isInBatchEdit) return@collect
 				val view = state.platformExtensions.view ?: return@collect
+				val imm = view.context.getSystemService(Context.INPUT_METHOD_SERVICE)
+						as? InputMethodManager ?: return@collect
 
-				lastSelStart = -1
-				lastSelEnd = -1
-				lastCompStart = -2
-				lastCompEnd = -2
-
-				val cursorIndex = state.getCharacterIndex(state.cursorPosition)
-				val selection = state.selector.selection
-				val selStart = selection?.let { state.getCharacterIndex(it.start) } ?: cursorIndex
-				val selEnd = selection?.let { state.getCharacterIndex(it.end) } ?: cursorIndex
-				val composing = state.composingRange
-				val compStart = composing?.let { state.getCharacterIndex(it.start) } ?: -1
-				val compEnd = composing?.let { state.getCharacterIndex(it.end) } ?: -1
-
-				lastSelStart = selStart
-				lastSelEnd = selEnd
-				lastCompStart = compStart
-				lastCompEnd = compEnd
-				updateImeSelection(view, selStart, selEnd, compStart, compEnd)
+				imm.restartInput(view)
+				pushSelection(view, state.currentImeSelection())
 			}
 		}
 
@@ -133,16 +100,48 @@ actual class ImeCursorSync actual constructor(
 		lastCompEnd = -2
 	}
 
-	private fun updateImeSelection(
-		view: View,
-		selStart: Int,
-		selEnd: Int,
-		compStart: Int,
-		compEnd: Int
-	) {
+	/** The selection and composing indices as the IME should currently see them. */
+	private class ImeSelection(
+		val selStart: Int,
+		val selEnd: Int,
+		val compStart: Int,
+		val compEnd: Int,
+	)
+
+	private fun TextEditorState.currentImeSelection(
+		cursorPos: CharLineOffset = cursorPosition,
+		selection: TextEditorRange? = selector.selection,
+	): ImeSelection {
+		val selStart: Int
+		val selEnd: Int
+		if (selection != null) {
+			selStart = getCharacterIndex(selection.start)
+			selEnd = getCharacterIndex(selection.end)
+		} else {
+			val cursorIndex = getCharacterIndex(cursorPos)
+			selStart = cursorIndex
+			selEnd = cursorIndex
+		}
+
+		val composing = composingRange
+		return ImeSelection(
+			selStart = selStart,
+			selEnd = selEnd,
+			compStart = composing?.let { getCharacterIndex(it.start) } ?: -1,
+			compEnd = composing?.let { getCharacterIndex(it.end) } ?: -1,
+		)
+	}
+
+	/** Records [indices] as last-sent and pushes them, with whatever else the IME is monitoring. */
+	private fun pushSelection(view: View, indices: ImeSelection) {
+		lastSelStart = indices.selStart
+		lastSelEnd = indices.selEnd
+		lastCompStart = indices.compStart
+		lastCompEnd = indices.compEnd
+
 		val imm = view.context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
 			?: return
-		imm.updateSelection(view, selStart, selEnd, compStart, compEnd)
+		imm.updateSelection(view, indices.selStart, indices.selEnd, indices.compStart, indices.compEnd)
 
 		if (state.platformExtensions.extractedTextMonitorEnabled) {
 			imm.updateExtractedText(
@@ -150,6 +149,10 @@ actual class ImeCursorSync actual constructor(
 				state.platformExtensions.extractedTextMonitorToken,
 				state.toExtractedText()
 			)
+		}
+
+		if (state.platformExtensions.cursorAnchorMonitoringEnabled) {
+			state.platformExtensions.sendCursorAnchorInfo()
 		}
 	}
 }
