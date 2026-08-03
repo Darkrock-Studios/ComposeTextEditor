@@ -9,7 +9,6 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.darkrockstudios.texteditor.richstyle.SpellCheckStyle
-import com.darkrockstudios.texteditor.spellcheck.SpellCheckGuard
 import com.darkrockstudios.texteditor.spellcheck.SpellCheckState
 import com.darkrockstudios.texteditor.spellcheck.SpellCheckingTextEditor
 import com.darkrockstudios.texteditor.spellcheck.api.EditorSpellChecker
@@ -27,7 +26,7 @@ import com.darkrockstudios.texteditor.spellcheck.rememberSpellCheckState
 fun spellCheckUiTest(
 	spellChecker: EditorSpellChecker,
 	initialText: String = "",
-	guard: SpellCheckGuard = SpellCheckGuard.Default,
+	enableSpellChecking: Boolean = true,
 	width: Dp = 400.dp,
 	height: Dp = 300.dp,
 	block: SpellCheckUiTestScope.() -> Unit,
@@ -37,7 +36,7 @@ fun spellCheckUiTest(
 		state = rememberSpellCheckState(
 			spellChecker = spellChecker,
 			initialText = AnnotatedString(initialText),
-			guard = guard,
+			enableSpellChecking = enableSpellChecking,
 		)
 		SpellCheckingTextEditor(
 			spellChecker = spellChecker,

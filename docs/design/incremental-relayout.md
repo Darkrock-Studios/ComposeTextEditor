@@ -147,8 +147,7 @@ Batch producers go through `TextEditorState.updateRichSpans(remove, add)`:
   pipeline's `clampAllToDocument` does. Overlay ranges are computed
   asynchronously, so they can arrive pointing past a document that shrank in
   the meantime; unclamped, such a span is invisible, uncollectable by range
-  queries, and still counted by span scans (which would falsely trip the
-  spell-check guard),
+  queries, and still counted by span scans,
 - one `SpansOnly` pass at commit.
 
 The spell checker routes every decoration path through this API, so a full

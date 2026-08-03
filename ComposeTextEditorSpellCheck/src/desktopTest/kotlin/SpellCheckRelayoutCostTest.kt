@@ -36,7 +36,7 @@ class SpellCheckRelayoutCostTest {
 	private val lineCount = 30
 	private val correctWords = setOf("alpha", "beta", "gamma", "delta")
 
-	/** One misspelling per line, well under the guard's count cap and word ratio. */
+	/** One misspelling per line. */
 	private fun document(): String =
 		(0 until lineCount).joinToString("\n") { "alpha beta gamma delta wrogn$it" }
 
