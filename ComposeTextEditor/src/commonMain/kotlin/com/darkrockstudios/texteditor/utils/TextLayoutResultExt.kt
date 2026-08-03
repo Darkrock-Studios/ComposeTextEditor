@@ -4,8 +4,43 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.style.ResolvedTextDirection
+import androidx.compose.ui.unit.Density
 import kotlin.math.max
 import kotlin.math.min
+
+/**
+ * The x at which [lineIndex]'s text actually starts, including whatever
+ * first-line or hanging indent the platform applied.
+ *
+ * Thar be dragons: [TextLayoutResult.getLineLeft] is not usable for this on
+ * Compose Android — for LTR, normally-aligned text it reports 0 no matter what
+ * [androidx.compose.ui.text.style.TextIndent] is in effect, so anything anchored
+ * to it (gutter markers, span decorations) lands in the wrong place. The
+ * position of the line's first glyph is the reliable signal on every platform.
+ *
+ * An empty paragraph has no glyph to measure, and the platforms disagree about
+ * whether a first-line indent applies to a degenerate `[0, 0)` range — Android
+ * applies it, desktop doesn't — so fall back to the declared indent, which needs
+ * a [density] to resolve. Pass null when the caller has no density; the result
+ * then reflects whatever the layout itself reports.
+ */
+fun TextLayoutResult.lineTextLeft(lineIndex: Int, density: Density?): Float {
+	val lineStart = getLineStart(lineIndex)
+	if (multiParagraph.getParagraphDirection(lineStart) != ResolvedTextDirection.Ltr) {
+		return getLineLeft(lineIndex)
+	}
+
+	val measured = max(
+		getLineLeft(lineIndex),
+		getHorizontalPosition(lineStart, usePrimaryDirection = true)
+	)
+	if (layoutInput.text.isNotEmpty() || density == null) return measured
+
+	val indent = layoutInput.text.paragraphStyles.firstOrNull()?.item?.textIndent?.firstLine
+		?: layoutInput.style.textIndent?.firstLine
+		?: return measured
+	return max(measured, with(density) { indent.toPx() })
+}
 
 /**
  * Reads bounds for multiple lines. This can be removed once an
@@ -87,9 +122,7 @@ fun TextLayoutResult.getBoundingBoxes(
 					usePrimaryDirection = isLtr
 				)
 			else
-				getLineLeft(
-					lineIndex = lineNum
-				)
+				lineTextLeft(lineIndex = lineNum, density = null)
 
 		val right =
 			if (lineNum == endLineNum)

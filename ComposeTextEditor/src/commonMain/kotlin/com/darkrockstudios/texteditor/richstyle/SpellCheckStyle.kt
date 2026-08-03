@@ -11,6 +11,7 @@ import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.unit.dp
 import com.darkrockstudios.texteditor.LineWrap
 import com.darkrockstudios.texteditor.state.TextEditorState
+import com.darkrockstudios.texteditor.utils.lineTextLeft
 
 /**
  * A [RichSpanStyle] that draws a red wavy underline beneath misspelled text.
@@ -39,7 +40,7 @@ object SpellCheckStyle : RichSpanStyle {
 
 		val lineStartOffset = layoutResult.getLineStart(lineWrap.virtualLineIndex) + 1
 		val startX = if (textRange.start <= lineStartOffset) {
-			layoutResult.getLineLeft(lineWrap.virtualLineIndex)
+			layoutResult.lineTextLeft(lineWrap.virtualLineIndex, this)
 		} else {
 			try {
 				layoutResult.getHorizontalPosition(textRange.start, usePrimaryDirection = true)

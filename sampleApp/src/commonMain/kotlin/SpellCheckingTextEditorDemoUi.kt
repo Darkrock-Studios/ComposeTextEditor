@@ -89,11 +89,11 @@ fun SpellCheckingTextEditorDemoUi(
 			// `textIndent` here gives plain paragraphs (and headers) a first-line
 			// indent for a more "document-like" look. The block-style rich spans
 			// (lists, blockquotes, code fences) read the actual text-left position
-			// from `TextLayoutResult.getLineLeft` when drawing their gutter
-			// markers, so they line up correctly regardless of how this default
-			// indent merges with their own per-paragraph indents — important on
-			// Compose Android, where the per-paragraph override of
-			// `TextStyle.textIndent` doesn't reliably win the merge.
+			// from the laid-out line when drawing their gutter markers, so they
+			// line up correctly regardless of how this default indent merges with
+			// their own per-paragraph indents: important on Compose Android, where
+			// the per-paragraph override of `TextStyle.textIndent` doesn't reliably
+			// win the merge.
 			style = rememberTextEditorStyle(
 				textStyle = TextStyle.Default.copy(
 					textIndent = TextIndent(firstLine = 24.sp)
