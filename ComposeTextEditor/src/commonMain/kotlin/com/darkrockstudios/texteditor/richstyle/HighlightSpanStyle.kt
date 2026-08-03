@@ -9,6 +9,7 @@ import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextRange
 import com.darkrockstudios.texteditor.LineWrap
 import com.darkrockstudios.texteditor.state.TextEditorState
+import com.darkrockstudios.texteditor.utils.lineTextLeft
 
 /**
  * A [RichSpanStyle] that paints a solid rectangle behind its text. Used for
@@ -29,7 +30,7 @@ class HighlightSpanStyle(
 
 		val lineStartOffset = layoutResult.getLineStart(lineWrap.virtualLineIndex)
 		val startX = if (textRange.start <= lineStartOffset) {
-			layoutResult.getLineLeft(lineWrap.virtualLineIndex)
+			layoutResult.lineTextLeft(lineWrap.virtualLineIndex, this)
 		} else {
 			try {
 				layoutResult.getHorizontalPosition(textRange.start, usePrimaryDirection = true)

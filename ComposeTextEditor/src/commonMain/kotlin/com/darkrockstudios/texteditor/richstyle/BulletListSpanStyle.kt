@@ -12,6 +12,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.darkrockstudios.texteditor.LineWrap
 import com.darkrockstudios.texteditor.state.TextEditorState
+import com.darkrockstudios.texteditor.utils.lineTextLeft
 
 /**
  * Decorative rich span that marks a line as a markdown bullet-list item — a small
@@ -42,7 +43,7 @@ data object BulletListSpanStyle : RichSpanStyle {
 		// line — editor-wide `TextStyle.textIndent`, the per-paragraph
 		// `BULLET_LIST_PARAGRAPH_STYLE.textIndent`, or whatever blend Compose
 		// actually produces (the merge is platform-dependent).
-		val textLeft = layoutResult.getLineLeft(lineWrap.virtualLineIndex)
+		val textLeft = layoutResult.lineTextLeft(lineWrap.virtualLineIndex, this)
 		val centerX = (textLeft - BULLET_GAP_DP.dp.toPx()).coerceAtLeast(BULLET_RADIUS_DP.dp.toPx())
 		drawCircle(
 			color = color,

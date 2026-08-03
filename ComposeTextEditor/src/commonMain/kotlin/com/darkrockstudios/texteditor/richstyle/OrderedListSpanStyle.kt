@@ -12,6 +12,7 @@ import androidx.compose.ui.text.style.TextIndent
 import androidx.compose.ui.unit.sp
 import com.darkrockstudios.texteditor.LineWrap
 import com.darkrockstudios.texteditor.state.TextEditorState
+import com.darkrockstudios.texteditor.utils.lineTextLeft
 
 /**
  * Decorative rich span that marks a line as a markdown ordered-list item — the
@@ -55,11 +56,11 @@ data object OrderedListSpanStyle : RichSpanStyle {
 		)
 
 		// Right-align numerals against the layout's actual text-left so digit
-		// columns line up (`9.` and `10.` both end at the same x). Reading
-		// `getLineLeft` rather than hardcoding the gutter makes the marker track
-		// whatever indent the platform actually applied.
+		// columns line up (`9.` and `10.` both end at the same x). Reading the
+		// laid-out text position rather than hardcoding the gutter makes the
+		// marker track whatever indent the platform actually applied.
 		val rightPad = GUTTER_RIGHT_PAD_SP.sp.toPx()
-		val textLeft = layoutResult.getLineLeft(lineWrap.virtualLineIndex)
+		val textLeft = layoutResult.lineTextLeft(lineWrap.virtualLineIndex, this)
 		val markerWidth = measured.size.width.toFloat()
 		val x = (textLeft - rightPad - markerWidth).coerceAtLeast(0f)
 

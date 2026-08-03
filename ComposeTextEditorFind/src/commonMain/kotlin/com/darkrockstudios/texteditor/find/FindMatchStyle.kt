@@ -9,6 +9,7 @@ import androidx.compose.ui.text.TextRange
 import com.darkrockstudios.texteditor.LineWrap
 import com.darkrockstudios.texteditor.richstyle.RichSpanStyle
 import com.darkrockstudios.texteditor.state.TextEditorState
+import com.darkrockstudios.texteditor.utils.lineTextLeft
 
 /**
  * Default highlight style for all find matches (non-current).
@@ -30,7 +31,7 @@ class FindMatchStyle(
 
 		val lineStartOffset = layoutResult.getLineStart(lineWrap.virtualLineIndex)
 		val startX = if (textRange.start <= lineStartOffset) {
-			layoutResult.getLineLeft(lineWrap.virtualLineIndex)
+			layoutResult.lineTextLeft(lineWrap.virtualLineIndex, this)
 		} else {
 			layoutResult.getHorizontalPosition(textRange.start, usePrimaryDirection = true)
 		}
@@ -70,7 +71,7 @@ class FindCurrentMatchStyle(
 
 		val lineStartOffset = layoutResult.getLineStart(lineWrap.virtualLineIndex)
 		val startX = if (textRange.start <= lineStartOffset) {
-			layoutResult.getLineLeft(lineWrap.virtualLineIndex)
+			layoutResult.lineTextLeft(lineWrap.virtualLineIndex, this)
 		} else {
 			layoutResult.getHorizontalPosition(textRange.start, usePrimaryDirection = true)
 		}
