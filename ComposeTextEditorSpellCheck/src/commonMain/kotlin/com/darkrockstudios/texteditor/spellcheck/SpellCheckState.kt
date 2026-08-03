@@ -355,9 +355,11 @@ class SpellCheckState(
 		// checker is caught even when the document was built up by typing. Live spans
 		// are counted rather than the bookkeeping lists: the span manager keeps their
 		// positions correct across edits, so they can't accumulate stale duplicates.
+		// The document's word count is only counted once the flagged total makes the
+		// ratio reachable; this runs on every typing pause and counting is O(document).
 		val flagged = spellCheckSpanCount()
 		val trip = guard.evaluateCount(flagged)
-			?: guard.evaluateWordRatio(documentWordCount(), flagged)
+			?: guard.evaluateWordRatioIfReachable(flagged) { documentWordCount() }
 		trip?.let { suspendSpellChecking(it) }
 	}
 
@@ -391,13 +393,20 @@ class SpellCheckState(
 
 		// Judge the whole document after folding this range in. Live spans are counted
 		// rather than the bookkeeping lists: the span manager keeps their positions
-		// correct across edits, so they can't accumulate stale duplicates.
-		val sentences = textState.sentenceSegments().toList()
-		val flaggedSentences = sentences.count { sentence ->
-			textState.getRichSpansInRange(sentence.range).any { it.style is SpellCheckStyle }
-		}
-		val trip = guard.evaluateCount(spellCheckSpanCount())
-			?: guard.evaluateSentenceRatio(sentences.size, flaggedSentences)
+		// correct across edits, so they can't accumulate stale duplicates. A flagged
+		// sentence carries at least one span, so the cheap span count gates the
+		// re-segmentation the ratio would otherwise cost on every typing pause.
+		val flagged = spellCheckSpanCount()
+		val trip = guard.evaluateCount(flagged)
+			?: if (guard.ratioReachable(flagged, guard.minSentenceSample)) {
+				val sentences = textState.sentenceSegments().toList()
+				val flaggedSentences = sentences.count { sentence ->
+					textState.getRichSpansInRange(sentence.range).any { it.style is SpellCheckStyle }
+				}
+				guard.evaluateSentenceRatio(sentences.size, flaggedSentences)
+			} else {
+				null
+			}
 		trip?.let { suspendSpellChecking(it) }
 	}
 

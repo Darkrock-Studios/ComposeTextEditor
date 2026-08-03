@@ -111,6 +111,31 @@ class SpellCheckGuardE2eTest {
 		}
 	}
 
+	@Test
+	fun `a typed word is checked once, not once per character`() {
+		val words = words(60)
+		val checker = CountingSpellChecker(correctWords = words.toSet())
+
+		spellCheckUiTest(
+			spellChecker = checker,
+			initialText = words.joinToString(" "),
+		) {
+			val lookupsAfterFullCheck = checker.lookups
+
+			// Each character arrives as its own insert, and their ranges butt end to
+			// start; uncoalesced, every one re-checks the same word.
+			typeText(" brokenword ")
+			letSpellCheckSettle()
+
+			assertEquals(1, spellCheckSpanCount)
+			assertEquals(
+				2,
+				checker.lookups - lookupsAfterFullCheck,
+				"One pass over the typed word and the one it was appended to",
+			)
+		}
+	}
+
 	@OptIn(ExperimentalTestApi::class)
 	@Test
 	fun `swapping in a laxer guard on recomposition lifts the suspension`() = runSkikoComposeUiTest {

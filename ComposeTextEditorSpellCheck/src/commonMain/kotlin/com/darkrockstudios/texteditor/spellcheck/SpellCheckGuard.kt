@@ -98,6 +98,28 @@ internal fun SpellCheckGuard.evaluateWordRatio(checked: Int, flagged: Int): Spel
 internal fun SpellCheckGuard.evaluateSentenceRatio(checked: Int, flagged: Int): SpellCheckSuspension? =
 	evaluateRatio(checked, flagged, minSentenceSample)
 
+/**
+ * [evaluateWordRatio], but [checked] is only asked for the document's word count once
+ * [flagged] is large enough for the ratio to be reachable at all.
+ *
+ * Counting the document's words is O(document) and a partial check runs on every typing
+ * pause, so an ordinary document with a handful of typos must never pay for it.
+ */
+internal inline fun SpellCheckGuard.evaluateWordRatioIfReachable(
+	flagged: Int,
+	checked: () -> Int,
+): SpellCheckSuspension? =
+	if (ratioReachable(flagged, minWordSample)) evaluateWordRatio(checked(), flagged) else null
+
+/**
+ * Whether [flagged] is large enough for the ratio to trip on any document. Tripping needs
+ * `flagged > checked * maxFlaggedRatio` with `checked >= minSample`, so a flagged count at
+ * or below `minSample * maxFlaggedRatio` cannot trip however the document is shaped. Float
+ * arithmetic keeps [SpellCheckGuard.Disabled]'s `Int.MAX_VALUE` sample from overflowing.
+ */
+internal fun SpellCheckGuard.ratioReachable(flagged: Int, minSample: Int): Boolean =
+	flagged > minSample.toFloat() * maxFlaggedRatio
+
 private fun SpellCheckGuard.evaluateRatio(
 	checked: Int,
 	flagged: Int,
