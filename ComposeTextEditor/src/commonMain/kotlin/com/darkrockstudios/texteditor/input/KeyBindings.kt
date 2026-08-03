@@ -35,10 +35,9 @@ val KeyEvent.isCtrlShortcut: Boolean
  * }
  * ```
  *
- * A chord resolving to an action the registry does not know is not consumed, so
- * it falls through to whatever would have handled it otherwise: an unmodified
- * printable key types its character, a Ctrl or Cmd chord does nothing, and Tab
- * moves focus out of the editor. Register before you bind.
+ * A chord resolving to an unregistered action is not consumed: a printable key
+ * types its character, a Ctrl or Cmd chord goes dead, and Tab moves focus out
+ * of the editor. Register before you bind.
  */
 fun interface KeyBindings {
 	/** The command [event] triggers, or null when the chord is unbound. */

@@ -11,12 +11,9 @@ import kotlinx.coroutines.CoroutineScope
 /**
  * Resolves context menu items against the [EditorActionRegistry]
  * [com.darkrockstudios.texteditor.input.EditorActionRegistry] on the state, so
- * the menu runs the same implementations the keyboard does. Replacing a
- * built-in, or registering an action of your own, changes both surfaces at once.
- *
- * The named methods cover the standard items; [canPerform] and [perform] drive
- * any other registered action, including your own, from a
- * [ContextMenuItem].
+ * the menu runs the same implementations the keyboard does. The named methods
+ * cover the standard items; [canPerform] and [perform] drive any registered
+ * action from a [ContextMenuItem].
  */
 class ContextMenuActions(
 	private val state: TextEditorState,
@@ -32,17 +29,15 @@ class ContextMenuActions(
 
 	/**
 	 * Whether [action] is registered, allowed in this editor, and currently has
-	 * work to do, which is what decides if its menu item is shown. Unregistered
-	 * actions report false, so dropping one from the registry takes its item out
-	 * of the menu, as does an editing action in a read-only editor.
+	 * work to do; false hides its menu item.
 	 */
 	fun canPerform(action: EditorCommand.Action): Boolean =
 		permitted(state.actions[action])?.isEnabled?.invoke(context()) == true
 
 	/**
-	 * Runs [action] if it is registered and allowed, otherwise does nothing. The
-	 * read-only check lives here rather than in the menu so a host item built on
-	 * this cannot mutate a disabled editor the keyboard already refuses to edit.
+	 * Runs [action] if it is registered and allowed. The read-only check lives
+	 * here, not in the menu, so a host item built on this cannot mutate a
+	 * disabled editor the keyboard already refuses to edit.
 	 */
 	fun perform(action: EditorCommand.Action) {
 		permitted(state.actions[action])?.perform?.invoke(context())

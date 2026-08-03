@@ -27,16 +27,12 @@ sealed interface EditorCommand {
 	}
 
 	/**
-	 * A named operation. Identified by [id] rather than being an enum member so a
-	 * host can introduce its own (`Action("myapp.toggleBold", isEdit = true)`) and
-	 * bind it from a custom [KeyBindings] exactly like a built-in.
-	 *
-	 * Ids are namespaced by convention: `editor.` for the built-ins below, then a
-	 * prefix of the owner's choosing. Equality is by [id] alone, so an action
-	 * rebuilt from its id matches the constant that named it. Two actions sharing
-	 * an id but disagreeing on [isEdit] are therefore the same action, and
-	 * whichever instance [KeyBindings] returns decides whether a disabled editor
-	 * runs it.
+	 * A named operation. Identified by [id] rather than enum membership so a host
+	 * can introduce its own (`Action("myapp.toggleBold", isEdit = true)`) and bind
+	 * it from a custom [KeyBindings] exactly like a built-in. Ids are namespaced
+	 * by convention (`editor.` is the built-ins'), and equality is by [id] alone,
+	 * so two actions sharing an id are the same action however they disagree on
+	 * [isEdit].
 	 */
 	class Action(val id: String, override val isEdit: Boolean) : EditorCommand {
 		override fun equals(other: Any?): Boolean = other is Action && other.id == id
@@ -60,9 +56,9 @@ sealed interface EditorCommand {
 			val NewLine = Action("editor.newLine", isEdit = true)
 
 			/**
-			 * The built-in carrying [id], or null for a host's own action. Lets the
-			 * editor take a built-in's [isEdit] from here rather than from whatever
-			 * instance a caller handed it, since identity is the id alone.
+			 * The built-in carrying [id], or null for a host's own action. Identity is
+			 * the id alone, so a built-in's [isEdit] is taken from here, never from
+			 * whatever instance a caller handed over.
 			 */
 			internal fun builtinFor(id: String): Action? = builtinsById[id]
 

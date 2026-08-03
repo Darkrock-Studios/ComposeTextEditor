@@ -53,13 +53,10 @@ actual class ImeCursorSync actual constructor(
 				}
 		}
 
-		// Edits the IME cannot infer from what it can see. A behavior that claims a
-		// backspace by exiting a list leaves the text and the caret index exactly
-		// where they were, so there is nothing for `updateSelection` to carry: both
-		// this class and `InputMethodManager` drop a push whose indices match the
-		// last one. Only `restartInput` makes the keyboard discard its mirror and
-		// re-read the buffer, which is what it takes to undo the decrement it
-		// already applied when it issued the request.
+		// Edits the IME cannot infer from what it can see: a behavior that exits a
+		// list on backspace leaves text and caret indices unchanged, so a selection
+		// push would be dropped as a duplicate. Only restartInput makes the keyboard
+		// discard its mirror and re-read the buffer.
 		scope.launch {
 			state.imeResyncRequests.collect {
 				if (state.platformExtensions.isInBatchEdit) return@collect

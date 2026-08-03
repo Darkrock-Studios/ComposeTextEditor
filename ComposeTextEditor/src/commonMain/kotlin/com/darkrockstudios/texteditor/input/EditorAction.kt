@@ -18,11 +18,9 @@ class EditorActionContext(
 /**
  * The implementation of one [EditorCommand.Action].
  *
- * [isEnabled] reports whether the action would currently do anything, for menus
- * and toolbars that grey their items out. Key dispatch ignores it on purpose: a
- * chord that resolves to a registered action must consume the key event whether
- * or not the action has work to do, or Ctrl+C with an empty selection would
- * fall through and type a literal `c`.
+ * [isEnabled] is for menus and toolbars that grey items out. Key dispatch
+ * ignores it: a bound chord must consume its event even with nothing to do,
+ * or Ctrl+C with an empty selection would type a literal `c`.
  */
 class EditorActionSpec(
 	val action: EditorCommand.Action,
@@ -31,12 +29,9 @@ class EditorActionSpec(
 ) {
 	/**
 	 * Whether this mutates the document, which is what a read-only editor refuses.
-	 *
-	 * For a built-in id the answer comes from the built-in constant, not from
-	 * [action]. An [EditorCommand.Action] is identified by its id alone, so
-	 * replacing `editor.paste` with a spec built from `Action("editor.paste",
-	 * isEdit = false)` resolves as paste everywhere else; taking its word here
-	 * would let it run in an editor the app disabled.
+	 * Built-in ids answer from the built-in constant, not [action]: identity is
+	 * the id alone, so `Action("editor.paste", isEdit = false)` must not get to
+	 * edit a disabled editor on its own say-so.
 	 */
 	internal val editsDocument: Boolean
 		get() = EditorCommand.Action.builtinFor(action.id)?.isEdit ?: action.isEdit
@@ -44,13 +39,9 @@ class EditorActionSpec(
 
 /**
  * Everything this editor can do, keyed by [EditorCommand.Action.id]. Lives on
- * [TextEditorState] because that is the one object every input surface already
- * shares: key chords reach it through [KeyBindings] and
- * [TextEditorKeyCommandHandler], and the context menu resolves through it too,
- * so an action is implemented once no matter how many ways it can be triggered.
- *
- * The built-ins register on construction through the same [register] a host
- * calls, so there is no private door for library actions.
+ * [TextEditorState] because that is the one object every input surface shares,
+ * so an action is implemented once no matter how it is triggered. The built-ins
+ * register on construction through the same [register] a host calls.
  */
 class EditorActionRegistry {
 	private val specs = mutableMapOf<String, EditorActionSpec>()
@@ -60,21 +51,17 @@ class EditorActionRegistry {
 	}
 
 	/**
-	 * Registers [spec]. An id that is already registered is replaced, which is
-	 * how a host substitutes its own implementation of a built-in (binding
-	 * `editor.paste` to a paste that strips formatting, say).
+	 * Registers [spec]. A previously registered id is replaced, which is how a
+	 * host substitutes its own implementation of a built-in.
 	 */
 	fun register(spec: EditorActionSpec) {
 		specs[spec.action.id] = spec
 	}
 
 	/**
-	 * Drops [action], after which the editor stops consuming any chord bound to it
-	 * and the event falls through to whatever would have seen it otherwise. What
-	 * that means depends on the chord: an unmodified printable key types its
-	 * character, a Ctrl or Cmd chord does nothing at all, and Tab reaches the
-	 * platform's focus traversal and moves focus out of the editor. Bind the chord
-	 * to an action of your own rather than unregistering if you need it inert.
+	 * Drops [action], leaving its chords unconsumed: a printable key types its
+	 * character, a Ctrl or Cmd chord goes dead, Tab moves focus out of the editor.
+	 * Bind the chord to a no-op action instead if you need it inert.
 	 */
 	fun unregister(action: EditorCommand.Action) {
 		specs.remove(action.id)

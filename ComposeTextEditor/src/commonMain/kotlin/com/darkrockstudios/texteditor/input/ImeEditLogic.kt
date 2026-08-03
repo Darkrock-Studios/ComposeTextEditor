@@ -25,10 +25,10 @@ import com.darkrockstudios.texteditor.state.TextEditorState
  * `newCursorPosition` contract.
  */
 internal fun TextEditorState.imeCommitText(text: String, newCursorPosition: Int) {
-	// A committed bare newline is an Enter. An IME that commits "\n" as text never
-	// produces a key event, so routing here is the only way an EditBehavior sees it.
-	// Restricted to the cursor-after-the-insert contract because a claimed newline
-	// may insert nothing at all, leaving no insert position to place a cursor from.
+	// A committed bare newline is an Enter: an IME that commits "\n" never produces
+	// a key event, so routing here is the only way an EditBehavior sees it. Requires
+	// the cursor-after-the-insert contract because a claimed newline may insert
+	// nothing at all, leaving no insert position to place a cursor from.
 	if (text == "\n" && newCursorPosition == 1 && composingRange == null) {
 		imePerformNewline()
 		return
@@ -107,26 +107,20 @@ internal fun TextEditorState.imeDeleteSurroundingTextInCodePoints(beforeLength: 
 
 /**
  * Deletes [deleteStart]..[deleteEnd], routed through the semantic backspace or
- * forward delete when that is what was asked for so an
- * [EditBehavior][com.darkrockstudios.texteditor.state.EditBehavior] can claim it,
- * and as a plain range delete otherwise.
+ * forward delete when that is what was asked for, so an
+ * [EditBehavior][com.darkrockstudios.texteditor.state.EditBehavior] can claim it.
  *
- * Intent comes from [singleCharBefore]/[singleCharAfter], derived from the widths
- * the caller asked for, never from the clamped range. Near the edges of the
- * document a request for several characters shrinks to one, and reading intent off
- * the survivor would misclassify a rewrite as a backspace.
+ * Intent is [singleCharBefore]/[singleCharAfter], derived from the widths the
+ * caller asked for, never from the clamped range: near a document edge a
+ * multi-character rewrite shrinks to one and would read as a backspace. The
+ * semantic routes run even on an empty clamped range, because a backspace at the
+ * document start removes nothing yet can still exit a line block, as the
+ * hardware key does.
  *
- * The semantic routes run even when the clamped range is empty. A backspace at the
- * very start of the document removes nothing but can still exit a line block, and
- * the hardware key does exactly that, so bailing early here would leave the key
- * dead on a soft keyboard for a block on the first line.
- *
- * Thar be dragons: `deleteSurroundingText` is not unambiguously a keypress.
- * Autocorrect and prediction engines call it to rewrite what was already typed,
- * and treating one of those as a backspace would demote a line block in the
- * middle of a word correction. Requiring no composing region, no selection, and
- * a request for exactly one character on exactly one side excludes the rewrite
- * shapes; widen these conditions only with device evidence.
+ * Thar be dragons: autocorrect calls `deleteSurroundingText` to rewrite what was
+ * already typed, and reading one as a backspace demotes a line block mid-word.
+ * The no-composing-region / no-selection / exactly-one-character conditions
+ * exclude the rewrite shapes; widen them only with device evidence.
  */
 private fun TextEditorState.deleteSurroundingRange(
 	singleCharBefore: Boolean,

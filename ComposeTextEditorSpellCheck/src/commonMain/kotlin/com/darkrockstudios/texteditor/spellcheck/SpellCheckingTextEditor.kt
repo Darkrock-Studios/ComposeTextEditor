@@ -179,11 +179,9 @@ fun SpellCheckingTextEditor(
 					currentSpellCheckItem = spellCheckItem
 
 					// A right-click always offers a menu, falling back to the standard
-					// one when the span has nothing to correct. A tap only opens one when
-					// there is a correction to offer: tapping a correctly spelled word
-					// means "put the caret here", and answering that with a menu is not
-					// what was asked for. Declining leaves the tap unconsumed, so it
-					// still focuses the editor and raises the keyboard.
+					// one. A tap only opens one with a correction to offer: tapping a
+					// correctly spelled word means "put the caret here", so declining
+					// leaves the tap to focus the editor and raise the keyboard.
 					if (type == SpanClickType.SECONDARY_CLICK || spellCheckItem != null) {
 						showContextMenu(offset, spellCheckItem)
 						true
@@ -233,11 +231,9 @@ private fun computeAffectedRanges(
 }
 
 /**
- * Overlapping, or butting up against each other end to start.
- *
- * A typed word arrives as one insert per character, each range starting exactly where the
- * last ended. [TextEditorRange.intersects] is exclusive at the ends and reports those as
- * disjoint, which would re-check the same word once per character typed.
+ * Overlapping, or butting up end to start. A typed word arrives as one insert per
+ * character, each range starting where the last ended; [TextEditorRange.intersects]
+ * is exclusive at the ends and would re-check the same word once per keystroke.
  */
 private fun TextEditorRange.adjoins(other: TextEditorRange): Boolean =
 	intersects(other) || end == other.start || other.end == start

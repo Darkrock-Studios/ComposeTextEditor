@@ -1,50 +1,9 @@
 # Editor actions and edit behaviors
 
-The design reference for how input reaches editor behavior: which shortcuts
-exist, what they invoke, and how a feature attaches behavior to a primitive
-edit without the primitive knowing the feature exists. It replaces the closed
-`EditorCommand.Action` enum and the hard-wired line-block branches in
-`TextEditorState`. Motivating issue: #37.
-
-## The problem
-
-Two symptoms, one cause.
-
-*Actions are a closed set.* `EditorCommand.Action` is an `internal` enum with
-fourteen members. `KeyBindings` maps chords onto it and
-`TextEditorKeyCommandHandler` executes it, which is a clean split as far as it
-goes, but a host cannot add a member. `MarkdownExtension` already exposes
-`toggleBlockquote`, `toggleBulletList`, `toggleOrderedList`, `toggleCodeFence`
-and `toggleHeader`, and the sample app drives all of them from toolbar buttons.
-Not one of them can be bound to a key without forking the library. Because
-there is also no way to *invoke* an action by name, every input surface
-re-implements the ones that do exist: `ContextMenuActions.paste` and
-`TextEditorKeyCommandHandler.handlePaste` are the same twenty-five lines of
-clipboard, rich-span provenance and HTML-block logic, written twice.
-
-*Behavior is welded into primitives.* `insertNewlineAtCursor` and
-`backspaceAtCursor` call `detectLineBlock` and branch on the result, so a
-line-block concern lives inside the two functions every input source shares.
-That inverts the intended layering (core reaching into `richstyle`), and it
-leaves no seam for any other feature that wants the same kind of hook.
-
-The second symptom was already a bug. Because the behavior sat in the
-primitives rather than at a point every input path agrees on, whether the user
-got it depended on which method their IME happened to call:
-
-| Path | Before | After |
-| --- | --- | --- |
-| Hardware key, `TextEditorKeyCommandHandler` | yes | yes |
-| Android `sendKeyEvent(KEYCODE_DEL)`, re-dispatched to the key handler | yes | yes |
-| Android `deleteSurroundingText(1, 0)` to `imeDeleteSurroundingText` | no | yes |
-| `commitText("\n")` to `imeCommitText` to `insertStringAtCursor` | no | yes |
-| `performEditorAction` to `imePerformNewline` | yes | yes |
-
-So on a soft keyboard, backspace at the start of a bullet demoted or merged
-depending on the IME's choice of `InputConnection` method, and Enter on an
-empty bullet exited the list or did not depending on whether the IME committed
-the newline as text. Every row is checked by `ImeLineBlockParityTest`, with the
-hardware-key result as the reference the others are compared against.
+How input reaches editor behavior: which shortcuts exist, what they invoke,
+and how a feature attaches behavior to a primitive edit without the primitive
+knowing the feature exists. Covers the `EditorCommand` vocabulary, the
+`EditorActionRegistry`, and the `EditBehavior` chain. Motivating issue: #37.
 
 ## Design rules
 
@@ -76,17 +35,17 @@ like an action bound to Backspace. It is not, because the IME never produces a
 key event. A soft-keyboard backspace arrives as `deleteSurroundingText(1, 0)`,
 an autocorrect replacement arrives as `commitText`, and neither carries a chord
 to bind. The interception point has to be the semantic edit primitive, not the
-chord, which is precisely why the current code ended up inside
-`backspaceAtCursor` in the first place. The fix is not to move it somewhere
-chord-shaped; it is to make that interception point explicit and registrable.
+chord. This is also why the line-block logic could never live in key handling:
+a behavior attached to a chord reaches only the input paths that produce key
+events, and the soft-keyboard paths silently lose it.
 
 ## Actions
 
 ### The vocabulary
 
-`EditorCommand` becomes public. `Motion` stays an enum: motions are a genuinely
-closed vocabulary, nothing about a caret movement is extensible, and keeping it
-closed preserves the exhaustive `when` in the handler. `Action` becomes an open
+`EditorCommand` is public. `Motion` is an enum: motions are a genuinely closed
+vocabulary, nothing about a caret movement is extensible, and keeping it
+closed preserves the exhaustive `when` in the handler. `Action` is an open
 class keyed by a string id:
 
 ```kotlin
@@ -98,20 +57,19 @@ sealed interface EditorCommand {
             val SelectAll = Action("editor.selectAll", isEdit = false)
             val Copy = Action("editor.copy", isEdit = false)
             val Paste = Action("editor.paste", isEdit = true)
-            // … the current fourteen
+            // … the built-in set
         }
     }
 }
 ```
 
-Existing `KeyBindings` implementations are untouched by this: `Action.Copy`
-still resolves through the companion. A host writes
-`Action("myapp.toggleBold", isEdit = true)` and binds it from its own
-`KeyBindings`. Ids are namespaced by convention (`editor.`, `markdown.`,
-`myapp.`) and the registry is keyed by id string, not object identity, so a
-duplicate id is a detectable collision rather than a silent second entry.
+A host writes `Action("myapp.toggleBold", isEdit = true)` and binds it from
+its own `KeyBindings`. Ids are namespaced by convention (`editor.`,
+`markdown.`, `myapp.`) and the registry is keyed by id string, not object
+identity, so a duplicate id is a detectable collision rather than a silent
+second entry.
 
-`isEdit` stays on the action because the disabled-editor gate needs it before
+`isEdit` sits on the action because the disabled-editor gate needs it before
 dispatch, without having to resolve a handler first.
 
 ### The registry
@@ -140,26 +98,23 @@ class EditorActionRegistry {
 }
 ```
 
-`isEnabled` exists for the context menu, which today asks `canCut()` /
-`canCopy()` / `canPaste()` through bespoke methods. Once actions carry their own
-enablement predicate the menu can be built from a list of action ids and stop
-knowing what any of them mean.
+`isEnabled` exists for the context menu, which builds its items from a list of
+action ids and asks each spec whether it currently applies, instead of knowing
+what any of them mean.
 
-The core registers its fourteen built-ins when the state is constructed. The
-obvious follow-up is for `MarkdownExtension` to register `markdown.toggleBold`,
-`markdown.toggleBulletList` and the rest from its `init`, which is the same
-place it already reaches into `editorState`, making every toolbar function
-bindable. That is *not* implemented: nothing outside `BuiltinEditorActions`
-registers an action, and `MarkdownExtension` is unchanged by this work. A host
-wanting a markdown chord today registers the action itself, as
-`sampleApp/BoldShortcut.kt` does.
+The core registers its built-ins (`BuiltinEditorActions`) when the state is
+constructed. Nothing else in the library registers an action:
+`MarkdownExtension` still exposes its toggles as plain functions, and a host
+that wants a markdown chord registers the action itself, as
+`sampleApp/BoldShortcut.kt` does. Having the extension register
+`markdown.toggleBold` and friends from its `init` is the obvious follow-up.
 
 ### Resolution and consumption
 
-`TextEditorKeyCommandHandler.handleKeyEvent` becomes:
+`TextEditorKeyCommandHandler.handleKeyEvent` resolves in three steps:
 
 1. `keyBindings.commandFor(event)` or return false.
-2. `Motion`: move the caret, extending on shift. Unchanged.
+2. `Motion`: move the caret, extending on shift.
 3. `Action`: look it up; **return false if unregistered** (rule 5). Then return
    false if the *registered spec's* `isEdit` and the editor is disabled.
    Otherwise `perform(context)` and return true.
@@ -171,14 +126,13 @@ resolves the real built-in paste; taking the caller's word for it would let that
 mutate a read-only editor.
 
 Returning false for an unregistered action leaves the event to whatever would
-have handled it otherwise. It is worth being precise about what that means,
-because an earlier draft of this document claimed it always "gets the character
-typed, not a dead key", and that is only true for unmodified printable keys.
-`handleCharacterInput` refuses control characters and refuses any Ctrl or Cmd
-chord, so an unregistered `editor.paste` makes Ctrl+V inert, and an unregistered
-`editor.indent` lets Tab reach the platform's focus traversal and move focus out
-of the editor entirely. A host that wants a chord to do nothing should bind it
-to a registered no-op action rather than unregister the built-in.
+have handled it otherwise, but only unmodified printable keys have a useful
+fallback. `handleCharacterInput` refuses control characters and refuses any
+Ctrl or Cmd chord, so an unregistered `editor.paste` makes Ctrl+V inert, and an
+unregistered `editor.indent` lets Tab reach the platform's focus traversal and
+move focus out of the editor entirely. A host that wants a chord to do nothing
+should bind it to a registered no-op action rather than unregister the
+built-in.
 
 ## Edit behaviors
 
@@ -195,12 +149,11 @@ interface EditBehavior {
 Returning true means "I handled it, do nothing else". Behaviors are an ordered
 list on `TextEditorState`; the first to claim the edit wins. A behavior that
 mutates must route through the edit manager, so its work lands in undo history
-like any other operation (the current line-block code already does this
-deliberately, going through `toggleLineBlock` rather than mutating spans
-directly).
+like any other operation (`LineBlockEditBehavior` does this by going through
+`toggleLineBlock` rather than mutating spans directly).
 
-The chain is consulted inside the existing public functions, which keep both
-their names and their current behavior:
+The chain is consulted inside the public semantic functions, so every caller
+gets it:
 
 ```kotlin
 fun backspaceAtCursor() {
@@ -209,40 +162,36 @@ fun backspaceAtCursor() {
 }
 ```
 
-The alternative was a new semantic layer (`performBackspace` running the chain,
-`backspaceAtCursor` staying primitive). Rejected for this pass: it changes what
-`backspaceAtCursor` does for existing callers, and there is no caller that wants
-the primitive without the behavior. The raw form stays internal until something
-needs it.
+A separate semantic layer (`performBackspace` running the chain over a
+primitive `backspaceAtCursor`) was considered and rejected: no caller wants
+the primitive without the behavior, so the raw form stays `internal` until
+something needs it.
 
 ### Line blocks as the first behavior
 
 Line blocks are not a markdown feature. They are a core capability that
-markdown happens to serialize, so the behavior stays in the library and
-`MarkdownExtension` remains a consumer. It moves out of `TextEditorState` and
-into a `LineBlockEditBehavior` in `richstyle`, registered by default, carrying
-the logic currently at `TextEditorState.kt:490-502` and `:530-552` verbatim.
-The semantics documented under "Smart editing" in
-[line-blocks.md](line-blocks.md) do not change.
+markdown happens to serialize, so the behavior lives in the library
+(`LineBlockEditBehavior` in `richstyle`) and is registered by default;
+`MarkdownExtension` remains a consumer. The semantics documented under
+"Smart editing" in [line-blocks.md](line-blocks.md) are unchanged by where the
+code sits.
 
-Moving code that keeps running by default and behaves identically is worth
-stating plainly, because it is fair to ask what was gained:
+What the seam buys over branching inside the primitives:
 
-- The dependency narrows. `TextEditorState` drops `applyLineBlock` and
-  `detectLineBlock` and names `LineBlockEditBehavior` instead. It does not stop
-  importing `richstyle`: `normalizeLineBlocks` and the block span styles are
-  still used by layout, measurement and content normalization, which have
-  nothing to do with edit behaviors. An earlier draft of this document claimed
-  the dependency inverts outright, which was wrong.
-- Every input path gets the behavior, which fixes the divergence table above.
+- The dependency narrows. `TextEditorState` names `LineBlockEditBehavior` but
+  no longer calls `applyLineBlock` or `detectLineBlock` itself. It still
+  imports `richstyle`: `normalizeLineBlocks` and the block span styles are
+  used by layout, measurement and content normalization, which have nothing to
+  do with edit behaviors.
+- Every input path gets the behavior. See "Input-path parity" below.
 - A code-editor host can add auto-indent or bracket-closing without forking.
 - It can be turned off, which previously required editing the library.
 
 The newline case does not fit a plain "handled / not handled" return. Enter on
 an empty item is a clean claim, but a split *inside* an item needs the block
 captured before the split and re-applied to both halves after, in one revision,
-because detection after the split is unreliable. Rather than add a second hook
-and thread state between the two, `TextEditorState.insertNewlineRaw()` is
+because detection after the split is unreliable. Rather than a second hook with
+state threaded between the two, `TextEditorState.insertNewlineRaw()` is
 `internal` and the behavior performs the split itself inside its own
 `withAtomicEdit`. The interface stays a single boolean.
 
@@ -250,50 +199,52 @@ That double apply is load-bearing rather than defensive: with the behavior
 removed, splitting an item leaves the new half without its gutter marker, which
 `EditBehaviorTest` pins.
 
-## Making every input path agree
+## Input-path parity
 
-With the chain in place, the IME paths route to the semantic functions:
+Five paths deliver a backspace or a newline, and all five must land on the
+same semantic function so the chain sees them:
 
-- `imeDeleteSurroundingText(before = 1, after = 0)` with no composing region
-  and no selection is a backspace. Route it to `backspaceAtCursor()`. Every
-  other shape stays a range delete.
-- `imeCommitText("\n", …)` with no composing region is an Enter. Route it to
-  the newline path.
+- Hardware key events, through `TextEditorKeyCommandHandler`.
+- Android `sendKeyEvent(KEYCODE_DEL)`, re-dispatched to the key handler.
+- Android `deleteSurroundingText(1, 0)`, routed to `backspaceAtCursor()`.
+- `commitText("\n")`, routed to the newline path.
+- `performEditorAction`, through `imePerformNewline`.
 
-This is the risky part of the whole design and should land last, on its own,
-with tests. `deleteSurroundingText(1, 0)` is not unambiguously a keypress:
-autocorrect and prediction engines use the same call to rewrite what the user
-typed, and treating one of those as a backspace would demote a bullet in the
-middle of a word correction. The guard conditions above (no composing region,
-no selection) exclude the autocorrect case as far as static reading can tell,
-but this needs verification on a device against at least Gboard and one
-third-party keyboard, not just the `androidHostTest` suite.
+Each path is checked by `ImeLineBlockParityTest`, with the hardware-key result
+as the reference the others are compared against. Before the IME routing
+existed, whether a soft-keyboard backspace demoted a bullet depended on which
+`InputConnection` method the IME happened to call.
 
-As implemented, the guard reads intent from the widths the caller asked for, not
-from the range that survives clamping: a request for exactly one character on
-exactly one side, no composing region, no selection. The distinction matters at
-the edges of the document, where a request for several characters shrinks to
-one; reading the survivor would let an autocorrect rewrite at the top of the
-document pass as a backspace.
+The IME routing is the risky part of the design, because
+`deleteSurroundingText(1, 0)` is not unambiguously a keypress: autocorrect and
+prediction engines use the same call to rewrite what the user typed, and
+treating one of those as a backspace would demote a bullet in the middle of a
+word correction. The guards:
 
-The code-point variant additionally requires that its request resolved to at
-most one UTF-16 char, so a one-code-point delete of an astral character never
-reaches `backspaceAtCursor`, which deletes a single char and would split the
-surrogate pair.
-
-Both semantic routes also run when clamping leaves an empty range. A backspace
-at the very start of the document removes nothing but can still exit a line
-block, which is what the hardware key does; bailing on the empty range would
-leave the key dead on a soft keyboard for a block on the first line.
+- Intent is read from the widths the caller asked for, not from the range that
+  survives clamping: exactly one character on exactly one side, no composing
+  region, no selection. The distinction matters at the edges of the document,
+  where a request for several characters shrinks to one; reading the survivor
+  would let an autocorrect rewrite at the top of the document pass as a
+  backspace.
+- The code-point variant additionally requires that its request resolved to at
+  most one UTF-16 char, so a one-code-point delete of an astral character never
+  reaches `backspaceAtCursor`, which deletes a single char and would split the
+  surrogate pair.
+- Both semantic routes also run when clamping leaves an empty range. A
+  backspace at the very start of the document removes nothing but can still
+  exit a line block, which is what the hardware key does; bailing on the empty
+  range would leave the key dead on a soft keyboard for a block on the first
+  line.
 
 ### Device verification still owed
 
-Everything below is covered only by desktop JVM tests against the shared
-`ImeEditLogic`. The guards are a static reading of what an autocorrect rewrite
-looks like versus what a relayed keypress looks like, and no soft keyboard was
-run against them. Do not treat this as release-ready until it has been checked
-on hardware against Gboard and at least one third-party keyboard (SwiftKey or
-Samsung Keyboard are the usual second targets).
+The guards are a static reading of what an autocorrect rewrite looks like
+versus what a relayed keypress looks like, covered only by desktop JVM tests
+against the shared `ImeEditLogic`; no soft keyboard has been run against them.
+Do not treat this as release-ready until it has been checked on hardware
+against Gboard and at least one third-party keyboard (SwiftKey or Samsung
+Keyboard are the usual second targets).
 
 What to check, in a document with a bullet list:
 
@@ -319,29 +270,8 @@ What to check, in a document with a bullet list:
    as an Enter.
 
 If any of these misbehave, the fix is to narrow the guard in
-`deleteSurroundingRange` / `imeCommitText`, not to widen it. The pre-existing
-behavior is the safe fallback: a plain range delete is always correct for the
-text, it just misses the block semantics.
-
-## Landing order
-
-Each step compiles, passes, and is independently revertible. All six have
-landed.
-
-1. `EditorCommand` public; `Action` becomes an open class with companion
-   constants. Pure mechanical change, no behavior difference.
-2. `EditorActionRegistry` on `TextEditorState`. Built-in action bodies move out
-   of `TextEditorKeyCommandHandler` into registered specs; the handler resolves
-   through the registry.
-3. `ContextMenuActions` collapses onto the registry. Deletes the duplicated
-   cut/copy/paste bodies.
-4. `EditBehavior` chain; `LineBlockEditBehavior` extracted and registered by
-   default. `TextEditorState` loses its line-block editing imports.
-5. IME backspace and newline routed through the semantic paths. Tests for each
-   row of the divergence table.
-6. Registration surfaced on `BasicTextEditor` / `TextEditor`, `LocalKeyBindings`
-   made public, docs updated, sample app binds Ctrl+B to bold as the worked
-   example.
+`deleteSurroundingRange` / `imeCommitText`, not to widen it. A plain range
+delete is always correct for the text, it just misses the block semantics.
 
 ## Extending the editor
 
@@ -382,15 +312,16 @@ out-of-module behavior builds on the public edit API (`insertStringAtCursor`,
 ## Known limitations and follow-ups
 
 - `Action.Indent` / `Action.Outdent` insert and strip literal spaces against a
-  hard-coded `TAB_SIZE = 4`, now in `BuiltinEditorActions`. Because actions are
+  hard-coded `TAB_SIZE = 4` in `BuiltinEditorActions`. Because actions are
   open these are overridable, so a list-aware Tab or a code-editor indent is a
-  host concern rather than a library change. Not addressed here.
+  host concern rather than a library change.
 - Behaviors are consulted for newline, backspace and forward delete only.
   Typed-character interception (auto-pairing quotes and brackets) is the
   obvious next hook and is deliberately out of scope until something needs it.
 - `EditBehavior` is public but the transactional primitives it would want are
   not. An out-of-module behavior can claim an edit and can mutate through the
-  public API, but cannot compose several mutations into one revision. Widen this
-  when a host asks for it, rather than guessing at the shape now.
-- The IME routing is unverified on real hardware. See "Device verification still
-  owed" above; that list should be worked through before a release ships this.
+  public API, but cannot compose several mutations into one revision. Widen
+  this when a host asks for it, rather than guessing at the shape now.
+- The IME routing is unverified on real hardware. See "Device verification
+  still owed" above; that list should be worked through before a release ships
+  this.

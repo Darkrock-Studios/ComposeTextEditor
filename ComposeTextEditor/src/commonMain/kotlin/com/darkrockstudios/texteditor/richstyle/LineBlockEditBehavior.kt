@@ -18,10 +18,8 @@ object LineBlockEditBehavior : EditBehavior {
 		val line = state.cursorPosition.line
 		val block = state.detectLineBlock(line) ?: return false
 
-		// Enter on an empty bullet/quote item exits the block: drop the gutter
-		// marker and indent, eat the keystroke. Matches Notion / Google Docs and
-		// gives a discoverable way to leave a list or quote without backspacing.
-		// Routed through the toggle so the demotion lands in undo history.
+		// Enter on an empty item exits the block (matches Notion / Google Docs);
+		// routed through the toggle so the demotion lands in undo history.
 		if (state.textLines.getOrNull(line)?.text.isNullOrEmpty()) {
 			state.editManager.toggleLineBlock(line..line, block)
 			return true
@@ -32,9 +30,8 @@ object LineBlockEditBehavior : EditBehavior {
 		state.withAtomicEdit {
 			state.insertNewlineRaw()
 
-			// RichSpanManager's newline handling only keeps the span on one side when
-			// the cursor was at a span boundary, so apply to both lines so both halves
-			// of the split keep the gutter marker. applyLineBlock is idempotent.
+			// A split at a span boundary keeps the span on only one side, so apply
+			// to both halves; applyLineBlock is idempotent.
 			state.applyLineBlock(line, block)
 			state.applyLineBlock(line + 1, block)
 		}
@@ -42,14 +39,10 @@ object LineBlockEditBehavior : EditBehavior {
 	}
 
 	override fun onBackspace(state: TextEditorState): Boolean {
-		// Backspace at column 0 of a line-block (blockquote, bullet) first demotes
-		// (removes the gutter marker and indent); a follow-up backspace then merges
-		// with the previous line. Matches Notion / Google Docs, a discoverable way
-		// to exit a block prefix without nuking the line content.
-		//
-		// Exception: if the previous line is the SAME line-block, fall through to
-		// merge directly. Otherwise demote-first turns "join two adjacent items"
-		// into a two-keystroke operation, which feels worse than Docs/Notion.
+		// Backspace at column 0 of a block line first demotes; a second backspace
+		// then merges (matches Notion / Google Docs). Exception: when the previous
+		// line is the SAME block, fall through and merge directly, or joining two
+		// adjacent items becomes a two-keystroke operation.
 		val position = state.cursorPosition
 		if (position.char != 0) return false
 		val activeBlock = state.detectLineBlock(position.line) ?: return false

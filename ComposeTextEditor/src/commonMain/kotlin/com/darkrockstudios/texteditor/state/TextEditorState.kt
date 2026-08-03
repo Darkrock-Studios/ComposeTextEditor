@@ -397,16 +397,12 @@ class TextEditorState(
 	/**
 	 * Behaviors consulted before [insertNewlineAtCursor], [backspaceAtCursor] and
 	 * [deleteAtCursor], in order; the first to claim an edit wins. Every input
-	 * path reaches these three, so a behavior applies to hardware keys and to an
-	 * IME alike.
+	 * path reaches these three, hardware keys and IME alike.
 	 *
-	 * Pre-loaded with [LineBlockEditBehavior], which sits at index 0 and claims
-	 * every newline and every column-0 backspace on a line carrying a block style
-	 * (header, blockquote, list, code fence). Appending with `add` therefore puts
-	 * your behavior *after* it, where it never sees those edits: an auto-indent
-	 * added that way would be dead inside a code fence, which is where it is most
-	 * wanted. Use `add(0, behavior)` to run first, or remove
-	 * [LineBlockEditBehavior] outright for an editor that wants plain line breaks.
+	 * Pre-loaded with [LineBlockEditBehavior] at index 0, which claims every
+	 * newline and column-0 backspace on a block line, so a behavior appended
+	 * after it never sees those edits. Use `add(0, behavior)` to run first, or
+	 * remove it outright for plain line breaks.
 	 */
 	val editBehaviors: MutableList<EditBehavior> = mutableListOf(LineBlockEditBehavior)
 
@@ -414,19 +410,14 @@ class TextEditorState(
 	private var behaviorDepth = 0
 
 	/**
-	 * Offers the edit to each behavior until one claims it.
+	 * Offers the edit to each behavior until one claims it. Iterates a snapshot
+	 * so a behavior may mutate the list mid-edit; nested calls skip the chain, so
+	 * a behavior can finish with an ordinary edit without being offered its own
+	 * edit again forever.
 	 *
-	 * Iterates a snapshot so a behavior may register or remove behaviors while
-	 * handling an edit. Nested calls skip the chain entirely, which is what lets a
-	 * behavior finish with the ordinary edit: an auto-indent that inserts its
-	 * whitespace and then calls [insertNewlineAtCursor] gets the plain split rather
-	 * than being offered its own edit again forever.
-	 *
-	 * A claim also asks the IME to resync. Once a behavior has answered the edit,
-	 * the keyboard's assumption about what its request did is unreliable in a way
-	 * no diff of the text can express: the edit may have changed only styling, or
-	 * inserted more than was asked for. The request is cheap and platforms without
-	 * an IME drop it.
+	 * A claim also asks the IME to resync: once a behavior answered the edit, the
+	 * keyboard's assumption about what its request did is wrong in a way no diff
+	 * of the text can express.
 	 */
 	private fun claimedByBehavior(hook: (EditBehavior) -> Boolean): Boolean {
 		if (behaviorDepth > 0) return false
