@@ -8,5 +8,5 @@ internal fun keyBindingsForOs(osName: String): KeyBindings =
 		CtrlKeyBindings
 	}
 
-internal actual fun platformKeyBindings(): KeyBindings =
+actual fun platformKeyBindings(): KeyBindings =
 	keyBindingsForOs(System.getProperty("os.name").orEmpty())

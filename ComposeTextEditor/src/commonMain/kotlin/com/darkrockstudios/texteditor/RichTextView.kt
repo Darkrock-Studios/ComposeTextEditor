@@ -70,7 +70,7 @@ fun RichTextView(
 			TextEditorInputModifierElement(state, clipboard, enabled = false, keyBindings = keyBindings)
 		}
 		val contextMenuActions = remember(state, clipboard) {
-			ContextMenuActions(state, clipboard, state.scope)
+			ContextMenuActions(state, clipboard, state.scope, enabled = false)
 		}
 
 		TextEditorContextMenuProvider(

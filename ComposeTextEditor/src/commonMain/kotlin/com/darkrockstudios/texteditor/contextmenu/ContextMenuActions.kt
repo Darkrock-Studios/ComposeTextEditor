@@ -1,105 +1,63 @@
 package com.darkrockstudios.texteditor.contextmenu
 
 import androidx.compose.ui.platform.Clipboard
-import com.darkrockstudios.texteditor.clipboard.ClipboardHelper
-import com.darkrockstudios.texteditor.clipboard.applyHtmlPasteBlocks
-import com.darkrockstudios.texteditor.clipboard.readHtmlPasteDocument
+import com.darkrockstudios.texteditor.input.EditorActionContext
+import com.darkrockstudios.texteditor.input.EditorActionSpec
+import com.darkrockstudios.texteditor.input.EditorCommand
+import com.darkrockstudios.texteditor.input.EditorCommand.Action
 import com.darkrockstudios.texteditor.state.TextEditorState
-import com.darkrockstudios.texteditor.state.applyStyleForEditAt
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.launch
 
 /**
- * Encapsulates clipboard and selection operations for the context menu.
- * Reuses the same logic as TextEditorKeyCommandHandler.
+ * Resolves context menu items against the [EditorActionRegistry]
+ * [com.darkrockstudios.texteditor.input.EditorActionRegistry] on the state, so
+ * the menu runs the same implementations the keyboard does. The named methods
+ * cover the standard items; [canPerform] and [perform] drive any registered
+ * action from a [ContextMenuItem].
  */
 class ContextMenuActions(
 	private val state: TextEditorState,
 	private val clipboard: Clipboard,
 	private val scope: CoroutineScope,
+	private val enabled: Boolean = true,
 ) {
-	/**
-	 * Returns true if there is a selection that can be cut.
-	 */
-	fun canCut(): Boolean = state.selector.hasSelection()
+	private fun context() = EditorActionContext(state, clipboard, scope)
+
+	/** Actions that mutate are refused outright while the editor is read-only. */
+	private fun permitted(spec: EditorActionSpec?): EditorActionSpec? =
+		spec?.takeUnless { it.editsDocument && !enabled }
 
 	/**
-	 * Returns true if there is a selection that can be copied.
+	 * Whether [action] is registered, allowed in this editor, and currently has
+	 * work to do; false hides its menu item.
 	 */
-	fun canCopy(): Boolean = state.selector.hasSelection()
+	fun canPerform(action: EditorCommand.Action): Boolean =
+		permitted(state.actions[action])?.isEnabled?.invoke(context()) == true
 
 	/**
-	 * Returns true if paste is available.
-	 * Note: We always return true since checking clipboard content is async.
-	 * The paste operation itself will handle empty clipboard gracefully.
+	 * Runs [action] if it is registered and allowed. The read-only check lives
+	 * here, not in the menu, so a host item built on this cannot mutate a
+	 * disabled editor the keyboard already refuses to edit.
 	 */
-	fun canPaste(): Boolean = true
-
-	/**
-	 * Cut the selected text to clipboard and delete it from the editor.
-	 */
-	fun cut() {
-		state.selector.selection?.let { selection ->
-			val selectedText = state.selector.getSelectedText()
-			val copyId = state.copyRichSpans(selection)
-			state.preserveCopiedRichSpansThroughNextEdit()
-			state.selector.deleteSelection()
-			scope.launch {
-				ClipboardHelper.setText(clipboard, selectedText, state.markdownConfiguration, copyId)
-			}
-		}
+	fun perform(action: EditorCommand.Action) {
+		permitted(state.actions[action])?.perform?.invoke(context())
 	}
 
-	/**
-	 * Copy the selected text to clipboard.
-	 */
-	fun copy() {
-		state.selector.selection?.let { selection ->
-			val selectedText = state.selector.getSelectedText()
-			val copyId = state.copyRichSpans(selection)
-			scope.launch {
-				ClipboardHelper.setText(clipboard, selectedText, state.markdownConfiguration, copyId)
-			}
-		}
-	}
+	fun canCut(): Boolean = canPerform(Action.Cut)
+
+	fun canCopy(): Boolean = canPerform(Action.Copy)
 
 	/**
-	 * Paste text from clipboard at the current cursor position.
-	 * If there is a selection, it will be replaced with the pasted text.
+	 * True whenever paste is registered. Whether the clipboard actually holds
+	 * anything is not knowable synchronously; [paste] handles an empty one.
 	 */
-	fun paste() {
-		scope.launch {
-			ClipboardHelper.getText(clipboard, state.markdownConfiguration)?.let { text ->
-				val curSelection = state.selector.selection
-				val insertPosition = curSelection?.start ?: state.cursorPosition
-				// Read the clipboard's HTML before mutating: the text, the in-editor
-				// rich spans and the pasted block structure then land as one revision.
-				val htmlDocument = state.readHtmlPasteDocument(clipboard, text)
-				val clipboardCopyId = ClipboardHelper.readCopyId(clipboard)
-				state.preserveCopiedRichSpansThroughNextEdit()
-				state.withAtomicEdit {
-					if (curSelection != null) {
-						state.replace(curSelection, state.applyStyleForEditAt(curSelection.start, text))
-					} else {
-						state.insertStringAtCursor(text)
-					}
-					state.pasteRichSpans(
-						insertPosition,
-						text,
-						clipboardCopyId,
-						requireCopyIdMatch = ClipboardHelper.supportsCopyProvenance,
-					)
-					htmlDocument?.let { state.applyHtmlPasteBlocks(it, insertPosition, text) }
-				}
-				state.selector.clearSelection()
-			}
-		}
-	}
+	fun canPaste(): Boolean = canPerform(Action.Paste)
 
-	/**
-	 * Select all text in the editor.
-	 */
-	fun selectAll() {
-		state.selector.selectAll()
-	}
+	fun cut() = perform(Action.Cut)
+
+	fun copy() = perform(Action.Copy)
+
+	fun paste() = perform(Action.Paste)
+
+	fun selectAll() = perform(Action.SelectAll)
 }

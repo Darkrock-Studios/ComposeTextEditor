@@ -44,35 +44,29 @@ actual class ImeCursorSync actual constructor(
 					if (state.platformExtensions.isInBatchEdit) return@collect
 					val view = state.platformExtensions.view ?: return@collect
 
-					val selStart: Int
-					val selEnd: Int
-					if (selection != null) {
-						selStart = state.getCharacterIndex(selection.start)
-						selEnd = state.getCharacterIndex(selection.end)
-					} else {
-						val cursorIndex = state.getCharacterIndex(cursorPos)
-						selStart = cursorIndex
-						selEnd = cursorIndex
-					}
-
-					val composing = state.composingRange
-					val compStart = composing?.let { state.getCharacterIndex(it.start) } ?: -1
-					val compEnd = composing?.let { state.getCharacterIndex(it.end) } ?: -1
-
-					val changed = selStart != lastSelStart || selEnd != lastSelEnd ||
-							compStart != lastCompStart || compEnd != lastCompEnd
+					val indices = state.currentImeSelection(cursorPos, selection)
+					val changed = indices.selStart != lastSelStart || indices.selEnd != lastSelEnd ||
+							indices.compStart != lastCompStart || indices.compEnd != lastCompEnd
 					if (!changed) return@collect
 
-					lastSelStart = selStart
-					lastSelEnd = selEnd
-					lastCompStart = compStart
-					lastCompEnd = compEnd
-					updateImeSelection(view, selStart, selEnd, compStart, compEnd)
-
-					if (state.platformExtensions.cursorAnchorMonitoringEnabled) {
-						state.platformExtensions.sendCursorAnchorInfo()
-					}
+					pushSelection(view, indices)
 				}
+		}
+
+		// Edits the IME cannot infer from what it can see: a behavior that exits a
+		// list on backspace leaves text and caret indices unchanged, so a selection
+		// push would be dropped as a duplicate. Only restartInput makes the keyboard
+		// discard its mirror and re-read the buffer.
+		scope.launch {
+			state.imeResyncRequests.collect {
+				if (state.platformExtensions.isInBatchEdit) return@collect
+				val view = state.platformExtensions.view ?: return@collect
+				val imm = view.context.getSystemService(Context.INPUT_METHOD_SERVICE)
+						as? InputMethodManager ?: return@collect
+
+				imm.restartInput(view)
+				pushSelection(view, state.currentImeSelection())
+			}
 		}
 
 		// Edit-driven updateExtractedText pushes for IMEs in monitor mode. Edits always
@@ -103,16 +97,48 @@ actual class ImeCursorSync actual constructor(
 		lastCompEnd = -2
 	}
 
-	private fun updateImeSelection(
-		view: View,
-		selStart: Int,
-		selEnd: Int,
-		compStart: Int,
-		compEnd: Int
-	) {
+	/** The selection and composing indices as the IME should currently see them. */
+	private class ImeSelection(
+		val selStart: Int,
+		val selEnd: Int,
+		val compStart: Int,
+		val compEnd: Int,
+	)
+
+	private fun TextEditorState.currentImeSelection(
+		cursorPos: CharLineOffset = cursorPosition,
+		selection: TextEditorRange? = selector.selection,
+	): ImeSelection {
+		val selStart: Int
+		val selEnd: Int
+		if (selection != null) {
+			selStart = getCharacterIndex(selection.start)
+			selEnd = getCharacterIndex(selection.end)
+		} else {
+			val cursorIndex = getCharacterIndex(cursorPos)
+			selStart = cursorIndex
+			selEnd = cursorIndex
+		}
+
+		val composing = composingRange
+		return ImeSelection(
+			selStart = selStart,
+			selEnd = selEnd,
+			compStart = composing?.let { getCharacterIndex(it.start) } ?: -1,
+			compEnd = composing?.let { getCharacterIndex(it.end) } ?: -1,
+		)
+	}
+
+	/** Records [indices] as last-sent and pushes them, with whatever else the IME is monitoring. */
+	private fun pushSelection(view: View, indices: ImeSelection) {
+		lastSelStart = indices.selStart
+		lastSelEnd = indices.selEnd
+		lastCompStart = indices.compStart
+		lastCompEnd = indices.compEnd
+
 		val imm = view.context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
 			?: return
-		imm.updateSelection(view, selStart, selEnd, compStart, compEnd)
+		imm.updateSelection(view, indices.selStart, indices.selEnd, indices.compStart, indices.compEnd)
 
 		if (state.platformExtensions.extractedTextMonitorEnabled) {
 			imm.updateExtractedText(
@@ -120,6 +146,10 @@ actual class ImeCursorSync actual constructor(
 				state.platformExtensions.extractedTextMonitorToken,
 				state.toExtractedText()
 			)
+		}
+
+		if (state.platformExtensions.cursorAnchorMonitoringEnabled) {
+			state.platformExtensions.sendCursorAnchorInfo()
 		}
 	}
 }

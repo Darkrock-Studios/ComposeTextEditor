@@ -17,22 +17,45 @@ import com.darkrockstudios.texteditor.input.EditorCommand.Motion
  * chords that type a character (Hungarian AltGr+X is `#`, Polish AltGr+Z is `ż`).
  * Compose folds AltGraph into `isAltPressed`, and no Ctrl+Alt chord is bound.
  */
-internal val KeyEvent.isCtrlShortcut: Boolean
+val KeyEvent.isCtrlShortcut: Boolean
 	get() = isCtrlPressed && !isAltPressed
 
-/** Maps a platform's key chords onto the editor's [EditorCommand] vocabulary. */
-internal fun interface KeyBindings {
+/**
+ * Maps a platform's key chords onto the editor's [EditorCommand] vocabulary.
+ *
+ * Bind a chord to an [EditorCommand.Action] you registered on
+ * [TextEditorState.actions][com.darkrockstudios.texteditor.state.TextEditorState.actions]
+ * to add a shortcut. Delegate the chords you do not claim so the platform's
+ * conventions survive:
+ *
+ * ```kotlin
+ * val bindings = KeyBindings { event ->
+ *     if (event.key == Key.B && event.isCtrlShortcut) ToggleBold
+ *     else platformKeyBindings().commandFor(event)
+ * }
+ * ```
+ *
+ * A chord resolving to an unregistered action is not consumed: a printable key
+ * types its character, a Ctrl or Cmd chord goes dead, and Tab moves focus out
+ * of the editor. Register before you bind.
+ */
+fun interface KeyBindings {
 	/** The command [event] triggers, or null when the chord is unbound. */
 	fun commandFor(event: KeyEvent): EditorCommand?
 }
 
 /** The bindings of the host platform. */
-internal expect fun platformKeyBindings(): KeyBindings
+expect fun platformKeyBindings(): KeyBindings
 
-internal val LocalKeyBindings = staticCompositionLocalOf { platformKeyBindings() }
+/**
+ * The bindings every editor in the composition uses, defaulting to
+ * [platformKeyBindings]. Provide your own to change shortcuts app-wide, or pass
+ * them to a single editor through its `keyBindings` parameter.
+ */
+val LocalKeyBindings = staticCompositionLocalOf { platformKeyBindings() }
 
 /** Windows and Linux conventions: Ctrl for shortcuts, Ctrl+Arrow for word jumps, Home/End for line bounds. */
-internal object CtrlKeyBindings : KeyBindings {
+object CtrlKeyBindings : KeyBindings {
 	override fun commandFor(event: KeyEvent): EditorCommand? {
 		val ctrl = event.isCtrlShortcut
 		return when (event.key) {
@@ -69,7 +92,7 @@ internal object CtrlKeyBindings : KeyBindings {
  * may consume an Option event; everything else must fall through to
  * [TextEditorKeyCommandHandler.handleCharacterInput] to be typed as a literal character.
  */
-internal object MacKeyBindings : KeyBindings {
+object MacKeyBindings : KeyBindings {
 	override fun commandFor(event: KeyEvent): EditorCommand? {
 		val cmd = event.isMetaPressed
 		val option = event.isAltPressed

@@ -25,6 +25,15 @@ import com.darkrockstudios.texteditor.state.TextEditorState
  * `newCursorPosition` contract.
  */
 internal fun TextEditorState.imeCommitText(text: String, newCursorPosition: Int) {
+	// A committed bare newline is an Enter: an IME that commits "\n" never produces
+	// a key event, so routing here is the only way an EditBehavior sees it. Requires
+	// the cursor-after-the-insert contract because a claimed newline may insert
+	// nothing at all, leaving no insert position to place a cursor from.
+	if (text == "\n" && newCursorPosition == 1 && composingRange == null) {
+		imePerformNewline()
+		return
+	}
+
 	val insertStart = replaceComposingOrInsert(text)
 	val insertEnd = insertStart + text.length
 	// Commit semantics end the composition even when no mutation ran (empty text
@@ -67,9 +76,13 @@ internal fun TextEditorState.imeDeleteSurroundingText(beforeLength: Int, afterLe
 	val cursorIndex = getCharacterIndex(cursorPosition)
 	val deleteStart = maxOf(0, cursorIndex - beforeLength)
 	val deleteEnd = minOf(getTextLength(), cursorIndex + afterLength)
-	if (deleteStart < deleteEnd) {
-		delete(TextEditorRange(getOffsetAtCharacter(deleteStart), getOffsetAtCharacter(deleteEnd)))
-	}
+	deleteSurroundingRange(
+		singleCharBefore = beforeLength == 1 && afterLength == 0,
+		singleCharAfter = beforeLength == 0 && afterLength == 1,
+		cursorIndex = cursorIndex,
+		deleteStart = deleteStart,
+		deleteEnd = deleteEnd,
+	)
 }
 
 /** `deleteSurroundingTextInCodePoints`: same as [imeDeleteSurroundingText] but counted in code points. */
@@ -80,9 +93,58 @@ internal fun TextEditorState.imeDeleteSurroundingTextInCodePoints(beforeLength: 
 	val charsAfter = codePointsToChars(fullText, cursorIndex, afterLength, backwards = false)
 	val deleteStart = maxOf(0, cursorIndex - charsBefore)
 	val deleteEnd = minOf(getTextLength(), cursorIndex + charsAfter)
-	if (deleteStart < deleteEnd) {
-		delete(TextEditorRange(getOffsetAtCharacter(deleteStart), getOffsetAtCharacter(deleteEnd)))
+	// charsBefore/charsAfter of 2 is one astral code point, which the semantic paths
+	// would split: they delete a single UTF-16 char. 0 is the document edge, where
+	// the request is still a keystroke even though there is nothing to remove.
+	deleteSurroundingRange(
+		singleCharBefore = beforeLength == 1 && afterLength == 0 && charsBefore <= 1,
+		singleCharAfter = beforeLength == 0 && afterLength == 1 && charsAfter <= 1,
+		cursorIndex = cursorIndex,
+		deleteStart = deleteStart,
+		deleteEnd = deleteEnd,
+	)
+}
+
+/**
+ * Deletes [deleteStart]..[deleteEnd], routed through the semantic backspace or
+ * forward delete when that is what was asked for, so an
+ * [EditBehavior][com.darkrockstudios.texteditor.state.EditBehavior] can claim it.
+ *
+ * Intent is [singleCharBefore]/[singleCharAfter], derived from the widths the
+ * caller asked for, never from the clamped range: near a document edge a
+ * multi-character rewrite shrinks to one and would read as a backspace. The
+ * semantic routes run even on an empty clamped range, because a backspace at the
+ * document start removes nothing yet can still exit a line block, as the
+ * hardware key does.
+ *
+ * Thar be dragons: autocorrect calls `deleteSurroundingText` to rewrite what was
+ * already typed, and reading one as a backspace demotes a line block mid-word.
+ * The no-composing-region / no-selection / exactly-one-character conditions
+ * exclude the rewrite shapes; widen them only with device evidence.
+ */
+private fun TextEditorState.deleteSurroundingRange(
+	singleCharBefore: Boolean,
+	singleCharAfter: Boolean,
+	cursorIndex: Int,
+	deleteStart: Int,
+	deleteEnd: Int,
+) {
+	val undisturbed = composingRange == null && !selector.hasSelection()
+	val available = deleteEnd - deleteStart
+
+	if (undisturbed && available <= 1) {
+		if (singleCharBefore && deleteEnd <= cursorIndex) {
+			backspaceAtCursor()
+			return
+		}
+		if (singleCharAfter && deleteStart >= cursorIndex) {
+			deleteAtCursor()
+			return
+		}
 	}
+
+	if (deleteStart >= deleteEnd) return
+	delete(TextEditorRange(getOffsetAtCharacter(deleteStart), getOffsetAtCharacter(deleteEnd)))
 }
 
 /** `setSelection`: collapse to a cursor when start == end, otherwise select; cursor goes to `end`. */

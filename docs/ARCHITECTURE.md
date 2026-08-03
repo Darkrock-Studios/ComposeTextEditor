@@ -156,11 +156,13 @@ translation paths:
 
 - **Commands.** `KeyBindings` maps the platform's key chords onto the
   `EditorCommand` vocabulary: motions and actions named by intent
-  (`WordLeft`, `DeleteWordBackward`, `Paste`), not by keys.
-  `TextEditorKeyCommandHandler` is the single executor. The split is strict:
-  bindings know which chord means what, the handler knows what commands do,
-  and nothing else knows either. Windows/Linux and macOS conventions ship as
-  two `KeyBindings` values; hosts can substitute their own.
+  (`WordLeft`, `DeleteWordBackward`, `Paste`), not by keys. The split is
+  three ways: bindings know which chord means what, the
+  `EditorActionRegistry` on the state knows what an action *does*, and
+  `TextEditorKeyCommandHandler` implements only caret motion, because a
+  motion is not something a host can register. Windows/Linux and macOS
+  conventions ship as two `KeyBindings` values; hosts can substitute their
+  own and register actions for their own chords to bind.
 - **Typed characters.** Printable typing that arrives as raw key events
   (desktop `KEY_TYPED`, hardware keyboards on Android, browser keydown on
   wasm) inserts through the same handler, gated by a per-platform predicate
@@ -173,6 +175,16 @@ translation paths:
 All of this converges on one modifier node, `TextEditorInputModifierNode`,
 which also owns the session lifecycle: gaining focus launches the platform
 input session, losing focus (or disabling the editor) cancels it.
+
+Two extension points hang off this, and they are not interchangeable. An
+**action** is invoked by name, so it needs something to invoke it: a chord, a
+menu item, a toolbar button. An **edit behavior** intercepts one of the
+semantic edits (newline, backspace, forward delete) and may have no trigger at
+all, because an IME can commit a newline or delete a character without ever
+producing a key event. Line-block smart editing is the first behavior, which is
+what makes it reach every input path rather than only the ones that go through
+key handling. Both, and the reasoning for keeping them separate:
+[design/editor-actions.md](design/editor-actions.md).
 
 The IME contract runs in two directions. Commands flow in, and each one lands
 in a single shared implementation (`ImeEditLogic` in commonMain) so that
