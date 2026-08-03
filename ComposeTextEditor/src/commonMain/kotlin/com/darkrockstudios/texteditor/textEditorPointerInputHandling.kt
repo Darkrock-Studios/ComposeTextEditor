@@ -18,16 +18,38 @@ data class SelectionHandle(
 	val bounds: Offset
 )
 
+/**
+ * Whether the tap in flight was answered by a [RichSpan], passed from the gesture
+ * handler on the text canvas to the focus handler on the enclosing container.
+ *
+ * Deliberately a private object rather than pointer consumption. Consumption is
+ * broadcast: it changes what every other handler in the tree sees, so using it to
+ * carry this one bit also tells the ancestor scroll container its drag was taken,
+ * which cancels flings and aborts scrolls.
+ */
+internal class SpanTapGate {
+	var claimed: Boolean = false
+		private set
+
+	fun claim() {
+		claimed = true
+	}
+
+	fun reset() {
+		claimed = false
+	}
+}
+
 internal fun Modifier.textEditorPointerInputHandling(
 	state: TextEditorState,
 	onSpanClick: RichSpanClickListener? = null,
 	onContextMenuRequest: ((Offset) -> Unit)? = null,
 	readOnly: Boolean = false,
-	onRequestFocus: (() -> Unit)? = null,
+	spanTapGate: SpanTapGate? = null,
 ): Modifier {
 	return this
 		.handleDragInput(state, readOnly)
-		.handleTextInteractions(state, onSpanClick, onContextMenuRequest, readOnly, onRequestFocus)
+		.handleTextInteractions(state, onSpanClick, onContextMenuRequest, readOnly, spanTapGate)
 		.detectMouseClicksImperatively(
 			onClick = { offset: Offset, isShiftPressed: Boolean ->
 				// On shift+click handleDragInput extends the selection; clearing it here
@@ -199,26 +221,12 @@ private fun handleSpanInteraction(
 			onSpanClick.invoke(clickedSpan, clickType, offset)
 }
 
-/**
- * Owns caret placement, span clicks, long-press selection, and the focus decision
- * that goes with them.
- *
- * Focus lives here because this is where the gesture is classified. Focus is what
- * raises the soft keyboard on Android, so it must follow what the gesture turned
- * out to mean rather than the fact that a finger touched the screen: a pan scrolls,
- * a long press selects, and a tap a span answered opened something the keyboard
- * would cover. Only a plain tap, or any mouse press, is a request to start typing.
- *
- * [onRequestFocus] is invoked for those, and the release is consumed for every
- * gesture this handler classified, which tells the fallback handler on the
- * enclosing container that focus has already been decided here.
- */
 private fun Modifier.handleTextInteractions(
 	state: TextEditorState,
 	onSpanClick: RichSpanClickListener?,
 	onContextMenuRequest: ((Offset) -> Unit)?,
 	readOnly: Boolean,
-	onRequestFocus: (() -> Unit)?,
+	spanTapGate: SpanTapGate?,
 ): Modifier {
 	return pointerInput(Unit) {
 		val touchSlop = viewConfiguration.touchSlop
@@ -231,17 +239,10 @@ private fun Modifier.handleTextInteractions(
 			// Whether this gesture is a real finger touch (vs mouse / mouse-as-touch on Android).
 			// Set on Press; controls whether Release fires a TAP. See android_mouse_pointer_type memo.
 			var isFingerTouchGesture = false
-			// The pointer this gesture started with. A second finger or a resting palm
-			// adds changes to the same event, and acting on whichever happens to be
-			// first would place the caret at the wrong pointer and decide focus from it.
-			var gesturePointer: PointerId? = null
 
 			while (true) {
 				val event = awaitPointerEvent()
-				val eventChange = gesturePointer
-					?.let { id -> event.changes.firstOrNull { it.id == id } }
-					?: event.changes.first()
-				if (gesturePointer == null) gesturePointer = eventChange.id
+				val eventChange = event.changes.first()
 
 				when (event.type) {
 					PointerEventType.Press -> {
@@ -264,7 +265,7 @@ private fun Modifier.handleTextInteractions(
 
 						if (isMouseLike) {
 							if (hasPrimaryButton) {
-								val claimedBySpan = handleSpanInteraction(
+								handleSpanInteraction(
 									state,
 									position,
 									SpanClickType.PRIMARY_CLICK,
@@ -272,7 +273,6 @@ private fun Modifier.handleTextInteractions(
 									readOnly,
 									isShiftPressed = event.keyboardModifiers.isShiftPressed,
 								)
-								if (!claimedBySpan) onRequestFocus?.invoke()
 								didHandlePress = true
 							} else if (hasSecondaryButton) {
 								handleSpanInteraction(
@@ -326,15 +326,11 @@ private fun Modifier.handleTextInteractions(
 								readOnly,
 							)
 							// A tap a span answered opened something — spell-check suggestions,
-							// a followed link — that the keyboard would cover.
-							if (!claimedBySpan) onRequestFocus?.invoke()
+							// a followed link — that the keyboard would cover, so tell the focus
+							// handler on the enclosing container not to treat it as a request
+							// to start typing.
+							if (claimedBySpan) spanTapGate?.claim()
 						}
-
-						// Every gesture reaching here has been classified, and focus decided
-						// with it. Consuming the release says so, which is what stops the
-						// fallback handler on the enclosing container from focusing a long
-						// press or a pan behind this handler's back.
-						eventChange.consume()
 
 						longPressJob?.cancel()
 						longPressJob = null
@@ -345,17 +341,7 @@ private fun Modifier.handleTextInteractions(
 					}
 
 					PointerEventType.Move -> {
-						val movement = eventChange
-						// A scroll container taking this gesture marks the change consumed.
-						// That is the only way to notice a pan that scrolls an ancestor,
-						// which drags the editor along with the finger and so produces no
-						// local movement to measure.
-						if (movement.isConsumed) {
-							wasDrag = true
-							longPressJob?.cancel()
-							longPressJob = null
-						}
-
+						val movement = event.changes.first()
 						// Only consider it a drag if movement exceeds touch slop threshold
 						// This prevents high-precision touch screens from treating micro-movements as drags
 						initialPressPosition?.let { pressPosition ->

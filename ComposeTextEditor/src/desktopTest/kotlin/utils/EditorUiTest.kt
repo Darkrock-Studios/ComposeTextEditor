@@ -152,6 +152,8 @@ class EditorUiTestScope(
 	fun longPressAtCharacter(charIndex: Int) {
 		val position = positionOfCharacter(charIndex)
 		test.onRoot().performTouchInput { down(position) }
+		// The long-press timer is a coroutine on the editor's scope, which the test
+		// clock drives; sleeping the thread would not move it.
 		test.mainClock.advanceTimeBy(800)
 		test.waitForIdle()
 		test.onRoot().performTouchInput { up() }

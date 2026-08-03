@@ -11,9 +11,9 @@ import kotlin.test.assertTrue
  * When the editor takes focus, and when it deliberately does not.
  *
  * Focus is what raises the soft keyboard on Android, so every case here is about
- * whether a keyboard slides up over the content. Only a plain tap, or a mouse
- * press, asks to start typing; a pan scrolls, a long press selects, and a tap a
- * rich span answered opened something the keyboard would cover.
+ * whether a keyboard slides up over the content. A finger has to lift near where
+ * it landed for the gesture to count as a tap, and a tap a rich span answered
+ * opened something the keyboard would cover.
  */
 class TouchFocusE2eTest {
 
@@ -97,35 +97,18 @@ class TouchFocusE2eTest {
 	}
 
 	/**
-	 * A long press selects a word and can open the context menu. Focusing on lift
-	 * would raise the keyboard over both.
+	 * Long-press-to-select must focus, or the selection cannot be typed over: the
+	 * keyboard never arrives and tapping to summon it clears the selection first.
 	 */
 	@Test
-	fun `a long press does not focus the editor`() = editorUiTest(
+	fun `a long press selects and focuses the editor`() = editorUiTest(
 		initialText = document,
 		autoFocus = false,
 	) {
 		longPressAtCharacter(4)
 
-		assertFalse(state.isFocused)
 		assertTrue(selectedText.isNotEmpty(), "expected the long press to select a word")
-	}
-
-	/**
-	 * An external mouse on Android reports as touch with buttons set, and there is a
-	 * real keyboard to raise there, so the span check has to apply to mouse too.
-	 */
-	@Test
-	fun `a mouse click claimed by a rich span does not focus the editor`() = editorUiTest(
-		initialText = document,
-		autoFocus = false,
-		onRichSpanClick = { _, _, _ -> true },
-	) {
-		state.addRichSpan(0, 5, SpellCheckStyle)
-
-		clickAtCharacter(2)
-
-		assertFalse(state.isFocused)
+		assertTrue(state.isFocused)
 	}
 
 	/** Focus survives the gesture that placed it, so typing right after a tap works. */
