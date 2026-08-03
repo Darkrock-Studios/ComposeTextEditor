@@ -165,6 +165,11 @@ private fun findHandleAtPosition(
 	}
 }
 
+/**
+ * Places the caret for a click or tap and offers the event to any [RichSpan] under
+ * it. Returns true when a span (or a selection handle) claimed the event, meaning
+ * the click was answered by something other than plain caret placement.
+ */
 private fun handleSpanInteraction(
 	state: TextEditorState,
 	offset: Offset,
@@ -189,11 +194,8 @@ private fun handleSpanInteraction(
 		state.selector.clearSelection()
 	}
 
-	return if (!isShiftPressed && clickedSpan != null && onSpanClick != null) {
-		onSpanClick.invoke(clickedSpan, clickType, offset)
-	} else {
-		true
-	}
+	return !isShiftPressed && clickedSpan != null && onSpanClick != null &&
+			onSpanClick.invoke(clickedSpan, clickType, offset)
 }
 
 private fun Modifier.handleTextInteractions(

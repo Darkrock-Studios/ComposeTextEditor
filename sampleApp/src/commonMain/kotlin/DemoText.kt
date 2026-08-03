@@ -189,7 +189,52 @@ Numeric edges round-trip too: version 2.0, Room 1-A, and "Step 1. do this" all s
 
 When a text edit occurs, spans are adjusted to maintain consistency. If the operation is an *insertion*, spans may **expand** or **shift** depending on the location relative to the insertion point. For *deletions*, spans **shrink** or **merge** based on the removed range. Replacement operations are treated as a **combination** of deletion and insertion, ensuring spans adapt seamlessly.
 
-Span deduplication plays a significant role by merging overlapping spans to reduce redundancy. Dynamic updates ensure that any changes in text instantly reflect on spans, keeping the document visually consistent. Efficient and robust, this approach simplifies complex text operations while maintaining **visual coherence**."""
+Span deduplication plays a significant role by merging overlapping spans to reduce redundancy. Dynamic updates ensure that any changes in text instantly reflect on spans, keeping the document visually consistent. Efficient and robust, this approach simplifies complex text operations while maintaining **visual coherence**.
+
+## Scrolling and Gestures
+
+From here down the document is deliberately long, so the editor scrolls well past a phone screen and a flick can build real momentum. Fling behaviour is easy to break without noticing: a handler that consumes the pointer release takes the gesture away from the scroll container, which then cancels its drag instead of finishing it with a velocity, and scrolling stops dead the moment the finger lifts instead of coasting.
+
+Touch and mouse want different things from the same code. A mouse press is unambiguous — the button is down, the user is pointing at something. A finger press is a question that is only answered when the finger lifts: it might be a tap, or it might be the beginning of a scroll, and on a phone the difference decides whether the soft keyboard covers half the screen.
+
+> Scroll to the bottom, then flick back up. The document should keep moving after your finger leaves the glass, and the keyboard should stay down the whole time.
+
+Things worth trying on this page:
+
+- Flick hard and let go — the text should coast, not stop dead
+- Drag slowly and release without lifting off the text — no keyboard
+- Tap a word — caret lands there, keyboard rises
+- Long press a word — it selects, and you can type over it immediately
+- Tap a bullet marker line like this one — it should behave like any other tap
+
+### Wrapping and Long Paragraphs
+
+Paragraphs of real length matter here because they are what makes the document tall enough to fling, and because wrapped lines are where hanging indents and gutter markers are most likely to drift out of alignment. This paragraph exists mostly to occupy vertical space, but it also exercises the layout path that recomputes wrap points whenever the viewport width changes, which is exactly what happens when a foldable is opened or closed.
+
+Rotating the device, unfolding it, or resizing the window all re-run line layout for every line in the document. On a long document that is a lot of work, and it is worth watching for a stutter at the moment the geometry changes rather than only while scrolling.
+
+1. Scroll to here from the top in one flick
+2. Note whether the motion decelerates smoothly or halts abruptly
+3. Tap once to place the caret, then scroll again without typing
+
+### Blocks Under the Fold
+
+> A blockquote this far down the document is a convenient target for testing that block decorations are still drawn correctly after a long scroll, rather than only when the document starts at the top of the viewport.
+
+```
+// Code fences are drawn on a tinted card. Scrolling past one
+// at speed is a good check that its background and border
+// stay locked to the text rather than lagging behind it.
+fun fling(velocity: Float): Float {
+    return velocity * DECELERATION
+}
+```
+
+- A bullet near the bottom
+- Another one, for backspace-at-the-start testing far from the first line
+- And a third that wraps onto a second visual line so the hanging indent can be checked down here too
+
+The end of the document is a useful place to stop, because scrolling past the last line and releasing is where an over-scroll or a mis-computed content height would show itself. If the text springs back or leaves a gap below this paragraph, something in the height calculation is off."""
 
 const val EXAMPLE_MARKDOWN = """# ComposeTextEditor
 

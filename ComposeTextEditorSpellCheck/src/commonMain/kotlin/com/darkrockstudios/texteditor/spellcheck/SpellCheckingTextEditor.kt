@@ -171,18 +171,27 @@ fun SpellCheckingTextEditor(
 			contextMenuState = contextMenuState,
 			onRichSpanClick = { span, type, offset ->
 				if (type == SpanClickType.SECONDARY_CLICK || type == SpanClickType.TAP) {
-					// Check if this span is a spell check span
 					val spellCheckItem: SpellCheckItem? = when (val clickResult = state.handleSpanClick(span)) {
 						is WordSegment -> SpellCheckItem.MisspelledWord(clickResult)
 						is Correction -> SpellCheckItem.SentenceIssue(clickResult)
 						else -> null
 					}
-					// Store the spell check item for context menu
 					currentSpellCheckItem = spellCheckItem
-					// Show context menu with spell suggestions
-					showContextMenu(offset, spellCheckItem)
-					// Return true to indicate we handled it
-					true
+
+					// A right-click always offers a menu, falling back to the standard
+					// one when the span has nothing to correct. A tap only opens one when
+					// there is a correction to offer: tapping a correctly spelled word
+					// means "put the caret here", and answering that with a menu is not
+					// what was asked for. Declining leaves the tap unconsumed, so it
+					// still focuses the editor and raises the keyboard.
+					if (type == SpanClickType.SECONDARY_CLICK || spellCheckItem != null) {
+						showContextMenu(offset, spellCheckItem)
+						true
+					} else {
+						// Not ours: a span the host put here. Offer it to their listener
+						// rather than swallowing the tap.
+						onRichSpanClick?.invoke(span, type, offset) ?: false
+					}
 				} else {
 					currentSpellCheckItem = null
 					onRichSpanClick?.invoke(span, type, offset) ?: false

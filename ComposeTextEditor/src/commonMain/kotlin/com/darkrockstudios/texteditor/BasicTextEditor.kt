@@ -24,6 +24,9 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.PointerType
+import androidx.compose.ui.input.pointer.isPrimaryPressed
+import androidx.compose.ui.input.pointer.isSecondaryPressed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
@@ -76,7 +79,7 @@ private const val CURSOR_BLINK_SPEED_MS = 500L
  * @param contextMenuState Drives context-menu visibility; pass your own to add
  *   custom items (e.g. spell-check suggestions), or leave `null` for the default.
  * @param onRichSpanClick Invoked when a rich span is tapped or right-clicked;
- *   return `true` to consume the event.
+ *   see [RichSpanClickListener] for what the return value does (and does not do).
  * @param decorateLine Optional per-line decorator drawn behind each line, keyed by
  *   line index — useful for gutters, current-line highlights, or diff markers.
  */
@@ -204,7 +207,7 @@ fun BasicTextEditor(
 				modifier = editorModifier
 					.padding(horizontalPadding)
 					.focusRequester(focusRequester)
-					.requestFocusOnPress(focusRequester)
+					.requestFocusOnPress(focusRequester) { effectiveContextMenuState.isVisible }
 					.then(inputModifierElement)
 					.focusable(enabled = true, interactionSource = interactionSource)
 					// Publish text-editing semantics so the node is recognized as an editable
@@ -259,7 +262,7 @@ fun BasicTextEditor(
 						.textEditorPointerInputHandling(
 							state = state,
 							onSpanClick = onRichSpanClick,
-							onContextMenuRequest = { offset -> effectiveContextMenuState.showMenu(offset) }
+							onContextMenuRequest = { offset -> effectiveContextMenuState.showMenu(offset) },
 						)
 						// Capture the canvas position so the desktop IME can place the
 						// composition/candidate window relative to the cursor.
@@ -295,16 +298,66 @@ fun BasicTextEditor(
 	}
 }
 
-internal fun Modifier.requestFocusOnPress(focusRequester: FocusRequester) = pointerInput(Unit) {
+/**
+ * Focuses the editor when the user actually points at it.
+ *
+ * A mouse press is unambiguous, so it focuses immediately. A finger press is not:
+ * it may still turn into a scroll, and on Android focusing raises the soft
+ * keyboard, so focusing on the down event pops the keyboard over the text every
+ * time the user tries to pan. A finger therefore has to lift roughly where it
+ * landed before this counts as a tap, which matches how the editor already
+ * decides caret placement: mouse on press, finger on release.
+ *
+ * A tap that opened a popup is skipped as well, reported by [popupIsShowing]. The
+ * thing to avoid is a keyboard sliding up over the spell-check suggestions or the
+ * context menu that same tap just opened. Note this asks what the tap *did*, not
+ * whether a listener said it handled the click: a host is free to answer a rich
+ * span click and still want the editor focused, and most do.
+ */
+internal fun Modifier.requestFocusOnPress(
+	focusRequester: FocusRequester,
+	popupIsShowing: () -> Boolean,
+) = pointerInput(Unit) {
+	val touchSlop = viewConfiguration.touchSlop
 	awaitEachGesture {
-		awaitFirstDown(requireUnconsumed = false)
-		focusRequester.requestFocus()
+		val down = awaitFirstDown(requireUnconsumed = false)
+
+		// Android reports an external mouse as PointerType.Touch but still fills in
+		// the buttons, so the button state is what actually separates the two.
+		val hasButton = currentEvent.buttons.isPrimaryPressed ||
+				currentEvent.buttons.isSecondaryPressed
+		if (down.type == PointerType.Mouse || hasButton) {
+			focusRequester.requestFocus()
+			return@awaitEachGesture
+		}
+
+		while (true) {
+			val event = awaitPointerEvent()
+			val change = event.changes.firstOrNull { it.id == down.id } ?: return@awaitEachGesture
+			if ((change.position - down.position).getDistance() > touchSlop) {
+				// Panning, not pointing.
+				return@awaitEachGesture
+			}
+			if (!change.pressed) {
+				// Safe to read synchronously: the Main pass dispatches child-first, so
+				// the Canvas gesture handler has already run this tap's dispatch (which
+				// opens any menu) before this container-level handler sees the release.
+				if (!popupIsShowing()) focusRequester.requestFocus()
+				return@awaitEachGesture
+			}
+		}
 	}
 }
 
 /**
  * Handles clicks on a [RichSpan]. Receives the clicked span, the [SpanClickType]
  * that distinguishes a tap from a left- or right-click, and the click [Offset] in
- * editor coordinates. Return `true` to consume the event and stop further handling.
+ * editor coordinates.
+ *
+ * The return value is a chaining protocol between listeners: `true` means "this
+ * click was answered here", which lets a wrapping listener (e.g. the spell-check
+ * editor's) decide whether to delegate a click onward to the host's listener.
+ * It does not affect the editor itself: caret placement, selection, scrolling,
+ * focus, and the soft keyboard all behave the same whatever is returned.
  */
 typealias RichSpanClickListener = ((RichSpan, SpanClickType, Offset) -> Boolean)

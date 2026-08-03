@@ -83,7 +83,9 @@ fun RichTextView(
 				state = state,
 				modifier = modifier
 					.focusRequester(focusRequester)
-					.requestFocusOnPress(focusRequester)
+					// A read-only view never raises a soft keyboard, and its focus exists
+					// only to route copy/select-all shortcuts, so no tap ever suppresses it.
+					.requestFocusOnPress(focusRequester, popupIsShowing = { false })
 					.then(inputModifierElement)
 					.focusable(enabled = true, interactionSource = interactionSource),
 				contentPadding = contentPadding,
