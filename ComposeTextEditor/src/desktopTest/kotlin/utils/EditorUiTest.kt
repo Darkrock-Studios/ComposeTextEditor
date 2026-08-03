@@ -148,6 +148,16 @@ class EditorUiTestScope(
 	/** Taps the character at flat index [charIndex] with a finger. */
 	fun tapAtCharacter(charIndex: Int) = tapAt(positionOfCharacter(charIndex))
 
+	/** Holds a finger on the character at flat index [charIndex] past the long-press threshold. */
+	fun longPressAtCharacter(charIndex: Int) {
+		val position = positionOfCharacter(charIndex)
+		test.onRoot().performTouchInput { down(position) }
+		test.mainClock.advanceTimeBy(800)
+		test.waitForIdle()
+		test.onRoot().performTouchInput { up() }
+		test.waitForIdle()
+	}
+
 	/**
 	 * Drags a finger [dy] pixels from [position] and lifts, the shape of a scroll.
 	 * Well past touch slop, so it can never be mistaken for a tap.

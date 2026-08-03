@@ -262,7 +262,8 @@ fun BasicTextEditor(
 						.textEditorPointerInputHandling(
 							state = state,
 							onSpanClick = onRichSpanClick,
-							onContextMenuRequest = { offset -> effectiveContextMenuState.showMenu(offset) }
+							onContextMenuRequest = { offset -> effectiveContextMenuState.showMenu(offset) },
+							onRequestFocus = { focusRequester.requestFocus() },
 						)
 						// Capture the canvas position so the desktop IME can place the
 						// composition/candidate window relative to the cursor.
@@ -299,43 +300,22 @@ fun BasicTextEditor(
 }
 
 /**
- * Focuses the editor when the user actually points at it.
+ * Focuses the editor for a press that lands on the container but never reaches the
+ * text canvas, such as the empty space below a short document.
  *
- * A mouse press is unambiguous, so it focuses immediately. A finger press is not:
- * it may still turn into a scroll, and on Android focusing raises the soft
- * keyboard, so focusing on the down event pops the keyboard over the text every
- * time the user tries to pan. A finger therefore has to lift roughly where it
- * landed before this counts as a tap, which matches how the editor already
- * decides caret placement: mouse on press, finger on release.
- *
- * A tap a [RichSpan][com.darkrockstudios.texteditor.richstyle.RichSpan] claimed is
- * skipped as well; `textEditorPointerInputHandling` consumes those, and the
- * keyboard sliding up over a suggestion popup is the thing to avoid.
+ * Anything over the text is `textEditorPointerInputHandling`'s to decide, because
+ * that is where a gesture is classified as a tap, a pan, a long press or a span
+ * click. It consumes the release of every gesture it handles, so a consumed
+ * release here means focus has already been settled and must not be second-guessed.
  */
 internal fun Modifier.requestFocusOnPress(focusRequester: FocusRequester) = pointerInput(Unit) {
-	val touchSlop = viewConfiguration.touchSlop
 	awaitEachGesture {
 		val down = awaitFirstDown(requireUnconsumed = false)
-
-		// Android reports an external mouse as PointerType.Touch but still fills in
-		// the buttons, so the button state is what actually separates the two.
-		val hasButton = currentEvent.buttons.isPrimaryPressed ||
-				currentEvent.buttons.isSecondaryPressed
-		if (down.type == PointerType.Mouse || hasButton) {
-			focusRequester.requestFocus()
-			return@awaitEachGesture
-		}
 
 		while (true) {
 			val event = awaitPointerEvent()
 			val change = event.changes.firstOrNull { it.id == down.id } ?: return@awaitEachGesture
-			if ((change.position - down.position).getDistance() > touchSlop) {
-				// Panning, not pointing.
-				return@awaitEachGesture
-			}
 			if (!change.pressed) {
-				// A rich span that answered this tap consumes it: opening spell-check
-				// suggestions or following a link is not a request to start typing.
 				if (!change.isConsumed) focusRequester.requestFocus()
 				return@awaitEachGesture
 			}

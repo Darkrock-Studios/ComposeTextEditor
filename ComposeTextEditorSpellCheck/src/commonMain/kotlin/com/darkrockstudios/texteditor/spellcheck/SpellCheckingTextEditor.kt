@@ -188,7 +188,9 @@ fun SpellCheckingTextEditor(
 						showContextMenu(offset, spellCheckItem)
 						true
 					} else {
-						false
+						// Not ours: a span the host put here. Offer it to their listener
+						// rather than swallowing the tap.
+						onRichSpanClick?.invoke(span, type, offset) ?: false
 					}
 				} else {
 					currentSpellCheckItem = null
