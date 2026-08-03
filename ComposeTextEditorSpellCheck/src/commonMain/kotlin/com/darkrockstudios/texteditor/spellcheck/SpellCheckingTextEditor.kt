@@ -214,12 +214,21 @@ private fun computeAffectedRanges(
 			else -> null
 		}
 		opRange?.let { newRange ->
-			// Merge overlapping ranges
-			val overlapping = ranges.filter { it.intersects(newRange) }
-			ranges.removeAll(overlapping)
-			val mergedRange = overlapping.fold(newRange) { acc, r -> acc.merge(r) }
+			val touching = ranges.filter { it.adjoins(newRange) }
+			ranges.removeAll(touching)
+			val mergedRange = touching.fold(newRange) { acc, r -> acc.merge(r) }
 			ranges.add(mergedRange)
 		}
 		ranges
 	}
 }
+
+/**
+ * Overlapping, or butting up against each other end to start.
+ *
+ * A typed word arrives as one insert per character, each range starting exactly where the
+ * last ended. [TextEditorRange.intersects] is exclusive at the ends and reports those as
+ * disjoint, which would re-check the same word once per character typed.
+ */
+private fun TextEditorRange.adjoins(other: TextEditorRange): Boolean =
+	intersects(other) || end == other.start || other.end == start

@@ -302,6 +302,43 @@ class SpellCheckGuardTest {
 		assertEquals(0, spellCheckSpanCount(), "No decorations while suspended")
 	}
 
+	@Test
+	fun `a partial check does not count the document when the ratio cannot trip`() = runTest {
+		val words = words(300)
+		textState.setText(words.joinToString(" "))
+		spellChecker.correctWords = words.drop(2).toSet() // 2 real typos
+		val state = SpellCheckState(textState, spellChecker)
+		state.runFullSpellCheck()
+
+		var counted = 0
+		val guard = SpellCheckGuard.Default
+		val trip = guard.evaluateWordRatioIfReachable(spellCheckSpanCount()) {
+			counted++
+			300
+		}
+
+		// Counting words walks the whole document, and this runs on every typing pause.
+		assertNull(trip)
+		assertEquals(0, counted, "A handful of typos must not pay for a document-wide scan")
+	}
+
+	@Test
+	fun `deferring the count leaves the ratio verdict unchanged at its boundary`() {
+		val guard = SpellCheckGuard.Default
+		val sample = guard.minWordSample
+		// The ratio needs flagged > checked * maxFlaggedRatio with checked >= minWordSample,
+		// so minWordSample * maxFlaggedRatio is exactly where deferral must stop.
+		val boundary = (sample * guard.maxFlaggedRatio).toInt()
+
+		for (flagged in (boundary - 1)..(boundary + 2)) {
+			assertEquals(
+				guard.evaluateWordRatio(sample, flagged),
+				guard.evaluateWordRatioIfReachable(flagged) { sample },
+				"Deferral changed the verdict at flagged=$flagged",
+			)
+		}
+	}
+
 	private fun spellCheckSpanCount(): Int =
 		textState.richSpanManager.getAllRichSpans().count { it.style is SpellCheckStyle }
 
