@@ -165,6 +165,11 @@ private fun findHandleAtPosition(
 	}
 }
 
+/**
+ * Places the caret for a click or tap and offers the event to any [RichSpan] under
+ * it. Returns true when a span (or a selection handle) claimed the event, meaning
+ * the click was answered by something other than plain caret placement.
+ */
 private fun handleSpanInteraction(
 	state: TextEditorState,
 	offset: Offset,
@@ -189,11 +194,8 @@ private fun handleSpanInteraction(
 		state.selector.clearSelection()
 	}
 
-	return if (!isShiftPressed && clickedSpan != null && onSpanClick != null) {
-		onSpanClick.invoke(clickedSpan, clickType, offset)
-	} else {
-		true
-	}
+	return !isShiftPressed && clickedSpan != null && onSpanClick != null &&
+			onSpanClick.invoke(clickedSpan, clickType, offset)
 }
 
 private fun Modifier.handleTextInteractions(
@@ -292,13 +294,18 @@ private fun Modifier.handleTextInteractions(
 						// selection a parallel double-click handler just set.
 						if (isFingerTouchGesture && !didLongPress && !wasDrag) {
 							val position = eventChange.position
-							handleSpanInteraction(
+							val claimedBySpan = handleSpanInteraction(
 								state,
 								position,
 								SpanClickType.TAP,
 								onSpanClick,
 								readOnly,
 							)
+							// Consumption is how the focus handler on the enclosing Box hears
+							// that a span answered this tap. A tap that opened spell-check
+							// suggestions or followed a link is not a request to start typing,
+							// so it must not raise the soft keyboard over what it just opened.
+							if (claimedBySpan) eventChange.consume()
 						}
 
 						longPressJob?.cancel()

@@ -13,6 +13,7 @@ import androidx.compose.ui.test.doubleClick
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performMouseInput
+import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.runSkikoComposeUiTest
 import androidx.compose.ui.text.AnnotatedString
@@ -50,6 +51,7 @@ internal fun editorUiTest(
 	enabled: Boolean = true,
 	keyBindings: KeyBindings = CtrlKeyBindings,
 	onRichSpanClick: RichSpanClickListener? = null,
+	autoFocus: Boolean = enabled,
 	block: EditorUiTestScope.() -> Unit,
 ) = runSkikoComposeUiTest {
 	val clipboard = InMemoryClipboard()
@@ -64,7 +66,7 @@ internal fun editorUiTest(
 				state = state,
 				modifier = Modifier.size(width, height),
 				enabled = enabled,
-				autoFocus = enabled,
+				autoFocus = autoFocus,
 				onRichSpanClick = onRichSpanClick,
 			)
 		}
@@ -74,7 +76,7 @@ internal fun editorUiTest(
 	// JVM the autoFocus request can land after the first replayed keystrokes,
 	// which are then silently dropped. Don't hand control to the test until the
 	// editor actually holds focus.
-	if (enabled) {
+	if (enabled && autoFocus) {
 		waitUntil(timeoutMillis = 5_000) { state.isFocused }
 	}
 	EditorUiTestScope(this, state, clipboard).block()
@@ -130,6 +132,31 @@ class EditorUiTestScope(
 			if (alt) keyUp(Key.AltLeft)
 			if (shift) keyUp(Key.ShiftLeft)
 			if (ctrl) keyUp(Key.CtrlLeft)
+		}
+		test.waitForIdle()
+	}
+
+	/** Taps [position] with a finger: down and up in the same place, no buttons. */
+	fun tapAt(position: Offset) {
+		test.onRoot().performTouchInput {
+			down(position)
+			up()
+		}
+		test.waitForIdle()
+	}
+
+	/** Taps the character at flat index [charIndex] with a finger. */
+	fun tapAtCharacter(charIndex: Int) = tapAt(positionOfCharacter(charIndex))
+
+	/**
+	 * Drags a finger [dy] pixels from [position] and lifts, the shape of a scroll.
+	 * Well past touch slop, so it can never be mistaken for a tap.
+	 */
+	fun panFrom(position: Offset, dy: Float = -120f) {
+		test.onRoot().performTouchInput {
+			down(position)
+			moveTo(position + Offset(0f, dy))
+			up()
 		}
 		test.waitForIdle()
 	}
