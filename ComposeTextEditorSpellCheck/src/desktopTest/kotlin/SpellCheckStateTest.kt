@@ -198,6 +198,24 @@ class SpellCheckStateTest {
 	}
 
 	@Test
+	fun `two checks never run against the spell checker at once`() = runTest {
+		textState.setText("helllo world")
+		val gate = CompletableDeferred<Unit>()
+		val gated = GatedSpellChecker(gate)
+		spellCheckState.spellChecker = gated
+
+		val first = launch { spellCheckState.runFullSpellCheck() }
+		val second = launch { spellCheckState.runFullSpellCheck() }
+		runCurrent()
+		gate.complete(Unit)
+		runCurrent()
+		first.join()
+		second.join()
+
+		assertEquals(1, gated.maxInFlight)
+	}
+
+	@Test
 	fun `test setSpellCheckingEnabled true re-runs full check`() = runTest {
 		// Setup: start disabled with a misspelled word present
 		spellCheckState.setSpellCheckingEnabled(false)
@@ -218,6 +236,36 @@ class SpellCheckStateTest {
 		assertEquals(1, spans.size)
 		assertTrue(spans.first().style is SpellCheckStyle)
 	}
+}
+
+/**
+ * Flags every word and reports the most lookups it was ever asked to do at once.
+ * [gate] holds every lookup open so a test can interleave.
+ */
+private class GatedSpellChecker(
+	private val gate: CompletableDeferred<Unit>,
+) : EditorSpellChecker {
+	var maxInFlight = 0
+		private set
+
+	private var inFlight = 0
+
+	override suspend fun isCorrectWord(word: String): Boolean {
+		inFlight++
+		maxInFlight = maxOf(maxInFlight, inFlight)
+		try {
+			gate.await()
+		} finally {
+			inFlight--
+		}
+		return false
+	}
+
+	override suspend fun suggestions(
+		input: String,
+		scope: EditorSpellChecker.Scope,
+		closestOnly: Boolean,
+	): List<Suggestion> = emptyList()
 }
 
 private class MockEditorSpellChecker(

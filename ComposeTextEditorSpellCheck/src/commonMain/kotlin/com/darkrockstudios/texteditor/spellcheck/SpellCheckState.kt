@@ -17,6 +17,8 @@ import com.darkrockstudios.texteditor.state.sentenceSegmentsInRange
 import com.darkrockstudios.texteditor.state.wordSegments
 import com.darkrockstudios.texteditor.state.wordSegmentsInRange
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlin.coroutines.CoroutineContext
 
@@ -38,6 +40,11 @@ enum class SpellCheckMode {
  * spans rendered in the document, and runs full or partial checks through an [EditorSpellChecker].
  * Span mutations are performed atomically after any asynchronous lookup completes so that a
  * cancelled check never leaves the document with its decorations wiped.
+ *
+ * Call from the dispatcher that drives the editor, normally Compose's main dispatcher. The
+ * checks serialize among themselves, but the non-suspending entry points
+ * ([invalidateSpellCheckSpans], [correctSpelling], [handleSpanClick]) mutate the same
+ * book-keeping unguarded, and the spans they touch are Compose state.
  *
  * @property textState The underlying editor state whose content is spell checked.
  * @property spellChecker The [EditorSpellChecker] used to evaluate words and sentences; checks are
@@ -89,6 +96,14 @@ class SpellCheckState(
 		private set
 	private val misspelledWords = mutableListOf<WordSegment>()
 	private val sentenceCorrections = mutableListOf<Correction>()
+
+	/**
+	 * Serializes the checks. Two running at once interleave their suspending lookups
+	 * against a single [EditorSpellChecker] session and race each other's span swaps,
+	 * and two can start at init: one from [rememberSpellCheckState] and one from the
+	 * editor's document-replacement listener.
+	 */
+	private val checkMutex = Mutex()
 
 	private fun removeMissSpellingsInRange(range: TextEditorRange) {
 		misspelledWords.removeAll { it.range.intersects(range) }
@@ -181,9 +196,11 @@ class SpellCheckState(
 	 * No-op while checking is disabled via [setSpellCheckingEnabled].
 	 */
 	suspend fun runFullSpellCheck() {
-		when (spellCheckMode) {
-			SpellCheckMode.Word -> runFullWordCheck()
-			SpellCheckMode.Sentence -> runFullSentenceCheck()
+		checkMutex.withLock {
+			when (spellCheckMode) {
+				SpellCheckMode.Word -> runFullWordCheck()
+				SpellCheckMode.Sentence -> runFullSentenceCheck()
+			}
 		}
 	}
 
@@ -191,9 +208,11 @@ class SpellCheckState(
 	 * Run partial spell check based on the current mode.
 	 */
 	suspend fun runPartialSpellCheck(range: TextEditorRange) {
-		when (spellCheckMode) {
-			SpellCheckMode.Word -> runPartialWordCheck(range)
-			SpellCheckMode.Sentence -> runPartialSentenceCheck(range)
+		checkMutex.withLock {
+			when (spellCheckMode) {
+				SpellCheckMode.Word -> runPartialWordCheck(range)
+				SpellCheckMode.Sentence -> runPartialSentenceCheck(range)
+			}
 		}
 	}
 
@@ -344,7 +363,7 @@ class SpellCheckState(
 	 * @param segment The word segment to check
 	 * @return true if the word is misspelled, false otherwise
 	 */
-	suspend fun checkWordSegment(segment: WordSegment): Boolean {
+	suspend fun checkWordSegment(segment: WordSegment): Boolean = checkMutex.withLock {
 		val sp = spellChecker ?: return false
 
 		// Resolve the async lookup first; only mutate spans afterward so a
@@ -365,7 +384,7 @@ class SpellCheckState(
 			}
 		}
 
-		return !isSpelledCorrectly
+		!isSpelledCorrectly
 	}
 
 	private fun shouldSpellCheck(segment: WordSegment): Boolean {
