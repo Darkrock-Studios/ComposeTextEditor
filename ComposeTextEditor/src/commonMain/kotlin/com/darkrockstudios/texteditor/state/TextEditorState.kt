@@ -1239,10 +1239,14 @@ class TextEditorState(
 
 	/**
 	 * Returns the [RichSpan] covering [position], or null if none does. Useful for
-	 * hit-testing taps on a list item or code fence. When several spans cover the
-	 * position the innermost one answers: a word-sized decoration (spell check
-	 * squiggle, link) sits inside the whole-line marker of the heading, list item,
-	 * blockquote or code fence it lives on, and the click belongs to the word.
+	 * hit-testing taps on a list item or code fence.
+	 *
+	 * Spans nest, so several can cover one position and only one can answer. Content
+	 * spans (link, highlight) go first, then the editor's own decorations (spell
+	 * check squiggle, find match), then the line-anchored marker of the heading, list
+	 * item, blockquote or code fence the line belongs to. Within a tier the span
+	 * covering the least of the clicked line wins, so the marker answers only where
+	 * nothing more specific does.
 	 */
 	fun findSpanAtPosition(position: CharLineOffset): RichSpan? {
 		// Find the line wrap that contains our position
@@ -1250,18 +1254,40 @@ class TextEditorState(
 			wrap.line == position.line && position.char >= wrap.wrapStartsAtIndex
 		} ?: return null
 
-		// Narrowest wins, line-anchored markers last. Set iteration order is not a
-		// hit-testing priority: it flips whenever a text edit re-folds the span set,
-		// which would make the same click answer differently before and after a
-		// keystroke somewhere else in the document.
 		return lineWrap.richSpans
 			.filter { it.containsPosition(position) }
-			.minWithOrNull(
-				compareBy(
-					{ getCharacterIndex(it.range.end) - getCharacterIndex(it.range.start) },
-					{ if (it.style.stickyAtStart) 1 else 0 },
-				)
-			)
+			.minWithOrNull(hitTestOrder(position.line))
+	}
+
+	/**
+	 * Ranks the spans covering a click on [line]. Total, down to the style name: a
+	 * partial order would leave the winner to the span set's iteration order, which
+	 * re-folds on every edit and would answer the same click differently before and
+	 * after an unrelated keystroke.
+	 */
+	private fun hitTestOrder(line: Int): Comparator<RichSpan> = compareBy(
+		{ it.style.hitTestTier() },
+		{ it.charsOnLine(line) },
+		{ it.range.start.char },
+		{ it.style::class.simpleName.orEmpty() },
+	)
+
+	private fun RichSpanStyle.hitTestTier(): Int = when {
+		stickyAtStart || this is BlockSpanStyle -> 2
+		isDecoration -> 1
+		else -> 0
+	}
+
+	/**
+	 * How much of [line] the span covers. Measured within the line rather than across
+	 * the document so a span running on from an earlier line is ranked by what it
+	 * claims here, not by its full length.
+	 */
+	private fun RichSpan.charsOnLine(line: Int): Int {
+		val lineLength = textLines.getOrNull(line)?.length ?: return Int.MAX_VALUE
+		val start = (if (range.start.line < line) 0 else range.start.char).coerceIn(0, lineLength)
+		val end = (if (range.end.line > line) lineLength else range.end.char).coerceIn(0, lineLength)
+		return end - start
 	}
 
 	fun captureMetadata(range: TextEditorRange): OperationMetadata {
