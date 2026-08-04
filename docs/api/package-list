@@ -7,6 +7,7 @@ com.darkrockstudios.texteditor.annotatedstring
 com.darkrockstudios.texteditor.clipboard
 com.darkrockstudios.texteditor.contextmenu
 com.darkrockstudios.texteditor.cursor
+com.darkrockstudios.texteditor.html
 com.darkrockstudios.texteditor.input
 com.darkrockstudios.texteditor.markdown
 com.darkrockstudios.texteditor.richstyle
