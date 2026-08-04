@@ -31,8 +31,11 @@ actual object ClipboardHelper {
 		text: AnnotatedString,
 		configuration: MarkdownConfiguration,
 		copyId: Long?,
+		html: String?,
 	) {
-		clipboard.setClipEntry(ClipEntry(AnnotatedStringTransferable(text, configuration, copyId)))
+		clipboard.setClipEntry(
+			ClipEntry(AnnotatedStringTransferable(text, configuration, copyId, html))
+		)
 	}
 
 	actual suspend fun readCopyId(clipboard: Clipboard): Long? {
@@ -73,17 +76,23 @@ actual object ClipboardHelper {
  * [copyId] identifies the copy that produced this content: pasting consults it
  * before re-applying the in-editor rich-span buffer, so identical text written
  * by any other source can never resurrect stale spans.
+ *
+ * [blockHtml] is the markup to offer. An [AnnotatedString] carries character
+ * styling alone, so deriving the fragment from it describes a selection with no
+ * lists, quotes or headings; a caller copying out of an editor passes markup
+ * built from the document's line-anchored spans instead.
  */
 internal class AnnotatedStringTransferable(
 	private val annotatedString: AnnotatedString,
 	private val configuration: MarkdownConfiguration = MarkdownConfiguration.DEFAULT,
 	private val copyId: Long? = null,
+	private val blockHtml: String? = null,
 ) : Transferable {
 
 	private val annotatedStringFlavor = DataFlavor(AnnotatedString::class.java, "AnnotatedString")
 	private val htmlFlavor = DataFlavor("text/html;class=java.lang.String;charset=Unicode")
 
-	private val html by lazy { annotatedString.toHtml(configuration) }
+	private val html by lazy { blockHtml ?: annotatedString.toHtml(configuration) }
 
 	override fun getTransferDataFlavors(): Array<DataFlavor> = buildList {
 		add(annotatedStringFlavor)

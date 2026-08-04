@@ -7,6 +7,7 @@ import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.clipboard.ClipboardHelper
 import com.darkrockstudios.texteditor.clipboard.applyHtmlPasteBlocks
 import com.darkrockstudios.texteditor.clipboard.readHtmlPasteDocument
+import com.darkrockstudios.texteditor.html.selectionAsHtml
 import com.darkrockstudios.texteditor.input.EditorCommand.Action
 import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.applyStyleForEditAt
@@ -76,9 +77,10 @@ internal fun EditorActionRegistry.registerBuiltinActions() {
 private fun EditorActionContext.copySelection() {
 	state.selector.selection?.let { selection ->
 		val selectedText = state.selector.getSelectedText()
+		val html = state.selectionAsHtml(selection)
 		val copyId = state.copyRichSpans(selection)
 		scope.launch {
-			ClipboardHelper.setText(clipboard, selectedText, state.markdownConfiguration, copyId)
+			ClipboardHelper.setText(clipboard, selectedText, state.markdownConfiguration, copyId, html)
 		}
 	}
 }
@@ -86,11 +88,14 @@ private fun EditorActionContext.copySelection() {
 private fun EditorActionContext.cutSelection() {
 	state.selector.selection?.let { selection ->
 		val selectedText = state.selector.getSelectedText()
+		// Both reads describe the document as it stands, so they have to happen
+		// before the delete takes the selection out from under them.
+		val html = state.selectionAsHtml(selection)
 		val copyId = state.copyRichSpans(selection)
 		state.preserveCopiedRichSpansThroughNextEdit()
 		state.selector.deleteSelection()
 		scope.launch {
-			ClipboardHelper.setText(clipboard, selectedText, state.markdownConfiguration, copyId)
+			ClipboardHelper.setText(clipboard, selectedText, state.markdownConfiguration, copyId, html)
 		}
 	}
 }

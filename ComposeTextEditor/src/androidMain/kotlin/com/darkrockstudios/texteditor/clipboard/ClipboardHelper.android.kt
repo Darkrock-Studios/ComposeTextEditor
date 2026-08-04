@@ -27,6 +27,7 @@ actual object ClipboardHelper {
 		text: AnnotatedString,
 		configuration: MarkdownConfiguration,
 		copyId: Long?,
+		html: String?,
 	) {
 		val clipData = ClipData.newPlainText("text", text.text)
 		clipboard.setClipEntry(clipData.toClipEntry())

@@ -38,12 +38,17 @@ expect object ClipboardHelper {
 	 * exact copy within this process; [copyId] rides along so a later paste can
 	 * prove the clipboard content is still this copy.
 	 * On other platforms, writes plain text only and [copyId] is ignored.
+	 *
+	 * [html] is the markup to offer, which callers copying out of an editor supply
+	 * so the fragment carries the selection's block structure. Null falls back to
+	 * markup derived from [text] alone, which describes its character styling only.
 	 */
 	suspend fun setText(
 		clipboard: Clipboard,
 		text: AnnotatedString,
 		configuration: MarkdownConfiguration = MarkdownConfiguration.DEFAULT,
 		copyId: Long? = null,
+		html: String? = null,
 	)
 
 	/**

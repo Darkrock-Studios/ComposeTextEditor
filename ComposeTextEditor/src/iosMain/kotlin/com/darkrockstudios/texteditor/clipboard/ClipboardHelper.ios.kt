@@ -24,6 +24,7 @@ actual object ClipboardHelper {
 		text: AnnotatedString,
 		configuration: MarkdownConfiguration,
 		copyId: Long?,
+		html: String?,
 	) {
 		UIPasteboard.generalPasteboard.string = text.text
 	}
