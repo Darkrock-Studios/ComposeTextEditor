@@ -42,6 +42,7 @@ Guards #38, #50, #79, #74, #49, #48.
 id, and paste only re-applies the in-editor span buffer when that id matches.
 
 ### 2.1 Round-trip inside the editor (desktop, Android)
+
 1. Markdown demo. Select a range covering a bold word, a bulleted list item, and a
    blockquote line.
 2. Ctrl/Cmd+C, click at the end of the document, Ctrl/Cmd+V.
@@ -51,6 +52,7 @@ id, and paste only re-applies the in-editor span buffer when that id matches.
    orphaned gutter markers left on the line.
 
 ### 2.2 Partial-span copy does not drag markers (#74)
+
 1. Markdown demo. Select **part of the text inside** a bullet list item (not the whole
    item).
 2. Copy, then paste **into the middle of** a plain paragraph line, and into the middle
@@ -62,8 +64,10 @@ id, and paste only re-applies the in-editor span buffer when that id matches.
    whole line; spliced into an existing line it never is.
 
 ### 2.2b Blocks survive an edit between copy and paste
+
 The in-editor rich-span buffer is cleared by any edit that is not the paste's own, so
 this exercises the clipboard's HTML as the block carrier.
+
 1. Markdown demo. Select whole lines covering two bullet items and a blockquote line.
    Copy.
 2. Click at the end of the document and press **Enter** to open a fresh line.
@@ -72,6 +76,7 @@ this exercises the clipboard's HTML as the block carrier.
    here is the regression this guards.
 
 ### 2.3 Foreign clipboard cannot resurrect the span buffer (#79)
+
 1. Desktop. In the editor, copy a styled run (say a bold, bulleted line).
 2. Switch to Notepad / TextEdit / a browser, type the **exact same characters** as the
    copied text, and copy them there.
@@ -82,6 +87,7 @@ this exercises the clipboard's HTML as the block carrier.
    not reapply the first instance's span buffer verbatim.
 
 ### 2.4 Cross-application rich paste (desktop) (#38, #50)
+
 1. Copy a bulleted list from a browser page (a Wikipedia list works).
 2. Paste into the Markdown demo. **Expect:** arrives as a bulleted list, not as literal
    `-` characters or as a single paragraph.
@@ -95,6 +101,7 @@ this exercises the clipboard's HTML as the block carrier.
 5. Bold body text pasted out must **not** land as an `<h4>` in the target app.
 
 ### 2.5 Paste font size (#49)
+
 1. Markdown demo. Place the caret at **offset 0** (very start of the document) and
    paste some copied text.
 2. **Expect:** pasted text renders at the same size as the surrounding body text, not
@@ -105,6 +112,7 @@ this exercises the clipboard's HTML as the block carrier.
    **Expect:** correctly sized.
 
 ### 2.6 Context menu parity (#87, #50)
+
 1. Right-click in the editor with a selection: Cut / Copy / Paste / Select All.
 2. **Expect:** each does exactly what its keyboard chord does, including keeping list
    and quote styling on copy.
@@ -114,6 +122,7 @@ this exercises the clipboard's HTML as the block carrier.
    editing actions are absent or disabled. Typing changes nothing.
 
 ### 2.7 Export while editing (#48)
+
 1. Markdown demo. Hold down a key to type continuously and click **Roundtrip** during
    the typing burst (or trigger export from another thread if you have a harness).
 2. **Expect:** no `ConcurrentModificationException`, no interleaved/garbled export.
@@ -123,6 +132,7 @@ this exercises the clipboard's HTML as the block carrier.
 Guards #45, #53, #87.
 
 ### 3.1 macOS bindings (#45)
+
 On macOS, verify each:
 
 | Chord | Expected |
@@ -142,14 +152,18 @@ text returns *and the caret lands at the correct end of it* (this was the undo d
 fixed alongside #45).
 
 ### 3.2 AltGr on Windows (#53)
+
 Requires a layout with AltGr: switch the Windows input to Hungarian or Polish.
+
 1. Hungarian: AltGr+X, AltGr+V. **Expect:** the accented characters are typed. Nothing
    is cut or pasted.
 2. Polish: AltGr+Z. **Expect:** `ż` typed, not an undo.
 3. With the US layout restored, plain Ctrl+X/V/Z still work.
 
 ### 3.3 Custom action binding (#87)
+
 The sample app registers Ctrl+B (Cmd+B on macOS) for bold as the worked example.
+
 1. Markdown demo. Select a word, press Ctrl/Cmd+B. **Expect:** bold toggles on; the
    toolbar Bold button lights up.
 2. Press it again. **Expect:** bold toggles off.
@@ -162,6 +176,7 @@ The sample app registers Ctrl+B (Cmd+B on macOS) for bold as the worked example.
    does not become unresponsive; the keystroke is not silently swallowed into text.
 
 ### 3.4 Read-only enforcement (#87)
+
 1. RichTextView demo. Attempt paste (Ctrl+V), Ctrl+B, backspace, Enter.
 2. **Expect:** the document is unchanged by every one of them. Copy and selection still
    work.
@@ -172,6 +187,7 @@ Guards #88, #91. **Android device or emulator required.** Use the Markdown demo,
 was lengthened specifically so it can be scrolled and flung.
 
 ### 4.1 Pan does not raise the keyboard
+
 1. Fresh entry into the demo, keyboard down.
 2. Drag a finger on the **text** to scroll. **Expect:** the document scrolls and the
    keyboard stays down.
@@ -181,6 +197,7 @@ was lengthened specifically so it can be scrolled and flung.
    render correctly after a long scroll.
 
 ### 4.2 Tap focuses
+
 1. Tap on a plain paragraph. **Expect:** caret placed, keyboard rises.
 2. Tap on a **bulleted list item** and on a **blockquote line**. **Expect:** both focus
    and raise the keyboard (these were unfocusable at one point during the PR).
@@ -191,6 +208,7 @@ was lengthened specifically so it can be scrolled and flung.
    swallowed tap.
 
 ### 4.3 Spans do not fight the keyboard
+
 1. Spell Check demo. Tap a **misspelled** word. **Expect:** the suggestion popup opens
    and the keyboard does not rise over it.
 2. Tap a **correctly spelled** word. **Expect:** ordinary caret placement + keyboard.
@@ -199,7 +217,9 @@ was lengthened specifically so it can be scrolled and flung.
    keyboard slides up over whatever it opened.
 
 ### 4.4 Indented lines draw correctly (#91)
+
 This is the Android-only `getLineLeft` fix. Compare side by side with desktop.
+
 1. Markdown demo, on Android: place the caret on an **empty** bulleted list item (press
    Enter at the end of an item to make one).
 2. **Expect:** the caret sits just after the bullet marker, indented **once**, not
@@ -213,7 +233,9 @@ This is the Android-only `getLineLeft` fix. Compare side by side with desktop.
    through the same helper).
 
 ### 4.5 IME edits behave like hardware keys (#87)
+
 Soft keyboard only:
+
 1. Backspace at **column 0** of a bulleted list item. **Expect:** the item demotes to a
    plain line (same as the hardware key), and Ctrl+Z / the Undo button restores it.
 2. Backspace at column 0 of an item **on the first line** of the document. **Expect:**
@@ -230,11 +252,12 @@ Soft keyboard only:
 Guards #57, #63, #66–#74, #78, #80.
 
 ### 5.1 Round-trip fidelity (the Roundtrip button)
+
 Markdown demo has a **Roundtrip** button that exports to markdown and re-imports.
 Press it after each of these and confirm the document is unchanged:
 
 1. Baseline demo document, untouched.
-2. A **bold run with trailing whitespace** (select `word ` including the space, bold
+2. A **bold run with trailing whitespace** (select `word` including the space, bold
    it). Roundtrip: **expect** the bold survives and no literal `**` characters appear
    (#70).
 3. A **bold run overlapping an inline code span**. Roundtrip: **expect** no asterisks
@@ -253,6 +276,7 @@ Press it after each of these and confirm the document is unchanged:
    all survive a roundtrip.
 
 ### 5.2 Block stacking and joins (#57, #63, #72)
+
 1. Put the caret on a bulleted item, click Blockquote. **Expect:** a consistent result
    (quote + list resolved by one rule), identical to what importing the equivalent
    markdown produces.
@@ -269,6 +293,7 @@ Press it after each of these and confirm the document is unchanged:
    **Expect:** the marker is not dragged onto the plain line.
 
 ### 5.3 Editing at block boundaries (#67, #68, #66)
+
 1. Create a code fence directly above a blockquote. Delete the newline between them to
    join. Then **type a character exactly at the join point**. **Expect:** no crash
    (this was an `AnnotatedString` overlapping-paragraph exception).
@@ -281,6 +306,7 @@ Press it after each of these and confirm the document is unchanged:
    from column 0.
 
 ### 5.4 Style span adjacency (#69)
+
 1. Type `bold X bold` where the two `bold` words are already bold and `X` is not.
 2. Apply bold anywhere else on the same line.
 3. **Expect:** the single unstyled character between the two bold runs stays unstyled
@@ -291,6 +317,7 @@ Press it after each of these and confirm the document is unchanged:
 Guards #75, #71, #55, #45.
 
 ### 6.1 Wordwise coalescing (#75)
+
 1. Blank Markdown demo. Type `the quick brown fox` in one go.
 2. Press Ctrl/Cmd+Z once. **Expect:** one *word* disappears, not one character.
 3. Keep undoing to empty, then redo back up. **Expect:** redo restores word by word and
@@ -305,12 +332,14 @@ Guards #75, #71, #55, #45.
    word-wise, not character-by-character.
 
 ### 6.2 History depth (#75)
+
 1. Blank demo. Type continuously for ~30 seconds (or paste-and-edit repeatedly to build
    well over 100 entries).
 2. Undo repeatedly. **Expect:** you can get back to the empty document; early edits
    were not silently dropped (the cap is now 1000).
 
 ### 6.3 Undo of block operations (#71, #55)
+
 1. Backspace at column 0 of a list item (smart demotion). Ctrl/Cmd+Z. **Expect:** the
    item comes back. Undo must **not** skip past to an earlier edit.
 2. Press Enter on an empty list item (block exit). Undo. **Expect:** the empty item is
