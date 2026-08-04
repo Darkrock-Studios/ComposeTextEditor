@@ -71,6 +71,35 @@ class SpellCheckE2eTest {
 	}
 
 	@Test
+	fun `a document loaded after the editor is composed gets checked`() {
+		val words = words(10)
+		val checker = CountingSpellChecker(correctWords = words.drop(2).toSet())
+
+		spellCheckUiTest(spellChecker = checker, initialText = "") {
+			assertEquals(0, spellCheckSpanCount)
+
+			state.textState.setText(words.joinToString(" "))
+			letSpellCheckSettle()
+
+			assertEquals(2, spellCheckSpanCount)
+		}
+	}
+
+	@Test
+	fun `replacing the document checks the new text`() {
+		val checker = CountingSpellChecker(correctWords = setOf("fine"))
+
+		spellCheckUiTest(spellChecker = checker, initialText = "typoone fine") {
+			assertEquals(1, spellCheckSpanCount)
+
+			state.textState.setText("fine typotwo typothree")
+			letSpellCheckSettle()
+
+			assertEquals(2, spellCheckSpanCount)
+		}
+	}
+
+	@Test
 	fun `typing is inert while checking is off`() {
 		val words = words(60)
 		val checker = CountingSpellChecker(correctWords = words.toSet())
