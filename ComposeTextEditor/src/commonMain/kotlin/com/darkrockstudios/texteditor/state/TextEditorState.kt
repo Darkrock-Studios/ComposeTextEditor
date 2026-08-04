@@ -1239,7 +1239,10 @@ class TextEditorState(
 
 	/**
 	 * Returns the [RichSpan] covering [position], or null if none does. Useful for
-	 * hit-testing taps on a list item or code fence.
+	 * hit-testing taps on a list item or code fence. When several spans cover the
+	 * position the innermost one answers: a word-sized decoration (spell check
+	 * squiggle, link) sits inside the whole-line marker of the heading, list item,
+	 * blockquote or code fence it lives on, and the click belongs to the word.
 	 */
 	fun findSpanAtPosition(position: CharLineOffset): RichSpan? {
 		// Find the line wrap that contains our position
@@ -1247,10 +1250,18 @@ class TextEditorState(
 			wrap.line == position.line && position.char >= wrap.wrapStartsAtIndex
 		} ?: return null
 
-		// Check each span in the line wrap
-		return lineWrap.richSpans.firstOrNull { span ->
-			span.containsPosition(position)
-		}
+		// Narrowest wins, line-anchored markers last. Set iteration order is not a
+		// hit-testing priority: it flips whenever a text edit re-folds the span set,
+		// which would make the same click answer differently before and after a
+		// keystroke somewhere else in the document.
+		return lineWrap.richSpans
+			.filter { it.containsPosition(position) }
+			.minWithOrNull(
+				compareBy(
+					{ getCharacterIndex(it.range.end) - getCharacterIndex(it.range.start) },
+					{ if (it.style.stickyAtStart) 1 else 0 },
+				)
+			)
 	}
 
 	fun captureMetadata(range: TextEditorRange): OperationMetadata {
