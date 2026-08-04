@@ -28,6 +28,7 @@ actual object ClipboardHelper {
 		text: AnnotatedString,
 		configuration: MarkdownConfiguration,
 		copyId: Long?,
+		html: String?,
 	) {
 		try {
 			writeClipboardText(text.text).await<JsAny?>()

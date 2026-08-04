@@ -52,27 +52,18 @@ class HtmlExtension(
 	fun exportAsHtml(): String {
 		val content = editorState.content
 		val blocks = documentBlocksOf(content.richSpans, configuration)
-		// Semantic heading levels, read from the spans rather than by matching
-		// font sizes, so a heading keeps its tag under any configuration.
-		val headerLevels = content.richSpans
-			.mapNotNull { span ->
-				(span.style as? HeaderSpanStyle)?.let { span.range.start.line to it.level }
-			}
-			.toMap()
+		val headerLevels = headerLevelsOf(content.richSpans)
 		val lines = content.lines
 		if (lines.size == 1 && lines[0].isEmpty() && blocks.isEmpty() && headerLevels.isEmpty()) {
 			return ""
 		}
 
-		val writer = HtmlWriter()
-		lines.forEachIndexed { index, line ->
-			writer.openContainers(containersFor(index, blocks))
-			writer.appendLine(
-				lineHtml(index, line, blocks, headerLevels[index]),
-				inCodeFence = blocks.has(index, CodeFence),
-			)
-		}
-		return writer.finish()
+		return renderHtmlFragment(
+			lines = lines.mapIndexed { index, line -> HtmlLine(line, index) },
+			blocks = blocks,
+			headerLevels = headerLevels,
+			configuration = configuration,
+		)
 	}
 
 	/**
@@ -106,60 +97,95 @@ class HtmlExtension(
 		}
 	}
 
-	/** The elements wrapping [line], outermost first. */
-	private fun containersFor(line: Int, blocks: DocumentBlocks): List<String> {
-		val containers = mutableListOf<String>()
-		if (blocks.has(line, Blockquote)) containers += "blockquote"
-		when {
-			blocks.has(line, OrderedList) -> containers += "ol"
-			blocks.has(line, BulletList) -> containers += "ul"
-			// `<code>` nests inside `<pre>` so a reader that only understands one of
-			// the two still sees a code block.
-			blocks.has(line, CodeFence) -> containers += listOf("pre", "code")
+}
+
+/** A line to serialize, paired with the document line its decorations come from. */
+internal class HtmlLine(val text: AnnotatedString, val docLine: Int)
+
+/** The semantic heading level of each line that carries a [HeaderSpanStyle]. */
+internal fun headerLevelsOf(spans: Set<com.darkrockstudios.texteditor.richstyle.RichSpan>): Map<Int, Int> =
+	spans
+		.mapNotNull { span ->
+			(span.style as? HeaderSpanStyle)?.let { span.range.start.line to it.level }
 		}
-		return containers
+		.toMap()
+
+/**
+ * Writes [lines] as an HTML fragment, taking each line's block structure from
+ * [blocks] by its [HtmlLine.docLine]. Shared by whole-document export and by the
+ * clipboard, so a copied selection carries the same markup a save would.
+ */
+internal fun renderHtmlFragment(
+	lines: List<HtmlLine>,
+	blocks: DocumentBlocks,
+	headerLevels: Map<Int, Int>,
+	configuration: MarkdownConfiguration,
+): String {
+	val writer = HtmlWriter()
+	lines.forEach { line ->
+		writer.openContainers(containersFor(line.docLine, blocks))
+		writer.appendLine(
+			lineHtml(line.docLine, line.text, blocks, headerLevels[line.docLine], configuration),
+			inCodeFence = blocks.has(line.docLine, CodeFence),
+		)
+	}
+	return writer.finish()
+}
+
+/** The elements wrapping [line], outermost first. */
+private fun containersFor(line: Int, blocks: DocumentBlocks): List<String> {
+	val containers = mutableListOf<String>()
+	if (blocks.has(line, Blockquote)) containers += "blockquote"
+	when {
+		blocks.has(line, OrderedList) -> containers += "ol"
+		blocks.has(line, BulletList) -> containers += "ul"
+		// `<code>` nests inside `<pre>` so a reader that only understands one of
+		// the two still sees a code block.
+		blocks.has(line, CodeFence) -> containers += listOf("pre", "code")
+	}
+	return containers
+}
+
+private fun lineHtml(
+	index: Int,
+	line: AnnotatedString,
+	blocks: DocumentBlocks,
+	headerLevel: Int?,
+	configuration: MarkdownConfiguration,
+): String {
+	// Fenced lines are literal code: running them through `toHtml` would see the
+	// baked-in monospace as an inline code run and wrap every line in `<code>`.
+	if (blocks.has(index, CodeFence)) return line.text.escapeHtmlText()
+
+	val image = blocks.imageLines[index]
+	val isRule = index in blocks.horizontalRuleLines
+	// A heading's span carries its level; font-size matching remains only as
+	// the fallback for spanless content. A uniformly styled heading line has
+	// no inner formatting left to render, so the tag is written here rather
+	// than by `toHtml`, which declines any heading level it cannot tell
+	// apart from bold body text.
+	val heading = when {
+		isRule || image != null -> null
+		headerLevel != null -> HtmlTag.entries[headerLevel - 1]
+		else -> line.uniformHeadingTag(configuration)
+	}
+	val content = when {
+		isRule -> "<hr>"
+		image != null -> "<img src=\"${image.source.escapeHtmlAttribute()}\"" +
+			" alt=\"${image.alt.escapeHtmlAttribute()}\">"
+
+		heading != null -> "<${heading.tag}>${line.text.escapeHtmlText()}</${heading.tag}>"
+		else -> line.toHtml(configuration)
 	}
 
-	private fun lineHtml(
-		index: Int,
-		line: AnnotatedString,
-		blocks: DocumentBlocks,
-		headerLevel: Int?,
-	): String {
-		// Fenced lines are literal code: running them through `toHtml` would see the
-		// baked-in monospace as an inline code run and wrap every line in `<code>`.
-		if (blocks.has(index, CodeFence)) return line.text.escapeHtmlText()
-
-		val image = blocks.imageLines[index]
-		val isRule = index in blocks.horizontalRuleLines
-		// A heading's span carries its level; font-size matching remains only as
-		// the fallback for spanless content. A uniformly styled heading line has
-		// no inner formatting left to render, so the tag is written here rather
-		// than by `toHtml`, which declines any heading level it cannot tell
-		// apart from bold body text.
-		val heading = when {
-			isRule || image != null -> null
-			headerLevel != null -> HtmlTag.entries[headerLevel - 1]
-			else -> line.uniformHeadingTag(configuration)
-		}
-		val content = when {
-			isRule -> "<hr>"
-			image != null -> "<img src=\"${image.source.escapeHtmlAttribute()}\"" +
-				" alt=\"${image.alt.escapeHtmlAttribute()}\">"
-
-			heading != null -> "<${heading.tag}>${line.text.escapeHtmlText()}</${heading.tag}>"
-			else -> line.toHtml(configuration)
-		}
-
-		val inList = blocks.has(index, BulletList) || blocks.has(index, OrderedList)
-		return when {
-			inList -> "<li>$content</li>"
-			// Rules, images and headings are block elements in their own right;
-			// wrapping one in `<p>` is invalid and browsers close the paragraph
-			// before it anyway.
-			isRule || image != null || heading != null -> content
-			else -> "<p>$content</p>"
-		}
+	val inList = blocks.has(index, BulletList) || blocks.has(index, OrderedList)
+	return when {
+		inList -> "<li>$content</li>"
+		// Rules, images and headings are block elements in their own right;
+		// wrapping one in `<p>` is invalid and browsers close the paragraph
+		// before it anyway.
+		isRule || image != null || heading != null -> content
+		else -> "<p>$content</p>"
 	}
 }
 
