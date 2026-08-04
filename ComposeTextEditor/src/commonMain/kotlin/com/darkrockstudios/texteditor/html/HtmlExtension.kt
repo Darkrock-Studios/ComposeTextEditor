@@ -10,6 +10,7 @@ import com.darkrockstudios.texteditor.richstyle.HeaderSpanStyle
 import com.darkrockstudios.texteditor.richstyle.ImageBlockSpanStyle
 import com.darkrockstudios.texteditor.richstyle.ImageProvider
 import com.darkrockstudios.texteditor.richstyle.OrderedList
+import com.darkrockstudios.texteditor.richstyle.RichSpan
 import com.darkrockstudios.texteditor.richstyle.applyDocumentBlocks
 import com.darkrockstudios.texteditor.richstyle.documentBlocksOf
 import com.darkrockstudios.texteditor.state.TextEditorState
@@ -99,11 +100,22 @@ class HtmlExtension(
 
 }
 
-/** A line to serialize, paired with the document line its decorations come from. */
-internal class HtmlLine(val text: AnnotatedString, val docLine: Int)
+/**
+ * A line to serialize, paired with the document line its decorations come from.
+ *
+ * [isWholeLine] is false for the partly covered first and last lines of a copied
+ * selection. Only a whole line can be read as a heading by how it is styled: any
+ * fragment of a bold run is uniformly styled, and the default h4 is bold at the
+ * body size, so the size match cannot tell the two apart.
+ */
+internal class HtmlLine(
+	val text: AnnotatedString,
+	val docLine: Int,
+	val isWholeLine: Boolean = true,
+)
 
 /** The semantic heading level of each line that carries a [HeaderSpanStyle]. */
-internal fun headerLevelsOf(spans: Set<com.darkrockstudios.texteditor.richstyle.RichSpan>): Map<Int, Int> =
+internal fun headerLevelsOf(spans: Set<RichSpan>): Map<Int, Int> =
 	spans
 		.mapNotNull { span ->
 			(span.style as? HeaderSpanStyle)?.let { span.range.start.line to it.level }
@@ -125,7 +137,14 @@ internal fun renderHtmlFragment(
 	lines.forEach { line ->
 		writer.openContainers(containersFor(line.docLine, blocks))
 		writer.appendLine(
-			lineHtml(line.docLine, line.text, blocks, headerLevels[line.docLine], configuration),
+			lineHtml(
+				index = line.docLine,
+				line = line.text,
+				blocks = blocks,
+				headerLevel = headerLevels[line.docLine],
+				isWholeLine = line.isWholeLine,
+				configuration = configuration,
+			),
 			inCodeFence = blocks.has(line.docLine, CodeFence),
 		)
 	}
@@ -151,6 +170,7 @@ private fun lineHtml(
 	line: AnnotatedString,
 	blocks: DocumentBlocks,
 	headerLevel: Int?,
+	isWholeLine: Boolean,
 	configuration: MarkdownConfiguration,
 ): String {
 	// Fenced lines are literal code: running them through `toHtml` would see the
@@ -160,14 +180,16 @@ private fun lineHtml(
 	val image = blocks.imageLines[index]
 	val isRule = index in blocks.horizontalRuleLines
 	// A heading's span carries its level; font-size matching remains only as
-	// the fallback for spanless content. A uniformly styled heading line has
-	// no inner formatting left to render, so the tag is written here rather
-	// than by `toHtml`, which declines any heading level it cannot tell
+	// the fallback for spanless content, and only for a whole line, since any
+	// fragment of a styled run is uniform on its own. A uniformly styled heading
+	// line has no inner formatting left to render, so the tag is written here
+	// rather than by `toHtml`, which declines any heading level it cannot tell
 	// apart from bold body text.
 	val heading = when {
 		isRule || image != null -> null
 		headerLevel != null -> HtmlTag.entries[headerLevel - 1]
-		else -> line.uniformHeadingTag(configuration)
+		isWholeLine -> line.uniformHeadingTag(configuration)
+		else -> null
 	}
 	val content = when {
 		isRule -> "<hr>"

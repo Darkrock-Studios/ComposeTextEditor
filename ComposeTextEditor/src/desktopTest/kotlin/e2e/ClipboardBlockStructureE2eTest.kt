@@ -3,12 +3,15 @@ package e2e
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.ClipEntry
 import com.darkrockstudios.texteditor.richstyle.BlockquoteSpanStyle
 import com.darkrockstudios.texteditor.richstyle.BulletListSpanStyle
+import com.darkrockstudios.texteditor.richstyle.HeaderSpanStyle
 import com.darkrockstudios.texteditor.richstyle.RichSpanStyle
 import com.darkrockstudios.texteditor.state.TextEditorState
 import kotlinx.coroutines.runBlocking
 import utils.EditorUiTestScope
+import utils.ForeignHtmlTransferable
 import utils.editorUiTest
 import java.awt.datatransfer.Transferable
 import kotlin.test.Test
@@ -123,6 +126,56 @@ class ClipboardBlockStructureE2eTest {
 		}
 
 	@Test
+	fun `copying part of a styled run does not make it a heading`() =
+		editorUiTest(width = 600.dp, height = 500.dp) {
+			markdown.importMarkdown("Some **bold** text.")
+			waitForIdle()
+
+			// Every fragment of a styled run is uniformly styled, and the default h4
+			// is bold at the body size, so a size match cannot tell the two apart.
+			val from = text.indexOf("bold")
+			selectRange(from, from + "bold".length)
+			press(Key.C, ctrl = true)
+			waitForIdle()
+
+			val html = clipboardHtml()
+			assertTrue("<h4>" !in html, "a bold fragment must not serialize as a heading, got: $html")
+			assertTrue("<strong>bold</strong>" in html, "expected bold markup, got: $html")
+
+			// And it must not turn into one on the way back in either.
+			clickAtCharacter(text.length)
+			press(Key.Enter)
+			press(Key.V, ctrl = true)
+			waitForIdle()
+
+			assertTrue(
+				state.richSpanManager.getAllRichSpans().none { it.style is HeaderSpanStyle },
+				"pasting a bold fragment must not add a heading, got: ${markdown.exportAsMarkdown()}",
+			)
+		}
+
+	@Test
+	fun `cut captures the markup before the delete`() =
+		editorUiTest(width = 600.dp, height = 500.dp) {
+			markdown.importMarkdown(document)
+			waitForIdle()
+
+			val from = text.indexOf("First item")
+			val to = text.indexOf("Second item") + "Second item".length
+			selectRange(from, to)
+			press(Key.X, ctrl = true)
+			waitForIdle()
+
+			// The selection is gone from the document, so markup gathered after the
+			// delete would describe lines that no longer carry the list.
+			val html = clipboardHtml()
+			assertTrue(
+				"<li>First item</li>" in html && "<li>Second item</li>" in html,
+				"cut must put the pre-delete list on the clipboard, got: $html",
+			)
+		}
+
+	@Test
 	fun `pasting the copied markup into a second editor keeps the blocks`() {
 		// Copy in one editor, capture what it put on the clipboard.
 		var copied: Transferable? = null
@@ -145,9 +198,7 @@ class ClipboardBlockStructureE2eTest {
 		val html = copied!!.getTransferData(flavor) as String
 
 		editorUiTest(width = 600.dp, height = 500.dp) {
-			clipboard.seed(
-				androidx.compose.ui.platform.ClipEntry(utils.ForeignHtmlTransferable(html))
-			)
+			clipboard.seed(ClipEntry(ForeignHtmlTransferable(html)))
 			waitForIdle()
 			press(Key.V, ctrl = true)
 			waitForIdle()
