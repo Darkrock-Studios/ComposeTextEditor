@@ -105,10 +105,8 @@ class TextEditorState(
 		}
 
 	/**
-	 * Whether a markdown or HTML extension installed [markdownConfiguration]. A
-	 * plain editor keeps the default value but never opts in, so its typed text
-	 * is left to the host's [textStyle] rather than being stamped with a body
-	 * style it never asked for.
+	 * Whether an extension installed [markdownConfiguration]. A plain editor keeps
+	 * the default value but never opts in, so its typed text stays on [textStyle].
 	 */
 	internal var hasMarkdownConfiguration: Boolean = false
 		private set

@@ -13,10 +13,8 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 /**
- * Typed text adopts the styles of the character next to it. Where there is no such
- * character — the start of a document, or a line whose predecessor is blank — a
- * markdown editor falls back to its configured body style instead of leaving the
- * text unstyled at the bare default size.
+ * Typed text adopts the styles of the character next to it, falling back to the
+ * markdown body style when there is no such character.
  */
 class TypedTextBodyStyleTest {
 

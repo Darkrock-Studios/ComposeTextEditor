@@ -33,11 +33,9 @@ fun TextEditorState.getSpanStylesAtPosition(position: CharLineOffset): Set<SpanS
 
 /**
  * The character styles text inserted at [position] should adopt: those of the
- * character before it, or of the character it sits in front of when nothing precedes
- * it. Where neither exists — the start of a document, or a line whose predecessor is
- * blank, as every paragraph after the first is — a markdown editor falls back to its
- * configured body style. Without that fallback such text carries no style at all and
- * renders at the bare default size rather than the document's.
+ * character before it, or of the character it sits in front of. With neither (a
+ * blank line below a blank line, as every new paragraph starts out), a markdown
+ * editor falls back to its body style rather than leaving the text unstyled.
  */
 internal fun TextEditorState.getSpanStylesForEditAt(position: CharLineOffset): Set<SpanStyle> {
 	val styles = getSpanStylesAtPosition(precedingCharacter(position) ?: position)
