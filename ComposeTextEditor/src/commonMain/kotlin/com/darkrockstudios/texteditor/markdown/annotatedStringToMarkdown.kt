@@ -19,14 +19,6 @@ fun AnnotatedString.toMarkdown(
 ): String {
 	if (text.isEmpty()) return ""
 
-	// Create a list of style boundaries (start and end points)
-	data class StyleBoundary(
-		val index: Int,
-		val isStart: Boolean,
-		val marker: StyleMarkerPair,
-		val length: Int
-	)
-
 	// Group ranges by marker (not SpanStyle) so distinct-but-equivalent styles
 	// — e.g. bold spans of different colors — still coalesce below.
 	val rangesByMarker = LinkedHashMap<StyleMarkerPair, MutableList<IntRange>>()
@@ -66,7 +58,36 @@ fun AnnotatedString.toMarkdown(
 		?.let { coalesceRuns(it.value) }
 		?: emptyList()
 
-	val boundaries = mutableListOf<StyleBoundary>()
+	// Shrinks a run onto its text: CommonMark emphasis cannot open before or close
+	// after whitespace — "**word **" is literal asterisks to any parser, and
+	// re-importing it escalates into escaped garbage. Null once nothing is left.
+	fun trimRun(run: MarkerRun): MarkerRun? {
+		if (!run.marker.trimsWhitespaceEdges) return run
+		var start = run.start
+		var end = run.end
+		while (start < end && text[start].isWhitespace()) start++
+		while (end > start && text[end - 1].isWhitespace()) end--
+		return if (start >= end) null else MarkerRun(start, end, run.marker)
+	}
+
+	// The destination is emitted verbatim inside `(...)`; a URL whose characters
+	// would terminate or corrupt the destination gets the CommonMark
+	// angle-bracket form instead.
+	val linkRuns = links.mapNotNull { (range, url) ->
+		val start = range.first.coerceAtLeast(0)
+		val end = (range.last + 1).coerceAtMost(text.length)
+		if (start >= end) return@mapNotNull null
+		MarkerRun(
+			start, end,
+			StyleMarkerPair(
+				openMarker = "[",
+				closeMarker = "](${markdownLinkDestination(url)})",
+				isLink = true,
+			),
+		)
+	}
+
+	val styleRuns = mutableListOf<MarkerRun>()
 	rangesByMarker.forEach { (marker, ranges) ->
 		var runs = coalesceRuns(ranges)
 		if (marker.trimsWhitespaceEdges) {
@@ -76,104 +97,117 @@ fun AnnotatedString.toMarkdown(
 			// express styled code, so the overlap itself is unrepresentable anyway.
 			runs = runs.flatMap { run -> subtractRuns(run, codeRuns) }
 		}
-		runs.forEach { (rawStart, rawEnd) ->
-			var start = rawStart
-			var end = rawEnd
-			// CommonMark emphasis cannot open before or close after whitespace:
-			// "**word **" is literal asterisks to any parser, and re-importing it
-			// escalates into escaped garbage. Shrink the markers onto the text.
-			if (marker.trimsWhitespaceEdges) {
-				while (start < end && text[start].isWhitespace()) start++
-				while (end > start && text[end - 1].isWhitespace()) end--
-			}
-			if (start >= end) return@forEach
-			val length = end - start
-			boundaries.add(StyleBoundary(start, true, marker, length))
-			boundaries.add(StyleBoundary(end, false, marker, length))
+		runs.forEach { (start, end) ->
+			trimRun(MarkerRun(start, end, marker))?.let { styleRuns += it }
 		}
 	}
 
-	// The destination is emitted verbatim inside `(...)`; a URL whose characters
-	// would terminate or corrupt the destination gets the CommonMark
-	// angle-bracket form instead.
-	links.forEach { (range, url) ->
-		val start = range.first.coerceAtLeast(0)
-		val end = (range.last + 1).coerceAtMost(text.length)
-		if (start >= end) return@forEach
-		val marker = StyleMarkerPair(
-			openMarker = "[",
-			closeMarker = "](${markdownLinkDestination(url)})",
-			isLink = true,
-		)
-		boundaries.add(StyleBoundary(start, true, marker, end - start))
-		boundaries.add(StyleBoundary(end, false, marker, end - start))
-	}
+	// Splitting can expose a whitespace edge the first trim could not see, so trim
+	// the pieces too — then resolve again, because trimming a run that encloses a
+	// link can walk its start past the link's and cross what had been nested. The
+	// emitter below reads a stack, and only properly nested runs keep it honest.
+	val resolved = resolveCrossings(
+		resolveCrossings(styleRuns, linkRuns).mapNotNull(::trimRun),
+		linkRuns,
+	)
 
-	// Sort boundaries:
-	// 1. By index
-	// 2. For same index, close markers come before open markers
-	// 3. Link markers enclose inline emphasis sharing the boundary: a link
-	//    opens before and closes after any other marker at the same index
-	// 4. For same index and type, sort by run length (longer runs close first)
-	boundaries.sortWith(compareBy<StyleBoundary> { it.index }
-		.thenBy { it.isStart }
-		.thenBy { if (it.marker.isLink == it.isStart) 0 else 1 }
-		.thenByDescending { it.length })
+	// Outermost first at a shared start: longer runs, then links, so a link
+	// encloses the emphasis inside it. Closing is LIFO off the stack below, which
+	// makes every close the exact mirror of its open.
+	val ordered = (resolved + linkRuns).sortedWith(
+		compareBy<MarkerRun> { it.start }
+			.thenByDescending { it.end }
+			.thenBy { if (it.marker.isLink) 0 else 1 }
+	)
 
 	val result = StringBuilder()
 	var currentIndex = 0
 	var codeSpanDepth = 0
+	var nextRun = 0
+	val open = ArrayDeque<MarkerRun>()
 
-	boundaries.forEach { boundary ->
-		// Add any text between the last position and this boundary. CommonMark code
-		// spans take their content literally — backslash escapes do not apply — so we
-		// must emit raw characters inside a code span, otherwise round-tripping doubles
-		// the escapes on each export.
-		while (currentIndex < boundary.index) {
+	fun appendTextTo(target: Int) {
+		// CommonMark code spans take their content literally — backslash escapes do
+		// not apply — so we must emit raw characters inside a code span, otherwise
+		// round-tripping doubles the escapes on each export.
+		while (currentIndex < target) {
 			val ch = text[currentIndex]
-			if (codeSpanDepth > 0) {
-				result.append(ch)
-			} else {
-				result.append(escapeMarkdownChar(ch))
-			}
+			if (codeSpanDepth > 0) result.append(ch) else result.append(escapeMarkdownChar(ch))
 			currentIndex++
 		}
+	}
 
-		// Add the appropriate marker
-		if (boundary.isStart) {
-			if (boundary.marker.openMarker.contains("#")) {
-				// Ensure header starts on a new line
-				if (!result.endsWith("\n") && result.isNotEmpty()) {
-					result.append("\n")
-				}
-				result.append(boundary.marker.openMarker)
-			} else {
-				result.append(boundary.marker.openMarker)
-			}
-			if (boundary.marker.openMarker == "`") {
-				codeSpanDepth++
+	while (true) {
+		val nextClose = open.lastOrNull()?.end ?: Int.MAX_VALUE
+		val nextOpen = ordered.getOrNull(nextRun)?.start ?: Int.MAX_VALUE
+		if (nextClose == Int.MAX_VALUE && nextOpen == Int.MAX_VALUE) break
+
+		// Close before open at a shared index, so `~~a~~*b*` never becomes `~~a*~~b*`.
+		if (nextClose <= nextOpen) {
+			appendTextTo(nextClose)
+			val closing = open.removeLast()
+			if (closing.marker.closeMarker == "`") codeSpanDepth--
+			result.append(closing.marker.closeMarker)
+			if (closing.marker.closeMarker == "\n") {
+				// Avoid duplicate newlines
+				if (currentIndex < text.length && text[currentIndex] == '\n') currentIndex++
 			}
 		} else {
-			if (boundary.marker.closeMarker == "`") {
-				codeSpanDepth--
+			appendTextTo(nextOpen)
+			val opening = ordered[nextRun]
+			nextRun++
+			if (opening.marker.openMarker.contains("#")) {
+				// Ensure header starts on a new line
+				if (!result.endsWith("\n") && result.isNotEmpty()) result.append("\n")
 			}
-			result.append(boundary.marker.closeMarker)
-			if (boundary.marker.closeMarker == "\n") {
-				// Avoid duplicate newlines
-				if (currentIndex < text.length && text[currentIndex] == '\n') {
-					currentIndex++
-				}
-			}
+			result.append(opening.marker.openMarker)
+			if (opening.marker.openMarker == "`") codeSpanDepth++
+			open.addLast(opening)
 		}
 	}
 
-	// Add any remaining text
-	while (currentIndex < text.length) {
-		result.append(escapeMarkdownChar(text[currentIndex]))
-		currentIndex++
-	}
+	appendTextTo(text.length)
 
 	return escapeOrderedListMarkers(result.toString())
+}
+
+private data class MarkerRun(val start: Int, val end: Int, val marker: StyleMarkerPair)
+
+/**
+ * Splits partially overlapping runs so every pair is either disjoint or nested.
+ * Markdown delimiters only nest: a crossing pair serializes as `*a ~~b*~~`, which
+ * no parser reads back as emphasis — the markers survive into the text as literal
+ * characters and the styling is lost. A crossing is resolved by cutting the
+ * earlier run at the later one's start, which keeps both styles over exactly the
+ * text they covered. [fixed] runs are never cut: a split link would emit its
+ * destination twice.
+ */
+private fun resolveCrossings(runs: List<MarkerRun>, fixed: List<MarkerRun>): List<MarkerRun> {
+	val out = runs.toMutableList()
+	// Every split resolves one crossing without creating any, so the loop is
+	// bounded by the crossings present at entry.
+	var guard = 512
+	while (guard-- > 0) {
+		val cut = out.indices.firstNotNullOfOrNull { i ->
+			val run = out[i]
+			(out + fixed).firstNotNullOfOrNull { other ->
+				when {
+					run.start < other.start && other.start < run.end && run.end < other.end ->
+						i to other.start
+
+					other.start < run.start && run.start < other.end && other.end < run.end ->
+						i to other.end
+
+					else -> null
+				}
+			}
+		} ?: break
+		val (index, at) = cut
+		val run = out[index]
+		out[index] = MarkerRun(run.start, at, run.marker)
+		out.add(MarkerRun(at, run.end, run.marker))
+	}
+	return out
 }
 
 /** Splits [run] into the segments left after removing every overlap with [holes]. */
