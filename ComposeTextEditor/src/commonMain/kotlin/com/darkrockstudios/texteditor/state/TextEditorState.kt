@@ -99,7 +99,19 @@ class TextEditorState(
 	 * editors that do not use markdown keep the default.
 	 */
 	var markdownConfiguration: MarkdownConfiguration = MarkdownConfiguration.DEFAULT
-		internal set
+		internal set(value) {
+			field = value
+			hasMarkdownConfiguration = true
+		}
+
+	/**
+	 * Whether a markdown or HTML extension installed [markdownConfiguration]. A
+	 * plain editor keeps the default value but never opts in, so its typed text
+	 * is left to the host's [textStyle] rather than being stamped with a body
+	 * style it never asked for.
+	 */
+	internal var hasMarkdownConfiguration: Boolean = false
+		private set
 
 	/**
 	 * Theming colors for line-block gutter markers, mirrored from
