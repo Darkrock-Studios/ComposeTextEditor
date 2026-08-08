@@ -48,20 +48,6 @@ fun SpellCheckingTextEditorDemoUi(
 		markdownExtension.importMarkdown(SIMPLE_MARKDOWN)
 	}
 
-	// `setText` (called inside `importMarkdown`) doesn't emit an editOperation,
-	// so the spell-check listener never sees the import. The `LaunchedEffect`
-	// inside `rememberSpellCheckState` runs `runFullSpellCheck` once when the
-	// platform spellChecker first becomes non-null — but on Android the system
-	// SpellCheckerSession initialises faster than `importMarkdown` runs, so
-	// that one-shot check fires over empty text and squiggles never appear.
-	// Re-running here keyed on `(spellChecker, markdownExtension)` makes the
-	// check deterministic regardless of which side wins the init race.
-	LaunchedEffect(spellChecker, markdownExtension) {
-		if (spellChecker != null) {
-			state.runFullSpellCheck()
-		}
-	}
-
 	Column(modifier = modifier) {
 		Row {
 			Text(

@@ -62,7 +62,8 @@ import kotlin.math.min
  * Related concerns are delegated to focused sub-objects exposed as properties:
  * [cursor] (caret position and movement), [selector] (selection), [scrollManager]
  * (scrolling and visible range), and [richSpanManager] (rich-span book-keeping).
- * Observe changes reactively via [cursorDataFlow] and [editOperations].
+ * Observe changes reactively via [cursorDataFlow], [editOperations] and
+ * [documentReplacements].
  *
  * Coordinates are [CharLineOffset]s and [TextEditorRange]s; convert to and from flat
  * character indices with [getCharacterIndex]/[getOffsetAtCharacter].
@@ -485,6 +486,15 @@ class TextEditorState(
 	 */
 	val actions: EditorActionRegistry = EditorActionRegistry()
 
+	private val _documentReplacements = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+
+	/**
+	 * Fires when [setText] swaps the whole document. A replacement is not an edit and
+	 * emits nothing on [editOperations], so anything deriving state from the text
+	 * (spell check, search results) has no other way to learn its document is gone.
+	 */
+	val documentReplacements: Flow<Unit> = _documentReplacements
+
 	/**
 	 * Replaces the entire document with [text], clearing rich spans and resetting
 	 * book-keeping. To edit existing content instead, use [replace] or the cursor
@@ -822,6 +832,7 @@ class TextEditorState(
 	 */
 	private fun replaceContent(lines: List<AnnotatedString>) {
 		mutateContent { DocumentSnapshot(lines, emptySet()) }
+		_documentReplacements.tryEmit(Unit)
 	}
 
 	internal fun setLines(lines: List<AnnotatedString>) {
