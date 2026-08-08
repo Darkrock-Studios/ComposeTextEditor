@@ -64,6 +64,9 @@ class SpellCheckStateTest {
 		spellCheckState = SpellCheckState(textState, spellChecker)
 	}
 
+	private fun spellCheckSpans(): Int =
+		textState.richSpanManager.getAllRichSpans().count { it.style is SpellCheckStyle }
+
 	@Test
 	fun `test checkWordSegment with correct word`() = runTest {
 		// Setup
@@ -198,6 +201,73 @@ class SpellCheckStateTest {
 	}
 
 	@Test
+	fun `a full check that outlived an edit re-runs against the new text`() = runTest {
+		textState.setText("helllo world")
+		val gate = CompletableDeferred<Unit>()
+		val gated = GatedSpellChecker(gate)
+		spellCheckState.spellChecker = gated
+
+		val job = launch { spellCheckState.runFullSpellCheck() }
+		runCurrent() // the check is suspended in its word lookups
+
+		// Three words where the pre-edit document had two, so a stale swap is visible
+		textState.setText("aaa bbb ccc")
+		gate.complete(Unit)
+		runCurrent()
+		job.join()
+
+		assertEquals(3, spellCheckSpans())
+	}
+
+	@Test
+	fun `two checks never run against the spell checker at once`() = runTest {
+		textState.setText("helllo world")
+		val gate = CompletableDeferred<Unit>()
+		val gated = GatedSpellChecker(gate)
+		spellCheckState.spellChecker = gated
+
+		val first = launch { spellCheckState.runFullSpellCheck() }
+		val second = launch { spellCheckState.runFullSpellCheck() }
+		runCurrent()
+		gate.complete(Unit)
+		runCurrent()
+		first.join()
+		second.join()
+
+		assertEquals(1, gated.maxInFlight)
+	}
+
+	@Test
+	fun `a check queued behind an identical one does not scan the document again`() = runTest {
+		textState.setText("helllo world")
+		val gate = CompletableDeferred<Unit>()
+		val gated = GatedSpellChecker(gate)
+		spellCheckState.spellChecker = gated
+
+		val first = launch { spellCheckState.runFullSpellCheck() }
+		val second = launch { spellCheckState.runFullSpellCheck() }
+		runCurrent()
+		gate.complete(Unit)
+		runCurrent()
+		first.join()
+		second.join()
+
+		assertEquals(2, gated.lookups, "One pass over the two words, not two passes")
+	}
+
+	@Test
+	fun `a later check over the same text still runs`() = runTest {
+		textState.setText("helllo world")
+		val gated = GatedSpellChecker()
+		spellCheckState.spellChecker = gated
+
+		spellCheckState.runFullSpellCheck()
+		spellCheckState.runFullSpellCheck()
+
+		assertEquals(4, gated.lookups, "A refresh is not a duplicate and must re-scan")
+	}
+
+	@Test
 	fun `test setSpellCheckingEnabled true re-runs full check`() = runTest {
 		// Setup: start disabled with a misspelled word present
 		spellCheckState.setSpellCheckingEnabled(false)
@@ -218,6 +288,39 @@ class SpellCheckStateTest {
 		assertEquals(1, spans.size)
 		assertTrue(spans.first().style is SpellCheckStyle)
 	}
+}
+
+/**
+ * Flags every word, counts lookups, and reports the most it was ever asked to do at
+ * once. [gate], when given, holds every lookup open so a test can interleave.
+ */
+private class GatedSpellChecker(
+	private val gate: CompletableDeferred<Unit>? = null,
+) : EditorSpellChecker {
+	var lookups = 0
+		private set
+	var maxInFlight = 0
+		private set
+
+	private var inFlight = 0
+
+	override suspend fun isCorrectWord(word: String): Boolean {
+		lookups++
+		inFlight++
+		maxInFlight = maxOf(maxInFlight, inFlight)
+		try {
+			gate?.await()
+		} finally {
+			inFlight--
+		}
+		return false
+	}
+
+	override suspend fun suggestions(
+		input: String,
+		scope: EditorSpellChecker.Scope,
+		closestOnly: Boolean,
+	): List<Suggestion> = emptyList()
 }
 
 private class MockEditorSpellChecker(
