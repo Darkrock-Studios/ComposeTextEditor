@@ -16,6 +16,9 @@ import com.darkrockstudios.texteditor.state.sentenceSegments
 import com.darkrockstudios.texteditor.state.sentenceSegmentsInRange
 import com.darkrockstudios.texteditor.state.wordSegments
 import com.darkrockstudios.texteditor.state.wordSegmentsInRange
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlin.coroutines.CoroutineContext
 
 /**
  * Determines which spell checking mode is active.
@@ -42,12 +45,17 @@ enum class SpellCheckMode {
  * @param enableSpellChecking Whether spell checking is active initially; exposed via
  *   [spellCheckingEnabled].
  * @property spellCheckMode Whether checking operates per-word or per-sentence; see [SpellCheckMode].
+ * @param scanContext The context the dictionary lookups run in. Checks start on the UI
+ *   dispatcher and an [EditorSpellChecker] typically hops to a worker per lookup, so gathering
+ *   them here keeps the caller's dispatcher out of the loop. Span mutations still happen on the
+ *   caller's dispatcher once the scan returns.
  */
 class SpellCheckState(
 	val textState: TextEditorState,
 	var spellChecker: EditorSpellChecker?,
 	enableSpellChecking: Boolean = true,
 	var spellCheckMode: SpellCheckMode = SpellCheckMode.Word,
+	private val scanContext: CoroutineContext = Dispatchers.Default,
 ) {
 	/** Whether spell checking is currently active. Toggle via [setSpellCheckingEnabled]. */
 	var spellCheckingEnabled: Boolean = enableSpellChecking
@@ -190,29 +198,37 @@ class SpellCheckState(
 		val sp = spellChecker ?: return
 		if (spellCheckingEnabled.not()) return
 
-		println("Running full Word Spell Check")
+		repeat(MAX_SCAN_ATTEMPTS) {
+			// Compute the misspellings under suspension WITHOUT touching spans. A
+			// cancellation here (e.g. a recomposition restarting the check) leaves the
+			// existing spans intact rather than wiping them.
+			val scannedText = textState.computeTextHash()
+			val candidates = textState.wordSegments().filter(::shouldSpellCheck).toList()
+			val misspelled = withContext(scanContext) {
+				candidates.filterNot { sp.isCorrectWord(it.text) }
+			}
 
-		// Compute the misspellings under suspension WITHOUT touching spans. A
-		// cancellation here (e.g. a recomposition restarting the check) leaves the
-		// existing spans intact rather than wiping them.
-		val candidates = textState.wordSegments().filter(::shouldSpellCheck).toList()
-		val misspelled = candidates.filterNot { sp.isCorrectWord(it.text) }
+			// Re-check after the async lookups: a concurrent disable must not have its
+			// clearing undone by this swap.
+			if (spellCheckingEnabled.not()) return
+			// The document stays editable while the lookups run, so a scan that raced an
+			// edit describes text that has moved; planting its ranges would underline the
+			// wrong words. Re-scan the newer text instead.
+			if (textState.computeTextHash() != scannedText) return@repeat
 
-		// Re-check after the async lookups: a concurrent disable must not have its
-		// clearing undone by this swap.
-		if (spellCheckingEnabled.not()) return
-
-		// Swap atomically: no suspension points between removal and re-add, and the
-		// batch lands as one measure-free relayout instead of one per span.
-		val doomed = textState.richSpanManager.getAllRichSpans()
-			.filter { it.style is SpellCheckStyle }
-		misspelledWords.clear()
-		sentenceCorrections.clear()
-		textState.updateRichSpans(
-			remove = doomed,
-			add = misspelled.map { RichSpan(it.range, SpellCheckStyle) },
-		)
-		misspelledWords.addAll(misspelled)
+			// Swap atomically: no suspension points between removal and re-add, and the
+			// batch lands as one measure-free relayout instead of one per span.
+			val doomed = textState.richSpanManager.getAllRichSpans()
+				.filter { it.style is SpellCheckStyle }
+			misspelledWords.clear()
+			sentenceCorrections.clear()
+			textState.updateRichSpans(
+				remove = doomed,
+				add = misspelled.map { RichSpan(it.range, SpellCheckStyle) },
+			)
+			misspelledWords.addAll(misspelled)
+			return
+		}
 	}
 
 	/**
@@ -222,28 +238,35 @@ class SpellCheckState(
 		val sp = spellChecker ?: return
 		if (spellCheckingEnabled.not()) return
 
-		println("Running full Sentence Spell Check")
+		repeat(MAX_SCAN_ATTEMPTS) {
+			// Compute corrections under suspension first; only mutate spans once the
+			// async work is done, so a cancellation can't leave the document wiped.
+			val scannedText = textState.computeTextHash()
+			val sentences = textState.sentenceSegments().toList()
+			val corrections = withContext(scanContext) {
+				sentences.flatMap { sentence -> sp.checkSentence(sentence.text, sentence.range) }
+			}
 
-		// Compute corrections under suspension first; only mutate spans once the
-		// async work is done, so a cancellation can't leave the document wiped.
-		val corrections = textState.sentenceSegments().toList().flatMap { sentence ->
-			sp.checkSentence(sentence.text, sentence.range)
+			// Re-check after the async lookups: a concurrent disable must not have its
+			// clearing undone by this swap.
+			if (spellCheckingEnabled.not()) return
+			// The document stays editable while the lookups run, so a scan that raced an
+			// edit describes text that has moved; planting its ranges would underline the
+			// wrong words. Re-scan the newer text instead.
+			if (textState.computeTextHash() != scannedText) return@repeat
+
+			// One measure-free relayout for the whole swap instead of one per span.
+			val doomed = textState.richSpanManager.getAllRichSpans()
+				.filter { it.style is SpellCheckStyle }
+			misspelledWords.clear()
+			sentenceCorrections.clear()
+			textState.updateRichSpans(
+				remove = doomed,
+				add = corrections.map { RichSpan(it.range, SpellCheckStyle) },
+			)
+			sentenceCorrections.addAll(corrections)
+			return
 		}
-
-		// Re-check after the async lookups: a concurrent disable must not have its
-		// clearing undone by this swap.
-		if (spellCheckingEnabled.not()) return
-
-		// One measure-free relayout for the whole swap instead of one per span.
-		val doomed = textState.richSpanManager.getAllRichSpans()
-			.filter { it.style is SpellCheckStyle }
-		misspelledWords.clear()
-		sentenceCorrections.clear()
-		textState.updateRichSpans(
-			remove = doomed,
-			add = corrections.map { RichSpan(it.range, SpellCheckStyle) },
-		)
-		sentenceCorrections.addAll(corrections)
 	}
 
 	private suspend fun runPartialWordCheck(range: TextEditorRange) {
@@ -253,7 +276,9 @@ class SpellCheckState(
 		// Compute misspellings under suspension before touching spans, so a
 		// cancellation leaves the range's existing spans intact.
 		val candidates = textState.wordSegmentsInRange(range).filter(::shouldSpellCheck)
-		val misspelled = candidates.filterNot { sp.isCorrectWord(it.text) }
+		val misspelled = withContext(scanContext) {
+			candidates.filterNot { sp.isCorrectWord(it.text) }
+		}
 
 		// A concurrent disable may have cleared the document while this check was
 		// suspended on lookups; adding spans now would undo its cleanup.
@@ -280,8 +305,9 @@ class SpellCheckState(
 
 		// Compute corrections under suspension before touching spans, so a
 		// cancellation leaves the range's existing spans intact.
-		val corrections = textState.sentenceSegmentsInRange(range).flatMap { sentence ->
-			sp.checkSentence(sentence.text, sentence.range)
+		val sentences = textState.sentenceSegmentsInRange(range)
+		val corrections = withContext(scanContext) {
+			sentences.flatMap { sentence -> sp.checkSentence(sentence.text, sentence.range) }
 		}
 
 		// A concurrent disable may have cleared the document while this check was
@@ -418,5 +444,10 @@ class SpellCheckState(
 			}
 
 		return combined
+	}
+
+	private companion object {
+		/** Attempts a full scan gets to land against text that stopped moving. */
+		const val MAX_SCAN_ATTEMPTS = 3
 	}
 }
