@@ -28,6 +28,13 @@ class TextEditorCursorState(
 			_stylesFlow.tryEmit(value)
 		}
 
+	/**
+	 * The document revision [styles] was last derived from. [updatePosition] skips the
+	 * recompute when neither the caret nor this changed since then. Starts as the
+	 * revision seen at construction, matching the empty [styles].
+	 */
+	private var stylesDerivedFrom: DocumentSnapshot = editorState.workingContent
+
 	private val _stylesFlow = MutableSharedFlow<Set<SpanStyle>>(
 		extraBufferCapacity = 1,
 		onBufferOverflow = BufferOverflow.DROP_OLDEST
@@ -41,12 +48,22 @@ class TextEditorCursorState(
 	val positionFlow: SharedFlow<CharLineOffset> = _cursorPositionFlow
 
 	fun updatePosition(position: CharLineOffset, updateStyles: Boolean = true) {
+		val oldPosition = _position
 		val newPosition = position.coerceInto(editorState.textLines)
 		_position = newPosition
 		_cursorPositionFlow.tryEmit(newPosition)
 
-		// Update styles based on surrounding text (skip during text operations to preserve manually-set styles)
-		if (updateStyles) {
+		// Recompute the typing style from the surrounding text only when something it
+		// derives from changed: the caret moved, or an edit altered the text under it
+		// (an edit can leave the caret offset untouched, e.g. styling a selection).
+		// Focus handlers and pointer taps re-assert the position the caret already
+		// has; recomputing then would wipe styles toggled onto the caret
+		// ([toggleStyle]) before the user gets to type with them.
+		// (Skip during text operations to preserve manually-set styles still applies
+		// via [updateStyles].)
+		if (updateStyles &&
+			(newPosition != oldPosition || editorState.workingContent !== stylesDerivedFrom)
+		) {
 			updateStylesFromPosition(newPosition)
 		}
 
@@ -95,6 +112,7 @@ class TextEditorCursorState(
 	}
 
 	private fun updateStylesFromPosition(position: CharLineOffset) {
+		stylesDerivedFrom = editorState.workingContent
 		styles = editorState.getSpanStylesForEditAt(position)
 	}
 
