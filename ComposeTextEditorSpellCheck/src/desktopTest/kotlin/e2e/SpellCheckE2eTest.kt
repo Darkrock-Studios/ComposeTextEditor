@@ -1,5 +1,10 @@
 package e2e
 
+import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import com.darkrockstudios.texteditor.contextmenu.ContextMenuItem
+import com.darkrockstudios.texteditor.spellcheck.SpellCheckItem
 import utils.CountingSpellChecker
 import utils.spellCheckUiTest
 import kotlin.test.Test
@@ -10,6 +15,7 @@ import kotlin.test.assertEquals
  * [SpellCheckingTextEditor][com.darkrockstudios.texteditor.spellcheck.SpellCheckingTextEditor],
  * real key events, and the debounced partial-check pipeline.
  */
+@OptIn(ExperimentalTestApi::class)
 class SpellCheckE2eTest {
 
 	/** Distinct, layout-independent words so segmentation yields exactly [count] segments. */
@@ -84,6 +90,31 @@ class SpellCheckE2eTest {
 			letSpellCheckSettle()
 
 			assertEquals(0, spellCheckSpanCount)
+		}
+	}
+
+	@Test
+	fun `host menu items are offered on a flagged word`() {
+		val checker = CountingSpellChecker(correctWords = setOf("fine"))
+		var addedWord: String? = null
+
+		spellCheckUiTest(
+			spellChecker = checker,
+			initialText = "fine brokenword fine",
+			spellCheckMenuItems = { item ->
+				if (item is SpellCheckItem.MisspelledWord) {
+					listOf(ContextMenuItem(label = "Add to dictionary") { addedWord = item.segment.text })
+				} else {
+					emptyList()
+				}
+			},
+		) {
+			assertEquals(1, spellCheckSpanCount)
+
+			rightClickAtCharacter(7)
+
+			test.onNodeWithText("Add to dictionary").assertExists().performClick()
+			assertEquals("brokenword", addedWord)
 		}
 	}
 }

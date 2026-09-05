@@ -54,6 +54,9 @@ private val DefaultContentPadding = PaddingValues(start = 8.dp)
  * @param autoFocus Whether the editor requests focus on first composition.
  * @param style The [TextEditorStyle] controlling appearance.
  * @param contextMenuStrings Localized strings for the built-in context menu.
+ * @param spellCheckMenuItems Extra items appended to the context menu opened on a flagged span,
+ *   after the suggestions (for example "Add to dictionary"). Shown while suggestions are still
+ *   loading, so they are available immediately.
  * @param onRichSpanClick Optional listener for clicks on non-spell-check rich spans; spell-check
  *   spans are handled internally.
  */
@@ -67,6 +70,7 @@ fun SpellCheckingTextEditor(
 	autoFocus: Boolean = false,
 	style: TextEditorStyle = rememberTextEditorStyle(),
 	contextMenuStrings: ContextMenuStrings = ContextMenuStrings.Default,
+	spellCheckMenuItems: (SpellCheckItem) -> List<ContextMenuItem> = { emptyList() },
 	onRichSpanClick: RichSpanClickListener? = null,
 ) {
 	val contextMenuState = remember { TextEditorContextMenuState() }
@@ -133,6 +137,7 @@ fun SpellCheckingTextEditor(
 			// No spell check item - just show standard menu
 			contextMenuState.showMenu(menuPos)
 		} else {
+			val hostItems = spellCheckMenuItems(spellCheckItem)
 			// Show menu immediately, then fetch suggestions async for misspelled words
 			when (spellCheckItem) {
 				is SpellCheckItem.MisspelledWord -> {
@@ -140,20 +145,20 @@ fun SpellCheckingTextEditor(
 					contextMenuState.showMenu(
 						menuPos, listOf(
 							ContextMenuItem(label = "Loading...", enabled = false, onClick = {})
-						)
+						) + hostItems
 					)
 					// Fetch suggestions asynchronously
 					coroutineScope.launch {
 						val suggestions = state.getSuggestions(spellCheckItem.segment.text)
 						val items = createSpellSuggestionItems(spellCheckItem, suggestions)
-						contextMenuState.extraItems.value = items
+						contextMenuState.extraItems.value = items + hostItems
 					}
 				}
 
 				is SpellCheckItem.SentenceIssue -> {
 					// Sentence issues already have suggestions
 					val items = createSpellSuggestionItems(spellCheckItem, spellCheckItem.correction.suggestions)
-					contextMenuState.showMenu(menuPos, items)
+					contextMenuState.showMenu(menuPos, items + hostItems)
 				}
 			}
 		}
