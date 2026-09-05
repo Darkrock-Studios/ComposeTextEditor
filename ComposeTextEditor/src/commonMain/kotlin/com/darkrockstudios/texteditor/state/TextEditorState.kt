@@ -104,6 +104,9 @@ class TextEditorState(
 		internal set(value) {
 			field = value
 			hasMarkdownConfiguration = true
+			// The typing style is derived from this as well as from the text, so a
+			// config swap invalidates it even though the document did not change.
+			cursor.refreshStyles()
 		}
 
 	/**
