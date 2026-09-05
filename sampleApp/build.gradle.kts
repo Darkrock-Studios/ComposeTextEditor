@@ -13,6 +13,7 @@ plugins {
 }
 
 kotlin {
+	jvmToolchain(libs.versions.jvm.get().toInt())
 	applyDefaultHierarchyTemplate()
 	jvm("desktop")
 	androidLibrary {

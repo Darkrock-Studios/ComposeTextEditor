@@ -7,6 +7,7 @@ plugins {
 }
 
 kotlin {
+	jvmToolchain(libs.versions.jvm.get().toInt())
 	compilerOptions {
 		jvmTarget.set(JvmTarget.fromTarget(libs.versions.jvm.get()))
 	}
