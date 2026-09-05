@@ -2,7 +2,7 @@
 <html class="no-js" lang="en">
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1" charset="UTF-8">
-    <title>RichSpanClickListener</title>
+    <title>trailingItems</title>
 <link href="../../../images/logo-icon.svg" rel="icon" type="image/svg"><script>var pathToRoot = "../../../";</script>
     <script>document.documentElement.classList.replace("no-js", "js");</script>
     <script>const storage = localStorage.getItem("dokka-dark-mode")
@@ -89,16 +89,12 @@
         </nav>
         <div id="resizer" class="resizer" data-item-type="BAR"></div>
         <div id="main" data-item-type="SECTION" role="main">
-<div class="main-content" data-page-type="classlike" id="content" pageids="Editor::com.darkrockstudios.texteditor/RichSpanClickListener///PointingToDeclaration//-556598459">
-  <div class="breadcrumbs"><a href="../../index.html">Editor</a><span class="delimiter">/</span><a href="../index.html">com.darkrockstudios.texteditor</a><span class="delimiter">/</span><span class="current">RichSpanClickListener</span></div>
+<div class="main-content" data-page-type="member" id="content" pageids="Editor::com.darkrockstudios.texteditor.contextmenu/TextEditorContextMenuState/trailingItems/#/PointingToDeclaration//-556598459">
+  <div class="breadcrumbs"><a href="../../index.html">Editor</a><span class="delimiter">/</span><a href="../index.html">com.darkrockstudios.texteditor.contextmenu</a><span class="delimiter">/</span><a href="index.html">TextEditorContextMenuState</a><span class="delimiter">/</span><span class="current">trailingItems</span></div>
   <div class="cover ">
-    <h1 class="cover"><span>Rich</span><wbr><span>Span</span><wbr><span>Click</span><wbr><span><span>Listener</span></span></h1>
-    <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">typealias </span><a href="index.html">RichSpanClickListener</a><span class="token operator"> = </span><span class="token punctuation">(</span><a href="../../com.darkrockstudios.texteditor.richstyle/-rich-span/index.html">RichSpan</a><span class="token punctuation">, </span><a href="../../com.darkrockstudios.texteditor.state/-span-click-type/index.html">SpanClickType</a><span class="token punctuation">, </span><a href="https://developer.android.com/reference/kotlin/androidx/compose/ui/geometry/Offset.html">Offset</a><span class="token punctuation">)</span><span class="token operator"> -&gt; </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html">Boolean</a><span class="source-link-wrapper"><span class="source-link" data-element-type="source-link">(<a href="https://github.com/Darkrock-Studios/ComposeTextEditor/blob/main/ComposeTextEditor/src/commonMain/kotlin/com/darkrockstudios/texteditor/BasicTextEditor.kt#L374">source</a>)</span></span></div><p class="paragraph">Handles clicks on a <a href="../../com.darkrockstudios.texteditor.richstyle/-rich-span/index.html">RichSpan</a>. Receives the clicked span, the <a href="../../com.darkrockstudios.texteditor.state/-span-click-type/index.html">SpanClickType</a> that distinguishes a tap from a left- or right-click, and the click <a href="https://developer.android.com/reference/kotlin/androidx/compose/ui/geometry/Offset.html">Offset</a> in editor coordinates.</p><p class="paragraph">The return value is a chaining protocol between listeners: <code class="lang-kotlin">true</code> means "this click was answered here", which lets a wrapping listener (e.g. the spell-check editor's) decide whether to delegate a click onward to the host's listener. It does not affect the editor itself: caret placement, selection, scrolling, focus, and the soft keyboard all behave the same whatever is returned.</p></div></div>
+    <h1 class="cover"><span>trailing</span><wbr><span><span>Items</span></span></h1>
   </div>
-  <div class="tabbedcontent">
-    <div class="tabs-section" tabs-section="tabs-section"></div>
-    <div class="tabs-section-body"></div>
-  </div>
+  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">val </span><a href="trailing-items.html">trailingItems</a><span class="token operator">: </span><a href="https://developer.android.com/reference/kotlin/androidx/compose/runtime/MutableState.html">MutableState</a><span class="token operator">&lt;</span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/-list/index.html">List</a><span class="token operator">&lt;</span><a href="../-context-menu-item/index.html">ContextMenuItem</a><span class="token operator">&gt;</span><span class="token operator">&gt;</span><span class="source-link-wrapper"><span class="source-link" data-element-type="source-link">(<a href="https://github.com/Darkrock-Studios/ComposeTextEditor/blob/main/ComposeTextEditor/src/commonMain/kotlin/com/darkrockstudios/texteditor/contextmenu/TextEditorContextMenuState.kt#L36">source</a>)</span></span></div><p class="paragraph">Items rendered after <a href="extra-items.html">extraItems</a> as a separate, divider-delimited group: host actions such as "Add to dictionary" that must not read as one more suggestion.</p></div></div>
 </div>
     <div class="footer">
         <div class="footer--container">
