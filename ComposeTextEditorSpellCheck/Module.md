@@ -38,7 +38,11 @@ fun SpellCheckedEditor(spellChecker: EditorSpellChecker) {
 `SpellCheckingTextEditor` draws the squiggles and wires misspelled-word taps to a
 suggestion menu for you. Toggle checking at runtime with
 `state.setSpellCheckingEnabled(...)`, or fetch suggestions yourself via
-`state.getSuggestions(word)`.
+`state.getSuggestions(word)`. To add your own entries to that menu, such as an
+"Add to dictionary" action, pass `spellCheckMenuItems`: it receives the flagged
+[SpellCheckItem][com.darkrockstudios.texteditor.spellcheck.SpellCheckItem] and returns
+[ContextMenuItem][com.darkrockstudios.texteditor.contextmenu.ContextMenuItem]s rendered
+as their own group after the suggestions.
 
 ## Choosing a backend
 

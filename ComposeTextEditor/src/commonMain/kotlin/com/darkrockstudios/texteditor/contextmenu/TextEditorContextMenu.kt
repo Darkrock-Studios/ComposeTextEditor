@@ -22,6 +22,7 @@ import kotlin.math.roundToInt
  * @param strings Localizable strings for menu items
  * @param enabled Whether editing operations (cut, paste) are enabled
  * @param extraItems Extra menu items to display before standard items
+ * @param trailingItems Items shown after [extraItems] in their own divider-delimited group
  * @param onDismiss Callback when the menu should be dismissed
  */
 @Composable
@@ -31,6 +32,7 @@ internal fun TextEditorContextMenu(
 	strings: ContextMenuStrings,
 	enabled: Boolean,
 	extraItems: List<ContextMenuItem> = emptyList(),
+	trailingItems: List<ContextMenuItem> = emptyList(),
 	onDismiss: () -> Unit,
 ) {
 	val showCut = actions.canCut() && enabled
@@ -40,7 +42,7 @@ internal fun TextEditorContextMenu(
 
 	// Every standard item is conditional, so a registry with them all dropped would
 	// otherwise pop an empty dropdown the user has to click away.
-	if (extraItems.isEmpty() && !showCut && !showCopy && !showPaste && !showSelectAll) {
+	if (extraItems.isEmpty() && trailingItems.isEmpty() && !showCut && !showCopy && !showPaste && !showSelectAll) {
 		onDismiss()
 		return
 	}
@@ -56,19 +58,15 @@ internal fun TextEditorContextMenu(
 			onDismissRequest = onDismiss,
 		) {
 			// Extra items first (e.g., spell check suggestions)
-			extraItems.forEach { item ->
-				DropdownMenuItem(
-					text = { Text(item.label) },
-					enabled = item.enabled,
-					onClick = {
-						item.onClick()
-						onDismiss()
-					},
-				)
-			}
+			CustomItems(extraItems, onDismiss)
 
-			// Divider between extra items and standard items
-			if (extraItems.isNotEmpty()) {
+			if (extraItems.isNotEmpty() && trailingItems.isNotEmpty()) {
+				HorizontalDivider()
+			}
+			CustomItems(trailingItems, onDismiss)
+
+			// Divider between custom items and standard items
+			if (extraItems.isNotEmpty() || trailingItems.isNotEmpty()) {
 				HorizontalDivider()
 			}
 
@@ -112,5 +110,19 @@ internal fun TextEditorContextMenu(
 				)
 			}
 		}
+	}
+}
+
+@Composable
+private fun CustomItems(items: List<ContextMenuItem>, onDismiss: () -> Unit) {
+	items.forEach { item ->
+		DropdownMenuItem(
+			text = { Text(item.label) },
+			enabled = item.enabled,
+			onClick = {
+				item.onClick()
+				onDismiss()
+			},
+		)
 	}
 }

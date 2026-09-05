@@ -23,6 +23,7 @@ actual fun TextEditorContextMenuProvider(
 				strings = strings,
 				enabled = enabled,
 				extraItems = menuState.extraItems.value,
+				trailingItems = menuState.trailingItems.value,
 				onDismiss = menuState::dismissMenu
 			)
 		}

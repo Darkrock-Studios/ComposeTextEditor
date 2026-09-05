@@ -1,21 +1,24 @@
 package e2e
 
-import androidx.compose.ui.test.ExperimentalTestApi
-import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.performClick
+import com.darkrockstudios.texteditor.CharLineOffset
+import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.contextmenu.ContextMenuItem
 import com.darkrockstudios.texteditor.spellcheck.SpellCheckItem
+import com.darkrockstudios.texteditor.spellcheck.SpellCheckMode
+import com.darkrockstudios.texteditor.spellcheck.api.Correction
+import com.darkrockstudios.texteditor.spellcheck.api.Suggestion
 import utils.CountingSpellChecker
 import utils.spellCheckUiTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 /**
  * Spell checking through the real editor stack: a composed
  * [SpellCheckingTextEditor][com.darkrockstudios.texteditor.spellcheck.SpellCheckingTextEditor],
  * real key events, and the debounced partial-check pipeline.
  */
-@OptIn(ExperimentalTestApi::class)
 class SpellCheckE2eTest {
 
 	/** Distinct, layout-independent words so segmentation yields exactly [count] segments. */
@@ -93,28 +96,120 @@ class SpellCheckE2eTest {
 		}
 	}
 
+	// --- host menu items ------------------------------------------------------
+
+	private val addToDictionary = "Add to dictionary"
+
+	private fun hostItemsFor(sink: (String) -> Unit): (SpellCheckItem) -> List<ContextMenuItem> = { item ->
+		when (item) {
+			is SpellCheckItem.MisspelledWord ->
+				listOf(ContextMenuItem(label = addToDictionary) { sink(item.segment.text) })
+
+			is SpellCheckItem.SentenceIssue ->
+				listOf(ContextMenuItem(label = "Ignore sentence") { sink(item.correction.originalText) })
+		}
+	}
+
 	@Test
-	fun `host menu items are offered on a flagged word`() {
+	fun `host items follow the suggestions on a flagged word`() {
+		val checker = CountingSpellChecker(correctWords = setOf("fine"), suggestions = listOf("brokenwork"))
+		var addedWord: String? = null
+
+		spellCheckUiTest(
+			spellChecker = checker,
+			initialText = "fine brokenword fine",
+			spellCheckMenuItems = hostItemsFor { addedWord = it },
+		) {
+			assertEquals(1, spellCheckSpanCount)
+
+			rightClickAtCharacter(7)
+			awaitMenuItem(addToDictionary)
+
+			assertTrue(hasMenuItem("brokenwork"))
+			assertTrue(menuItemTop(addToDictionary) > menuItemTop("brokenwork"), "host items render after the suggestions")
+
+			clickMenuItem(addToDictionary)
+			assertEquals("brokenword", addedWord)
+		}
+	}
+
+	@Test
+	fun `host items are offered when the checker has no suggestions`() {
 		val checker = CountingSpellChecker(correctWords = setOf("fine"))
 		var addedWord: String? = null
 
 		spellCheckUiTest(
 			spellChecker = checker,
 			initialText = "fine brokenword fine",
-			spellCheckMenuItems = { item ->
-				if (item is SpellCheckItem.MisspelledWord) {
-					listOf(ContextMenuItem(label = "Add to dictionary") { addedWord = item.segment.text })
-				} else {
-					emptyList()
-				}
-			},
+			spellCheckMenuItems = hostItemsFor { addedWord = it },
+		) {
+			rightClickAtCharacter(7)
+			awaitMenuItem(addToDictionary)
+
+			assertTrue(hasMenuItem("No suggestions"))
+			clickMenuItem(addToDictionary)
+			assertEquals("brokenword", addedWord)
+		}
+	}
+
+	@Test
+	fun `host items are not offered on a correctly spelled word`() {
+		val checker = CountingSpellChecker(correctWords = setOf("fine"))
+
+		spellCheckUiTest(
+			spellChecker = checker,
+			initialText = "fine brokenword fine",
+			spellCheckMenuItems = hostItemsFor {},
+		) {
+			rightClickAtCharacter(1)
+
+			assertFalse(hasMenuItem(addToDictionary))
+		}
+	}
+
+	@Test
+	fun `host items are not offered while the editor is disabled`() {
+		val checker = CountingSpellChecker(correctWords = setOf("fine"))
+
+		spellCheckUiTest(
+			spellChecker = checker,
+			initialText = "fine brokenword fine",
+			enabled = false,
+			spellCheckMenuItems = hostItemsFor {},
 		) {
 			assertEquals(1, spellCheckSpanCount)
 
 			rightClickAtCharacter(7)
 
-			test.onNodeWithText("Add to dictionary").assertExists().performClick()
-			assertEquals("brokenword", addedWord)
+			assertFalse(hasMenuItem(addToDictionary))
+			assertFalse(hasMenuItem("Loading..."))
+		}
+	}
+
+	@Test
+	fun `host items follow the suggestions on a sentence issue`() {
+		val brokenRange = TextEditorRange(CharLineOffset(0, 5), CharLineOffset(0, 15))
+		val checker = CountingSpellChecker(
+			sentenceCorrections = { _, _ ->
+				listOf(Correction(brokenRange, "brokenword", listOf(Suggestion("broken word"))))
+			},
+		)
+		var ignored: String? = null
+
+		spellCheckUiTest(
+			spellChecker = checker,
+			initialText = "fine brokenword fine",
+			spellCheckMode = SpellCheckMode.Sentence,
+			spellCheckMenuItems = hostItemsFor { ignored = it },
+		) {
+			assertEquals(1, spellCheckSpanCount)
+
+			rightClickAtCharacter(7)
+			awaitMenuItem("Ignore sentence")
+
+			assertTrue(menuItemTop("Ignore sentence") > menuItemTop("broken word"))
+			clickMenuItem("Ignore sentence")
+			assertEquals("brokenword", ignored)
 		}
 	}
 }

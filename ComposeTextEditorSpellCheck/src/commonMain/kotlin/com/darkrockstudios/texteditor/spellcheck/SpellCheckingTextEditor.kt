@@ -4,11 +4,9 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalDensity
@@ -30,6 +28,7 @@ import com.darkrockstudios.texteditor.state.SpanClickType
 import com.darkrockstudios.texteditor.state.TextEditOperation
 import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.WordSegment
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlin.time.Duration.Companion.milliseconds
 
@@ -54,9 +53,10 @@ private val DefaultContentPadding = PaddingValues(start = 8.dp)
  * @param autoFocus Whether the editor requests focus on first composition.
  * @param style The [TextEditorStyle] controlling appearance.
  * @param contextMenuStrings Localized strings for the built-in context menu.
- * @param spellCheckMenuItems Extra items appended to the context menu opened on a flagged span,
- *   after the suggestions (for example "Add to dictionary"). Shown while suggestions are still
- *   loading, so they are available immediately.
+ * @param spellCheckMenuItems Host items for the context menu opened on a flagged span, rendered
+ *   as their own group after the suggestions (for example "Add to dictionary"). For a misspelled
+ *   word they appear together with the suggestions once those have loaded. Not consulted while
+ *   the editor is disabled. Read at click time, so it may close over changing state.
  * @param onRichSpanClick Optional listener for clicks on non-spell-check rich spans; spell-check
  *   spans are handled internally.
  */
@@ -76,9 +76,7 @@ fun SpellCheckingTextEditor(
 	val contextMenuState = remember { TextEditorContextMenuState() }
 	val wordVisibilityBuffer = dpToPx(35.dp)
 	val coroutineScope = rememberCoroutineScope()
-
-	// Track the current spell check item for right-click context
-	var currentSpellCheckItem by remember { mutableStateOf<SpellCheckItem?>(null) }
+	val suggestionJob = remember { mutableStateOf<Job?>(null) }
 
 	LaunchedEffect(state) {
 		state.textState.editOperations
@@ -132,34 +130,38 @@ fun SpellCheckingTextEditor(
 
 	fun showContextMenu(offset: Offset, spellCheckItem: SpellCheckItem?) {
 		val menuPos = Offset(offset.x, offset.y + wordVisibilityBuffer)
+		suggestionJob.value?.cancel()
+		suggestionJob.value = null
 
 		if (spellCheckItem == null) {
-			// No spell check item - just show standard menu
 			contextMenuState.showMenu(menuPos)
-		} else {
-			val hostItems = spellCheckMenuItems(spellCheckItem)
-			// Show menu immediately, then fetch suggestions async for misspelled words
-			when (spellCheckItem) {
-				is SpellCheckItem.MisspelledWord -> {
-					// Show loading state
-					contextMenuState.showMenu(
-						menuPos, listOf(
-							ContextMenuItem(label = "Loading...", enabled = false, onClick = {})
-						) + hostItems
-					)
-					// Fetch suggestions asynchronously
-					coroutineScope.launch {
-						val suggestions = state.getSuggestions(spellCheckItem.segment.text)
-						val items = createSpellSuggestionItems(spellCheckItem, suggestions)
-						contextMenuState.extraItems.value = items + hostItems
-					}
-				}
+			return
+		}
 
-				is SpellCheckItem.SentenceIssue -> {
-					// Sentence issues already have suggestions
-					val items = createSpellSuggestionItems(spellCheckItem, spellCheckItem.correction.suggestions)
-					contextMenuState.showMenu(menuPos, items + hostItems)
+		val hostItems = spellCheckMenuItems(spellCheckItem)
+		when (spellCheckItem) {
+			is SpellCheckItem.MisspelledWord -> {
+				contextMenuState.showMenu(
+					menuPos,
+					listOf(ContextMenuItem(label = "Loading...", enabled = false, onClick = {})),
+				)
+				// Host items arrive with the suggestions: shown under the placeholder, they
+				// would move under the pointer when it is replaced.
+				suggestionJob.value = coroutineScope.launch {
+					val suggestions = state.getSuggestions(spellCheckItem.segment.text)
+					// Dismissed, or reopened elsewhere, while the lookup ran.
+					if (contextMenuState.menuPosition.value != menuPos) return@launch
+					contextMenuState.showMenu(
+						menuPos,
+						createSpellSuggestionItems(spellCheckItem, suggestions),
+						hostItems,
+					)
 				}
+			}
+
+			is SpellCheckItem.SentenceIssue -> {
+				val items = createSpellSuggestionItems(spellCheckItem, spellCheckItem.correction.suggestions)
+				contextMenuState.showMenu(menuPos, items, hostItems)
 			}
 		}
 	}
@@ -176,12 +178,12 @@ fun SpellCheckingTextEditor(
 			contextMenuState = contextMenuState,
 			onRichSpanClick = { span, type, offset ->
 				if (type == SpanClickType.SECONDARY_CLICK || type == SpanClickType.TAP) {
-					val spellCheckItem: SpellCheckItem? = when (val clickResult = state.handleSpanClick(span)) {
+					// A disabled editor must not offer corrections it cannot apply.
+					val spellCheckItem: SpellCheckItem? = if (!enabled) null else when (val clickResult = state.handleSpanClick(span)) {
 						is WordSegment -> SpellCheckItem.MisspelledWord(clickResult)
 						is Correction -> SpellCheckItem.SentenceIssue(clickResult)
 						else -> null
 					}
-					currentSpellCheckItem = spellCheckItem
 
 					// A right-click always offers a menu, falling back to the standard
 					// one. A tap only opens one with a correction to offer: tapping a
@@ -196,7 +198,6 @@ fun SpellCheckingTextEditor(
 						onRichSpanClick?.invoke(span, type, offset) ?: false
 					}
 				} else {
-					currentSpellCheckItem = null
 					onRichSpanClick?.invoke(span, type, offset) ?: false
 				}
 			},

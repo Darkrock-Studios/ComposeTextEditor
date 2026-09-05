@@ -17,7 +17,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -260,11 +262,17 @@ fun BasicTextEditor(
 						state = state.scrollState,
 					)
 			) {
+				// The pointer handler never restarts, so it must reach the listener the
+				// host passed most recently rather than the one captured at first composition.
+				val currentOnRichSpanClick by rememberUpdatedState(onRichSpanClick)
+				val spanClickProxy: RichSpanClickListener = remember {
+					{ span, type, offset -> currentOnRichSpanClick?.invoke(span, type, offset) ?: false }
+				}
 				Canvas(
 					modifier = Modifier
 						.textEditorPointerInputHandling(
 							state = state,
-							onSpanClick = onRichSpanClick,
+							onSpanClick = spanClickProxy,
 							onContextMenuRequest = { offset -> effectiveContextMenuState.showMenu(offset) },
 						)
 						// Capture the canvas position so the desktop IME can place the

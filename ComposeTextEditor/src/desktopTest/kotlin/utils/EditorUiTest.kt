@@ -87,8 +87,6 @@ internal fun editorUiTest(
 	EditorUiTestScope(this, state, clipboard).block()
 }
 
-internal const val EDITOR_TEST_TAG = "editor-under-test"
-
 @OptIn(ExperimentalTestApi::class)
 class EditorUiTestScope(
 	val test: SkikoComposeUiTest,
@@ -219,18 +217,8 @@ class EditorUiTestScope(
 		test.waitForIdle()
 	}
 
-	// The editor's double/triple-click detection compares wall-clock timestamps
-	// (Clock.System.now, 300ms window), not the virtual test clock, so gestures
-	// issued back-to-back by a fast test read as multi-clicks and word-select.
-	private fun defeatMultiClickDetection() {
-		Thread.sleep(350)
-	}
-
 	/** Pixel position of the character at flat index [charIndex], vertically centered on its line. */
-	fun positionOfCharacter(charIndex: Int): Offset {
-		val metrics = state.getPositionForOffset(state.getOffsetAtCharacter(charIndex))
-		return Offset(metrics.position.x, metrics.position.y + metrics.height / 2f)
-	}
+	fun positionOfCharacter(charIndex: Int): Offset = state.positionOfCharacter(charIndex)
 
 	/**
 	 * Seeds the clipboard with unstyled text, as an external application or a

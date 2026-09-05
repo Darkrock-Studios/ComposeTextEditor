@@ -30,6 +30,12 @@ class TextEditorContextMenuState {
 	val extraItems: MutableState<List<ContextMenuItem>> = mutableStateOf(emptyList())
 
 	/**
+	 * Items rendered after [extraItems] as a separate, divider-delimited group: host actions
+	 * such as "Add to dictionary" that must not read as one more suggestion.
+	 */
+	val trailingItems: MutableState<List<ContextMenuItem>> = mutableStateOf(emptyList())
+
+	/**
 	 * Whether the menu is currently visible.
 	 */
 	val isVisible: Boolean
@@ -43,18 +49,25 @@ class TextEditorContextMenuState {
 	}
 
 	/**
-	 * Show the context menu at the specified position with extra items.
+	 * Show the context menu at the specified position with extra items, and optionally a
+	 * trailing group of items.
 	 */
-	fun showMenu(position: Offset, items: List<ContextMenuItem>) {
+	fun showMenu(
+		position: Offset,
+		items: List<ContextMenuItem>,
+		trailingItems: List<ContextMenuItem> = emptyList(),
+	) {
 		extraItems.value = items
+		this.trailingItems.value = trailingItems
 		menuPosition.value = position
 	}
 
 	/**
-	 * Dismiss the context menu and clear extra items.
+	 * Dismiss the context menu and clear extra and trailing items.
 	 */
 	fun dismissMenu() {
 		menuPosition.value = null
 		extraItems.value = emptyList()
+		trailingItems.value = emptyList()
 	}
 }
