@@ -3,10 +3,13 @@ package e2e
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.contextmenu.ContextMenuItem
+import com.darkrockstudios.texteditor.contextmenu.ContextMenuStrings
 import com.darkrockstudios.texteditor.spellcheck.SpellCheckItem
 import com.darkrockstudios.texteditor.spellcheck.SpellCheckMode
 import com.darkrockstudios.texteditor.spellcheck.api.Correction
+import com.darkrockstudios.texteditor.spellcheck.api.EditorSpellChecker
 import com.darkrockstudios.texteditor.spellcheck.api.Suggestion
+import kotlinx.coroutines.CompletableDeferred
 import utils.CountingSpellChecker
 import utils.spellCheckUiTest
 import kotlin.test.Test
@@ -210,6 +213,82 @@ class SpellCheckE2eTest {
 			assertTrue(menuItemTop("Ignore sentence") > menuItemTop("broken word"))
 			clickMenuItem("Ignore sentence")
 			assertEquals("brokenword", ignored)
+		}
+	}
+
+	// --- suggestion lookup ----------------------------------------------------
+
+	private val loading = "Loading..."
+
+	/**
+	 * Holds suggestion lookups until [release], the way a platform checker answers only after
+	 * the right-click that asked has been fully handled.
+	 */
+	private class GatedSuggestions(private val delegate: EditorSpellChecker) : EditorSpellChecker by delegate {
+		private val gate = CompletableDeferred<Unit>()
+
+		fun release() {
+			gate.complete(Unit)
+		}
+
+		override suspend fun suggestions(
+			input: String,
+			scope: EditorSpellChecker.Scope,
+			closestOnly: Boolean,
+		): List<Suggestion> {
+			gate.await()
+			return delegate.suggestions(input, scope, closestOnly)
+		}
+	}
+
+	@Test
+	fun `suggestions that arrive after the click replace the placeholder in place`() {
+		val checker = GatedSuggestions(
+			CountingSpellChecker(correctWords = setOf("fine"), suggestions = listOf("brokenwork"))
+		)
+
+		spellCheckUiTest(
+			spellChecker = checker,
+			initialText = "fine brokenword fine",
+			spellCheckMenuItems = hostItemsFor {},
+		) {
+			assertEquals(1, spellCheckSpanCount)
+
+			rightClickAtCharacter(7)
+			awaitMenuItem(loading)
+			val placeholderTop = menuItemTop(loading)
+
+			checker.release()
+			awaitMenuItem("brokenwork")
+
+			assertFalse(hasMenuItem(loading))
+			assertTrue(hasMenuItem(addToDictionary))
+			assertEquals(placeholderTop, menuItemTop("brokenwork"), absoluteTolerance = 1f)
+		}
+	}
+
+	@Test
+	fun `suggestions that arrive after the menu closed do not reopen it`() {
+		val checker = GatedSuggestions(
+			CountingSpellChecker(correctWords = setOf("fine"), suggestions = listOf("brokenwork"))
+		)
+
+		spellCheckUiTest(
+			spellChecker = checker,
+			initialText = "fine brokenword fine",
+			spellCheckMenuItems = hostItemsFor {},
+		) {
+			assertEquals(1, spellCheckSpanCount)
+
+			rightClickAtCharacter(7)
+			awaitMenuItem(loading)
+			clickMenuItem(ContextMenuStrings.Default.selectAll)
+
+			checker.release()
+			waitForIdle()
+
+			assertFalse(hasMenuItem("brokenwork"))
+			assertFalse(hasMenuItem(addToDictionary))
 		}
 	}
 }

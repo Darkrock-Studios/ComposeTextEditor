@@ -90,6 +90,9 @@ class SpellCheckUiTestScope(
 		test.waitForIdle()
 	}
 
+	/** Runs frames until recomposition and pending effects have settled. */
+	fun waitForIdle() = test.waitForIdle()
+
 	/** Right-clicks the character at flat index [charIndex], opening the context menu. */
 	fun rightClickAtCharacter(charIndex: Int) {
 		defeatMultiClickDetection()

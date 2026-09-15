@@ -141,18 +141,18 @@ fun SpellCheckingTextEditor(
 		val hostItems = spellCheckMenuItems(spellCheckItem)
 		when (spellCheckItem) {
 			is SpellCheckItem.MisspelledWord -> {
-				contextMenuState.showMenu(
-					menuPos,
-					listOf(ContextMenuItem(label = "Loading...", enabled = false, onClick = {})),
-				)
+				val placeholder = listOf(ContextMenuItem(label = "Loading...", enabled = false, onClick = {}))
+				contextMenuState.showMenu(menuPos, placeholder)
 				// Host items arrive with the suggestions: shown under the placeholder, they
 				// would move under the pointer when it is replaced.
 				suggestionJob.value = coroutineScope.launch {
 					val suggestions = state.getSuggestions(spellCheckItem.segment.text)
-					// Dismissed, or reopened elsewhere, while the lookup ran.
-					if (contextMenuState.menuPosition.value != menuPos) return@launch
+					// Dismissed, or showing other items, while the lookup ran. The position is no
+					// guide: the editor re-anchors the menu to the pointer after this handler returns.
+					val position = contextMenuState.menuPosition.value
+					if (position == null || contextMenuState.extraItems.value !== placeholder) return@launch
 					contextMenuState.showMenu(
-						menuPos,
+						position,
 						createSpellSuggestionItems(spellCheckItem, suggestions),
 						hostItems,
 					)
