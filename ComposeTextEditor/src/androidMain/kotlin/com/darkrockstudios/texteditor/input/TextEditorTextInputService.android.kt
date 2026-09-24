@@ -33,9 +33,7 @@ private class TextEditorInputMethodRequest(
 ) : PlatformTextInputMethodRequest {
 	override fun createInputConnection(outAttributes: EditorInfo): InputConnection {
 		outAttributes.populate(state)
-		return TextEditorInputConnection(state, view).also {
-			state.platformExtensions.activeConnection = it
-		}
+		return TextEditorInputConnection(state, view)
 	}
 }
 
@@ -50,15 +48,9 @@ private fun EditorInfo.populate(state: TextEditorState) {
 			EditorInfo.IME_FLAG_NO_EXTRACT_UI or
 			EditorInfo.IME_ACTION_UNSPECIFIED
 
-	val cursorPos = state.getCharacterIndex(state.cursorPosition)
-	val selection = state.selector.selection
-	if (selection != null) {
-		initialSelStart = state.getCharacterIndex(selection.start)
-		initialSelEnd = state.getCharacterIndex(selection.end)
-	} else {
-		initialSelStart = cursorPos
-		initialSelEnd = cursorPos
-	}
+	val selection = state.selectionAsTextRange()
+	initialSelStart = selection.start
+	initialSelEnd = selection.end
 }
 
 /**
@@ -77,7 +69,7 @@ private fun EditorInfo.populate(state: TextEditorState) {
 @VisibleForTesting
 internal class TextEditorInputConnection(
 	private val state: TextEditorState,
-	private val view: View,
+	internal val view: View,
 ) : InputConnection {
 
 	@Volatile
@@ -85,6 +77,10 @@ internal class TextEditorInputConnection(
 
 	/** Batch levels this connection holds open on the state, released when it closes. */
 	private var batchDepth: Int = 0
+
+	init {
+		state.platformExtensions.connectionOpened(this)
+	}
 
 	private inline fun edit(block: () -> Unit): Boolean {
 		if (!isActive) return false
@@ -110,29 +106,19 @@ internal class TextEditorInputConnection(
 		state.platformExtensions.endBatchEdit()
 	}
 
-	/** Start of the selection, or the caret, as a flat index. */
-	private fun selectionStart(): Int =
-		state.selector.selection?.let { state.getCharacterIndex(it.start) }
-			?: state.getCharacterIndex(state.cursorPosition)
-
-	/** End of the selection, or the caret, as a flat index. */
-	private fun selectionEnd(): Int =
-		state.selector.selection?.let { state.getCharacterIndex(it.end) }
-			?: state.getCharacterIndex(state.cursorPosition)
-
 	// ============ TEXT RETRIEVAL ============
 
 	// Lengths are clamped against the text before any arithmetic: some IMEs ask for
 	// Int.MAX_VALUE characters, which overflows once added to an index.
 
 	override fun getTextBeforeCursor(n: Int, flags: Int): CharSequence {
-		val end = selectionStart()
+		val end = state.selectionAsTextRange().min
 		val start = end - n.coerceIn(0, end)
 		return if (start < end) state.getAllText().subSequence(start, end) else ""
 	}
 
 	override fun getTextAfterCursor(n: Int, flags: Int): CharSequence {
-		val start = selectionEnd()
+		val start = state.selectionAsTextRange().max
 		val end = start + minOf(n.coerceAtLeast(0), (state.getTextLength() - start).coerceAtLeast(0))
 		return if (start < end) state.getAllText().subSequence(start, end) else ""
 	}
@@ -143,7 +129,7 @@ internal class TextEditorInputConnection(
 	}
 
 	override fun getCursorCapsMode(reqModes: Int): Int {
-		return TextUtils.getCapsMode(state.getAllText(), selectionStart(), reqModes)
+		return TextUtils.getCapsMode(state.getAllText(), state.selectionAsTextRange().min, reqModes)
 	}
 
 	override fun getExtractedText(request: ExtractedTextRequest?, flags: Int): ExtractedText {
@@ -161,8 +147,9 @@ internal class TextEditorInputConnection(
 		afterLength: Int,
 		flags: Int
 	): SurroundingText {
-		val selStart = selectionStart()
-		val selEnd = selectionEnd()
+		val selection = state.selectionAsTextRange()
+		val selStart = selection.min
+		val selEnd = selection.max
 		val start = selStart - beforeLength.coerceIn(0, selStart)
 		val end = selEnd + minOf(afterLength.coerceAtLeast(0), (state.getTextLength() - selEnd).coerceAtLeast(0))
 		val text = state.getAllText().subSequence(start, end).toString()
@@ -267,10 +254,13 @@ internal class TextEditorInputConnection(
 			android.R.id.cut -> KeyEvent.KEYCODE_X
 			else -> return true
 		}
+		// Dispatched directly rather than through dispatchKeyFromIme, which queues the
+		// event: an IME reads the selection right after asking for select-all, and
+		// EditText answers these synchronously.
 		val now = SystemClock.uptimeMillis()
 		val meta = KeyEvent.META_CTRL_ON or KeyEvent.META_CTRL_LEFT_ON
-		dispatchKeyFromIme(KeyEvent(now, now, KeyEvent.ACTION_DOWN, keyCode, 0, meta))
-		dispatchKeyFromIme(KeyEvent(now, now, KeyEvent.ACTION_UP, keyCode, 0, meta))
+		view.dispatchKeyEvent(KeyEvent(now, now, KeyEvent.ACTION_DOWN, keyCode, 0, meta))
+		view.dispatchKeyEvent(KeyEvent(now, now, KeyEvent.ACTION_UP, keyCode, 0, meta))
 		return true
 	}
 
@@ -298,18 +288,12 @@ internal class TextEditorInputConnection(
 	override fun closeConnection() {
 		if (!isActive) return
 		isActive = false
-		val extensions = state.platformExtensions
 		// Released without notifying: this connection's IME is gone, and a batch it left
 		// open must not hold back notifications for the next connection.
-		extensions.releaseBatchEdits(batchDepth)
+		state.platformExtensions.releaseBatchEdits(batchDepth)
 		batchDepth = 0
 		state.clearComposingRange()
-		if (extensions.activeConnection === this) {
-			extensions.activeConnection = null
-			extensions.cursorAnchorMonitoringEnabled = false
-			extensions.extractedTextMonitorEnabled = false
-			extensions.extractedTextMonitorToken = 0
-		}
+		state.platformExtensions.connectionClosed(this)
 	}
 
 	override fun commitCompletion(text: CompletionInfo?): Boolean = false
@@ -344,15 +328,9 @@ internal fun TextEditorState.toExtractedText(): ExtractedText {
 	res.startOffset = 0
 	res.partialStartOffset = -1 // -1 means full text
 	res.partialEndOffset = all.length
-	val cursorIndex = getCharacterIndex(cursorPosition)
-	val selection = selector.selection
-	if (selection != null) {
-		res.selectionStart = getCharacterIndex(selection.start)
-		res.selectionEnd = getCharacterIndex(selection.end)
-	} else {
-		res.selectionStart = cursorIndex
-		res.selectionEnd = cursorIndex
-	}
+	val selection = selectionAsTextRange()
+	res.selectionStart = selection.start
+	res.selectionEnd = selection.end
 	res.flags = if ('\n' in all) 0 else ExtractedText.FLAG_SINGLE_LINE
 	return res
 }

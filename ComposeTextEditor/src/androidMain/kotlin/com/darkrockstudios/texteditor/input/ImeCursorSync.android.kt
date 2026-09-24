@@ -2,7 +2,6 @@ package com.darkrockstudios.texteditor.input
 
 import android.os.Handler
 import android.os.Looper
-import android.view.inputmethod.ExtractedText
 import android.view.inputmethod.InputMethodManager
 import com.darkrockstudios.texteditor.state.TextEditorState
 import kotlinx.coroutines.CoroutineScope
@@ -11,6 +10,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.launch
+import java.lang.ref.WeakReference
 
 /**
  * Android implementation of IME state synchronization: keeps the keyboard's mirror of the
@@ -31,26 +31,31 @@ import kotlinx.coroutines.launch
 actual class ImeCursorSync internal constructor(
 	private val state: TextEditorState,
 	private val sink: ImeUpdateSink,
+	private val postToMain: (Runnable) -> Unit,
 ) {
-	actual constructor(state: TextEditorState) : this(state, InputMethodManagerSink(state))
+	actual constructor(state: TextEditorState) : this(
+		state,
+		InputMethodManagerSink(state),
+		{ mainHandler.post(it) },
+	)
 
+	private var attached = false
 	private var scope: CoroutineScope? = null
-	private var handler: Handler? = null
 	private var flushPosted = false
 	private val postedFlush = Runnable {
 		flushPosted = false
-		flush()
+		if (attached) flush()
 	}
 
 	private var lastSelection: ImeSelection? = null
-	private var lastExtractedText: CharSequence? = null
+	private var handledResyncGeneration = 0
+
+	// Weak so a whole superseded document is not kept alive just to compare against. A
+	// cleared reference still means "changed": the current text is strongly reachable.
+	private var lastExtractedText: WeakReference<CharSequence>? = null
 
 	actual fun startSync() {
-		stopSync()
-		state.imeResyncPending = false
-		state.platformExtensions.imeSync = this
-		handler = Handler(Looper.getMainLooper())
-
+		attach()
 		val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 		this.scope = scope
 		// Signals only: the flush reads the state once the change has finished, rather than
@@ -60,16 +65,22 @@ actual class ImeCursorSync internal constructor(
 				state.cursor.positionFlow,
 				state.selector.selectionRangeFlow,
 				state.editOperations,
-				state.imeResyncRequests,
 			).collect { requestFlush() }
 		}
 	}
 
+	/** Registers for batch-end flushes; [startSync] without the flow observation. */
+	internal fun attach() {
+		stopSync()
+		attached = true
+		handledResyncGeneration = state.imeResyncGeneration
+		state.platformExtensions.imeSync = this
+	}
+
 	actual fun stopSync() {
+		attached = false
 		scope?.cancel()
 		scope = null
-		handler?.removeCallbacks(postedFlush)
-		handler = null
 		flushPosted = false
 		if (state.platformExtensions.imeSync === this) {
 			state.platformExtensions.imeSync = null
@@ -78,11 +89,11 @@ actual class ImeCursorSync internal constructor(
 		lastExtractedText = null
 	}
 
-	private fun requestFlush() {
-		val handler = handler ?: return
-		if (flushPosted) return
+	/** Schedules a flush for after the current change; repeated requests share one. */
+	internal fun requestFlush() {
+		if (!attached || flushPosted) return
 		flushPosted = true
-		handler.post(postedFlush)
+		postToMain(postedFlush)
 	}
 
 	/** Reports whatever changed since the last flush; does nothing while a batch edit is open. */
@@ -90,8 +101,9 @@ actual class ImeCursorSync internal constructor(
 		val extensions = state.platformExtensions
 		if (extensions.isInBatchEdit || !sink.isReady) return
 
-		if (state.imeResyncPending) {
-			state.imeResyncPending = false
+		val resyncGeneration = state.imeResyncGeneration
+		if (resyncGeneration != handledResyncGeneration) {
+			handledResyncGeneration = resyncGeneration
 			// A behavior answered an IME request in a way no diff of the text or caret can
 			// express, and the IMM drops an updateSelection matching its cache. Only a
 			// restart makes the keyboard discard its mirror and re-read the buffer.
@@ -105,9 +117,9 @@ actual class ImeCursorSync internal constructor(
 		if (extensions.extractedTextMonitorEnabled) {
 			// Identity is enough: the flattened text is memoized per text revision.
 			val text = state.getAllText()
-			if (selectionChanged || text !== lastExtractedText) {
-				lastExtractedText = text
-				sink.updateExtractedText(extensions.extractedTextMonitorToken, state.toExtractedText())
+			if (selectionChanged || lastExtractedText?.get() !== text) {
+				lastExtractedText = WeakReference(text)
+				sink.updateExtractedText(extensions.extractedTextMonitorToken)
 			}
 		}
 
@@ -129,25 +141,18 @@ actual class ImeCursorSync internal constructor(
 	)
 
 	private fun TextEditorState.currentImeSelection(): ImeSelection {
-		val selection = selector.selection
-		val selStart: Int
-		val selEnd: Int
-		if (selection != null) {
-			selStart = getCharacterIndex(selection.start)
-			selEnd = getCharacterIndex(selection.end)
-		} else {
-			val cursorIndex = getCharacterIndex(cursorPosition)
-			selStart = cursorIndex
-			selEnd = cursorIndex
-		}
-
-		val composing = composingRange
+		val selection = selectionAsTextRange()
+		val composing = composingAsTextRange()
 		return ImeSelection(
-			selStart = selStart,
-			selEnd = selEnd,
-			compStart = composing?.let { getCharacterIndex(it.start) } ?: -1,
-			compEnd = composing?.let { getCharacterIndex(it.end) } ?: -1,
+			selStart = selection.start,
+			selEnd = selection.end,
+			compStart = composing?.start ?: -1,
+			compEnd = composing?.end ?: -1,
 		)
+	}
+
+	private companion object {
+		val mainHandler by lazy { Handler(Looper.getMainLooper()) }
 	}
 }
 
@@ -157,12 +162,12 @@ internal interface ImeUpdateSink {
 	val isReady: Boolean
 	fun restartInput()
 	fun updateSelection(selStart: Int, selEnd: Int, compStart: Int, compEnd: Int)
-	fun updateExtractedText(token: Int, text: ExtractedText)
+	fun updateExtractedText(token: Int)
 	fun sendCursorAnchorInfo()
 }
 
 private class InputMethodManagerSink(private val state: TextEditorState) : ImeUpdateSink {
-	private val view get() = state.platformExtensions.view
+	private val view get() = state.platformExtensions.imeView
 	private val imm get() = view?.context?.getSystemService(InputMethodManager::class.java)
 
 	override val isReady: Boolean get() = view != null
@@ -177,9 +182,9 @@ private class InputMethodManagerSink(private val state: TextEditorState) : ImeUp
 		imm?.updateSelection(view, selStart, selEnd, compStart, compEnd)
 	}
 
-	override fun updateExtractedText(token: Int, text: ExtractedText) {
+	override fun updateExtractedText(token: Int) {
 		val view = view ?: return
-		imm?.updateExtractedText(view, token, text)
+		imm?.updateExtractedText(view, token, state.toExtractedText())
 	}
 
 	override fun sendCursorAnchorInfo() = state.platformExtensions.sendCursorAnchorInfo()

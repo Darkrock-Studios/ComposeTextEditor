@@ -9,9 +9,7 @@ import com.darkrockstudios.texteditor.richstyle.LineBlockEditBehavior
 import com.darkrockstudios.texteditor.state.EditBehavior
 import com.darkrockstudios.texteditor.state.TextEditorState
 import io.mockk.mockk
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
-import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -161,29 +159,21 @@ class EditBehaviorTest {
 		val extension = bulletedEditor("- one\n- ")
 		val state = extension.editorState
 		state.cursor.updatePosition(CharLineOffset(1, 0))
-		var resyncs = 0
-		val job = launch { state.imeResyncRequests.collect { resyncs++ } }
-		runCurrent()
+		val before = state.imeResyncGeneration
 
 		state.insertNewlineAtCursor()
-		runCurrent()
 
-		assertEquals(1, resyncs)
-		job.cancel()
+		assertEquals(before + 1, state.imeResyncGeneration)
 	}
 
 	@Test
 	fun `an unclaimed edit does not ask for a resync`() = runTest {
 		val state = editor()
-		var resyncs = 0
-		val job = launch { state.imeResyncRequests.collect { resyncs++ } }
-		runCurrent()
+		val before = state.imeResyncGeneration
 
 		state.insertNewlineAtCursor()
-		runCurrent()
 
-		assertEquals(0, resyncs)
-		job.cancel()
+		assertEquals(before, state.imeResyncGeneration)
 	}
 
 	@Test

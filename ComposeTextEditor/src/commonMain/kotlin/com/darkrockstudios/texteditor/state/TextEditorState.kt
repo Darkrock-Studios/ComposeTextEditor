@@ -40,7 +40,6 @@ import com.darkrockstudios.texteditor.richstyle.RichSpanStyle
 import com.darkrockstudios.texteditor.richstyle.normalizeLineBlocks
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -636,25 +635,17 @@ class TextEditorState(
 		composingRange = null
 	}
 
-	private val _imeResyncRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
-
 	/**
-	 * Fires when the editor answered an IME request in a way the IME cannot infer
-	 * from the text or the caret, so its mirror of the buffer has to be pushed
-	 * again rather than deduplicated away. Platforms without an IME ignore it.
+	 * Advances whenever the editor answered an IME request in a way the IME cannot infer
+	 * from the text or the caret, so its mirror of the buffer has to be discarded and
+	 * re-read. A platform with an IME remembers the generation it last acted on; the
+	 * others ignore it.
 	 */
-	internal val imeResyncRequests: Flow<Unit> = _imeResyncRequests
-
-	/**
-	 * Set with each [imeResyncRequests] emission and cleared by the platform that acts on
-	 * it. The resync has to go out when the IME's batch edit ends, and flow delivery makes
-	 * no promise of arriving by then.
-	 */
-	internal var imeResyncPending = false
+	internal var imeResyncGeneration = 0
+		private set
 
 	internal fun requestImeResync() {
-		imeResyncPending = true
-		_imeResyncRequests.tryEmit(Unit)
+		imeResyncGeneration++
 	}
 
 	/**

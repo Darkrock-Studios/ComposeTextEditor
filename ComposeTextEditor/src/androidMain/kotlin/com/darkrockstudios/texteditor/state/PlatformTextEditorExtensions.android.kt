@@ -7,6 +7,8 @@ import android.view.inputmethod.CursorAnchorInfo
 import android.view.inputmethod.InputMethodManager
 import com.darkrockstudios.texteditor.input.ImeCursorSync
 import com.darkrockstudios.texteditor.input.TextEditorInputConnection
+import com.darkrockstudios.texteditor.input.composingAsTextRange
+import com.darkrockstudios.texteditor.input.selectionAsTextRange
 
 /**
  * Android-specific extensions for TextEditorState.
@@ -45,11 +47,37 @@ actual class PlatformTextEditorExtensions actual constructor(
 	 */
 	internal var imeSync: ImeCursorSync? = null
 
-	/**
-	 * The most recently opened IME connection. A connection replaced by a restart closes
-	 * after its successor opened, so only this one may reset the monitor flags on close.
-	 */
+	/** The most recently opened IME connection, the one the keyboard is talking through. */
 	internal var activeConnection: TextEditorInputConnection? = null
+		private set
+
+	/**
+	 * The view IME reports go through: the live connection's, which is the view the
+	 * [InputMethodManager] is serving, falling back to the captured [view] between sessions.
+	 */
+	internal val imeView: View? get() = activeConnection?.view ?: view
+
+	/**
+	 * Monitor requests belong to one IME session, and a new connection is a new session:
+	 * its keyboard has asked for nothing yet. A restart opens the successor before closing
+	 * the old connection, so this is where the old requests are dropped.
+	 */
+	internal fun connectionOpened(connection: TextEditorInputConnection) {
+		activeConnection = connection
+		resetMonitoring()
+	}
+
+	internal fun connectionClosed(connection: TextEditorInputConnection) {
+		if (activeConnection !== connection) return
+		activeConnection = null
+		resetMonitoring()
+	}
+
+	private fun resetMonitoring() {
+		cursorAnchorMonitoringEnabled = false
+		extractedTextMonitorEnabled = false
+		extractedTextMonitorToken = 0
+	}
 
 	private var batchEditDepth: Int = 0
 
@@ -98,35 +126,22 @@ actual class PlatformTextEditorExtensions actual constructor(
 	 * - On cursor changes when CURSOR_UPDATE_MONITOR is active
 	 */
 	fun sendCursorAnchorInfo() {
-		val view = view ?: return
+		val view = imeView ?: return
 		val imm = view.context.getSystemService(Context.INPUT_METHOD_SERVICE)
 				as? InputMethodManager ?: return
 
 		val builder = CursorAnchorInfo.Builder()
 
-		// Set selection range
-		val cursorIndex = state.getCharacterIndex(state.cursorPosition)
-		val selection = state.selector.selection
-		if (selection != null) {
-			builder.setSelectionRange(
-				state.getCharacterIndex(selection.start),
-				state.getCharacterIndex(selection.end)
-			)
-		} else {
-			builder.setSelectionRange(cursorIndex, cursorIndex)
-		}
+		val selection = state.selectionAsTextRange()
+		builder.setSelectionRange(selection.start, selection.end)
 
 		// Set composing text info if present
-		val composingRange = state.composingRange
-		if (composingRange != null) {
-			val composingStart = state.getCharacterIndex(composingRange.start)
-			val composingEnd = state.getCharacterIndex(composingRange.end)
-			if (composingStart < composingEnd && composingEnd <= state.getTextLength()) {
-				builder.setComposingText(
-					composingStart,
-					state.getAllText().subSequence(composingStart, composingEnd)
-				)
-			}
+		val composing = state.composingAsTextRange()
+		if (composing != null && composing.start < composing.end && composing.end <= state.getTextLength()) {
+			builder.setComposingText(
+				composing.start,
+				state.getAllText().subSequence(composing.start, composing.end)
+			)
 		}
 
 		// Set the transformation matrix to convert from view coordinates to screen coordinates

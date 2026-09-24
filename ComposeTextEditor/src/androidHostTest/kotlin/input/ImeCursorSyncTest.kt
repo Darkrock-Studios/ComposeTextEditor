@@ -1,7 +1,7 @@
 package input
 
 import android.view.View
-import android.view.inputmethod.ExtractedText
+import android.view.inputmethod.InputConnection
 import androidx.compose.ui.text.AnnotatedString
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.input.ImeCursorSync
@@ -13,6 +13,8 @@ import io.mockk.mockk
 import kotlinx.coroutines.test.TestScope
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 /**
@@ -34,8 +36,8 @@ class ImeCursorSyncTest {
 			events += "sel($selStart,$selEnd,$compStart,$compEnd)"
 		}
 
-		override fun updateExtractedText(token: Int, text: ExtractedText) {
-			events += "extracted"
+		override fun updateExtractedText(token: Int) {
+			events += "extracted($token)"
 		}
 
 		override fun sendCursorAnchorInfo() {
@@ -44,20 +46,23 @@ class ImeCursorSyncTest {
 	}
 
 	private val sink = RecordingSink()
+	private val posted = mutableListOf<Runnable>()
+	private lateinit var state: TextEditorState
+	private lateinit var sync: ImeCursorSync
 
-	private fun editor(text: String = "", cursor: Int = text.length): Pair<TextEditorState, TextEditorInputConnection> {
-		val state = TextEditorState(
+	private fun editor(text: String = "", cursor: Int = text.length): TextEditorInputConnection {
+		state = TextEditorState(
 			scope = TestScope(),
 			measurer = mockk(relaxed = true),
 			initialText = AnnotatedString(text),
 		)
 		state.cursor.updatePosition(CharLineOffset(0, cursor))
-		val sync = ImeCursorSync(state, sink)
-		state.platformExtensions.imeSync = sync
+		sync = ImeCursorSync(state, sink) { posted += it }
+		sync.attach()
 		// Establish what the keyboard already knows, so each test sees only its own reports.
 		sync.flush()
 		sink.events.clear()
-		return state to TextEditorInputConnection(state, mockk<View>(relaxed = true))
+		return TextEditorInputConnection(state, mockk<View>(relaxed = true))
 	}
 
 	private fun TextEditorInputConnection.batch(block: TextEditorInputConnection.() -> Unit) {
@@ -66,9 +71,15 @@ class ImeCursorSyncTest {
 		endBatchEdit()
 	}
 
+	private fun runPosted() {
+		val pending = posted.toList()
+		posted.clear()
+		pending.forEach { it.run() }
+	}
+
 	@Test
 	fun `composing text is reported with its composing region, never as vanished`() {
-		val (_, ic) = editor()
+		val ic = editor()
 
 		ic.batch { setComposingText("あ", 1) }
 		// Gboard re-sends the same composition after each update.
@@ -80,7 +91,7 @@ class ImeCursorSyncTest {
 
 	@Test
 	fun `an autocorrect batch is reported once, with its final state`() {
-		val (state, ic) = editor("Hello gret")
+		val ic = editor("Hello gret")
 
 		ic.batch {
 			deleteSurroundingText(4, 0)
@@ -93,7 +104,7 @@ class ImeCursorSyncTest {
 
 	@Test
 	fun `finishing a composition is reported even though the caret stays put`() {
-		val (_, ic) = editor()
+		val ic = editor()
 		ic.setComposingText("ab", 1)
 		sink.events.clear()
 
@@ -104,7 +115,7 @@ class ImeCursorSyncTest {
 
 	@Test
 	fun `marking an existing word as composing is reported`() {
-		val (_, ic) = editor("hello world")
+		val ic = editor("hello world")
 
 		ic.setComposingRegion(6, 11)
 
@@ -113,7 +124,7 @@ class ImeCursorSyncTest {
 
 	@Test
 	fun `nothing is reported until the outermost batch ends`() {
-		val (_, ic) = editor()
+		val ic = editor()
 
 		ic.beginBatchEdit()
 		ic.beginBatchEdit()
@@ -128,7 +139,7 @@ class ImeCursorSyncTest {
 
 	@Test
 	fun `a resync claimed inside an IME batch restarts input when the batch ends`() {
-		val (state, ic) = editor("ab")
+		val ic = editor("ab")
 		state.editBehaviors.add(0, object : EditBehavior {
 			override fun onBackspace(state: TextEditorState) = true
 		})
@@ -140,5 +151,102 @@ class ImeCursorSyncTest {
 
 		assertEquals("ab", state.getAllText().text)
 		assertEquals(listOf("restart", "sel(2,2,-1,-1)"), sink.events)
+	}
+
+	@Test
+	fun `a resync claimed by a hardware key goes out on the posted flush`() {
+		editor("ab")
+		state.editBehaviors.add(0, object : EditBehavior {
+			override fun onBackspace(state: TextEditorState) = true
+		})
+
+		state.backspaceAtCursor()
+		sync.requestFlush()
+		runPosted()
+
+		assertEquals(listOf("restart", "sel(2,2,-1,-1)"), sink.events)
+	}
+
+	@Test
+	fun `posted flush requests share one flush`() {
+		editor("abc")
+		state.cursor.updatePosition(CharLineOffset(0, 1))
+
+		sync.requestFlush()
+		sync.requestFlush()
+		assertEquals(1, posted.size)
+		runPosted()
+
+		assertEquals(listOf("sel(1,1,-1,-1)"), sink.events)
+	}
+
+	@Test
+	fun `a posted flush that lands inside a batch leaves the report to the batch end`() {
+		val ic = editor("abc")
+		state.cursor.updatePosition(CharLineOffset(0, 1))
+		sync.requestFlush()
+
+		ic.beginBatchEdit()
+		runPosted()
+		assertTrue(sink.events.isEmpty())
+		ic.endBatchEdit()
+
+		assertEquals(listOf("sel(1,1,-1,-1)"), sink.events)
+	}
+
+	@Test
+	fun `a posted flush that lands after the sync stopped reports nothing`() {
+		editor("abc")
+		state.cursor.updatePosition(CharLineOffset(0, 1))
+		sync.requestFlush()
+
+		sync.stopSync()
+		runPosted()
+
+		assertTrue(sink.events.isEmpty())
+	}
+
+	@Test
+	fun `extracted text is reported when the text changes, even with the caret unmoved`() {
+		val ic = editor("a")
+		state.platformExtensions.extractedTextMonitorEnabled = true
+		state.platformExtensions.extractedTextMonitorToken = 7
+		sync.flush()
+		sink.events.clear()
+
+		ic.batch {
+			deleteSurroundingText(1, 0)
+			commitText("b", 1)
+		}
+
+		assertEquals(listOf("extracted(7)"), sink.events)
+	}
+
+	@Test
+	fun `a new connection starts with no monitor requests`() {
+		val old = editor("a")
+		old.requestCursorUpdates(InputConnection.CURSOR_UPDATE_MONITOR)
+		state.platformExtensions.extractedTextMonitorEnabled = true
+		state.platformExtensions.extractedTextMonitorToken = 7
+
+		// A restart opens the successor before it closes the old connection.
+		TextEditorInputConnection(state, mockk<View>(relaxed = true))
+		old.closeConnection()
+
+		assertFalse(state.platformExtensions.cursorAnchorMonitoringEnabled)
+		assertFalse(state.platformExtensions.extractedTextMonitorEnabled)
+		state.cursor.updatePosition(CharLineOffset(0, 0))
+		sync.flush()
+		assertEquals(listOf("sel(0,0,-1,-1)"), sink.events)
+	}
+
+	@Test
+	fun `reports go through the live connection's view`() {
+		editor()
+		val view = mockk<View>(relaxed = true)
+
+		TextEditorInputConnection(state, view)
+
+		assertSame(view, state.platformExtensions.imeView)
 	}
 }

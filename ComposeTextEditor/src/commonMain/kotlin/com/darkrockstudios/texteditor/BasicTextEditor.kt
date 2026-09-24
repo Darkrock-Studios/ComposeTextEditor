@@ -53,6 +53,7 @@ import com.darkrockstudios.texteditor.input.CaptureViewForIme
 import com.darkrockstudios.texteditor.input.KeyBindings
 import com.darkrockstudios.texteditor.input.LocalKeyBindings
 import com.darkrockstudios.texteditor.input.TextEditorInputModifierElement
+import com.darkrockstudios.texteditor.input.TextInputRequester
 import com.darkrockstudios.texteditor.input.selectionAsTextRange
 import com.darkrockstudios.texteditor.richstyle.BlockSpanStyle
 import com.darkrockstudios.texteditor.state.LayoutUpdate
@@ -112,8 +113,9 @@ fun BasicTextEditor(
 	val density = LocalDensity.current
 	val layoutDirection = LocalLayoutDirection.current
 
+	val inputRequester = remember { TextInputRequester() }
 	val inputModifierElement = remember(state, clipboard, enabled, keyBindings) {
-		TextEditorInputModifierElement(state, clipboard, enabled, keyBindings)
+		TextEditorInputModifierElement(state, clipboard, enabled, keyBindings, inputRequester)
 	}
 
 	val horizontalPadding = remember(contentPadding, layoutDirection) {
@@ -212,7 +214,11 @@ fun BasicTextEditor(
 				modifier = editorModifier
 					.padding(horizontalPadding)
 					.focusRequester(focusRequester)
-					.requestFocusOnPress(focusRequester) { effectiveContextMenuState.isVisible }
+					.requestFocusOnPress(
+						focusRequester,
+						popupIsShowing = { effectiveContextMenuState.isVisible },
+						onRequestInput = inputRequester::requestInput,
+					)
 					.then(inputModifierElement)
 					.focusable(enabled = true, interactionSource = interactionSource)
 					// Publish text-editing semantics so the node is recognized as an editable
@@ -324,10 +330,15 @@ fun BasicTextEditor(
  * context menu that same tap just opened. Note this asks what the tap *did*, not
  * whether a listener said it handled the click: a host is free to answer a rich
  * span click and still want the editor focused, and most do.
+ *
+ * Every press or tap that focuses also calls [onRequestInput], which brings back a soft
+ * keyboard the user dismissed. Focusing cannot do that alone: the editor may already
+ * have focus. A right-click only focuses, since it opens the context menu.
  */
 internal fun Modifier.requestFocusOnPress(
 	focusRequester: FocusRequester,
 	popupIsShowing: () -> Boolean,
+	onRequestInput: () -> Unit = {},
 ) = pointerInput(Unit) {
 	val touchSlop = viewConfiguration.touchSlop
 	awaitEachGesture {
@@ -339,6 +350,7 @@ internal fun Modifier.requestFocusOnPress(
 				currentEvent.buttons.isSecondaryPressed
 		if (down.type == PointerType.Mouse || hasButton) {
 			focusRequester.requestFocus()
+			if (!currentEvent.buttons.isSecondaryPressed) onRequestInput()
 			return@awaitEachGesture
 		}
 
@@ -353,7 +365,10 @@ internal fun Modifier.requestFocusOnPress(
 				// Safe to read synchronously: the Main pass dispatches child-first, so
 				// the Canvas gesture handler has already run this tap's dispatch (which
 				// opens any menu) before this container-level handler sees the release.
-				if (!popupIsShowing()) focusRequester.requestFocus()
+				if (!popupIsShowing()) {
+					focusRequester.requestFocus()
+					onRequestInput()
+				}
 				return@awaitEachGesture
 			}
 		}
