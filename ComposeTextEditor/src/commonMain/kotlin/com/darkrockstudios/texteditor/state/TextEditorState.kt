@@ -27,7 +27,7 @@ import com.darkrockstudios.texteditor.annotatedstring.subSequence
 import com.darkrockstudios.texteditor.annotatedstring.toAnnotatedString
 import com.darkrockstudios.texteditor.coerceInto
 import com.darkrockstudios.texteditor.cursor.CursorMetrics
-import com.darkrockstudios.texteditor.cursor.getWrappedLineIndex
+import com.darkrockstudios.texteditor.cursor.getWrapForDrawing
 import com.darkrockstudios.texteditor.effectiveHeight
 import com.darkrockstudios.texteditor.input.EditorActionRegistry
 import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
@@ -885,12 +885,13 @@ class TextEditorState(
 	fun getPositionForOffset(position: CharLineOffset): CursorMetrics {
 		val (_, charIndex) = position
 
-		val currentWrappedLineIndex = lineOffsets.getWrappedLineIndex(position)
-		val currentWrappedLine = lineOffsets[currentWrappedLineIndex]
+		val currentWrappedLine = lineOffsets.getWrapForDrawing(position)
+			?: return CursorMetrics(position = Offset.Zero, height = 0f)
 
 		val layout = currentWrappedLine.textLayoutResult
+		val safeCharIndex = charIndex.coerceIn(0, layout.layoutInput.text.length)
 
-		val cursorX = layout.getHorizontalPosition(charIndex, usePrimaryDirection = true)
+		val cursorX = layout.getHorizontalPosition(safeCharIndex, usePrimaryDirection = true)
 		val cursorY = currentWrappedLine.offset.y - scrollState.value
 
 		val lineHeight = currentWrappedLine.effectiveHeight

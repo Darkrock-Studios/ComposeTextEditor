@@ -9,8 +9,8 @@ import com.darkrockstudios.texteditor.utils.lineTextLeft
 fun TextEditorState.calculateCursorPosition(): CursorMetrics {
 	val (_, charIndex) = cursorPosition
 
-	val currentWrappedLineIndex = lineOffsets.getWrappedLineIndex(cursorPosition)
-	val currentWrappedLine = lineOffsets[currentWrappedLineIndex]
+	val currentWrappedLine = lineOffsets.getWrapForDrawing(cursorPosition)
+		?: return CursorMetrics(position = Offset.Zero, height = 0f)
 
 	val layout = currentWrappedLine.textLayoutResult
 	val virtualLineIndex = currentWrappedLine.virtualLineIndex
@@ -46,6 +46,15 @@ internal fun List<LineWrap>.getWrappedLineIndex(position: CharLineOffset): Int {
 		lineOffset.line == position.line && lineOffset.wrapStartsAtIndex <= position.char
 	}
 }
+
+/**
+ * Like [getWrappedLineIndex], but tolerates a layout that lags the text (layout is
+ * skipped while the viewport is collapsed) by falling back to the nearest wrap above.
+ */
+internal fun List<LineWrap>.getWrapForDrawing(position: CharLineOffset): LineWrap? =
+	getOrNull(getWrappedLineIndex(position))
+		?: lastOrNull { it.line <= position.line }
+		?: firstOrNull()
 
 private fun List<LineWrap>.getWrappedLine(position: CharLineOffset): LineWrap {
 	return last { lineOffset ->

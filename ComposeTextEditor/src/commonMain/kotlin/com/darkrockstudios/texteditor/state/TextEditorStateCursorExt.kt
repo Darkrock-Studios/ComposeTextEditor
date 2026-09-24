@@ -1,23 +1,26 @@
 package com.darkrockstudios.texteditor.state
 
 import com.darkrockstudios.texteditor.CharLineOffset
-import kotlin.math.min
+
+// The layout can lag the text (it is skipped while the viewport is collapsed), so the
+// cursor may be missing from lineOffsets, and a wrap's line may be missing from the
+// text. Missing cursors step by logical line; updatePosition clamps into the text.
 
 internal fun TextEditorState.moveCursorUp() {
 	val currentWrappedIndex = getWrappedLineIndex(cursorPosition)
-	if (currentWrappedIndex > 0) {
+	if (currentWrappedIndex < 0) {
+		if (cursorPosition.line > 0) {
+			cursor.updatePosition(cursorPosition.copy(line = cursorPosition.line - 1))
+		}
+	} else if (currentWrappedIndex > 0) {
 		val curWrappedSegment = lineOffsets[currentWrappedIndex]
 		val previousWrappedSegment = lineOffsets[currentWrappedIndex - 1]
 		val localCharIndex = cursorPosition.char - curWrappedSegment.wrapStartsAtIndex
-		val newCharIndex = min(
-			textLines[previousWrappedSegment.line].length,
-			previousWrappedSegment.wrapStartsAtIndex + localCharIndex
-		)
 
 		cursor.updatePosition(
 			CharLineOffset(
 				line = previousWrappedSegment.line,
-				char = newCharIndex
+				char = previousWrappedSegment.wrapStartsAtIndex + localCharIndex
 			)
 		)
 	}
@@ -25,20 +28,19 @@ internal fun TextEditorState.moveCursorUp() {
 
 internal fun TextEditorState.moveCursorDown() {
 	val currentWrappedIndex = getWrappedLineIndex(cursorPosition)
-	if (currentWrappedIndex < lineOffsets.size - 1) {
+	if (currentWrappedIndex < 0) {
+		if (cursorPosition.line < textLines.lastIndex) {
+			cursor.updatePosition(cursorPosition.copy(line = cursorPosition.line + 1))
+		}
+	} else if (currentWrappedIndex < lineOffsets.size - 1) {
 		val curWrappedSegment = lineOffsets[currentWrappedIndex]
 		val nextWrappedSegment = lineOffsets[currentWrappedIndex + 1]
 		val localCharIndex = cursorPosition.char - curWrappedSegment.wrapStartsAtIndex
 
-		val newCharIndex = min(
-			textLines[nextWrappedSegment.line].length,
-			nextWrappedSegment.wrapStartsAtIndex + localCharIndex
-		)
-
 		cursor.updatePosition(
 			CharLineOffset(
 				line = nextWrappedSegment.line,
-				char = newCharIndex
+				char = nextWrappedSegment.wrapStartsAtIndex + localCharIndex
 			)
 		)
 	}
@@ -47,6 +49,10 @@ internal fun TextEditorState.moveCursorDown() {
 internal fun TextEditorState.moveCursorToLineEnd() {
 	val (line, _) = cursorPosition
 	val currentWrappedLineIndex = getWrappedLineIndex(cursorPosition)
+	if (currentWrappedLineIndex < 0) {
+		cursor.updatePosition(cursorPosition.copy(char = textLines[line].length))
+		return
+	}
 	val currentWrappedLine = lineOffsets[currentWrappedLineIndex]
 
 	if (currentWrappedLineIndex < lineOffsets.size - 1) {
@@ -170,19 +176,15 @@ internal fun TextEditorState.moveCursorPageUp() {
 
 	if (targetLine != null) {
 		// Try to maintain the same horizontal position
-		val currentWrappedLine = getWrappedLine(cursorPosition)
-		val localCharIndex = cursorPosition.char - currentWrappedLine.wrapStartsAtIndex
-
-		val newCharIndex = minOf(
-			textLines[targetLine.line].length,
-			targetLine.wrapStartsAtIndex + localCharIndex
-		)
+		val currentWrapStart = lineOffsets.getOrNull(getWrappedLineIndex(cursorPosition))
+			?.wrapStartsAtIndex ?: 0
+		val localCharIndex = cursorPosition.char - currentWrapStart
 
 		// Update cursor position
 		cursor.updatePosition(
 			CharLineOffset(
 				line = targetLine.line,
-				char = newCharIndex
+				char = targetLine.wrapStartsAtIndex + localCharIndex
 			)
 		)
 
@@ -207,19 +209,15 @@ internal fun TextEditorState.moveCursorPageDown() {
 
 	if (targetLine != null) {
 		// Try to maintain the same horizontal position
-		val currentWrappedLine = getWrappedLine(cursorPosition)
-		val localCharIndex = cursorPosition.char - currentWrappedLine.wrapStartsAtIndex
-
-		val newCharIndex = minOf(
-			textLines[targetLine.line].length,
-			targetLine.wrapStartsAtIndex + localCharIndex
-		)
+		val currentWrapStart = lineOffsets.getOrNull(getWrappedLineIndex(cursorPosition))
+			?.wrapStartsAtIndex ?: 0
+		val localCharIndex = cursorPosition.char - currentWrapStart
 
 		// Update cursor position
 		cursor.updatePosition(
 			CharLineOffset(
 				line = targetLine.line,
-				char = newCharIndex
+				char = targetLine.wrapStartsAtIndex + localCharIndex
 			)
 		)
 

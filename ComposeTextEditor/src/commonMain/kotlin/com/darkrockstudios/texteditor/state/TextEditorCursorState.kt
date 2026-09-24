@@ -131,7 +131,8 @@ class TextEditorCursorState(
 	}
 
 	fun moveToLineStart() {
-		val currentWrappedLine = editorState.getWrappedLine(position)
-		updatePosition(position.copy(char = currentWrappedLine.wrapStartsAtIndex))
+		val wrapStart = editorState.lineOffsets.getOrNull(editorState.getWrappedLineIndex(position))
+			?.wrapStartsAtIndex ?: 0
+		updatePosition(position.copy(char = wrapStart))
 	}
 }
