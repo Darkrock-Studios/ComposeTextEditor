@@ -350,7 +350,7 @@ class SpellCheckStateTest {
 		val textState = editorWithCounter(MeasureCounter())
 		val spellCheckState = SpellCheckState(textState, spellChecker)
 		textState.setText("aaa\nbbb\nccc")
-		(0..2).forEach { line ->
+		for (line in 0..2) {
 			textState.addRichSpan(TextEditorRange(CharLineOffset(line, 0), CharLineOffset(line, 3)), SpellCheckStyle)
 		}
 
