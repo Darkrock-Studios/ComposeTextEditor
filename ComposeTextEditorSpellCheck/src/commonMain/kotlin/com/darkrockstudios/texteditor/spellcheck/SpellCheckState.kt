@@ -383,27 +383,38 @@ class SpellCheckState(
 	 * This will remove any existing spell check spans for the word and add a new one if misspelled.
 	 *
 	 * The lookup always runs, but the document is only decorated while checking is enabled.
+	 * [segment] addresses the document as it stands when this is called. If an edit changes
+	 * the word's line before the span goes in, that line is re-checked instead.
 	 *
 	 * @param segment The word segment to check
 	 * @return true if the word is misspelled, false otherwise
 	 */
-	suspend fun checkWordSegment(segment: WordSegment): Boolean = checkMutex.withLock {
-		val sp = spellChecker ?: return false
+	suspend fun checkWordSegment(segment: WordSegment): Boolean {
+		val computedAgainst = textState.textLines
+		return checkMutex.withLock {
+			val sp = spellChecker ?: return false
 
-		// Resolve the async lookup first; only mutate spans afterward so a
-		// cancellation can't leave the word's span removed-but-not-restored.
-		val isSpelledCorrectly = sp.isCorrectWord(segment.text)
+			// Resolve the async lookup first; only mutate spans afterward so a
+			// cancellation can't leave the word's span removed-but-not-restored.
+			val isSpelledCorrectly = sp.isCorrectWord(segment.text)
 
-		if (spellCheckingEnabled) {
-			val doomed = textState.getRichSpansInRange(segment.range)
-				.filter { it.style is SpellCheckStyle }
-			val add = if (isSpelledCorrectly) emptyList() else {
-				listOf(RichSpan(segment.range, MisspelledWordStyle))
+			if (spellCheckingEnabled) {
+				val diff = LineDiff(computedAgainst, textState.textLines)
+				val range = diff.move(segment.range)
+				if (range != null) {
+					val doomed = textState.getRichSpansInRange(range)
+						.filter { it.style is SpellCheckStyle }
+					val add = if (isSpelledCorrectly) emptyList() else {
+						listOf(RichSpan(range, MisspelledWordStyle))
+					}
+					textState.updateRichSpans(remove = doomed, add = add)
+				} else {
+					diff.cover(segment.range)?.let { runPartialWordCheck(it, textState.textLines) }
+				}
 			}
-			textState.updateRichSpans(remove = doomed, add = add)
-		}
 
-		!isSpelledCorrectly
+			!isSpelledCorrectly
+		}
 	}
 
 	private fun shouldSpellCheck(segment: WordSegment): Boolean {

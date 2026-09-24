@@ -307,6 +307,40 @@ class SpellCheckStateTest {
 		assertEquals(listOf("aaa", "bbb", "c".repeat(13)), spellCheckedText())
 	}
 
+	@Test
+	fun `checkWordSegment follows a line inserted above its word`() = runTest {
+		textState.setText("aaa\nbbb")
+		val gate = CompletableDeferred<Unit>()
+		val state = SpellCheckState(textState, GatedSpellChecker(gate), scanContext = EmptyCoroutineContext)
+
+		val check = launch { state.checkWordSegment(WordSegment("bbb", lineRange(1))) }
+		runCurrent()
+
+		textState.replace(TextEditorRange(CharLineOffset(0, 0), CharLineOffset(0, 0)), "zz\n")
+		gate.complete(Unit)
+		check.join()
+
+		assertEquals(listOf("bbb"), spellCheckedText())
+		assertEquals(2, textState.richSpanManager.getAllRichSpans().single().range.start.line)
+	}
+
+	@Test
+	fun `checkWordSegment re-checks its line when an edit lands on it`() = runTest {
+		textState.setText("aaa bbb")
+		val gate = CompletableDeferred<Unit>()
+		val state = SpellCheckState(textState, GatedSpellChecker(gate), scanContext = EmptyCoroutineContext)
+
+		val bbb = TextEditorRange(CharLineOffset(0, 4), CharLineOffset(0, 7))
+		val check = launch { state.checkWordSegment(WordSegment("bbb", bbb)) }
+		runCurrent()
+
+		textState.replace(TextEditorRange(CharLineOffset(0, 0), CharLineOffset(0, 0)), "x")
+		gate.complete(Unit)
+		check.join()
+
+		assertEquals(listOf("bbb", "xaaa"), spellCheckedText())
+	}
+
 	private fun lineRange(line: Int) =
 		TextEditorRange(CharLineOffset(line, 0), CharLineOffset(line, textState.textLines[line].length))
 
