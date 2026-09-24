@@ -79,8 +79,10 @@ fun SpellCheckingTextEditor(
 	val suggestionJob = remember { mutableStateOf<Job?>(null) }
 
 	LaunchedEffect(state) {
-		state.textState.documentReplacements
-			.collect { state.runFullSpellCheck() }
+		state.textState.documentGeneration
+			.collect { generation ->
+				if (generation != state.fullCheckGeneration) state.runFullSpellCheck()
+			}
 	}
 
 	LaunchedEffect(state) {

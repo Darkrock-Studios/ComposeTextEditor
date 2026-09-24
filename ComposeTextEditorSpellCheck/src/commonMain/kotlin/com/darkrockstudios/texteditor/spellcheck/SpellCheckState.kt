@@ -80,6 +80,13 @@ class SpellCheckState(
 	}
 
 	private var lastTextHash = -1
+
+	/**
+	 * The [TextEditorState.documentGeneration] the latest full check scanned, set when the
+	 * scan starts so a replacement arriving mid-scan is not mistaken for already checked.
+	 */
+	internal var fullCheckGeneration = -1
+		private set
 	private val misspelledWords = mutableListOf<WordSegment>()
 	private val sentenceCorrections = mutableListOf<Correction>()
 
@@ -202,6 +209,7 @@ class SpellCheckState(
 			// Compute the misspellings under suspension WITHOUT touching spans. A
 			// cancellation here (e.g. a recomposition restarting the check) leaves the
 			// existing spans intact rather than wiping them.
+			fullCheckGeneration = textState.documentGeneration.value
 			val scannedText = textState.computeTextHash()
 			val candidates = textState.wordSegments().filter(::shouldSpellCheck).toList()
 			val misspelled = withContext(scanContext) {
@@ -241,6 +249,7 @@ class SpellCheckState(
 		repeat(MAX_SCAN_ATTEMPTS) {
 			// Compute corrections under suspension first; only mutate spans once the
 			// async work is done, so a cancellation can't leave the document wiped.
+			fullCheckGeneration = textState.documentGeneration.value
 			val scannedText = textState.computeTextHash()
 			val sentences = textState.sentenceSegments().toList()
 			val corrections = withContext(scanContext) {
