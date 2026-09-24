@@ -28,6 +28,13 @@ class TextEditorCursorState(
 			_stylesFlow.tryEmit(value)
 		}
 
+	/**
+	 * Whether [styles] were set by hand ([addStyle] and friends) rather than derived
+	 * from the text. While set, [updatePosition] keeps them unless the caret moves.
+	 * Edits clear it through [releaseManualStyles].
+	 */
+	private var stylesSetManually = false
+
 	private val _stylesFlow = MutableSharedFlow<Set<SpanStyle>>(
 		extraBufferCapacity = 1,
 		onBufferOverflow = BufferOverflow.DROP_OLDEST
@@ -41,12 +48,15 @@ class TextEditorCursorState(
 	val positionFlow: SharedFlow<CharLineOffset> = _cursorPositionFlow
 
 	fun updatePosition(position: CharLineOffset, updateStyles: Boolean = true) {
+		val oldPosition = _position
 		val newPosition = position.coerceInto(editorState.textLines)
 		_position = newPosition
 		_cursorPositionFlow.tryEmit(newPosition)
 
-		// Update styles based on surrounding text (skip during text operations to preserve manually-set styles)
-		if (updateStyles) {
+		// Focus handlers and pointer taps re-assert the position the caret already
+		// has; recomputing then would wipe styles toggled onto the caret before the
+		// user gets to type with them.
+		if (updateStyles && (newPosition != oldPosition || !stylesSetManually)) {
 			updateStylesFromPosition(newPosition)
 		}
 
@@ -66,10 +76,12 @@ class TextEditorCursorState(
 	}
 
 	fun addStyle(style: SpanStyle) {
+		stylesSetManually = true
 		styles = styles + style
 	}
 
 	fun removeStyle(style: SpanStyle) {
+		stylesSetManually = true
 		styles = styles - style
 	}
 
@@ -82,7 +94,16 @@ class TextEditorCursorState(
 	}
 
 	fun clearStyles() {
+		stylesSetManually = true
 		styles = emptySet()
+	}
+
+	/**
+	 * Lets the next [updatePosition] re-derive [styles] even if the caret stays put.
+	 * For edits, which can change the text under an unmoved caret.
+	 */
+	internal fun releaseManualStyles() {
+		stylesSetManually = false
 	}
 
 	/**
@@ -95,6 +116,7 @@ class TextEditorCursorState(
 	}
 
 	private fun updateStylesFromPosition(position: CharLineOffset) {
+		stylesSetManually = false
 		styles = editorState.getSpanStylesForEditAt(position)
 	}
 

@@ -133,6 +133,9 @@ class TextEditManager(private val state: TextEditorState) {
 				is TextEditOperation.LineBlock -> applyLineBlockOperation(operation)
 			}
 
+			// Decorations are overlays; a spell-check pass must not drop the caret's
+			// toggled styles.
+			if (!isDecoration) state.cursor.releaseManualStyles()
 			state.cursor.updatePosition(operation.cursorAfter)
 			state.invalidateCopiedRichSpans()
 			state.richSpanManager.updateSpans(operation, metadata)
@@ -755,6 +758,7 @@ class TextEditManager(private val state: TextEditorState) {
 		// each of those is its own publicly visible revision.
 		state.withAtomicEdit {
 			applyLineBlockState(operation.lines, undo = true)
+			state.cursor.releaseManualStyles()
 			state.cursor.updatePosition(operation.cursorBefore)
 			state.invalidateCopiedRichSpans()
 			// Requested inside the transaction so the commit flushes one pass; this
