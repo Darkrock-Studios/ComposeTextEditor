@@ -104,6 +104,27 @@ class NavigationE2eTest {
 	}
 
 	@Test
+	fun `numpad navigation keys move the cursor with num lock off`() = editorUiTest(
+		initialText = AnnotatedString("first\nsecond\nthird"),
+	) {
+		clickAtCharacter(9)
+		press(Key.NumPadMoveHome)
+		assertEquals(CharLineOffset(1, 0), state.cursorPosition)
+
+		press(Key.NumPadMoveEnd)
+		assertEquals(CharLineOffset(1, 6), state.cursorPosition)
+
+		press(Key.NumPadDirectionLeft)
+		assertEquals(CharLineOffset(1, 5), state.cursorPosition)
+
+		press(Key.NumPadDirectionUp)
+		assertEquals(CharLineOffset(0, 5), state.cursorPosition)
+
+		press(Key.NumPadMoveEnd, ctrl = true)
+		assertEquals(CharLineOffset(2, 5), state.cursorPosition)
+	}
+
+	@Test
 	fun `ctrl+home and ctrl+end jump to the document boundaries`() = editorUiTest(
 		initialText = AnnotatedString("first\nsecond\nthird"),
 	) {

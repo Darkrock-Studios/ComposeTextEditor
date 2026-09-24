@@ -58,7 +58,7 @@ val LocalKeyBindings = staticCompositionLocalOf { platformKeyBindings() }
 object CtrlKeyBindings : KeyBindings {
 	override fun commandFor(event: KeyEvent): EditorCommand? {
 		val ctrl = event.isCtrlShortcut
-		return when (event.key) {
+		return when (event.navigationKey) {
 			Key.A -> if (ctrl) Action.SelectAll else null
 			Key.C -> if (ctrl) Action.Copy else null
 			Key.X -> if (ctrl) Action.Cut else null
@@ -96,7 +96,7 @@ object MacKeyBindings : KeyBindings {
 	override fun commandFor(event: KeyEvent): EditorCommand? {
 		val cmd = event.isMetaPressed
 		val option = event.isAltPressed
-		return when (event.key) {
+		return when (event.navigationKey) {
 			Key.A -> if (cmd) Action.SelectAll else null
 			Key.C -> if (cmd) Action.Copy else null
 			Key.X -> if (cmd) Action.Cut else null
@@ -136,10 +136,29 @@ object MacKeyBindings : KeyBindings {
 }
 
 /** Chords that mean the same thing everywhere. */
-private fun commonCommandFor(event: KeyEvent): EditorCommand? = when (event.key) {
+private fun commonCommandFor(event: KeyEvent): EditorCommand? = when (event.navigationKey) {
 	Key.PageUp -> Motion.PageUp
 	Key.PageDown -> Motion.PageDown
 	Key.Tab -> if (event.isShiftPressed) Action.Outdent else Action.Indent
 	Key.Enter, Key.NumPadEnter -> Action.NewLine
 	else -> null
 }
+
+/**
+ * The dedicated key a numpad key stands in for when Num Lock is off. Desktop Compose
+ * keeps the numpad location on these, so they never equal [Key.MoveHome] and friends,
+ * and laptops that fold navigation into the numpad have no other Home, End or Page keys.
+ */
+private val KeyEvent.navigationKey: Key
+	get() = when (val key = key) {
+		Key.NumPadDirectionUp -> Key.DirectionUp
+		Key.NumPadDirectionDown -> Key.DirectionDown
+		Key.NumPadDirectionLeft -> Key.DirectionLeft
+		Key.NumPadDirectionRight -> Key.DirectionRight
+		Key.NumPadMoveHome -> Key.MoveHome
+		Key.NumPadMoveEnd -> Key.MoveEnd
+		Key.NumPadPageUp -> Key.PageUp
+		Key.NumPadPageDown -> Key.PageDown
+		Key.NumPadDelete -> Key.Delete
+		else -> key
+	}
