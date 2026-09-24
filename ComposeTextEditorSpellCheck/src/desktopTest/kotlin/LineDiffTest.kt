@@ -86,4 +86,18 @@ class LineDiffTest {
 
 		assertNull(diff.cover(range(1, 0, 1, 3)))
 	}
+
+	@Test
+	fun `changedLines spans the edited lines as they stand now`() {
+		val diff = LineDiff(lines("aaa", "bbb", "ccc"), lines("aaa", "xbbb", "yy", "ccc"))
+
+		assertEquals(range(1, 0, 2, 2), diff.changedLines())
+	}
+
+	@Test
+	fun `changedLines is null when lines were only deleted`() {
+		val diff = LineDiff(lines("aaa", "bbb", "ccc"), lines("aaa", "ccc"))
+
+		assertNull(diff.changedLines())
+	}
 }

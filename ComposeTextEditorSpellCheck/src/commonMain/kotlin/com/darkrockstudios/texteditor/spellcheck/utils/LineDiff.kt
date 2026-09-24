@@ -66,6 +66,13 @@ internal class LineDiff(
 		return TextEditorRange(start, end)
 	}
 
+	/** The changed lines as they stand in [to], or null when none remain there. */
+	fun changedLines(): TextEditorRange? {
+		if (toBandEnd == bandStart) return null
+		val lastLine = toBandEnd - 1
+		return TextEditorRange(CharLineOffset(bandStart, 0), CharLineOffset(lastLine, to[lastLine].length))
+	}
+
 	private fun sameLine(a: AnnotatedString, b: AnnotatedString): Boolean = a === b || a.text == b.text
 }
 

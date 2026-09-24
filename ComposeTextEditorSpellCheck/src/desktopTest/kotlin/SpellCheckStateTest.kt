@@ -285,6 +285,28 @@ class SpellCheckStateTest {
 		)
 	}
 
+	@Test
+	fun `a full check that keeps racing edits still decorates the document`() = runTest {
+		textState.setText("aaa\nbbb\nccc")
+		var edits = 0
+		val typingChecker = object : EditorSpellChecker by spellChecker {
+			override suspend fun isCorrectWord(word: String): Boolean {
+				// Keep typing on the last line through well over three rounds of lookups
+				if (edits < 10) {
+					edits++
+					val end = CharLineOffset(2, textState.textLines[2].length)
+					textState.replace(TextEditorRange(end, end), "c")
+				}
+				return false
+			}
+		}
+		val state = SpellCheckState(textState, typingChecker, scanContext = EmptyCoroutineContext)
+
+		state.runFullSpellCheck()
+
+		assertEquals(listOf("aaa", "bbb", "c".repeat(13)), spellCheckedText())
+	}
+
 	private fun lineRange(line: Int) =
 		TextEditorRange(CharLineOffset(line, 0), CharLineOffset(line, textState.textLines[line].length))
 
