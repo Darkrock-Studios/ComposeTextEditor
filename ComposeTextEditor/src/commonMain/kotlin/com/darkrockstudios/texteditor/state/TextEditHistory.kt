@@ -137,6 +137,19 @@ class TextEditHistory(private val maxHistorySize: Int = 1000) {
 		undoQueue.clear()
 		redoQueue.clear()
 	}
+
+	/** Empties both queues, returning an action that puts their entries back. */
+	internal fun clearRestorably(): () -> Unit {
+		val undo = undoQueue.toList()
+		val redo = redoQueue.toList()
+		clear()
+		return {
+			undoQueue.clear()
+			undoQueue.addAll(undo)
+			redoQueue.clear()
+			redoQueue.addAll(redo)
+		}
+	}
 }
 
 data class RelativePosition(

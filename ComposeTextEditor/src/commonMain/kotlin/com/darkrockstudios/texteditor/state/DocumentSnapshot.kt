@@ -11,7 +11,8 @@ import com.darkrockstudios.texteditor.richstyle.RichSpan
  * them without an edit changing either underneath it and without pairing text from one
  * revision with span line indices from another. Take one with
  * [TextEditorState.snapshot]; it is safe to hold and to read from any thread, and it
- * does not reflect later edits.
+ * does not reflect later edits. Load one into an editor with
+ * [TextEditorState.setDocument].
  */
 class DocumentSnapshot private constructor(
 	/** The document as one [AnnotatedString] per line, in order. */
@@ -37,7 +38,11 @@ class DocumentSnapshot private constructor(
 	 */
 	private val allText: Lazy<AnnotatedString>,
 ) {
-	internal constructor(lines: List<AnnotatedString>, richSpans: Set<RichSpan>) : this(
+	/**
+	 * Builds a snapshot by hand. [richSpans] need not fit [lines]:
+	 * [TextEditorState.setDocument] clamps them onto the document on load.
+	 */
+	constructor(lines: List<AnnotatedString>, richSpans: Set<RichSpan> = emptySet()) : this(
 		lines = lines,
 		richSpans = richSpans,
 		spansByLine = spansByLineOf(richSpans),

@@ -213,6 +213,13 @@ plus a flat set of `RichSpan` decorations. Every mutation publishes a whole new
 snapshot, so a reader on any thread always sees a complete, self-consistent
 revision.
 
+`setDocument` is the inverse of `snapshot()`: it loads a snapshot, rich spans
+included, as one revision, so a document moves between editors without a
+markdown round trip. It drops decoration spans, clamps spans onto the incoming
+lines, and clears undo history like any other document load. `setText` keeps
+only character-level spans. Both announce the swap by bumping `documentGeneration`
+once it commits, which is how spell check knows to re-scan.
+
 Edits that must land together run inside `TextEditorState.withAtomicEdit`. The
 transaction accumulates mutations in a draft and publishes them as one revision
 at commit, after line-block normalization. A throwing transaction discards the

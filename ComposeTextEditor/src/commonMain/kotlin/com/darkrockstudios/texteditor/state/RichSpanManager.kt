@@ -1,5 +1,6 @@
 package com.darkrockstudios.texteditor.state
 
+import androidx.compose.ui.text.AnnotatedString
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.LineWrap
 import com.darkrockstudios.texteditor.TextEditorRange
@@ -47,35 +48,7 @@ class RichSpanManager(
 	 * paste replay recorded offsets; the document they land in may have shifted.
 	 */
 	internal fun addRichSpanClamped(range: TextEditorRange, style: RichSpanStyle) {
-		val clamped = clampRangeToDocument(range) ?: return
-		if (clamped.start == clamped.end && !style.rendersWhenEmpty) return
-		spans = spans + RichSpan(clamped, style)
-	}
-
-	// Sticky gutter markers render on empty lines, and placeholder blocks (rules,
-	// images) own their whole line no matter how wide its text is.
-	private val RichSpanStyle.rendersWhenEmpty: Boolean
-		get() = stickyAtStart || this is BlockSpanStyle
-
-	/**
-	 * Coerces [range] onto lines and columns that exist right now, or null when the
-	 * document has no lines at all. Zero-width results are the caller's decision:
-	 * sticky gutter markers render on empty lines, other styles do not.
-	 */
-	private fun clampRangeToDocument(range: TextEditorRange): TextEditorRange? {
-		val lastLine = state.textLines.lastIndex
-		if (lastLine < 0) return null
-		val startLine = range.start.line.coerceIn(0, lastLine)
-		val endLine = range.end.line.coerceIn(startLine, lastLine)
-		val startChar = range.start.char.coerceIn(0, state.textLines[startLine].length)
-		val endChar = range.end.char.coerceIn(
-			if (startLine == endLine) startChar else 0,
-			state.textLines[endLine].length,
-		)
-		return TextEditorRange(
-			CharLineOffset(startLine, startChar),
-			CharLineOffset(endLine, endChar),
-		)
+		clampSpanToLines(RichSpan(range, style), state.textLines)?.let { spans = spans + it }
 	}
 
 	internal fun addRichSpan(start: CharLineOffset, end: CharLineOffset, style: RichSpanStyle) {
@@ -96,16 +69,8 @@ class RichSpanManager(
 	 * invisible, uncollectable by range queries, and still counted by span scans.
 	 */
 	internal fun addRichSpansClamped(newSpans: Collection<RichSpan>) {
-		val clamped = newSpans.mapNotNull { span ->
-			clampRangeToDocument(span.range)?.let { range ->
-				if (range.start == range.end && !span.style.rendersWhenEmpty) {
-					null
-				} else {
-					span.copy(range = range)
-				}
-			}
-		}
-		addRichSpans(clamped)
+		val lines = state.textLines
+		addRichSpans(newSpans.mapNotNull { clampSpanToLines(it, lines) })
 	}
 
 	internal fun removeRichSpan(start: CharLineOffset, end: CharLineOffset, style: RichSpanStyle) {
@@ -168,16 +133,10 @@ class RichSpanManager(
 	 * arithmetic near line joins can land a hair past a shortened line; a span
 	 * shrunk to nothing dies unless its sticky marker renders on empty lines.
 	 */
-	private fun clampAllToDocument(updatedSpans: Set<RichSpan>): Set<RichSpan> =
-		updatedSpans.mapNotNullTo(mutableSetOf()) { span ->
-			clampRangeToDocument(span.range)?.let { clamped ->
-				if (clamped.start == clamped.end && !span.style.rendersWhenEmpty) {
-					null
-				} else {
-					span.copy(range = clamped)
-				}
-			}
-		}
+	private fun clampAllToDocument(updatedSpans: Set<RichSpan>): Set<RichSpan> {
+		val lines = state.textLines
+		return updatedSpans.mapNotNullTo(mutableSetOf()) { clampSpanToLines(it, lines) }
+	}
 
 	/**
 	 * Collapses any same-line duplicates of line-anchored (sticky-at-start) styles
@@ -502,4 +461,33 @@ class RichSpanManager(
 		}
 		return result.toList()
 	}
+}
+
+// Sticky gutter markers render on empty lines, and placeholder blocks (rules,
+// images) own their whole line no matter how wide its text is.
+private val RichSpanStyle.rendersWhenEmpty: Boolean
+	get() = stickyAtStart || this is BlockSpanStyle
+
+/**
+ * Coerces [span] onto lines and columns that exist in [lines], or null when [lines] is
+ * empty or the span shrinks to nothing and its style does not render when empty.
+ * Returns [span] itself when it already fits.
+ */
+internal fun clampSpanToLines(span: RichSpan, lines: List<AnnotatedString>): RichSpan? {
+	val lastLine = lines.lastIndex
+	if (lastLine < 0) return null
+	val range = span.range
+	val startLine = range.start.line.coerceIn(0, lastLine)
+	val endLine = range.end.line.coerceIn(startLine, lastLine)
+	val startChar = range.start.char.coerceIn(0, lines[startLine].length)
+	val endChar = range.end.char.coerceIn(
+		if (startLine == endLine) startChar else 0,
+		lines[endLine].length,
+	)
+	val clamped = TextEditorRange(
+		CharLineOffset(startLine, startChar),
+		CharLineOffset(endLine, endChar),
+	)
+	if (clamped.start == clamped.end && !span.style.rendersWhenEmpty) return null
+	return if (clamped == range) span else span.copy(range = clamped)
 }

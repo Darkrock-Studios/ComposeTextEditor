@@ -159,6 +159,9 @@ class TextEditorState(
 	/** Actions deferred by [onCommit] until the outermost transaction commits. */
 	private val pendingCommitActions = mutableListOf<() -> Unit>()
 
+	/** Undo actions registered by [onRollback], run if the transaction throws. */
+	private val pendingRollbackActions = mutableListOf<() -> Unit>()
+
 	/**
 	 * Layout work requested while a transaction is open, merged across requests and
 	 * flushed as one pass at commit. Laying out mid-transaction would both waste the
@@ -212,11 +215,14 @@ class TextEditorState(
 	 * Re-entrant: a nested call joins the outer transaction and commits with it. A
 	 * throwing [block] discards the draft and leaves [content] on the previous
 	 * revision, because a half-applied revision would keep serializing block markers
-	 * onto the wrong lines long after the failure rather than only during it.
+	 * onto the wrong lines long after the failure rather than only during it. State
+	 * outside the document that the block changed is put back by its [onRollback]
+	 * actions.
 	 */
 	internal fun <T> withAtomicEdit(block: () -> T): T {
 		if (draft != null) return block()
 		draft = content
+		var committed = false
 		try {
 			val result = block()
 			// Every publish passes through line-block normalization, so no caller
@@ -232,6 +238,8 @@ class TextEditorState(
 				}
 			}
 			draft = null
+			committed = true
+			pendingRollbackActions.clear()
 			// Flush the deferred relayout, then the cursor scroll that must read the
 			// fresh offsets, then the commit actions that announce the edit. All of
 			// this runs only on the committing path.
@@ -255,7 +263,20 @@ class TextEditorState(
 			pendingLayoutUpdate = null
 			pendingCursorScroll = false
 			pendingCommitActions.clear()
+			if (!committed) {
+				val rollbacks = pendingRollbackActions.asReversed().toList()
+				pendingRollbackActions.clear()
+				rollbacks.forEach { it() }
+			}
 		}
+	}
+
+	/**
+	 * Registers [action] to undo a side effect of the open transaction if it throws,
+	 * or drops it when there is none, since the side effect then stands.
+	 */
+	private fun onRollback(action: () -> Unit) {
+		if (draft != null) pendingRollbackActions += action
 	}
 
 	/**
@@ -491,33 +512,96 @@ class TextEditorState(
 	private val _documentGeneration = MutableStateFlow(0)
 
 	/**
-	 * Increments each time [setText] swaps the whole document. A replacement is not an
-	 * edit and emits nothing on [editOperations], so anything deriving state from the
-	 * text (spell check, search results) has no other way to learn its document is gone.
-	 * Being a [StateFlow], a collector that subscribes after a replacement still sees it.
+	 * Increments each time [setText] or [setDocument] swaps the whole document. A
+	 * replacement is not an edit and emits nothing on [editOperations], so anything
+	 * deriving state from the text (spell check, search results) has no other way to
+	 * learn its document is gone. Being a [StateFlow], a collector that subscribes
+	 * after a replacement still sees it. Inside a transaction it increments only once
+	 * the transaction commits, so a listener sees the finished document and a failed
+	 * load is never announced.
 	 */
 	val documentGeneration: StateFlow<Int> = _documentGeneration
 
+	private fun announceReplacement() {
+		onCommit { _documentGeneration.value++ }
+	}
+
 	/**
-	 * Replaces the entire document with [text], clearing rich spans and resetting
-	 * book-keeping. To edit existing content instead, use [replace] or the cursor
-	 * operations.
+	 * Replaces the entire document with [text], clearing rich spans and undo history
+	 * and resetting book-keeping. To edit existing content instead, use [replace] or
+	 * the cursor operations.
 	 */
 	fun setText(text: String) {
 		replaceContent(text.split("\n").map { it.toAnnotatedString() })
+		clearHistory()
 		updateBookKeeping()
 		cursor.refreshStyles()
 	}
 
 	/**
 	 * Replaces the entire document with [text], preserving its character-level spans
-	 * while clearing rich spans and resetting book-keeping. To edit existing content
-	 * instead, use [replace] or the cursor operations.
+	 * while clearing rich spans and undo history and resetting book-keeping. To edit
+	 * existing content instead, use [replace] or the cursor operations; to load a
+	 * document along with its rich spans, use [setDocument].
 	 */
 	fun setText(text: AnnotatedString) {
 		replaceContent(text.splitAnnotatedString())
+		clearHistory()
 		updateBookKeeping()
 		cursor.refreshStyles()
+	}
+
+	/**
+	 * Replaces the entire document with [document]'s lines and rich spans in a single
+	 * revision, typically one taken from another editor with [snapshot]. Unlike
+	 * [setText], rich spans (rules, images, code fences, list and quote markers) come
+	 * along.
+	 *
+	 * Decoration spans are dropped, since they belong to whatever produced them in the
+	 * source editor, and spans that do not fit the incoming lines are clamped onto them.
+	 * Like any document load this is not undoable: history is cleared, the selection
+	 * and composing region are dropped, the cursor is coerced into the new document,
+	 * and it increments [documentGeneration] rather than emitting on [editOperations].
+	 */
+	fun setDocument(document: DocumentSnapshot) {
+		val lines = document.lines.ifEmpty { listOf(AnnotatedString("")) }
+		val spans = document.richSpans.mapNotNullTo(mutableSetOf()) { span ->
+			if (span.style.isDecoration) null else clampSpanToLines(span, lines)
+		}
+		// An already-clean snapshot is published as is; it is immutable, and sharing
+		// it keeps its memoized indexes.
+		val clean = lines === document.lines && spans == document.richSpans
+		mutateContent { if (clean) document else DocumentSnapshot(lines, spans) }
+		announceReplacement()
+
+		clearHistory()
+		val previousComposing = composingRange
+		val previousSelection = selector.selection
+		composingRange = null
+		selector.clearSelection()
+		onRollback {
+			composingRange = previousComposing
+			previousSelection?.let { selector.updateSelection(it.start, it.end) }
+		}
+		updateBookKeeping()
+		cursor.updatePosition(cursor.position)
+	}
+
+	/**
+	 * Drops every undo and redo entry. Their offsets address the document a wholesale
+	 * replacement just discarded, so replaying one would corrupt the new content.
+	 * Cleared immediately rather than at commit, so an edit later in the same
+	 * transaction cannot coalesce into an entry from the old document.
+	 */
+	private fun clearHistory() {
+		val restore = editManager.history.clearRestorably()
+		_canUndo = false
+		_canRedo = false
+		onRollback {
+			restore()
+			_canUndo = editManager.history.hasUndoLevels()
+			_canRedo = editManager.history.hasRedoLevels()
+		}
 	}
 
 	/** Sets [isFocused]; losing focus also clears any pending IME composing region. */
@@ -835,7 +919,7 @@ class TextEditorState(
 	 */
 	private fun replaceContent(lines: List<AnnotatedString>) {
 		mutateContent { DocumentSnapshot(lines, emptySet()) }
-		_documentGeneration.value++
+		announceReplacement()
 	}
 
 	internal fun setLines(lines: List<AnnotatedString>) {
