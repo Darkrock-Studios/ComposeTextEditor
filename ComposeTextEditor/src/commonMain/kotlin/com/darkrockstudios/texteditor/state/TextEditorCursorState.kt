@@ -29,11 +29,11 @@ class TextEditorCursorState(
 		}
 
 	/**
-	 * The document revision [styles] was last derived from. [updatePosition] skips the
-	 * recompute when neither the caret nor this changed since then. Starts as the
-	 * revision seen at construction, matching the empty [styles].
+	 * Whether [styles] were set by hand ([addStyle] and friends) rather than derived
+	 * from the text. While set, [updatePosition] keeps them unless the caret moves.
+	 * Edits clear it through [releaseManualStyles].
 	 */
-	private var stylesDerivedFrom: DocumentSnapshot = editorState.workingContent
+	private var stylesSetManually = false
 
 	private val _stylesFlow = MutableSharedFlow<Set<SpanStyle>>(
 		extraBufferCapacity = 1,
@@ -53,17 +53,10 @@ class TextEditorCursorState(
 		_position = newPosition
 		_cursorPositionFlow.tryEmit(newPosition)
 
-		// Recompute the typing style from the surrounding text only when something it
-		// derives from changed: the caret moved, or an edit altered the text under it
-		// (an edit can leave the caret offset untouched, e.g. styling a selection).
 		// Focus handlers and pointer taps re-assert the position the caret already
-		// has; recomputing then would wipe styles toggled onto the caret
-		// ([toggleStyle]) before the user gets to type with them.
-		// (Skip during text operations to preserve manually-set styles still applies
-		// via [updateStyles].)
-		if (updateStyles &&
-			(newPosition != oldPosition || editorState.workingContent !== stylesDerivedFrom)
-		) {
+		// has; recomputing then would wipe styles toggled onto the caret before the
+		// user gets to type with them.
+		if (updateStyles && (newPosition != oldPosition || !stylesSetManually)) {
 			updateStylesFromPosition(newPosition)
 		}
 
@@ -83,10 +76,12 @@ class TextEditorCursorState(
 	}
 
 	fun addStyle(style: SpanStyle) {
+		stylesSetManually = true
 		styles = styles + style
 	}
 
 	fun removeStyle(style: SpanStyle) {
+		stylesSetManually = true
 		styles = styles - style
 	}
 
@@ -99,7 +94,16 @@ class TextEditorCursorState(
 	}
 
 	fun clearStyles() {
+		stylesSetManually = true
 		styles = emptySet()
+	}
+
+	/**
+	 * Lets the next [updatePosition] re-derive [styles] even if the caret stays put.
+	 * For edits, which can change the text under an unmoved caret.
+	 */
+	internal fun releaseManualStyles() {
+		stylesSetManually = false
 	}
 
 	/**
@@ -112,7 +116,7 @@ class TextEditorCursorState(
 	}
 
 	private fun updateStylesFromPosition(position: CharLineOffset) {
-		stylesDerivedFrom = editorState.workingContent
+		stylesSetManually = false
 		styles = editorState.getSpanStylesForEditAt(position)
 	}
 

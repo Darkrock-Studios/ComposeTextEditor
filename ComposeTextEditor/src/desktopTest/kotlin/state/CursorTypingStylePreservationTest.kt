@@ -2,9 +2,11 @@ package state
 
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
+import com.darkrockstudios.texteditor.richstyle.SpellCheckStyle
 import com.darkrockstudios.texteditor.state.TextEditorState
 import io.mockk.mockk
 import kotlinx.coroutines.test.TestScope
@@ -24,6 +26,7 @@ import kotlin.test.assertTrue
 class CursorTypingStylePreservationTest {
 
 	private val bold = SpanStyle(fontWeight = FontWeight.Bold)
+	private val italic = SpanStyle(fontStyle = FontStyle.Italic)
 
 	private fun TestScope.editor(text: String = "hello") = TextEditorState(
 		scope = this,
@@ -100,5 +103,39 @@ class CursorTypingStylePreservationTest {
 		state.undo()
 
 		assertFalse(bold in state.cursor.styles, "typing style should not survive undo as a stale manual style")
+	}
+
+	@Test
+	fun `toggled styles survive a re-assert after typing`() = runTest {
+		val state = editor("")
+		state.insertCharacterAtCursor('a')
+		state.cursor.addStyle(bold)
+
+		state.cursor.updatePosition(state.cursor.position)
+
+		assertTrue(bold in state.cursor.styles, "toggled style was wiped by a same-position update after an edit")
+	}
+
+	@Test
+	fun `an edit under an unmoved caret replaces toggled styles`() = runTest {
+		val state = editor()
+		state.cursor.updatePosition(CharLineOffset(0, 5))
+		state.cursor.addStyle(bold)
+
+		state.addStyleSpan(TextEditorRange(CharLineOffset(0, 0), CharLineOffset(0, 5)), italic)
+
+		assertTrue(italic in state.cursor.styles)
+		assertFalse(bold in state.cursor.styles, "toggled style should not outlive an edit")
+	}
+
+	@Test
+	fun `a spell check decoration keeps toggled styles`() = runTest {
+		val state = editor()
+		state.cursor.updatePosition(CharLineOffset(0, 5))
+		state.cursor.addStyle(bold)
+
+		state.addRichSpan(TextEditorRange(CharLineOffset(0, 0), CharLineOffset(0, 5)), SpellCheckStyle)
+
+		assertTrue(bold in state.cursor.styles, "a decoration overlay wiped the toggled style")
 	}
 }
