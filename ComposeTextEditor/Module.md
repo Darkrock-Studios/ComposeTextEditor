@@ -155,6 +155,37 @@ To convert an `AnnotatedString` alone, without block structure, use
 — these are also what the clipboard uses, so pasting from a browser or word
 processor keeps its formatting and its list/quote/code-block structure.
 
+## Snapshots
+
+[snapshot][com.darkrockstudios.texteditor.state.TextEditorState.snapshot] returns the
+document as an immutable
+[DocumentSnapshot][com.darkrockstudios.texteditor.state.DocumentSnapshot]: its lines
+and rich spans, both from the same revision. It is safe to hold and to read from any
+thread, which makes it the right input for an autosave or a background exporter.
+
+[setDocument][com.darkrockstudios.texteditor.state.TextEditorState.setDocument] loads
+one back, rich spans included, so a document can move between editors without a
+Markdown round trip:
+
+```kotlin
+// Keep an unsaved document in memory while its editor is gone:
+val buffer: DocumentSnapshot = state.snapshot()
+
+// Later, load it into a newly composed editor:
+newState.setDocument(buffer)
+```
+
+`setText` would drop the rules, images, code fences, and list and quote markers,
+since those live in rich spans rather than in the `AnnotatedString`.
+
+Like any document load, `setDocument` clears undo history and the selection, and
+it is not reported on `editOperations`; watch
+[documentGeneration][com.darkrockstudios.texteditor.state.TextEditorState.documentGeneration]
+to learn the document was replaced. Spell-check underlines and find highlights
+are not carried over, because the target editor computes its own. A hand-built
+`DocumentSnapshot(lines, richSpans)` is accepted too; spans that fall outside its
+lines are clamped onto them.
+
 # Package com.darkrockstudios.texteditor
 
 The editor composables ([TextEditor][com.darkrockstudios.texteditor.TextEditor],

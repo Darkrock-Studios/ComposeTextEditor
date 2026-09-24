@@ -7,10 +7,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.runSkikoComposeUiTest
+import androidx.compose.ui.text.AnnotatedString
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.contextmenu.ContextMenuItem
 import com.darkrockstudios.texteditor.contextmenu.ContextMenuStrings
+import com.darkrockstudios.texteditor.richstyle.RichSpan
 import com.darkrockstudios.texteditor.richstyle.SpellCheckStyle
 import com.darkrockstudios.texteditor.spellcheck.SpellCheckItem
 import com.darkrockstudios.texteditor.spellcheck.SpellCheckMode
@@ -20,6 +22,7 @@ import com.darkrockstudios.texteditor.spellcheck.api.Correction
 import com.darkrockstudios.texteditor.spellcheck.api.EditorSpellChecker
 import com.darkrockstudios.texteditor.spellcheck.api.Suggestion
 import com.darkrockstudios.texteditor.spellcheck.rememberSpellCheckState
+import com.darkrockstudios.texteditor.state.DocumentSnapshot
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.delay
 import utils.CountingSpellChecker
@@ -145,6 +148,30 @@ class SpellCheckE2eTest {
 
 		val spans = state.textState.richSpanManager.getAllRichSpans().count { it.style is SpellCheckStyle }
 		assertEquals(2, spans)
+	}
+
+	@Test
+	fun `a document loaded with setDocument is checked by this editor`() {
+		val checker = CountingSpellChecker(correctWords = setOf("fine"))
+		// A squiggle carried over from the source editor, which this one's checker
+		// would not flag.
+		val staleSquiggle = RichSpan(
+			TextEditorRange(CharLineOffset(0, 0), CharLineOffset(0, 4)),
+			SpellCheckStyle,
+		)
+		val document = DocumentSnapshot(
+			lines = listOf(AnnotatedString("fine typotwo typothree")),
+			richSpans = setOf(staleSquiggle),
+		)
+
+		spellCheckUiTest(spellChecker = checker, initialText = "typoone fine") {
+			assertEquals(1, spellCheckSpanCount)
+
+			state.textState.setDocument(document)
+			letSpellCheckSettle()
+
+			assertEquals(2, spellCheckSpanCount)
+		}
 	}
 
 	@Test
