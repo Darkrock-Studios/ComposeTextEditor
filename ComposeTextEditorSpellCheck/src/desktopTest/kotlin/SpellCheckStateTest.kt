@@ -7,6 +7,7 @@ import androidx.compose.ui.text.TextMeasurer
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.richstyle.SpellCheckStyle
+import com.darkrockstudios.texteditor.spellcheck.api.Correction
 import com.darkrockstudios.texteditor.spellcheck.api.EditorSpellChecker
 import com.darkrockstudios.texteditor.spellcheck.api.Suggestion
 import com.darkrockstudios.texteditor.state.TextEditorState
@@ -21,6 +22,7 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Before
 import org.junit.Test
+import kotlin.coroutines.EmptyCoroutineContext
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
@@ -198,6 +200,157 @@ class SpellCheckStateTest {
 	}
 
 	@Test
+	fun `two checks never run against the spell checker at once`() = runTest {
+		textState.setText("helllo world")
+		val gate = CompletableDeferred<Unit>()
+		val gated = GatedSpellChecker(gate)
+		spellCheckState.spellChecker = gated
+
+		val first = launch { spellCheckState.runFullSpellCheck() }
+		val second = launch { spellCheckState.runFullSpellCheck() }
+		runCurrent()
+		gate.complete(Unit)
+		runCurrent()
+		first.join()
+		second.join()
+
+		assertEquals(1, gated.maxInFlight)
+	}
+
+	@Test
+	fun `a partial check queued behind another follows a line inserted above its range`() = runTest {
+		textState.setText("aaa\nbbb\nccc")
+		val gate = CompletableDeferred<Unit>()
+		val state = SpellCheckState(textState, GatedSpellChecker(gate), scanContext = EmptyCoroutineContext)
+
+		val first = launch { state.runPartialSpellCheck(lineRange(0)) }
+		runCurrent() // holds the lock, suspended in its lookups
+		val queued = launch { state.runPartialSpellCheck(lineRange(2)) }
+		runCurrent()
+
+		textState.replace(TextEditorRange(CharLineOffset(0, 0), CharLineOffset(0, 0)), "zzz\n")
+		gate.complete(Unit)
+		first.join()
+		queued.join()
+
+		assertEquals(listOf("aaa", "ccc"), spellCheckedText())
+	}
+
+	@Test
+	fun `a partial check re-scans a line edited during its lookups`() = runTest {
+		textState.setText("aaa bbb")
+		val gate = CompletableDeferred<Unit>()
+		val state = SpellCheckState(textState, GatedSpellChecker(gate), scanContext = EmptyCoroutineContext)
+
+		val check = launch { state.runPartialSpellCheck(TextEditorRange(CharLineOffset(0, 0), CharLineOffset(0, 3))) }
+		runCurrent()
+
+		textState.replace(TextEditorRange(CharLineOffset(0, 0), CharLineOffset(0, 0)), "x")
+		gate.complete(Unit)
+		check.join()
+
+		assertEquals(listOf("bbb", "xaaa"), spellCheckedText())
+	}
+
+	@Test
+	fun `a click on a squiggle an edit shifted finds its word`() = runTest {
+		textState.setText("aaa bbb")
+		spellChecker.correctWords = setOf("aaa")
+		spellCheckState.runFullSpellCheck()
+
+		textState.replace(TextEditorRange(CharLineOffset(0, 0), CharLineOffset(0, 0)), "zz\n")
+
+		val squiggle = textState.richSpanManager.getAllRichSpans().single { it.style is SpellCheckStyle }
+		assertEquals(WordSegment("bbb", squiggle.range), spellCheckState.handleSpanClick(squiggle))
+	}
+
+	@Test
+	fun `a click on a sentence squiggle an edit shifted finds its correction`() = runTest {
+		textState.setText("aaa bbb")
+		val flagged = TextEditorRange(CharLineOffset(0, 4), CharLineOffset(0, 7))
+		val suggestions = listOf(Suggestion("ccc"))
+		spellCheckState.spellChecker = object : EditorSpellChecker by spellChecker {
+			override suspend fun checkSentence(sentence: String, sentenceRange: TextEditorRange) =
+				listOf(Correction(flagged, "bbb", suggestions))
+		}
+		spellCheckState.spellCheckMode = SpellCheckMode.Sentence
+		spellCheckState.runFullSpellCheck()
+
+		textState.replace(TextEditorRange(CharLineOffset(0, 0), CharLineOffset(0, 0)), "zz ")
+
+		val squiggle = textState.richSpanManager.getAllRichSpans().single { it.style is SpellCheckStyle }
+		assertEquals(
+			Correction(TextEditorRange(CharLineOffset(0, 7), CharLineOffset(0, 10)), "bbb", suggestions),
+			spellCheckState.handleSpanClick(squiggle),
+		)
+	}
+
+	@Test
+	fun `a full check that keeps racing edits still decorates the document`() = runTest {
+		textState.setText("aaa\nbbb\nccc")
+		var edits = 0
+		val typingChecker = object : EditorSpellChecker by spellChecker {
+			override suspend fun isCorrectWord(word: String): Boolean {
+				// Keep typing on the last line through well over three rounds of lookups
+				if (edits < 10) {
+					edits++
+					val end = CharLineOffset(2, textState.textLines[2].length)
+					textState.replace(TextEditorRange(end, end), "c")
+				}
+				return false
+			}
+		}
+		val state = SpellCheckState(textState, typingChecker, scanContext = EmptyCoroutineContext)
+
+		state.runFullSpellCheck()
+
+		assertEquals(listOf("aaa", "bbb", "c".repeat(13)), spellCheckedText())
+	}
+
+	@Test
+	fun `checkWordSegment follows a line inserted above its word`() = runTest {
+		textState.setText("aaa\nbbb")
+		val gate = CompletableDeferred<Unit>()
+		val state = SpellCheckState(textState, GatedSpellChecker(gate), scanContext = EmptyCoroutineContext)
+
+		val check = launch { state.checkWordSegment(WordSegment("bbb", lineRange(1))) }
+		runCurrent()
+
+		textState.replace(TextEditorRange(CharLineOffset(0, 0), CharLineOffset(0, 0)), "zz\n")
+		gate.complete(Unit)
+		check.join()
+
+		assertEquals(listOf("bbb"), spellCheckedText())
+		assertEquals(2, textState.richSpanManager.getAllRichSpans().single().range.start.line)
+	}
+
+	@Test
+	fun `checkWordSegment re-checks its line when an edit lands on it`() = runTest {
+		textState.setText("aaa bbb")
+		val gate = CompletableDeferred<Unit>()
+		val state = SpellCheckState(textState, GatedSpellChecker(gate), scanContext = EmptyCoroutineContext)
+
+		val bbb = TextEditorRange(CharLineOffset(0, 4), CharLineOffset(0, 7))
+		val check = launch { state.checkWordSegment(WordSegment("bbb", bbb)) }
+		runCurrent()
+
+		textState.replace(TextEditorRange(CharLineOffset(0, 0), CharLineOffset(0, 0)), "x")
+		gate.complete(Unit)
+		check.join()
+
+		assertEquals(listOf("bbb", "xaaa"), spellCheckedText())
+	}
+
+	private fun lineRange(line: Int) =
+		TextEditorRange(CharLineOffset(line, 0), CharLineOffset(line, textState.textLines[line].length))
+
+	private fun spellCheckedText(): List<String> =
+		textState.richSpanManager.getAllRichSpans()
+			.filter { it.style is SpellCheckStyle }
+			.map { textState.textLines[it.range.start.line].text.substring(it.range.start.char, it.range.end.char) }
+			.sorted()
+
+	@Test
 	fun `test setSpellCheckingEnabled true re-runs full check`() = runTest {
 		// Setup: start disabled with a misspelled word present
 		spellCheckState.setSpellCheckingEnabled(false)
@@ -218,6 +371,36 @@ class SpellCheckStateTest {
 		assertEquals(1, spans.size)
 		assertTrue(spans.first().style is SpellCheckStyle)
 	}
+}
+
+/**
+ * Flags every word and reports the most lookups it was ever asked to do at once.
+ * [gate] holds every lookup open so a test can interleave.
+ */
+private class GatedSpellChecker(
+	private val gate: CompletableDeferred<Unit>,
+) : EditorSpellChecker {
+	var maxInFlight = 0
+		private set
+
+	private var inFlight = 0
+
+	override suspend fun isCorrectWord(word: String): Boolean {
+		inFlight++
+		maxInFlight = maxOf(maxInFlight, inFlight)
+		try {
+			gate.await()
+		} finally {
+			inFlight--
+		}
+		return false
+	}
+
+	override suspend fun suggestions(
+		input: String,
+		scope: EditorSpellChecker.Scope,
+		closestOnly: Boolean,
+	): List<Suggestion> = emptyList()
 }
 
 private class MockEditorSpellChecker(

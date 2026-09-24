@@ -96,8 +96,9 @@ fun SpellCheckingTextEditor(
 		state.textState.editOperations.debounceUntilQuiescentWithBatch(500.milliseconds)
 			.collect { operations ->
 				val rangesToCheck = computeAffectedRanges(operations, state.textState)
+				val computedAgainst = state.textState.textLines
 				rangesToCheck.forEach { range ->
-					state.runPartialSpellCheck(range)
+					state.runPartialSpellCheck(range, computedAgainst)
 				}
 			}
 	}
