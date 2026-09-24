@@ -21,6 +21,7 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Before
 import org.junit.Test
+import kotlin.coroutines.EmptyCoroutineContext
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
@@ -214,6 +215,50 @@ class SpellCheckStateTest {
 
 		assertEquals(1, gated.maxInFlight)
 	}
+
+	@Test
+	fun `a partial check queued behind another follows a line inserted above its range`() = runTest {
+		textState.setText("aaa\nbbb\nccc")
+		val gate = CompletableDeferred<Unit>()
+		val state = SpellCheckState(textState, GatedSpellChecker(gate), scanContext = EmptyCoroutineContext)
+
+		val first = launch { state.runPartialSpellCheck(lineRange(0)) }
+		runCurrent() // holds the lock, suspended in its lookups
+		val queued = launch { state.runPartialSpellCheck(lineRange(2)) }
+		runCurrent()
+
+		textState.replace(TextEditorRange(CharLineOffset(0, 0), CharLineOffset(0, 0)), "zzz\n")
+		gate.complete(Unit)
+		first.join()
+		queued.join()
+
+		assertEquals(listOf("aaa", "ccc"), spellCheckedText())
+	}
+
+	@Test
+	fun `a partial check re-scans a line edited during its lookups`() = runTest {
+		textState.setText("aaa bbb")
+		val gate = CompletableDeferred<Unit>()
+		val state = SpellCheckState(textState, GatedSpellChecker(gate), scanContext = EmptyCoroutineContext)
+
+		val check = launch { state.runPartialSpellCheck(TextEditorRange(CharLineOffset(0, 0), CharLineOffset(0, 3))) }
+		runCurrent()
+
+		textState.replace(TextEditorRange(CharLineOffset(0, 0), CharLineOffset(0, 0)), "x")
+		gate.complete(Unit)
+		check.join()
+
+		assertEquals(listOf("bbb", "xaaa"), spellCheckedText())
+	}
+
+	private fun lineRange(line: Int) =
+		TextEditorRange(CharLineOffset(line, 0), CharLineOffset(line, textState.textLines[line].length))
+
+	private fun spellCheckedText(): List<String> =
+		textState.richSpanManager.getAllRichSpans()
+			.filter { it.style is SpellCheckStyle }
+			.map { textState.textLines[it.range.start.line].text.substring(it.range.start.char, it.range.end.char) }
+			.sorted()
 
 	@Test
 	fun `test setSpellCheckingEnabled true re-runs full check`() = runTest {
