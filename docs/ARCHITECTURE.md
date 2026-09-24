@@ -192,8 +192,9 @@ composing-region and cursor semantics are byte-for-byte identical on every
 platform; the per-platform adapters are pure translation. State flows out,
 because an IME keeps its own mirror of the text around the cursor and will
 issue commands against a stale buffer unless it is told about every change.
-On Android that direction is driven entirely by observing the state's flows,
-never by manual notify calls. The session machinery, the Android
+On Android every report goes through one flush that compares the finished state
+against what the keyboard was last told, run when a batch edit ends or posted
+after any other change, never from inside an edit. The session machinery, the Android
 `InputConnection`, and the per-platform differences:
 [design/text-input-sessions.md](design/text-input-sessions.md).
 
@@ -212,6 +213,13 @@ The document is an immutable `DocumentSnapshot`: one `AnnotatedString` per line
 plus a flat set of `RichSpan` decorations. Every mutation publishes a whole new
 snapshot, so a reader on any thread always sees a complete, self-consistent
 revision.
+
+`setDocument` is the inverse of `snapshot()`: it loads a snapshot, rich spans
+included, as one revision, so a document moves between editors without a
+markdown round trip. It drops decoration spans, clamps spans onto the incoming
+lines, and clears undo history like any other document load. `setText` keeps
+only character-level spans. Both announce the swap by bumping `documentGeneration`
+once it commits, which is how spell check knows to re-scan.
 
 Edits that must land together run inside `TextEditorState.withAtomicEdit`. The
 transaction accumulates mutations in a draft and publishes them as one revision

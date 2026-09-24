@@ -8,8 +8,8 @@ particular, and where the key pipeline entangles with it.
 
 ## The session lifecycle
 
-The session is owned by `TextEditorInputModifierNode` and driven entirely by
-focus. Gaining focus (while enabled) launches a session; losing focus, or
+The session is owned by `TextEditorInputModifierNode` and driven by focus and
+taps. Gaining focus (while enabled) launches a session; losing focus, or
 disabling the editor, cancels it. Nothing else in the system may start or
 stop input sessions.
 
@@ -21,7 +21,25 @@ Launching does two things, one per direction of the IME contract:
 
 `startInput` never returns normally; a session ends only by cancellation, so
 there is exactly one live session per node and relaunching cancels its
-predecessor. What `startInput` actually does is the per-platform fork:
+predecessor.
+
+Focus events are not unique: Compose re-sends one, unchanged, for reasons
+that have nothing to do with the user (a tap on the focused editor,
+focus-property invalidation), so the node acts only on a change of focus.
+A tap reaches it separately: the tap handler that requests focus also calls
+`TextInputRequester.requestInput`, because tapping an editor that already has
+focus changes no focus state. The node answers by showing the keyboard in the
+live session, bringing back one the user dismissed, and starts a session only
+if none is running. It never restarts a live one for a tap, since a restart
+resets the keyboard mid-word and discards whatever it had in flight.
+
+A session starts only when the user asks for input, because starting one
+raises the soft keyboard: on gaining focus, or on a tap. Re-enabling a focused
+editor restores its focus state but waits for a tap. Rebinding it to a
+different state restarts a live session, since a session is bound to its
+state.
+
+What `startInput` actually does is the per-platform fork:
 
 - **Android**: starts an input method with a request that builds a real
   `InputConnection`; this is what opens the soft keyboard.
@@ -62,79 +80,120 @@ The semantics they pin down:
 - Composition replacement passes `inheritStyle`, so autocorrect replacing a
   bold word does not strip the bold.
 
-Two guards worth knowing. The composing range is held on `TextEditorState`
+Guards worth knowing. The composing range is held on `TextEditorState`
 and, like the selection, is discarded by any content mutation (see
 edit-operation-offset-transforms.md); if a composing range somehow survives
 an out-of-pipeline edit, it is validated against the current document and
-treated as absent rather than trusted. And each of these functions is a
-single ordinary mutation through the edit manager: nothing here coalesces
-undo. Batching (below) suppresses notifications only.
+treated as absent rather than trusted. A pointer that puts the caret or a
+selection outside the composition ends it, which is what keyboards do
+themselves when told of the move; one that does not would type over the old
+composing word, wherever it is. A caret placed inside the composition keeps
+it, since some keyboards edit mid-composition. `deleteSurroundingText` counts
+from the selection's edges and leaves the selection itself in place, as the
+Android contract requires. And each of these functions is a single ordinary
+mutation through the edit manager: nothing here coalesces undo. Batching
+(below) suppresses notifications only.
 
 ## Android
 
 Android is the deep end: the IME is a separate app holding a live
 `InputConnection` into the editor, and the protocol has years of
-vendor-specific folklore. The implementation deliberately mirrors
-androidx foundation's `RecordingInputConnection` (the one behind
-`BasicTextField`) so we inherit the contract IMEs are actually tested
-against, rather than inventing our own.
+vendor-specific folklore. The implementation follows the contract `EditText`,
+Chromium, and androidx foundation's `StatelessInputConnection` (behind the
+current `BasicTextField`) share, because that is what keyboards are tested
+against. Keyboards that follow the protocol loosely are the ones that expose
+any departure from it.
 
 ### The connection
 
 `startInput` registers a `PlatformTextInputMethodRequest` whose
 `createInputConnection` populates `EditorInfo` (multiline text, autocorrect,
 sentence caps, no fullscreen extract UI, initial selection in flat character
-indices) and returns a `TextEditorInputConnection`. The connection's read
-side (`getTextBeforeCursor`, `getSurroundingText`, `getExtractedText`)
-answers from the state's flat-index conversions; its write side records
+indices) and returns a `TextEditorInputConnection` bound to the session's
+view. The connection's read side (`getTextBeforeCursor`, `getSurroundingText`,
+`getExtractedText`) answers from the state's flat-index conversions, measuring
+from the selection's edges and clamping requested lengths before any
+arithmetic (some IMEs ask for `Int.MAX_VALUE`); its write side applies
 commands.
 
 ### Batch edits
 
 IMEs wrap multi-command edits (autocorrect is typically a delete plus a
-commit) in `beginBatchEdit`/`endBatchEdit`. Mutations are recorded as command
-values and applied when the outermost batch ends. Every single command also
-wraps itself in its own depth 0 to 1 to 0 batch, so batched and unbatched
-mutations exit through one drain path.
+commit) in `beginBatchEdit`/`endBatchEdit`. Commands apply to the state
+immediately, batch or no batch, as they do in `EditText`; a batch only holds
+back notifications until the outermost one ends. Every single command also
+runs in its own batch, so batched and unbatched commands end the same way.
+
+Applying immediately is a robustness decision. Queuing commands until the
+outermost batch ends (what androidx's legacy `RecordingInputConnection` did,
+and this editor once copied) makes the editor the one place where a keyboard's
+batching mistakes cost text: a keyboard that leaves a batch open types
+nothing at all, and reads made mid-batch miss the keyboard's own edits, so it
+rebuilds its composition from the wrong buffer.
 
 The defensive details exist because real IMEs misbehave:
 
 - Some (Huawei Celia, SwiftKey) send `endBatchEdit` without a matching
-  begin. The depth floors at zero so a stray end cannot go negative and
-  permanently block the drain.
-- `closeConnection` resets the batch depth, so a dead connection's stale
-  depth cannot suppress notifications for the next session.
-- The platform batch flag is cleared *before* the drain applies the queued
-  commands, so the state mutations run with `isInBatchEdit == false` and the
-  observation path (next section) sees them.
+  begin. A connection ignores an end for a batch it never opened, so a stray
+  end can neither go negative nor release a batch someone else holds.
+- Batch depth is counted per connection. `closeConnection` releases exactly
+  the levels its own IME left open, without notifying, so a dead connection
+  cannot suppress notifications for its successor.
+- Monitor requests (extracted text, cursor anchor) belong to one IME session,
+  so opening a connection clears them: its keyboard has asked for nothing yet.
+  A restart opens the successor before closing the old connection, so
+  clearing on close alone would carry the old session's requests over.
 
-### Notifying the IME: no manual notify path
+### Notifying the IME: one flush, never mid-edit
 
-This is the design decision the whole Android side hangs on: nothing in the
-edit path calls `InputMethodManager` notify methods. `ImeCursorSync` collects
-the state's flows and derives every notification:
+Nothing in the edit path calls the `InputMethodManager`. `ImeCursorSync`
+reports everything through a single `flush`, which compares the state as it
+stands (selection, composing region, and the text when the IME monitors
+extracted text) against what the keyboard was last told, and reports only the
+difference. A flush runs at one of two points:
 
-- Cursor and selection changes (combined, deduped against the last values
-  actually sent) drive `updateSelection`. Deduping matters because
-  IME-originated edits flow through here too: without it, every command the
-  IME sends would echo back an update it already expects.
-- Applied edits on `editOperations` drive `updateExtractedText` when the IME
-  has requested extracted-text monitor mode; edits always emit here even when
-  the selection did not move (autocorrect to a same-length word).
-- Both are suppressed while a batch edit is in progress, so the IME sees one
-  consistent update per logical edit, not the intermediate states.
+- when the outermost batch edit ends. Every IME command runs in one, so a
+  keyboard hears about its own edit exactly once, after it is complete;
+- posted to the main looper after any other change (keys, pointer, undo,
+  programmatic edits), signalled by the state's cursor, selection, edit, and
+  resync flows. The flows are triggers only: the flush reads the state once
+  the change has finished, not the value a flow carried.
 
-Because notifications derive from state rather than from call sites,
-IME-originated edits notify exactly like keyboard, pointer, undo, or
-programmatic edits. That closes the loop that keeps the IME's mirror correct,
-and it is what makes `setSelection` safe to treat as absolute indices.
+A flush while a batch is open does nothing; the batch's end flushes instead.
+
+This is strict because an edit passes through states the keyboard must never
+see. Replacing composing text clears the composing range before the new range
+is set, so a report taken inside that edit tells the keyboard its composition
+vanished, and composing keyboards believe it: Gboard's Japanese input finished
+its composition on every keystroke, so kana could never be converted. A
+delete-then-commit autocorrect reported half way looks like the user moved the
+caret, which keyboards that track their expected selection treat as a reason
+to reset. The earlier design reported from flow collectors, which did both,
+and also dropped the final report whenever it landed while the next batch was
+already open.
+
+The comparison is what keeps IME-originated edits from echoing: a keyboard's
+own command produces exactly the report it expects, once. Because the
+composing region is part of the comparison, composing-only changes
+(`setComposingRegion`, `finishComposingText`) are reported too.
+
+A behavior that answers an IME request in a way no diff can express (exiting
+a list on backspace leaves text and caret where they were) advances a resync
+generation on the state. A whole-document replacement (`setText`,
+`setDocument`) advances `documentGeneration`, and is no edit the keyboard
+could follow either. The next flush that sees either generation change sends
+`restartInput`, which makes the keyboard discard its mirror, then reports
+afresh, as `EditText` restarts input on `setText`. Reading counters at flush
+time, rather than waiting on a flow, is what guarantees the restart goes out
+when the IME's batch ends.
 
 Cursor anchor info (`updateCursorAnchorInfo`, used by floating toolbars,
-stylus handwriting, and some candidate windows) follows the same pattern:
-requested by the IME via `requestCursorUpdates`, then pushed on cursor moves
-from the caret's layout metrics plus the view's screen location. The Android
-`View` all of this needs is captured by the `CaptureViewForIme` composable
-into `platformExtensions` when the editor enters composition.
+stylus handwriting, and some candidate windows) is requested by the IME via
+`requestCursorUpdates` and sent by the flush whenever the selection report
+changes, from the caret's layout metrics plus the view's screen location.
+Reports go through the view the live connection is bound to, the one the
+`InputMethodManager` is serving; between sessions they fall back to the view
+the `CaptureViewForIme` composable captures into `platformExtensions`.
 
 ### One key pipeline
 
@@ -143,8 +202,12 @@ on Android deliver events through the soft-keyboard intercept chain before
 the normal key path. Both are routed into the same
 `TextEditorKeyCommandHandler`:
 
-- `sendKeyEvent` forwards to `View.dispatchKeyEvent`, which re-enters
-  Compose's key dispatch from the top.
+- `sendKeyEvent` hands the event to
+  `InputMethodManager.dispatchKeyEventFromInputMethod`, the post-IME dispatch
+  `EditText` uses, so it reaches Compose's key dispatch the way a hardware
+  key does after the IME stage. A string sent as an `ACTION_MULTIPLE` key
+  event (the legacy way to send text as a key) is committed as text instead,
+  since it has no key code to translate.
 - The modifier node mirrors its shortcut handling in
   `onPreInterceptKeyBeforeSoftKeyboard`, because with an active IME a
   Bluetooth keyboard's Ctrl+C would otherwise be consumed before
@@ -152,7 +215,10 @@ the normal key path. Both are routed into the same
   typed characters fall through to the IME, which delivers them as
   `commitText`.
 - `performContextMenuAction` (the IME's select-all/copy/paste/cut buttons)
-  synthesizes the matching Ctrl chords through the same dispatch, and
+  synthesizes the matching Ctrl chords and dispatches them to the view
+  directly, so they resolve through the same handler and registry. Unlike
+  `sendKeyEvent` they apply before the call returns, as in `EditText`: an IME
+  reads the selection right after asking for select-all. And
   `performEditorAction` maps the unspecified/none actions to newline, since
   some IMEs send Enter that way instead of committing `"\n"`.
 
@@ -200,13 +266,16 @@ Composed input (IME typing in a browser) is a known gap.
 
 - A new IME mutation is implemented once in `ImeEditLogic` and called from
   every platform adapter. Adapters translate; they never decide semantics.
-- Never notify the `InputMethodManager` from an edit path. The state flows
-  are the notification path; if the IME's mirror is stale, fix the
-  observation, do not add a manual push.
+- IME commands apply immediately. Never queue an edit behind a batch: a
+  keyboard's batching mistakes may delay a notification, never lose text.
+- Never notify the `InputMethodManager` from an edit path. Reports go through
+  `ImeCursorSync.flush`, at a batch end or posted; if the IME's mirror is
+  stale, fix what the flush compares or when it runs, do not add a push.
 - A batch edit suppresses notifications, nothing more. Undo coalescing is
   `TextEditHistory`'s business, and the two must not be conflated.
-- Session start and stop belong to the modifier node's focus handling; no
-  other code may establish or cancel input sessions.
+- Session start and stop belong to the modifier node; other code asks for
+  input through `TextInputRequester` and never establishes or cancels input
+  sessions itself.
 - Which event types mean "typed character" is a platform fact and lives in
   `isCharacterInputCandidate`, not in handler logic.
 - When an IME misbehaves (unbalanced batches, unexpected action codes),

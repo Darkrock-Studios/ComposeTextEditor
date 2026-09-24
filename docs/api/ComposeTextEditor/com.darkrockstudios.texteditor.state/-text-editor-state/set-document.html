@@ -2,7 +2,7 @@
 <html class="no-js" lang="en">
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1" charset="UTF-8">
-    <title>moveLeft</title>
+    <title>setDocument</title>
 <link href="../../../images/logo-icon.svg" rel="icon" type="image/svg"><script>var pathToRoot = "../../../";</script>
     <script>document.documentElement.classList.replace("no-js", "js");</script>
     <script>const storage = localStorage.getItem("dokka-dark-mode")
@@ -89,12 +89,12 @@
         </nav>
         <div id="resizer" class="resizer" data-item-type="BAR"></div>
         <div id="main" data-item-type="SECTION" role="main">
-<div class="main-content" data-page-type="member" id="content" pageids="Editor::com.darkrockstudios.texteditor.state/TextEditorCursorState/moveLeft/#kotlin.Int/PointingToDeclaration//-556598459">
-  <div class="breadcrumbs"><a href="../../index.html">Editor</a><span class="delimiter">/</span><a href="../index.html">com.darkrockstudios.texteditor.state</a><span class="delimiter">/</span><a href="index.html">TextEditorCursorState</a><span class="delimiter">/</span><span class="current">moveLeft</span></div>
+<div class="main-content" data-page-type="member" id="content" pageids="Editor::com.darkrockstudios.texteditor.state/TextEditorState/setDocument/#com.darkrockstudios.texteditor.state.DocumentSnapshot/PointingToDeclaration//-556598459">
+  <div class="breadcrumbs"><a href="../../index.html">Editor</a><span class="delimiter">/</span><a href="../index.html">com.darkrockstudios.texteditor.state</a><span class="delimiter">/</span><a href="index.html">TextEditorState</a><span class="delimiter">/</span><span class="current">setDocument</span></div>
   <div class="cover ">
-    <h1 class="cover"><span>move</span><wbr><span><span>Left</span></span></h1>
+    <h1 class="cover"><span>set</span><wbr><span><span>Document</span></span></h1>
   </div>
-  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">fun </span><a href="move-left.html"><span class="token function">moveLeft</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">n<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a><span class="token operator"> = </span><span class="token constant">1</span></span></span><span class="token punctuation">)</span><span class="source-link-wrapper"><span class="source-link" data-element-type="source-link">(<a href="https://github.com/Darkrock-Studios/ComposeTextEditor/blob/main/ComposeTextEditor/src/commonMain/kotlin/com/darkrockstudios/texteditor/state/TextEditorCursorState.kt#L142">source</a>)</span></span></div></div></div>
+  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">fun </span><a href="set-document.html"><span class="token function">setDocument</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">document<span class="token operator">: </span><a href="../-document-snapshot/index.html">DocumentSnapshot</a></span></span><span class="token punctuation">)</span><span class="source-link-wrapper"><span class="source-link" data-element-type="source-link">(<a href="https://github.com/Darkrock-Studios/ComposeTextEditor/blob/main/ComposeTextEditor/src/commonMain/kotlin/com/darkrockstudios/texteditor/state/TextEditorState.kt#L565">source</a>)</span></span></div><p class="paragraph">Replaces the entire document with <a href="set-document.html">document</a>'s lines and rich spans in a single revision, typically one taken from another editor with <a href="snapshot.html">snapshot</a>. Unlike <a href="set-text.html">setText</a>, rich spans (rules, images, code fences, list and quote markers) come along.</p><p class="paragraph">Decoration spans are dropped, since they belong to whatever produced them in the source editor, and spans that do not fit the incoming lines are clamped onto them. Like any document load this is not undoable: history is cleared, the selection and composing region are dropped, the cursor is coerced into the new document, and it increments <a href="document-generation.html">documentGeneration</a> rather than emitting on <a href="edit-operations.html">editOperations</a>.</p></div></div>
 </div>
     <div class="footer">
         <div class="footer--container">
