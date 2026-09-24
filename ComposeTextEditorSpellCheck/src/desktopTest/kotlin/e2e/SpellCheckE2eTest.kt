@@ -1,15 +1,27 @@
 package e2e
 
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.runSkikoComposeUiTest
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.contextmenu.ContextMenuItem
 import com.darkrockstudios.texteditor.contextmenu.ContextMenuStrings
+import com.darkrockstudios.texteditor.richstyle.SpellCheckStyle
 import com.darkrockstudios.texteditor.spellcheck.SpellCheckItem
 import com.darkrockstudios.texteditor.spellcheck.SpellCheckMode
+import com.darkrockstudios.texteditor.spellcheck.SpellCheckState
+import com.darkrockstudios.texteditor.spellcheck.SpellCheckingTextEditor
 import com.darkrockstudios.texteditor.spellcheck.api.Correction
 import com.darkrockstudios.texteditor.spellcheck.api.EditorSpellChecker
 import com.darkrockstudios.texteditor.spellcheck.api.Suggestion
+import com.darkrockstudios.texteditor.spellcheck.rememberSpellCheckState
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.delay
 import utils.CountingSpellChecker
 import utils.spellCheckUiTest
 import kotlin.test.Test
@@ -80,6 +92,59 @@ class SpellCheckE2eTest {
 				"One pass over the typed word and the one it was appended to",
 			)
 		}
+	}
+
+	@Test
+	fun `a document loaded after the editor is composed gets checked`() {
+		val words = words(10)
+		val checker = CountingSpellChecker(correctWords = words.drop(2).toSet())
+
+		spellCheckUiTest(spellChecker = checker, initialText = "") {
+			assertEquals(0, spellCheckSpanCount)
+
+			state.textState.setText(words.joinToString(" "))
+			letSpellCheckSettle()
+
+			assertEquals(2, spellCheckSpanCount)
+		}
+	}
+
+	@Test
+	fun `replacing the document checks the new text`() {
+		val checker = CountingSpellChecker(correctWords = setOf("fine"))
+
+		spellCheckUiTest(spellChecker = checker, initialText = "typoone fine") {
+			assertEquals(1, spellCheckSpanCount)
+
+			state.textState.setText("fine typotwo typothree")
+			letSpellCheckSettle()
+
+			assertEquals(2, spellCheckSpanCount)
+		}
+	}
+
+	@Test
+	@OptIn(ExperimentalTestApi::class)
+	fun `a document loaded before the editor is composed gets checked`() = runSkikoComposeUiTest {
+		val checker = CountingSpellChecker(correctWords = setOf("fine"))
+		lateinit var state: SpellCheckState
+		setContent {
+			state = rememberSpellCheckState(spellChecker = checker)
+			var loaded by remember { mutableStateOf(false) }
+			LaunchedEffect(state) {
+				// Let the checker's one-shot full check finish over the empty document first.
+				delay(500)
+				state.textState.setText("fine typoone typotwo")
+				loaded = true
+			}
+			if (loaded) SpellCheckingTextEditor(spellChecker = checker, state = state)
+		}
+		waitForIdle()
+		mainClock.advanceTimeBy(2_000)
+		waitForIdle()
+
+		val spans = state.textState.richSpanManager.getAllRichSpans().count { it.style is SpellCheckStyle }
+		assertEquals(2, spans)
 	}
 
 	@Test

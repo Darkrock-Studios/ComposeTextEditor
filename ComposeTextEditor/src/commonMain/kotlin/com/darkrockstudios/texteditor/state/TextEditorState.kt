@@ -41,6 +41,8 @@ import com.darkrockstudios.texteditor.richstyle.normalizeLineBlocks
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlin.concurrent.Volatile
 import kotlin.math.min
@@ -62,7 +64,8 @@ import kotlin.math.min
  * Related concerns are delegated to focused sub-objects exposed as properties:
  * [cursor] (caret position and movement), [selector] (selection), [scrollManager]
  * (scrolling and visible range), and [richSpanManager] (rich-span book-keeping).
- * Observe changes reactively via [cursorDataFlow] and [editOperations].
+ * Observe changes reactively via [cursorDataFlow], [editOperations] and
+ * [documentGeneration].
  *
  * Coordinates are [CharLineOffset]s and [TextEditorRange]s; convert to and from flat
  * character indices with [getCharacterIndex]/[getOffsetAtCharacter].
@@ -485,6 +488,16 @@ class TextEditorState(
 	 */
 	val actions: EditorActionRegistry = EditorActionRegistry()
 
+	private val _documentGeneration = MutableStateFlow(0)
+
+	/**
+	 * Increments each time [setText] swaps the whole document. A replacement is not an
+	 * edit and emits nothing on [editOperations], so anything deriving state from the
+	 * text (spell check, search results) has no other way to learn its document is gone.
+	 * Being a [StateFlow], a collector that subscribes after a replacement still sees it.
+	 */
+	val documentGeneration: StateFlow<Int> = _documentGeneration
+
 	/**
 	 * Replaces the entire document with [text], clearing rich spans and resetting
 	 * book-keeping. To edit existing content instead, use [replace] or the cursor
@@ -822,6 +835,7 @@ class TextEditorState(
 	 */
 	private fun replaceContent(lines: List<AnnotatedString>) {
 		mutateContent { DocumentSnapshot(lines, emptySet()) }
+		_documentGeneration.value++
 	}
 
 	internal fun setLines(lines: List<AnnotatedString>) {

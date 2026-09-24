@@ -39,7 +39,7 @@ private val DefaultContentPadding = PaddingValues(start = 8.dp)
  *
  * Wraps [BasicTextEditor] and overlays spell-check decorations driven by a [SpellCheckState].
  * Edits are observed reactively: affected spans are invalidated immediately and re-checked once
- * typing goes quiet. Secondary clicks and taps on a flagged span open a context menu of
+ * typing goes quiet, and replacing the document wholesale re-checks all of it. Secondary clicks and taps on a flagged span open a context menu of
  * [Suggestion][com.darkrockstudios.texteditor.spellcheck.api.Suggestion]s for the
  * misspelled word or sentence-level [Correction].
  *
@@ -77,6 +77,13 @@ fun SpellCheckingTextEditor(
 	val wordVisibilityBuffer = dpToPx(35.dp)
 	val coroutineScope = rememberCoroutineScope()
 	val suggestionJob = remember { mutableStateOf<Job?>(null) }
+
+	LaunchedEffect(state) {
+		state.textState.documentGeneration
+			.collect { generation ->
+				if (generation != state.fullCheckGeneration) state.runFullSpellCheck()
+			}
+	}
 
 	LaunchedEffect(state) {
 		state.textState.editOperations
