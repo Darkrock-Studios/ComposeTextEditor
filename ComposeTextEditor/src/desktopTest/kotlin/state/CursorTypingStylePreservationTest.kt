@@ -4,8 +4,11 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
+import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
+import com.darkrockstudios.texteditor.markdown.MarkdownExtension
 import com.darkrockstudios.texteditor.richstyle.SpellCheckStyle
 import com.darkrockstudios.texteditor.state.TextEditorState
 import io.mockk.mockk
@@ -137,5 +140,49 @@ class CursorTypingStylePreservationTest {
 		state.addRichSpan(TextEditorRange(CharLineOffset(0, 0), CharLineOffset(0, 5)), SpellCheckStyle)
 
 		assertTrue(bold in state.cursor.styles, "a decoration overlay wiped the toggled style")
+	}
+
+	@Test
+	fun `installing a markdown extension re-derives the typing style`() = runTest {
+		val state = editor("")
+		// The extension opts the editor into a body style fallback that the caret,
+		// sitting on an empty document, has nothing in the text to derive.
+		MarkdownExtension(state)
+
+		state.cursor.updatePosition(CharLineOffset(0, 0))
+
+		assertTrue(
+			MarkdownConfiguration.DEFAULT.defaultTextStyle in state.cursor.styles,
+			"typing style must follow the installed configuration, got ${state.cursor.styles}",
+		)
+	}
+
+	@Test
+	fun `first char typed into a fresh markdown document carries the body style`() = runTest {
+		val state = editor("")
+		MarkdownExtension(state)
+
+		state.cursor.updatePosition(CharLineOffset(0, 0))
+		state.insertCharacterAtCursor('a')
+
+		assertEquals(
+			listOf(MarkdownConfiguration.DEFAULT.defaultTextStyle),
+			state.textLines[0].spanStyles.map { it.item },
+		)
+	}
+
+	@Test
+	fun `swapping the markdown configuration re-derives the typing style`() = runTest {
+		val state = editor("")
+		val markdown = MarkdownExtension(state)
+		state.cursor.updatePosition(CharLineOffset(0, 0))
+
+		val restyled = MarkdownConfiguration.DEFAULT.copy(
+			defaultTextStyle = SpanStyle(fontSize = 22.sp),
+		)
+		// No heading lines to rebake, so the swap publishes no new revision.
+		markdown.markdownConfiguration = restyled
+
+		assertEquals(setOf(restyled.defaultTextStyle), state.cursor.styles)
 	}
 }
