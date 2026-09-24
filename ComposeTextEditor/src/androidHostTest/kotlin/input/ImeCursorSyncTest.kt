@@ -168,6 +168,30 @@ class ImeCursorSyncTest {
 	}
 
 	@Test
+	fun `replacing the whole document restarts input`() {
+		editor("abc")
+
+		state.setText("xyz")
+		sync.requestFlush()
+		runPosted()
+
+		assertEquals(listOf("restart", "sel(3,3,-1,-1)"), sink.events)
+	}
+
+	@Test
+	fun `a document replaced inside a batch restarts input when the batch ends`() {
+		val ic = editor("abc")
+
+		ic.beginBatchEdit()
+		state.setText("xyz")
+		sync.flush()
+		assertTrue(sink.events.isEmpty())
+		ic.endBatchEdit()
+
+		assertEquals("restart", sink.events.first())
+	}
+
+	@Test
 	fun `posted flush requests share one flush`() {
 		editor("abc")
 		state.cursor.updatePosition(CharLineOffset(0, 1))

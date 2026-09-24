@@ -179,10 +179,13 @@ composing region is part of the comparison, composing-only changes
 
 A behavior that answers an IME request in a way no diff can express (exiting
 a list on backspace leaves text and caret where they were) advances a resync
-generation on the state. The next flush that sees a generation it has not
-acted on sends `restartInput`, which makes the keyboard discard its mirror,
-then reports afresh. Reading a counter at flush time, rather than waiting on a
-flow, is what guarantees the restart goes out when the IME's batch ends.
+generation on the state. A whole-document replacement (`setText`,
+`setDocument`) advances `documentGeneration`, and is no edit the keyboard
+could follow either. The next flush that sees either generation change sends
+`restartInput`, which makes the keyboard discard its mirror, then reports
+afresh, as `EditText` restarts input on `setText`. Reading counters at flush
+time, rather than waiting on a flow, is what guarantees the restart goes out
+when the IME's batch ends.
 
 Cursor anchor info (`updateCursorAnchorInfo`, used by floating toolbars,
 stylus handwriting, and some candidate windows) is requested by the IME via

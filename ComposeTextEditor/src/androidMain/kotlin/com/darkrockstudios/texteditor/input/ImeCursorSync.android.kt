@@ -49,6 +49,7 @@ actual class ImeCursorSync internal constructor(
 
 	private var lastSelection: ImeSelection? = null
 	private var handledResyncGeneration = 0
+	private var handledDocumentGeneration = 0
 
 	// Weak so a whole superseded document is not kept alive just to compare against. A
 	// cleared reference still means "changed": the current text is strongly reachable.
@@ -65,6 +66,7 @@ actual class ImeCursorSync internal constructor(
 				state.cursor.positionFlow,
 				state.selector.selectionRangeFlow,
 				state.editOperations,
+				state.documentGeneration,
 			).collect { requestFlush() }
 		}
 	}
@@ -74,6 +76,7 @@ actual class ImeCursorSync internal constructor(
 		stopSync()
 		attached = true
 		handledResyncGeneration = state.imeResyncGeneration
+		handledDocumentGeneration = state.documentGeneration.value
 		state.platformExtensions.imeSync = this
 	}
 
@@ -102,11 +105,14 @@ actual class ImeCursorSync internal constructor(
 		if (extensions.isInBatchEdit || !sink.isReady) return
 
 		val resyncGeneration = state.imeResyncGeneration
-		if (resyncGeneration != handledResyncGeneration) {
+		val documentGeneration = state.documentGeneration.value
+		if (resyncGeneration != handledResyncGeneration || documentGeneration != handledDocumentGeneration) {
 			handledResyncGeneration = resyncGeneration
-			// A behavior answered an IME request in a way no diff of the text or caret can
-			// express, and the IMM drops an updateSelection matching its cache. Only a
-			// restart makes the keyboard discard its mirror and re-read the buffer.
+			handledDocumentGeneration = documentGeneration
+			// The keyboard's mirror is wrong in a way no updateSelection can fix: a behavior
+			// answered its request without the edit it expected, or setText/setDocument
+			// swapped the whole document. Only a restart makes it discard the mirror and
+			// re-read the buffer, as EditText restarts input on setText.
 			sink.restartInput()
 			lastSelection = null
 		}
