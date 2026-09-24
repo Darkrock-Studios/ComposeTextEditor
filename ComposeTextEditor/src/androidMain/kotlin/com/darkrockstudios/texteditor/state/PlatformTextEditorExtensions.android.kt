@@ -5,6 +5,8 @@ import android.graphics.Matrix
 import android.view.View
 import android.view.inputmethod.CursorAnchorInfo
 import android.view.inputmethod.InputMethodManager
+import com.darkrockstudios.texteditor.input.ImeCursorSync
+import com.darkrockstudios.texteditor.input.TextEditorInputConnection
 
 /**
  * Android-specific extensions for TextEditorState.
@@ -38,41 +40,51 @@ actual class PlatformTextEditorExtensions actual constructor(
 	var extractedTextMonitorToken: Int = 0
 
 	/**
-	 * Tracks the batch edit depth. IMEs may nest batch edits.
-	 * When > 0, IME cursor sync updates should be suppressed.
+	 * The running input session's notifier. Ending the outermost batch edit flushes it,
+	 * which is how an IME hears about its own edits.
 	 */
+	internal var imeSync: ImeCursorSync? = null
+
+	/**
+	 * The most recently opened IME connection. A connection replaced by a restart closes
+	 * after its successor opened, so only this one may reset the monitor flags on close.
+	 */
+	internal var activeConnection: TextEditorInputConnection? = null
+
 	private var batchEditDepth: Int = 0
 
 	/**
-	 * Whether a batch edit is currently in progress.
-	 * During batch edits, IME cursor sync updates are suppressed to avoid
-	 * unnecessary intermediate updates.
+	 * Whether a batch edit is in progress. IME notifications wait for the outermost batch
+	 * to end, so the keyboard sees each logical edit once rather than its intermediate states.
 	 */
 	val isInBatchEdit: Boolean get() = batchEditDepth > 0
 
 	/**
-	 * Begins a batch edit. Call [endBatchEdit] when done.
-	 * Batch edits can be nested.
+	 * Begins a batch edit; pair every call with [endBatchEdit]. Batches nest. Edits made
+	 * inside one apply immediately; only the IME notifications are held back.
 	 */
 	fun beginBatchEdit() {
 		batchEditDepth++
 	}
 
 	/**
-	 * Ends a batch edit started by [beginBatchEdit].
+	 * Ends a batch edit started by [beginBatchEdit]. Ending the outermost one notifies the
+	 * IME of everything the batch changed.
 	 * @return true if all batch edits have ended (depth == 0)
 	 */
 	fun endBatchEdit(): Boolean {
-		if (batchEditDepth > 0) {
-			batchEditDepth--
-		}
+		if (batchEditDepth == 0) return true
+		batchEditDepth--
+		if (batchEditDepth == 0) imeSync?.flush()
 		return batchEditDepth == 0
 	}
 
-	/**
-	 * Resets batch-edit state to zero. Called from `closeConnection` so a stale depth
-	 * from a now-dead InputConnection doesn't suppress future IME updates.
-	 */
+	/** Drops [count] batch levels without notifying, for a connection whose IME is gone. */
+	internal fun releaseBatchEdits(count: Int) {
+		batchEditDepth = (batchEditDepth - count).coerceAtLeast(0)
+	}
+
+	/** Forces batch-edit state back to zero without notifying the IME. */
 	fun resetBatchEdit() {
 		batchEditDepth = 0
 	}

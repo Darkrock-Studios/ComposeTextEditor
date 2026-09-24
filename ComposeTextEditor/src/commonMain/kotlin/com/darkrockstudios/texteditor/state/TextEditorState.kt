@@ -645,7 +645,15 @@ class TextEditorState(
 	 */
 	internal val imeResyncRequests: Flow<Unit> = _imeResyncRequests
 
+	/**
+	 * Set with each [imeResyncRequests] emission and cleared by the platform that acts on
+	 * it. The resync has to go out when the IME's batch edit ends, and flow delivery makes
+	 * no promise of arriving by then.
+	 */
+	internal var imeResyncPending = false
+
 	internal fun requestImeResync() {
+		imeResyncPending = true
 		_imeResyncRequests.tryEmit(Unit)
 	}
 

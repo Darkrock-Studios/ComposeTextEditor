@@ -5,9 +5,12 @@ import androidx.compose.ui.focus.FocusState
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyInputModifierNode
 import androidx.compose.ui.input.key.SoftKeyboardInterceptionModifierNode
+import androidx.compose.ui.node.CompositionLocalConsumerModifierNode
 import androidx.compose.ui.node.ModifierNodeElement
+import androidx.compose.ui.node.currentValueOf
 import androidx.compose.ui.platform.Clipboard
 import androidx.compose.ui.platform.InspectorInfo
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.PlatformTextInputModifierNode
 import androidx.compose.ui.platform.establishTextInputSession
 import com.darkrockstudios.texteditor.state.TextEditorState
@@ -35,25 +38,39 @@ internal class TextEditorInputModifierNode(
 	KeyInputModifierNode,
 	SoftKeyboardInterceptionModifierNode,
 	FocusEventModifierNode,
-	PlatformTextInputModifierNode {
+	PlatformTextInputModifierNode,
+	CompositionLocalConsumerModifierNode {
 
 	private val keyCommandHandler = TextEditorKeyCommandHandler(keyBindings)
 	private var inputSessionJob: Job? = null
 	private var imeCursorSync: ImeCursorSync? = null
+	private var isFocused = false
 
 	override fun onFocusEvent(focusState: FocusState) {
-		if (enabled) {
-			// Only update the focus state when enabled
-			state.updateFocus(focusState.isFocused)
-			if (focusState.isFocused) {
-				launchTextInputSession()
-			} else {
-				stopTextInputSession()
-			}
-		} else {
-			// When disabled, we still want to receive keyboard events but not show as "focused"
-			state.updateFocus(false)
-			stopTextInputSession()
+		isFocused = focusState.isFocused
+		syncInputSession()
+	}
+
+	override fun onDetach() {
+		stopTextInputSession()
+	}
+
+	/**
+	 * Matches the input session to focus and [enabled]. A disabled editor still receives
+	 * key events but neither shows as focused nor takes IME input.
+	 *
+	 * Compose re-sends the focus event when a focused editor is tapped again. Restarting a
+	 * live session then would reset the keyboard mid-word and throw away whatever the IME
+	 * had in flight, so the session is kept and only a keyboard the user dismissed is
+	 * brought back.
+	 */
+	private fun syncInputSession() {
+		val wantsInput = enabled && isFocused
+		state.updateFocus(wantsInput)
+		when {
+			!wantsInput -> stopTextInputSession()
+			inputSessionJob?.isActive != true -> launchTextInputSession()
+			else -> currentValueOf(LocalSoftwareKeyboardController)?.show()
 		}
 	}
 
@@ -115,10 +132,18 @@ internal class TextEditorInputModifierNode(
 		enabled: Boolean,
 		keyBindings: KeyBindings
 	) {
+		val stateChanged = state !== this.state
+		val enabledChanged = enabled != this.enabled
+		if (isFocused && stateChanged) {
+			// The running session and its sync are bound to the old state.
+			stopTextInputSession()
+			this.state.updateFocus(false)
+		}
 		this.state = state
 		this.clipboard = clipboard
 		this.enabled = enabled
 		keyCommandHandler.keyBindings = keyBindings
+		if (isFocused && (stateChanged || enabledChanged)) syncInputSession()
 	}
 }
 

@@ -192,8 +192,9 @@ composing-region and cursor semantics are byte-for-byte identical on every
 platform; the per-platform adapters are pure translation. State flows out,
 because an IME keeps its own mirror of the text around the cursor and will
 issue commands against a stale buffer unless it is told about every change.
-On Android that direction is driven entirely by observing the state's flows,
-never by manual notify calls. The session machinery, the Android
+On Android every report goes through one flush that compares the finished state
+against what the keyboard was last told, run when a batch edit ends or posted
+after any other change, never from inside an edit. The session machinery, the Android
 `InputConnection`, and the per-platform differences:
 [design/text-input-sessions.md](design/text-input-sessions.md).
 
