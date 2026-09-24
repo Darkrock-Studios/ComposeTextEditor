@@ -10,6 +10,7 @@ import com.darkrockstudios.texteditor.richstyle.SpellCheckStyle
 import com.darkrockstudios.texteditor.spellcheck.api.Correction
 import com.darkrockstudios.texteditor.spellcheck.api.EditorSpellChecker
 import com.darkrockstudios.texteditor.spellcheck.api.Suggestion
+import com.darkrockstudios.texteditor.state.TextEditOperation
 import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.WordSegment
 import com.darkrockstudios.texteditor.state.getRichSpansInRange
@@ -22,6 +23,8 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Before
 import org.junit.Test
+import utils.MeasureCounter
+import utils.editorWithCounter
 import kotlin.coroutines.EmptyCoroutineContext
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -339,6 +342,31 @@ class SpellCheckStateTest {
 		check.join()
 
 		assertEquals(listOf("bbb", "xaaa"), spellCheckedText())
+	}
+
+	@Test
+	fun `every edit in a burst clears the squiggles it touched`() = runTest {
+		// Invalidation reads spans off the laid-out lines, so this editor needs a viewport
+		val textState = editorWithCounter(MeasureCounter())
+		val spellCheckState = SpellCheckState(textState, spellChecker)
+		textState.setText("aaa\nbbb\nccc")
+		for (line in 0..2) {
+			textState.addRichSpan(TextEditorRange(CharLineOffset(line, 0), CharLineOffset(line, 3)), SpellCheckStyle)
+		}
+
+		val operations = mutableListOf<TextEditOperation>()
+		val collector = launch { textState.editOperations.collect { operations += it } }
+		runCurrent()
+		// Both edits commit before the collector runs, as a replace-all's do
+		textState.replace(TextEditorRange(CharLineOffset(2, 1), CharLineOffset(2, 1)), "x")
+		textState.replace(TextEditorRange(CharLineOffset(0, 1), CharLineOffset(0, 1)), "x")
+		runCurrent()
+		collector.cancel()
+
+		operations.forEach(spellCheckState::invalidateSpellCheckSpans)
+
+		val remaining = textState.richSpanManager.getAllRichSpans().filter { it.style is SpellCheckStyle }
+		assertEquals(listOf(1), remaining.map { it.range.start.line })
 	}
 
 	private fun lineRange(line: Int) =

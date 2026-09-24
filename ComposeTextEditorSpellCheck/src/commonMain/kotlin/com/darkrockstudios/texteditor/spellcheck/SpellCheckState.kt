@@ -89,8 +89,6 @@ class SpellCheckState(
 		}
 	}
 
-	private var lastTextHash = -1
-
 	/**
 	 * The [TextEditorState.documentGeneration] the latest full check scanned, set when the
 	 * scan starts so a replacement arriving mid-scan is not mistaken for already checked.
@@ -426,36 +424,29 @@ class SpellCheckState(
 	 * Remove spell-check decorations affected by an edit operation.
 	 *
 	 * Called as edits stream in so stale decorations disappear immediately, ahead of the debounced
-	 * re-check. No-op when the operation did not change the document text.
+	 * re-check. No-op for span and line-block operations, which move no text.
 	 *
 	 * @param operation The [TextEditOperation] that mutated the document.
 	 */
 	fun invalidateSpellCheckSpans(operation: TextEditOperation) {
-		val newTextHash = textState.computeTextHash()
-		if (lastTextHash != newTextHash) {
-			val range: TextEditorRange? = when (operation) {
-				is TextEditOperation.Delete -> operation.range
-				is TextEditOperation.Insert -> TextEditorRange(
-					operation.position,
-					operation.position
-				)
+		val range: TextEditorRange = when (operation) {
+			is TextEditOperation.Delete -> operation.range
+			is TextEditOperation.Insert -> TextEditorRange(
+				operation.position,
+				operation.position
+			)
 
-				is TextEditOperation.Replace -> operation.range
-				is TextEditOperation.StyleSpan -> null
-				is TextEditOperation.RichSpan -> null
-				is TextEditOperation.LineBlock -> null
-			}
-
-			range?.let { r ->
-				val doomed = r.affectedLineWraps(textState).flatMap { vLine ->
-					textState.getWrappedLine(vLine).richSpans
-						.filter { it.style is SpellCheckStyle && r.intersects(it.range) }
-				}
-				textState.updateRichSpans(remove = doomed, add = emptyList())
-			}
-
-			lastTextHash = newTextHash
+			is TextEditOperation.Replace -> operation.range
+			is TextEditOperation.StyleSpan,
+			is TextEditOperation.RichSpan,
+			is TextEditOperation.LineBlock -> return
 		}
+
+		val doomed = range.affectedLineWraps(textState).flatMap { vLine ->
+			textState.getWrappedLine(vLine).richSpans
+				.filter { it.style is SpellCheckStyle && range.intersects(it.range) }
+		}
+		textState.updateRichSpans(remove = doomed, add = emptyList())
 	}
 
 	/**

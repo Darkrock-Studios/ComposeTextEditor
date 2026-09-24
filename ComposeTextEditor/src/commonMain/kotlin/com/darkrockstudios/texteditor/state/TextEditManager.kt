@@ -19,7 +19,6 @@ import com.darkrockstudios.texteditor.richstyle.setLineBlockSpans
 import com.darkrockstudios.texteditor.utils.appendAnnotatedStrings
 import com.darkrockstudios.texteditor.utils.buildAnnotatedStringWithSpans
 import com.darkrockstudios.texteditor.utils.mergeAnnotatedStrings
-import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 
@@ -27,9 +26,11 @@ class TextEditManager(private val state: TextEditorState) {
 	private val spanManager = SpanManager()
 	internal val history = TextEditHistory()
 
+	// Unbounded: several edits can commit before a collector next runs (a find
+	// replace-all), and consumers like spell check act on each one. With no replay,
+	// nothing is held while no one is collecting.
 	private val _editOperations = MutableSharedFlow<TextEditOperation>(
-		extraBufferCapacity = 1,
-		onBufferOverflow = BufferOverflow.DROP_OLDEST
+		extraBufferCapacity = Int.MAX_VALUE,
 	)
 	val editOperations: SharedFlow<TextEditOperation> = _editOperations
 
