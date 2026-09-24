@@ -246,6 +246,50 @@ class KeyBindingsTest {
 	}
 
 	@Test
+	fun `numpad navigation keys mean the same as the dedicated keys on both platforms`() {
+		val numPadKeys = mapOf(
+			Key.NumPadDirectionUp to Key.DirectionUp,
+			Key.NumPadDirectionDown to Key.DirectionDown,
+			Key.NumPadDirectionLeft to Key.DirectionLeft,
+			Key.NumPadDirectionRight to Key.DirectionRight,
+			Key.NumPadMoveHome to Key.MoveHome,
+			Key.NumPadMoveEnd to Key.MoveEnd,
+			Key.NumPadPageUp to Key.PageUp,
+			Key.NumPadPageDown to Key.PageDown,
+			Key.NumPadDelete to Key.Delete,
+		)
+		for (bindings in listOf(CtrlKeyBindings, MacKeyBindings)) {
+			for ((numPad, dedicated) in numPadKeys) {
+				for (modifiers in listOf(false, true)) {
+					assertEquals(
+						bindings.commandFor(chord(dedicated, ctrl = modifiers, alt = modifiers)),
+						bindings.commandFor(chord(numPad, ctrl = modifiers, alt = modifiers)),
+						"$numPad on $bindings",
+					)
+					assertEquals(
+						bindings.commandFor(chord(dedicated, ctrl = modifiers, meta = modifiers)),
+						bindings.commandFor(chord(numPad, ctrl = modifiers, meta = modifiers)),
+						"$numPad on $bindings",
+					)
+				}
+			}
+			assertEquals(Motion.LineStart, bindings.commandFor(chord(Key.NumPadMoveHome)))
+		}
+		assertEquals(
+			Motion.DocumentStart,
+			CtrlKeyBindings.commandFor(chord(Key.NumPadMoveHome, ctrl = true)),
+		)
+	}
+
+	@Test
+	fun `numpad digits stay unbound so they type`() {
+		for (bindings in listOf(CtrlKeyBindings, MacKeyBindings)) {
+			assertNull(bindings.commandFor(chord(Key.NumPad7)))
+			assertNull(bindings.commandFor(chord(Key.NumPad8)))
+		}
+	}
+
+	@Test
 	fun `only document changing commands are edits`() {
 		val readOnly = listOf<EditorCommand>(Action.SelectAll, Action.Copy) + Motion.entries
 		for (command in readOnly) {
