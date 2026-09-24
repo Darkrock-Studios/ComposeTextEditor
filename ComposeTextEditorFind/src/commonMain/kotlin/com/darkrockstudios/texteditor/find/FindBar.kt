@@ -123,12 +123,12 @@ fun FindBar(
 									.onPreviewKeyEvent { event ->
 										if (event.type == KeyEventType.KeyDown) {
 											when {
-												event.key == Key.Enter && event.isShiftPressed -> {
+												event.isEnter && event.isShiftPressed -> {
 													state.findPrevious()
 													true
 												}
 
-												event.key == Key.Enter -> {
+												event.isEnter -> {
 													state.findNext()
 													true
 												}
@@ -278,7 +278,7 @@ fun FindBar(
 										.onPreviewKeyEvent { event ->
 											if (event.type == KeyEventType.KeyDown) {
 												when {
-													event.key == Key.Enter -> {
+													event.isEnter -> {
 														state.replaceCurrent(replaceText)
 														true
 													}
@@ -347,3 +347,6 @@ fun FindBar(
 		}
 	}
 }
+
+private val KeyEvent.isEnter: Boolean
+	get() = key == Key.Enter || key == Key.NumPadEnter
