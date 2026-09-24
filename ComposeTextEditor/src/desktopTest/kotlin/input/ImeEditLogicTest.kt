@@ -191,4 +191,44 @@ class ImeEditLogicTest {
 
 		assertEquals("abc", text(), "Stale range is treated as no-composition")
 	}
+
+	private fun select(start: Int, end: Int) {
+		state.selector.updateSelection(state.getOffsetAtCharacter(start), state.getOffsetAtCharacter(end))
+		moveCursorToCharIndex(end)
+	}
+
+	private fun selectedText() = state.selector.getSelectedText().text
+
+	@Test
+	fun `deleteSurroundingText deletes around a selection and keeps it`() {
+		state.setText("one two three")
+		select(4, 7)
+
+		state.imeDeleteSurroundingText(beforeLength = 4, afterLength = 2)
+
+		assertEquals("twohree", text())
+		assertEquals("two", selectedText())
+		assertEquals(3, cursorCharIndex())
+	}
+
+	@Test
+	fun `deleteSurroundingTextInCodePoints deletes around a selection and keeps it`() {
+		state.setText("a😀bc😀d")
+		select(3, 5)
+
+		state.imeDeleteSurroundingTextInCodePoints(beforeLength = 1, afterLength = 1)
+
+		assertEquals("abcd", text())
+		assertEquals("bc", selectedText())
+	}
+
+	@Test
+	fun `deleteSurroundingText clamps a length of Int MAX_VALUE to the document`() {
+		state.setText("hello")
+		moveCursorToCharIndex(2)
+
+		state.imeDeleteSurroundingText(beforeLength = 0, afterLength = Int.MAX_VALUE)
+
+		assertEquals("he", text())
+	}
 }

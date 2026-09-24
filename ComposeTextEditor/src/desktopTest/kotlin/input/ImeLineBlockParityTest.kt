@@ -15,9 +15,7 @@ import com.darkrockstudios.texteditor.richstyle.BulletListSpanStyle
 import com.darkrockstudios.texteditor.state.EditBehavior
 import com.darkrockstudios.texteditor.state.TextEditorState
 import io.mockk.mockk
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
-import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import utils.InMemoryClipboard
 import kotlin.test.Test
@@ -318,30 +316,22 @@ class ImeLineBlockParityTest {
 	fun `a behavior-claimed backspace asks the IME to resync`() = runTest {
 		val state = editorWith("plain\n- item")
 		state.cursor.updatePosition(CharLineOffset(1, 0))
-		var resyncs = 0
-		val job = launch { state.imeResyncRequests.collect { resyncs++ } }
-		runCurrent()
+		val before = state.imeResyncGeneration
 
 		state.imeDeleteSurroundingText(1, 0)
-		runCurrent()
 
-		assertEquals(1, resyncs)
-		job.cancel()
+		assertEquals(before + 1, state.imeResyncGeneration)
 	}
 
 	@Test
 	fun `a behavior-claimed newline asks the IME to resync`() = runTest {
 		val state = editorWith("- one\n- ")
 		state.cursor.updatePosition(CharLineOffset(1, 0))
-		var resyncs = 0
-		val job = launch { state.imeResyncRequests.collect { resyncs++ } }
-		runCurrent()
+		val before = state.imeResyncGeneration
 
 		state.imeCommitText("\n", newCursorPosition = 1)
-		runCurrent()
 
-		assertEquals(1, resyncs)
-		job.cancel()
+		assertEquals(before + 1, state.imeResyncGeneration)
 	}
 
 	/** A delete that really removed text needs no correction; the caret move carries it. */
@@ -349,15 +339,11 @@ class ImeLineBlockParityTest {
 	fun `an ordinary backspace does not ask for a resync`() = runTest {
 		val state = editorWith("hello")
 		state.cursor.updatePosition(CharLineOffset(0, 5))
-		var resyncs = 0
-		val job = launch { state.imeResyncRequests.collect { resyncs++ } }
-		runCurrent()
+		val before = state.imeResyncGeneration
 
 		state.imeDeleteSurroundingText(1, 0)
-		runCurrent()
 
-		assertEquals(0, resyncs)
-		job.cancel()
+		assertEquals(before, state.imeResyncGeneration)
 	}
 
 	// --- the non-block case must be untouched by the routing ---

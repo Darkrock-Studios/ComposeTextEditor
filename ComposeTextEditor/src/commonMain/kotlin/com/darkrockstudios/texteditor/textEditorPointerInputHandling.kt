@@ -37,17 +37,20 @@ internal fun Modifier.textEditorPointerInputHandling(
 						state.cursor.updatePosition(position)
 					}
 					state.selector.clearSelection()
+					state.endCompositionIfPointerLeft()
 				}
 			},
 			onDoubleClick = { offset: Offset ->
 				val position = state.getOffsetAtPosition(offset)
 				state.selector.startSelection(position, isTouch = false)
 				state.selector.selectWordAt(position)
+				state.endCompositionIfPointerLeft()
 			},
 			onTripleClick = { offset: Offset ->
 				val position = state.getOffsetAtPosition(offset)
 				state.selector.startSelection(position, isTouch = false)
 				state.selector.selectLineAt(position)
+				state.endCompositionIfPointerLeft()
 			}
 		)
 }
@@ -74,6 +77,7 @@ private fun Modifier.handleDragInput(state: TextEditorState, readOnly: Boolean):
 				val handle = findHandleAtPosition(initialPosition, state)
 				if (handle != null) {
 					state.selector.setDraggingHandle(handle.isStart)
+					state.endCompositionIfPointerLeft()
 				}
 			} else if (isMouseLike && hasPrimaryButton) {
 				// Only start selection drag on primary (left) mouse button
@@ -91,6 +95,7 @@ private fun Modifier.handleDragInput(state: TextEditorState, readOnly: Boolean):
 					mouseSelectionAnchor = clickedPosition
 					state.selector.startSelection(position = clickedPosition, isTouch = false)
 				}
+				state.endCompositionIfPointerLeft()
 			}
 
 			val pointerId = down.id
@@ -137,6 +142,20 @@ private fun Modifier.handleDragInput(state: TextEditorState, readOnly: Boolean):
 			}
 		}
 	}
+}
+
+/**
+ * Ends the IME composition once a pointer has put the caret or a selection outside it,
+ * which is what keyboards do themselves when told of the move. One that does not would
+ * replace the old composing word, wherever it is, with its next keystroke. A caret
+ * placed inside the composition keeps it: some keyboards edit mid-composition.
+ */
+private fun TextEditorState.endCompositionIfPointerLeft() {
+	val composing = composingRange ?: return
+	val caretInside = selector.selection == null &&
+			(cursorPosition isAfterOrEqual composing.start) &&
+			(cursorPosition isBeforeOrEqual composing.end)
+	if (!caretInside) clearComposingRange()
 }
 
 private fun findHandleAtPosition(
@@ -192,6 +211,7 @@ private fun handleSpanInteraction(
 			state.cursor.updatePosition(position)
 		}
 		state.selector.clearSelection()
+		state.endCompositionIfPointerLeft()
 	}
 
 	return !isShiftPressed && clickedSpan != null && onSpanClick != null &&
@@ -280,6 +300,7 @@ private fun Modifier.handleTextInteractions(
 								} else {
 									state.selector.startSelection(wordPosition, isTouch = true)
 									state.selector.selectWordAt(wordPosition)
+									state.endCompositionIfPointerLeft()
 								}
 
 								didLongPress = true

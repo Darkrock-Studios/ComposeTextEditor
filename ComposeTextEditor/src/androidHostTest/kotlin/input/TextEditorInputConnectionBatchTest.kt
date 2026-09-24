@@ -1,8 +1,12 @@
 package input
 
+import android.view.KeyEvent
+import android.view.View
 import androidx.compose.ui.text.AnnotatedString
+import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.input.TextEditorInputConnection
 import com.darkrockstudios.texteditor.state.TextEditorState
+import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.test.TestScope
 import kotlin.test.BeforeTest
@@ -12,12 +16,12 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
- * Regression tests for batch-edit depth handling in [TextEditorInputConnection].
+ * Batch-edit and misbehaving-IME handling in [TextEditorInputConnection].
  *
- * Some IMEs (Huawei Celia consistently, SwiftKey intermittently) call
- * endBatchEdit() without a matching beginBatchEdit(). If the depth goes
- * negative, every subsequent edit is queued but never drained, so typed
- * characters silently vanish (GitHub issue #33).
+ * Commands apply immediately and batches only hold back notifications, so no IME
+ * batching mistake can keep typed text out of the document. Some IMEs (Huawei Celia
+ * consistently, SwiftKey intermittently) call endBatchEdit() without a matching
+ * beginBatchEdit() (GitHub issue #33); others may never close a batch at all.
  */
 class TextEditorInputConnectionBatchTest {
 
@@ -26,13 +30,15 @@ class TextEditorInputConnectionBatchTest {
 
 	@BeforeTest
 	fun setup() {
-		state = TextEditorState(
-			scope = TestScope(),
-			measurer = mockk(relaxed = true),
-			initialText = AnnotatedString(""),
-		)
-		connection = TextEditorInputConnection(state)
+		state = editorState("")
+		connection = TextEditorInputConnection(state, mockk<View>(relaxed = true))
 	}
+
+	private fun editorState(text: String) = TextEditorState(
+		scope = TestScope(),
+		measurer = mockk(relaxed = true),
+		initialText = AnnotatedString(text),
+	)
 
 	private fun text() = state.getAllText().text
 
@@ -60,17 +66,37 @@ class TextEditorInputConnectionBatchTest {
 	}
 
 	@Test
-	fun `nested batch edits defer edits until the outermost end`() {
+	fun `edits inside a batch apply immediately`() {
 		connection.beginBatchEdit()
 		connection.beginBatchEdit()
 		connection.commitText("a", 1)
-		assertEquals("", text(), "Edit must stay queued while a batch is open")
+		assertEquals("a", text())
 
 		connection.endBatchEdit()
-		assertEquals("", text(), "Inner end must not drain the queue")
+		assertTrue(state.platformExtensions.isInBatchEdit, "Inner end must keep notifications held")
 
 		connection.endBatchEdit()
-		assertEquals("a", text(), "Outermost end must apply queued edits")
+		assertFalse(state.platformExtensions.isInBatchEdit)
+		assertEquals("a", text())
+	}
+
+	@Test
+	fun `a batch the IME never closes still types`() {
+		connection.beginBatchEdit()
+		connection.setComposingText("w", 1)
+		connection.setComposingText("wo", 1)
+		connection.commitText("word ", 1)
+
+		assertEquals("word ", text())
+	}
+
+	@Test
+	fun `reads inside a batch see the IME's own edits`() {
+		connection.beginBatchEdit()
+		connection.commitText("hello", 1)
+
+		assertEquals("hello", connection.getTextBeforeCursor(10, 0).toString())
+		connection.endBatchEdit()
 	}
 
 	@Test
@@ -83,6 +109,15 @@ class TextEditorInputConnectionBatchTest {
 		assertTrue(state.platformExtensions.isInBatchEdit)
 		connection.endBatchEdit()
 		assertFalse(state.platformExtensions.isInBatchEdit)
+	}
+
+	@Test
+	fun `a stray endBatchEdit cannot release a batch the connection never opened`() {
+		state.platformExtensions.beginBatchEdit()
+
+		connection.endBatchEdit()
+
+		assertTrue(state.platformExtensions.isInBatchEdit)
 	}
 
 	@Test
@@ -113,5 +148,61 @@ class TextEditorInputConnectionBatchTest {
 		connection.endBatchEdit()
 
 		assertEquals("word", text())
+	}
+
+	@Test
+	fun `closing a connection releases only the batches it opened`() {
+		val successor = TextEditorInputConnection(state, mockk<View>(relaxed = true))
+		successor.beginBatchEdit()
+		connection.beginBatchEdit()
+		connection.beginBatchEdit()
+
+		connection.closeConnection()
+
+		assertTrue(state.platformExtensions.isInBatchEdit, "The successor's batch must survive")
+		successor.endBatchEdit()
+		assertFalse(state.platformExtensions.isInBatchEdit)
+	}
+
+	@Test
+	fun `a closed connection rejects further edits`() {
+		connection.closeConnection()
+
+		assertFalse(connection.commitText("a", 1))
+		assertEquals("", text())
+	}
+
+	@Test
+	fun `text around the cursor is measured from the selection edges`() {
+		state = editorState("one two three")
+		connection = TextEditorInputConnection(state, mockk<View>(relaxed = true))
+		connection.setSelection(4, 7)
+
+		assertEquals("one ", connection.getTextBeforeCursor(100, 0).toString())
+		assertEquals(" three", connection.getTextAfterCursor(100, 0).toString())
+		assertEquals("two", connection.getSelectedText(0).toString())
+	}
+
+	@Test
+	fun `huge read lengths do not overflow`() {
+		state = editorState("abc")
+		connection = TextEditorInputConnection(state, mockk<View>(relaxed = true))
+		state.cursor.updatePosition(CharLineOffset(0, 1))
+
+		assertEquals("a", connection.getTextBeforeCursor(Int.MAX_VALUE, 0).toString())
+		assertEquals("bc", connection.getTextAfterCursor(Int.MAX_VALUE, 0).toString())
+	}
+
+	@Test
+	fun `a string sent as a key event is committed as text`() {
+		val event = mockk<KeyEvent> {
+			every { action } returns KeyEvent.ACTION_MULTIPLE
+			every { keyCode } returns KeyEvent.KEYCODE_UNKNOWN
+			@Suppress("DEPRECATION")
+			every { characters } returns "é"
+		}
+
+		assertTrue(connection.sendKeyEvent(event))
+		assertEquals("é", text())
 	}
 }

@@ -5,6 +5,10 @@ import android.graphics.Matrix
 import android.view.View
 import android.view.inputmethod.CursorAnchorInfo
 import android.view.inputmethod.InputMethodManager
+import com.darkrockstudios.texteditor.input.ImeCursorSync
+import com.darkrockstudios.texteditor.input.TextEditorInputConnection
+import com.darkrockstudios.texteditor.input.composingAsTextRange
+import com.darkrockstudios.texteditor.input.selectionAsTextRange
 
 /**
  * Android-specific extensions for TextEditorState.
@@ -38,41 +42,77 @@ actual class PlatformTextEditorExtensions actual constructor(
 	var extractedTextMonitorToken: Int = 0
 
 	/**
-	 * Tracks the batch edit depth. IMEs may nest batch edits.
-	 * When > 0, IME cursor sync updates should be suppressed.
+	 * The running input session's notifier. Ending the outermost batch edit flushes it,
+	 * which is how an IME hears about its own edits.
 	 */
+	internal var imeSync: ImeCursorSync? = null
+
+	/** The most recently opened IME connection, the one the keyboard is talking through. */
+	internal var activeConnection: TextEditorInputConnection? = null
+		private set
+
+	/**
+	 * The view IME reports go through: the live connection's, which is the view the
+	 * [InputMethodManager] is serving, falling back to the captured [view] between sessions.
+	 */
+	internal val imeView: View? get() = activeConnection?.view ?: view
+
+	/**
+	 * Monitor requests belong to one IME session, and a new connection is a new session:
+	 * its keyboard has asked for nothing yet. A restart opens the successor before closing
+	 * the old connection, so this is where the old requests are dropped.
+	 */
+	internal fun connectionOpened(connection: TextEditorInputConnection) {
+		activeConnection = connection
+		resetMonitoring()
+	}
+
+	internal fun connectionClosed(connection: TextEditorInputConnection) {
+		if (activeConnection !== connection) return
+		activeConnection = null
+		resetMonitoring()
+	}
+
+	private fun resetMonitoring() {
+		cursorAnchorMonitoringEnabled = false
+		extractedTextMonitorEnabled = false
+		extractedTextMonitorToken = 0
+	}
+
 	private var batchEditDepth: Int = 0
 
 	/**
-	 * Whether a batch edit is currently in progress.
-	 * During batch edits, IME cursor sync updates are suppressed to avoid
-	 * unnecessary intermediate updates.
+	 * Whether a batch edit is in progress. IME notifications wait for the outermost batch
+	 * to end, so the keyboard sees each logical edit once rather than its intermediate states.
 	 */
 	val isInBatchEdit: Boolean get() = batchEditDepth > 0
 
 	/**
-	 * Begins a batch edit. Call [endBatchEdit] when done.
-	 * Batch edits can be nested.
+	 * Begins a batch edit; pair every call with [endBatchEdit]. Batches nest. Edits made
+	 * inside one apply immediately; only the IME notifications are held back.
 	 */
 	fun beginBatchEdit() {
 		batchEditDepth++
 	}
 
 	/**
-	 * Ends a batch edit started by [beginBatchEdit].
+	 * Ends a batch edit started by [beginBatchEdit]. Ending the outermost one notifies the
+	 * IME of everything the batch changed.
 	 * @return true if all batch edits have ended (depth == 0)
 	 */
 	fun endBatchEdit(): Boolean {
-		if (batchEditDepth > 0) {
-			batchEditDepth--
-		}
+		if (batchEditDepth == 0) return true
+		batchEditDepth--
+		if (batchEditDepth == 0) imeSync?.flush()
 		return batchEditDepth == 0
 	}
 
-	/**
-	 * Resets batch-edit state to zero. Called from `closeConnection` so a stale depth
-	 * from a now-dead InputConnection doesn't suppress future IME updates.
-	 */
+	/** Drops [count] batch levels without notifying, for a connection whose IME is gone. */
+	internal fun releaseBatchEdits(count: Int) {
+		batchEditDepth = (batchEditDepth - count).coerceAtLeast(0)
+	}
+
+	/** Forces batch-edit state back to zero without notifying the IME. */
 	fun resetBatchEdit() {
 		batchEditDepth = 0
 	}
@@ -86,35 +126,22 @@ actual class PlatformTextEditorExtensions actual constructor(
 	 * - On cursor changes when CURSOR_UPDATE_MONITOR is active
 	 */
 	fun sendCursorAnchorInfo() {
-		val view = view ?: return
+		val view = imeView ?: return
 		val imm = view.context.getSystemService(Context.INPUT_METHOD_SERVICE)
 				as? InputMethodManager ?: return
 
 		val builder = CursorAnchorInfo.Builder()
 
-		// Set selection range
-		val cursorIndex = state.getCharacterIndex(state.cursorPosition)
-		val selection = state.selector.selection
-		if (selection != null) {
-			builder.setSelectionRange(
-				state.getCharacterIndex(selection.start),
-				state.getCharacterIndex(selection.end)
-			)
-		} else {
-			builder.setSelectionRange(cursorIndex, cursorIndex)
-		}
+		val selection = state.selectionAsTextRange()
+		builder.setSelectionRange(selection.start, selection.end)
 
 		// Set composing text info if present
-		val composingRange = state.composingRange
-		if (composingRange != null) {
-			val composingStart = state.getCharacterIndex(composingRange.start)
-			val composingEnd = state.getCharacterIndex(composingRange.end)
-			if (composingStart < composingEnd && composingEnd <= state.getTextLength()) {
-				builder.setComposingText(
-					composingStart,
-					state.getAllText().subSequence(composingStart, composingEnd)
-				)
-			}
+		val composing = state.composingAsTextRange()
+		if (composing != null && composing.start < composing.end && composing.end <= state.getTextLength()) {
+			builder.setComposingText(
+				composing.start,
+				state.getAllText().subSequence(composing.start, composing.end)
+			)
 		}
 
 		// Set the transformation matrix to convert from view coordinates to screen coordinates

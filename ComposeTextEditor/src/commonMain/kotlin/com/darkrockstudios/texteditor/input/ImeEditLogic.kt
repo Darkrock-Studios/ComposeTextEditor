@@ -1,5 +1,6 @@
 package com.darkrockstudios.texteditor.input
 
+import androidx.compose.ui.text.TextRange
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.state.TextEditorState
 
@@ -71,11 +72,20 @@ internal fun TextEditorState.imeFinishComposing() {
 	clearComposingRange()
 }
 
-/** `deleteSurroundingText`: delete [beforeLength]/[afterLength] chars around the cursor. */
+/**
+ * `deleteSurroundingText`: delete [beforeLength] chars before the selection and
+ * [afterLength] after it, or around the cursor when nothing is selected.
+ */
 internal fun TextEditorState.imeDeleteSurroundingText(beforeLength: Int, afterLength: Int) {
-	val cursorIndex = getCharacterIndex(cursorPosition)
-	val deleteStart = maxOf(0, cursorIndex - beforeLength)
-	val deleteEnd = minOf(getTextLength(), cursorIndex + afterLength)
+	val selection = selectionAsTextRange()
+	if (!selection.collapsed) {
+		deleteAroundSelection(selection, beforeLength, afterLength)
+		return
+	}
+	val cursorIndex = selection.start
+	// Lengths are clamped before they meet an index: IMEs pass Int.MAX_VALUE for "all".
+	val deleteStart = cursorIndex - beforeLength.coerceIn(0, cursorIndex)
+	val deleteEnd = cursorIndex + afterLength.coerceIn(0, getTextLength() - cursorIndex)
 	deleteSurroundingRange(
 		singleCharBefore = beforeLength == 1 && afterLength == 0,
 		singleCharAfter = beforeLength == 0 && afterLength == 1,
@@ -87,12 +97,18 @@ internal fun TextEditorState.imeDeleteSurroundingText(beforeLength: Int, afterLe
 
 /** `deleteSurroundingTextInCodePoints`: same as [imeDeleteSurroundingText] but counted in code points. */
 internal fun TextEditorState.imeDeleteSurroundingTextInCodePoints(beforeLength: Int, afterLength: Int) {
-	val cursorIndex = getCharacterIndex(cursorPosition)
+	val selection = selectionAsTextRange()
 	val fullText = getAllText()
-	val charsBefore = codePointsToChars(fullText, cursorIndex, beforeLength, backwards = true)
-	val charsAfter = codePointsToChars(fullText, cursorIndex, afterLength, backwards = false)
-	val deleteStart = maxOf(0, cursorIndex - charsBefore)
-	val deleteEnd = minOf(getTextLength(), cursorIndex + charsAfter)
+	// Both counts stop at the document edge, so they are already bounded.
+	val charsBefore = codePointsToChars(fullText, selection.min, beforeLength, backwards = true)
+	val charsAfter = codePointsToChars(fullText, selection.max, afterLength, backwards = false)
+	if (!selection.collapsed) {
+		deleteAroundSelection(selection, charsBefore, charsAfter)
+		return
+	}
+	val cursorIndex = selection.start
+	val deleteStart = cursorIndex - charsBefore
+	val deleteEnd = cursorIndex + charsAfter
 	// charsBefore/charsAfter of 2 is one astral code point, which the semantic paths
 	// would split: they delete a single UTF-16 char. 0 is the document edge, where
 	// the request is still a keystroke even though there is nothing to remove.
@@ -145,6 +161,33 @@ private fun TextEditorState.deleteSurroundingRange(
 
 	if (deleteStart >= deleteEnd) return
 	delete(TextEditorRange(getOffsetAtCharacter(deleteStart), getOffsetAtCharacter(deleteEnd)))
+}
+
+/**
+ * Deletes [before] chars ending at the start of [selection] and [after] starting at its
+ * end. The IME contract leaves the selection itself alone, and every content edit clears
+ * it, so it is restored over the same text afterwards.
+ */
+private fun TextEditorState.deleteAroundSelection(selection: TextRange, before: Int, after: Int) {
+	val selStart = selection.min
+	val selEnd = selection.max
+	val removedBefore = before.coerceIn(0, selStart)
+	val removedAfter = after.coerceIn(0, getTextLength() - selEnd)
+	if (removedBefore == 0 && removedAfter == 0) return
+
+	val cursorIndex = getCharacterIndex(cursorPosition)
+	// The far side first, so the near side's indices still hold.
+	if (removedAfter > 0) {
+		delete(TextEditorRange(getOffsetAtCharacter(selEnd), getOffsetAtCharacter(selEnd + removedAfter)))
+	}
+	if (removedBefore > 0) {
+		delete(TextEditorRange(getOffsetAtCharacter(selStart - removedBefore), getOffsetAtCharacter(selStart)))
+	}
+	selector.updateSelection(
+		getOffsetAtCharacter(selStart - removedBefore),
+		getOffsetAtCharacter(selEnd - removedBefore),
+	)
+	cursor.updatePosition(getOffsetAtCharacter(cursorIndex - removedBefore))
 }
 
 /** `setSelection`: collapse to a cursor when start == end, otherwise select; cursor goes to `end`. */
