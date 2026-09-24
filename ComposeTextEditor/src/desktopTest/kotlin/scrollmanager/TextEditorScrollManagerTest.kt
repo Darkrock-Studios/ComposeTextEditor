@@ -30,13 +30,16 @@ class TextEditorScrollManagerTest {
 		}
 	}
 
-	private fun createMockTextLayoutResult(): TextLayoutResult {
+	private fun createMockTextLayoutResult(lineHeight: Float = 20f): TextLayoutResult {
 		return mockk {
-			every { size } returns IntSize(100, 20)
+			every { size } returns IntSize(100, lineHeight.toInt())
+			every { multiParagraph } returns mockk {
+				every { getLineHeight(any()) } returns lineHeight
+			}
 		}
 	}
 
-	private fun createTestLineWraps(count: Int): List<LineWrap> {
+	private fun createTestLineWraps(count: Int, lineHeight: Float = 20f): List<LineWrap> {
 		val result = mutableListOf<LineWrap>()
 		var yOffset = 0f
 
@@ -48,11 +51,11 @@ class TextEditorScrollManagerTest {
 					virtualLength = 10,
 					virtualLineIndex = 0,
 					offset = Offset(0f, yOffset),
-					textLayoutResult = createMockTextLayoutResult(),
+					textLayoutResult = createMockTextLayoutResult(lineHeight),
 					richSpans = emptyList()
 				)
 			)
-			yOffset += 20f // Each line is 20 units tall
+			yOffset += lineHeight
 		}
 		return result
 	}
@@ -404,5 +407,71 @@ class TextEditorScrollManagerTest {
 		assertEquals(20, manager.calculateLineHeight(CharLineOffset(0, 5)))
 		assertEquals(20, manager.calculateLineHeight(CharLineOffset(1, 5)))
 		assertEquals(20, manager.calculateLineHeight(CharLineOffset(2, 5)))
+	}
+
+	@Test
+	fun `test last line height is measured not guessed`() = testScope.runTest {
+		val scrollState = createMockScrollState()
+		val lineWraps = createTestLineWraps(5, lineHeight = 55f)
+
+		val manager = TextEditorScrollManager(
+			scope = testScope,
+			scrollState = scrollState,
+			getLines = { List(5) { AnnotatedString("Line $it") } },
+			getViewportSize = { Size(100f, 165f) },
+			getCursorPosition = { CharLineOffset(4, 5) },
+			getLineOffsets = { lineWraps }
+		)
+
+		assertEquals(55, manager.calculateLineHeight(CharLineOffset(4, 5)))
+	}
+
+	@Test
+	fun `test cursor clipped by the viewport bottom is not reported visible`() = testScope.runTest {
+		val scrollState = createMockScrollState()
+		val lineWraps = createTestLineWraps(5, lineHeight = 55f)
+
+		val manager = TextEditorScrollManager(
+			scope = testScope,
+			scrollState = scrollState,
+			getLines = { List(5) { AnnotatedString("Line $it") } },
+			getViewportSize = { Size(100f, 165f) }, // Shows 3 lines
+			getCursorPosition = { CharLineOffset(4, 5) },
+			getLineOffsets = { lineWraps }
+		)
+		manager.updateContentHeight(275)
+		manager.bottomContentPaddingPx = 20
+
+		// Last line spans y=220..275, viewport bottom lands mid-line at y=250.
+		every { scrollState.value } returns 85
+		assertFalse(manager.isOffsetVisible(CharLineOffset(4, 5)))
+
+		val scrollSlot = slot<Int>()
+		coEvery { scrollState.animateScrollTo(capture(scrollSlot)) } returns Unit
+
+		manager.ensureCursorVisible()
+		testScope.advanceUntilIdle()
+
+		// cursorTop(220) + cursorHeight(55) - viewportHeight(165) + buffer(10)
+		assertTrue(scrollSlot.isCaptured)
+		assertEquals(120, scrollSlot.captured)
+	}
+
+	@Test
+	fun `test offset missing from a stale layout uses the nearest wrap above`() = testScope.runTest {
+		val scrollState = createMockScrollState()
+		val lineWraps = createTestLineWraps(3, lineHeight = 30f)
+
+		val manager = TextEditorScrollManager(
+			scope = testScope,
+			scrollState = scrollState,
+			getLines = { List(5) { AnnotatedString("Line $it") } },
+			getViewportSize = { Size(100f, 200f) },
+			getCursorPosition = { CharLineOffset(4, 0) },
+			getLineOffsets = { lineWraps }
+		)
+
+		assertEquals(60f, manager.calculateOffsetYPosition(CharLineOffset(4, 0)))
+		assertEquals(30, manager.calculateLineHeight(CharLineOffset(4, 0)))
 	}
 }

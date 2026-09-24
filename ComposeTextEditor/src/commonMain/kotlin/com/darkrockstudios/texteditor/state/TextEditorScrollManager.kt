@@ -8,6 +8,8 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.text.AnnotatedString
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.LineWrap
+import com.darkrockstudios.texteditor.cursor.getWrapForDrawing
+import com.darkrockstudios.texteditor.effectiveHeight
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -156,8 +158,6 @@ class TextEditorScrollManager(
 
 	fun isOffsetVisible(offset: CharLineOffset): Boolean {
 		val cursorTop = calculateOffsetYPosition(offset).toInt()
-		// Assuming cursor height is roughly the line height - we can make this more precise
-		// by passing in the actual cursor height from text measurement if needed
 		val cursorHeight = calculateLineHeight(offset)
 		val cursorBottom = cursorTop + cursorHeight
 
@@ -177,32 +177,12 @@ class TextEditorScrollManager(
 	 * Inverse of [offsetAtYPosition].
 	 */
 	fun calculateOffsetYPosition(offset: CharLineOffset): Float {
-		val lineOffsets = getLineOffsets()
-		val wrappedLineIndex = lineOffsets.indexOfLast { lineWrap ->
-			lineWrap.line == offset.line && lineWrap.wrapStartsAtIndex <= offset.char
-		}
-
-		if (wrappedLineIndex == -1) return 0f
-
-		val wrappedLine = lineOffsets[wrappedLineIndex]
-		return wrappedLine.offset.y
+		return getLineOffsets().getWrapForDrawing(offset)?.offset?.y ?: 0f
 	}
 
 	@VisibleForTesting
 	internal fun calculateLineHeight(offset: CharLineOffset): Int {
-		val lineOffsets = getLineOffsets()
-		val currentLineIndex = lineOffsets.indexOfLast { lineWrap ->
-			lineWrap.line == offset.line && lineWrap.wrapStartsAtIndex <= offset.char
-		}
-
-		// Find next line's Y position to calculate height
-		val currentY = if (currentLineIndex >= 0) lineOffsets[currentLineIndex].offset.y else 0f
-		val nextY = if (currentLineIndex + 1 < lineOffsets.size) {
-			lineOffsets[currentLineIndex + 1].offset.y
-		} else {
-			currentY + 20f // Default height if we can't determine it
-		}
-
-		return (nextY - currentY).toInt().coerceAtLeast(1)
+		val wrap = getLineOffsets().getWrapForDrawing(offset) ?: return 1
+		return wrap.effectiveHeight.toInt().coerceAtLeast(1)
 	}
 }
