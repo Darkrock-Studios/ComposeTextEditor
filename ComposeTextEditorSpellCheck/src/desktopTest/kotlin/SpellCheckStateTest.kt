@@ -7,6 +7,7 @@ import androidx.compose.ui.text.TextMeasurer
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.richstyle.SpellCheckStyle
+import com.darkrockstudios.texteditor.spellcheck.api.Correction
 import com.darkrockstudios.texteditor.spellcheck.api.EditorSpellChecker
 import com.darkrockstudios.texteditor.spellcheck.api.Suggestion
 import com.darkrockstudios.texteditor.state.TextEditorState
@@ -249,6 +250,39 @@ class SpellCheckStateTest {
 		check.join()
 
 		assertEquals(listOf("bbb", "xaaa"), spellCheckedText())
+	}
+
+	@Test
+	fun `a click on a squiggle an edit shifted finds its word`() = runTest {
+		textState.setText("aaa bbb")
+		spellChecker.correctWords = setOf("aaa")
+		spellCheckState.runFullSpellCheck()
+
+		textState.replace(TextEditorRange(CharLineOffset(0, 0), CharLineOffset(0, 0)), "zz\n")
+
+		val squiggle = textState.richSpanManager.getAllRichSpans().single { it.style is SpellCheckStyle }
+		assertEquals(WordSegment("bbb", squiggle.range), spellCheckState.handleSpanClick(squiggle))
+	}
+
+	@Test
+	fun `a click on a sentence squiggle an edit shifted finds its correction`() = runTest {
+		textState.setText("aaa bbb")
+		val flagged = TextEditorRange(CharLineOffset(0, 4), CharLineOffset(0, 7))
+		val suggestions = listOf(Suggestion("ccc"))
+		spellCheckState.spellChecker = object : EditorSpellChecker by spellChecker {
+			override suspend fun checkSentence(sentence: String, sentenceRange: TextEditorRange) =
+				listOf(Correction(flagged, "bbb", suggestions))
+		}
+		spellCheckState.spellCheckMode = SpellCheckMode.Sentence
+		spellCheckState.runFullSpellCheck()
+
+		textState.replace(TextEditorRange(CharLineOffset(0, 0), CharLineOffset(0, 0)), "zz ")
+
+		val squiggle = textState.richSpanManager.getAllRichSpans().single { it.style is SpellCheckStyle }
+		assertEquals(
+			Correction(TextEditorRange(CharLineOffset(0, 7), CharLineOffset(0, 10)), "bbb", suggestions),
+			spellCheckState.handleSpanClick(squiggle),
+		)
 	}
 
 	private fun lineRange(line: Int) =

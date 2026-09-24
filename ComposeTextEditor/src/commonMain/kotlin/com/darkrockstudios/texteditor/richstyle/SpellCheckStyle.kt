@@ -15,8 +15,14 @@ import com.darkrockstudios.texteditor.utils.lineTextLeft
 
 /**
  * A [RichSpanStyle] that draws a red wavy underline beneath misspelled text.
+ *
+ * The companion is the plain underline. Subclass it to carry data with the span: the
+ * editor keeps a span's style as edits move its range, so the data stays attached to the
+ * text it describes. Match spans with `is SpellCheckStyle` to include subclasses.
  */
-object SpellCheckStyle : RichSpanStyle {
+open class SpellCheckStyle protected constructor() : RichSpanStyle {
+	companion object : SpellCheckStyle()
+
 	/** Marks this as a non-editing decoration so it stays out of the undo/edit stream. */
 	override val isDecoration: Boolean = true
 
