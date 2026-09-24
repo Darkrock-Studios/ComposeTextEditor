@@ -49,16 +49,28 @@ class FindState(
 	// Job for debounced search on text changes
 	private var searchUpdateJob: Job? = null
 
+	/** The [TextEditorState.documentGeneration] [matches] were found in. */
+	private var matchesGeneration = textState.documentGeneration.value
+
 	init {
-		// Listen for text changes and update search results
 		searchUpdateJob = scope.launch {
-			textState.editOperations
-				.debounce(300.milliseconds)
-				.collect {
-					if (query.isNotEmpty()) {
-						refreshSearch()
+			// Listen for text changes and update search results
+			launch {
+				textState.editOperations
+					.debounce(300.milliseconds)
+					.collect {
+						if (query.isNotEmpty()) {
+							refreshSearch()
+						}
 					}
+			}
+			// A whole-document replacement (setText, setDocument) emits no edit, so
+			// without this the matches would keep describing the old document.
+			textState.documentGeneration.collect { generation ->
+				if (generation != matchesGeneration && query.isNotEmpty()) {
+					refreshSearch()
 				}
+			}
 		}
 	}
 
@@ -76,6 +88,7 @@ class FindState(
 
 		// Find all matches
 		val results = textState.findAll(newQuery, caseSensitive)
+		matchesGeneration = textState.documentGeneration.value
 		_matches.clear()
 		_matches.addAll(results)
 
@@ -248,6 +261,7 @@ class FindState(
 
 		// Re-search
 		val results = textState.findAll(query, caseSensitive)
+		matchesGeneration = textState.documentGeneration.value
 		_matches.clear()
 		_matches.addAll(results)
 
