@@ -15,19 +15,26 @@ import kotlin.coroutines.CoroutineContext
 /** The default underline color: blue, apart from spell check's red. */
 val DefaultDiagnosticColor = Color(0xFF2F6FDB)
 
+/** The default underline color of a [DiagnosticSeverity.Suggestion]: a muted gold. */
+val DefaultSuggestionColor = Color(0xFFB8860B)
+
 /**
  * Underlines what a [TextDiagnosticsChecker] finds in [textState], line by line. Results are kept by
- * line text, so after an edit only the lines that changed go to the checker. Pass it to
+ * line text, so after an edit only the lines that changed go to [TextDiagnosticsChecker.check];
+ * [TextDiagnosticsChecker.checkText] sees the whole text every time. Pass it to
  * [com.darkrockstudios.texteditor.spellcheck.SpellCheckingTextEditor], which refreshes it as the text
  * changes and opens a menu of the message and fixes on an underline.
  *
- * @param scanContext Where [TextDiagnosticsChecker.check] runs. Spans change on the caller's dispatcher.
+ * @param color Underlines a [DiagnosticSeverity.Error].
+ * @param suggestionColor Underlines a [DiagnosticSeverity.Suggestion].
+ * @param scanContext Where the checker runs. Spans change on the caller's dispatcher.
  * @param cacheLines How many lines' results to keep.
  */
 class TextDiagnosticsState(
 	val textState: TextEditorState,
 	checker: TextDiagnosticsChecker?,
 	color: Color = DefaultDiagnosticColor,
+	suggestionColor: Color = DefaultSuggestionColor,
 	private val scanContext: CoroutineContext = Dispatchers.Default,
 	private val cacheLines: Int = DEFAULT_CACHE_LINES,
 ) {
@@ -35,6 +42,9 @@ class TextDiagnosticsState(
 		private set
 
 	var color: Color = color
+		private set
+
+	var suggestionColor: Color = suggestionColor
 		private set
 
 	/** The [TextEditorState.documentGeneration] the latest refresh started on. */
@@ -53,11 +63,22 @@ class TextDiagnosticsState(
 		refresh()
 	}
 
-	/** Redraws every underline in [value]. */
+	/** Redraws every [DiagnosticSeverity.Error]'s underline in [value]. */
 	fun setColor(value: Color) {
 		if (value == color) return
 		color = value
-		val spans = diagnosticSpans()
+		recolor(DiagnosticSeverity.Error, value)
+	}
+
+	/** Redraws every [DiagnosticSeverity.Suggestion]'s underline in [value]. */
+	fun setSuggestionColor(value: Color) {
+		if (value == suggestionColor) return
+		suggestionColor = value
+		recolor(DiagnosticSeverity.Suggestion, value)
+	}
+
+	private fun recolor(severity: DiagnosticSeverity, value: Color) {
+		val spans = diagnosticSpans().filter { (it.style as DiagnosticStyle).severity == severity }
 		textState.updateRichSpans(
 			remove = spans,
 			add = spans.map { it.copy(style = (it.style as DiagnosticStyle).copy(color = value)) },
@@ -75,14 +96,19 @@ class TextDiagnosticsState(
 			textState.updateRichSpans(remove = diagnosticSpans(), add = emptyList())
 			return@withLock
 		}
-		val unchecked = textState.textLines.map { it.text }.filter { it.isNotBlank() && it !in checked }.distinct()
+		val lines = textState.textLines.map { it.text }
+		val unchecked = lines.filter { it.isNotBlank() && it !in checked }.distinct()
 		if (unchecked.isNotEmpty()) {
 			val results = withContext(scanContext) { current.check(unchecked) }
 			// Replaced while this ran: the new checker's own refresh follows.
 			if (checker !== current) return@withLock
 			unchecked.forEachIndexed { index, line -> remember(line, results.getOrNull(index).orEmpty()) }
 		}
-		reconcile()
+		val textFound = withContext(scanContext) { current.checkText(lines) }
+		if (checker !== current) return@withLock
+		// These are by line number, which an edit made meanwhile may have shifted; the refresh after it redoes them.
+		if (textFound != null && textState.textLines.map { it.text } != lines) return@withLock
+		reconcile(textFound)
 	}
 
 	/**
@@ -107,13 +133,15 @@ class TextDiagnosticsState(
 		textState.replace(span.range, fix, true)
 	}
 
-	private fun reconcile() {
+	private fun reconcile(textFound: List<List<LineDiagnostic>>?) {
 		val existing = diagnosticSpans().groupBy { it.range.start.line }
 		val remove = mutableListOf<RichSpan>()
 		val add = mutableListOf<RichSpan>()
 		textState.textLines.forEachIndexed { index, line ->
-			val found = checked[line.text] ?: return@forEachIndexed
-			val wanted = found.mapNotNull { it.toSpan(index, line.length) }.toSet()
+			val byLine = checked[line.text]
+			val byText = textFound?.let { it.getOrNull(index).orEmpty() }
+			if (byLine == null && byText == null) return@forEachIndexed
+			val wanted = (byLine.orEmpty() + byText.orEmpty()).mapNotNull { it.toSpan(index, line.length) }.toSet()
 			val have = existing[index].orEmpty().toSet()
 			if (wanted != have) {
 				remove += have - wanted
@@ -140,7 +168,7 @@ class TextDiagnosticsState(
 		if (from >= to) return null
 		return RichSpan(
 			TextEditorRange(CharLineOffset(line, from), CharLineOffset(line, to)),
-			DiagnosticStyle(message, fixes, color),
+			DiagnosticStyle(message, fixes, if (severity == DiagnosticSeverity.Error) color else suggestionColor, severity),
 		)
 	}
 

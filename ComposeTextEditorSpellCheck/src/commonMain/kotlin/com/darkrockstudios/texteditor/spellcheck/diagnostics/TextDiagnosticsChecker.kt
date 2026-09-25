@@ -8,6 +8,14 @@ fun interface TextDiagnosticsChecker {
 	 * should judge each line on its own. It must not throw: it runs inside the editor's effects.
 	 */
 	suspend fun check(lines: List<String>): List<List<LineDiagnostic>>
+
+	/**
+	 * The issues that depend on more than their own line, such as a word used again a line later: one
+	 * list per line of [lines], the whole text. Called with every line, blank ones included, each time
+	 * the text is checked, so it should be quick. Null, as by default, when the checker has no such
+	 * issues to find. It must not throw either.
+	 */
+	suspend fun checkText(lines: List<String>): List<List<LineDiagnostic>>? = null
 }
 
 /**
@@ -15,13 +23,23 @@ fun interface TextDiagnosticsChecker {
  *
  * @param message Says what is wrong, shown on the menu the underline opens.
  * @param fixes Offered on that menu.
+ * @param severity How the issue is underlined.
  */
 data class LineDiagnostic(
 	val start: Int,
 	val end: Int,
 	val message: String,
 	val fixes: List<DiagnosticFix> = emptyList(),
+	val severity: DiagnosticSeverity = DiagnosticSeverity.Error,
 )
+
+enum class DiagnosticSeverity {
+	/** A mistake: a wavy underline. */
+	Error,
+
+	/** Something the writer may want to change, such as a repeated word: a dotted underline. */
+	Suggestion,
+}
 
 /** A [LineDiagnostic] whose fixes are replacements, each shown as itself. */
 fun LineDiagnostic(start: Int, end: Int, message: String, fixes: List<String>): LineDiagnostic =

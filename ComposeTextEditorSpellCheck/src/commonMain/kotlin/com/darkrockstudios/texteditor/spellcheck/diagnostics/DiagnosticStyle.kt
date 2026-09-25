@@ -6,6 +6,7 @@ import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextRange
 import com.darkrockstudios.texteditor.LineWrap
 import com.darkrockstudios.texteditor.richstyle.RichSpanStyle
+import com.darkrockstudios.texteditor.richstyle.drawDottedUnderline
 import com.darkrockstudios.texteditor.richstyle.drawWavyUnderline
 import com.darkrockstudios.texteditor.state.TextEditorState
 
@@ -17,6 +18,7 @@ data class DiagnosticStyle(
 	val message: String,
 	val fixes: List<DiagnosticFix>,
 	val color: Color,
+	val severity: DiagnosticSeverity = DiagnosticSeverity.Error,
 ) : RichSpanStyle {
 	override val isDecoration: Boolean get() = true
 
@@ -26,6 +28,9 @@ data class DiagnosticStyle(
 		textRange: TextRange,
 		state: TextEditorState,
 	) {
-		drawWavyUnderline(layoutResult, lineWrap, textRange, color)
+		when (severity) {
+			DiagnosticSeverity.Error -> drawWavyUnderline(layoutResult, lineWrap, textRange, color)
+			DiagnosticSeverity.Suggestion -> drawDottedUnderline(layoutResult, lineWrap, textRange, color)
+		}
 	}
 }

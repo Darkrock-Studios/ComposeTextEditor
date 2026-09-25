@@ -9,6 +9,7 @@ import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.richstyle.RichSpan
 import com.darkrockstudios.texteditor.spellcheck.diagnostics.DiagnosticFix
+import com.darkrockstudios.texteditor.spellcheck.diagnostics.DiagnosticSeverity
 import com.darkrockstudios.texteditor.spellcheck.diagnostics.DiagnosticStyle
 import com.darkrockstudios.texteditor.spellcheck.diagnostics.LineDiagnostic
 import com.darkrockstudios.texteditor.spellcheck.diagnostics.TextDiagnosticsChecker
@@ -56,8 +57,26 @@ class TextDiagnosticsStateTest {
 		textState = TextEditorState(scope = TestScope(), measurer = measurer, initialText = null)
 	}
 
-	private fun diagnostics() = TextDiagnosticsState(textState, checker, Color.Blue, EmptyCoroutineContext)
+	private fun diagnostics(with: TextDiagnosticsChecker = checker) =
+		TextDiagnosticsState(textState, with, Color.Blue, Color.Yellow, scanContext = EmptyCoroutineContext)
 
+	private val textChecked = mutableListOf<List<String>>()
+
+	// Line by line, the "the the" checker; across lines, a suggestion on each word some earlier line has.
+	private val echoChecker = object : TextDiagnosticsChecker {
+		override suspend fun check(lines: List<String>) = checker.check(lines)
+
+		override suspend fun checkText(lines: List<String>): List<List<LineDiagnostic>> {
+			textChecked += lines
+			val seen = mutableSetOf<String>()
+			return lines.map { line ->
+				val words = Regex("\\w+").findAll(line).toList()
+				words.filter { it.value in seen }
+					.map { LineDiagnostic(it.range.first, it.range.last + 1, "Echo", severity = DiagnosticSeverity.Suggestion) }
+					.also { seen += words.map { it.value } }
+			}
+		}
+	}
 
 	private fun spans(): List<RichSpan> =
 		textState.richSpanManager.getAllRichSpans().filter { it.style is DiagnosticStyle }.sortedBy { it.range.start }
@@ -129,5 +148,63 @@ class TextDiagnosticsStateTest {
 		state.setColor(Color.Green)
 
 		assertEquals(listOf(Color.Green, Color.Green), spans().map { (it.style as DiagnosticStyle).color })
+	}
+
+	@Test
+	fun `the whole text goes to checkText on every refresh, and its issues join each line's`() = runTest {
+		textState.setText("Over the the hill.\n\nThe hill.")
+		val state = diagnostics(echoChecker)
+		state.refresh()
+		state.refresh()
+
+		assertEquals(List(2) { listOf("Over the the hill.", "", "The hill.") }, textChecked)
+		assertEquals(listOf(range(0, 5, 12), range(2, 4, 8)), spans().map { it.range })
+		assertEquals(
+			DiagnosticStyle("Echo", emptyList(), Color.Yellow, DiagnosticSeverity.Suggestion),
+			spans().last().style,
+		)
+	}
+
+	@Test
+	fun `an edit to one line can clear another line's text-wide issue`() = runTest {
+		textState.setText("Over the hill.\nThe hill.")
+		val state = diagnostics(echoChecker)
+		state.refresh()
+		textState.replace(range(0, 9, 13), "dale")
+		state.refresh()
+
+		assertTrue(spans().isEmpty())
+	}
+
+	@Test
+	fun `text-wide issues found while the text changed wait for the next refresh`() = runTest {
+		textState.setText("A hill.\nThe hill.")
+		var editing = true
+		val state = diagnostics(object : TextDiagnosticsChecker {
+			override suspend fun check(lines: List<String>) = echoChecker.check(lines)
+
+			override suspend fun checkText(lines: List<String>): List<List<LineDiagnostic>> {
+				if (editing) {
+					editing = false
+					textState.replace(range(0, 0, 0), "New line\n")
+				}
+				return echoChecker.checkText(lines)
+			}
+		})
+		state.refresh()
+		assertTrue(spans().isEmpty())
+
+		state.refresh()
+		assertEquals(listOf(range(2, 4, 8)), spans().map { it.range })
+	}
+
+	@Test
+	fun `each severity has its own color`() = runTest {
+		textState.setText("Over the the hill.\nThe hill.")
+		val state = diagnostics(echoChecker)
+		state.refresh()
+		state.setSuggestionColor(Color.Green)
+
+		assertEquals(listOf(Color.Blue, Color.Green), spans().map { (it.style as DiagnosticStyle).color })
 	}
 }

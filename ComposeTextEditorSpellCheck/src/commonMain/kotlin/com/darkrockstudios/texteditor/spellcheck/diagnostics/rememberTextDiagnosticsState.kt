@@ -7,7 +7,7 @@ import androidx.compose.ui.graphics.Color
 import com.darkrockstudios.texteditor.state.TextEditorState
 
 /**
- * Remembers a [TextDiagnosticsState] for [textState], following [checker] and [color] as they change.
+ * Remembers a [TextDiagnosticsState] for [textState], following [checker] and the colors as they change.
  * Pass a stable [checker]: a new instance checks the whole text again.
  */
 @Composable
@@ -15,9 +15,11 @@ fun rememberTextDiagnosticsState(
 	textState: TextEditorState,
 	checker: TextDiagnosticsChecker?,
 	color: Color = DefaultDiagnosticColor,
+	suggestionColor: Color = DefaultSuggestionColor,
 ): TextDiagnosticsState {
-	val state = remember(textState) { TextDiagnosticsState(textState, checker, color) }
+	val state = remember(textState) { TextDiagnosticsState(textState, checker, color, suggestionColor) }
 	LaunchedEffect(state, checker) { state.setChecker(checker) }
 	LaunchedEffect(state, color) { state.setColor(color) }
+	LaunchedEffect(state, suggestionColor) { state.setSuggestionColor(suggestionColor) }
 	return state
 }
