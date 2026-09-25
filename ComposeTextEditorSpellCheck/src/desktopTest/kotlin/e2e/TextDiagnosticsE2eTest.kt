@@ -2,6 +2,7 @@ package e2e
 
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
+import com.darkrockstudios.texteditor.spellcheck.diagnostics.DiagnosticFix
 import com.darkrockstudios.texteditor.spellcheck.diagnostics.LineDiagnostic
 import com.darkrockstudios.texteditor.spellcheck.diagnostics.TextDiagnosticsChecker
 import utils.CountingSpellChecker
@@ -57,6 +58,30 @@ class TextDiagnosticsE2eTest {
 			assertEquals("over the hill", state.textState.getAllText().text)
 			letSpellCheckSettle()
 			assertEquals(emptyList(), diagnosticSpans)
+		}
+	}
+
+	@Test
+	fun `a fix shows its label, and applies its replacement`() {
+		// Flags the second "the" of "the the", offering to remove it.
+		val removal = TextDiagnosticsChecker { lines ->
+			lines.map { line ->
+				Regex("the( the)").findAll(line).map {
+					val repeat = it.groups[1]!!.range
+					LineDiagnostic(repeat.first, repeat.last + 1, "Repeated word", listOf(DiagnosticFix("", "Remove “the”")))
+				}.toList()
+			}
+		}
+		spellCheckUiTest(
+			spellChecker = CountingSpellChecker(correctWords = setOf("over", "the", "hill")),
+			initialText = "over the the hill",
+			diagnosticsChecker = removal,
+		) {
+			rightClickAtCharacter(10)
+			awaitMenuItem("Remove “the”")
+			clickMenuItem("Remove “the”")
+
+			assertEquals("over the hill", state.textState.getAllText().text)
 		}
 	}
 

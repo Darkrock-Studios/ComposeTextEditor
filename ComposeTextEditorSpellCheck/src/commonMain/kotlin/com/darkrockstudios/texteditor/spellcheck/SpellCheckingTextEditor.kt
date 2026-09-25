@@ -130,7 +130,7 @@ fun SpellCheckingTextEditor(
 		suggestionJob.value = null
 		val message = ContextMenuItem(label = style.message, enabled = false, onClick = {})
 		val fixes = style.fixes.map { fix ->
-			ContextMenuItem(label = fix, enabled = true, onClick = { diagnostics?.applyFix(span, fix) })
+			ContextMenuItem(label = fix.label, enabled = true, onClick = { diagnostics?.applyFix(span, fix.replacement) })
 		}
 		contextMenuState.showMenu(Offset(offset.x, offset.y + wordVisibilityBuffer), listOf(message) + fixes)
 	}

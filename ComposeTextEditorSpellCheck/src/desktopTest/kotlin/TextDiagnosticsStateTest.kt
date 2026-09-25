@@ -8,6 +8,7 @@ import androidx.compose.ui.text.TextMeasurer
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.richstyle.RichSpan
+import com.darkrockstudios.texteditor.spellcheck.diagnostics.DiagnosticFix
 import com.darkrockstudios.texteditor.spellcheck.diagnostics.DiagnosticStyle
 import com.darkrockstudios.texteditor.spellcheck.diagnostics.LineDiagnostic
 import com.darkrockstudios.texteditor.spellcheck.diagnostics.TextDiagnosticsChecker
@@ -69,7 +70,7 @@ class TextDiagnosticsStateTest {
 		diagnostics().refresh()
 
 		assertEquals(listOf(range(0, 5, 12), range(2, 4, 11)), spans().map { it.range })
-		assertEquals(DiagnosticStyle("Repeated word", listOf("the"), Color.Blue), spans().first().style)
+		assertEquals(DiagnosticStyle("Repeated word", listOf(DiagnosticFix("the")), Color.Blue), spans().first().style)
 	}
 
 	@Test

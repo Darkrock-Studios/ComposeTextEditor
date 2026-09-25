@@ -14,11 +14,24 @@ fun interface TextDiagnosticsChecker {
  * An issue in one line, from [start] to [end], as character offsets into the line.
  *
  * @param message Says what is wrong, shown on the menu the underline opens.
- * @param fixes Replacements for the range, offered on that menu.
+ * @param fixes Offered on that menu.
  */
 data class LineDiagnostic(
 	val start: Int,
 	val end: Int,
 	val message: String,
-	val fixes: List<String> = emptyList(),
+	val fixes: List<DiagnosticFix> = emptyList(),
+)
+
+/** A [LineDiagnostic] whose fixes are replacements, each shown as itself. */
+fun LineDiagnostic(start: Int, end: Int, message: String, fixes: List<String>): LineDiagnostic =
+	LineDiagnostic(start, end, message, fixes.map(::DiagnosticFix))
+
+/**
+ * A fix for a diagnostic: [replacement] for its range, shown on the menu as [label]. A label says what
+ * a fix does where the replacement alone would not, such as "Remove “the”" for an empty replacement.
+ */
+data class DiagnosticFix(
+	val replacement: String,
+	val label: String = replacement,
 )

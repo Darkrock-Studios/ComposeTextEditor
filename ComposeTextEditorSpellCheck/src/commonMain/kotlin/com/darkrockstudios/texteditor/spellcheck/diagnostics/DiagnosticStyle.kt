@@ -15,7 +15,7 @@ import com.darkrockstudios.texteditor.state.TextEditorState
  */
 data class DiagnosticStyle(
 	val message: String,
-	val fixes: List<String>,
+	val fixes: List<DiagnosticFix>,
 	val color: Color,
 ) : RichSpanStyle {
 	override val isDecoration: Boolean get() = true
