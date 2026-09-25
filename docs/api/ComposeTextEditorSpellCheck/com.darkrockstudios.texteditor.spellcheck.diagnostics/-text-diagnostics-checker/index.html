@@ -2,7 +2,7 @@
 <html class="no-js" lang="en">
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1" charset="UTF-8">
-    <title>drawCustomStyle</title>
+    <title>TextDiagnosticsChecker</title>
 <link href="../../../images/logo-icon.svg" rel="icon" type="image/svg"><script>var pathToRoot = "../../../";</script>
     <script>document.documentElement.classList.replace("no-js", "js");</script>
     <script>const storage = localStorage.getItem("dokka-dark-mode")
@@ -42,7 +42,7 @@
         </div>
         <div class="navigation-controls">
         <ul class="filter-section filter-section_loading" id="filter-section" aria-label="Target filter">
-                <button class="platform-tag platform-selector common-like" data-active="" aria-pressed="true" data-filter=":ComposeTextEditor/commonMain">common</button>
+                <button class="platform-tag platform-selector common-like" data-active="" aria-pressed="true" data-filter=":ComposeTextEditorSpellCheck/commonMain">common</button>
             <div class="dropdown filter-section--dropdown" data-role="dropdown" id="filter-section-dropdown">
                 <button class="button button_dropdown filter-section--dropdown-toggle" role="combobox" data-role="dropdown-toggle" aria-controls="platform-tags-listbox" aria-haspopup="listbox" aria-expanded="false" aria-label="Toggle source sets"></button>
                 <ul role="listbox" id="platform-tags-listbox" class="dropdown--list" data-role="dropdown-listbox" aria-label="Target filter">
@@ -53,7 +53,7 @@
                     </div>
                         <li role="option" class="dropdown--option platform-selector-option common-like" tabindex="0">
                             <label class="checkbox">
-                                <input type="checkbox" class="checkbox--input" id=":ComposeTextEditor/commonMain" data-filter=":ComposeTextEditor/commonMain">
+                                <input type="checkbox" class="checkbox--input" id=":ComposeTextEditorSpellCheck/commonMain" data-filter=":ComposeTextEditorSpellCheck/commonMain">
                                 <span class="checkbox--icon"></span>
                                 common
                             </label>
@@ -89,12 +89,36 @@
         </nav>
         <div id="resizer" class="resizer" data-item-type="BAR"></div>
         <div id="main" data-item-type="SECTION" role="main">
-<div class="main-content" data-page-type="member" id="content" pageids="Editor::com.darkrockstudios.texteditor.richstyle/SpellCheckStyle/drawCustomStyle/androidx.compose.ui.graphics.drawscope.DrawScope#androidx.compose.ui.text.TextLayoutResult#com.darkrockstudios.texteditor.LineWrap#androidx.compose.ui.text.TextRange#com.darkrockstudios.texteditor.state.TextEditorState/PointingToDeclaration//-556598459">
-  <div class="breadcrumbs"><a href="../../index.html">Editor</a><span class="delimiter">/</span><a href="../index.html">com.darkrockstudios.texteditor.richstyle</a><span class="delimiter">/</span><a href="index.html">SpellCheckStyle</a><span class="delimiter">/</span><span class="current">drawCustomStyle</span></div>
+<div class="main-content" data-page-type="classlike" id="content" pageids="Spell Check::com.darkrockstudios.texteditor.spellcheck.diagnostics/TextDiagnosticsChecker///PointingToDeclaration//-479651739">
+  <div class="breadcrumbs"><a href="../../index.html">Spell Check</a><span class="delimiter">/</span><a href="../index.html">com.darkrockstudios.texteditor.spellcheck.diagnostics</a><span class="delimiter">/</span><span class="current">TextDiagnosticsChecker</span></div>
   <div class="cover ">
-    <h1 class="cover"><span>draw</span><wbr><span>Custom</span><wbr><span><span>Style</span></span></h1>
+    <h1 class="cover"><span>Text</span><wbr><span>Diagnostics</span><wbr><span><span>Checker</span></span></h1>
+    <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditorSpellCheck/commonMain"><div class="symbol monospace"><span class="token keyword">fun </span><span class="token keyword">interface </span><a href="index.html">TextDiagnosticsChecker</a><span class="source-link-wrapper"><span class="source-link" data-element-type="source-link">(<a href="https://github.com/Darkrock-Studios/ComposeTextEditor/blob/main/ComposeTextEditorSpellCheck/src/commonMain/kotlin/com/darkrockstudios/texteditor/spellcheck/diagnostics/TextDiagnosticsChecker.kt#L4">source</a>)</span></span></div><p class="paragraph">Finds issues other than spelling, such as grammar, in lines of text.</p></div></div>
   </div>
-  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">fun </span><a href="https://developer.android.com/reference/kotlin/androidx/compose/ui/graphics/drawscope/DrawScope.html">DrawScope</a><span class="token punctuation">.</span><a href="draw-custom-style.html"><span class="token function">drawCustomStyle</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">layoutResult<span class="token operator">: </span><a href="https://developer.android.com/reference/kotlin/androidx/compose/ui/text/TextLayoutResult.html">TextLayoutResult</a><span class="token punctuation">, </span></span><span class="parameter ">lineWrap<span class="token operator">: </span><a href="../../com.darkrockstudios.texteditor/-line-wrap/index.html">LineWrap</a><span class="token punctuation">, </span></span><span class="parameter ">textRange<span class="token operator">: </span><a href="https://developer.android.com/reference/kotlin/androidx/compose/ui/text/TextRange.html">TextRange</a><span class="token punctuation">, </span></span><span class="parameter ">state<span class="token operator">: </span><a href="../../com.darkrockstudios.texteditor.state/-text-editor-state/index.html">TextEditorState</a></span></span><span class="token punctuation">)</span><span class="source-link-wrapper"><span class="source-link" data-element-type="source-link">(<a href="https://github.com/Darkrock-Studios/ComposeTextEditor/blob/main/ComposeTextEditor/src/commonMain/kotlin/com/darkrockstudios/texteditor/richstyle/SpellCheckStyle.kt#L23">source</a>)</span></span></div><p class="paragraph">Paints the span's decoration. Runs AFTER <code class="lang-kotlin">drawText</code> for the line, so anything painted here overlays the text — good for foreground glyphs (bullet dots, ordered numerals), bars, borders, and underlines, but the caller must use translucent fills or the text will be obscured.</p><p class="paragraph">For opaque backgrounds (full-card code-block fill, etc.) override <a href="../-rich-span-style/draw-background.html">drawBackground</a> instead — that pass runs before <code class="lang-kotlin">drawText</code> so the text paints on top.</p><p class="paragraph"><a href="../-rich-span-style/draw-custom-style.html">state</a> is provided so styles that need editor-wide context (the <a href="../../com.darkrockstudios.texteditor.state/-text-editor-state/text-measurer.html">TextEditorState.textMeasurer</a> for laying out a marker glyph, the active <a href="../../com.darkrockstudios.texteditor.state/-text-editor-state/text-style.html">TextEditorState.textStyle</a>, etc.) can reach those without holding a back-reference. Most styles ignore it.</p></div></div>
+  <div class="tabbedcontent">
+    <div class="tabs-section" tabs-section="tabs-section"><button class="section-tab" data-active="" data-togglable="CONSTRUCTOR,TYPE,PROPERTY,FUNCTION">Members</button></div>
+    <div class="tabs-section-body">
+      <div data-togglable="FUNCTION">
+        <h2 class="tableheader">Functions</h2>
+        <div class="table"><a data-name="1814959298%2FFunctions%2F-479651739" anchor-label="check" id="1814959298%2FFunctions%2F-479651739" data-filterable-set=":ComposeTextEditorSpellCheck/commonMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":ComposeTextEditorSpellCheck/commonMain" data-filterable-set=":ComposeTextEditorSpellCheck/commonMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="check.html"><span><span>check</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="1814959298%2FFunctions%2F-479651739"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditorSpellCheck/commonMain"><div class="symbol monospace"><span class="token keyword">abstract </span><span class="token keyword">suspend </span><span class="token keyword">fun </span><a href="check.html"><span class="token function">check</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">lines<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/-list/index.html">List</a><span class="token operator">&lt;</span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html">String</a><span class="token operator">&gt;</span></span></span><span class="token punctuation">)</span><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/-list/index.html">List</a><span class="token operator">&lt;</span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/-list/index.html">List</a><span class="token operator">&lt;</span><a href="../-line-diagnostic/index.html">LineDiagnostic</a><span class="token operator">&gt;</span><span class="token operator">&gt;</span></div><div class="brief "><p class="paragraph">The issues in each of <a href="check.html">lines</a>, in the same order. A line is one of the editor's lines, a paragraph, without its line break. Called only for lines whose text it has not seen, so it should judge each line on its own. It must not throw: it runs inside the editor's effects.</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
     <div class="footer">
         <div class="footer--container">

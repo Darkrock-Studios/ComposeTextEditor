@@ -20,4 +20,5 @@ module:Spell Check
 com.darkrockstudios.texteditor.spellcheck
 com.darkrockstudios.texteditor.spellcheck.adapters
 com.darkrockstudios.texteditor.spellcheck.api
+com.darkrockstudios.texteditor.spellcheck.diagnostics
 com.darkrockstudios.texteditor.spellcheck.markdown
