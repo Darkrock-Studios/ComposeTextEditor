@@ -32,6 +32,7 @@ And now, it's working, and at this point, working pretty well.
 - ✅ Rich text with custom spans
 - ✅ Expose scroll state
 - ✅ Spell checking
+- ✅ Diagnostics from your own checker (grammar, style), underlined with a menu of fixes
 - ☑️ CommonMark Spec (partial)
   - Inline styles (bold, italics, ect)
   - Block styles (code fence, lists, images)

@@ -18,6 +18,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.contextmenu.ContextMenuItem
+import com.darkrockstudios.texteditor.richstyle.RichSpan
 import com.darkrockstudios.texteditor.richstyle.SpellCheckStyle
 import com.darkrockstudios.texteditor.spellcheck.SpellCheckItem
 import com.darkrockstudios.texteditor.spellcheck.SpellCheckMode
@@ -26,6 +27,10 @@ import com.darkrockstudios.texteditor.spellcheck.SpellCheckingTextEditor
 import com.darkrockstudios.texteditor.spellcheck.api.Correction
 import com.darkrockstudios.texteditor.spellcheck.api.EditorSpellChecker
 import com.darkrockstudios.texteditor.spellcheck.api.Suggestion
+import com.darkrockstudios.texteditor.spellcheck.diagnostics.DiagnosticStyle
+import com.darkrockstudios.texteditor.spellcheck.diagnostics.TextDiagnosticsChecker
+import com.darkrockstudios.texteditor.spellcheck.diagnostics.TextDiagnosticsState
+import com.darkrockstudios.texteditor.spellcheck.diagnostics.rememberTextDiagnosticsState
 import com.darkrockstudios.texteditor.spellcheck.rememberSpellCheckState
 
 /**
@@ -45,9 +50,11 @@ fun spellCheckUiTest(
 	width: Dp = 400.dp,
 	height: Dp = 300.dp,
 	spellCheckMenuItems: (SpellCheckItem) -> List<ContextMenuItem> = { emptyList() },
+	diagnosticsChecker: TextDiagnosticsChecker? = null,
 	block: SpellCheckUiTestScope.() -> Unit,
 ) = runSkikoComposeUiTest {
 	lateinit var state: SpellCheckState
+	var diagnostics: TextDiagnosticsState? = null
 	setContent {
 		state = rememberSpellCheckState(
 			spellChecker = spellChecker,
@@ -55,6 +62,7 @@ fun spellCheckUiTest(
 			enableSpellChecking = enableSpellChecking,
 			spellCheckMode = spellCheckMode,
 		)
+		diagnostics = diagnosticsChecker?.let { rememberTextDiagnosticsState(state.textState, it) }
 		SpellCheckingTextEditor(
 			spellChecker = spellChecker,
 			state = state,
@@ -65,17 +73,25 @@ fun spellCheckUiTest(
 			enabled = enabled,
 			autoFocus = true,
 			spellCheckMenuItems = spellCheckMenuItems,
+			diagnostics = diagnostics,
 		)
 	}
 	waitForIdle()
-	SpellCheckUiTestScope(this, state).block()
+	SpellCheckUiTestScope(this, state, diagnostics).block()
 }
 
 @OptIn(ExperimentalTestApi::class)
 class SpellCheckUiTestScope(
 	val test: SkikoComposeUiTest,
 	val state: SpellCheckState,
+	val diagnostics: TextDiagnosticsState? = null,
 ) {
+	/** The diagnostic underlines on the document, in order. */
+	val diagnosticSpans: List<RichSpan>
+		get() = state.textState.richSpanManager.getAllRichSpans()
+			.filter { it.style is DiagnosticStyle }
+			.sortedBy { it.range.start }
+
 	/** How many spell-check decoration spans are currently on the document. */
 	val spellCheckSpanCount: Int
 		get() = state.textState.richSpanManager.getAllRichSpans()

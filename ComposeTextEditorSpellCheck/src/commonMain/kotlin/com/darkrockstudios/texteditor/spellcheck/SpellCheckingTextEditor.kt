@@ -21,8 +21,12 @@ import com.darkrockstudios.texteditor.contextmenu.ContextMenuStrings
 import com.darkrockstudios.texteditor.contextmenu.TextEditorContextMenuState
 import com.darkrockstudios.texteditor.focusBorder
 import com.darkrockstudios.texteditor.rememberTextEditorStyle
+import com.darkrockstudios.texteditor.richstyle.RichSpan
 import com.darkrockstudios.texteditor.spellcheck.api.Correction
 import com.darkrockstudios.texteditor.spellcheck.api.EditorSpellChecker
+import com.darkrockstudios.texteditor.spellcheck.diagnostics.DiagnosticStyle
+import com.darkrockstudios.texteditor.spellcheck.diagnostics.TextDiagnosticsState
+import com.darkrockstudios.texteditor.spellcheck.utils.debounceUntilQuiescent
 import com.darkrockstudios.texteditor.spellcheck.utils.debounceUntilQuiescentWithBatch
 import com.darkrockstudios.texteditor.state.SpanClickType
 import com.darkrockstudios.texteditor.state.TextEditOperation
@@ -57,8 +61,11 @@ private val DefaultContentPadding = PaddingValues(start = 8.dp)
  *   as their own group after the suggestions (for example "Add to dictionary"). For a misspelled
  *   word they appear together with the suggestions once those have loaded. Not consulted while
  *   the editor is disabled. Read at click time, so it may close over changing state.
- * @param onRichSpanClick Optional listener for clicks on non-spell-check rich spans; spell-check
- *   spans are handled internally.
+ * @param diagnostics Underlines from a checker other than spelling, such as grammar, kept up to date
+ *   as the text changes. Its [TextDiagnosticsState.textState] must be [state]'s. A secondary click
+ *   or tap on one opens a menu of its message and fixes.
+ * @param onRichSpanClick Optional listener for clicks on other rich spans; spell-check and
+ *   diagnostic spans are handled internally.
  */
 @Composable
 fun SpellCheckingTextEditor(
@@ -71,6 +78,7 @@ fun SpellCheckingTextEditor(
 	style: TextEditorStyle = rememberTextEditorStyle(),
 	contextMenuStrings: ContextMenuStrings = ContextMenuStrings.Default,
 	spellCheckMenuItems: (SpellCheckItem) -> List<ContextMenuItem> = { emptyList() },
+	diagnostics: TextDiagnosticsState? = null,
 	onRichSpanClick: RichSpanClickListener? = null,
 ) {
 	val contextMenuState = remember { TextEditorContextMenuState() }
@@ -101,6 +109,30 @@ fun SpellCheckingTextEditor(
 					state.runPartialSpellCheck(range, computedAgainst)
 				}
 			}
+	}
+
+	if (diagnostics != null) {
+		LaunchedEffect(diagnostics) {
+			diagnostics.textState.documentGeneration.collect { generation ->
+				if (generation != diagnostics.refreshGeneration) diagnostics.refresh()
+			}
+		}
+		LaunchedEffect(diagnostics) {
+			diagnostics.textState.editOperations.collect(diagnostics::invalidate)
+		}
+		LaunchedEffect(diagnostics) {
+			diagnostics.textState.editOperations.debounceUntilQuiescent(500.milliseconds).collect { diagnostics.refresh() }
+		}
+	}
+
+	fun showDiagnosticMenu(offset: Offset, span: RichSpan, style: DiagnosticStyle) {
+		suggestionJob.value?.cancel()
+		suggestionJob.value = null
+		val message = ContextMenuItem(label = style.message, enabled = false, onClick = {})
+		val fixes = style.fixes.map { fix ->
+			ContextMenuItem(label = fix, enabled = true, onClick = { diagnostics?.applyFix(span, fix) })
+		}
+		contextMenuState.showMenu(Offset(offset.x, offset.y + wordVisibilityBuffer), listOf(message) + fixes)
 	}
 
 	fun createSpellSuggestionItems(
@@ -185,7 +217,13 @@ fun SpellCheckingTextEditor(
 			contextMenuStrings = contextMenuStrings,
 			contextMenuState = contextMenuState,
 			onRichSpanClick = { span, type, offset ->
-				if (type == SpanClickType.SECONDARY_CLICK || type == SpanClickType.TAP) {
+				val diagnostic = span.style as? DiagnosticStyle
+				if (diagnostic != null && diagnostics != null && enabled &&
+					(type == SpanClickType.SECONDARY_CLICK || type == SpanClickType.TAP)
+				) {
+					showDiagnosticMenu(offset, span, diagnostic)
+					true
+				} else if (type == SpanClickType.SECONDARY_CLICK || type == SpanClickType.TAP) {
 					// A disabled editor must not offer corrections it cannot apply.
 					val spellCheckItem: SpellCheckItem? = if (!enabled) null else when (val clickResult = state.handleSpanClick(span)) {
 						is WordSegment -> SpellCheckItem.MisspelledWord(clickResult)
