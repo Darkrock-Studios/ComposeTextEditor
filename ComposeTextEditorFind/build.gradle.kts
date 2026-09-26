@@ -72,6 +72,9 @@ kotlin {
 	}
 }
 
+// There are no wasmJs tests; this Compose check trips on the Skiko that main pulls in.
+tasks.matching { it.name == "checkComposeUiTestConfigurationForWasmJs" }.configureEach { enabled = false }
+
 dokka {
 	moduleName.set("Find & Replace")
 	dokkaSourceSets.configureEach {
