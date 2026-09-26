@@ -38,7 +38,8 @@ private class ImeComposeStateAdapter(
 	override fun get(index: Int): Char = editorState.imeCharAt(index)
 	override fun subSequence(startIndex: Int, endIndex: Int): CharSequence =
 		editorState.imeSubSequence(startIndex, endIndex)
-	override fun toString(): String = editorState.getAllText().toString()
+	override val text: String get() = editorState.getAllText().text
+	override fun toString(): String = text
 	override val selection get() = editorState.selectionAsTextRange()
 	override val composition get() = editorState.composingAsTextRange()
 }
@@ -158,6 +159,15 @@ private class TextEditorIOSInputMethodRequest(
 				)
 				val newCursor = currentVal.selection.start + text.length
 				value = TextFieldValue(newText, TextRange(newCursor, newCursor))
+			}
+
+			override fun setSelection(start: Int, end: Int) {
+				val length = value.text.length
+				value = value.copy(selection = TextRange(start.coerceIn(0, length), end.coerceIn(0, length)))
+			}
+
+			override fun setComposingRegion(start: Int, end: Int) {
+				// No-op for now
 			}
 
 			override fun setComposingText(text: CharSequence, newCursorPosition: Int) {
