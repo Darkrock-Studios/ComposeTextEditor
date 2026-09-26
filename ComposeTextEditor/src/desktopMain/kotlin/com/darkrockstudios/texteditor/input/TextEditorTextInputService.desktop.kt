@@ -130,7 +130,8 @@ private class ImeComposeStateAdapter(
 	override fun get(index: Int): Char = editorState.imeCharAt(index)
 	override fun subSequence(startIndex: Int, endIndex: Int): CharSequence =
 		editorState.imeSubSequence(startIndex, endIndex)
-	override fun toString(): String = editorState.getAllText().toString()
+	override val text: String get() = editorState.getAllText().text
+	override fun toString(): String = text
 	override val selection get() = editorState.selectionAsTextRange()
 	override val composition get() = editorState.composingAsTextRange()
 }
@@ -146,8 +147,12 @@ private class DesktopTextEditingScope(
 	override fun deleteSurroundingTextInCodePoints(lengthBeforeCursor: Int, lengthAfterCursor: Int) =
 		state.imeDeleteSurroundingTextInCodePoints(lengthBeforeCursor, lengthAfterCursor)
 
+	override fun setSelection(start: Int, end: Int) = state.imeSetSelection(start, end)
+
 	override fun commitText(text: CharSequence, newCursorPosition: Int) =
 		state.imeCommitText(text.toString(), newCursorPosition)
+
+	override fun setComposingRegion(start: Int, end: Int) = state.imeSetComposingRegion(start, end)
 
 	override fun setComposingText(text: CharSequence, newCursorPosition: Int) =
 		state.imeSetComposingText(text.toString(), newCursorPosition)
