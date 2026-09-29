@@ -16,6 +16,7 @@ import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.applyStyleForEditAt
 import com.darkrockstudios.texteditor.state.moveToNextWord
 import com.darkrockstudios.texteditor.state.moveToPreviousWord
+import com.darkrockstudios.texteditor.state.moveToWordEnd
 import com.darkrockstudios.texteditor.state.toggleSpanStyle
 import kotlinx.coroutines.launch
 
@@ -69,6 +70,9 @@ internal fun EditorActionRegistry.registerBuiltinActions() {
 	})
 	register(EditorActionSpec(Action.DeleteWordForward) { ctx ->
 		ctx.state.deleteByMotion { ctx.state.moveToNextWord() }
+	})
+	register(EditorActionSpec(Action.DeleteToWordEnd) { ctx ->
+		ctx.state.deleteByMotion { ctx.state.moveToWordEnd() }
 	})
 	register(EditorActionSpec(Action.DeleteToLineStart) { ctx ->
 		ctx.state.deleteByMotion { ctx.state.cursor.moveToLineStart() }

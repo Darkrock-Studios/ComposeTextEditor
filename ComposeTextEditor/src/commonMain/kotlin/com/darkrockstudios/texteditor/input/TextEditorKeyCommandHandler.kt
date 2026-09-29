@@ -22,6 +22,7 @@ import com.darkrockstudios.texteditor.state.moveToNextWord
 import com.darkrockstudios.texteditor.state.moveToParagraphEnd
 import com.darkrockstudios.texteditor.state.moveToParagraphStart
 import com.darkrockstudios.texteditor.state.moveToPreviousWord
+import com.darkrockstudios.texteditor.state.moveToWordEnd
 import kotlinx.coroutines.CoroutineScope
 
 /**
@@ -140,6 +141,7 @@ internal class TextEditorKeyCommandHandler(
 			Motion.Down -> state.moveCursorDown()
 			Motion.WordLeft -> state.moveToPreviousWord()
 			Motion.WordRight -> state.moveToNextWord()
+			Motion.WordEnd -> state.moveToWordEnd()
 			Motion.LineStart -> state.cursor.moveToLineStart()
 			Motion.LineEnd -> state.moveCursorToLineEnd()
 			Motion.DocumentStart -> state.moveToDocumentStart()

@@ -14,7 +14,11 @@ sealed interface EditorCommand {
 		Right,
 		Up,
 		Down,
+
+		/** To the start of the word, or of the previous one when not inside a word or at its start. */
 		WordLeft,
+
+		/** To the start of the next word: Ctrl+Right on Windows. */
 		WordRight,
 		LineStart,
 		LineEnd,
@@ -30,7 +34,13 @@ sealed interface EditorCommand {
 		ParagraphEnd,
 
 		/** To the start of the next paragraph, or the document end from the last one. */
-		NextParagraphStart;
+		NextParagraphStart,
+
+		/**
+		 * To the end of the word, or of the next one when not inside a word: Ctrl+Right on
+		 * Linux, Option+Right on macOS.
+		 */
+		WordEnd;
 
 		override val isEdit: Boolean get() = false
 	}
@@ -61,7 +71,11 @@ sealed interface EditorCommand {
 			val DeleteBackward = Action("editor.deleteBackward", isEdit = true)
 			val DeleteForward = Action("editor.deleteForward", isEdit = true)
 			val DeleteWordBackward = Action("editor.deleteWordBackward", isEdit = true)
+			/** Deletes to where [Motion.WordRight] goes, the start of the next word. */
 			val DeleteWordForward = Action("editor.deleteWordForward", isEdit = true)
+
+			/** Deletes to where [Motion.WordEnd] goes, the end of the word. */
+			val DeleteToWordEnd = Action("editor.deleteToWordEnd", isEdit = true)
 			val DeleteToLineStart = Action("editor.deleteToLineStart", isEdit = true)
 			val DeleteToLineEnd = Action("editor.deleteToLineEnd", isEdit = true)
 
@@ -104,6 +118,7 @@ sealed interface EditorCommand {
 				DeleteForward,
 				DeleteWordBackward,
 				DeleteWordForward,
+				DeleteToWordEnd,
 				DeleteToLineStart,
 				DeleteToLineEnd,
 				DeleteToParagraphEnd,

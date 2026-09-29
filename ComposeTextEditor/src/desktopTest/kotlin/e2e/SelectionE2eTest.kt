@@ -3,6 +3,7 @@ package e2e
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.text.AnnotatedString
 import com.darkrockstudios.texteditor.input.MacKeyBindings
+import com.darkrockstudios.texteditor.input.WindowsKeyBindings
 import utils.editorUiTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -36,8 +37,19 @@ class SelectionE2eTest {
 	}
 
 	@Test
-	fun `ctrl+shift+right selects to the next word start`() = editorUiTest(
+	fun `ctrl+shift+right selects to the word end`() = editorUiTest(
 		initialText = AnnotatedString("The quick brown fox"),
+	) {
+		clickAtCharacter(0)
+		press(Key.DirectionRight, ctrl = true, shift = true)
+
+		assertEquals("The", selectedText)
+	}
+
+	@Test
+	fun `ctrl+shift+right on windows selects to the next word start`() = editorUiTest(
+		initialText = AnnotatedString("The quick brown fox"),
+		keyBindings = WindowsKeyBindings,
 	) {
 		clickAtCharacter(0)
 		press(Key.DirectionRight, ctrl = true, shift = true)
@@ -189,10 +201,10 @@ class SelectionE2eTest {
 	) {
 		clickAtCharacter(4)
 		press(Key.DirectionRight, ctrl = true, shift = true)
-		assertEquals("quick ", selectedText)
+		assertEquals("quick", selectedText)
 
 		press(Key.DirectionRight, ctrl = true, shift = true)
-		assertEquals("quick brown ", selectedText)
+		assertEquals("quick brown", selectedText)
 
 		press(Key.DirectionLeft, ctrl = true, shift = true)
 		assertTrue(selectedText.startsWith("quick"), "shrinking must keep the anchor, was '$selectedText'")

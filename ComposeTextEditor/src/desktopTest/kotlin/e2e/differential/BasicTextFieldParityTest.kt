@@ -1,7 +1,6 @@
 package e2e.differential
 
 import androidx.compose.ui.unit.dp
-import kotlin.test.Test
 import utils.Backspace
 import utils.CtrlBackspace
 import utils.CtrlDelete
@@ -35,6 +34,7 @@ import utils.ShiftUp
 import utils.Up
 import utils.assertMatchesNative
 import utils.type
+import kotlin.test.Test
 
 /**
  * Keyboard behaviour compared against `BasicTextField`; see [utils.differentialUiTest]
@@ -222,14 +222,12 @@ class BasicTextFieldParityTest {
 	fun `ctrl right stops at word ends`() = assertMatchesNative(
 		start = EditSnapshot("hello big world", caret = 0),
 		strokes = listOf(CtrlRight, CtrlRight),
-		divergesUntil = "1.19",
 	)
 
 	@Test
 	fun `ctrl shift right selects by words`() = assertMatchesNative(
 		start = EditSnapshot("hello big world", caret = 0),
 		strokes = listOf(CtrlShiftRight, CtrlShiftRight, CtrlShiftLeft),
-		divergesUntil = "1.19",
 	)
 
 	@Test
@@ -242,14 +240,12 @@ class BasicTextFieldParityTest {
 	fun `ctrl delete removes to the next word end`() = assertMatchesNative(
 		start = EditSnapshot("hello big world", caret = 5),
 		strokes = listOf(CtrlDelete),
-		divergesUntil = "1.19",
 	)
 
 	@Test
 	fun `ctrl right stops at the line end`() = assertMatchesNative(
 		start = EditSnapshot("first line\nsecond line", caret = 6),
 		strokes = listOf(CtrlRight),
-		divergesUntil = "1.5",
 	)
 
 	@Test

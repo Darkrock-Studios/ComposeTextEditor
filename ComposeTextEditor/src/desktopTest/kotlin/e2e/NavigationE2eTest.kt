@@ -4,6 +4,7 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import com.darkrockstudios.texteditor.CharLineOffset
+import com.darkrockstudios.texteditor.input.WindowsKeyBindings
 import utils.EditorUiTestScope
 import utils.editorUiTest
 import kotlin.math.abs
@@ -275,8 +276,21 @@ class NavigationE2eTest {
 	}
 
 	@Test
-	fun `ctrl+right jumps word by word`() = editorUiTest(
+	fun `ctrl+right jumps to word ends`() = editorUiTest(
 		initialText = AnnotatedString("The quick brown fox"),
+	) {
+		clickAtCharacter(0)
+		press(Key.DirectionRight, ctrl = true)
+		assertEquals(3, cursorIndex, "first jump lands after 'The'")
+
+		press(Key.DirectionRight, ctrl = true)
+		assertEquals(9, cursorIndex, "second jump lands after 'quick'")
+	}
+
+	@Test
+	fun `ctrl+right on windows jumps to word starts`() = editorUiTest(
+		initialText = AnnotatedString("The quick brown fox"),
+		keyBindings = WindowsKeyBindings,
 	) {
 		clickAtCharacter(0)
 		press(Key.DirectionRight, ctrl = true)
@@ -284,6 +298,15 @@ class NavigationE2eTest {
 
 		press(Key.DirectionRight, ctrl = true)
 		assertEquals(10, cursorIndex, "second jump lands on 'brown'")
+	}
+
+	@Test
+	fun `ctrl+right from a line end goes to the end of the next line's first word`() = editorUiTest(
+		initialText = AnnotatedString("first line\n  second line"),
+	) {
+		clickAtCharacter(10)
+		press(Key.DirectionRight, ctrl = true)
+		assertEquals(19, cursorIndex)
 	}
 
 	@Test

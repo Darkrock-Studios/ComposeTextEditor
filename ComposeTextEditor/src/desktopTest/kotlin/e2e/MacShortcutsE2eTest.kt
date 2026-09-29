@@ -74,10 +74,10 @@ class MacShortcutsE2eTest {
 	) {
 		clickAtCharacter(0)
 		press(Key.DirectionRight, alt = true)
-		assertEquals(4, cursorIndex, "first jump lands on 'quick'")
+		assertEquals(3, cursorIndex, "first jump lands after 'The'")
 
 		press(Key.DirectionRight, alt = true)
-		assertEquals(10, cursorIndex, "second jump lands on 'brown'")
+		assertEquals(9, cursorIndex, "second jump lands after 'quick'")
 
 		press(Key.DirectionLeft, alt = true)
 		assertEquals(4, cursorIndex)
@@ -91,7 +91,7 @@ class MacShortcutsE2eTest {
 		clickAtCharacter(0)
 		press(Key.DirectionRight, alt = true, shift = true)
 
-		assertEquals("The ", selectedText)
+		assertEquals("The", selectedText)
 	}
 
 	@Test
@@ -171,14 +171,14 @@ class MacShortcutsE2eTest {
 	}
 
 	@Test
-	fun `option+delete deletes the next word`() = editorUiTest(
+	fun `option+delete deletes to the word end`() = editorUiTest(
 		initialText = AnnotatedString("The quick brown fox"),
 		keyBindings = MacKeyBindings,
 	) {
 		clickAtCharacter(4)
 		press(Key.Delete, alt = true)
 
-		assertEquals("The brown fox", text)
+		assertEquals("The  brown fox", text)
 	}
 
 	@Test

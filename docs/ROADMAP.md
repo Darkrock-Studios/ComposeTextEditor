@@ -304,7 +304,9 @@ fixes what users feel every minute.
 - [ ] **1.5 Word motion and word selection. C, U.** [Opus] [Lane A]
   - Line end is not a boundary: Ctrl+Right from the last word of a line skips
     the first word of the next, and Ctrl+Delete deletes it
-    (hammer-editor#852).
+    (hammer-editor#852). Since 1.19 only Windows' next-word-start motion
+    (`WordRight`, `DeleteWordForward`) does this; the word end stops at the
+    line end.
   - Only the straight apostrophe is a word character
     (`state/WordSegmentationUtils.kt`), so "don’t" splits. This also makes
     spell check flag contractions in typeset prose.
@@ -376,11 +378,18 @@ fixes what users feel every minute.
 
 ### Found by the differential tests
 
-- [ ] **1.19 Word ends. R.** [Opus] [Lane A] Ctrl+Right and Ctrl+Shift+Right
+- [x] **1.19 Word ends. R.** [Opus] [Lane A] Ctrl+Right and Ctrl+Shift+Right
   stop at the start of the next word; `BasicTextField` stops at the end of the
   current one, and its Ctrl+Delete deletes to that end. Windows editors stop at
   the next word start, so the answer may be per platform (see 2.6 for macOS).
   Decide, then clear the `divergesUntil = "1.19"` cases.
+  Decided per platform, through the binding tables rather than `expect`/`actual`
+  (Windows and Linux share the desktop target): `Motion.WordEnd` and
+  `Action.DeleteToWordEnd` sit beside `WordRight` and `DeleteWordForward`.
+  `CtrlKeyBindings` (Linux, Android, other Ctrl hosts) and `MacKeyBindings`
+  (Option+Right, Option+Delete) use the word end, like GTK, `EditText` and
+  Cocoa; `WindowsKeyBindings` keeps the next word start. Desktop picks Windows
+  from `os.name` and the web from the browser's platform and user agent.
 - [x] **1.20 Joining lines deletes an empty line. R.** [Opus] [Lane G] In a
   three-line document with an empty line, joining the other two lines also
   deletes the empty one: Backspace before `c` in `\nb\nc` gives `bc`, and
@@ -422,7 +431,8 @@ fixes what users feel every minute.
   are on `CtrlKeyBindings` only; the dedicated keys are on both. Shift+Delete
   with no selection is a no-op, as a cut of nothing is.
 - [ ] **2.6 macOS conventions.** [Opus] [Lane A] Option+Right stops at the end
-  of the current word, not the start of the next. The Emacs-style Ctrl bindings
+  of the current word, not the start of the next (done with 1.19, as is
+  Option+Delete deleting to the word end). The Emacs-style Ctrl bindings
   (A, E, F, B, N, P, D, H, K) that every Cocoa text view has. K landed with
   2.4. Ctrl+Y (yank) needs a kill ring that K fills, which does not exist.
 - [ ] **2.7 Layout-aware shortcuts. U.** [Fable] [Lane D] A BEPO user reports

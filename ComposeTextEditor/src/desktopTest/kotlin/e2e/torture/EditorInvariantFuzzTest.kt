@@ -19,12 +19,15 @@ class EditorInvariantFuzzTest {
 
 	private fun fuzz(seed: Long) = invariantFuzz(seed = fuzzSeed(seed), count = 120, width = WIDTH)
 
-	private fun assertStillFails(invariant: EditorInvariant, seed: Long) {
+	/** Passes on the first of [seeds] that breaks [invariant], so unrelated fixes cannot retire the check. */
+	private fun assertStillFails(invariant: EditorInvariant, seeds: LongRange = 1L..12L) {
 		if (invariant.onByDefault) return
-		val failure = runCatching {
-			invariantFuzz(seed = seed, count = 80, width = WIDTH, invariants = setOf(invariant))
-		}.exceptionOrNull() ?: fail(
-			"$invariant now holds on seed $seed; if roadmap items ${invariant.needs.toList()} " +
+		val failure = seeds.firstNotNullOfOrNull { seed ->
+			runCatching {
+				invariantFuzz(seed = seed, count = 80, width = WIDTH, invariants = setOf(invariant))
+			}.exceptionOrNull()
+		} ?: fail(
+			"$invariant now holds on seeds $seeds; if roadmap items ${invariant.needs.toList()} " +
 				"have landed, delete them from OPEN_PARITY_ITEMS"
 		)
 		assertTrue(
@@ -50,11 +53,11 @@ class EditorInvariantFuzzTest {
 
 	@Test
 	fun `NoLoneSurrogate still fails while its items are open`() =
-		assertStillFails(EditorInvariant.NoLoneSurrogate, seed = 1)
+		assertStillFails(EditorInvariant.NoLoneSurrogate)
 
 	@Test
 	fun `CaretOnGraphemeBoundary still fails while its items are open`() =
-		assertStillFails(EditorInvariant.CaretOnGraphemeBoundary, seed = 2)
+		assertStillFails(EditorInvariant.CaretOnGraphemeBoundary)
 
 	private companion object {
 		val WIDTH = 160.dp

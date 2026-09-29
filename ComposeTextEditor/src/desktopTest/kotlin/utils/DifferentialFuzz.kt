@@ -12,7 +12,7 @@ import kotlin.test.fail
  * reference's state and the script continues. Delete an item here when it lands,
  * and the fuzzer starts failing on that class of divergence.
  */
-val OPEN_PARITY_ITEMS: Set<String> = setOf("1.1", "1.5", "1.6", "1.19", "7.5")
+val OPEN_PARITY_ITEMS: Set<String> = setOf("1.1", "1.5", "1.6", "7.5")
 
 /** Starting text for the Unicode fuzzers: an emoji, a combining mark, and a right-to-left word. */
 const val FUZZ_START_TEXT = "seed line\nsecond line of words\n\uD83D\uDE00 e\u0301 שלום end"
@@ -83,8 +83,7 @@ fun explainDivergence(
 	if (stroke !is Stroke.Press) return@buildSet
 	when (stroke.key) {
 		Key.DirectionLeft, Key.DirectionRight -> if (stroke.ctrl) {
-			add("1.5")
-			if (stroke.key == Key.DirectionRight) add("1.19")
+			if (stroke.key == Key.DirectionLeft || crossesWordBreakText(before, native, editor)) add("1.5")
 		} else {
 			val collapses = !stroke.shift && before.hasSelection
 			if (collapses) add("1.4")
@@ -93,8 +92,7 @@ fun explainDivergence(
 		}
 
 		Key.Backspace, Key.Delete -> if (stroke.ctrl) {
-			add("1.5")
-			if (stroke.key == Key.Delete) add("1.19")
+			if (stroke.key == Key.Backspace || crossesWordBreakText(before, native, editor)) add("1.5")
 		} else if (!before.hasSelection && before.text.length - native.text.length > 1) {
 			add("1.1")
 		}
@@ -127,6 +125,20 @@ fun explainDivergence(
 private fun DifferentialScope.sameRow(a: EditSnapshot, b: EditSnapshot): Boolean {
 	val rows = editorRows()
 	return rows.indexOfLast { it <= a.caret } == rows.indexOfLast { it <= b.caret }
+}
+
+/**
+ * Whether a forward word stroke passed text where the editor's word rule and the
+ * reference's word break iterator can disagree (1.5): anything but letters and digits
+ * below the CJK blocks, spaces and line breaks.
+ */
+private fun crossesWordBreakText(before: EditSnapshot, native: EditSnapshot, editor: EditSnapshot): Boolean {
+	val deleted = before.text.length - minOf(native.text.length, editor.text.length)
+	val from = minOf(before.caret, native.caret, editor.caret)
+	val to = minOf(before.text.length, maxOf(native.caret, editor.caret, before.caret + deleted) + 1)
+	return before.text.substring(from, to).any {
+		!(it == ' ' || it == '\n' || (it.isLetterOrDigit() && it < '\u2E80'))
+	}
 }
 
 private fun String.paragraphHasRightToLeft(index: Int): Boolean {

@@ -56,9 +56,10 @@ val LocalKeyBindings = staticCompositionLocalOf { platformKeyBindings() }
 
 /**
  * Linux conventions, also used on Android: Ctrl for shortcuts, Ctrl+Left/Right for word
- * jumps, Ctrl+Up/Down for paragraph jumps, Home/End for line bounds. Ctrl+Down stops at the
- * end of the paragraph, as GTK, `EditText` and `BasicTextField` do. Windows differs only in
- * that, see [WindowsKeyBindings].
+ * jumps, Ctrl+Up/Down for paragraph jumps, Home/End for line bounds. Going forward, Ctrl+Right
+ * and Ctrl+Delete stop at the end of the word and Ctrl+Down at the end of the paragraph, as
+ * GTK, `EditText` and `BasicTextField` do. Windows differs only in those, see
+ * [WindowsKeyBindings].
  */
 object CtrlKeyBindings : KeyBindings {
 	override fun commandFor(event: KeyEvent): EditorCommand? {
@@ -87,14 +88,14 @@ object CtrlKeyBindings : KeyBindings {
 			}
 
 			Key.DirectionLeft -> if (ctrl) Motion.WordLeft else Motion.Left
-			Key.DirectionRight -> if (ctrl) Motion.WordRight else Motion.Right
+			Key.DirectionRight -> if (ctrl) Motion.WordEnd else Motion.Right
 			Key.DirectionUp -> if (ctrl) Motion.ParagraphStart else Motion.Up
 			Key.DirectionDown -> if (ctrl) Motion.ParagraphEnd else Motion.Down
 			Key.MoveHome -> if (ctrl) Motion.DocumentStart else Motion.LineStart
 			Key.MoveEnd -> if (ctrl) Motion.DocumentEnd else Motion.LineEnd
 			Key.Backspace -> if (ctrl) Action.DeleteWordBackward else Action.DeleteBackward
 			Key.Delete -> when {
-				ctrl -> Action.DeleteWordForward
+				ctrl -> Action.DeleteToWordEnd
 				event.isShiftPressed && !event.isAltPressed -> Action.Cut
 				else -> Action.DeleteForward
 			}
@@ -112,24 +113,33 @@ object CtrlKeyBindings : KeyBindings {
 }
 
 /**
- * Windows conventions: [CtrlKeyBindings], except that Ctrl+Down goes on to the start of the
- * next paragraph, as Word and WordPad do.
+ * Windows conventions: [CtrlKeyBindings], except that going forward runs on to the next
+ * start, as Windows edit controls, Word and WordPad do: Ctrl+Right and Ctrl+Delete to the
+ * start of the next word, Ctrl+Down to the start of the next paragraph.
  */
 object WindowsKeyBindings : KeyBindings {
-	override fun commandFor(event: KeyEvent): EditorCommand? =
-		if (event.isCtrlShortcut && event.navigationKey == Key.DirectionDown) {
-			Motion.NextParagraphStart
+	override fun commandFor(event: KeyEvent): EditorCommand? {
+		val forward = if (event.isCtrlShortcut) {
+			when (event.navigationKey) {
+				Key.DirectionRight -> Motion.WordRight
+				Key.DirectionDown -> Motion.NextParagraphStart
+				Key.Delete -> Action.DeleteWordForward
+				else -> null
+			}
 		} else {
-			CtrlKeyBindings.commandFor(event)
+			null
 		}
+		return forward ?: CtrlKeyBindings.commandFor(event)
+	}
 }
 
 /**
- * macOS conventions: Cmd for shortcuts, Option+Left/Right for word jumps, Option+Up/Down for
- * paragraph jumps, Cmd+Arrow for line and document bounds. Ctrl never selects a different
- * command than the unmodified key would, since on macOS it belongs to the system and to the
- * Emacs-style text bindings. The exceptions are Ctrl+K, which is one of those Emacs-style
- * bindings, and Enter, where every Ctrl, Cmd or Option chord is left for the host.
+ * macOS conventions: Cmd for shortcuts, Option+Left/Right for word jumps (Option+Right to the
+ * end of the word), Option+Up/Down for paragraph jumps, Cmd+Arrow for line and document
+ * bounds. Ctrl never selects a different command than the unmodified key would, since on
+ * macOS it belongs to the system and to the Emacs-style text bindings. The exceptions are
+ * Ctrl+K, which is one of those Emacs-style bindings, and Enter, where every Ctrl, Cmd or
+ * Option chord is left for the host.
  *
  * Option is also the macOS compose modifier (Option+8 types '{'), so only the chords claimed here
  * may consume an Option event; everything else must fall through to
@@ -170,7 +180,7 @@ object MacKeyBindings : KeyBindings {
 
 			Key.DirectionRight -> when {
 				cmd -> Motion.LineEnd
-				option -> Motion.WordRight
+				option -> Motion.WordEnd
 				else -> Motion.Right
 			}
 
@@ -196,7 +206,7 @@ object MacKeyBindings : KeyBindings {
 
 			Key.Delete -> when {
 				cmd -> Action.DeleteToLineEnd
-				option -> Action.DeleteWordForward
+				option -> Action.DeleteToWordEnd
 				else -> Action.DeleteForward
 			}
 

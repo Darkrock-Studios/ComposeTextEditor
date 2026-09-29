@@ -122,6 +122,27 @@ fun TextEditorState.moveToNextWord() {
 }
 
 /**
+ * Moves the cursor to the end of the current word, or of the next one when it is not
+ * inside a word, or to the document end if no word remains.
+ */
+fun TextEditorState.moveToWordEnd() {
+	var (line, char) = cursorPosition
+	while (!isWordChar(textLines[line], char)) {
+		when {
+			char < textLines[line].length -> char++
+			line < textLines.lastIndex -> {
+				line++
+				char = 0
+			}
+
+			else -> break
+		}
+	}
+	while (isWordChar(textLines[line], char)) char++
+	cursor.updatePosition(CharLineOffset(line, char))
+}
+
+/**
  * Moves the cursor to the start of the current or previous word, or to the
  * document start if already at the beginning.
  */

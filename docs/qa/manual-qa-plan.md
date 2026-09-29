@@ -140,7 +140,8 @@ On macOS, verify each:
 | Cmd+C / Cmd+V / Cmd+X | Copy / paste / cut |
 | Cmd+A | Select all |
 | Cmd+Z / Cmd+Shift+Z | Undo / redo |
-| Option+Left / Option+Right | Word-wise motion |
+| Option+Left / Option+Right | Word start / word end (the end of the current word, or of the next one) |
+| Option+Delete (forward delete) | Delete to the word end |
 | Option+Up / Option+Down | Paragraph start (then the previous one's) / paragraph end (then the next one's); with Shift, selects |
 | Cmd+Left / Cmd+Right | Line start / line end |
 | Cmd+Up / Cmd+Down | Document start / end |
@@ -214,6 +215,8 @@ On every desktop platform unless a row names one; the macOS chords are in 3.1.
 | PageDown / PageUp in a long document | The caret moves a viewport's height and keeps its place on screen and its column; the view scrolls with it |
 | PageDown on the last page / PageUp on the first | Document end / start |
 | Arrow down past the viewport bottom while typing | The view scrolls just enough to show the caret's row, with no extra margin |
+| Ctrl+Right / Ctrl+Delete on Linux | To / delete to the end of the word, or of the next one |
+| Ctrl+Right / Ctrl+Delete on Windows | To / delete to the start of the next word |
 | Ctrl+Up | Paragraph start, then the previous paragraph's start; with Shift, selects |
 | Ctrl+Down on Linux | Paragraph end, then the next paragraph's end; with Shift, selects |
 | Ctrl+Down on Windows | The next paragraph's start; from the last paragraph, the document end; with Shift, selects |

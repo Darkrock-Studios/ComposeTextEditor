@@ -79,9 +79,9 @@ host:
 
 | Table | Used on | Differs in |
 | --- | --- | --- |
-| `CtrlKeyBindings` | Linux, Android, and any other Ctrl host | The base: Ctrl for shortcuts and jumps |
-| `WindowsKeyBindings` | Windows desktop, browsers on Windows | Ctrl+Down goes on to the next paragraph's start (Word, WordPad) instead of stopping at the paragraph's end |
-| `MacKeyBindings` | macOS, iPadOS, browsers on macOS | Cmd for shortcuts, Option for word and paragraph jumps |
+| `CtrlKeyBindings` | Linux, Android, and any other Ctrl host | The base: Ctrl for shortcuts and jumps; going forward stops at ends (GTK, `EditText`) |
+| `WindowsKeyBindings` | Windows desktop, browsers on Windows | Going forward runs on to the next start: Ctrl+Right and Ctrl+Delete to the next word's (`WordRight`, `DeleteWordForward`), Ctrl+Down to the next paragraph's |
+| `MacKeyBindings` | macOS, iPadOS, browsers on macOS | Cmd for shortcuts, Option for word and paragraph jumps; Option+Right and Option+Delete stop at the word end |
 
 Windows and Linux are the same desktop JVM target, so the choice is made at
 runtime from `os.name` (desktop) or the browser's platform and user agent

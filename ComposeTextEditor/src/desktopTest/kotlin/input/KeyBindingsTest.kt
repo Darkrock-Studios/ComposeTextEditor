@@ -59,7 +59,7 @@ class KeyBindingsTest {
 			CtrlKeyBindings.commandFor(chord(Key.DirectionLeft, ctrl = true)),
 		)
 		assertEquals(
-			Motion.WordRight,
+			Motion.WordEnd,
 			CtrlKeyBindings.commandFor(chord(Key.DirectionRight, ctrl = true)),
 		)
 		assertEquals(Motion.LineStart, CtrlKeyBindings.commandFor(chord(Key.MoveHome)))
@@ -88,6 +88,21 @@ class KeyBindingsTest {
 	}
 
 	@Test
+	fun `windows ctrl right and ctrl delete go on to the next word start`() {
+		assertEquals(Motion.WordRight, WindowsKeyBindings.commandFor(chord(Key.DirectionRight, ctrl = true)))
+		assertEquals(
+			Motion.WordRight,
+			WindowsKeyBindings.commandFor(chord(Key.NumPadDirectionRight, ctrl = true, shift = true)),
+		)
+		assertEquals(Action.DeleteWordForward, WindowsKeyBindings.commandFor(chord(Key.Delete, ctrl = true)))
+		assertEquals(Action.DeleteWordForward, WindowsKeyBindings.commandFor(chord(Key.NumPadDelete, ctrl = true)))
+		assertEquals(Motion.WordLeft, WindowsKeyBindings.commandFor(chord(Key.DirectionLeft, ctrl = true)))
+		assertEquals(Action.DeleteWordBackward, WindowsKeyBindings.commandFor(chord(Key.Backspace, ctrl = true)))
+		assertEquals(Motion.Right, WindowsKeyBindings.commandFor(chord(Key.DirectionRight, ctrl = true, alt = true)))
+		assertEquals(Action.Cut, WindowsKeyBindings.commandFor(chord(Key.Delete, shift = true)))
+	}
+
+	@Test
 	fun `windows ctrl down goes on to the next paragraph start`() {
 		assertEquals(Motion.ParagraphStart, WindowsKeyBindings.commandFor(chord(Key.DirectionUp, ctrl = true)))
 		assertEquals(
@@ -104,11 +119,13 @@ class KeyBindingsTest {
 
 	@Test
 	fun `the windows table agrees with the ctrl table away from its own chords`() {
-		val ownKeys = setOf(Key.DirectionDown, Key.NumPadDirectionDown)
-		val keys = listOf(
+		val ownKeys = setOf(
+			Key.DirectionRight, Key.NumPadDirectionRight, Key.DirectionDown, Key.NumPadDirectionDown,
+			Key.Delete, Key.NumPadDelete,
+		)
+		val keys = ownKeys + listOf(
 			Key.A, Key.C, Key.V, Key.X, Key.Y, Key.Z, Key.B, Key.K, Key.Enter, Key.Tab, Key.Insert,
-			Key.DirectionLeft, Key.DirectionRight, Key.DirectionUp, Key.DirectionDown, Key.NumPadDirectionDown,
-			Key.MoveHome, Key.MoveEnd, Key.PageUp, Key.PageDown, Key.Backspace, Key.Delete,
+			Key.DirectionLeft, Key.DirectionUp, Key.MoveHome, Key.MoveEnd, Key.PageUp, Key.PageDown, Key.Backspace,
 		)
 		val flags = listOf(false, true)
 		for (key in keys) for (ctrl in flags) for (shift in flags) for (alt in flags) {
@@ -142,7 +159,7 @@ class KeyBindingsTest {
 		)
 		assertEquals(Action.DeleteForward, CtrlKeyBindings.commandFor(chord(Key.Delete)))
 		assertEquals(
-			Action.DeleteWordForward,
+			Action.DeleteToWordEnd,
 			CtrlKeyBindings.commandFor(chord(Key.Delete, ctrl = true)),
 		)
 	}
@@ -229,7 +246,7 @@ class KeyBindingsTest {
 			MacKeyBindings.commandFor(chord(Key.DirectionLeft, alt = true)),
 		)
 		assertEquals(
-			Motion.WordRight,
+			Motion.WordEnd,
 			MacKeyBindings.commandFor(chord(Key.DirectionRight, alt = true)),
 		)
 		assertEquals(
@@ -262,7 +279,7 @@ class KeyBindingsTest {
 			MacKeyBindings.commandFor(chord(Key.Backspace, meta = true)),
 		)
 		assertEquals(
-			Action.DeleteWordForward,
+			Action.DeleteToWordEnd,
 			MacKeyBindings.commandFor(chord(Key.Delete, alt = true)),
 		)
 	}
