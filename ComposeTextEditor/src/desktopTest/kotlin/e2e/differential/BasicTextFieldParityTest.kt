@@ -266,14 +266,14 @@ class BasicTextFieldParityTest {
 
 	@Test
 	fun `right and left step over an emoji whole`() = assertMatchesNative(
-		start = EditSnapshot("a😀b", caret = 1),
+		start = EditSnapshot("a\uD83D\uDE00b", caret = 1),
 		strokes = listOf(Right, Left),
 		divergesUntil = "1.1",
 	)
 
 	@Test
 	fun `backspace after an emoji removes it whole`() = assertMatchesNative(
-		start = EditSnapshot("a😀b", caret = 3),
+		start = EditSnapshot("a\uD83D\uDE00b", caret = 3),
 		strokes = listOf(Backspace),
 		divergesUntil = "1.1",
 	)
@@ -286,35 +286,35 @@ class BasicTextFieldParityTest {
 
 	@Test
 	fun `delete before an emoji removes it whole`() = assertMatchesNative(
-		start = EditSnapshot("a😀b", caret = 1),
+		start = EditSnapshot("a\uD83D\uDE00b", caret = 1),
 		strokes = listOf(Delete),
 		divergesUntil = "1.1",
 	)
 
 	@Test
 	fun `shift right selects an emoji whole`() = assertMatchesNative(
-		start = EditSnapshot("a😀b", caret = 1),
+		start = EditSnapshot("a\uD83D\uDE00b", caret = 1),
 		strokes = listOf(ShiftRight),
 		divergesUntil = "1.1",
 	)
 
 	@Test
 	fun `right steps over a zwj sequence whole`() = assertMatchesNative(
-		start = EditSnapshot("a👨‍👩‍👧b", caret = 1),
+		start = EditSnapshot("a\uD83D\uDC68\u200D\uD83D\uDC69\u200D\uD83D\uDC67b", caret = 1),
 		strokes = listOf(Right),
 		divergesUntil = "1.1",
 	)
 
 	@Test
 	fun `right steps over a flag whole`() = assertMatchesNative(
-		start = EditSnapshot("a🇯🇵b", caret = 1),
+		start = EditSnapshot("a\uD83C\uDDEF\uD83C\uDDF5b", caret = 1),
 		strokes = listOf(Right),
 		divergesUntil = "1.1",
 	)
 
 	@Test
 	fun `right steps over a combining mark with its base`() = assertMatchesNative(
-		start = EditSnapshot("aéb", caret = 1),
+		start = EditSnapshot("ae\u0301b", caret = 1),
 		strokes = listOf(Right),
 		divergesUntil = "1.1",
 	)
@@ -322,7 +322,7 @@ class BasicTextFieldParityTest {
 	@Test
 	fun `typed emoji and cjk text match`() = assertMatchesNative(
 		start = EditSnapshot("", caret = 0),
-		strokes = listOf(type("日本 😀 é"), Home, End),
+		strokes = listOf(type("日本 \uD83D\uDE00 é"), Home, End),
 	)
 
 	@Test

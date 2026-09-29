@@ -72,6 +72,14 @@ practical reference is `BasicTextField`: it runs in the same test harness and
 already gets these conventions right. Every Phase 1 item below where the editor
 and `BasicTextField` were both probed, `BasicTextField` gave the native answer.
 
+Exceptions, where `BasicTextField` is not native (found by 0.2, and tolerated
+by its `referenceQuirk`): with a selection, its Home and End measure from the
+selection's start and end rather than the caret; Home on an empty last line
+moves to the end of the line above; End on a paragraph's last row stops before
+its trailing spaces; a word wider than the row is broken where it starts
+instead of moving to the next row. Its arrow keys in right-to-left text are
+logical, like the editor's (7.5).
+
 ## Workflow
 
 ### Branch and machines
@@ -154,7 +162,7 @@ review.
 | D | Bindings, actions, menu | `input/KeyBindings.kt`, `input/EditorCommand.kt`, `input/BuiltinEditorActions.kt`, `contextmenu/` | 2.1, 2.2, 2.4, 2.5, 2.7 to 2.10, 4.8, 5.8 |
 | E | Input sessions on desktop, iOS, web | `desktopMain`, `iosMain`, `wasmJsMain` under `input/` | 4.2 to 4.7, 4.10 to 4.12, 4.19 |
 | F | Android input | `androidMain` | 0.4, 3.9 to 3.11, 3.14, 4.16, 4.18, 4.20 |
-| G | Edit pipeline and undo | `state/TextEditManager.kt`, `state/TextEditHistory.kt`, `state/EditBehavior.kt`, `input/ImeEditLogic.kt` | 5.1 to 5.5, 6.1 to 6.6 |
+| G | Edit pipeline and undo | `state/TextEditManager.kt`, `state/TextEditHistory.kt`, `state/EditBehavior.kt`, `input/ImeEditLogic.kt` | 1.20, 5.1 to 5.5, 6.1 to 6.6 |
 | H | Clipboard and HTML | `clipboard/`, `html/` | 4.9, 4.13, 4.17, 6.7 to 6.12 |
 | I | Markdown and block model | `markdown/`, `richstyle/` | 5.6, 7.14 to 7.16 |
 | J | Find addon | `ComposeTextEditorFind/` | 7.17 to 7.19 |
@@ -221,9 +229,12 @@ editor does rather than what it should do.
   Done in `desktopTest/.../e2e/differential/BasicTextFieldParityTest.kt`. A
   case the editor fails today carries `divergesUntil = "<item>"`; it fails once
   the editor matches, so each fix deletes its item's markers.
-- [ ] **0.2 Differential fuzzing.** [Opus] [Lane L] Feed `FuzzScript` scripts
+- [x] **0.2 Differential fuzzing.** [Opus] [Lane L] Feed `FuzzScript` scripts
   to both widgets. Add navigation keys, shift-selection, emoji, ZWJ sequences,
   flags, combining marks, and right-to-left words to the vocabulary.
+  Done in `e2e/differential/DifferentialFuzzTest.kt`. A divergence explained by
+  an item in `OPEN_PARITY_ITEMS` (`utils/DifferentialFuzz.kt`) is tolerated;
+  delete the item there when it lands.
 - [ ] **0.3 Invariants in the fuzzer.** [Opus] [Lane L] After every op: no lone
   surrogate in the document, the caret never sits inside a grapheme cluster,
   Down moves exactly one visual row, Left then Right returns to the same
@@ -289,8 +300,9 @@ fixes what users feel every minute.
   - Prefer the platform word break iterator, shared by keyboard, mouse, and
     spell check. This part builds on the 1.1 utility: [Fable] [Mac work].
 - [ ] **1.6 End on a wrapped row, and caret affinity. R, C.** [Fable] [Lane A]
-  End goes to `nextWrapStart - 1`. That is right when the row ends in a space
-  and one character short when the wrap falls mid-word or in CJK.
+  End goes to `nextWrapStart - 1`. That is right when the row ends in a space,
+  one character short when the wrap falls mid-word or in CJK, and past the
+  first space when the row ends in several.
   `CharLineOffset` has no affinity, so a position at a wrap boundary always
   draws on the later row.
 - [ ] **1.7 PageUp and PageDown. C.** [Opus] [Lane A] Driven by scroll position
@@ -344,6 +356,12 @@ fixes what users feel every minute.
   current one, and its Ctrl+Delete deletes to that end. Windows editors stop at
   the next word start, so the answer may be per platform (see 2.6 for macOS).
   Decide, then clear the `divergesUntil = "1.19"` cases.
+- [ ] **1.20 Joining lines deletes an empty line. R.** [Opus] [Lane G] In a
+  three-line document with an empty line, joining the other two lines also
+  deletes the empty one: Backspace before `c` in `\nb\nc` gives `bc`, and
+  before `b` in `a\nb\n` gives `ab`. Typing over a selection that spans a line
+  break loses it the same way. Reproduces on a bare `TextEditorState`; four-line
+  documents are not affected.
 
 ## Phase 2: command completeness
 

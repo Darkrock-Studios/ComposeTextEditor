@@ -310,16 +310,31 @@ class DifferentialScope internal constructor(
 	 * precondition for comparing vertical motion. Call while both hold the same text.
 	 */
 	fun assertSameRows() {
-		val editorRows = editor.lineOffsets.map {
-			editor.getCharacterIndex(CharLineOffset(it.line, it.wrapStartsAtIndex))
-		}
-		val layout = test.runOnIdle { fieldLayout() } ?: fail("the reference field has no layout")
-		val referenceRows = (0 until layout.lineCount).map { layout.getLineStart(it) }
 		assertEquals(
-			referenceRows,
-			editorRows,
+			referenceRows(),
+			editorRows(),
 			"harness precondition: the editor and the reference must wrap at the same offsets",
 		)
+	}
+
+	/**
+	 * Whether both widgets break the editor's current text into the same rows. Loads
+	 * that text into the reference, so call it only once the reference replay is done.
+	 */
+	fun rowsAgree(): Boolean {
+		val text = editor.getAllText().text
+		test.runOnIdle { reference.edit { replace(0, length, text) } }
+		test.waitForIdle()
+		return referenceRows() == editorRows()
+	}
+
+	private fun editorRows(): List<Int> = editor.lineOffsets.map {
+		editor.getCharacterIndex(CharLineOffset(it.line, it.wrapStartsAtIndex))
+	}
+
+	private fun referenceRows(): List<Int> {
+		val layout = test.runOnIdle { fieldLayout() } ?: fail("the reference field has no layout")
+		return (0 until layout.lineCount).map { layout.getLineStart(it) }
 	}
 }
 
