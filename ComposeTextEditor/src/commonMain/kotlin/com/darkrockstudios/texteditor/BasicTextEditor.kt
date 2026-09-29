@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -34,6 +35,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.LocalTextToolbar
 import androidx.compose.ui.semantics.editableText
 import androidx.compose.ui.semantics.insertTextAtCursor
 import androidx.compose.ui.semantics.onClick
@@ -159,6 +161,16 @@ fun BasicTextEditor(
 	val contextMenuActions = remember(state, clipboard, enabled) {
 		ContextMenuActions(state, clipboard, state.scope, enabled)
 	}
+
+	val textToolbar = LocalTextToolbar.current
+	val nativeTextToolbar = LocalNativeTextToolbar.current
+	val touchToolbar = remember(state, textToolbar, nativeTextToolbar, contextMenuActions, effectiveContextMenuState) {
+		TouchToolbar(state, textToolbar.takeIf { nativeTextToolbar }, contextMenuActions) { offset ->
+			effectiveContextMenuState.showMenu(offset)
+		}
+	}
+	LaunchedEffect(touchToolbar) { touchToolbar.watch() }
+	DisposableEffect(touchToolbar) { onDispose { touchToolbar.hide() } }
 
 	LaunchedEffect(Unit) {
 		if (enabled && autoFocus) {
@@ -317,6 +329,7 @@ fun BasicTextEditor(
 							links = linkClicks,
 							caretHandle = enabled,
 							contentOrigin = { contentOrigin },
+							touchToolbar = touchToolbar,
 						)
 						.padding(horizontalPadding)
 						.textMagnifier(state)

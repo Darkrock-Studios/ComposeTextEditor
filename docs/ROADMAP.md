@@ -603,10 +603,23 @@ fixes what users feel every minute.
   handler compares `TextEditorSelectionManager.touchSelectionGeneration` across
   the gesture, which every finger selection advances. No triple tap: Android's
   text fields have none.
-- [ ] **3.8 Reaching Paste by touch. C.** [Fable] [Lane B] The menu opens only
+- [x] **3.8 Reaching Paste by touch. C.** [Fable] [Lane B] The menu opens only
   on a second long-press over an existing selection, and long-press on an empty
   line does nothing. Paste is unreachable in an empty editor and at a bare
-  caret. Use the platform text toolbar.
+  caret. Use the platform text toolbar. `TouchToolbar` (`TouchToolbar.kt`) now
+  shows `LocalTextToolbar` with Cut, Copy, Paste and Select all as the editor
+  can do them: once a long press or double tap lifts (over the word, or over
+  the caret a long press on empty space or an empty editor placed), on a tap
+  of the caret handle, on a tap or drop of a selection handle, and on a long
+  press on the selection. It hides when the caret or selection moves under
+  it, on focus loss, and on any mouse press, and follows the text on a scroll;
+  its Select all keeps it up with handles on the new selection. Android and iOS have a toolbar
+  (`hasNativeTextToolbar`, an `expect`); desktop's is inert and the web's is
+  drawn only inside foundation's own text fields, so there the editor's
+  context menu stands in, but only at a bare caret and for a long press on the
+  selection: it is modal and would eat the tap after every selection.
+  Right-click keeps the context menu everywhere. A selectable `RichTextView`
+  gets the same with Copy and Select all.
 - [ ] **3.9 Caret under the soft keyboard. C, U.** [Opus] [Lane F] A viewport
   resize relayouts but does not re-run `ensureCursorVisible`, and there is no
   `BringIntoViewRequester` (hammer-editor#932).
@@ -1106,3 +1119,4 @@ records results and removes entries that passed.
 | Item | What to do | A pass looks like | Result |
 | --- | --- | --- | --- |
 | 2.6 | In Safari and Chrome on macOS, open the wasm demo and press Ctrl+A, E, F, B, N, P, D, H and K in a paragraph. The page's hidden text area has the same Cocoa Emacs bindings, so a chord could act twice | Each chord moves or deletes once, as in the desktop sample app | Not run: needs a person at a real keyboard. Browser automation injects key events below the Cocoa text system, so it cannot reproduce a chord acting twice |
+| 3.8 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64`. 3.8 added `internal expect fun hasNativeTextToolbar()` (commonMain `TouchToolbar.kt`) with `iosMain/.../TouchToolbar.ios.kt` answering true. Then in the simulator: long-press a word, double-tap a word, long-press empty space, tap the caret handle, and drag a selection handle | Compiles. UIKit's edit menu appears over the selection or caret with Cut, Copy, Paste and Select all as applicable (Paste and Select all alone at a bare caret), hides while a handle is dragged and returns when it drops, and goes when the caret moves or the text is scrolled. If no menu appears, the input connection has no toolbar: fall back to `false` in `TouchToolbar.ios.kt` so the context menu stands in | |

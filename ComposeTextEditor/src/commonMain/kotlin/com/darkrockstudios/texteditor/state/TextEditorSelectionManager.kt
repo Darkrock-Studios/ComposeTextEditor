@@ -261,6 +261,11 @@ class TextEditorSelectionManager(
 		updateSelectionRange(null)
 	}
 
+	/** Gives the selection touch handles, for one made by the touch toolbar's Select all. */
+	internal fun markTouchSelection() {
+		if (_selection != null) _isTouchSelection = true
+	}
+
 	fun selectAll() {
 		if (state.textLines.isEmpty()) {
 			clearSelection()

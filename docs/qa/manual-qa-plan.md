@@ -322,6 +322,23 @@ was lengthened specifically so it can be scrolled and flung.
     **Expect:** it auto-scrolls. Compare the hold time before the word selects with
     the system's long-press setting (Settings > Accessibility > Touch & hold
     delay): the editor follows it.
+14. Long-press a word and lift. **Expect:** Android's floating toolbar appears over
+    the word with Cut, Copy, Paste and Select all (3.8), with the keyboard up. Drag
+    a handle. **Expect:** the toolbar hides during the drag and returns when the
+    handle drops. Tap Select all. **Expect:** everything selects with handles and
+    the toolbar comes back over the visible rows. Scroll. **Expect:** the toolbar
+    moves with the text. Type a letter, or tap the caret handle twice. **Expect:**
+    the toolbar goes.
+15. Blank Markdown demo (empty editor): long-press. **Expect:** the toolbar offers
+    Paste and Select all only, and Paste inserts the clipboard. In a document,
+    long-press an empty line, and separately tap the caret handle after a tap.
+    **Expect:** the same Paste and Select all toolbar; the caret does not move.
+    Copy a word with a long-press and the toolbar's Copy, then tap elsewhere and
+    paste through the toolbar. **Expect:** the word arrives.
+16. Desktop with a touch screen, or a mouse right-click for the menu: long-press
+    empty space or tap the caret handle. **Expect:** the context menu opens with
+    Paste and Select All. Long-press a word. **Expect:** it selects with handles
+    and no menu; a second long-press on the selection opens the menu (unchanged).
 
 ### 4.3 Spans do not fight the keyboard
 

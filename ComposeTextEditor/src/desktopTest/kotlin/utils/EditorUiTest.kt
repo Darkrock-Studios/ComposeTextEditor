@@ -8,6 +8,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.LocalClipboard
+import androidx.compose.ui.platform.LocalTextToolbar
+import androidx.compose.ui.platform.TextToolbar
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.MouseButton
@@ -29,6 +31,7 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.darkrockstudios.texteditor.BasicTextEditor
+import com.darkrockstudios.texteditor.LocalNativeTextToolbar
 import com.darkrockstudios.texteditor.RichSpanClickEventListener
 import com.darkrockstudios.texteditor.handleCenter as drawnHandleCenter
 import com.darkrockstudios.texteditor.RichSpanClickListener
@@ -68,6 +71,7 @@ internal fun editorUiTest(
 	autoFocus: Boolean = enabled,
 	contentPadding: PaddingValues = PaddingValues(0.dp),
 	density: Float = 1f,
+	textToolbar: TextToolbar? = null,
 	block: EditorUiTestScope.() -> Unit,
 ) = runSkikoComposeUiTest(density = Density(density)) {
 	val clipboard = InMemoryClipboard()
@@ -77,6 +81,10 @@ internal fun editorUiTest(
 		CompositionLocalProvider(
 			LocalClipboard provides clipboard,
 			LocalKeyBindings provides keyBindings,
+			// The desktop scene's own toolbar is inert; a test that passes one stands it in
+			// for a platform toolbar, and without one the editor falls back to its menu.
+			LocalTextToolbar provides (textToolbar ?: LocalTextToolbar.current),
+			LocalNativeTextToolbar provides (textToolbar != null),
 		) {
 			BasicTextEditor(
 				state = state,

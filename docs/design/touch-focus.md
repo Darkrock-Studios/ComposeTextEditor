@@ -222,6 +222,12 @@ The `RichSpanClickListener` KDoc now states the Boolean's real contract
   must be typeable over, but then does not ask for the soft keyboard, which
   would cover the popup; the popup check alone guards gestures that selected
   nothing.
+- The platform text toolbar (3.8) is not a popup in this sense: it is not
+  routed through `contextMenuState`, so `popupIsShowing` never sees it, and a
+  long press that selects gets both the toolbar and the keyboard, as native
+  Android does. Where there is no platform toolbar the context menu stands in,
+  and only at a bare caret: it is modal, and after every selection it would eat
+  the next tap and, through the popup check, the keyboard.
 - Focus is skipped only when the tap or long press left a popup showing
   (test-pinned from both sides: popup-opening tap does not focus, span-claimed
   tap with no popup does). Bullets and blockquotes focus by touch again.

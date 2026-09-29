@@ -5,6 +5,7 @@ import androidx.compose.foundation.focusable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -15,9 +16,11 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.LocalTextToolbar
 import androidx.compose.ui.unit.dp
 import com.darkrockstudios.texteditor.contextmenu.ContextMenuActions
 import com.darkrockstudios.texteditor.contextmenu.ContextMenuStrings
@@ -81,6 +84,15 @@ fun RichTextView(
 		val contextMenuActions = remember(state, clipboard) {
 			ContextMenuActions(state, clipboard, state.scope, enabled = false)
 		}
+		val textToolbar = LocalTextToolbar.current
+		val nativeTextToolbar = LocalNativeTextToolbar.current
+		val touchToolbar = remember(state, textToolbar, nativeTextToolbar, contextMenuActions) {
+			TouchToolbar(state, textToolbar.takeIf { nativeTextToolbar }, contextMenuActions) { offset ->
+				contextMenuState.showMenu(offset)
+			}
+		}
+		LaunchedEffect(touchToolbar) { touchToolbar.watch() }
+		DisposableEffect(touchToolbar) { onDispose { touchToolbar.hide() } }
 
 		TextEditorContextMenuProvider(
 			menuState = contextMenuState,
@@ -102,6 +114,7 @@ fun RichTextView(
 				isSelectable = true,
 				onContextMenuRequest = { offset -> contextMenuState.showMenu(offset) },
 				linkClicks = linkClicks,
+				touchToolbar = touchToolbar,
 			)
 		}
 	} else {
@@ -113,6 +126,7 @@ fun RichTextView(
 			isSelectable = false,
 			onContextMenuRequest = null,
 			linkClicks = linkClicks,
+			touchToolbar = null,
 		)
 	}
 }
@@ -126,6 +140,7 @@ private fun RichTextViewBody(
 	isSelectable: Boolean,
 	onContextMenuRequest: ((Offset) -> Unit)?,
 	linkClicks: LinkClicks,
+	touchToolbar: TouchToolbar?,
 ) {
 	val density = LocalDensity.current
 	val layoutDirection = LocalLayoutDirection.current
@@ -167,8 +182,11 @@ private fun RichTextViewBody(
 					readOnly = true,
 					links = linkClicks,
 					contentOrigin = { contentOrigin },
+					touchToolbar = touchToolbar,
 				)
 				.padding(contentPadding)
+				// The touch toolbar is placed in root coordinates, from the canvas's.
+				.onGloballyPositioned { state.canvasLayoutCoordinates = it }
 				.textMagnifier(state)
 		} else {
 			Modifier

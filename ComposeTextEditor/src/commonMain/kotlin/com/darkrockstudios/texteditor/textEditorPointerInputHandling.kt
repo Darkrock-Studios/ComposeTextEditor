@@ -47,11 +47,14 @@ internal fun Modifier.textEditorPointerInputHandling(
 	links: LinkClicks? = null,
 	caretHandle: Boolean = !readOnly,
 	contentOrigin: () -> Offset,
+	touchToolbar: TouchToolbar? = null,
 ): Modifier {
 	return this
-		.handleHandleDrag(state, contentOrigin)
-		.handleTouchInteractions(state, onSpanClick, onContextMenuRequest, readOnly, links, caretHandle, contentOrigin)
-		.handleMouseInput(state, onSpanClick, onContextMenuRequest, readOnly, links, contentOrigin)
+		.handleHandleDrag(state, contentOrigin, touchToolbar)
+		.handleTouchInteractions(
+			state, onSpanClick, onContextMenuRequest, readOnly, links, caretHandle, contentOrigin, touchToolbar,
+		)
+		.handleMouseInput(state, onSpanClick, onContextMenuRequest, readOnly, links, contentOrigin, touchToolbar)
 }
 
 /**
@@ -170,7 +173,8 @@ private fun Modifier.handleMouseInput(
 	readOnly: Boolean,
 	links: LinkClicks?,
 	contentOrigin: () -> Offset,
-): Modifier = pointerInput(state, links) {
+	touchToolbar: TouchToolbar?,
+): Modifier = pointerInput(state, links, touchToolbar) {
 	val clickCounter = ClickCounter(viewConfiguration)
 	val touchSlop = viewConfiguration.touchSlop
 	coroutineScope {
@@ -181,6 +185,7 @@ private fun Modifier.handleMouseInput(
 		if (!press.isMouseLike(down)) return@awaitEachGesture
 		val origin = contentOrigin()
 		val downAt = down.inContent(origin)
+		touchToolbar?.hide()
 
 		val buttons = press.buttons
 		when {
@@ -457,10 +462,16 @@ internal fun Modifier.linkClickHandling(
  * end of the selection is fixed for the whole drag, so the dragged end can cross it. The
  * dragged end moves exactly as far as the finger does from where it grabbed the handle,
  * so grabbing moves nothing. Held above or below the viewport, the drag auto-scrolls like
- * a mouse drag.
+ * a mouse drag. The touch toolbar hides for the drag and comes back when a selection
+ * handle is dropped; the caret handle brings it up only when tapped, as Android's
+ * insertion handle does.
  */
-private fun Modifier.handleHandleDrag(state: TextEditorState, contentOrigin: () -> Offset): Modifier {
-	return pointerInput(state) {
+private fun Modifier.handleHandleDrag(
+	state: TextEditorState,
+	contentOrigin: () -> Offset,
+	touchToolbar: TouchToolbar?,
+): Modifier {
+	return pointerInput(state, touchToolbar) {
 		coroutineScope {
 			val autoScrollScope = this
 			awaitEachGesture {
@@ -469,10 +480,16 @@ private fun Modifier.handleHandleDrag(state: TextEditorState, contentOrigin: () 
 				val origin = contentOrigin()
 				val downAt = down.inContent(origin)
 				if (isOnCaretHandle(downAt, state)) {
-					dragCaretHandle(state, down, origin, autoScrollScope)
+					// A tap on the handle toggles the toolbar, as Android's insertion handle does.
+					val wasShown = touchToolbar?.isShown == true
+					touchToolbar?.hide()
+					val tapped = dragCaretHandle(state, down, origin, autoScrollScope)
+					if (tapped && !wasShown) touchToolbar?.show()
 				} else {
 					val handle = findHandleAtPosition(downAt, state) ?: return@awaitEachGesture
+					touchToolbar?.hide()
 					dragSelectionHandle(state, handle, down, origin, autoScrollScope)
+					if (state.selector.hasSelection()) touchToolbar?.show()
 				}
 			}
 		}
@@ -526,14 +543,15 @@ private suspend fun AwaitPointerEventScope.dragSelectionHandle(
 /**
  * Drags the touch caret handle, moving the caret. The handle stays up through the drag,
  * and its idle timeout restarts on release. Anything else that moves the caret, edits,
- * selects, or takes focus meanwhile takes the handle away and ends the drag.
+ * selects, or takes focus meanwhile takes the handle away and ends the drag. Returns
+ * whether the finger lifted without dragging: a tap on the handle.
  */
 private suspend fun AwaitPointerEventScope.dragCaretHandle(
 	state: TextEditorState,
 	down: PointerInputChange,
 	origin: Offset,
 	autoScrollScope: CoroutineScope,
-) {
+): Boolean {
 	val downAt = down.inContent(origin)
 	val grabOffset = grabOffset(state, state.cursorPosition, downAt)
 	state.selector.magnifierCenter = magnifierCenter(state, state.cursorPosition, downAt + grabOffset)
@@ -548,7 +566,7 @@ private suspend fun AwaitPointerEventScope.dragCaretHandle(
 		state.endCompositionIfPointerLeft()
 	}
 	try {
-		followDrag(autoScroll, down, origin, consumeAll = true)
+		return followDrag(autoScroll, down, origin, viewConfiguration.touchSlop, consumeAll = true) != null
 	} finally {
 		state.selector.releaseCaretHandle()
 		state.selector.magnifierCenter = null
@@ -678,10 +696,11 @@ private fun Density.handleSpanInteraction(
 /**
  * Finger taps, double taps, and long presses. A tap places the caret; a second tap
  * within the platform's double-tap timeout selects the word under it; a long press
- * selects the word under it, or opens the context menu when it lands on the selection.
+ * selects the word under it, or brings up the menu when it lands on the selection.
  * Dragging on from a double tap or a long press extends the selection by word, as
  * Android's text fields do, and the moves are consumed so the ancestor scrollable does
- * not pan with them.
+ * not pan with them. Once the finger lifts, the [touchToolbar] shows over what was
+ * selected, or over the caret a long press placed, which is how a finger reaches Paste.
  */
 private fun Modifier.handleTouchInteractions(
 	state: TextEditorState,
@@ -691,8 +710,9 @@ private fun Modifier.handleTouchInteractions(
 	links: LinkClicks?,
 	caretHandle: Boolean,
 	contentOrigin: () -> Offset,
+	touchToolbar: TouchToolbar?,
 ): Modifier {
-	return pointerInput(state, links, caretHandle) {
+	return pointerInput(state, links, caretHandle, touchToolbar) {
 		val touchSlop = viewConfiguration.touchSlop
 		val longPressTimeout = viewConfiguration.longPressTimeoutMillis
 		val tapCounter = ClickCounter(viewConfiguration, slop = DOUBLE_TAP_SLOP.toPx(), fromRelease = true)
@@ -710,14 +730,17 @@ private fun Modifier.handleTouchInteractions(
 
 				if (tapCounter.register(down) >= 2) {
 					tapCounter.reset()
+					touchToolbar?.hide()
 					val selection = PointerSelection.press(state, downAt, SelectionGranularity.Word, isTouch = true)
 					dragTouchSelection(state, selection, down, origin, autoScrollScope)
+					touchToolbar?.show()
 					return@awaitEachGesture
 				}
 
 				var didLongPress = false
 				var wasDrag = false
 				var longPressSelection: PointerSelection? = null
+				var showToolbarOnRelease = false
 				val pressed = ClickTarget.at(state, downAt)
 				val existingSelection = state.selector.selection
 				val longPressJob = state.scope.launch {
@@ -729,11 +752,18 @@ private fun Modifier.handleTouchInteractions(
 							(wordPosition isBeforeOrEqual existingSelection.end)
 
 					if (isOnSelection) {
-						onContextMenuRequest?.invoke(downAt)
+						// The toolbar waits for the finger to lift, as after every other
+						// gesture; the fallback menu is modal, so it opens now, under the finger.
+						when {
+							touchToolbar == null -> onContextMenuRequest?.invoke(downAt)
+							touchToolbar.isNative -> showToolbarOnRelease = true
+							else -> touchToolbar.showMenuAt(downAt)
+						}
 					} else {
 						// Off any word this selects nothing and leaves the caret at the press.
 						longPressSelection =
 							PointerSelection.press(state, downAt, SelectionGranularity.Word, isTouch = true)
+						showToolbarOnRelease = true
 					}
 
 					didLongPress = true
@@ -745,7 +775,9 @@ private fun Modifier.handleTouchInteractions(
 						val change = event.changes.firstOrNull { it.id == down.id } ?: break
 						if (!change.pressed) {
 							if (didLongPress || wasDrag) tapCounter.reset() else tapCounter.released(change)
+							if (showToolbarOnRelease) touchToolbar?.show()
 							if (!didLongPress && !wasDrag) {
+								touchToolbar?.hide()
 								val releasedAt = change.inContent(origin)
 								val placed = handleSpanInteraction(
 									state,
@@ -769,6 +801,7 @@ private fun Modifier.handleTouchInteractions(
 						if (selection != null) {
 							tapCounter.reset()
 							dragTouchSelection(state, selection, down, origin, autoScrollScope, first = change)
+							touchToolbar?.show()
 							break
 						}
 						// Only a move past touch slop is a drag, so a high-precision touch screen's
