@@ -277,10 +277,10 @@ private class ClickTarget(val span: RichSpan?, val link: String?) {
 /**
  * The span a click at [offset] answers to. Hit on the character under the pointer; off
  * the text, where there is none (a block image's line, past a row's end), on the
- * nearest caret position.
+ * nearest caret position. Above the first row or below the last there is none.
  */
 private fun TextEditorState.spanAt(offset: Offset): RichSpan? =
-	findSpanAtPosition(characterAt(offset) ?: getOffsetAtPosition(offset))
+	characterAt(offset)?.let { findSpanAtPosition(it) } ?: findSpanAtPoint(offset)
 
 /**
  * The character under [offset], or null when the pointer is beside a row rather than

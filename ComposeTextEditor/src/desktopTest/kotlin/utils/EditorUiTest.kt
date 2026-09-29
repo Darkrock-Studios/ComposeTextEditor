@@ -1,5 +1,6 @@
 package utils
 
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
@@ -63,6 +64,7 @@ internal fun editorUiTest(
 	onLinkClick: ((String) -> Unit)? = null,
 	contextMenuState: TextEditorContextMenuState? = null,
 	autoFocus: Boolean = enabled,
+	contentPadding: PaddingValues = PaddingValues(0.dp),
 	block: EditorUiTestScope.() -> Unit,
 ) = runSkikoComposeUiTest {
 	val clipboard = InMemoryClipboard()
@@ -76,6 +78,7 @@ internal fun editorUiTest(
 			BasicTextEditor(
 				state = state,
 				modifier = Modifier.size(width, height).testTag(EDITOR_TEST_TAG),
+				contentPadding = contentPadding,
 				enabled = enabled,
 				autoFocus = autoFocus,
 				contextMenuState = contextMenuState,
@@ -322,6 +325,21 @@ class EditorUiTestScope(
 			gestures()
 		}
 		if (held.isNotEmpty()) test.onRoot().performKeyInput { held.forEach { keyUp(it) } }
+		test.waitForIdle()
+	}
+
+	/**
+	 * Presses at [from], drags to [to], and releases, both in editor node
+	 * coordinates. Either end may lie outside the editor.
+	 */
+	fun dragBetween(from: Offset, to: Offset) {
+		defeatMultiClickDetection()
+		editor.performMouseInput {
+			moveTo(from)
+			press()
+			moveTo(to)
+			release()
+		}
 		test.waitForIdle()
 	}
 

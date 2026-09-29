@@ -344,10 +344,13 @@ fixes what users feel every minute.
   the caret there first, as Chrome, VS Code, and GTK do. `BasicTextField`
   leaves the caret where it was on any right-click, so this departs from it.
   A read-only `RichTextView` keeps its selection on any right-click.
-- [ ] **1.10 Clicks above the first line. S.** [Opus] [Lane C]
+- [x] **1.10 Clicks above the first line. S.** [Opus] [Lane C]
   `getOffsetAtPosition` (`state/TextEditorState.kt`) falls through to "end of
   last line" for any y above the content. Clicking in the top padding, or
   dragging a selection above the top, sends the caret to the document end.
+  Done: a point above the first row hits the first row and one below the last
+  row hits the last row, x hit-tested either way, as `BasicTextField` does
+  (`e2e/ClickOutsideTextE2eTest.kt`).
 - [ ] **1.11 Padding. C.** [Opus] [Lane C] The placeholder draws at `Offset(0,
   0)`, ignoring top padding (`DrawPlaceholderText.kt`). Horizontal padding sits
   outside pointer input, leaving dead click zones.

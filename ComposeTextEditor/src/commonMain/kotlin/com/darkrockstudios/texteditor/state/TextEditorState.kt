@@ -1011,37 +1011,51 @@ class TextEditorState(
 
 	/**
 	 * Maps a pixel [Offset] within the editor (e.g. a tap location) to the nearest
-	 * [CharLineOffset], accounting for scroll. Clamps to the end of the last line when
-	 * the point falls below all content.
+	 * [CharLineOffset], accounting for scroll. A point above the first row hits the
+	 * first row and a point below the last row hits the last row; x is hit-tested on
+	 * that row either way, as native text fields do.
 	 */
 	fun getOffsetAtPosition(offset: Offset): CharLineOffset {
 		if (_lineOffsets.isEmpty()) return CharLineOffset(0, 0)
 
-		// Add scroll offset to the input y coordinate
-		val adjustedOffset = offset.copy(y = offset.y + scrollState.value)
+		val contentY = offset.y + scrollState.value
+		val row = _lineOffsets[rowIndexAtY(contentY)]
+		val lineLength = textLines.getOrNull(row.line)?.length
+			?: return CharLineOffset(textLines.lastIndex, textLines.last().length)
 
-		var curRealLine: LineWrap = _lineOffsets[0]
+		// Hit-test inside the row itself, so a point above, below, or in a block
+		// line's extra height lands on that row's text line.
+		val paragraph = row.textLayoutResult.multiParagraph
+		val lineHeight = paragraph.getLineHeight(row.virtualLineIndex)
+		val yInLine = (contentY - row.offset.y).coerceIn(0f, (lineHeight - 1f).coerceAtLeast(0f))
+		val charPos = paragraph.getOffsetForPosition(
+			Offset(offset.x - row.offset.x, paragraph.getLineTop(row.virtualLineIndex) + yInLine)
+		)
+		return CharLineOffset(row.line, min(charPos, lineLength))
+	}
 
-		// Find the line that contains the offset
-		for (lineWrap in _lineOffsets) {
-			if (lineWrap.line != curRealLine.line) {
-				curRealLine = lineWrap
-			}
-			val textLayoutResult = lineWrap.textLayoutResult
+	/**
+	 * The [RichSpan] under a pointer at [offset], in the same coordinates as
+	 * [getOffsetAtPosition]. Unlike that mapping, a point above the first row or
+	 * below the last row is over no span.
+	 */
+	internal fun findSpanAtPoint(offset: Offset): RichSpan? {
+		val first = _lineOffsets.firstOrNull() ?: return null
+		val last = _lineOffsets.last()
+		val contentY = offset.y + scrollState.value
+		if (contentY < first.offset.y || contentY >= last.offset.y + last.effectiveHeight) return null
+		return findSpanAtPosition(getOffsetAtPosition(offset))
+	}
 
-			// Full paragraph height — using a single sub-line's height misses clicks past the first wrap.
-			val paragraphHeight = lineWrap.blockHeight ?: textLayoutResult.size.height.toFloat()
-
-			val relativeOffset = adjustedOffset - lineWrap.offset
-			if (adjustedOffset.y in curRealLine.offset.y..(curRealLine.offset.y + paragraphHeight)) {
-				val charPos = textLayoutResult.multiParagraph.getOffsetForPosition(relativeOffset)
-				return CharLineOffset(lineWrap.line, min(charPos, textLines[lineWrap.line].length))
-			}
+	/** Index of the last row whose top is at or above content-space [y], or 0 above them all. */
+	private fun rowIndexAtY(y: Float): Int {
+		var low = 0
+		var high = _lineOffsets.lastIndex
+		while (low < high) {
+			val mid = (low + high + 1) ushr 1
+			if (_lineOffsets[mid].offset.y <= y) low = mid else high = mid - 1
 		}
-
-		// If we're below all lines, return position at end of last line
-		val lastLine = textLines.lastIndex
-		return CharLineOffset(lastLine, textLines[lastLine].length)
+		return low
 	}
 
 	/**
