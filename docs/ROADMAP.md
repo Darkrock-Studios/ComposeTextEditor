@@ -347,15 +347,21 @@ fixes what users feel every minute.
   Cmd+Option+Shift+V. The text takes the styling at its destination.
 - [ ] **2.3 Paragraph motion.** [Opus] [Lane A] Ctrl+Up/Down on Windows and
   Linux, Option+Up/Down on macOS.
-- [ ] **2.4 Delete to line end.** [Opus] [Lane D] Cmd+Delete and Ctrl+K on
-  macOS.
+- [x] **2.4 Delete to line end.** [Opus] [Lane D] Cmd+Delete and Ctrl+K on
+  macOS. Following Cocoa: Cmd+Backspace stays `deleteToBeginningOfLine:`;
+  Cmd+Fn+Delete is `Action.DeleteToLineEnd` (`deleteToEndOfLine:`, to the end
+  of the visual row, nothing at its end); Ctrl+K is
+  `Action.DeleteToParagraphEnd` (`deleteToEndOfParagraph:`, past any wrap, and
+  at the paragraph's end it deletes the line break). No kill ring, so Ctrl+Y
+  does not yank. Not bound on Windows and Linux.
 - [x] **2.5 Legacy chords.** [Opus] [Lane D] Ctrl+Insert, Shift+Insert,
   Shift+Delete, and the dedicated Cut, Copy, and Paste keys. The CUA chords
   are on `CtrlKeyBindings` only; the dedicated keys are on both. Shift+Delete
   with no selection is a no-op, as a cut of nothing is.
 - [ ] **2.6 macOS conventions.** [Opus] [Lane A] Option+Right stops at the end
   of the current word, not the start of the next. The Emacs-style Ctrl bindings
-  (A, E, F, B, N, P, D, H, K) that every Cocoa text view has.
+  (A, E, F, B, N, P, D, H, K) that every Cocoa text view has. K landed with
+  2.4. Ctrl+Y (yank) needs a kill ring that K fills, which does not exist.
 - [ ] **2.7 Layout-aware shortcuts. U.** [Fable] [Lane D] A BEPO user reports
   shortcuts follow physical QWERTY positions on desktop (hammer-editor#945).
   Confirm, then match on the produced character where the platform provides it.

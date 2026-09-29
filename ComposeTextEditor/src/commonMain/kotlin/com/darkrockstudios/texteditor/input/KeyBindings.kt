@@ -103,8 +103,9 @@ object CtrlKeyBindings : KeyBindings {
 /**
  * macOS conventions: Cmd for shortcuts, Option+Arrow for word jumps, Cmd+Arrow for line and
  * document bounds. Ctrl never selects a different command than the unmodified key would, since
- * on macOS it belongs to the system and to the Emacs-style text bindings. The exception is
- * Enter, where every Ctrl, Cmd or Option chord is left for the host.
+ * on macOS it belongs to the system and to the Emacs-style text bindings. The exceptions are
+ * Ctrl+K, which is one of those Emacs-style bindings, and Enter, where every Ctrl, Cmd or
+ * Option chord is left for the host.
  *
  * Option is also the macOS compose modifier (Option+8 types '{'), so only the chords claimed here
  * may consume an Option event; everything else must fall through to
@@ -153,7 +154,18 @@ object MacKeyBindings : KeyBindings {
 				else -> Action.DeleteBackward
 			}
 
-			Key.Delete -> if (option) Action.DeleteWordForward else Action.DeleteForward
+			Key.Delete -> when {
+				cmd -> Action.DeleteToLineEnd
+				option -> Action.DeleteWordForward
+				else -> Action.DeleteForward
+			}
+
+			Key.K -> if (event.isCtrlPressed && !cmd && !option && !event.isShiftPressed) {
+				Action.DeleteToParagraphEnd
+			} else {
+				null
+			}
+
 			else -> commonCommandFor(event)
 		}
 	}

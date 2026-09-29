@@ -69,6 +69,10 @@ internal fun EditorActionRegistry.registerBuiltinActions() {
 	register(EditorActionSpec(Action.DeleteToLineStart) { ctx ->
 		ctx.state.deleteByMotion { ctx.state.cursor.moveToLineStart() }
 	})
+	register(EditorActionSpec(Action.DeleteToLineEnd) { ctx ->
+		ctx.state.deleteByMotion { ctx.state.moveCursorToVisualRowEnd() }
+	})
+	register(EditorActionSpec(Action.DeleteToParagraphEnd) { it.state.deleteToParagraphEnd() })
 
 	register(EditorActionSpec(Action.Indent) { it.state.handleIndent() })
 	register(EditorActionSpec(Action.Outdent) { it.state.handleOutdent() })
@@ -175,6 +179,32 @@ private fun TextEditorState.deleteByMotion(locateRangeEdge: () -> Unit) {
 		TextEditorRange(origin, edge)
 	}
 	delete(range, cursorBefore = origin)
+}
+
+/**
+ * Past the last character of the caret's visual row. Not the End motion, which on a
+ * wrapped row stops before that character so the caret stays drawn on the row.
+ */
+private fun TextEditorState.moveCursorToVisualRowEnd() {
+	val position = cursorPosition
+	val row = getWrappedLineIndex(position)
+	val nextRow = lineOffsets.getOrNull(row + 1)
+	val end = if (row >= 0 && nextRow != null && nextRow.line == position.line) {
+		nextRow.wrapStartsAtIndex
+	} else {
+		textLines[position.line].length
+	}
+	cursor.updatePosition(position.copy(char = end))
+}
+
+private fun TextEditorState.deleteToParagraphEnd() {
+	val position = cursorPosition
+	val lineLength = textLines[position.line].length
+	if (selector.selection == null && position.char == lineLength) {
+		deleteAtCursor()
+	} else {
+		deleteByMotion { cursor.updatePosition(position.copy(char = lineLength)) }
+	}
 }
 
 private fun TextEditorState.handleIndent() {

@@ -54,6 +54,13 @@ sealed interface EditorCommand {
 			val DeleteWordBackward = Action("editor.deleteWordBackward", isEdit = true)
 			val DeleteWordForward = Action("editor.deleteWordForward", isEdit = true)
 			val DeleteToLineStart = Action("editor.deleteToLineStart", isEdit = true)
+			val DeleteToLineEnd = Action("editor.deleteToLineEnd", isEdit = true)
+
+			/**
+			 * Deletes to the end of the logical line, past any wrap. At the line's end it
+			 * deletes the line break instead, joining the next line, like Cocoa's Ctrl+K.
+			 */
+			val DeleteToParagraphEnd = Action("editor.deleteToParagraphEnd", isEdit = true)
 			val Indent = Action("editor.indent", isEdit = true)
 			val Outdent = Action("editor.outdent", isEdit = true)
 			val NewLine = Action("editor.newLine", isEdit = true)
@@ -79,6 +86,8 @@ sealed interface EditorCommand {
 				DeleteWordBackward,
 				DeleteWordForward,
 				DeleteToLineStart,
+				DeleteToLineEnd,
+				DeleteToParagraphEnd,
 				Indent,
 				Outdent,
 				NewLine,

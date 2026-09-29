@@ -145,12 +145,14 @@ On macOS, verify each:
 | Cmd+Up / Cmd+Down | Document start / end |
 | Option+Backspace | Delete previous word |
 | Cmd+Backspace | Delete to line start |
+| Cmd+Fn+Delete (forward delete) | Delete to the end of the visual row; nothing at the row's end |
+| Ctrl+K | Delete to the end of the paragraph, past any wrap; at its end, join the next paragraph |
 | Option+8 | Types `{` (unclaimed Option chords must fall through to text) |
 | Cmd+Shift+V / Cmd+Option+Shift+V | Paste as plain text: no copied formatting, takes the style where it lands |
 | Shift+Return | New line |
 | Cmd+Return / Option+Return / Ctrl+Return | Nothing in the editor (left for the host to claim) |
 
-After **Option+Backspace** and **Cmd+Backspace**, press Cmd+Z. **Expect:** the deleted
+After **Option+Backspace**, **Cmd+Backspace** and **Cmd+Fn+Delete**, press Cmd+Z. **Expect:** the deleted
 text returns *and the caret lands at the correct end of it* (this was the undo defect
 fixed alongside #45).
 

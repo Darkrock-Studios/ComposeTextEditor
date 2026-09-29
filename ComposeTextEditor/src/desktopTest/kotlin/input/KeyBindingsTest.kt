@@ -208,6 +208,21 @@ class KeyBindingsTest {
 	}
 
 	@Test
+	fun `macos deletes forward to the line end with cmd and to the paragraph end with ctrl+k`() {
+		assertEquals(Action.DeleteToLineEnd, MacKeyBindings.commandFor(chord(Key.Delete, meta = true)))
+		assertEquals(
+			Action.DeleteToLineEnd,
+			MacKeyBindings.commandFor(chord(Key.NumPadDelete, meta = true)),
+		)
+		assertEquals(Action.DeleteToParagraphEnd, MacKeyBindings.commandFor(chord(Key.K, ctrl = true)))
+		assertNull(MacKeyBindings.commandFor(chord(Key.K, ctrl = true, shift = true)))
+		assertNull(MacKeyBindings.commandFor(chord(Key.K, ctrl = true, alt = true)))
+		assertNull(MacKeyBindings.commandFor(chord(Key.K, ctrl = true, meta = true)))
+		assertNull(MacKeyBindings.commandFor(chord(Key.K, meta = true)))
+		assertNull(CtrlKeyBindings.commandFor(chord(Key.K, ctrl = true)))
+	}
+
+	@Test
 	fun `macos leaves ctrl to the system`() {
 		assertNull(MacKeyBindings.commandFor(chord(Key.A, ctrl = true)))
 		assertNull(MacKeyBindings.commandFor(chord(Key.C, ctrl = true)))
