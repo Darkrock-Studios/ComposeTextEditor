@@ -81,7 +81,8 @@ the goal x is over or past them; a word wider than the row is broken where it
 starts instead of moving to the next row; a page move neither starts nor follows
 a goal x, so it measures from the caret, and Up or Down after one measures from
 where it landed; PageUp and PageDown stop on the first and last rows instead of
-going on to the document start and end. Its arrow keys in right-to-left text are logical, like the
+going on to the document start and end; with a selection, its Shift paragraph
+jumps measure from the selection's start and end rather than the caret. Its arrow keys in right-to-left text are logical, like the
 editor's (7.5).
 
 ## Workflow
@@ -149,7 +150,7 @@ Commands on the Mac:
 ```
 
 The sample app is the Xcode project in `sampleAppiOS/`. While the Mac is in
-use, also give the macOS desktop items (2.4, 2.6, 2.7) a manual pass in the
+use, also give the macOS desktop items (2.3, 2.4, 2.6, 2.7) a manual pass in the
 desktop sample app; the automated tests exercise the Mac key bindings but
 not a real Mac keyboard.
 
@@ -400,8 +401,15 @@ fixes what users feel every minute.
   currently a rich paste because `Key.V` ignores Shift (hammer-editor#929).
   `Action.PasteAsPlainText`, on Ctrl+Shift+V, Cmd+Shift+V, and Cocoa's
   Cmd+Option+Shift+V. The text takes the styling at its destination.
-- [ ] **2.3 Paragraph motion.** [Opus] [Lane A] Ctrl+Up/Down on Windows and
+- [x] **2.3 Paragraph motion.** [Opus] [Lane A] Ctrl+Up/Down on Windows and
   Linux, Option+Up/Down on macOS.
+  Up goes to the paragraph's start, or the previous one's when already there,
+  everywhere. Down stops at the paragraph's end on Linux (GTK and
+  `BasicTextField`), Android (`EditText`) and macOS (Cocoa's Option+Down), and
+  goes on to the next paragraph's start on Windows (Word, WordPad), through a
+  new `WindowsKeyBindings` table. Shift extends from the caret; without Shift a
+  selection is left from its start going up and its end going down, as
+  `BasicTextField`, `EditText` and Cocoa do.
 - [x] **2.4 Delete to line end.** [Opus] [Lane D] Cmd+Delete and Ctrl+K on
   macOS. Following Cocoa: Cmd+Backspace stays `deleteToBeginningOfLine:`;
   Cmd+Fn+Delete is `Action.DeleteToLineEnd` (`deleteToEndOfLine:`, to the end

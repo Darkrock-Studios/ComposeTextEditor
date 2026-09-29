@@ -1,16 +1,21 @@
 package e2e.differential
 
 import androidx.compose.ui.unit.dp
+import kotlin.test.Test
 import utils.Backspace
 import utils.CtrlBackspace
 import utils.CtrlDelete
+import utils.CtrlDown
 import utils.CtrlEnd
 import utils.CtrlHome
 import utils.CtrlLeft
 import utils.CtrlRight
+import utils.CtrlShiftDown
 import utils.CtrlShiftEnd
 import utils.CtrlShiftLeft
 import utils.CtrlShiftRight
+import utils.CtrlShiftUp
+import utils.CtrlUp
 import utils.Delete
 import utils.Down
 import utils.EditSnapshot
@@ -30,7 +35,6 @@ import utils.ShiftUp
 import utils.Up
 import utils.assertMatchesNative
 import utils.type
-import kotlin.test.Test
 
 /**
  * Keyboard behaviour compared against `BasicTextField`; see [utils.differentialUiTest]
@@ -253,6 +257,51 @@ class BasicTextFieldParityTest {
 		start = EditSnapshot("go don’t stop", caret = 8),
 		strokes = listOf(CtrlLeft),
 		divergesUntil = "1.5",
+	)
+
+	// Paragraph stops
+
+	@Test
+	fun `ctrl up stops at paragraph starts`() = assertMatchesNative(
+		start = EditSnapshot("one two\nthree four\nfive", caret = 14),
+		strokes = listOf(CtrlUp, CtrlUp, CtrlUp),
+	)
+
+	@Test
+	fun `ctrl down stops at paragraph ends`() = assertMatchesNative(
+		start = EditSnapshot("one two\nthree four\nfive", caret = 2),
+		strokes = listOf(CtrlDown, CtrlDown, CtrlDown),
+	)
+
+	@Test
+	fun `ctrl down and ctrl up cross an empty paragraph`() = assertMatchesNative(
+		start = EditSnapshot("a\n\nb", caret = 0),
+		strokes = listOf(CtrlDown, CtrlDown, CtrlDown, CtrlUp, CtrlUp, CtrlUp),
+	)
+
+	@Test
+	fun `ctrl up and ctrl down pass the rows of a wrapped paragraph`() = assertMatchesNative(
+		start = EditSnapshot("alpha beta gamma delta epsilon\nzeta", caret = 25),
+		strokes = listOf(CtrlUp, CtrlDown),
+		width = 120.dp,
+	)
+
+	@Test
+	fun `ctrl shift up selects to paragraph starts`() = assertMatchesNative(
+		start = EditSnapshot("one two\nthree four\nfive", caret = 14),
+		strokes = listOf(CtrlShiftUp, CtrlShiftUp),
+	)
+
+	@Test
+	fun `unshifted ctrl up and ctrl down leave a selection from its edges`() = assertMatchesNative(
+		start = EditSnapshot("one two\nthree four\nfive", anchor = 10, caret = 5),
+		strokes = listOf(CtrlDown),
+	)
+
+	@Test
+	fun `ctrl shift down selects to paragraph ends`() = assertMatchesNative(
+		start = EditSnapshot("one two\nthree four\nfive", caret = 10),
+		strokes = listOf(CtrlShiftDown, CtrlShiftDown),
 	)
 
 	// Unicode

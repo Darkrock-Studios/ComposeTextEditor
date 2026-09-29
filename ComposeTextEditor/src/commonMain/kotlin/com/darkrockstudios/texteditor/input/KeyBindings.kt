@@ -54,7 +54,12 @@ expect fun platformKeyBindings(): KeyBindings
  */
 val LocalKeyBindings = staticCompositionLocalOf { platformKeyBindings() }
 
-/** Windows and Linux conventions: Ctrl for shortcuts, Ctrl+Arrow for word jumps, Home/End for line bounds. */
+/**
+ * Linux conventions, also used on Android: Ctrl for shortcuts, Ctrl+Left/Right for word
+ * jumps, Ctrl+Up/Down for paragraph jumps, Home/End for line bounds. Ctrl+Down stops at the
+ * end of the paragraph, as GTK, `EditText` and `BasicTextField` do. Windows differs only in
+ * that, see [WindowsKeyBindings].
+ */
 object CtrlKeyBindings : KeyBindings {
 	override fun commandFor(event: KeyEvent): EditorCommand? {
 		val ctrl = event.isCtrlShortcut
@@ -83,8 +88,8 @@ object CtrlKeyBindings : KeyBindings {
 
 			Key.DirectionLeft -> if (ctrl) Motion.WordLeft else Motion.Left
 			Key.DirectionRight -> if (ctrl) Motion.WordRight else Motion.Right
-			Key.DirectionUp -> Motion.Up
-			Key.DirectionDown -> Motion.Down
+			Key.DirectionUp -> if (ctrl) Motion.ParagraphStart else Motion.Up
+			Key.DirectionDown -> if (ctrl) Motion.ParagraphEnd else Motion.Down
 			Key.MoveHome -> if (ctrl) Motion.DocumentStart else Motion.LineStart
 			Key.MoveEnd -> if (ctrl) Motion.DocumentEnd else Motion.LineEnd
 			Key.Backspace -> if (ctrl) Action.DeleteWordBackward else Action.DeleteBackward
@@ -107,11 +112,24 @@ object CtrlKeyBindings : KeyBindings {
 }
 
 /**
- * macOS conventions: Cmd for shortcuts, Option+Arrow for word jumps, Cmd+Arrow for line and
- * document bounds. Ctrl never selects a different command than the unmodified key would, since
- * on macOS it belongs to the system and to the Emacs-style text bindings. The exceptions are
- * Ctrl+K, which is one of those Emacs-style bindings, and Enter, where every Ctrl, Cmd or
- * Option chord is left for the host.
+ * Windows conventions: [CtrlKeyBindings], except that Ctrl+Down goes on to the start of the
+ * next paragraph, as Word and WordPad do.
+ */
+object WindowsKeyBindings : KeyBindings {
+	override fun commandFor(event: KeyEvent): EditorCommand? =
+		if (event.isCtrlShortcut && event.navigationKey == Key.DirectionDown) {
+			Motion.NextParagraphStart
+		} else {
+			CtrlKeyBindings.commandFor(event)
+		}
+}
+
+/**
+ * macOS conventions: Cmd for shortcuts, Option+Left/Right for word jumps, Option+Up/Down for
+ * paragraph jumps, Cmd+Arrow for line and document bounds. Ctrl never selects a different
+ * command than the unmodified key would, since on macOS it belongs to the system and to the
+ * Emacs-style text bindings. The exceptions are Ctrl+K, which is one of those Emacs-style
+ * bindings, and Enter, where every Ctrl, Cmd or Option chord is left for the host.
  *
  * Option is also the macOS compose modifier (Option+8 types '{'), so only the chords claimed here
  * may consume an Option event; everything else must fall through to
@@ -156,8 +174,18 @@ object MacKeyBindings : KeyBindings {
 				else -> Motion.Right
 			}
 
-			Key.DirectionUp -> if (cmd) Motion.DocumentStart else Motion.Up
-			Key.DirectionDown -> if (cmd) Motion.DocumentEnd else Motion.Down
+			Key.DirectionUp -> when {
+				cmd -> Motion.DocumentStart
+				option -> Motion.ParagraphStart
+				else -> Motion.Up
+			}
+
+			Key.DirectionDown -> when {
+				cmd -> Motion.DocumentEnd
+				option -> Motion.ParagraphEnd
+				else -> Motion.Down
+			}
+
 			Key.MoveHome -> Motion.LineStart
 			Key.MoveEnd -> Motion.LineEnd
 			Key.Backspace -> when {

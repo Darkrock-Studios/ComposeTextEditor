@@ -21,7 +21,16 @@ sealed interface EditorCommand {
 		DocumentStart,
 		DocumentEnd,
 		PageUp,
-		PageDown;
+		PageDown,
+
+		/** To the start of the paragraph, or of the previous one when already at a start. */
+		ParagraphStart,
+
+		/** To the end of the paragraph, or of the next one when already at an end. */
+		ParagraphEnd,
+
+		/** To the start of the next paragraph, or the document end from the last one. */
+		NextParagraphStart;
 
 		override val isEdit: Boolean get() = false
 	}

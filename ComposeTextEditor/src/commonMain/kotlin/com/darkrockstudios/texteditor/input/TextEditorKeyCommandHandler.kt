@@ -17,7 +17,10 @@ import com.darkrockstudios.texteditor.state.moveCursorToLineEnd
 import com.darkrockstudios.texteditor.state.moveCursorUp
 import com.darkrockstudios.texteditor.state.moveToDocumentEnd
 import com.darkrockstudios.texteditor.state.moveToDocumentStart
+import com.darkrockstudios.texteditor.state.moveToNextParagraphStart
 import com.darkrockstudios.texteditor.state.moveToNextWord
+import com.darkrockstudios.texteditor.state.moveToParagraphEnd
+import com.darkrockstudios.texteditor.state.moveToParagraphStart
 import com.darkrockstudios.texteditor.state.moveToPreviousWord
 import kotlinx.coroutines.CoroutineScope
 
@@ -117,10 +120,16 @@ internal class TextEditorKeyCommandHandler(
 		if (!extendSelection) {
 			val selection = state.selector.selection
 			state.selector.clearSelection()
-			// Native editors collapse onto the selection's edge without moving further.
-			if (selection != null && (motion == Motion.Left || motion == Motion.Right)) {
-				state.cursor.updatePosition(if (motion == Motion.Left) selection.start else selection.end)
-				return
+			if (selection != null) {
+				when (motion) {
+					// Native editors collapse onto the selection's edge without moving further.
+					Motion.Left -> return state.cursor.updatePosition(selection.start)
+					Motion.Right -> return state.cursor.updatePosition(selection.end)
+					// Paragraph jumps measure from the edge they head towards.
+					Motion.ParagraphStart -> state.cursor.updatePosition(selection.start)
+					Motion.ParagraphEnd, Motion.NextParagraphStart -> state.cursor.updatePosition(selection.end)
+					else -> {}
+				}
 			}
 		}
 
@@ -137,6 +146,9 @@ internal class TextEditorKeyCommandHandler(
 			Motion.DocumentEnd -> state.moveToDocumentEnd()
 			Motion.PageUp -> state.moveCursorPageUp()
 			Motion.PageDown -> state.moveCursorPageDown()
+			Motion.ParagraphStart -> state.moveToParagraphStart()
+			Motion.ParagraphEnd -> state.moveToParagraphEnd()
+			Motion.NextParagraphStart -> state.moveToNextParagraphStart()
 		}
 
 		if (extendSelection) {

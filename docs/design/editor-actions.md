@@ -72,6 +72,23 @@ second entry.
 `isEdit` sits on the action because the disabled-editor gate needs it before
 dispatch, without having to resolve a handler first.
 
+### Platform tables
+
+Three `KeyBindings` tables ship, and `platformKeyBindings()` picks one for the
+host:
+
+| Table | Used on | Differs in |
+| --- | --- | --- |
+| `CtrlKeyBindings` | Linux, Android, and any other Ctrl host | The base: Ctrl for shortcuts and jumps |
+| `WindowsKeyBindings` | Windows desktop, browsers on Windows | Ctrl+Down goes on to the next paragraph's start (Word, WordPad) instead of stopping at the paragraph's end |
+| `MacKeyBindings` | macOS, iPadOS, browsers on macOS | Cmd for shortcuts, Option for word and paragraph jumps |
+
+Windows and Linux are the same desktop JVM target, so the choice is made at
+runtime from `os.name` (desktop) or the browser's platform and user agent
+(web), not by `expect`/`actual`. `WindowsKeyBindings` delegates everything it
+does not change to `CtrlKeyBindings`, so the two cannot drift apart. A host
+replaces the table through `LocalKeyBindings` or an editor's `keyBindings`.
+
 ### The registry
 
 Lives on `TextEditorState`, because that is the one object the key handler, the

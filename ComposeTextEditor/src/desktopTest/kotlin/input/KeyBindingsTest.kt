@@ -9,6 +9,7 @@ import com.darkrockstudios.texteditor.input.EditorCommand
 import com.darkrockstudios.texteditor.input.EditorCommand.Action
 import com.darkrockstudios.texteditor.input.EditorCommand.Motion
 import com.darkrockstudios.texteditor.input.MacKeyBindings
+import com.darkrockstudios.texteditor.input.WindowsKeyBindings
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -71,6 +72,65 @@ class KeyBindingsTest {
 			Motion.DocumentEnd,
 			CtrlKeyBindings.commandFor(chord(Key.MoveEnd, ctrl = true)),
 		)
+	}
+
+	@Test
+	fun `ctrl up and down move by paragraph`() {
+		assertEquals(Motion.Up, CtrlKeyBindings.commandFor(chord(Key.DirectionUp)))
+		assertEquals(Motion.Down, CtrlKeyBindings.commandFor(chord(Key.DirectionDown)))
+		assertEquals(Motion.ParagraphStart, CtrlKeyBindings.commandFor(chord(Key.DirectionUp, ctrl = true)))
+		assertEquals(Motion.ParagraphEnd, CtrlKeyBindings.commandFor(chord(Key.DirectionDown, ctrl = true)))
+		assertEquals(
+			Motion.ParagraphEnd,
+			CtrlKeyBindings.commandFor(chord(Key.NumPadDirectionDown, ctrl = true, shift = true)),
+		)
+		assertEquals(Motion.Down, CtrlKeyBindings.commandFor(chord(Key.DirectionDown, ctrl = true, alt = true)))
+	}
+
+	@Test
+	fun `windows ctrl down goes on to the next paragraph start`() {
+		assertEquals(Motion.ParagraphStart, WindowsKeyBindings.commandFor(chord(Key.DirectionUp, ctrl = true)))
+		assertEquals(
+			Motion.NextParagraphStart,
+			WindowsKeyBindings.commandFor(chord(Key.DirectionDown, ctrl = true)),
+		)
+		assertEquals(
+			Motion.NextParagraphStart,
+			WindowsKeyBindings.commandFor(chord(Key.NumPadDirectionDown, ctrl = true, shift = true)),
+		)
+		assertEquals(Motion.Down, WindowsKeyBindings.commandFor(chord(Key.DirectionDown)))
+		assertEquals(Motion.Down, WindowsKeyBindings.commandFor(chord(Key.DirectionDown, ctrl = true, alt = true)))
+	}
+
+	@Test
+	fun `the windows table agrees with the ctrl table away from its own chords`() {
+		val ownKeys = setOf(Key.DirectionDown, Key.NumPadDirectionDown)
+		val keys = listOf(
+			Key.A, Key.C, Key.V, Key.X, Key.Y, Key.Z, Key.B, Key.K, Key.Enter, Key.Tab, Key.Insert,
+			Key.DirectionLeft, Key.DirectionRight, Key.DirectionUp, Key.DirectionDown, Key.NumPadDirectionDown,
+			Key.MoveHome, Key.MoveEnd, Key.PageUp, Key.PageDown, Key.Backspace, Key.Delete,
+		)
+		val flags = listOf(false, true)
+		for (key in keys) for (ctrl in flags) for (shift in flags) for (alt in flags) {
+			if (key in ownKeys && ctrl && !alt) continue
+			val event = chord(key, ctrl = ctrl, shift = shift, alt = alt)
+			assertEquals(
+				CtrlKeyBindings.commandFor(event),
+				WindowsKeyBindings.commandFor(event),
+				"$key ctrl=$ctrl shift=$shift alt=$alt",
+			)
+		}
+	}
+
+	@Test
+	fun `macos moves by paragraph with option up and down`() {
+		assertEquals(Motion.ParagraphStart, MacKeyBindings.commandFor(chord(Key.DirectionUp, alt = true)))
+		assertEquals(Motion.ParagraphEnd, MacKeyBindings.commandFor(chord(Key.DirectionDown, alt = true)))
+		assertEquals(
+			Motion.ParagraphEnd,
+			MacKeyBindings.commandFor(chord(Key.DirectionDown, alt = true, shift = true)),
+		)
+		assertEquals(Motion.DocumentEnd, MacKeyBindings.commandFor(chord(Key.DirectionDown, alt = true, meta = true)))
 	}
 
 	@Test
