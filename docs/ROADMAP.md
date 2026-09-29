@@ -624,6 +624,9 @@ fixes what users feel every minute.
   `ScrollIndicatorTest.kt`). Touch handles on the last row now sit below the
   viewport's edge with nothing to scroll them into view; the buffer never
   fully cleared them either (see 3.3).
+  iOS checked in the simulator 2026-09-29: the thumb is proportional, shows
+  while scrolling and fades after, and pulling past the top rubber-bands and
+  settles back.
 - [ ] **3.13 Known open issues** [Fable] [Lane B] from
   `docs/design/touch-focus.md`: a handle drag cannot restore focus; an orphaned
   long-press job with a second finger.
@@ -661,7 +664,7 @@ Constraints that shape the order:
   runner that builds the iOS targets and the iOS sample app. Without it every
   iOS change is a guess. Done: the `ios` job in `ci-build.yml`. There are no
   iOS test sources yet, so `iosSimulatorArm64Test` is skipped until some exist.
-- [ ] **4.2 One shared input request for desktop, iOS, and web.** [Fable]
+- [x] **4.2 One shared input request for desktop, iOS, and web.** [Fable]
   [Lane E] [Mac work] Move the request, the state adapter, and the editing
   scope from `desktopMain/.../input/TextEditorTextInputService.desktop.kt` into
   a source set shared by the three skiko platforms. iOS and web then get
@@ -672,8 +675,9 @@ Constraints that shape the order:
   Linux part done: `skikoMain` holds `SkikoTextEditorInputMethodRequest`
   (request, state adapter, editing scope, `EditCommand` translation) and the
   three platform files pass in `ImeOptions` only; the desktop suite plus
-  `input/SkikoInputMethodRequestTest` cover it and wasm compiles. The Mac part
-  is in the queue; the checkbox waits on it.
+  `input/SkikoInputMethodRequestTest` cover it and wasm compiles. Mac part
+  done 2026-09-29 at `024affd`: iOS compiles with no `iosMain` change beyond
+  the `ImeOptions`, and the simulator pass under 4.5 is clean.
 - [x] **4.3 Start a real input session on web.** [Fable] [Lane E] Replace the
   suspend-forever stub with `startInputMethod` using the shared request, then
   settle which path owns plain typing so keys are not inserted twice (today
@@ -696,7 +700,7 @@ Constraints that shape the order:
 
 ### iOS
 
-- [ ] **4.5 Input correctness. S.** [Opus] [Lane E] [Mac work] Resolved by 4.2;
+- [x] **4.5 Input correctness. S.** [Opus] [Lane E] [Mac work] Resolved by 4.2;
   listed so each can be checked off on a device.
   `iosMain/.../input/TextEditorTextInputService.ios.kt` does not use the shared
   logic, contrary to `docs/design/text-input-sessions.md`.
@@ -708,8 +712,14 @@ Constraints that shape the order:
   - `applyTextFieldValue` replaces the whole document with a plain string on
     every edit, dropping character styles.
   - Commits skip the edit-behavior chain, so list continuation does not run.
-  All four are addressed on Linux by the shared request (4.2); each waits on
-  the device pass in the Mac queue.
+  All four are addressed on Linux by the shared request (4.2). Simulator pass
+  2026-09-29 (iPhone 17 Pro Max, iOS 26.0), against the baseline below: soft
+  keys type once each; backspace removes one character per press; "teh" then
+  space becomes "The " (the correction replaces the word); Japanese Romaji
+  "nihongo" shows underlined にほんご with kanji candidates, and picking 日本語
+  replaces the kana once; Return at the end of a bullet item continues the
+  list, and bold elsewhere on the line survives. Dictation and a physical
+  device are left to 4.4.
 - [ ] **4.6 Layout geometry. C.** [Opus] [Lane E] [Mac work] `textLayoutResult`
   and every rect return null, so spacebar trackpad mode and IME positioning
   cannot work. The rects come with 4.2 (done on Linux); `textLayoutResult`
@@ -719,9 +729,20 @@ Constraints that shape the order:
   Also: the rectangles read the snapshot-backed viewport size, so a resize
   re-runs iOS's geometry observer, but a move without a resize does not,
   since `canvasLayoutCoordinates` is a plain field.
-- [ ] **4.7 Keyboard options. C.** [Opus] [Lane E] [Mac work] Capitalisation is
-  not set. Set to sentences with autocorrect on in 4.2; confirm the keyboard
-  shows it in the Mac queue pass.
+- [x] **4.7 Keyboard options. C.** [Opus] [Lane E] [Mac work] Capitalisation is
+  not set. Set to sentences with autocorrect on in 4.2. Confirmed in the
+  simulator: the keyboard opens shifted at the start of a line.
+- [ ] **4.24 Caret under the soft keyboard, and a shifted screen. R.** [Opus]
+  [Lane E] [Mac work] Seen in the 4.5 pass. Tapping a line that the keyboard
+  will cover leaves the caret hidden behind the keyboard until the first edit,
+  which does scroll it into view; the iOS twin of 3.9. Separately, when the
+  keyboard first opens, the whole screen is often pushed up by about the
+  toolbar's height, hiding the toolbar and leaving an empty band above the
+  keyboard; it sometimes corrects itself when the keyboard changes. Seen on
+  three of five keyboard opens across both days, with and without the 4.2
+  rects, so the rects alone did not fix it. Suspect Compose's keyboard
+  avoidance reacting to `focusedRectInRoot` before the editor has scrolled or
+  resized.
 - [ ] **4.8 Native edit menu. C.** [Fable] [Lane D] [Mac work] A Material
   dropdown is used instead of the platform text toolbar.
 - [ ] **4.9 Rich clipboard. C.** [Opus] [Lane H] [Mac work] Plain text only
@@ -755,8 +776,7 @@ Also seen:
   (1.11).
 - Intermittent: with the soft keyboard up, the whole screen was pushed up by
   about the toolbar's height, hiding it and leaving a gap above the keyboard.
-  Seen on one of three runs. The null `focusedRectInRoot` (4.6) is the likely
-  cause; recheck after 4.2.
+  Still present after 4.2; now 4.24.
 - After any hardware key event the simulator hides the soft keyboard until the
   device is rebooted. Keep that in mind when testing both paths in one run.
 
@@ -1072,9 +1092,4 @@ records results and removes entries that passed.
 
 | Item | What to do | A pass looks like | Result |
 | --- | --- | --- | --- |
-| 4.2 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64`, then `./gradlew :ComposeTextEditor:iosSimulatorArm64Test`. The iOS file (`iosMain/.../input/TextEditorTextInputService.ios.kt`) now only passes `ImeOptions` into `skikoMain`'s `startSkikoInputSession`; if it does not compile, the fix is in that file or in `skikoMain/.../input/`, never a copy of the desktop code | Both tasks green with no change to the desktop or wasm sources | |
-| 4.2 | Build `sampleAppiOS`, run it in the simulator, and repeat the baseline recording: type a sentence, backspace through it, accept an autocorrect suggestion, and compose Japanese (Settings > General > Keyboard, add Japanese Kana, type "nihongo" and pick a candidate). Compare against "Simulator baseline before 4.2" in the iOS section | Typed characters appear once each and backspace removes one character at a time (4.5); an accepted autocorrect replaces the word rather than appending it (4.5, hammer-editor#791); kana show underlined while composing and the chosen candidate replaces them once (4.5); the keyboard opens with a shifted first letter (4.7). If the baseline already passed any of these, note it as a regression check only | |
-| 2.6 | In Safari and Chrome on macOS, open the wasm demo and press Ctrl+A, E, F, B, N, P, D, H and K in a paragraph. The page's hidden text area has the same Cocoa Emacs bindings, so a chord could act twice | Each chord moves or deletes once, as in the desktop sample app | |
-| 3.12 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64`; `iosMain/.../scrollbar/TextEditorScrollbar.ios.kt` now calls the shared `ScrollIndicator` (commonMain `scrollbar/ScrollIndicator.kt`). Then in the simulator, scroll a long document in the sample app, and pull past its top and bottom | Compiles. The indicator's thumb shrinks as the document grows, shows while scrolling, and fades about half a second after; pulling past an end shows whatever overscroll Compose provides on iOS, and the text settles back | |
-| 4.14 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64`. 4.14 added `skikoMain/.../scrollbar/EditorVerticalScrollbar.skiko.kt`, Compose's skiko `VerticalScrollbar` over the editor's scroll state; iOS compiles it but does not use it | Compiles with no `iosMain` change | |
-| 3.6 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64`. 3.6 added `internal expect fun Modifier.textMagnifier` (commonMain `TextMagnifier.kt`) with its `actual` in `skikoMain` (`TextMagnifier.skiko.kt`, a no-op), not in `iosMain` | Compiles with no `iosMain` change | |
+| 2.6 | In Safari and Chrome on macOS, open the wasm demo and press Ctrl+A, E, F, B, N, P, D, H and K in a paragraph. The page's hidden text area has the same Cocoa Emacs bindings, so a chord could act twice | Each chord moves or deletes once, as in the desktop sample app | Not run: needs a person at a real keyboard. Browser automation injects key events below the Cocoa text system, so it cannot reproduce a chord acting twice |
