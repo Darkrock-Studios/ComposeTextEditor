@@ -105,6 +105,18 @@ internal class LinkClicks(
 	}
 }
 
+/**
+ * Whether a second finger is down beside [down], which makes the gesture a pinch or a
+ * two-finger scroll rather than a tap or long press. Only pointers that hit the editor's
+ * node appear in an event, so a second finger landing outside the editor is not seen.
+ */
+internal fun PointerEvent.hasOtherFingerDown(down: PointerInputChange): Boolean =
+	changes.any { it.id != down.id && it.pressed }
+
+/** Whether [change], of the pointer that went down at [down], has left the tap: travelled or joined. */
+private fun PointerEvent.leavesTap(down: PointerInputChange, change: PointerInputChange, touchSlop: Float): Boolean =
+	(change.position - down.position).getDistance() > touchSlop || hasOtherFingerDown(down)
+
 internal fun PointerEvent.isMouseLike(down: PointerInputChange): Boolean =
 	down.type == PointerType.Mouse || buttons.areAnyPressed
 
@@ -306,8 +318,8 @@ private suspend fun AwaitPointerEventScope.followDrag(
 			val event = awaitPointerEvent()
 			val change = event.changes.firstOrNull { it.id == down.id } ?: return null
 			if (!change.pressed) return if (dragged) null else change
+			dragged = dragged || event.leavesTap(down, change, touchSlop)
 			if (change.positionChanged()) {
-				dragged = dragged || (change.position - down.position).getDistance() > touchSlop
 				autoScroll.update(change.inContent(origin))
 				change.consume()
 			} else if (consumeAll) {
@@ -442,8 +454,9 @@ internal fun Modifier.linkClickHandling(
 			val origin = contentOrigin()
 			val link = ClickTarget.at(state, down.inContent(origin)).link ?: return@awaitEachGesture
 			while (true) {
-				val change = awaitPointerEvent().changes.firstOrNull { it.id == down.id } ?: return@awaitEachGesture
-				if ((change.position - down.position).getDistance() > touchSlop) return@awaitEachGesture
+				val event = awaitPointerEvent()
+				val change = event.changes.firstOrNull { it.id == down.id } ?: return@awaitEachGesture
+				if (event.leavesTap(down, change, touchSlop)) return@awaitEachGesture
 				if (!change.pressed) {
 					val opens = if (currentEvent.isMouseLike(down)) {
 						links.opensOnClick(currentEvent.keyboardModifiers)
@@ -805,8 +818,10 @@ private fun Modifier.handleTouchInteractions(
 							break
 						}
 						// Only a move past touch slop is a drag, so a high-precision touch screen's
-						// micro-movements still tap.
-						if (!wasDrag && (change.position - down.position).getDistance() > touchSlop) {
+						// micro-movements still tap. A second finger is a pinch or a scroll for
+						// some ancestor, which Android's gesture detector also takes for neither
+						// a tap nor a long press.
+						if (!wasDrag && event.leavesTap(down, change, touchSlop)) {
 							wasDrag = true
 							tapCounter.reset()
 							longPressJob.cancel()

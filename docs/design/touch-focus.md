@@ -234,12 +234,18 @@ The `RichSpanClickListener` KDoc now states the Boolean's real contract
 - The markdown demo document is long enough to fling and puts blocks below the
   fold.
 
-Deliberately not addressed, tracked as follow-ups:
+Formerly open, closed by 3.13:
 
-- Dragging a selection handle cannot restore focus once it is lost (needs the
-  same "gesture completed, restore focus" design as popup dismissal).
-- The orphaned long-press job when a second finger lands mid-gesture. Pre-dates
-  this branch; exists on `main`.
+- Dragging a selection handle restores focus: the drag advances the touch
+  selection generation on every move, so the container handler focuses on the
+  drop like any selecting gesture (test-pinned). The keyboard is requested too,
+  unless a popup is showing.
+- A second finger landing mid-gesture cancels the long press and the tap in the
+  gesture handler, and reads as a pan in the focus handler, so a pinch or a
+  two-finger scroll neither selects nor raises the keyboard. Only pointers that
+  hit the editor's node reach its handlers, so this sees a second finger on the
+  editor, not one on the host around it. The long-press job is cancelled in a
+  `finally` whenever its gesture ends, so it cannot be orphaned.
 
 ## Verification assets
 

@@ -339,6 +339,15 @@ was lengthened specifically so it can be scrolled and flung.
     empty space or tap the caret handle. **Expect:** the context menu opens with
     Paste and Select All. Long-press a word. **Expect:** it selects with handles
     and no menu; a second long-press on the selection opens the menu (unchanged).
+17. Long-press a word, then press Back to dismiss the keyboard, and tap a toolbar
+    button or another field so the editor loses focus while the handles stay. Drag
+    a handle. **Expect:** on the drop the editor is focused again and the keyboard
+    rises, so typing replaces the selection (3.13).
+18. Put two fingers down on the text and hold. **Expect:** no word selects and the
+    keyboard stays down. Pinch or two-finger scroll with both fingers on the text.
+    **Expect:** the caret does not move and the keyboard stays down. A second
+    finger on the host outside the editor is not seen by it, so that case is not
+    covered.
 
 ### 4.3 Spans do not fight the keyboard
 

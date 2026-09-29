@@ -246,6 +246,44 @@ class TouchFocusE2eTest {
 		}
 	}
 
+	/**
+	 * Handles stay drawn after focus is lost, and a selection the user is shaping has to
+	 * be typeable over, so dropping a handle focuses even though the finger travelled.
+	 */
+	@Test
+	fun `dropping a selection handle restores focus`() = editorUiTest(
+		initialText = document,
+		autoFocus = false,
+	) {
+		test.runOnIdle {
+			state.selector.startSelection(state.getOffsetAtCharacter(6), isTouch = true)
+			state.selector.updateSelection(state.getOffsetAtCharacter(6), state.getOffsetAtCharacter(11))
+		}
+		waitForIdle()
+		assertFalse(state.isFocused, "precondition: unfocused with a touch selection")
+
+		dragHandle(isStart = false, toChar = 16)
+
+		assertTrue(selectedText.startsWith("world"), "the drag extended the selection: $selectedText")
+		assertTrue(state.isFocused)
+	}
+
+	/** Two fingers are a pinch or a scroll gesture for some ancestor, never a request to type. */
+	@Test
+	fun `a two-finger tap does not focus the editor`() = editorUiTest(
+		initialText = document,
+		autoFocus = false,
+	) {
+		touch {
+			down(0, positionOfCharacter(4))
+			down(1, positionOfCharacter(20))
+			up(0)
+			up(1)
+		}
+
+		assertFalse(state.isFocused)
+	}
+
 	/** Focus survives the gesture that placed it, so typing right after a tap works. */
 	@Test
 	fun `a tap leaves the editor focused and editable`() = editorUiTest(

@@ -653,9 +653,15 @@ fixes what users feel every minute.
   iOS checked in the simulator 2026-09-29: the thumb is proportional, shows
   while scrolling and fades after, and pulling past the top rubber-bands and
   settles back.
-- [ ] **3.13 Known open issues** [Fable] [Lane B] from
+- [x] **3.13 Known open issues** [Fable] [Lane B] from
   `docs/design/touch-focus.md`: a handle drag cannot restore focus; an orphaned
-  long-press job with a second finger.
+  long-press job with a second finger. A handle drop focuses through the touch
+  selection generation 3.7 added (a handle drag advances it on every move), now
+  test-pinned. The long-press job cannot outlive its gesture (a `finally`
+  cancels it), and a second finger on the editor now cancels it and the tap
+  (the caret handle's and a link's too), and keeps the focus handler from
+  focusing, as Android's gesture detector treats a second pointer. A finger
+  landing outside the editor's node never reaches its handlers.
 - [ ] **3.14 Italics invisible on Android. U.** [Fable] [Lane F] Saved and
   exported correctly but not drawn (hammer-editor#956). Not reproduced.
 - [ ] **3.15 Magnifier on iOS and mobile web. C.** [Fable] [Lane B]

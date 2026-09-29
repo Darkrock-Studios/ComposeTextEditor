@@ -130,6 +130,44 @@ class TouchGesturesTest {
 		assertNull(state.selector.selection)
 	}
 
+	/** As Android's gesture detector: a second pointer cancels the long press and the tap. */
+	@Test
+	fun `a second finger cancels the long press`() = editorUiTest(initialText = document) {
+		tapAtCharacter(2)
+		// Past the double-tap window, so the next finger down is a fresh gesture.
+		test.mainClock.advanceTimeBy(1_000)
+		touch {
+			down(0, positionOfCharacter(8))
+			down(1, positionOfCharacter(16))
+		}
+		test.mainClock.advanceTimeBy(800)
+		waitForIdle()
+
+		assertNull(state.selector.selection, "no long press with two fingers down")
+
+		touch {
+			up(0)
+			up(1)
+		}
+
+		assertNull(state.selector.selection)
+		assertEquals(2, cursorIndex, "no tap either")
+	}
+
+	@Test
+	fun `a second finger landing after the long press leaves the selection`() = editorUiTest(initialText = document) {
+		longPressAt(positionOfCharacter(8))
+		assertEquals("beta", selectedText)
+
+		touch {
+			down(1, positionOfCharacter(16))
+			up(1)
+			up(0)
+		}
+
+		assertEquals("beta", selectedText)
+	}
+
 	@Test
 	fun `a long press then drag extends by word`() = editorUiTest(initialText = document) {
 		longPressDragToCharacter(fromChar = 8, toChar = 16)

@@ -413,7 +413,9 @@ internal fun Modifier.requestFocusOnPress(
 		while (true) {
 			val event = awaitPointerEvent()
 			val change = event.changes.firstOrNull { it.id == down.id } ?: return@awaitEachGesture
-			panned = panned || (change.position - down.position).getDistance() > touchSlop
+			// Travel, or a second finger, means a pan or a pinch rather than pointing.
+			panned = panned || (change.position - down.position).getDistance() > touchSlop ||
+					event.hasOtherFingerDown(down)
 			if (!change.pressed) {
 				// Safe to read synchronously: the Main pass dispatches child-first, so
 				// the Canvas gesture handler has already run this gesture's dispatch
