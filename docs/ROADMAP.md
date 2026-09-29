@@ -105,7 +105,10 @@ small enough to review in one pass.
 3. Implement.
 4. Run the tests: `./gradlew :ComposeTextEditor:desktopTest`, plus the addon
    module's suite when it was touched. Run `./gradlew check` before a push.
-5. Run `/code-review` on the chunk.
+5. Run `/code-review` on the chunk, naming its diff (for example "only the
+   uncommitted changes, `git diff HEAD`"). Without one it compares against
+   `main`, and a worktree branch has no upstream, so it reviews the whole
+   working branch instead of the chunk.
 6. Fix what the review found. Rerun the tests.
 7. Tick the item's checkbox here, in the same commit as the work.
 8. Checkpoint commit, naming the roadmap item. Then move on.
