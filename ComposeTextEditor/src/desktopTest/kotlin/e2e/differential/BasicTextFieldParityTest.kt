@@ -1,5 +1,6 @@
 package e2e.differential
 
+import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.unit.dp
 import utils.Backspace
 import utils.CtrlBackspace
@@ -110,6 +111,12 @@ class BasicTextFieldParityTest {
 	fun `up on the first row goes to the document start`() = assertMatchesNative(
 		start = EditSnapshot("Hello\nWorld", caret = 3),
 		strokes = listOf(Up),
+	)
+
+	@Test
+	fun `up and down at the document ends measure the next move from the caret`() = assertMatchesNative(
+		start = EditSnapshot("abcdef\nabcdef\nabcdef", caret = 10),
+		strokes = listOf(Up, Up, Down, Down, Down, Down, Up),
 	)
 
 	@Test
@@ -456,6 +463,51 @@ class BasicTextFieldParityTest {
 	fun `a right-to-left word inside left-to-right text moves logically`() = assertMatchesNative(
 		start = EditSnapshot("abc שלום def", caret = 2),
 		strokes = listOf(Right, Right, Right, Right, Left),
+	)
+
+	// Right-to-left paragraphs, with the content-based direction a right-to-left host sets.
+
+	@Test
+	fun `left moves forward through a right-to-left paragraph`() = assertMatchesNative(
+		start = EditSnapshot("שלום עולם", caret = 0),
+		strokes = listOf(Right, Left, Left, Right),
+		textDirection = TextDirection.Content,
+	)
+
+	@Test
+	fun `shift left selects forward and ctrl arrows mirror in a right-to-left paragraph`() = assertMatchesNative(
+		start = EditSnapshot("שלום עולם טוב", caret = 0),
+		strokes = listOf(ShiftLeft, ShiftLeft, CtrlShiftLeft, CtrlLeft, CtrlRight, CtrlRight),
+		textDirection = TextDirection.Content,
+	)
+
+	@Test
+	fun `left and right collapse a selection to its far edge in a right-to-left paragraph`() = assertMatchesNative(
+		start = EditSnapshot("שלום עולם", anchor = 2, caret = 6),
+		strokes = listOf(Left, ShiftLeft, ShiftLeft, Right),
+		textDirection = TextDirection.Content,
+	)
+
+	@Test
+	fun `home and end stay logical in a right-to-left paragraph`() = assertMatchesNative(
+		start = EditSnapshot("שלום עולם", caret = 4),
+		strokes = listOf(Home, End, ShiftHome),
+		textDirection = TextDirection.Content,
+	)
+
+	/** No spaces, so the rows wrap mid-word and the reference's trailing-space stop cannot differ. */
+	@Test
+	fun `up and down keep the x in a wrapped right-to-left paragraph`() = assertMatchesNative(
+		start = EditSnapshot("שלוםעולםטובמאודהיוםומחרשלוםעולםטוב", caret = 2),
+		strokes = listOf(Down, Down, Up, Home, Down, Down, End, Up),
+		width = 120.dp,
+		textDirection = TextDirection.Content,
+	)
+
+	@Test
+	fun `with the default direction a right-to-left paragraph is left-to-right based and logical`() = assertMatchesNative(
+		start = EditSnapshot("שלום עולם", caret = 0),
+		strokes = listOf(Right, Right, Left, CtrlRight),
 	)
 
 	@Test

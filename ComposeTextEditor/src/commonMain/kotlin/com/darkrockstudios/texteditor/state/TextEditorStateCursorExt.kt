@@ -33,11 +33,27 @@ internal fun TextEditorState.moveCursorDown() {
 }
 
 /**
+ * Runs [edgeMove], a page move's jump to the document start or end, keeping the
+ * run's goal x, as `BasicTextField` does across a page move: the next Up or Down
+ * returns to the column. Up and Down at the edges measure afresh from the caret,
+ * again as the reference does.
+ */
+private inline fun TextEditorState.keepingVerticalGoal(edgeMove: () -> Unit) {
+	val goalX = verticalGoalOrCaretX()
+	edgeMove()
+	cursor.rememberVerticalGoalX(goalX)
+}
+
+/** The x the vertical run under way aims for, or the caret's own x when one starts. */
+private fun TextEditorState.verticalGoalOrCaretX(): Float =
+	cursor.verticalGoalX ?: getPositionForOffset(cursorPosition, cursor.affinity).position.x
+
+/**
  * Moves the caret onto the visual row at [rowIndex] in [lineOffsets], at the x the
  * current run of vertical moves aims for (the caret's own x when a run starts).
  */
 private fun TextEditorState.moveCursorToRow(rowIndex: Int) {
-	val goalX = cursor.verticalGoalX ?: getPositionForOffset(cursorPosition, cursor.affinity).position.x
+	val goalX = verticalGoalOrCaretX()
 	val row = lineOffsets[rowIndex]
 	val (char, affinity) = row.caretAtX(goalX)
 	cursor.updatePosition(CharLineOffset(row.line, char), affinity)
@@ -54,14 +70,12 @@ private fun LineWrap.caretAtX(x: Float): Pair<Int, CaretAffinity> {
 	val text = layout.layoutInput.text.text
 	val rowEnd = layout.getLineEnd(row)
 	val wraps = row < layout.lineCount - 1
-	// At or past a wrapped row's far edge the layout answers with the last glyph's
-	// start, since it puts the wrap offset on the next row; the caret belongs at the end.
-	val pastEdge = wraps && if (layout.getParagraphDirection(0) == ResolvedTextDirection.Ltr) {
-		x >= rowEndX()
-	} else {
-		x <= rowEndX()
-	}
-	if (pastEdge) return rowEnd to CaretAffinity.Upstream
+	// Past a row's far edge the layout's answer is unreliable: on a wrapped row it is
+	// the last glyph's start (the wrap offset belongs to the next row), and on a row
+	// that ends in a run of the other direction it is a position inside that run. The
+	// caret belongs at the row's end.
+	val pastEdge = if (layout.getParagraphDirection(0) == ResolvedTextDirection.Ltr) x >= rowEndX() else x <= rowEndX()
+	if (pastEdge) return rowEnd to if (wraps) CaretAffinity.Upstream else CaretAffinity.Downstream
 	val y = (layout.getLineTop(row) + layout.getLineBottom(row)) / 2f
 	val hit = layout.getOffsetForPosition(Offset(x, y)).coerceIn(wrapStartsAtIndex, rowEnd)
 	val char = text.snapToGraphemeBoundary(hit, forward = false)
@@ -156,6 +170,12 @@ fun TextEditorState.moveToPreviousWord() {
 	}
 }
 
+/** Whether the caret's paragraph runs right to left; a paragraph the layout has not reached counts as left to right. */
+internal fun TextEditorState.caretParagraphIsRtl(): Boolean {
+	val row = lineOffsets.getOrNull(getWrappedLineIndex(cursorPosition)) ?: return false
+	return row.textLayoutResult.getParagraphDirection(0) == ResolvedTextDirection.Rtl
+}
+
 /** Moves the cursor to the first character of the document. */
 fun TextEditorState.moveToDocumentStart() {
 	cursor.updatePosition(CharLineOffset(0, 0))
@@ -222,9 +242,9 @@ private fun TextEditorState.moveCursorByPage(direction: Int) {
 		if (it == index) index + direction else it
 	}
 	when {
-		targetY < 0f || targetIndex < 0 -> moveToDocumentStart()
+		targetY < 0f || targetIndex < 0 -> keepingVerticalGoal { moveToDocumentStart() }
 		targetY >= lastRow.offset.y + lastRow.effectiveHeight || targetIndex > lineOffsets.lastIndex ->
-			moveToDocumentEnd()
+			keepingVerticalGoal { moveToDocumentEnd() }
 
 		else -> moveCursorToRow(targetIndex)
 	}

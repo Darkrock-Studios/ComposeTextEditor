@@ -92,8 +92,11 @@ emoji is a word of its own), and its Ctrl+Left and Ctrl+Backspace step back
 one character at a time and stop at the first segment that began before the
 step, so they pass over one-character segments (a space, a mark, a flag, a lone
 ideograph) and stop one short of a word when the step lands inside it, where
-GTK and Cocoa go to the previous word's start. Its
-arrow keys in right-to-left text are logical, like the editor's (7.5).
+GTK and Cocoa go to the previous word's start; and its paragraph direction is
+the whole text's, from its first strong character, so a right-to-left paragraph
+after a left-to-right one keeps left-to-right arrows, where native editors and
+the editor resolve each paragraph on its own. Its
+arrow keys inside a mixed paragraph are logical, like the editor's (7.32).
 
 ## Workflow
 
@@ -316,8 +319,11 @@ fixes what users feel every minute.
   5. Use the caret's x and hit-test the target row; remember the goal x until a
   horizontal move or an edit.
   The goal x lives on `TextEditorCursorState` and ends with any other caret
-  move or any document change. A goal x past a wrapped row's end stops one
-  short of the wrap, where 1.6's affinity is needed to sit at the row's end.
+  move or any document change. A page move past the first or last row keeps
+  it through its jump to the document end (1.7), so the move back returns to
+  the column; Up and Down at the ends (1.3) measure afresh from the caret, as
+  `BasicTextField` does in both cases. A goal x past a wrapped row's end sits
+  at the row's end since 1.6.
 - [x] **1.3 Document edges. R.** [Opus] [Lane A] Up on the first row and Down
   on the last row do nothing. Native moves to document start and end.
 - [x] **1.4 Collapse the selection on an unshifted arrow. R.** [Opus] [Lane A]
@@ -1039,10 +1045,39 @@ iOS Safari; browser tests run in CI.
 
 ### Right-to-left and bidirectional text
 
-- [ ] **7.5** [Fable] [Lane A] Arrow keys are logical, so visually inverted in
+- [x] **7.5** [Fable] [Lane A] Arrow keys are logical, so visually inverted in
   right-to-left text. `BasicTextField` is logical too, so it is no reference
   here. Collapsing a selection with Left or Right (1.4) goes to its logical start
   or end; `BasicTextField` swaps the two in a right-to-left paragraph.
+  Done, by paragraph direction, which is also what `BasicTextField` does once
+  its style resolves a direction from the content: in a right-to-left paragraph
+  the arrow keys mirror (`TextEditorKeyCommandHandler`): Left and Right swap,
+  Ctrl+Left performs the platform's forward word motion
+  (`KeyBindings.wordForward`: the word end, or the next word start on Windows)
+  and Ctrl+Right the word start, Cmd+Left and Cmd+Right swap line start and
+  end, and the 1.4 collapse follows the mirrored key. Home, End, the Emacs
+  chords, the deletes and the vertical moves stay logical. Direction is the
+  paragraph's `getParagraphDirection`, which with Compose's default
+  `TextDirection.Unspecified` is the app's layout direction: an all-Hebrew
+  paragraph in a left-to-right app is left-to-right based and stays logical,
+  exactly as `BasicTextField` is; a host that sets `TextDirection.Content` on
+  the editor's text style gets the mirroring (7.31). Mixed runs inside a
+  paragraph stay logical (7.32).
+- [ ] **7.31** [Fable] [Lane M] The editor's text style leaves `textDirection`
+  unspecified, so the paragraph direction is the app's layout direction: a
+  right-to-left paragraph in a left-to-right app is laid out left-to-right
+  based (aligned left, caret motion logical), and an English paragraph in a
+  right-to-left app is right-to-left based, with the 7.5 mirror on its arrows,
+  unless the host sets `TextDirection.Content`. `BasicTextField` behaves the
+  same, but native editors resolve each paragraph from its first strong
+  character. Decide whether the editor should default to `Content`, or
+  document the host's job.
+- [ ] **7.32** [Fable] [Lane A] Arrow keys inside a mixed paragraph (a Hebrew
+  word in English text, or the reverse) move logically, so the caret jumps
+  visually at the run boundaries. macOS and Windows move visually through the
+  runs, with the caret carrying a direction at each boundary; `BasicTextField`
+  is logical here too. Needs `getBidiRunDirection` and a run-aware step, and a
+  visual caret position at run boundaries.
 - [ ] **7.6** [Fable] [Lane C] Selection draws one rect per row from x(start)
   to x(end); wrong in right-to-left, and mixed text needs several rects.
 - [ ] **7.7** [Fable] [Lane C] Underline boxes (spell check, composing, links)

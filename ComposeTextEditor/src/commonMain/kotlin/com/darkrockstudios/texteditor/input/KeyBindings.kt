@@ -42,6 +42,15 @@ val KeyEvent.isCtrlShortcut: Boolean
 fun interface KeyBindings {
 	/** The command [event] triggers, or null when the chord is unbound. */
 	fun commandFor(event: KeyEvent): EditorCommand?
+
+	/**
+	 * The motion the forward word chord (Ctrl+Right, Option+Right) performs. In a
+	 * right-to-left paragraph the arrow keys mirror, so Ctrl+Left performs this and
+	 * Ctrl+Right the word start. [WindowsKeyBindings] returns [Motion.WordRight]. A
+	 * lambda cannot override it, so bindings that wrap the platform's on Windows keep
+	 * it by delegating: `object Mine : KeyBindings by platformKeyBindings() { ... }`.
+	 */
+	val wordForward: Motion get() = Motion.WordEnd
 }
 
 /** The bindings of the host platform. */
@@ -118,6 +127,8 @@ object CtrlKeyBindings : KeyBindings {
  * start of the next word, Ctrl+Down to the start of the next paragraph.
  */
 object WindowsKeyBindings : KeyBindings {
+	override val wordForward: Motion get() = Motion.WordRight
+
 	override fun commandFor(event: KeyEvent): EditorCommand? {
 		val forward = if (event.isCtrlShortcut) {
 			when (event.navigationKey) {
@@ -277,7 +288,7 @@ private val KeyEvent.isEnterHostChord: Boolean
  * keeps the numpad location on these, so they never equal [Key.MoveHome] and friends,
  * and laptops that fold navigation into the numpad have no other Home, End or Page keys.
  */
-private val KeyEvent.navigationKey: Key
+internal val KeyEvent.navigationKey: Key
 	get() = when (val key = key) {
 		Key.NumPadDirectionUp -> Key.DirectionUp
 		Key.NumPadDirectionDown -> Key.DirectionDown

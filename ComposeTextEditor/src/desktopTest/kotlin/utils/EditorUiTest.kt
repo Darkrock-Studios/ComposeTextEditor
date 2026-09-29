@@ -28,6 +28,7 @@ import androidx.compose.ui.test.runSkikoComposeUiTest
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.darkrockstudios.texteditor.BasicTextEditor
@@ -35,6 +36,7 @@ import com.darkrockstudios.texteditor.LocalNativeTextToolbar
 import com.darkrockstudios.texteditor.RichSpanClickEventListener
 import com.darkrockstudios.texteditor.handleCenter as drawnHandleCenter
 import com.darkrockstudios.texteditor.RichSpanClickListener
+import com.darkrockstudios.texteditor.TextEditorStyle
 import com.darkrockstudios.texteditor.contextmenu.TextEditorContextMenuState
 import com.darkrockstudios.texteditor.input.CtrlKeyBindings
 import com.darkrockstudios.texteditor.input.KeyBindings
@@ -72,6 +74,7 @@ internal fun editorUiTest(
 	contentPadding: PaddingValues = PaddingValues(0.dp),
 	density: Float = 1f,
 	textToolbar: TextToolbar? = null,
+	textStyle: TextStyle = TextStyle.Default,
 	block: EditorUiTestScope.() -> Unit,
 ) = runSkikoComposeUiTest(density = Density(density)) {
 	val clipboard = InMemoryClipboard()
@@ -92,6 +95,7 @@ internal fun editorUiTest(
 				contentPadding = contentPadding,
 				enabled = enabled,
 				autoFocus = autoFocus,
+				style = TextEditorStyle(textStyle = textStyle),
 				contextMenuState = contextMenuState,
 				onRichSpanClick = onRichSpanClick,
 				onRichSpanClickEvent = onRichSpanClickEvent,

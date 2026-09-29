@@ -32,10 +32,13 @@ import androidx.compose.ui.test.runSkikoComposeUiTest
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.darkrockstudios.texteditor.BasicTextEditor
 import com.darkrockstudios.texteditor.CharLineOffset
+import com.darkrockstudios.texteditor.TextEditorStyle
 import com.darkrockstudios.texteditor.input.CtrlKeyBindings
 import com.darkrockstudios.texteditor.input.LocalKeyBindings
 import com.darkrockstudios.texteditor.state.TextEditorState
@@ -169,12 +172,17 @@ private const val REFERENCE_TEST_TAG = "reference-text-field"
  *
  * Cases the editor gets wrong today stay in the suite, marked with the roadmap
  * item that fixes them; see `divergesUntil` on [assertMatchesNative].
+ *
+ * [textDirection] goes into both widgets' text style. Compose's default resolves to
+ * the layout direction, so a right-to-left paragraph is left-to-right based unless
+ * a host asks for [TextDirection.Content].
  */
 @OptIn(ExperimentalTestApi::class)
 internal fun differentialUiTest(
 	initialText: String,
 	width: Dp = 400.dp,
 	height: Dp = 300.dp,
+	textDirection: TextDirection = TextDirection.Unspecified,
 	block: DifferentialScope.() -> Unit,
 ) = withPinnedReferenceKeyMapping {
 	runSkikoComposeUiTest {
@@ -184,6 +192,7 @@ internal fun differentialUiTest(
 		var fieldFocused = false
 		var fieldLayout: (() -> TextLayoutResult?)? = null
 		lateinit var editorState: TextEditorState
+		val textStyle = TextStyle(textDirection = textDirection)
 		setContent {
 			editorState = rememberTextEditorState(initialText = AnnotatedString(initialText))
 			CompositionLocalProvider(
@@ -195,10 +204,12 @@ internal fun differentialUiTest(
 						state = editorState,
 						modifier = Modifier.size(width, height).testTag(EDITOR_TEST_TAG),
 						autoFocus = true,
+						style = TextEditorStyle(textStyle = textStyle),
 					)
 					val textWidth = with(LocalDensity.current) { editorState.viewportSize.width.toDp() }
 					BasicTextField(
 						state = fieldState,
+						textStyle = textStyle,
 						modifier = Modifier
 							.width(textWidth)
 							.height(height)
@@ -428,7 +439,8 @@ internal fun assertMatchesNative(
 	strokes: List<Stroke>,
 	width: Dp = 400.dp,
 	divergesUntil: String? = null,
-) = differentialUiTest(initialText = start.text, width = width) {
+	textDirection: TextDirection = TextDirection.Unspecified,
+) = differentialUiTest(initialText = start.text, width = width, textDirection = textDirection) {
 	assertSameRows()
 	val reference = replayReference(start, strokes)
 	focusEditor()

@@ -183,7 +183,11 @@ translation paths:
   three ways: bindings know which chord means what, the
   `EditorActionRegistry` on the state knows what an action *does*, and
   `TextEditorKeyCommandHandler` implements only caret motion, because a
-  motion is not something a host can register. Windows/Linux and macOS
+  motion is not something a host can register. The arrow keys are visual:
+  in a paragraph the layout resolves as right-to-left, the handler mirrors
+  the bound motion (Left and Right, the word motions through
+  `KeyBindings.wordForward`, line start and end) before running it; Home,
+  End, deletes and the Emacs chords stay logical. Windows/Linux and macOS
   conventions ship as two `KeyBindings` values; hosts can substitute their
   own and register actions for their own chords to bind.
 - **Typed characters.** Printable typing that arrives as raw key events

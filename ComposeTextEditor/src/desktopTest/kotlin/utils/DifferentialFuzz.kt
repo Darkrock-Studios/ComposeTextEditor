@@ -14,7 +14,7 @@ import kotlin.test.fail
  * reference's state and the script continues. Delete an item here when it lands,
  * and the fuzzer starts failing on that class of divergence.
  */
-val OPEN_PARITY_ITEMS: Set<String> = setOf("7.5")
+val OPEN_PARITY_ITEMS: Set<String> = emptySet()
 
 /** Starting text for the Unicode fuzzers: an emoji, a combining mark, and a right-to-left word. */
 const val FUZZ_START_TEXT = "seed line\nsecond line of words\n\uD83D\uDE00 e\u0301 שלום end"
@@ -106,11 +106,6 @@ fun explainDivergence(
 				val edge = if (stroke.key == Key.DirectionUp) 0 else native.text.length
 				if (native.caret == edge && editor.caret == before.caret) add("1.3") else add("1.2")
 			}
-			// The caret's x, and the row edge a far goal x snaps to, depend on direction.
-			val text = before.text
-			if (listOf(before.caret, native.caret, editor.caret).any { text.paragraphHasRightToLeft(it) }) {
-				add("7.5")
-			}
 		}
 
 		else -> {}
@@ -166,15 +161,6 @@ private fun String.icuSegment(offset: Int): Pair<Int, Int> {
 	val lineEnd = indexOf('\n', offset).let { if (it < 0) length else it }
 	val run = substring(lineStart, lineEnd).wordRuns().first { offset - lineStart in it.start until it.end }
 	return lineStart + run.start to lineStart + run.end
-}
-
-private fun String.paragraphHasRightToLeft(index: Int): Boolean {
-	val start = lastIndexOf('\n', index - 1) + 1
-	val end = indexOf('\n', index).let { if (it < 0) length else it }
-	return substring(start, end).any {
-		val direction = Character.getDirectionality(it)
-		direction == Character.DIRECTIONALITY_RIGHT_TO_LEFT || direction == Character.DIRECTIONALITY_RIGHT_TO_LEFT_ARABIC
-	}
 }
 
 /**

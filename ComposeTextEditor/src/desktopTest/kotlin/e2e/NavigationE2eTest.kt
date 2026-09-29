@@ -2,6 +2,8 @@ package e2e
 
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.unit.dp
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.cursor.calculateCursorPosition
@@ -302,6 +304,19 @@ class NavigationE2eTest {
 	}
 
 	@Test
+	fun `a page move past the document end keeps the column for the move back`() = editorUiTest(
+		initialText = AnnotatedString((1..40).joinToString("\n") { "line number $it" }),
+	) {
+		clickAtCharacter(5)
+		press(Key.PageDown)
+		press(Key.PageDown)
+		press(Key.PageDown)
+		assertEquals(text.length, cursorIndex, "past the last page is the document end")
+		press(Key.DirectionUp)
+		assertEquals(CharLineOffset(38, 5), state.cursorPosition, "back on the column the run started in")
+	}
+
+	@Test
 	fun `end on a row wrapped mid-word sits at the wrap and draws on that row`() = editorUiTest(
 		initialText = AnnotatedString(WRAPPED_WORD),
 		width = 80.dp,
@@ -380,6 +395,47 @@ class NavigationE2eTest {
 		typeText("X")
 		assertEquals('X', text[wrap])
 		assertEquals(wrap + 1, cursorIndex)
+	}
+
+	@Test
+	fun `ctrl+left on windows goes to the next word start in a right-to-left paragraph`() = editorUiTest(
+		initialText = AnnotatedString("שלום עולם טוב"),
+		keyBindings = WindowsKeyBindings,
+		textStyle = TextStyle(textDirection = TextDirection.Content),
+	) {
+		press(Key.MoveHome, ctrl = true)
+		press(Key.DirectionLeft, ctrl = true)
+		assertEquals(5, cursorIndex, "Ctrl+Left is the forward word chord here: the next word's start")
+		press(Key.DirectionRight, ctrl = true)
+		assertEquals(0, cursorIndex)
+	}
+
+	/** Direction is per paragraph, as native editors resolve it; BasicTextField takes the whole text's. */
+	@Test
+	fun `arrows mirror only in the right-to-left paragraph of a mixed document`() = editorUiTest(
+		initialText = AnnotatedString("abc def\nשלום עולם"),
+		textStyle = TextStyle(textDirection = TextDirection.Content),
+	) {
+		press(Key.MoveEnd, ctrl = true)
+		press(Key.DirectionRight)
+		assertEquals(CharLineOffset(1, 8), state.cursorPosition, "Right moves back through the Hebrew paragraph")
+		press(Key.DirectionLeft)
+		assertEquals(CharLineOffset(1, 9), state.cursorPosition)
+		press(Key.MoveHome)
+		press(Key.DirectionRight)
+		assertEquals(CharLineOffset(0, 7), state.cursorPosition, "Right from the paragraph start crosses to the line above")
+		press(Key.DirectionLeft)
+		assertEquals(CharLineOffset(0, 6), state.cursorPosition, "and is logical again in the English paragraph")
+	}
+
+	@Test
+	fun `ctrl+backspace stays logical in a right-to-left paragraph`() = editorUiTest(
+		initialText = AnnotatedString("שלום עולם"),
+		textStyle = TextStyle(textDirection = TextDirection.Content),
+	) {
+		press(Key.MoveEnd, ctrl = true)
+		press(Key.Backspace, ctrl = true)
+		assertEquals("שלום ", text)
 	}
 
 	@Test
