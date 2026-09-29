@@ -134,7 +134,10 @@ scrollbar, context menu, and IME wiring; `RichTextView` renders the same
 content read-only. Input arrives through platform key, pointer, and IME
 handlers whose only job is translation: raw events become cursor moves,
 selection changes, or `TextEditOperation`s. The view renders what `lineOffsets`
-says and holds no document state of its own.
+says and holds no document state of its own. Content padding belongs to the
+editor: the top and bottom padding are scroll range, and the start and end
+padding are applied inside the canvas, below its pointer input, so a press
+anywhere in the padding reaches the nearest row.
 
 ### Observation and extensions
 

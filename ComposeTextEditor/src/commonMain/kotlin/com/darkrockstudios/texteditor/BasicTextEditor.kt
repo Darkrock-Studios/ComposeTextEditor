@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -133,6 +132,9 @@ fun BasicTextEditor(
 			end = contentPadding.calculateEndPadding(layoutDirection),
 		)
 	}
+	val contentOrigin by rememberUpdatedState(
+		with(density) { Offset(contentPadding.calculateLeftPadding(layoutDirection).toPx(), 0f) }
+	)
 
 	LaunchedEffect(contentPadding, density) {
 		with(density) {
@@ -223,9 +225,10 @@ fun BasicTextEditor(
 			modifier = modifier,
 			scrollState = state.scrollState,
 		) { editorModifier ->
+			// The horizontal padding is applied inside the canvas, below its pointer input,
+			// so presses in it reach the text; the vertical padding is scroll range.
 			Box(
 				modifier = editorModifier
-					.padding(horizontalPadding)
 					.focusRequester(focusRequester)
 					.requestFocusOnPress(
 						focusRequester,
@@ -268,12 +271,6 @@ fun BasicTextEditor(
 						}
 						onClick { focusRequester.requestFocus(); true }
 					}
-					.background(style.backgroundColor)
-					.onSizeChanged { size ->
-						state.onViewportSizeChange(
-							size.toSize()
-						)
-					}
 					.fillMaxSize()
 					.scrollable(
 						orientation = Orientation.Vertical,
@@ -297,22 +294,23 @@ fun BasicTextEditor(
 				}
 				Canvas(
 					modifier = Modifier
-						.textEditorPointerIcon(state, linkClicks)
-						.textMagnifier(state)
+						.textEditorPointerIcon(state, linkClicks, contentOrigin = { contentOrigin })
 						.textEditorPointerInputHandling(
 							state = state,
 							onSpanClick = spanClickProxy,
 							onContextMenuRequest = { offset -> effectiveContextMenuState.showMenu(offset) },
 							links = linkClicks,
 							caretHandle = enabled,
+							contentOrigin = { contentOrigin },
 						)
+						.padding(horizontalPadding)
+						.textMagnifier(state)
+						.background(style.backgroundColor)
+						.onSizeChanged { size -> state.onViewportSizeChange(size.toSize()) }
 						// Capture the canvas position so the desktop IME can place the
 						// composition/candidate window relative to the cursor.
 						.onGloballyPositioned { state.canvasLayoutCoordinates = it }
-						.size(
-							width = state.viewportSize.width.dp,
-							height = state.viewportSize.height.dp
-						)
+						.fillMaxSize()
 						.graphicsLayer {
 							clip = false
 						}

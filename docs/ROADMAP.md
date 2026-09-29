@@ -351,9 +351,14 @@ fixes what users feel every minute.
   Done: a point above the first row hits the first row and one below the last
   row hits the last row, x hit-tested either way, as `BasicTextField` does
   (`e2e/ClickOutsideTextE2eTest.kt`).
-- [ ] **1.11 Padding. C.** [Opus] [Lane C] The placeholder draws at `Offset(0,
+- [x] **1.11 Padding. C.** [Opus] [Lane C] The placeholder draws at `Offset(0,
   0)`, ignoring top padding (`DrawPlaceholderText.kt`). Horizontal padding sits
   outside pointer input, leaving dead click zones.
+  Done: the placeholder starts at the first line. `BasicTextEditor` and
+  `RichTextView` apply their padding inside the canvas, below its pointer
+  input; the handlers subtract the padding's top-left from every position
+  (`contentOrigin`), so a press in the padding reaches the nearest row edge,
+  focuses, and scrolls (`e2e/ContentPaddingE2eTest.kt`).
 - [x] **1.12 Multi-click drag. C.** [Opus] [Lane B] Double-click then drag
   should extend by word, triple-click then drag by line. Today multi-click
   resolves on release and replaces the drag. Word selection should appear on
@@ -505,6 +510,10 @@ fixes what users feel every minute.
   is shifted by the start content padding. `TextEditor` does not expose
   `contextMenuStrings` or `contextMenuState`; `RichTextView` hard-codes
   English. No Paste as plain text item (2.2 added the action).
+  Since 1.11 the canvas's pointer input covers the padding, so a raw pointer
+  position is already in the menu provider's coordinates; the handlers
+  translate it to text coordinates before `onContextMenuRequest`, which is the
+  shift.
 - [ ] **2.11 Kill ring.** [Opus] [Lane D] Ctrl+K on macOS deletes to the
   paragraph end but keeps nothing. Cocoa saves killed text to a kill ring,
   consecutive kills append to it, and Ctrl+Y yanks it back. Separate from the
@@ -960,6 +969,8 @@ Shaping is one line per keystroke. These still scale with document length:
 - [x] `docs/design/text-input-sessions.md` describes iOS as routing through
   the shared IME logic; it does not yet (4.2). True since 4.2's Linux part.
 - [ ] `getOffsetAtCharacter` returns a negative char for negative input.
+- [ ] `rememberTextEditorStyle` leaves `backgroundColor` out of its `remember`
+  keys, so a new background colour is ignored until another key changes.
 - [ ] The document content is not snapshot state, so the skiko input session
   (4.2) collects `editOperations` and `documentGeneration` to bump a
   snapshot-backed revision its text reads fold in. The bump lands one

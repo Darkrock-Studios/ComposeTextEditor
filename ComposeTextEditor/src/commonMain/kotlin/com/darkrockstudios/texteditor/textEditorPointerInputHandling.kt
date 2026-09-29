@@ -44,12 +44,19 @@ internal fun Modifier.textEditorPointerInputHandling(
 	readOnly: Boolean = false,
 	links: LinkClicks? = null,
 	caretHandle: Boolean = !readOnly,
+	contentOrigin: () -> Offset = { Offset.Zero },
 ): Modifier {
 	return this
-		.handleHandleDrag(state)
-		.handleTouchInteractions(state, onSpanClick, onContextMenuRequest, readOnly, links, caretHandle)
-		.handleMouseInput(state, onSpanClick, onContextMenuRequest, readOnly, links)
+		.handleHandleDrag(state, contentOrigin)
+		.handleTouchInteractions(state, onSpanClick, onContextMenuRequest, readOnly, links, caretHandle, contentOrigin)
+		.handleMouseInput(state, onSpanClick, onContextMenuRequest, readOnly, links, contentOrigin)
 }
+
+/**
+ * [PointerInputChange.position] in text-canvas coordinates. The pointer node can span the
+ * content padding as well, so its origin sits [origin] above and left of the canvas's.
+ */
+private fun PointerInputChange.inContent(origin: Offset): Offset = position - origin
 
 internal typealias SpanClickSink = (RichSpanClick) -> Unit
 
@@ -135,6 +142,7 @@ private fun Modifier.handleMouseInput(
 	onContextMenuRequest: ((Offset) -> Unit)?,
 	readOnly: Boolean,
 	links: LinkClicks?,
+	contentOrigin: () -> Offset,
 ): Modifier = pointerInput(state, links) {
 	val clickCounter = ClickCounter(viewConfiguration)
 	val touchSlop = viewConfiguration.touchSlop
@@ -146,6 +154,8 @@ private fun Modifier.handleMouseInput(
 		val down = press.changes.firstOrNull { it.changedToDownIgnoreConsumed() }
 			?: return@awaitEachGesture
 		if (!press.isMouseLike(down)) return@awaitEachGesture
+		val origin = contentOrigin()
+		val downAt = down.inContent(origin)
 
 		val buttons = press.buttons
 		when {
@@ -154,22 +164,23 @@ private fun Modifier.handleMouseInput(
 				val clicks = clickCounter.register(down)
 				// The second and third press of a multi-click select; only a plain first
 				// press can become a click on what is under it.
-				val pressed = if (clicks == 1 && !isShiftPressed) ClickTarget.at(state, down.position) else null
+				val pressed = if (clicks == 1 && !isShiftPressed) ClickTarget.at(state, downAt) else null
 				val selection = MouseSelection.press(
 					state,
-					position = down.position,
+					position = downAt,
 					granularity = SelectionGranularity.forClickCount(clicks),
 					isShiftPressed = isShiftPressed,
 				)
 				val autoScroll = DragAutoScroll(state, autoScrollScope, onDrag = selection::selectTo)
-				val release = followDrag(autoScroll, down, touchSlop) ?: return@awaitEachGesture
+				val release = followDrag(autoScroll, down, origin, touchSlop) ?: return@awaitEachGesture
 				// A drag inside the slop that still selected something is a drag too.
 				if (pressed == null || state.selector.hasSelection()) return@awaitEachGesture
-				val released = ClickTarget.at(state, release.position)
+				val releasedAt = release.inContent(origin)
+				val released = ClickTarget.at(state, releasedAt)
 				val modifiers = currentEvent.keyboardModifiers
 				if (pressed.span != null && pressed.span == released.span) {
 					onSpanClick?.invoke(
-						RichSpanClick(pressed.span, SpanClickType.PRIMARY_CLICK, release.position, modifiers)
+						RichSpanClick(pressed.span, SpanClickType.PRIMARY_CLICK, releasedAt, modifiers)
 					)
 				}
 				if (pressed.link != null && pressed.link == released.link && links?.opensOnClick(modifiers) == true) {
@@ -181,13 +192,13 @@ private fun Modifier.handleMouseInput(
 				clickCounter.reset()
 				handleSpanInteraction(
 					state,
-					down.position,
+					downAt,
 					SpanClickType.SECONDARY_CLICK,
 					press.keyboardModifiers,
 					onSpanClick,
 					readOnly,
 				)
-				onContextMenuRequest?.invoke(down.position)
+				onContextMenuRequest?.invoke(downAt)
 			}
 
 			else -> clickCounter.reset()
@@ -242,6 +253,7 @@ private class MouseSelection(
 private suspend fun AwaitPointerEventScope.followDrag(
 	autoScroll: DragAutoScroll,
 	down: PointerInputChange,
+	origin: Offset,
 	touchSlop: Float = 0f,
 	consumeAll: Boolean = false,
 ): PointerInputChange? {
@@ -253,7 +265,7 @@ private suspend fun AwaitPointerEventScope.followDrag(
 			if (!change.pressed) return if (dragged) null else change
 			if (change.positionChanged()) {
 				dragged = dragged || (change.position - down.position).getDistance() > touchSlop
-				autoScroll.update(change.position)
+				autoScroll.update(change.inContent(origin))
 				change.consume()
 			} else if (consumeAll) {
 				change.consume()
@@ -350,6 +362,7 @@ internal fun Modifier.textEditorPointerIcon(
 	state: TextEditorState,
 	links: LinkClicks?,
 	default: PointerIcon? = PointerIcon.Text,
+	contentOrigin: () -> Offset = { Offset.Zero },
 ): Modifier = composed {
 	var icon by remember(state, default) { mutableStateOf(default) }
 	val tracking = pointerInput(state, links, default) {
@@ -358,7 +371,7 @@ internal fun Modifier.textEditorPointerIcon(
 				val event = awaitPointerEvent(PointerEventPass.Initial)
 				val change = event.changes.firstOrNull() ?: continue
 				if (change.type != PointerType.Mouse) continue
-				icon = pointerIconAt(state, change.position, event.keyboardModifiers, links, default)
+				icon = pointerIconAt(state, change.inContent(contentOrigin()), event.keyboardModifiers, links, default)
 			}
 		}
 	}
@@ -369,7 +382,11 @@ internal fun Modifier.textEditorPointerIcon(
  * Link clicks for a read-only view that is not selectable, so has no other pointer
  * handling: a click or tap that lands and lifts on the same link opens it.
  */
-internal fun Modifier.linkClickHandling(state: TextEditorState, links: LinkClicks): Modifier =
+internal fun Modifier.linkClickHandling(
+	state: TextEditorState,
+	links: LinkClicks,
+	contentOrigin: () -> Offset = { Offset.Zero },
+): Modifier =
 	pointerInput(state, links) {
 		val touchSlop = viewConfiguration.touchSlop
 		awaitEachGesture {
@@ -377,7 +394,8 @@ internal fun Modifier.linkClickHandling(state: TextEditorState, links: LinkClick
 			// Android's awaitFirstDown answers every mouse button; only the primary one clicks.
 			val buttons = currentEvent.buttons
 			if (buttons.areAnyPressed && !buttons.isPrimaryPressed) return@awaitEachGesture
-			val link = ClickTarget.at(state, down.position).link ?: return@awaitEachGesture
+			val origin = contentOrigin()
+			val link = ClickTarget.at(state, down.inContent(origin)).link ?: return@awaitEachGesture
 			while (true) {
 				val change = awaitPointerEvent().changes.firstOrNull { it.id == down.id } ?: return@awaitEachGesture
 				if ((change.position - down.position).getDistance() > touchSlop) return@awaitEachGesture
@@ -387,7 +405,7 @@ internal fun Modifier.linkClickHandling(state: TextEditorState, links: LinkClick
 					} else {
 						links.opensOnTap
 					}
-					if (opens && ClickTarget.at(state, change.position).link == link) links.open(link)
+					if (opens && ClickTarget.at(state, change.inContent(origin)).link == link) links.open(link)
 					return@awaitEachGesture
 				}
 			}
@@ -401,18 +419,20 @@ internal fun Modifier.linkClickHandling(state: TextEditorState, links: LinkClick
  * so grabbing moves nothing. Held above or below the viewport, the drag auto-scrolls like
  * a mouse drag.
  */
-private fun Modifier.handleHandleDrag(state: TextEditorState): Modifier {
+private fun Modifier.handleHandleDrag(state: TextEditorState, contentOrigin: () -> Offset): Modifier {
 	return pointerInput(state) {
 		coroutineScope {
 			val autoScrollScope = this
 			awaitEachGesture {
 				val down = awaitFirstDown(requireUnconsumed = false)
 				if (currentEvent.isMouseLike(down)) return@awaitEachGesture
-				if (isOnCaretHandle(down.position, state)) {
-					dragCaretHandle(state, down, autoScrollScope)
+				val origin = contentOrigin()
+				val downAt = down.inContent(origin)
+				if (isOnCaretHandle(downAt, state)) {
+					dragCaretHandle(state, down, origin, autoScrollScope)
 				} else {
-					val handle = findHandleAtPosition(down.position, state) ?: return@awaitEachGesture
-					dragSelectionHandle(state, handle, down, autoScrollScope)
+					val handle = findHandleAtPosition(downAt, state) ?: return@awaitEachGesture
+					dragSelectionHandle(state, handle, down, origin, autoScrollScope)
 				}
 			}
 		}
@@ -423,13 +443,15 @@ private suspend fun AwaitPointerEventScope.dragSelectionHandle(
 	state: TextEditorState,
 	handle: SelectionHandle,
 	down: PointerInputChange,
+	origin: Offset,
 	autoScrollScope: CoroutineScope,
 ) {
 	val selection = state.selector.selection ?: return
 	val anchor = if (handle.isStart) selection.end else selection.start
-	val grabOffset = grabOffset(state, handle.position, down)
+	val downAt = down.inContent(origin)
+	val grabOffset = grabOffset(state, handle.position, downAt)
 	state.selector.setDraggingHandle(handle.isStart)
-	state.selector.magnifierCenter = magnifierCenter(state, handle.position, down.position + grabOffset)
+	state.selector.magnifierCenter = magnifierCenter(state, handle.position, downAt + grabOffset)
 	state.endCompositionIfPointerLeft()
 
 	val autoScroll = DragAutoScroll(state, autoScrollScope, grabOffset) { target ->
@@ -454,7 +476,7 @@ private suspend fun AwaitPointerEventScope.dragSelectionHandle(
 		state.selector.magnifierCenter = magnifierCenter(state, position, target)
 	}
 	try {
-		followDrag(autoScroll, down, consumeAll = true)
+		followDrag(autoScroll, down, origin, consumeAll = true)
 	} finally {
 		state.selector.clearDraggingHandle()
 		state.selector.magnifierCenter = null
@@ -469,10 +491,12 @@ private suspend fun AwaitPointerEventScope.dragSelectionHandle(
 private suspend fun AwaitPointerEventScope.dragCaretHandle(
 	state: TextEditorState,
 	down: PointerInputChange,
+	origin: Offset,
 	autoScrollScope: CoroutineScope,
 ) {
-	val grabOffset = grabOffset(state, state.cursorPosition, down)
-	state.selector.magnifierCenter = magnifierCenter(state, state.cursorPosition, down.position + grabOffset)
+	val downAt = down.inContent(origin)
+	val grabOffset = grabOffset(state, state.cursorPosition, downAt)
+	state.selector.magnifierCenter = magnifierCenter(state, state.cursorPosition, downAt + grabOffset)
 	val autoScroll = DragAutoScroll(state, autoScrollScope, grabOffset) { target ->
 		if (!state.selector.isCaretHandleVisible) {
 			state.selector.magnifierCenter = null
@@ -484,7 +508,7 @@ private suspend fun AwaitPointerEventScope.dragCaretHandle(
 		state.endCompositionIfPointerLeft()
 	}
 	try {
-		followDrag(autoScroll, down, consumeAll = true)
+		followDrag(autoScroll, down, origin, consumeAll = true)
 	} finally {
 		state.selector.releaseCaretHandle()
 		state.selector.magnifierCenter = null
@@ -511,9 +535,9 @@ private fun magnifierCenter(state: TextEditorState, position: CharLineOffset, ta
 }
 
 /** From the finger at [down] to the middle of [position]'s row: what a handle drag moves. */
-private fun grabOffset(state: TextEditorState, position: CharLineOffset, down: PointerInputChange): Offset {
+private fun grabOffset(state: TextEditorState, position: CharLineOffset, down: Offset): Offset {
 	val edge = state.getPositionForOffset(position)
-	return Offset(edge.position.x, edge.position.y + edge.height / 2f) - down.position
+	return Offset(edge.position.x, edge.position.y + edge.height / 2f) - down
 }
 
 /**
@@ -616,28 +640,31 @@ private fun Modifier.handleTouchInteractions(
 	readOnly: Boolean,
 	links: LinkClicks?,
 	caretHandle: Boolean,
+	contentOrigin: () -> Offset,
 ): Modifier {
 	return pointerInput(state, links, caretHandle) {
 		val touchSlop = viewConfiguration.touchSlop
 		awaitEachGesture {
 			val down = awaitFirstDown(requireUnconsumed = false)
 			if (currentEvent.isMouseLike(down)) return@awaitEachGesture
-			if (isOnAnyHandle(down.position, state)) return@awaitEachGesture
+			val origin = contentOrigin()
+			val downAt = down.inContent(origin)
+			if (isOnAnyHandle(downAt, state)) return@awaitEachGesture
 
 			var didLongPress = false
 			var wasDrag = false
-			val pressed = ClickTarget.at(state, down.position)
+			val pressed = ClickTarget.at(state, downAt)
 			val existingSelection = state.selector.selection
 			val longPressJob = state.scope.launch {
 				delay(500)
-				val wordPosition = state.getOffsetAtPosition(down.position)
+				val wordPosition = state.getOffsetAtPosition(downAt)
 
 				val isOnSelection = existingSelection != null &&
 						(wordPosition isAfterOrEqual existingSelection.start) &&
 						(wordPosition isBeforeOrEqual existingSelection.end)
 
 				if (isOnSelection) {
-					onContextMenuRequest?.invoke(down.position)
+					onContextMenuRequest?.invoke(downAt)
 				} else {
 					// Off any word this selects nothing and leaves the caret at the press.
 					val word = state.selector.rangeAt(wordPosition, SelectionGranularity.Word)
@@ -656,7 +683,7 @@ private fun Modifier.handleTouchInteractions(
 						if (!didLongPress && !wasDrag) {
 							val placed = handleSpanInteraction(
 								state,
-								change.position,
+								change.inContent(origin),
 								SpanClickType.TAP,
 								event.keyboardModifiers,
 								onSpanClick,
@@ -665,7 +692,7 @@ private fun Modifier.handleTouchInteractions(
 							)
 							if (placed && caretHandle) state.selector.showCaretHandle()
 							if (pressed.link != null && links?.opensOnTap == true &&
-								ClickTarget.at(state, change.position).link == pressed.link
+								ClickTarget.at(state, change.inContent(origin)).link == pressed.link
 							) {
 								links.open(pressed.link)
 							}

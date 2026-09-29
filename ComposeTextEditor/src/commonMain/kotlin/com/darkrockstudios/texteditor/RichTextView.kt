@@ -149,42 +149,50 @@ private fun RichTextViewBody(
 			last.offset.y + last.effectiveHeight
 		} ?: 0f
 
-		Box(modifier = Modifier.padding(contentPadding)) {
-			val selectionModifier = if (isSelectable) {
-				Modifier
-					.textEditorPointerIcon(state, linkClicks)
-					.textMagnifier(state)
-					.textEditorPointerInputHandling(
-						state = state,
-						onContextMenuRequest = onContextMenuRequest,
-						readOnly = true,
-						links = linkClicks,
-					)
-			} else {
-				Modifier
-					.textEditorPointerIcon(state, linkClicks, default = null)
-					.linkClickHandling(state, linkClicks)
+		// The padding goes below the pointer input so presses in it still reach the text.
+		val contentOrigin by rememberUpdatedState(
+			with(density) {
+				Offset(
+					contentPadding.calculateLeftPadding(layoutDirection).toPx(),
+					contentPadding.calculateTopPadding().toPx(),
+				)
+			}
+		)
+		val pointerModifier = if (isSelectable) {
+			Modifier
+				.textEditorPointerIcon(state, linkClicks, contentOrigin = { contentOrigin })
+				.textEditorPointerInputHandling(
+					state = state,
+					onContextMenuRequest = onContextMenuRequest,
+					readOnly = true,
+					links = linkClicks,
+					contentOrigin = { contentOrigin },
+				)
+				.padding(contentPadding)
+				.textMagnifier(state)
+		} else {
+			Modifier
+				.textEditorPointerIcon(state, linkClicks, default = null, contentOrigin = { contentOrigin })
+				.linkClickHandling(state, linkClicks, contentOrigin = { contentOrigin })
+				.padding(contentPadding)
+		}
+
+		Canvas(
+			modifier = pointerModifier
+				.fillMaxWidth()
+				.height(with(density) { contentHeightPx.toDp() })
+				.graphicsLayer { clip = false }
+		) {
+			try {
+				DrawEditorText(state, style, decorateLine = null)
+			} catch (_: IllegalArgumentException) {
+				// Mid-resize layout race; the next frame will recover, mirrors BasicTextEditor.
 			}
 
-			Canvas(
-				modifier = Modifier
-					.fillMaxWidth()
-					.height(with(density) { contentHeightPx.toDp() })
-					.graphicsLayer { clip = false }
-					.then(selectionModifier)
-			) {
-				try {
-					DrawEditorText(state, style, decorateLine = null)
-				} catch (_: IllegalArgumentException) {
-					// Mid-resize layout race; the next frame will recover, mirrors BasicTextEditor.
-				}
-
-				if (isSelectable) {
-					DrawSelection(state, style.selectionColor)
-					DrawSelectionHandles(state)
-				}
+			if (isSelectable) {
+				DrawSelection(state, style.selectionColor)
+				DrawSelectionHandles(state)
 			}
 		}
 	}
 }
-

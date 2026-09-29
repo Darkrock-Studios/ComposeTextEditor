@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.testTag
@@ -332,19 +333,24 @@ class EditorUiTestScope(
 	 * Presses at [from], drags to [to], and releases, both in editor node
 	 * coordinates. Either end may lie outside the editor.
 	 */
-	fun dragBetween(from: Offset, to: Offset) {
-		defeatMultiClickDetection()
-		editor.performMouseInput {
-			moveTo(from)
-			press()
-			moveTo(to)
-			release()
-		}
-		test.waitForIdle()
+	fun dragBetween(from: Offset, to: Offset) = mouse {
+		moveTo(from)
+		press()
+		moveTo(to)
+		release()
 	}
 
-	/** Pixel position of the character at flat index [charIndex], vertically centered on its line. */
-	fun positionOfCharacter(charIndex: Int): Offset = state.positionOfCharacter(charIndex)
+	/**
+	 * Pixel position of the character at flat index [charIndex], vertically centered on
+	 * its line, in editor node coordinates (content padding included).
+	 */
+	fun positionOfCharacter(charIndex: Int): Offset = canvasToNode(state.positionOfCharacter(charIndex))
+
+	/** Converts a point in the editor's text canvas to editor node coordinates. */
+	fun canvasToNode(canvasPosition: Offset): Offset {
+		val canvas = checkNotNull(state.canvasLayoutCoordinates) { "the editor has not been laid out" }
+		return canvasPosition + canvas.positionInRoot() - editor.fetchSemanticsNode().positionInRoot
+	}
 
 	/**
 	 * Seeds the clipboard with unstyled text, as an external application or a
