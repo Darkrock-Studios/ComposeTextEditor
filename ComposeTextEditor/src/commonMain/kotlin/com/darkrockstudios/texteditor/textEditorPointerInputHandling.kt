@@ -2,10 +2,21 @@ package com.darkrockstudios.texteditor
 
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.composed
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.*
 import androidx.compose.ui.platform.ViewConfiguration
+import com.darkrockstudios.texteditor.input.CtrlKeyBindings
+import com.darkrockstudios.texteditor.input.KeyBindings
+import com.darkrockstudios.texteditor.input.MacKeyBindings
+import com.darkrockstudios.texteditor.input.platformKeyBindings
+import com.darkrockstudios.texteditor.richstyle.LinkSpanStyle
+import com.darkrockstudios.texteditor.richstyle.RichSpan
 import com.darkrockstudios.texteditor.state.SelectionGranularity
 import com.darkrockstudios.texteditor.state.SpanClickType
 import com.darkrockstudios.texteditor.state.TextEditorState
@@ -26,14 +37,57 @@ data class SelectionHandle(
  */
 internal fun Modifier.textEditorPointerInputHandling(
 	state: TextEditorState,
-	onSpanClick: RichSpanClickListener? = null,
+	onSpanClick: SpanClickSink? = null,
 	onContextMenuRequest: ((Offset) -> Unit)? = null,
 	readOnly: Boolean = false,
+	links: LinkClicks? = null,
 ): Modifier {
 	return this
 		.handleHandleDrag(state)
-		.handleTouchInteractions(state, onSpanClick, onContextMenuRequest, readOnly)
-		.handleMouseInput(state, onSpanClick, onContextMenuRequest, readOnly)
+		.handleTouchInteractions(state, onSpanClick, onContextMenuRequest, readOnly, links)
+		.handleMouseInput(state, onSpanClick, onContextMenuRequest, readOnly, links)
+}
+
+internal typealias SpanClickSink = (RichSpanClick) -> Unit
+
+/**
+ * The built-in link convention: a click on a [LinkSpanStyle] opens it through the
+ * host's `onLinkClick`, read through [handler] so the latest one is always used. In an
+ * editor a plain click places the caret, so opening takes Ctrl, or Cmd when
+ * [usesCommandKey]; a read-only view opens on a plain click or tap.
+ */
+internal class LinkClicks(
+	private val requiresShortcutKey: Boolean,
+	private val usesCommandKey: Boolean,
+	private val handler: () -> ((String) -> Unit)?,
+) {
+	fun opensOnClick(modifiers: PointerKeyboardModifiers): Boolean = handler() != null && when {
+		!requiresShortcutKey -> true
+		usesCommandKey -> modifiers.isMetaPressed
+		else -> modifiers.isCtrlPressed
+	}
+
+	val opensOnTap: Boolean get() = handler() != null && !requiresShortcutKey
+
+	fun open(url: String) {
+		handler()?.invoke(url)
+	}
+
+	companion object {
+		/** Cmd opens links under the macOS bindings, Ctrl under any other. */
+		fun forEditor(keyBindings: KeyBindings, handler: () -> ((String) -> Unit)?) = LinkClicks(
+			requiresShortcutKey = true,
+			usesCommandKey = when {
+				keyBindings === MacKeyBindings -> true
+				keyBindings === CtrlKeyBindings -> false
+				else -> platformKeyBindings() === MacKeyBindings
+			},
+			handler = handler,
+		)
+
+		fun forReadOnly(handler: () -> ((String) -> Unit)?) =
+			LinkClicks(requiresShortcutKey = false, usesCommandKey = false, handler = handler)
+	}
 }
 
 private fun PointerEvent.isMouseLike(down: PointerInputChange): Boolean =
@@ -74,11 +128,13 @@ private class ClickCounter(private val viewConfiguration: ViewConfiguration) {
  */
 private fun Modifier.handleMouseInput(
 	state: TextEditorState,
-	onSpanClick: RichSpanClickListener?,
+	onSpanClick: SpanClickSink?,
 	onContextMenuRequest: ((Offset) -> Unit)?,
 	readOnly: Boolean,
-): Modifier = pointerInput(Unit) {
+	links: LinkClicks?,
+): Modifier = pointerInput(state, links) {
 	val clickCounter = ClickCounter(viewConfiguration)
+	val touchSlop = viewConfiguration.touchSlop
 	awaitEachGesture {
 		// Not awaitFirstDown: on skiko it ignores every mouse button but the primary one.
 		val press = awaitPointerEvent()
@@ -90,21 +146,41 @@ private fun Modifier.handleMouseInput(
 		when {
 			(buttons.isPrimaryPressed && !buttons.isSecondaryPressed) || !buttons.areAnyPressed -> {
 				val isShiftPressed = press.keyboardModifiers.isShiftPressed
+				val clicks = clickCounter.register(down)
+				// The second and third press of a multi-click select; only a plain first
+				// press can become a click on what is under it.
+				val pressed = if (clicks == 1 && !isShiftPressed) ClickTarget.at(state, down.position) else null
 				val selection = MouseSelection.press(
 					state,
 					position = down.position,
-					granularity = SelectionGranularity.forClickCount(clickCounter.register(down)),
+					granularity = SelectionGranularity.forClickCount(clicks),
 					isShiftPressed = isShiftPressed,
 				)
-				if (!isShiftPressed) {
-					reportSpanClick(state, down.position, SpanClickType.PRIMARY_CLICK, onSpanClick)
+				val release = followDrag(selection, down, touchSlop) ?: return@awaitEachGesture
+				// A drag inside the slop that still selected something is a drag too.
+				if (pressed == null || state.selector.hasSelection()) return@awaitEachGesture
+				val released = ClickTarget.at(state, release.position)
+				val modifiers = currentEvent.keyboardModifiers
+				if (pressed.span != null && pressed.span == released.span) {
+					onSpanClick?.invoke(
+						RichSpanClick(pressed.span, SpanClickType.PRIMARY_CLICK, release.position, modifiers)
+					)
 				}
-				followDrag(selection, down.id)
+				if (pressed.link != null && pressed.link == released.link && links?.opensOnClick(modifiers) == true) {
+					links.open(pressed.link)
+				}
 			}
 
 			buttons.isSecondaryPressed -> {
 				clickCounter.reset()
-				handleSpanInteraction(state, down.position, SpanClickType.SECONDARY_CLICK, onSpanClick, readOnly)
+				handleSpanInteraction(
+					state,
+					down.position,
+					SpanClickType.SECONDARY_CLICK,
+					press.keyboardModifiers,
+					onSpanClick,
+					readOnly,
+				)
 				onContextMenuRequest?.invoke(down.position)
 			}
 
@@ -150,22 +226,161 @@ private class MouseSelection(
 	}
 }
 
-/** Extends [selection] as the pointer drags, until it is released. */
-private suspend fun AwaitPointerEventScope.followDrag(selection: MouseSelection, pointerId: PointerId) {
+/**
+ * Extends [selection] as the pointer drags, until it is released. Returns the release
+ * when the pointer came up without having moved past [touchSlop], null otherwise.
+ */
+private suspend fun AwaitPointerEventScope.followDrag(
+	selection: MouseSelection,
+	down: PointerInputChange,
+	touchSlop: Float,
+): PointerInputChange? {
+	var dragged = false
 	while (true) {
 		val event = awaitPointerEvent()
-		val change = event.changes.firstOrNull { it.id == pointerId } ?: break
-		if (!change.pressed) break
+		val change = event.changes.firstOrNull { it.id == down.id } ?: return null
+		if (!change.pressed) return if (dragged) null else change
 		if (change.positionChanged()) {
+			dragged = dragged || (change.position - down.position).getDistance() > touchSlop
 			selection.selectTo(change.position)
 			change.consume()
 		}
 	}
 }
 
+/** What a click at a point would act on: the span that answers it, and any link there. */
+private class ClickTarget(val span: RichSpan?, val link: String?) {
+	companion object {
+		fun at(state: TextEditorState, offset: Offset): ClickTarget = ClickTarget(
+			state.spanAt(offset),
+			state.characterAt(offset)?.let { state.linkAt(it) },
+		)
+	}
+}
+
+/**
+ * The span a click at [offset] answers to. Hit on the character under the pointer; off
+ * the text, where there is none (a block image's line, past a row's end), on the
+ * nearest caret position.
+ */
+private fun TextEditorState.spanAt(offset: Offset): RichSpan? =
+	findSpanAtPosition(characterAt(offset) ?: getOffsetAtPosition(offset))
+
+/**
+ * The character under [offset], or null when the pointer is beside a row rather than
+ * over it. [TextEditorState.getOffsetAtPosition] answers the nearest caret position
+ * instead, which over the right half of a character is the one after it, and past the
+ * end of a wrapped row is the first character of the next.
+ */
+private fun TextEditorState.characterAt(offset: Offset): CharLineOffset? {
+	val y = offset.y + scrollState.value
+	var found: LineWrap? = null
+	var previousLine = -1
+	for (wrap in lineOffsets) {
+		// A paragraph's first row carries its top and its whole layout.
+		if (wrap.line == previousLine) continue
+		previousLine = wrap.line
+		val height = wrap.blockHeight ?: wrap.textLayoutResult.size.height.toFloat()
+		if (y >= wrap.offset.y && y <= wrap.offset.y + height) {
+			found = wrap
+			break
+		}
+	}
+	if (found == null) return null
+	val layout = found.textLayoutResult.multiParagraph
+	val relative = Offset(offset.x, y) - found.offset
+	val row = layout.getLineForVerticalPosition(relative.y)
+	if (relative.x < layout.getLineLeft(row) || relative.x >= layout.getLineRight(row)) return null
+	val caret = layout.getOffsetForPosition(relative)
+	val char = if (caret > layout.getLineStart(row) && relative.x < layout.getHorizontalPosition(caret, true)) {
+		caret - 1
+	} else {
+		caret
+	}
+	val length = textLines[found.line].length
+	return if (char < length) CharLineOffset(found.line, char) else null
+}
+
+/** The URL of the [LinkSpanStyle] covering [position], if any. */
+private fun TextEditorState.linkAt(position: CharLineOffset): String? =
+	lineOffsets.lastOrNull { it.line == position.line && position.char >= it.wrapStartsAtIndex }
+		?.richSpans
+		?.firstOrNull { it.style is LinkSpanStyle && it.containsPosition(position) }
+		?.let { (it.style as LinkSpanStyle).url }
+
+/**
+ * The pointer icon for a mouse hovering at [offset] with [modifiers] held: a hand over a
+ * link that a click would open, [default] everywhere else.
+ */
+internal fun pointerIconAt(
+	state: TextEditorState,
+	offset: Offset,
+	modifiers: PointerKeyboardModifiers,
+	links: LinkClicks?,
+	default: PointerIcon?,
+): PointerIcon? {
+	if (links == null || !links.opensOnClick(modifiers)) return default
+	val link = state.characterAt(offset)?.let { state.linkAt(it) }
+	return if (link != null) PointerIcon.Hand else default
+}
+
+/**
+ * Shows [default] over the text and a hand over links a click would open; a null
+ * [default] leaves the parent's icon everywhere but over a link. Only a pointer event
+ * updates it, so pressing Ctrl or Cmd over a link changes the icon on the next mouse
+ * move.
+ */
+internal fun Modifier.textEditorPointerIcon(
+	state: TextEditorState,
+	links: LinkClicks?,
+	default: PointerIcon? = PointerIcon.Text,
+): Modifier = composed {
+	var icon by remember(state, default) { mutableStateOf(default) }
+	val tracking = pointerInput(state, links, default) {
+		awaitPointerEventScope {
+			while (true) {
+				val event = awaitPointerEvent(PointerEventPass.Initial)
+				val change = event.changes.firstOrNull() ?: continue
+				if (change.type != PointerType.Mouse) continue
+				icon = pointerIconAt(state, change.position, event.keyboardModifiers, links, default)
+			}
+		}
+	}
+	icon?.let { tracking.pointerHoverIcon(it) } ?: tracking
+}
+
+/**
+ * Link clicks for a read-only view that is not selectable, so has no other pointer
+ * handling: a click or tap that lands and lifts on the same link opens it.
+ */
+internal fun Modifier.linkClickHandling(state: TextEditorState, links: LinkClicks): Modifier =
+	pointerInput(state, links) {
+		val touchSlop = viewConfiguration.touchSlop
+		awaitEachGesture {
+			val down = awaitFirstDown(requireUnconsumed = false)
+			// Android's awaitFirstDown answers every mouse button; only the primary one clicks.
+			val buttons = currentEvent.buttons
+			if (buttons.areAnyPressed && !buttons.isPrimaryPressed) return@awaitEachGesture
+			val link = ClickTarget.at(state, down.position).link ?: return@awaitEachGesture
+			while (true) {
+				val change = awaitPointerEvent().changes.firstOrNull { it.id == down.id } ?: return@awaitEachGesture
+				if ((change.position - down.position).getDistance() > touchSlop) return@awaitEachGesture
+				if (!change.pressed) {
+					val opens = if (currentEvent.isMouseLike(down)) {
+						links.opensOnClick(currentEvent.keyboardModifiers)
+					} else {
+						links.opensOnTap
+					}
+					if (opens && ClickTarget.at(state, change.position).link == link) links.open(link)
+					return@awaitEachGesture
+				}
+			}
+		}
+	}
+
 /** Drags a touch selection handle. */
 private fun Modifier.handleHandleDrag(state: TextEditorState): Modifier {
-	return pointerInput(Unit) {
+	return pointerInput(state) {
 		awaitEachGesture {
 			val down = awaitFirstDown(requireUnconsumed = false)
 			if (currentEvent.isMouseLike(down)) return@awaitEachGesture
@@ -243,28 +458,18 @@ private fun findHandleAtPosition(
 	}
 }
 
-/** Offers a click to the [RichSpan] under [offset], if there is one. */
-private fun reportSpanClick(
-	state: TextEditorState,
-	offset: Offset,
-	clickType: SpanClickType,
-	onSpanClick: RichSpanClickListener?,
-) {
-	if (onSpanClick == null) return
-	val span = state.findSpanAtPosition(state.getOffsetAtPosition(offset)) ?: return
-	onSpanClick(span, clickType, offset)
-}
-
 /**
- * Places the caret for a tap or a right-click, then offers the event to any [RichSpan]
- * under it.
+ * Places the caret for a tap or a right-click, then offers the event to the [RichSpan]
+ * under it. A tap reports only when it lifts on the span it landed on, [pressedSpan].
  */
 private fun handleSpanInteraction(
 	state: TextEditorState,
 	offset: Offset,
 	clickType: SpanClickType,
-	onSpanClick: RichSpanClickListener?,
+	modifiers: PointerKeyboardModifiers,
+	onSpanClick: SpanClickSink?,
 	readOnly: Boolean,
+	pressedSpan: RichSpan? = null,
 ) {
 	if (findHandleAtPosition(offset, state) != null) return
 
@@ -284,17 +489,20 @@ private fun handleSpanInteraction(
 		state.endCompositionIfPointerLeft()
 	}
 
-	reportSpanClick(state, offset, clickType, onSpanClick)
+	val span = state.spanAt(offset) ?: return
+	if (clickType == SpanClickType.TAP && span != pressedSpan) return
+	onSpanClick?.invoke(RichSpanClick(span, clickType, offset, modifiers))
 }
 
 /** Finger taps and long presses. */
 private fun Modifier.handleTouchInteractions(
 	state: TextEditorState,
-	onSpanClick: RichSpanClickListener?,
+	onSpanClick: SpanClickSink?,
 	onContextMenuRequest: ((Offset) -> Unit)?,
 	readOnly: Boolean,
+	links: LinkClicks?,
 ): Modifier {
-	return pointerInput(Unit) {
+	return pointerInput(state, links) {
 		val touchSlop = viewConfiguration.touchSlop
 		awaitEachGesture {
 			val down = awaitFirstDown(requireUnconsumed = false)
@@ -303,6 +511,7 @@ private fun Modifier.handleTouchInteractions(
 
 			var didLongPress = false
 			var wasDrag = false
+			val pressed = ClickTarget.at(state, down.position)
 			val existingSelection = state.selector.selection
 			val longPressJob = state.scope.launch {
 				delay(500)
@@ -329,7 +538,20 @@ private fun Modifier.handleTouchInteractions(
 					val change = event.changes.firstOrNull { it.id == down.id } ?: break
 					if (!change.pressed) {
 						if (!didLongPress && !wasDrag) {
-							handleSpanInteraction(state, change.position, SpanClickType.TAP, onSpanClick, readOnly)
+							handleSpanInteraction(
+								state,
+								change.position,
+								SpanClickType.TAP,
+								event.keyboardModifiers,
+								onSpanClick,
+								readOnly,
+								pressedSpan = pressed.span,
+							)
+							if (pressed.link != null && links?.opensOnTap == true &&
+								ClickTarget.at(state, change.position).link == pressed.link
+							) {
+								links.open(pressed.link)
+							}
 						}
 						break
 					}

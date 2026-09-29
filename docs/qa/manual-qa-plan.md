@@ -248,6 +248,14 @@ the platform's double-tap timeout (300 ms on desktop), not the OS mouse setting.
    the click to the end of that word.
 4. Click twice slowly, or twice a few characters apart. **Expect:** two single
    clicks, no word selection.
+5. Hover the text. **Expect:** an I-beam over the editor and over a selectable
+   RichTextView.
+6. Markdown demo, over a link: hover, then hold Ctrl (Cmd on macOS) and move the
+   mouse a little. **Expect:** the I-beam turns into a hand only with the key held.
+   Ctrl/Cmd+click opens the link in the browser; a plain click places the caret; a
+   drag that starts on the link selects and opens nothing.
+7. RichTextView demo: click the link. **Expect:** it opens, with a hand shown over
+   it. Drag a selection across it. **Expect:** nothing opens.
 
 ## 4. Touch, focus and the soft keyboard (Android)
 

@@ -25,6 +25,7 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.darkrockstudios.texteditor.BasicTextEditor
+import com.darkrockstudios.texteditor.RichSpanClickEventListener
 import com.darkrockstudios.texteditor.RichSpanClickListener
 import com.darkrockstudios.texteditor.contextmenu.TextEditorContextMenuState
 import com.darkrockstudios.texteditor.input.CtrlKeyBindings
@@ -56,6 +57,8 @@ internal fun editorUiTest(
 	enabled: Boolean = true,
 	keyBindings: KeyBindings = CtrlKeyBindings,
 	onRichSpanClick: RichSpanClickListener? = null,
+	onRichSpanClickEvent: RichSpanClickEventListener? = null,
+	onLinkClick: ((String) -> Unit)? = null,
 	contextMenuState: TextEditorContextMenuState? = null,
 	autoFocus: Boolean = enabled,
 	block: EditorUiTestScope.() -> Unit,
@@ -75,6 +78,9 @@ internal fun editorUiTest(
 				autoFocus = autoFocus,
 				contextMenuState = contextMenuState,
 				onRichSpanClick = onRichSpanClick,
+				onRichSpanClickEvent = onRichSpanClickEvent,
+				onLinkClick = onLinkClick,
+				keyBindings = keyBindings,
 			)
 		}
 	}
@@ -189,10 +195,9 @@ class EditorUiTestScope(
 		clickAt(positionOfCharacter(charIndex), shift)
 	}
 
-	/** Left-clicks an arbitrary pixel [position], optionally with shift held. */
-	fun clickAt(position: Offset, shift: Boolean = false) = mouse(shift) {
-		click(position)
-	}
+	/** Left-clicks an arbitrary pixel [position], optionally with modifier keys held. */
+	fun clickAt(position: Offset, shift: Boolean = false, ctrl: Boolean = false, meta: Boolean = false) =
+		mouse(shift = shift, ctrl = ctrl, meta = meta) { click(position) }
 
 	/** Right-clicks the character at flat index [charIndex]. */
 	fun rightClickAtCharacter(charIndex: Int) = mouse {
@@ -226,7 +231,7 @@ class EditorUiTestScope(
 		shift: Boolean = false,
 		beforeRelease: () -> Unit = {},
 	) {
-		mouse(shift) {
+		mouse(shift = shift) {
 			moveTo(positionOfCharacter(fromChar))
 			repeat(clicks - 1) {
 				press()
@@ -237,7 +242,7 @@ class EditorUiTestScope(
 			if (toChar != null) moveTo(positionOfCharacter(toChar))
 		}
 		beforeRelease()
-		mouse(shift, fresh = false) { release() }
+		mouse(shift = shift, fresh = false) { release() }
 	}
 
 	/** Presses at [fromChar], drags to [toChar], and releases. */
@@ -249,17 +254,28 @@ class EditorUiTestScope(
 	}
 
 	/**
-	 * Runs mouse [gestures] on the editor, with shift held throughout when [shift] is set.
+	 * Runs mouse [gestures] on the editor, holding the given modifier keys throughout.
 	 * Unless [fresh] is false, the first press starts a new click sequence rather than
 	 * continuing the previous gesture's multi-click.
 	 */
-	fun mouse(shift: Boolean = false, fresh: Boolean = true, gestures: MouseInjectionScope.() -> Unit) {
-		if (shift) test.onRoot().performKeyInput { keyDown(Key.ShiftLeft) }
+	fun mouse(
+		shift: Boolean = false,
+		ctrl: Boolean = false,
+		meta: Boolean = false,
+		fresh: Boolean = true,
+		gestures: MouseInjectionScope.() -> Unit,
+	) {
+		val held = listOfNotNull(
+			Key.ShiftLeft.takeIf { shift },
+			Key.CtrlLeft.takeIf { ctrl },
+			Key.MetaLeft.takeIf { meta },
+		)
+		if (held.isNotEmpty()) test.onRoot().performKeyInput { held.forEach { keyDown(it) } }
 		editor.performMouseInput {
 			if (fresh) defeatMultiClickDetection()
 			gestures()
 		}
-		if (shift) test.onRoot().performKeyInput { keyUp(Key.ShiftLeft) }
+		if (held.isNotEmpty()) test.onRoot().performKeyInput { held.forEach { keyUp(it) } }
 		test.waitForIdle()
 	}
 

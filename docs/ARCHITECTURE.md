@@ -213,7 +213,10 @@ extends by whatever unit the press selected. Only the primary button places
 the caret or selects; the secondary button opens the context menu, keeping a
 selection it lands inside. Finger input places the caret on release,
 long-presses to select a word or open the context menu, and drags selection
-handles.
+handles. A span click is reported on release, when the press and release land
+on the same span without a drag, so placing the caret or selecting never reads
+as a click; links open by the host's `onLinkClick` on Ctrl/Cmd+click in an
+editor and on a plain click in `RichTextView`.
 
 ## Document model and transactions
 

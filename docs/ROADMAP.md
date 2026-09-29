@@ -174,7 +174,7 @@ review.
 | H | Clipboard and HTML | `clipboard/`, `html/` | 4.9, 4.13, 4.17, 6.7 to 6.12 |
 | I | Markdown and block model | `markdown/`, `richstyle/` | 5.6, 7.14 to 7.16 |
 | J | Find addon | `ComposeTextEditorFind/` | 7.17 to 7.19, 7.26, 7.29 |
-| K | Spell check addon | `ComposeTextEditorSpellCheck/` | 7.20 to 7.22, 7.28 |
+| K | Spell check addon | `ComposeTextEditorSpellCheck/` | 7.20 to 7.22, 7.28, 7.30 |
 | L | Tests and CI | test sources, `.github/workflows/` | 0.1 to 0.3, 0.5 to 0.8, 4.1, 4.15 |
 | M | Accessibility and host API | semantics in `BasicTextEditor.kt`, `RichTextView.kt`, `state/rememberTextEditorState.kt` | 7.1 to 7.4, 7.13, 7.23 to 7.25 |
 | N | Core layout and performance | `state/TextEditorState.kt` | 5.7, 7.8 to 7.12 |
@@ -360,14 +360,26 @@ fixes what users feel every minute.
   virtual clock), and the drag, all matching `BasicTextField`. Words come from
   `findWordSegmentAt`, the same function double-click and long press use, so
   1.5's break iterator reaches all three.
-- [ ] **1.13 Pointer icons. C.** [Opus] [Lane B] No I-beam over the editor
-  (`RichTextView` has one). No hand over links.
+- [x] **1.13 Pointer icons. C.** [Opus] [Lane B] No I-beam over the editor
+  (`RichTextView` has one). No hand over links. The editor and a selectable
+  `RichTextView` show the I-beam; a hand shows over a link a click would open
+  (1.15), so in an editor only while Ctrl or Cmd is held. The icon changes on
+  the next mouse move, not on the key press itself.
 - [ ] **1.14 Drag auto-scroll. C.** [Opus] [Lane B] Scrolls only on pointer
   move events. Holding still outside the viewport stops the scroll.
-- [ ] **1.15 Links. C.** [Opus] [Lane B] Span clicks are reported on press with
+- [x] **1.15 Links. C.** [Opus] [Lane B] Span clicks are reported on press with
   no modifier state, so a host that opens links on click also fires when the
   user places the caret or starts a drag. Report on release, pass modifiers,
-  and offer a built-in Ctrl/Cmd+click convention.
+  and offer a built-in Ctrl/Cmd+click convention. A left-click or tap now
+  reports on release, only when it lifts on the span it landed on without a
+  drag; the second and third press of a multi-click do not report; a
+  right-click still reports on press, with its menu. `RichSpanClickListener`
+  is unchanged. The modifiers come through a new, parallel
+  `onRichSpanClickEvent: (RichSpanClick) -> Boolean` on `BasicTextEditor` and
+  `TextEditor`. The convention is a new `onLinkClick: (url) -> Unit`: in an
+  editor Ctrl+click opens a `LinkSpanStyle` (Cmd+click under `MacKeyBindings`),
+  and in `RichTextView` a plain click or tap does. Span hit testing now uses
+  the character under the pointer, not the nearest caret position.
 - [x] **1.16 Middle-click paste on Linux. C.** [Opus] [Lane B] Not handled;
   middle click moves the caret. Only on Android, where `awaitFirstDown` answers
   every mouse button; on skiko it answers only the primary one. The click
@@ -878,6 +890,9 @@ Shaping is one line per keystroke. These still scale with document length:
 - [ ] **7.28** [Opus] [Lane K] Ignore and Add to dictionary match the exact
   string, so ignoring "kotlinx" leaves "Kotlinx" at a sentence start flagged.
   Match case-insensitively, or at least across a capitalised first letter.
+- [ ] **7.30** [Opus] [Lane K] `SpellCheckingTextEditor` does not forward
+  `onLinkClick` or `onRichSpanClickEvent` (1.15) to the editor it wraps, so
+  spell-checked editors have no link convention and no modifier state.
 
 ### Host API
 
@@ -894,6 +909,9 @@ Shaping is one line per keystroke. These still scale with document length:
   preserves formatting.
 - [ ] Stray `println` calls in `state/TextEditorState.kt` and
   `SpellCheckState.kt`.
+- [ ] The sample app's toolbar Link button attaches its own
+  `sample.LinkSpanStyle`, not the library's, so those links get no hand icon
+  and do not open on Ctrl+click (1.15). Markdown-parsed links do.
 - [x] `docs/design/text-input-sessions.md` describes iOS as routing through
   the shared IME logic; it does not yet (4.2). True since 4.2's Linux part.
 - [ ] `getOffsetAtCharacter` returns a negative char for negative input.

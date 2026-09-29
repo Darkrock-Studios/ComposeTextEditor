@@ -8,6 +8,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.darkrockstudios.texteditor.TextEditor
@@ -103,6 +104,7 @@ fun TextEditorDemoUi(
 			markdownControls = (demoContent != DemoContent.Rich)
 		)
 
+		val uriHandler = LocalUriHandler.current
 		val style = rememberTextEditorStyle(
 			placeholderText = "Enter text here",
 			textColor = MaterialTheme.colorScheme.onSurface,
@@ -121,7 +123,8 @@ fun TextEditorDemoUi(
 					SpanClickType.SECONDARY_CLICK -> println("Right click on span: $span")
 				}
 				true
-			}
+			},
+			onLinkClick = uriHandler::openUri,
 		)
 	}
 }
