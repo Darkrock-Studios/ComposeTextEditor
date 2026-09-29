@@ -9,7 +9,8 @@ name: CI Build
 
 on:
   push:
-    branches: [ "main" ]
+    # native-parity is the shared roadmap branch (docs/ROADMAP.md); drop it once merged.
+    branches: [ "main", "native-parity" ]
   pull_request:
     branches: [ "main" ]
   workflow_call:
@@ -46,3 +47,47 @@ jobs:
         uses: gradle/gradle-build-action@ce999babab2de1c4b649dc15f0ee67e6246c994f
         with:
           arguments: ${{ matrix.target }}
+
+  # Kotlin/Native iOS targets only compile on macOS, so the Ubuntu `check` never
+  # builds iosMain. This job compiles the libraries for device and simulator, runs
+  # any iOS tests, and builds the sample app the same way Xcode does.
+  ios:
+    runs-on: macos-26
+
+    steps:
+      - uses: actions/checkout@v6
+      - name: Validate Gradle Wrapper
+        uses: gradle/wrapper-validation-action@v3
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.konan
+          key: ${{ runner.os }}-konan-${{ hashFiles('gradle/libs.versions.toml') }}
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v5
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+      - name: Compile the libraries for iOS and run iOS tests
+        run: >
+          ./gradlew --stacktrace
+          :ComposeTextEditor:compileKotlinIosArm64
+          :ComposeTextEditor:iosSimulatorArm64Test
+          :ComposeTextEditorSpellCheck:compileKotlinIosArm64
+          :ComposeTextEditorSpellCheck:iosSimulatorArm64Test
+          :ComposeTextEditorFind:compileKotlinIosArm64
+          :ComposeTextEditorFind:iosSimulatorArm64Test
+      - name: Build the iOS sample app
+        # The project's run script phase links the simulator framework through Gradle.
+        run: >
+          xcodebuild
+          -project sampleAppiOS/SampleAppiOS.xcodeproj
+          -scheme SampleAppiOS
+          -configuration Debug
+          -destination 'generic/platform=iOS Simulator'
+          ARCHS=arm64 ONLY_ACTIVE_ARCH=YES CODE_SIGNING_ALLOWED=NO
+          build

@@ -478,6 +478,33 @@ Exit criteria for dropping "experimental": typing, backspace, autocorrect,
 dictation, and CJK composition work on a device; selection handles and the
 edit menu work by touch; iOS is compiled and smoke-tested in CI.
 
+#### Simulator baseline before 4.2
+
+Recorded 2026-09-28 at `227f2ac`, Xcode 26.5, iPhone 17 Pro Max simulator on
+iOS 26.0, Markdown Editor (Blank) demo. This is the before picture for 4.2 and
+4.5 to 4.7.
+
+| Input | Result |
+| --- | --- |
+| Soft keyboard letters | Work. QuickType suggestions update per word. |
+| Soft keyboard backspace | Works (arrives as `BackspaceCommand`). |
+| Hardware keyboard letters, capitals, punctuation | Work. The first injected character of a session once lost its capital; not reproduced. |
+| Autocorrect: "teh" then space | **Broken.** "hel teh" became "hel tehthe": the correction is appended instead of replacing the word, and the space is lost. Same class as hammer-editor#791. |
+| Japanese Romaji: "k" then "a" | **Broken.** Shows "kか", not a marked "か". Composing text is committed, so the candidate bar never offers conversions. |
+| Auto-capitalisation | Absent. The keyboard opens in lower case at document start (4.7). |
+| Dictation | Not testable in the simulator. |
+
+Also seen:
+
+- The caret draws one line below the placeholder text in an empty editor
+  (1.11).
+- Intermittent: with the soft keyboard up, the whole screen was pushed up by
+  about the toolbar's height, hiding it and leaving a gap above the keyboard.
+  Seen on one of three runs. The null `focusedRectInRoot` (4.6) is the likely
+  cause; recheck after 4.2.
+- After any hardware key event the simulator hides the soft keyboard until the
+  device is rebooted. Keep that in mind when testing both paths in one run.
+
 ### Web
 
 - [ ] **4.11 Soft keyboard on mobile web. C.** [Opus] [Lane E] Compose creates
@@ -695,6 +722,4 @@ records results and removes entries that passed.
 
 | Item | What to do | A pass looks like | Result |
 | --- | --- | --- | --- |
-| Baseline | Build the iOS targets and the `sampleAppiOS` project from the current branch, run it in the simulator | It builds, launches, and the editor accepts typing | |
-| Baseline | In the simulator, record today's behaviour for typing, backspace, autocorrect, and a Japanese keyboard | Written down here, as the before picture for 4.2 | |
-| 4.1 | Add a macOS CI job that compiles the iOS targets | The job is green on the branch | |
+| 4.1 | Add a macOS CI job that compiles the iOS targets | The job is green on the branch | The `ios` job in `ci-build.yml`; waiting on its first run |
