@@ -205,7 +205,8 @@ private fun TextEditorState.deleteByMotion(locateRangeEdge: () -> Unit) {
 	} else {
 		TextEditorRange(origin, edge)
 	}
-	delete(range, cursorBefore = origin)
+	// Never typing, even over one character: a backspace after it is its own step.
+	editManager.recordingAsTyping(false) { delete(range, cursorBefore = origin) }
 }
 
 /**

@@ -237,8 +237,9 @@ class TextEditHistory(private val maxHistorySize: Int = 1000) {
 		metadata: OperationMetadata,
 	): HistoryEntry.Edit? {
 		val newText = metadata.deletedText ?: return null
-		val newChar = newText.text.singleCodePointOrNull() ?: return null
-		if (newChar == '\n') return null
+		// A typed delete takes a code point or a whole cluster (an emoji sequence, a
+		// letter and its marks).
+		if (newText.isEmpty() || '\n' in newText.text) return null
 		if (!operation.range.isSingleLine() || !previous.range.isSingleLine()) return null
 		// Span bookkeeping is anchored to each operation's own range and does not
 		// concatenate; a run that touched spans stays un-merged.
@@ -251,7 +252,8 @@ class TextEditHistory(private val maxHistorySize: Int = 1000) {
 		if (!backward && !forward) return null
 		// Breaking on the whitespace/word transition keeps deletion runs wordwise.
 		val runEdge = if (backward) runText.text.first() else runText.text.last()
-		if (newChar.isWhitespace() != runEdge.isWhitespace()) return null
+		val newEdge = if (backward) newText.text.last() else newText.text.first()
+		if (newEdge.isWhitespace() != runEdge.isWhitespace()) return null
 
 		val mergedRange = if (backward) {
 			previous.range.copy(start = operation.range.start)

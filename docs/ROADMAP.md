@@ -181,9 +181,9 @@ review.
 | B | Pointer and touch | `textEditorPointerInputHandling.kt`, `state/TextEditorSelectionManager.kt`, `DrawSelectionHandles.kt` | 1.9, 1.12 to 1.16, 1.21 to 1.24, 3.1, 3.2, 3.4 to 3.8, 3.13, 3.15, 4.23 |
 | C | Drawing and geometry | `Draw*.kt`, `cursor/`, `scrollbar/`, `state/TextEditorScrollState.kt`, hit testing | 1.8, 1.10, 1.11, 1.17, 1.18, 3.3, 3.12, 4.14, 7.6, 7.7 |
 | D | Bindings, actions, menu | `input/KeyBindings.kt`, `input/EditorCommand.kt`, `input/BuiltinEditorActions.kt`, `contextmenu/` | 2.1, 2.2, 2.4, 2.5, 2.7 to 2.12, 4.8, 5.8 |
-| E | Input sessions on desktop, iOS, web | `desktopMain`, `iosMain`, `wasmJsMain` under `input/` | 4.2 to 4.7, 4.10 to 4.12, 4.19, 4.21, 4.22 |
-| F | Android input | `androidMain` | 0.4, 3.9 to 3.11, 3.14, 4.16, 4.18, 4.20 |
-| G | Edit pipeline and undo | `state/TextEditManager.kt`, `state/TextEditHistory.kt`, `state/EditBehavior.kt`, `input/ImeEditLogic.kt` | 1.20, 5.1 to 5.5, 6.1 to 6.6 |
+| E | Input sessions on desktop, iOS, web | `desktopMain`, `iosMain`, `wasmJsMain` under `input/` | 4.2 to 4.7, 4.10 to 4.12, 4.19, 4.21, 4.22, 4.24 to 4.26 |
+| F | Android input | `androidMain` | 0.4, 3.9 to 3.11, 3.14, 4.16, 4.18, 4.20, 4.27 |
+| G | Edit pipeline and undo | `state/TextEditManager.kt`, `state/TextEditHistory.kt`, `state/EditBehavior.kt`, `input/ImeEditLogic.kt` | 1.20, 5.1 to 5.5, 5.9, 6.1 to 6.6, 6.14, 6.15 |
 | H | Clipboard and HTML | `clipboard/`, `html/` | 4.9, 4.13, 4.17, 6.7 to 6.12 |
 | I | Markdown and block model | `markdown/`, `richstyle/` | 5.6, 7.14 to 7.16 |
 | J | Find addon | `ComposeTextEditorFind/` | 7.17 to 7.19, 7.26, 7.29 |
@@ -212,6 +212,7 @@ Limits on parallel work:
 | 4.1 | Trusting any iOS change |
 | 4.2 | 4.3, 4.5 to 4.7, 4.11, 4.12 |
 | 5.1 | 5.2 to 5.4, which can then run in parallel as separate behaviours |
+| 4.25, 4.26, 4.27 | Shipping 5.2 to 5.4 with a behavior that edits on the IME path |
 | 6.2 | 6.1 |
 
 A first wave that can run in parallel:
@@ -982,7 +983,7 @@ iOS Safari; browser tests run in CI.
   after the commit then addresses the wrong characters. Defer the hook to
   the batch's end, or drop the batch's remaining offsets once a behavior
   has edited.
-- [ ] **4.27 Android resyncs by restarting input. C.** [Opus] [Lane E]
+- [ ] **4.27 Android resyncs by restarting input. C.** [Opus] [Lane F]
   `requestImeResync` becomes `restartInput`, which clears the keyboard's
   suggestions and shift state. That suits a whole-document replace, not a
   smart-punctuation substitution beside the caret (5.2), which native
@@ -1018,6 +1019,15 @@ iOS Safari; browser tests run in CI.
   height. Global `textIndent`, `lineHeight`, and `textAlign` already work
   through `textStyle` (relevant to hammer-editor#927).
 - [ ] **5.8 Clear formatting and unlink** [Opus] [Lane D] actions.
+- [ ] **5.9 A composition the editor ends is not offered. C.** [Fable]
+  [Lane G] 5.1 offers a typed composition when the IME commits or finishes
+  it, but the editor also ends one itself, with a bare `clearComposingRange`:
+  a tap or drag outside it (`endCompositionIfPointerLeft`), focus loss, and
+  the Android connection closing. The IME's later `finishComposingText` then
+  finds nothing, so a behavior never sees the last word typed before a tap.
+  Offering it there means a behavior may edit while the pointer is placing
+  the caret, so decide who owns the caret first. Touches lane B's pointer
+  handling and lane F's connection; do it when both are idle.
 
 ## Phase 6: undo and clipboard fidelity
 

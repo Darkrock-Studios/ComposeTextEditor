@@ -252,7 +252,9 @@ class TextEditorState(
 		// The caret and selection live outside the draft; a rollback puts them back
 		// too, or they would address the revision that was discarded.
 		val cursorBefore = cursor.position
+		val affinityBefore = cursor.affinity
 		val selectionBefore = selector.selection
+		val touchSelectionBefore = selector.isTouchSelection
 		var committed = false
 		try {
 			val result = block()
@@ -303,12 +305,13 @@ class TextEditorState(
 				// After the rollbacks: a document load's rollback restores the entries
 				// it cleared, staged ones included, and those go with the draft too.
 				editManager.history.endGroup(commit = false)
+				// Cleared first, which also drops any touch mode the block left pending.
+				selector.clearSelection()
 				if (selectionBefore != null) {
 					selector.updateSelection(selectionBefore.start, selectionBefore.end)
-				} else {
-					selector.clearSelection()
+					if (touchSelectionBefore) selector.markTouchSelection()
 				}
-				cursor.updatePosition(cursorBefore)
+				cursor.updatePosition(cursorBefore, affinityBefore)
 			}
 		}
 	}
@@ -801,7 +804,8 @@ class TextEditorState(
 				cursorBefore = cursorPosition,
 				cursorAfter = CharLineOffset(cursorPosition.line, start)
 			)
-			editManager.applyOperation(operation)
+			// Typing whatever the cluster's length, so an emoji joins the backspace run.
+			editManager.recordingAsTyping(true) { editManager.applyOperation(operation) }
 		} else if (cursorPosition.line > 0) {
 			val previousLineLength = textLines[cursorPosition.line - 1].length
 			val deleteRange = TextEditorRange(
@@ -838,7 +842,7 @@ class TextEditorState(
 				cursorBefore = cursorPosition,
 				cursorAfter = cursorPosition
 			)
-			editManager.applyOperation(operation)
+			editManager.recordingAsTyping(true) { editManager.applyOperation(operation) }
 		} else if (cursorPosition.line < textLines.size - 1) {
 			val deleteRange = TextEditorRange(
 				cursorPosition,

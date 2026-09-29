@@ -203,31 +203,31 @@ like any other operation (`LineBlockEditBehavior` does this by going through
 `toggleLineBlock` rather than mutating spans directly).
 
 `onTextInput` is the typed-text hook, and unlike the other three it runs
-*after* the edit: it is told where committed text landed. It sees every path:
-a key event's character (`insertTypedString`), an IME commit (the whole word
-a soft keyboard or a candidate window commits, in place of what it was
-composing, or a composition it finishes as it stands), a dictated phrase through the accessibility `insertTextAtCursor`,
-and a host's own `insertTypedString`. It never sees an IME's composing
-updates, which are not committed text, and it never sees a paste, which is
-not typing (an auto-link over pasted URLs needs its own seam). A lone typed
-line break is the Enter key and goes to `onNewline`, never to `onTextInput`;
-the one exception is an IME committing `"\n"` over its own composition, which
-is a replacement of the composition and reaches neither hook (see
-`ImeLineBlockParityTest`).
+*after* the edit: it is told where committed text landed. It sees every
+path: a key event's character (`insertTypedString`), an IME commit (the
+whole word a soft keyboard or a candidate window commits, in place of what
+it was composing, or a composition it finishes as it stands), a dictated
+phrase through the accessibility `insertTextAtCursor`, and a host's own
+`insertTypedString`. It never sees an IME's composing updates, which are not
+committed text, and it never sees a paste, which is not typing (an auto-link
+over pasted URLs needs its own seam). A lone typed line break is the Enter
+key and goes to `onNewline`, never to `onTextInput`; the one exception is an
+IME committing `"\n"` over its own composition, which is a replacement of
+the composition and reaches neither hook (see `ImeLineBlockParityTest`).
 
 It runs after rather than before because the default edit is not one thing a
 behavior could reproduce: on the IME path it replaces the composition,
 inherits its styling, and places the caret by the IME's `newCursorPosition`
 contract. Letting it land first means a behavior reads the document around
 `range` and edits on top, owns the caret from there, and the IME is asked to
-resync when it claims. It also gives the undo shape native editors have for
-free: the typed text is its own step, the behavior's replacement the next,
-so one undo of an em dash gives back the two hyphens. Several edits go in
-one `editGroup` to be one step. The chain is skipped for edits a behavior
-makes while handling one, and a behavior that edits ends the chain whether
-or not it claims, since the range it was told no longer holds. Smart punctuation, markdown as you type, and
-auto-link are opt-in behaviors on this hook; `TextInputBehaviorTest` shows
-the shape.
+resync when it moves the text or the caret. It also gives the undo shape
+native editors have for free: the typed text is its own step, the behavior's
+replacement the next, so one undo of an em dash gives back the two hyphens.
+Several edits go in one `editGroup` to be one step. The chain is skipped for
+edits a behavior makes while handling one, and a behavior that edits ends
+the chain whether or not it claims, since the range it was told no longer
+holds. Smart punctuation, markdown as you type, and auto-link are opt-in
+behaviors on this hook; `TextInputBehaviorTest` shows the shape.
 
 The chain is consulted inside the public semantic functions, so every caller
 gets it:
@@ -305,9 +305,9 @@ word correction. The guards:
   would let an autocorrect rewrite at the top of the document pass as a
   backspace.
 - The code-point variant additionally requires that its request resolved to at
-  most one UTF-16 char, so a one-code-point delete of an astral character never
-  reaches `backspaceAtCursor`, which deletes a single char and would split the
-  surrogate pair.
+  most one UTF-16 char, and either variant goes semantic only when the cluster
+  beside the caret is one char: `backspaceAtCursor` and `deleteAtCursor` take
+  a whole code point, emoji sequence, or cluster, more than the IME asked for.
 - Both semantic routes also run when clamping leaves an empty range. A
   backspace at the very start of the document removes nothing but can still
   exit a line block, which is what the hardware key does; bailing on the empty
@@ -397,7 +397,9 @@ primitives stay `internal`.
   host concern rather than a library change.
 - Behaviors see typed text, newline, backspace and forward delete. A paste
   is not offered to `onTextInput`; the pasted-URL half of auto-link needs a
-  paste seam of its own.
+  paste seam of its own. Nor is a typed composition the editor ends itself
+  (a tap outside it, focus loss), only one the IME commits or finishes
+  (roadmap 5.9).
 - The IME routing is unverified on real hardware. See "Device verification
   still owed" above; that list should be worked through before a release ships
   this.

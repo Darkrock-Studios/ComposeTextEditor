@@ -153,7 +153,7 @@ class TextEditManager(private val state: TextEditorState) {
 				is TextEditOperation.Insert -> applyInsert(operation)
 				is TextEditOperation.Delete -> applyDelete(operation)
 				is TextEditOperation.Replace -> applyReplace(addToHistory, operation)
-				is TextEditOperation.StyleSpan -> applyStyleOperation(operation)
+				is TextEditOperation.StyleSpan -> applyStyleOperation(addToHistory, operation)
 				is TextEditOperation.RichSpan -> applyRichSpanOperation(operation)
 				is TextEditOperation.LineBlock -> applyLineBlockOperation(operation)
 			}
@@ -613,12 +613,16 @@ class TextEditManager(private val state: TextEditorState) {
 		}
 	}
 
-	private fun applyStyleOperation(operation: TextEditOperation.StyleSpan): OperationMetadata {
+	private fun applyStyleOperation(addToHistory: Boolean, operation: TextEditOperation.StyleSpan): OperationMetadata {
 		// Captured before the change: undo puts these back rather than inverting
 		// the operation, which would strip styling the range already carried.
-		val before = (operation.range.start.line..operation.range.end.line)
-			.filter { it in state.textLines.indices }
-			.associateWith { state.textLines[it].spanStyles }
+		val before = if (addToHistory) {
+			(operation.range.start.line..operation.range.end.line)
+				.filter { it in state.textLines.indices }
+				.associateWith { state.textLines[it].spanStyles }
+		} else {
+			emptyMap()
+		}
 		if (operation.range.isSingleLine()) {
 			if (operation.isAdd) {
 				val updatedLine = spanManager.applySingleLineSpanStyle(
