@@ -5,7 +5,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import com.darkrockstudios.texteditor.CharLineOffset
-import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.richstyle.LinkSpanStyle
 import com.darkrockstudios.texteditor.richstyle.RichSpan
 import utils.editorUiTest
@@ -14,9 +13,10 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * Pointer input that lands above or below the text. Like `BasicTextField`, a point
- * above the first row hits the first row and a point below the last row hits the
- * last row, with x hit-tested on that row either way.
+ * Clicks that land above or below the text. Like `BasicTextField`, a point above the
+ * first row hits the first row and a point below the last row hits the last row, with
+ * x hit-tested on that row either way. A drag past the viewport's edge is
+ * `DragAutoScrollE2eTest`'s.
  */
 class ClickOutsideTextE2eTest {
 
@@ -42,21 +42,6 @@ class ClickOutsideTextE2eTest {
 		clickAt(Offset(x, 5f))
 
 		assertEquals(CharLineOffset(0, 2), state.cursorPosition)
-	}
-
-	@Test
-	fun `dragging above the top selects to the first row at the pointer's x`() = editorUiTest(
-		initialText = AnnotatedString("hello world\nsecond line"),
-	) {
-		val from = positionOfCharacter(12 + 3)
-		val x = positionOfCharacter(4).x
-		dragBetween(from, Offset(x, -30f))
-
-		assertEquals(
-			TextEditorRange(CharLineOffset(0, 4), CharLineOffset(1, 3)),
-			state.selector.selection,
-		)
-		assertEquals(CharLineOffset(0, 4), state.cursorPosition)
 	}
 
 	@Test

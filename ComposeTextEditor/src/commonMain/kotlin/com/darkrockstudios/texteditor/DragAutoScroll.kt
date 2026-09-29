@@ -90,9 +90,11 @@ internal class DragAutoScroll(
 		// Rows run top to bottom, so both searches are binary; neither comparison returns 0,
 		// so each result is -(first row past the boundary) - 1.
 		val row = if (overflow > 0f) {
-			// With the last row in view, below it is where the document's end is read from.
 			val last = rows.lastOrNull() ?: return position
-			if (last.offset.y + last.effectiveHeight <= bottom) return position
+			if (last.offset.y + last.effectiveHeight <= bottom) {
+				// With the last row in view, far right of it is the document's end.
+				return Offset(DOCUMENT_EDGE_X, last.offset.y + last.effectiveHeight / 2f - top)
+			}
 			val pastBottom = -rows.binarySearch { if (it.offset.y + it.effectiveHeight <= bottom) -1 else 1 } - 1
 			// A row taller than the viewport is never wholly inside it; take the one at the edge.
 			rows.getOrNull(pastBottom - 1)?.takeIf { it.offset.y >= top } ?: rows.getOrNull(pastBottom)
