@@ -1132,7 +1132,7 @@ iOS Safari; browser tests run in CI.
   exactly as `BasicTextField` is; a host that sets `TextDirection.Content` on
   the editor's text style gets the mirroring (7.32). Mixed runs inside a
   paragraph stay logical (7.33).
-- [ ] **7.32** [Fable] [Lane M] The editor's text style leaves `textDirection`
+- [x] **7.32** [Fable] [Lane M] The editor's text style leaves `textDirection`
   unspecified, so the paragraph direction is the app's layout direction: a
   right-to-left paragraph in a left-to-right app is laid out left-to-right
   based (aligned left, caret motion logical), and an English paragraph in a
@@ -1140,7 +1140,10 @@ iOS Safari; browser tests run in CI.
   unless the host sets `TextDirection.Content`. `BasicTextField` behaves the
   same, but native editors resolve each paragraph from its first strong
   character. Decide whether the editor should default to `Content`, or
-  document the host's job.
+  document the host's job. Decided: keep following the app's layout
+  direction, as `BasicTextField` does; the `textStyle` KDoc on
+  `TextEditorStyle` tells hosts to set `TextDirection.Content` for
+  per-paragraph direction.
 - [ ] **7.33** [Fable] [Lane A] Arrow keys inside a mixed paragraph (a Hebrew
   word in English text, or the reverse) move logically, so the caret jumps
   visually at the run boundaries. macOS and Windows move visually through the

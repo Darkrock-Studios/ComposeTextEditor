@@ -28,6 +28,12 @@ data class TextEditorStyle(
 	val selectionColor: Color = Color.Unspecified,
 	val focusedBorderColor: Color = Color.Unspecified,
 	val unfocusedBorderColor: Color = Color.Unspecified,
+	/**
+	 * Its `textDirection` sets each paragraph's direction. Left unspecified, every
+	 * paragraph follows the app's layout direction, as in `BasicTextField`; set
+	 * `TextDirection.Content` to resolve each paragraph from its first strong character,
+	 * so a right-to-left paragraph in a left-to-right app lays out right to left.
+	 */
 	val textStyle: TextStyle = TextStyle.Default,
 	/**
 	 * Color of the bullet-list dot drawn in the gutter. `Color.Unspecified` falls
