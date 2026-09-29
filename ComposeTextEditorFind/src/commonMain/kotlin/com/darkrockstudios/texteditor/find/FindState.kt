@@ -5,6 +5,8 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.buildAnnotatedString
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.richstyle.RichSpan
 import com.darkrockstudios.texteditor.state.TextEditorState
@@ -87,7 +89,7 @@ class FindState(
 		}
 
 		// Find all matches
-		val results = textState.findAll(newQuery, caseSensitive)
+		val results = findMatches()
 		matchesGeneration = textState.documentGeneration.value
 		_matches.clear()
 		_matches.addAll(results)
@@ -188,33 +190,41 @@ class FindState(
 
 	/**
 	 * Replace the current match with the given text and move to the next match.
+	 * The replacement takes the styling at the start of the text it replaces.
 	 * @param replaceText The text to replace with
 	 * @return true if a replacement was made, false if no current match
 	 */
 	fun replaceCurrent(replaceText: String): Boolean {
 		if (currentMatchIndex < 0 || currentMatchIndex >= _matches.size) return false
 
-		val match = _matches[currentMatchIndex]
+		// An edit since the last search can have moved the match. Its highlight moved with it, so
+		// replace what the user sees highlighted, and only while that is still a match.
+		val highlighted = textState.richSpanManager.getAllRichSpans()
+			.firstOrNull { it.style === currentMatchStyle }?.range
+			?: _matches[currentMatchIndex]
+		val match = highlighted.takeIf { it in findMatches() }
+		if (match == null) {
+			refreshSearch()
+			return false
+		}
 
 		// Clear highlights before replacement
 		clearHighlights()
 
-		// Perform the replacement
-		textState.replace(match, replaceText)
+		textState.replace(match, styledReplacement(match, replaceText))
 
 		// Re-run the search to update matches
 		// The debounced search will also run, but we do it immediately for responsiveness
-		val results = textState.findAll(query, caseSensitive)
+		val results = findMatches()
 		_matches.clear()
 		_matches.addAll(results)
 
-		// Adjust current index - stay at same index if possible, or wrap
-		if (_matches.isEmpty()) {
-			currentMatchIndex = -1
+		// The first match after the replacement (the cursor's spot), which can itself contain the query
+		val afterReplacement = textState.cursor.position
+		currentMatchIndex = if (_matches.isEmpty()) {
+			-1
 		} else {
-			// Keep at same index (which is now the next match after replacement)
-			// but clamp to valid range
-			currentMatchIndex = currentMatchIndex.coerceIn(0, _matches.lastIndex)
+			_matches.indexOfFirst { it.start >= afterReplacement }.takeIf { it >= 0 } ?: 0
 		}
 
 		// Update highlights and navigate
@@ -227,29 +237,47 @@ class FindState(
 	}
 
 	/**
-	 * Replace all matches with the given text.
+	 * Replace all matches with the given text, each taking the styling at the start of the text
+	 * it replaces. Matches are found afresh in the current text; where matches overlap, only the
+	 * first is replaced.
 	 * @param replaceText The text to replace with
 	 * @return The number of replacements made
 	 */
 	fun replaceAll(replaceText: String): Int {
-		if (_matches.isEmpty()) return 0
+		if (query.isEmpty()) return 0
+		val targets = findMatches().withoutOverlaps()
+		if (targets.isEmpty()) {
+			refreshSearch()
+			return 0
+		}
 
-		val count = _matches.size
-
-		// Clear highlights before replacements
 		clearHighlights()
 
-		// Replace from end to start to preserve positions
-		_matches.sortedByDescending { it.start }.forEach { match ->
-			textState.replace(match, replaceText)
+		// Last to first, so each replacement leaves the earlier ranges where they were.
+		targets.asReversed().forEach { match ->
+			textState.replace(match, styledReplacement(match, replaceText))
 		}
 
 		// Clear matches since they're all replaced
 		_matches.clear()
 		currentMatchIndex = -1
 
-		return count
+		return targets.size
 	}
+
+	/** [replaceText] styled like the character at the start of [range]. */
+	private fun styledReplacement(range: TextEditorRange, replaceText: String): AnnotatedString {
+		val line = textState.textLines[range.start.line]
+		val char = range.start.char
+		return buildAnnotatedString {
+			append(replaceText)
+			line.spanStyles
+				.filter { it.start <= char && char < it.end }
+				.forEach { addStyle(it.item, 0, replaceText.length) }
+		}
+	}
+
+	private fun findMatches(): List<TextEditorRange> = textState.findAll(query, caseSensitive)
 
 	/**
 	 * Cancel any ongoing operations. Call this when done with FindState.
@@ -271,7 +299,7 @@ class FindState(
 		} else null
 
 		// Re-search
-		val results = textState.findAll(query, caseSensitive)
+		val results = findMatches()
 		matchesGeneration = textState.documentGeneration.value
 		_matches.clear()
 		_matches.addAll(results)

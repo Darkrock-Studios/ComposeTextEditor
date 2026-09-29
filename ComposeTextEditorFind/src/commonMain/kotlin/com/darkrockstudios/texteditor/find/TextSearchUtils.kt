@@ -39,6 +39,18 @@ fun TextEditorState.findAll(
 }
 
 /**
+ * The matches that do not overlap an earlier one, keeping the first of each overlapping run.
+ * [findAll] reports overlapping matches (`aa` in `aaa` twice); a replacement can only take one.
+ */
+internal fun List<TextEditorRange>.withoutOverlaps(): List<TextEditorRange> {
+	var lastEnd: CharLineOffset? = null
+	return filter { match ->
+		val end = lastEnd
+		(end == null || match.start >= end).also { kept -> if (kept) lastEnd = match.end }
+	}
+}
+
+/**
  * Returns the index into [matches] of the match nearest the cursor.
  *
  * Prefers the first match at or after [cursorPosition], wrapping back to the first match when every
