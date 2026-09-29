@@ -489,6 +489,11 @@ Constraints that shape the order:
   code that the desktop suite already tests. Platform files keep only what
   truly differs (keyboard options on iOS). Mac part: compile the iOS half and
   confirm typing, backspace, and composition in the simulator.
+  Linux part done: `skikoMain` holds `SkikoTextEditorInputMethodRequest`
+  (request, state adapter, editing scope, `EditCommand` translation) and the
+  three platform files pass in `ImeOptions` only; the desktop suite plus
+  `input/SkikoInputMethodRequestTest` cover it and wasm compiles. The Mac part
+  is in the queue; the checkbox waits on it.
 - [ ] **4.3 Start a real input session on web.** [Fable] [Lane E] Replace the
   suspend-forever stub with `startInputMethod` using the shared request, then
   settle which path owns plain typing so keys are not inserted twice (today
@@ -511,11 +516,17 @@ Constraints that shape the order:
   - `applyTextFieldValue` replaces the whole document with a plain string on
     every edit, dropping character styles.
   - Commits skip the edit-behavior chain, so list continuation does not run.
+  All four are addressed on Linux by the shared request (4.2); each waits on
+  the device pass in the Mac queue.
 - [ ] **4.6 Layout geometry. C.** [Opus] [Lane E] [Mac work] `textLayoutResult`
   and every rect return null, so spacebar trackpad mode and IME positioning
-  cannot work. The rects come with 4.2.
+  cannot work. The rects come with 4.2 (done on Linux); `textLayoutResult`
+  stays null because the editor lays out its own lines, so the spacebar
+  trackpad's floating caret needs an editor-side equivalent of
+  `getOffsetForPosition` before it can work. That is the remaining work here.
 - [ ] **4.7 Keyboard options. C.** [Opus] [Lane E] [Mac work] Capitalisation is
-  not set.
+  not set. Set to sentences with autocorrect on in 4.2; confirm the keyboard
+  shows it in the Mac queue pass.
 - [ ] **4.8 Native edit menu. C.** [Fable] [Lane D] [Mac work] A Material
   dropdown is used instead of the platform text toolbar.
 - [ ] **4.9 Rich clipboard. C.** [Opus] [Lane H] [Mac work] Plain text only
@@ -567,6 +578,13 @@ Also seen:
   out.
 - [ ] **4.15 Browser tests.** [Opus] [Lane L] Automation against the built demo
   (0.7), with composition events.
+- [ ] **4.21 Whole-document mirror per edit. S.** [Opus] [Lane E] Compose's web
+  session copies `request.value().text` into the backing `<textarea>` after
+  every edit, and iOS snapshots `state.text` the same way, so each keystroke
+  builds the whole document as a `String` and hands it to the platform. Same
+  as `BasicTextField` on those platforms, so acceptable today; measure on a
+  long document (7.8) before deciding whether the request should serve a
+  window around the caret instead.
 
 Exit criteria: typing, composition, and clipboard work in current Chrome,
 Firefox, and Safari on desktop; the soft keyboard works on Android Chrome and
@@ -700,6 +718,9 @@ Shaping is one line per keystroke. These still scale with document length:
 - [ ] **7.13** [Opus] [Lane M] Missing: read-only with a caret, single-line
   mode, min and max lines, auto-grow (the editor forces `fillMaxSize`), max
   length, an input filter, a soft-wrap toggle with horizontal scrolling.
+  Also the soft keyboard options: capitalisation, autocorrect, and keyboard
+  type are fixed per platform (Android's `EditorInfo`, the iOS `ImeOptions`
+  in 4.2), so a host editing code cannot turn sentence caps off.
 
 ### Markdown export
 
@@ -754,9 +775,15 @@ Shaping is one line per keystroke. These still scale with document length:
   preserves formatting.
 - [ ] Stray `println` calls in `state/TextEditorState.kt` and
   `SpellCheckState.kt`.
-- [ ] `docs/design/text-input-sessions.md` describes iOS as routing through
-  the shared IME logic; it does not yet (4.2).
+- [x] `docs/design/text-input-sessions.md` describes iOS as routing through
+  the shared IME logic; it does not yet (4.2). True since 4.2's Linux part.
 - [ ] `getOffsetAtCharacter` returns a negative char for negative input.
+- [ ] The document content is not snapshot state, so the skiko input session
+  (4.2) collects `editOperations` and `documentGeneration` to bump a
+  snapshot-backed revision its text reads fold in. A revision advanced from
+  `TextEditorState.onCommit` would give every snapshot observer the same
+  signal with no collectors; do it when `state/TextEditorState.kt` is next
+  open (lane N).
 
 ## User reports mapped to this roadmap
 
@@ -785,3 +812,5 @@ records results and removes entries that passed.
 
 | Item | What to do | A pass looks like | Result |
 | --- | --- | --- | --- |
+| 4.2 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64`, then `./gradlew :ComposeTextEditor:iosSimulatorArm64Test`. The iOS file (`iosMain/.../input/TextEditorTextInputService.ios.kt`) now only passes `ImeOptions` into `skikoMain`'s `startSkikoInputSession`; if it does not compile, the fix is in that file or in `skikoMain/.../input/`, never a copy of the desktop code | Both tasks green with no change to the desktop or wasm sources | |
+| 4.2 | Build `sampleAppiOS`, run it in the simulator, and repeat the baseline recording: type a sentence, backspace through it, accept an autocorrect suggestion, and compose Japanese (Settings > General > Keyboard, add Japanese Kana, type "nihongo" and pick a candidate). Compare against "Simulator baseline before 4.2" in the iOS section | Typed characters appear once each and backspace removes one character at a time (4.5); an accepted autocorrect replaces the word rather than appending it (4.5, hammer-editor#791); kana show underlined while composing and the chosen candidate replaces them once (4.5); the keyboard opens with a shifted first letter (4.7). If the baseline already passed any of these, note it as a regression check only | |

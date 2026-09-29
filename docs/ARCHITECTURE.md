@@ -189,7 +189,11 @@ key handling. Both, and the reasoning for keeping them separate:
 The IME contract runs in two directions. Commands flow in, and each one lands
 in a single shared implementation (`ImeEditLogic` in commonMain) so that
 composing-region and cursor semantics are byte-for-byte identical on every
-platform; the per-platform adapters are pure translation. State flows out,
+platform; the per-platform adapters are pure translation. There are two of
+them: the Android `InputConnection`, and one skiko
+`PlatformTextInputMethodRequest` in the `skikoMain` source set shared by
+desktop, iOS, and web, each contributing only its `ImeOptions` (desktop and
+iOS start it; web is roadmap 4.3). State flows out,
 because an IME keeps its own mirror of the text around the cursor and will
 issue commands against a stale buffer unless it is told about every change.
 On Android every report goes through one flush that compares the finished state
