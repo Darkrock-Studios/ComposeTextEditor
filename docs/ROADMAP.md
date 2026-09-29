@@ -434,9 +434,14 @@ fixes what users feel every minute.
 
 ### Selection drawing
 
-- [ ] **1.17 Empty lines and newlines. C.** [Opus] [Lane C] Empty lines inside
+- [x] **1.17 Empty lines and newlines. C.** [Opus] [Lane C] Empty lines inside
   a selection draw nothing (`DrawSelectionUi.kt`). Native shows a sliver for
   the newline.
+  Done: each selected line break adds a sliver one space wide (the base text
+  style's) after its line's text, trailing spaces included, which are now
+  highlighted too; a soft wrap adds none. Only rows in view are drawn, each
+  its full height, block rows included (`drawing/SelectionDrawingTest.kt`).
+  The sliver always goes right; right-to-left lines are 7.6's.
 - [ ] **1.18 Unfocused state. C.** [Opus] [Lane C] No unfocused selection
   colour; selection and touch handles stay drawn unchanged after focus loss.
 

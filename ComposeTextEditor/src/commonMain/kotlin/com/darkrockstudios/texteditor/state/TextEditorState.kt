@@ -90,6 +90,24 @@ class TextEditorState(
 			}
 		}
 
+	private var lineBreakWidthKey: Pair<TextMeasurer, TextStyle>? = null
+	private var lineBreakWidthPx = 0f
+
+	/**
+	 * Width of the sliver a selected line break draws: one space in [textStyle], with
+	 * no indent, which layout strips from the style as well.
+	 */
+	internal val lineBreakWidth: Float
+		get() {
+			val key = textMeasurer to textStyle
+			if (key != lineBreakWidthKey) {
+				lineBreakWidthPx = textMeasurer.measure(" ", textStyle.copy(textIndent = TextIndent.None))
+					.size.width.toFloat()
+				lineBreakWidthKey = key
+			}
+			return lineBreakWidthPx
+		}
+
 	/**
 	 * Styling used when converting styled text to and from an external
 	 * representation, currently the clipboard's HTML flavor. Header levels are
