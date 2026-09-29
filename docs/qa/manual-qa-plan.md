@@ -264,6 +264,11 @@ the platform's double-tap timeout (300 ms on desktop), not the OS mouse setting.
 8. In a long document, drag a selection below the editor and hold the mouse still.
    **Expect:** the editor keeps scrolling and the selection keeps growing; farther
    below scrolls faster; moving back inside stops it. Repeat above the editor.
+9. In a document of long wrapped paragraphs, triple-click a paragraph and drag
+   below the editor, holding still. **Expect:** the scroll runs at one even speed
+   with no lurching or jumping back (1.23). Move the mouse back inside and
+   release. **Expect:** the view then scrolls to show the caret at the end of the
+   last selected paragraph.
 
 ## 4. Touch, focus and the soft keyboard (Android)
 

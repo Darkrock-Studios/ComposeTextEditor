@@ -428,12 +428,19 @@ fixes what users feel every minute.
   does, so any button focuses; a secondary press does not itself ask for the
   soft keyboard, though on Android focusing an unfocused editor starts the
   input session and may raise it.
-- [ ] **1.23 Word and line drags past the viewport. C.** [Opus] [Lane B]
+- [x] **1.23 Word and line drags past the viewport. C.** [Opus] [Lane B]
   Auto-scroll (1.14) keeps a character drag's caret on a wholly visible row,
   but a word or line drag puts the caret at the far end of the unit under the
   pointer. In a long wrapped paragraph that end is off screen, so the
   editor's scroll-to-caret animation restarts every frame against the
-  auto-scroll and the scroll lurches.
+  auto-scroll and the scroll lurches. Reproduced for a line drag (a
+  triple-click drag held below the viewport scrolled 66, 83, 25, 83 px per
+  200 ms); a word drag does it only for a word wider than the row, which
+  layout breaks across rows. While its ticker runs `DragAutoScroll` now owns
+  the scroll: it stops any scroll animation and sets
+  `TextEditorScrollManager.cursorScrollSuppressed`, which
+  `ensureCursorVisible` honours, and when the pointer comes back inside or
+  lifts it clears the flag and reveals the caret.
 
 ### Selection drawing
 

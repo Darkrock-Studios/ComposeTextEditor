@@ -69,22 +69,35 @@ class TextEditorScrollManager(
 		applyScrollRange()
 	}
 
-	fun scrollToTop() {
+	/**
+	 * Set while a drag auto-scroll runs: it owns the scroll then, and a caret it puts off
+	 * screen (a line drag's, at the paragraph end) must not start a scroll against it.
+	 * Every scroll to the caret goes through [ensureCursorVisible], which honours it.
+	 */
+	internal var cursorScrollSuppressed = false
+
+	/** Stops a scroll animation in progress where it is. */
+	internal fun stopScrolling() {
 		scrollJob?.cancel()
+		scrollJob = null
+	}
+
+	fun scrollToTop() {
+		stopScrolling()
 		scrollJob = scope.launch {
 			scrollState.animateScrollTo(scrollState.minValue)
 		}
 	}
 
 	fun scrollToBottom() {
-		scrollJob?.cancel()
+		stopScrolling()
 		scrollJob = scope.launch {
 			scrollState.animateScrollTo(maxScroll)
 		}
 	}
 
 	fun scrollToPosition(position: Int, animated: Boolean = true) {
-		scrollJob?.cancel()
+		stopScrolling()
 		scrollJob = scope.launch {
 			val scrollToY = position.coerceIn(scrollState.minValue, maxScroll)
 			if (animated) {
@@ -146,7 +159,7 @@ class TextEditorScrollManager(
 		}
 
 		if(targetScroll != viewportTop) {
-			scrollJob?.cancel()
+			stopScrolling()
 			scrollJob = scope.launch {
 				scrollState.animateScrollTo(targetScroll)
 			}
@@ -158,6 +171,7 @@ class TextEditorScrollManager(
 	}
 
 	fun ensureCursorVisible() {
+		if (cursorScrollSuppressed) return
 		val cursorPos = getCursorPosition()
 		if (!isOffsetVisible(cursorPos)) {
 			scrollToCursor()

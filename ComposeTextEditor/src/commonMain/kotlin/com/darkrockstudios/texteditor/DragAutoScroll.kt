@@ -32,18 +32,29 @@ internal class DragAutoScroll(
 
 	fun update(position: Offset) {
 		pointer = position
+		// Back inside, the editor's scroll into view is the drag's again, so it is
+		// handed back before this move places the caret.
+		if (overflow(position) == 0f) stop()
 		onDrag(clampToViewport(position + targetOffset))
-		if (overflow(position) == 0f) {
-			stop()
-		} else if (ticker == null) {
+		if (overflow(position) != 0f && ticker == null) {
+			// This owns the scroll now: the editor's scroll into view would restart
+			// against it every frame for a caret a line drag leaves off screen.
+			state.scrollManager.stopScrolling()
+			state.scrollManager.cursorScrollSuppressed = true
 			ticker = scope.launch { tick() }
 		}
 	}
 
+	/** Ends the scroll, and reveals the caret the drag may have left off screen meanwhile. */
 	fun stop() {
+		val wasScrolling = ticker != null
 		ticker?.cancel()
 		ticker = null
 		fraction = 0f
+		if (wasScrolling) {
+			state.scrollManager.cursorScrollSuppressed = false
+			state.scrollManager.ensureCursorVisible()
+		}
 	}
 
 	private suspend fun tick() {
