@@ -429,9 +429,10 @@ Constraints that shape the order:
 
 ### First steps, in order
 
-- [ ] **4.1 Compile and test iOS in CI.** [Opus] [Lane L] [Mac work] A macOS
+- [x] **4.1 Compile and test iOS in CI.** [Opus] [Lane L] [Mac work] A macOS
   runner that builds the iOS targets and the iOS sample app. Without it every
-  iOS change is a guess.
+  iOS change is a guess. Done: the `ios` job in `ci-build.yml`. There are no
+  iOS test sources yet, so `iosSimulatorArm64Test` is skipped until some exist.
 - [ ] **4.2 One shared input request for desktop, iOS, and web.** [Fable]
   [Lane E] [Mac work] Move the request, the state adapter, and the editing
   scope from `desktopMain/.../input/TextEditorTextInputService.desktop.kt` into
@@ -722,4 +723,3 @@ records results and removes entries that passed.
 
 | Item | What to do | A pass looks like | Result |
 | --- | --- | --- | --- |
-| 4.1 | Add a macOS CI job that compiles the iOS targets | The job is green on the branch | The `ios` job in `ci-build.yml`; waiting on its first run |
