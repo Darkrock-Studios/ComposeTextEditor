@@ -103,8 +103,9 @@ arrow keys inside a mixed paragraph are logical, like the editor's (7.33).
 ### Branch and machines
 
 - All roadmap work happens on one working branch, `native-parity`, pushed to
-  `origin`. Both machines sync through it. It merges into `main` by one pull
-  request once the roadmap is done, not before.
+  `origin`. Both machines sync through it. The work can be shaped into a
+  stack of pull requests as it goes, but none is opened, and nothing merges
+  into `main`, until the roadmap is done.
 - **Linux** is the primary machine: shared code, desktop, Android, and web.
 - **Mac** does everything tagged [Mac work], using its own agent session in
   its own clone.
