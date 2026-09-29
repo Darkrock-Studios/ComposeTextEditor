@@ -3,6 +3,8 @@ package com.darkrockstudios.texteditor
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
+import androidx.compose.foundation.overscroll
+import androidx.compose.foundation.rememberOverscrollEffect
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -122,6 +124,9 @@ fun BasicTextEditor(
 	val clipboard = LocalClipboard.current
 	val density = LocalDensity.current
 	val layoutDirection = LocalLayoutDirection.current
+
+	// The platform's own: a stretch on Android, Compose's bounce on iOS, none on desktop.
+	val overscrollEffect = rememberOverscrollEffect()
 
 	val inputRequester = remember { TextInputRequester() }
 	val inputModifierElement = remember(state, clipboard, enabled, keyBindings) {
@@ -281,10 +286,12 @@ fun BasicTextEditor(
 						onClick { focusRequester.requestFocus(); true }
 					}
 					.fillMaxSize()
+					.overscroll(overscrollEffect)
 					.scrollable(
 						orientation = Orientation.Vertical,
 						reverseDirection = false,
 						state = state.scrollState,
+						overscrollEffect = overscrollEffect,
 					)
 			) {
 				// The pointer handler never restarts, so it must reach the listeners the

@@ -44,6 +44,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlin.concurrent.Volatile
+import kotlin.math.ceil
 import kotlin.math.min
 
 /**
@@ -1321,7 +1322,8 @@ class TextEditorState(
 		}
 
 		_lineOffsets = offsets
-		scrollManager.updateContentHeight(yOffset.toInt())
+		// Rounded up so the last row's fraction of a pixel is still in reach.
+		scrollManager.updateContentHeight(ceil(yOffset).toInt())
 		lastLayoutLineCount = textLines.size
 		lastLayoutGeneration = layoutInputGeneration
 

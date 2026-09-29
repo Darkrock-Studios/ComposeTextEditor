@@ -25,8 +25,6 @@ import kotlin.math.roundToInt
 class TextEditorScrollState(
 	initial: Int = 0
 ) : ScrollableState {
-	private val SCROLL_CONTENT_BUFFER = 32
-
 	private var _value by mutableStateOf(initial)
 	private var _minValue by mutableStateOf(0)
 	private var _maxValue by mutableStateOf(0)
@@ -52,16 +50,19 @@ class TextEditorScrollState(
 			_value = if (wasAtMin) _minValue else _value.coerceIn(_minValue, _maxValue)
 		}
 
-	/**
-	 * Upper scroll bound in pixels. A fixed content buffer is added to the value
-	 * set here, and [value] is re-clamped to the new range.
-	 */
+	/** Upper scroll bound in pixels, never below [minValue]. Setting it re-clamps [value]. */
 	var maxValue: Int
 		get() = _maxValue
 		set(value) {
-			_maxValue = (value + SCROLL_CONTENT_BUFFER).coerceAtLeast(_minValue)
+			_maxValue = value.coerceAtLeast(_minValue)
 			_value = _value.coerceIn(_minValue, _maxValue)
 		}
+
+	override val canScrollForward: Boolean
+		get() = _value < _maxValue
+
+	override val canScrollBackward: Boolean
+		get() = _value > _minValue
 
 	/** `true` while a [scroll] or [animateScrollTo] is running. */
 	override val isScrollInProgress: Boolean

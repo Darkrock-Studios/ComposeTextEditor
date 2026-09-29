@@ -492,6 +492,28 @@ lower-depth platforms in §1.
 9. Undo/redo toolbar buttons enable and disable correctly as history is consumed.
 10. Dark mode toggle: everything remains legible.
 
+## 8b. Drawing, caret and scrolling
+
+Guards roadmap items 1.8, 1.10, 1.11, 1.17, 1.18, 3.12 and 4.14. Desktop and
+Android unless a step says otherwise.
+
+1. Rich Text Editor demo: click in the padding left of a line, right of it, and
+   above the first line. **Expect:** the caret lands at that row's start, its end,
+   or the first row under the pointer; nothing is dead.
+2. Select a word. **Expect:** no caret while text is selected; it reappears, shown,
+   the moment the selection collapses.
+3. Put the caret mid-line and press Delete (forward delete) repeatedly, slowly.
+   **Expect:** the caret stays solid while deleting and only blinks once you stop.
+4. Select across an empty line and across several line ends. **Expect:** each line
+   end, and the empty line, shows a narrow highlighted sliver.
+5. Select text, then click another control (desktop) or dismiss focus (Android).
+   **Expect:** the selection turns a dimmed grey; touch handles disappear. Right-
+   clicking a selection must not dim it.
+6. A one-line document. **Expect:** it does not scroll at all.
+7. Android: scroll a long document; pull past its top and bottom. **Expect:** the
+   stretch overscroll; the thin indicator on the right shows while scrolling, is
+   sized to the visible share, and fades shortly after.
+
 ## 9. Consumer API sanity
 
 Guards #82, #48, #87, #90. Not strictly manual UI testing, but worth one pass before

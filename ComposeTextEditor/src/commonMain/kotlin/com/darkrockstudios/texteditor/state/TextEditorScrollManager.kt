@@ -27,6 +27,9 @@ class TextEditorScrollManager(
 	var totalContentHeight by mutableStateOf(0)
 		private set
 
+	/** Height of the laid-out rows, which unlike [totalContentHeight] may be under the viewport's. */
+	private var contentHeight = 0
+
 	var topContentPaddingPx: Int = 0
 		set(value) {
 			if (field != value) {
@@ -46,12 +49,21 @@ class TextEditorScrollManager(
 	val viewportHeight: Int
 		get() = getViewportSize().height.toInt()
 
+	/**
+	 * The furthest scroll: the last row and the bottom padding at the viewport's bottom,
+	 * or no scrolling at all when the content and its padding fit. Native editors add no
+	 * room past the last line; the bottom content padding is that room when wanted.
+	 */
+	private val maxScroll: Int
+		get() = maxOf(-topContentPaddingPx, contentHeight + bottomContentPaddingPx - viewportHeight)
+
 	private fun applyScrollRange() {
 		scrollState.minValue = -topContentPaddingPx
-		scrollState.maxValue = totalContentHeight - viewportHeight + bottomContentPaddingPx
+		scrollState.maxValue = maxScroll
 	}
 
 	fun updateContentHeight(height: Int) {
+		contentHeight = height
 		totalContentHeight = maxOf(height, viewportHeight)
 		applyScrollRange()
 	}
@@ -66,14 +78,14 @@ class TextEditorScrollManager(
 	fun scrollToBottom() {
 		scrollJob?.cancel()
 		scrollJob = scope.launch {
-			scrollState.animateScrollTo(totalContentHeight - viewportHeight + bottomContentPaddingPx)
+			scrollState.animateScrollTo(maxScroll)
 		}
 	}
 
 	fun scrollToPosition(position: Int, animated: Boolean = true) {
 		scrollJob?.cancel()
 		scrollJob = scope.launch {
-			val scrollToY = position.coerceIn(scrollState.minValue, totalContentHeight)
+			val scrollToY = position.coerceIn(scrollState.minValue, maxScroll)
 			if (animated) {
 				scrollState.animateScrollTo(scrollToY)
 			} else {
@@ -114,7 +126,6 @@ class TextEditorScrollManager(
 		if (top) {
 			val targetTop = calculateOffsetYPosition(offset).toInt()
 			val minScroll = scrollState.minValue
-			val maxScroll = maxOf(minScroll, totalContentHeight - viewportHeight + bottomContentPaddingPx)
 			scrollToPosition(targetTop.coerceIn(minScroll, maxScroll), animated = animated)
 			return
 		}
@@ -123,7 +134,6 @@ class TextEditorScrollManager(
 		val cursorHeight = calculateLineHeight(offset)
 		val viewportTop = scrollState.value
 		val minScroll = scrollState.minValue
-		val maxScroll = maxOf(minScroll, totalContentHeight - viewportHeight + bottomContentPaddingPx)
 
 		// Just far enough to show the caret's whole row, as native editors scroll.
 		val targetScroll = if (cursorTop < viewportTop) {

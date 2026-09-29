@@ -599,9 +599,23 @@ fixes what users feel every minute.
   autocorrect, or keyboard type. `initialCapsMode` and initial surrounding text
   are not set. `commitContent` returns false. No autofill, no stylus
   handwriting.
-- [ ] **3.12 Scrolling. C.** [Opus] [Lane C] No overscroll effect. The mobile
+- [x] **3.12 Scrolling. C.** [Opus] [Lane C] No overscroll effect. The mobile
   scroll indicator is non-interactive, always visible, with a fixed 15% thumb.
   A 32 px buffer is always added to max scroll, so a one-line document scrolls.
+  Done: the editor feeds and draws the platform's overscroll
+  (`rememberOverscrollEffect`: a stretch on Android, none on desktop). The
+  Android and iOS indicator (`scrollbar/ScrollIndicator.kt`, shared) has a
+  thumb as long as the share of the document in view and fades half a second
+  after scrolling stops; it stays display-only, as on both platforms. The
+  buffer is gone: the furthest scroll puts the last row and the bottom padding
+  at the viewport's bottom, as `BasicTextField` does, and a document that fits
+  with its padding does not scroll; bottom content padding is the room below
+  the last line when a host wants it. `TextEditorScrollState` reports
+  `canScrollForward` and `canScrollBackward`, so a wheel at an end reaches a
+  parent scroll container (`scrollmanager/ScrollRangeE2eTest.kt`,
+  `ScrollIndicatorTest.kt`). Touch handles on the last row now sit below the
+  viewport's edge with nothing to scroll them into view; the buffer never
+  fully cleared them either (see 3.3).
 - [ ] **3.13 Known open issues** [Fable] [Lane B] from
   `docs/design/touch-focus.md`: a handle drag cannot restore focus; an orphaned
   long-press job with a second finger.
@@ -1038,4 +1052,5 @@ records results and removes entries that passed.
 | 4.2 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64`, then `./gradlew :ComposeTextEditor:iosSimulatorArm64Test`. The iOS file (`iosMain/.../input/TextEditorTextInputService.ios.kt`) now only passes `ImeOptions` into `skikoMain`'s `startSkikoInputSession`; if it does not compile, the fix is in that file or in `skikoMain/.../input/`, never a copy of the desktop code | Both tasks green with no change to the desktop or wasm sources | |
 | 4.2 | Build `sampleAppiOS`, run it in the simulator, and repeat the baseline recording: type a sentence, backspace through it, accept an autocorrect suggestion, and compose Japanese (Settings > General > Keyboard, add Japanese Kana, type "nihongo" and pick a candidate). Compare against "Simulator baseline before 4.2" in the iOS section | Typed characters appear once each and backspace removes one character at a time (4.5); an accepted autocorrect replaces the word rather than appending it (4.5, hammer-editor#791); kana show underlined while composing and the chosen candidate replaces them once (4.5); the keyboard opens with a shifted first letter (4.7). If the baseline already passed any of these, note it as a regression check only | |
 | 2.6 | In Safari and Chrome on macOS, open the wasm demo and press Ctrl+A, E, F, B, N, P, D, H and K in a paragraph. The page's hidden text area has the same Cocoa Emacs bindings, so a chord could act twice | Each chord moves or deletes once, as in the desktop sample app | |
+| 3.12 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64`; `iosMain/.../scrollbar/TextEditorScrollbar.ios.kt` now calls the shared `ScrollIndicator` (commonMain `scrollbar/ScrollIndicator.kt`). Then in the simulator, scroll a long document in the sample app, and pull past its top and bottom | Compiles. The indicator's thumb shrinks as the document grows, shows while scrolling, and fades about half a second after; pulling past an end shows whatever overscroll Compose provides on iOS, and the text settles back | |
 | 3.6 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64`. 3.6 added `internal expect fun Modifier.textMagnifier` (commonMain `TextMagnifier.kt`) with its `actual` in `skikoMain` (`TextMagnifier.skiko.kt`, a no-op), not in `iosMain` | Compiles with no `iosMain` change | |

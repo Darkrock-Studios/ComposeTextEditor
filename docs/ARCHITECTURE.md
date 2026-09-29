@@ -113,7 +113,10 @@ line-indexed queries layout and drawing rely on.
   selection; only span-level operations keep it.
 - **`TextEditorScrollManager`** (with `TextEditorScrollState`): scroll offset,
   total content height, visible-range queries, and `ensureCursorVisible`, which
-  is deferred through transactions so it always reads fresh layout.
+  is deferred through transactions so it always reads fresh layout. The range
+  runs from minus the top padding (the first row below the top padding) to the
+  last row and bottom padding at the viewport's bottom, and is empty when
+  everything fits.
 - **`PlatformTextEditorExtensions`**: per-platform IME glue (Android cursor
   anchor monitoring; empty elsewhere).
 
