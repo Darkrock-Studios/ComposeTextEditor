@@ -8,6 +8,7 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.MouseButton
 import androidx.compose.ui.test.SkikoComposeUiTest
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.doubleClick
@@ -201,6 +202,17 @@ class EditorUiTestScope(
 	fun rightClickAtCharacter(charIndex: Int) {
 		defeatMultiClickDetection()
 		editor.performMouseInput { rightClick(positionOfCharacter(charIndex)) }
+		test.waitForIdle()
+	}
+
+	/** Middle-clicks the character at flat index [charIndex]. */
+	fun middleClickAtCharacter(charIndex: Int) {
+		defeatMultiClickDetection()
+		editor.performMouseInput {
+			moveTo(positionOfCharacter(charIndex))
+			press(MouseButton.Tertiary)
+			release(MouseButton.Tertiary)
+		}
 		test.waitForIdle()
 	}
 

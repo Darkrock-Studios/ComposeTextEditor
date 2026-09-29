@@ -124,6 +124,10 @@ this exercises the clipboard's HTML as the block carrier.
    menu offers Cut and Copy. Right-click outside it. **Expect:** the caret moves to the
    click and the selection clears before the menu opens (1.9). In the RichTextView demo
    a right-click outside the selection keeps it.
+6. Middle-click in the editor, with and without a selection. **Expect:** the caret and
+   selection do not change (primary-selection paste is not built, 4.23).
+7. Repeat 5 and 6 on Android with a USB or Bluetooth mouse. Android delivers every
+   mouse button as a press, which the desktop tests cannot reproduce.
 
 ### 2.7 Export while editing (#48)
 

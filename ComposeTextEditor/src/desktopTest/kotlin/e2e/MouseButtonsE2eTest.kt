@@ -67,6 +67,22 @@ class MouseButtonsE2eTest {
 		assertNull(state.selector.selection)
 	}
 
+	/**
+	 * X11 pastes the primary selection on a middle click, which the editor does not
+	 * support yet (see 4.23). Until it does, the click must not disturb the caret or
+	 * the selection.
+	 */
+	@Test
+	fun `middle click leaves the caret and selection alone`() = editorUiTest(initialText = document) {
+		clickAtCharacter(2)
+		middleClickAtCharacter(13)
+		assertEquals(2, cursorIndex)
+
+		dragSelect(fromChar = 6, toChar = 10)
+		middleClickAtCharacter(19)
+		assertEquals("beta", selectedText)
+	}
+
 	/** A read-only view has no caret to move, so the selection stays for Copy. */
 	@Test
 	fun `right-click outside the selection of a read-only view keeps it`() = runComposeUiTest {

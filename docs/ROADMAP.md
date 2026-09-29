@@ -165,7 +165,7 @@ review.
 | Lane | Area | Main files | Items |
 | --- | --- | --- | --- |
 | A | Caret motion | `state/TextEditorCursorState.kt`, `state/TextEditorStateCursorExt.kt`, `state/WordSegmentationUtils.kt`, `input/TextEditorKeyCommandHandler.kt` | 1.1 to 1.7, 1.19, 2.3, 2.6, 7.5 |
-| B | Pointer and touch | `textEditorPointerInputHandling.kt`, `state/TextEditorSelectionManager.kt`, `DrawSelectionHandles.kt` | 1.9, 1.12 to 1.16, 1.21, 3.1, 3.2, 3.4 to 3.8, 3.13 |
+| B | Pointer and touch | `textEditorPointerInputHandling.kt`, `state/TextEditorSelectionManager.kt`, `DrawSelectionHandles.kt` | 1.9, 1.12 to 1.16, 1.21, 1.22, 3.1, 3.2, 3.4 to 3.8, 3.13, 4.23 |
 | C | Drawing and geometry | `Draw*.kt`, `cursor/`, `scrollbar/`, `state/TextEditorScrollState.kt`, hit testing | 1.8, 1.10, 1.11, 1.17, 1.18, 3.3, 3.12, 4.14, 7.6, 7.7 |
 | D | Bindings, actions, menu | `input/KeyBindings.kt`, `input/EditorCommand.kt`, `input/BuiltinEditorActions.kt`, `contextmenu/` | 2.1, 2.2, 2.4, 2.5, 2.7 to 2.11, 4.8, 5.8 |
 | E | Input sessions on desktop, iOS, web | `desktopMain`, `iosMain`, `wasmJsMain` under `input/` | 4.2 to 4.7, 4.10 to 4.12, 4.19, 4.21, 4.22 |
@@ -364,13 +364,23 @@ fixes what users feel every minute.
   no modifier state, so a host that opens links on click also fires when the
   user places the caret or starts a drag. Report on release, pass modifiers,
   and offer a built-in Ctrl/Cmd+click convention.
-- [ ] **1.16 Middle-click paste on Linux. C.** [Opus] [Lane B] Not handled;
-  middle click moves the caret.
+- [x] **1.16 Middle-click paste on Linux. C.** [Opus] [Lane B] Not handled;
+  middle click moves the caret. Only on Android, where `awaitFirstDown` answers
+  every mouse button; on skiko it answers only the primary one. The click
+  handler now takes the primary button only, so a middle click leaves the caret
+  and selection alone everywhere. Compose has no primary selection API; the
+  paste itself is 4.23.
 
 - [ ] **1.21 Empty selections. C.** [Opus] [Lane B] A drag that ends where it
   began leaves a non-null selection with start equal to end. The delete-by-motion
   actions (word, line, and paragraph deletes) then delete nothing and still
   consume the key. Normalise an empty selection to none.
+- [ ] **1.22 Right-click does not focus on desktop. R.** [Opus] [Lane B]
+  `requestFocusOnPress` (`BasicTextEditor.kt`) waits for `awaitFirstDown`,
+  which on skiko ignores every mouse button but the primary one, so a
+  right-click on an unfocused editor opens the menu without focusing it.
+  `docs/design/touch-focus.md` expects it to focus. Watch for the press event
+  directly instead.
 
 ### Selection drawing
 
@@ -685,6 +695,18 @@ iOS Safari; browser tests run in CI.
 - [ ] **4.20 Hardware keyboard dead keys on Android. S.** [Opus] [Lane F]
   `handleCharacterInput` inserts `utf16CodePoint` directly, with no handling of
   combining accents.
+- [ ] **4.23 Primary selection on Linux. S.** [Fable] [Lane B] Middle-click
+  paste of the X11 primary selection. Compose's `Clipboard` covers only the
+  system clipboard, but AWT exposes the primary selection as
+  `Toolkit.getSystemSelection()` (null on Windows and macOS). A full version
+  needs: a platform hook (an `expect` with a desktop `actual` over AWT and
+  no-ops elsewhere, so [Mac work] to compile iOS); owning the primary
+  selection whenever the user selects, offering the selected text lazily
+  rather than copying on every drag step; and a middle click that moves the
+  caret to the pointer and inserts the primary selection's plain text there,
+  through the normal paste path so undo and line blocks behave. AWT under
+  native Wayland has no primary selection (see 4.17), so it only works under
+  X11 or XWayland.
 
 ## Phase 5: writer conveniences
 
