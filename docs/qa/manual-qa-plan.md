@@ -128,6 +128,11 @@ this exercises the clipboard's HTML as the block carrier.
    selection do not change (primary-selection paste is not built, 4.23).
 7. Repeat 5 and 6 on Android with a USB or Bluetooth mouse. Android delivers every
    mouse button as a press, which the desktop tests cannot reproduce.
+8. Click outside the editor so it loses focus, then right-click inside it.
+   **Expect:** the menu opens and the editor is focused behind it (1.22): Escape
+   closes the menu and typing lands in the editor. On Android with a mouse, note
+   whether the soft keyboard rises for this right-click (focus alone may start the
+   input session); a right-click on an already focused editor must not raise it.
 
 ### 2.7 Export while editing (#48)
 

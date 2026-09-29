@@ -1,5 +1,6 @@
 package e2e
 
+import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.text.AnnotatedString
 import com.darkrockstudios.texteditor.contextmenu.TextEditorContextMenuState
 import com.darkrockstudios.texteditor.richstyle.BulletListSpanStyle
@@ -19,6 +20,7 @@ import kotlin.test.assertTrue
  * returned never enters into it: hosts return `true` liberally just to observe
  * clicks, so the listener's answer cannot mean "do not focus".
  */
+@OptIn(ExperimentalTestApi::class)
 class TouchFocusE2eTest {
 
 	private val document = AnnotatedString("hello world, this is the document text")
@@ -53,6 +55,44 @@ class TouchFocusE2eTest {
 		autoFocus = false,
 	) {
 		clickAtCharacter(4)
+
+		assertTrue(state.isFocused)
+	}
+
+	/**
+	 * The menu a right-click opens acts on the editor, so the editor must hold focus
+	 * behind it and keep it once the menu goes. Skiko's `awaitFirstDown` answers only
+	 * the primary button, so this is the case a focus handler built on it misses.
+	 */
+	@Test
+	fun `a right-click focuses the editor`() {
+		val menuState = TextEditorContextMenuState()
+		editorUiTest(
+			initialText = document,
+			autoFocus = false,
+			contextMenuState = menuState,
+		) {
+			rightClickAtCharacter(4)
+
+			assertTrue(menuState.isVisible, "precondition: the right-click opened the menu")
+			assertTrue(state.isFocused)
+
+			test.runOnIdle { menuState.dismissMenu() }
+			waitForIdle()
+			typeText("X")
+
+			assertTrue(state.isFocused)
+			assertTrue(text.contains("X"), "expected the typed character to land: $text")
+		}
+	}
+
+	/** Any mouse button is an unambiguous press at the editor. */
+	@Test
+	fun `a middle click focuses the editor`() = editorUiTest(
+		initialText = document,
+		autoFocus = false,
+	) {
+		middleClickAtCharacter(4)
 
 		assertTrue(state.isFocused)
 	}

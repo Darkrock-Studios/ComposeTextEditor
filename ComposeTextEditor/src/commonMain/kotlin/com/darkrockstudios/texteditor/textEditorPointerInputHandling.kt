@@ -102,8 +102,19 @@ internal class LinkClicks(
 	}
 }
 
-private fun PointerEvent.isMouseLike(down: PointerInputChange): Boolean =
+internal fun PointerEvent.isMouseLike(down: PointerInputChange): Boolean =
 	down.type == PointerType.Mouse || buttons.areAnyPressed
+
+/**
+ * Waits for a press by any pointer or mouse button and returns its change; the event it
+ * came in is [AwaitPointerEventScope.currentEvent]. Not `awaitFirstDown`: on skiko that
+ * ignores every mouse button but the primary one.
+ */
+internal suspend fun AwaitPointerEventScope.awaitAnyPress(): PointerInputChange {
+	while (true) {
+		awaitPointerEvent().changes.firstOrNull { it.changedToDownIgnoreConsumed() }?.let { return it }
+	}
+}
 
 /**
  * Counts successive primary presses into single, double, and triple clicks. A press
@@ -151,10 +162,8 @@ private fun Modifier.handleMouseInput(
 	coroutineScope {
 	val autoScrollScope = this
 	awaitEachGesture {
-		// Not awaitFirstDown: on skiko it ignores every mouse button but the primary one.
-		val press = awaitPointerEvent()
-		val down = press.changes.firstOrNull { it.changedToDownIgnoreConsumed() }
-			?: return@awaitEachGesture
+		val down = awaitAnyPress()
+		val press = currentEvent
 		if (!press.isMouseLike(down)) return@awaitEachGesture
 		val origin = contentOrigin()
 		val downAt = down.inContent(origin)

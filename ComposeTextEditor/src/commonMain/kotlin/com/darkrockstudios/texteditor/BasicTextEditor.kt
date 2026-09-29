@@ -7,7 +7,6 @@ import androidx.compose.foundation.overscroll
 import androidx.compose.foundation.rememberOverscrollEffect
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.scrollable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
@@ -27,8 +26,6 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.PointerType
-import androidx.compose.ui.input.pointer.isPrimaryPressed
 import androidx.compose.ui.input.pointer.isSecondaryPressed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -382,13 +379,9 @@ internal fun Modifier.requestFocusOnPress(
 ) = pointerInput(Unit) {
 	val touchSlop = viewConfiguration.touchSlop
 	awaitEachGesture {
-		val down = awaitFirstDown(requireUnconsumed = false)
-
-		// Android reports an external mouse as PointerType.Touch but still fills in
-		// the buttons, so the button state is what actually separates the two.
-		val hasButton = currentEvent.buttons.isPrimaryPressed ||
-				currentEvent.buttons.isSecondaryPressed
-		if (down.type == PointerType.Mouse || hasButton) {
+		// Any button, so a right-click focuses the editor its menu acts on.
+		val down = awaitAnyPress()
+		if (currentEvent.isMouseLike(down)) {
 			focusRequester.requestFocus()
 			if (!currentEvent.buttons.isSecondaryPressed) onRequestInput()
 			return@awaitEachGesture

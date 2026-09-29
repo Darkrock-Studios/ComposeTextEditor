@@ -419,12 +419,15 @@ fixes what users feel every minute.
   selection: a drag back to its start left a character selected. An empty
   update now clears the selection and its touch mode. A long press on blank
   space places the caret there and selects nothing.
-- [ ] **1.22 Right-click does not focus on desktop. R.** [Opus] [Lane B]
+- [x] **1.22 Right-click does not focus on desktop. R.** [Opus] [Lane B]
   `requestFocusOnPress` (`BasicTextEditor.kt`) waits for `awaitFirstDown`,
   which on skiko ignores every mouse button but the primary one, so a
   right-click on an unfocused editor opens the menu without focusing it.
   `docs/design/touch-focus.md` expects it to focus. Watch for the press event
-  directly instead.
+  directly instead. It now reads the press event itself, as the mouse handler
+  does, so any button focuses; a secondary press does not itself ask for the
+  soft keyboard, though on Android focusing an unfocused editor starts the
+  input session and may raise it.
 - [ ] **1.23 Word and line drags past the viewport. C.** [Opus] [Lane B]
   Auto-scroll (1.14) keeps a character drag's caret on a wholly visible row,
   but a word or line drag puts the caret at the far end of the unit under the

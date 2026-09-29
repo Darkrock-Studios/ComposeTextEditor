@@ -201,6 +201,9 @@ The `RichSpanClickListener` KDoc now states the Boolean's real contract
 
 - Focus on lift for finger, on press for mouse. Device-confirmed: no keyboard on
   pan, fling coasts.
+- Every mouse button focuses on press, the secondary one included (1.22). The
+  focus handler reads the press event itself rather than through
+  `awaitFirstDown`, which on skiko answers only the primary button.
 - Spell-check menu policy: tap opens a menu only with a correction to offer,
   other spans delegate to the host listener.
 - A tap reports a span click on release, and only when it lifts on the span it
