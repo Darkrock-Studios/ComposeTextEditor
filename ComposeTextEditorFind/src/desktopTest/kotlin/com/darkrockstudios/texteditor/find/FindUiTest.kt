@@ -7,6 +7,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.ExperimentalTestApi
@@ -14,7 +15,10 @@ import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.SkikoComposeUiTest
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.isFocused
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.click
+import androidx.compose.ui.test.performMouseInput
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.pressKey
@@ -22,6 +26,7 @@ import androidx.compose.ui.test.runSkikoComposeUiTest
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import com.darkrockstudios.texteditor.BasicTextEditor
+import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.rememberTextEditorState
 
@@ -53,7 +58,7 @@ internal fun findUiTest(
 					modifier = Modifier
 						.size(400.dp, 300.dp)
 						.testTag(FIND_EDITOR_TAG)
-						.findShortcut { host.barVisible = !host.barVisible },
+						.findShortcut(findState) { host.barVisible = !host.barVisible },
 					autoFocus = !barInitiallyVisible,
 				)
 			}
@@ -82,6 +87,22 @@ internal class FindUiTestScope(
 	fun hideBarFromHost() {
 		host.barVisible = false
 		test.waitForIdle()
+	}
+
+	/** Selects [start, end) of line [line] in the editor. */
+	fun selectInEditor(line: Int, start: Int, end: Int) = selectInEditor(
+		CharLineOffset(line, start), CharLineOffset(line, end)
+	)
+
+	fun selectInEditor(start: CharLineOffset, end: CharLineOffset) {
+		test.runOnUiThread { textState.selector.updateSelection(start, end) }
+		test.waitForIdle()
+	}
+
+	/** Clicks into the editor at its top left, giving it focus. */
+	fun focusEditor() {
+		test.onNodeWithTag(FIND_EDITOR_TAG).performMouseInput { click(Offset(1f, 1f)) }
+		test.waitUntil(timeoutMillis = 5_000) { textState.isFocused }
 	}
 
 	/** How many find highlight spans are on the document. */

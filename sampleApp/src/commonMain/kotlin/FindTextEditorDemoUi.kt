@@ -34,7 +34,8 @@ You can search for any text in this document. For example:
 - Other matches are highlighted in yellow
 
 Use the "Prev" and "Next" buttons to navigate between matches.
-You can also press Enter to go to the next match, or Shift+Enter for previous.
+You can also press Enter or F3 to go to the next match, or Shift+Enter or Shift+F3 for previous.
+Select a word before opening the find bar to search for it.
 
 Press Escape to close the find bar.
 
@@ -95,7 +96,7 @@ fun FindTextEditorDemoUi(
 			modifier = Modifier
 				.padding(8.dp)
 				.fillMaxSize()
-				.findShortcut { showFindBar = !showFindBar },
+				.findShortcut(findState) { showFindBar = !showFindBar },
 			style = style,
 		)
 	}

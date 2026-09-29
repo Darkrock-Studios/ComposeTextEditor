@@ -27,9 +27,11 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -39,12 +41,15 @@ import androidx.compose.ui.unit.sp
  *
  * Closing the bar (Escape, the find shortcut, the close button, or the host removing it from
  * the composition) ends the session through [FindState.close], clearing the highlights.
+ * In either field, F3 and Ctrl+G (Cmd+G on macOS) find the next match, with Shift the previous.
  *
  * @param state The FindState managing the search
  * @param onClose Called when the user closes the find bar; the host should hide it
  * @param modifier Modifier for the find bar
  * @param strings Localizable strings for the UI. Defaults to English.
  * @param requestFocus Whether to request focus on the search field when shown
+ * @param prefillFromSelection Whether opening the bar over a single-line selection, with no search
+ * already running, searches for the selected text
  */
 @Composable
 fun FindBar(
@@ -52,9 +57,10 @@ fun FindBar(
 	onClose: () -> Unit,
 	modifier: Modifier = Modifier,
 	strings: FindBarStrings = FindBarStrings.Default,
-	requestFocus: Boolean = true
+	requestFocus: Boolean = true,
+	prefillFromSelection: Boolean = true,
 ) {
-	var searchText by remember { mutableStateOf(state.query) }
+	var searchText by remember { mutableStateOf(TextFieldValue(state.query)) }
 	var replaceText by remember { mutableStateOf("") }
 	var showReplace by remember { mutableStateOf(false) }
 	val focusRequester = remember { FocusRequester() }
@@ -63,9 +69,16 @@ fun FindBar(
 		onClose()
 	}
 
-	// The session can end or restart without this bar (close, a host call to search).
+	LaunchedEffect(state) {
+		if (prefillFromSelection && state.query.isEmpty()) state.selectionSeed()?.let(state::search)
+	}
+
+	// The session can end or restart without this bar (close, prefill, a host call to search).
+	// Text set from outside is selected, so typing replaces it.
 	LaunchedEffect(state.query) {
-		if (searchText != state.query) searchText = state.query
+		if (searchText.text != state.query) {
+			searchText = TextFieldValue(state.query, selection = TextRange(0, state.query.length))
+		}
 	}
 
 	// However the host hides the bar, leaving the composition ends the session.
@@ -135,7 +148,7 @@ fun FindBar(
 						modifier = Modifier.fillMaxWidth()
 					) {
 						Box(modifier = Modifier.weight(1f)) {
-							if (searchText.isEmpty()) {
+							if (searchText.text.isEmpty()) {
 								Text(
 									text = strings.placeholder,
 									style = textStyle.copy(color = placeholderColor)
@@ -144,13 +157,14 @@ fun FindBar(
 							BasicTextField(
 								value = searchText,
 								onValueChange = { newValue ->
+									val changed = newValue.text != searchText.text
 									searchText = newValue
-									state.search(newValue)
+									if (changed) state.search(newValue.text)
 								},
 								modifier = Modifier
 									.fillMaxWidth()
 									.focusRequester(focusRequester)
-									.findShortcut(close)
+									.findShortcut(state, close)
 									.onPreviewKeyEvent { event ->
 										if (event.type == KeyEventType.KeyDown) {
 											when {
@@ -212,12 +226,21 @@ fun FindBar(
 									focusRequester.requestFocus()
 								},
 							)
+							OptionToggle(
+								glyph = "\u2261",
+								description = strings.inSelection,
+								checked = state.inSelection,
+								onCheckedChange = {
+									state.toggleInSelection(it)
+									focusRequester.requestFocus()
+								},
+							)
 						}
 
-						if (searchText.isNotEmpty()) {
+						if (searchText.text.isNotEmpty()) {
 							IconButton(
 								onClick = {
-									searchText = ""
+									searchText = TextFieldValue()
 									state.clearSearch()
 								},
 								modifier = Modifier.size(clearButtonSize)
@@ -340,7 +363,7 @@ fun FindBar(
 									onValueChange = { replaceText = it },
 									modifier = Modifier
 										.fillMaxWidth()
-										.findShortcut(close)
+										.findShortcut(state, close)
 										.onPreviewKeyEvent { event ->
 											if (event.type == KeyEventType.KeyDown) {
 												when {

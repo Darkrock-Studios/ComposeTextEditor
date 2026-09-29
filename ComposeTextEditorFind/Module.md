@@ -16,7 +16,8 @@ implementation("com.darkrockstudios:composetexteditor-find:2.0.0")
 Create a [FindState][com.darkrockstudios.texteditor.find.FindState] for your editor's
 state with [rememberFindState][com.darkrockstudios.texteditor.find.rememberFindState],
 show the [FindBar][com.darkrockstudios.texteditor.find.FindBar], and wire up the
-standard <kbd>Ctrl/Cmd+F</kbd> shortcut with
+standard <kbd>Ctrl/Cmd+F</kbd> shortcut, plus <kbd>F3</kbd> and <kbd>Ctrl/Cmd+G</kbd> for the
+next match, with
 [Modifier.findShortcut][com.darkrockstudios.texteditor.find.findShortcut]:
 
 ```kotlin
@@ -38,7 +39,7 @@ fun EditorWithFind() {
             state = textState,
             modifier = Modifier
                 .fillMaxSize()
-                .findShortcut { showFind = !showFind },
+                .findShortcut(findState) { showFind = !showFind },
         )
     }
 }
@@ -55,6 +56,7 @@ if you want to build your own UI:
 findState.search("needle")
 findState.toggleCaseSensitive(true) // also toggleWholeWord() and toggleRegex(); each re-runs the search
 findState.isInvalidPattern          // true while a regex query does not compile
+findState.toggleInSelection(true)   // limit matches to the current selection
 findState.findNext()                // and findPrevious()
 findState.replaceCurrent("thread")  // replace the active match, advance to the next
 val replaced = findState.replaceAll("thread")

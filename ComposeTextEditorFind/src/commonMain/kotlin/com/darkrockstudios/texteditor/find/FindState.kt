@@ -44,6 +44,13 @@ class FindState(
 	var useRegex: Boolean by mutableStateOf(false)
 		private set
 
+	/**
+	 * Whether matches are limited to the selection captured by [toggleInSelection]. The scope
+	 * follows edits; if its text is deleted or the document replaced, this turns off.
+	 */
+	var inSelection: Boolean by mutableStateOf(false)
+		private set
+
 	/** Whether [query] is a regular expression that does not compile; it then finds nothing. */
 	val isInvalidPattern: Boolean by derivedStateOf {
 		useRegex && query.isNotEmpty() && !isValidFindPattern(query)
@@ -61,6 +68,10 @@ class FindState(
 	// Styles for highlighting
 	private val matchStyle = FindMatchStyle()
 	private val currentMatchStyle = FindCurrentMatchStyle()
+	private val scopeStyle = FindScopeStyle()
+
+	/** The user's own selection, as it stood before a search moved the selection onto a match. */
+	private var selectionBeforeSearch: TextEditorRange? = null
 
 	// Job for debounced search on text changes
 	private var searchUpdateJob: Job? = null
@@ -95,6 +106,8 @@ class FindState(
 	 * Updates highlights and jumps to the nearest match.
 	 */
 	fun search(newQuery: String) {
+		val selection = textState.selector.selection
+		if (selection != _matches.getOrNull(currentMatchIndex)) selectionBeforeSearch = selection
 		query = newQuery
 
 		if (newQuery.isEmpty()) {
@@ -114,9 +127,9 @@ class FindState(
 			return
 		}
 
-		// Find nearest match to cursor
-		val cursorPos = textState.cursor.position
-		currentMatchIndex = findNearestMatchIndex(results, cursorPos)
+		// Nearest the selection (the current match, while typing extends a query), else the cursor
+		val origin = textState.selector.selection?.start ?: textState.cursor.position
+		currentMatchIndex = findNearestMatchIndex(results, origin)
 
 		// Add highlights
 		updateHighlights()
@@ -154,6 +167,49 @@ class FindState(
 			useRegex = enabled
 			rerunSearch()
 		}
+	}
+
+	/**
+	 * Limit matches to the current selection, or search the whole document again. Once a search
+	 * has moved the selection onto a match, the selection from before that search is used.
+	 * Enabling does nothing when there is no such selection.
+	 */
+	fun toggleInSelection(enabled: Boolean) {
+		if (inSelection == enabled) return
+		if (enabled) {
+			val selection = textState.selector.selection
+			val scope = if (selection != null && selection == _matches.getOrNull(currentMatchIndex)) {
+				selectionBeforeSearch
+			} else {
+				selection
+			}
+			if (scope == null || scope.start == scope.end) return
+			textState.addRichSpan(scope, scopeStyle)
+		} else {
+			removeScope()
+		}
+		inSelection = enabled
+		rerunSearch()
+	}
+
+	/**
+	 * The query to seed a new search with: the selected text when it is a single line, escaped
+	 * when [useRegex] is on so it still finds itself.
+	 */
+	internal fun selectionSeed(): String? {
+		val selection = textState.selector.selection ?: return null
+		if (!selection.isSingleLine() || selection.start == selection.end) return null
+		val text = textState.selector.getSelectedText().text
+		return if (useRegex) text.replace(REGEX_METACHARACTER) { "\\" + it.value } else text
+	}
+
+	private fun scopeRange(): TextEditorRange? =
+		textState.richSpanManager.getAllRichSpans().firstOrNull { it.style === scopeStyle }?.range
+
+	private fun removeScope() {
+		textState.richSpanManager.getAllRichSpans()
+			.filter { it.style === scopeStyle }
+			.forEach { textState.removeRichSpan(it) }
 	}
 
 	private fun rerunSearch() {
@@ -222,6 +278,9 @@ class FindState(
 	 */
 	fun close() {
 		query = ""
+		removeScope()
+		inSelection = false
+		selectionBeforeSearch = null
 		clearHighlights()
 		_matches.clear()
 		currentMatchIndex = -1
@@ -250,7 +309,7 @@ class FindState(
 		// Clear highlights before replacement
 		clearHighlights()
 
-		textState.replace(match, styledReplacement(match, replaceText))
+		replaceRanges(listOf(match), replaceText)
 
 		// Re-run the search to update matches
 		// The debounced search will also run, but we do it immediately for responsiveness
@@ -292,16 +351,35 @@ class FindState(
 
 		clearHighlights()
 
-		// Last to first, so each replacement leaves the earlier ranges where they were.
-		targets.asReversed().forEach { match ->
-			textState.replace(match, styledReplacement(match, replaceText))
-		}
+		replaceRanges(targets, replaceText)
 
 		// Clear matches since they're all replaced
 		_matches.clear()
 		currentMatchIndex = -1
 
 		return targets.size
+	}
+
+	/**
+	 * Replaces [targets], in document order and not overlapping, last to first so each
+	 * replacement leaves the earlier ranges where they were. An edit at the edge of the find in
+	 * selection scope would shrink it, so the scope is re-laid over what it covered.
+	 */
+	private fun replaceRanges(targets: List<TextEditorRange>, replaceText: String) {
+		val scope = scopeRange()
+		val scopeStart = scope?.start?.let(textState::getCharacterIndex)
+		var scopeEnd = scope?.end?.let(textState::getCharacterIndex)
+		targets.asReversed().forEach { match ->
+			if (scopeEnd != null) {
+				val matchLength = textState.getCharacterIndex(match.end) - textState.getCharacterIndex(match.start)
+				scopeEnd += replaceText.length - matchLength
+			}
+			textState.replace(match, styledReplacement(match, replaceText))
+		}
+		if (scopeStart != null && scopeEnd != null) {
+			removeScope()
+			textState.addRichSpan(scopeStart, scopeEnd, scopeStyle)
+		}
 	}
 
 	/** [replaceText] styled like the character at the start of [range]. */
@@ -316,14 +394,23 @@ class FindState(
 		}
 	}
 
-	private fun findMatches(): List<TextEditorRange> =
-		textState.findAll(query, caseSensitive, wholeWord, useRegex)
+	private fun findMatches(): List<TextEditorRange> {
+		val all = textState.findAll(query, caseSensitive, wholeWord, useRegex)
+		if (!inSelection) return all
+		val scope = scopeRange()
+		if (scope == null) {
+			inSelection = false
+			return all
+		}
+		return all.filter { it.start >= scope.start && it.end <= scope.end }
+	}
 
 	/**
 	 * Cancel any ongoing operations. Call this when done with FindState.
 	 */
 	fun dispose() {
 		searchUpdateJob?.cancel()
+		close()
 		clearSearch()
 	}
 
@@ -406,3 +493,5 @@ class FindState(
 		textState.scrollManager.scrollToPosition(match.start)
 	}
 }
+
+private val REGEX_METACHARACTER = Regex("""[\\^$.|?*+()\[\]{}]""")

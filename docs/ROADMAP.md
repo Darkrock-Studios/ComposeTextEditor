@@ -680,7 +680,7 @@ Shaping is one line per keystroke. These still scale with document length:
 
 ### Find and replace addon
 
-- [ ] **7.17** [Opus] [Lane J] Missing: whole word, regex, find in selection,
+- [x] **7.17** [Opus] [Lane J] Missing: whole word, regex, find in selection,
   F3 and Ctrl+G, prefill from the selection. Case sensitivity exists in
   `FindState` but `FindBar` has no control for it.
 - [x] **7.18** [Opus] [Lane J] Replace-all drops the replaced text's styling,
@@ -690,6 +690,10 @@ Shaping is one line per keystroke. These still scale with document length:
   Windows layouts; use `isCtrlShortcut`.
 - [ ] **7.26** [Opus] [Lane J] Regex replace inserts the replacement
   literally; `$1` and named groups are not expanded.
+- [ ] **7.27** [Opus] [Lane C] Decorations take part in span hit testing
+  (`findSpanAtPosition`), ranked above line markers. While find in selection
+  is on, its scope decoration answers clicks on list, blockquote, and code
+  fence markers inside it. A decoration needs a way to opt out.
 
 ### Spell check addon
 

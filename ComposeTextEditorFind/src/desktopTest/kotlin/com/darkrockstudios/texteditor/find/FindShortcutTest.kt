@@ -57,4 +57,27 @@ class FindShortcutTest {
 		assertNull(findChordFor(chord(Key.F), mac = false))
 		assertNull(findChordFor(chord(Key.F), mac = true))
 	}
+
+	@Test
+	fun `F3 steps forward and Shift+F3 back on every platform`() {
+		for (mac in listOf(false, true)) {
+			assertEquals(FindChord.Next, findChordFor(chord(Key.F3), mac))
+			assertEquals(FindChord.Previous, findChordFor(chord(Key.F3, shift = true), mac))
+			assertNull(findChordFor(chord(Key.F3, ctrl = true), mac))
+		}
+	}
+
+	@Test
+	fun `Ctrl+G steps off macOS`() {
+		assertEquals(FindChord.Next, findChordFor(chord(Key.G, ctrl = true), mac = false))
+		assertEquals(FindChord.Previous, findChordFor(chord(Key.G, ctrl = true, shift = true), mac = false))
+		assertNull(findChordFor(chord(Key.G, ctrl = true, alt = true), mac = false))
+	}
+
+	@Test
+	fun `Cmd+G steps on macOS`() {
+		assertEquals(FindChord.Next, findChordFor(chord(Key.G, meta = true), mac = true))
+		assertEquals(FindChord.Previous, findChordFor(chord(Key.G, meta = true, shift = true), mac = true))
+		assertNull(findChordFor(chord(Key.G, ctrl = true), mac = true))
+	}
 }

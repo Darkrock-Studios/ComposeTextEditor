@@ -36,18 +36,30 @@ import com.darkrockstudios.texteditor.input.platformKeyBindings
  * character.
  */
 fun Modifier.findShortcut(onToggle: () -> Unit): Modifier = this
-	.onInterceptKeyBeforeSoftKeyboard { event -> handleFindShortcut(event, onToggle) }
-	.onPreviewKeyEvent { event -> handleFindShortcut(event, onToggle) }
+	.onInterceptKeyBeforeSoftKeyboard { event -> handleFindShortcut(event, null, onToggle) }
+	.onPreviewKeyEvent { event -> handleFindShortcut(event, null, onToggle) }
 
-private fun handleFindShortcut(event: KeyEvent, onToggle: () -> Unit): Boolean {
-	if (event.type == KeyEventType.KeyDown && findChordFor(event, usesMacChords) == FindChord.Toggle) {
+/**
+ * [findShortcut] plus find next and previous while [state] has a query: F3 and Shift+F3, and
+ * Ctrl+G and Ctrl+Shift+G (Cmd on macOS and iOS). Without a query those keys pass through.
+ */
+fun Modifier.findShortcut(state: FindState, onToggle: () -> Unit): Modifier = this
+	.onInterceptKeyBeforeSoftKeyboard { event -> handleFindShortcut(event, state, onToggle) }
+	.onPreviewKeyEvent { event -> handleFindShortcut(event, state, onToggle) }
+
+private fun handleFindShortcut(event: KeyEvent, state: FindState?, onToggle: () -> Unit): Boolean {
+	if (event.type != KeyEventType.KeyDown) return false
+	val chord = findChordFor(event, usesMacChords) ?: return false
+	if (chord == FindChord.Toggle) {
 		onToggle()
 		return true
 	}
-	return false
+	if (state == null || state.query.isEmpty()) return false
+	if (chord == FindChord.Next) state.findNext() else state.findPrevious()
+	return true
 }
 
-internal enum class FindChord { Toggle }
+internal enum class FindChord { Toggle, Next, Previous }
 
 /** Whether the host follows the macOS chord conventions, per the core's [platformKeyBindings]. */
 internal val usesMacChords: Boolean by lazy { platformKeyBindings() === MacKeyBindings }
@@ -65,8 +77,13 @@ internal fun findChordFor(event: KeyEvent, mac: Boolean): FindChord? {
 	} else {
 		event.isCtrlShortcut && !event.isMetaPressed
 	}
+	val unmodified = !event.isCtrlPressed && !event.isMetaPressed && !event.isAltPressed
+	val forward = !event.isShiftPressed
 	return when {
-		event.key == Key.F && primary && !event.isShiftPressed -> FindChord.Toggle
+		event.key == Key.F && primary && forward -> FindChord.Toggle
+		(event.key == Key.F3 && unmodified) || (event.key == Key.G && primary) ->
+			if (forward) FindChord.Next else FindChord.Previous
+
 		else -> null
 	}
 }

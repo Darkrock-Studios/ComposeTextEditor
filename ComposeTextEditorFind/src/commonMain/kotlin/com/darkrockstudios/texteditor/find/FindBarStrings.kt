@@ -39,6 +39,8 @@ data class FindBarStrings(
 	val wholeWord: String = "Whole word",
 	/** Accessibility label for the regular expression toggle. */
 	val regex: String = "Regular expression",
+	/** Accessibility label for the find-in-selection toggle. */
+	val inSelection: String = "Find in selection",
 	/** Message shown when the query is not a valid regular expression. */
 	val invalidPattern: String = "Invalid pattern",
 ) {
