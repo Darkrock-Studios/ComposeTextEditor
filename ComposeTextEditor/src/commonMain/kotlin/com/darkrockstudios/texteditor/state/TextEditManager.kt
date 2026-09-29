@@ -34,6 +34,24 @@ class TextEditManager(private val state: TextEditorState) {
 	)
 	val editOperations: SharedFlow<TextEditOperation> = _editOperations
 
+	/** Whether edits are being recorded as typing; null lets the history infer it. */
+	private var typingOverride: Boolean? = null
+
+	/**
+	 * Records the edits [block] makes as [typing] or not, whatever their shape:
+	 * an IME commit is a word the user typed, a deleted selection is not typing
+	 * even when it is one character.
+	 */
+	internal fun <T> recordingAsTyping(typing: Boolean, block: () -> T): T {
+		val previous = typingOverride
+		typingOverride = typing
+		try {
+			return block()
+		} finally {
+			typingOverride = previous
+		}
+	}
+
 	/**
 	 * Derives the layout work [operation] requires, expressed against the post-edit
 	 * document. The op-declared line delta is cross-checked against the counts the
@@ -97,7 +115,13 @@ class TextEditManager(private val state: TextEditorState) {
 		else LayoutUpdate.Partial(lines.min(), lines.max(), 0)
 	}
 
-	fun applyOperation(operation: TextEditOperation, addToHistory: Boolean = true) {
+	fun applyOperation(requested: TextEditOperation, addToHistory: Boolean = true) {
+		// Resolved before anything reads it, so what is applied, recorded, and
+		// announced is one and the same operation.
+		val operation = if (requested is TextEditOperation.Replace) resolveInheritedStyle(requested) else requested
+		// An edit of no characters (an IME committing "", an empty selection
+		// deleted) changes nothing, so nothing is applied, recorded, or announced.
+		if (operation.isNoOp()) return
 		// Selection offsets must not outlive a content mutation. Span operations
 		// leave the text untouched, so they keep the selection.
 		val isSpanOperation = operation is TextEditOperation.StyleSpan ||
@@ -141,7 +165,7 @@ class TextEditManager(private val state: TextEditorState) {
 			state.invalidateCopiedRichSpans()
 			state.richSpanManager.updateSpans(operation, metadata)
 			if (addToHistory && !isDecoration) {
-				history.recordEdit(operation, metadata ?: OperationMetadata())
+				history.recordEdit(operation, metadata ?: OperationMetadata(), typing = typingOverride)
 			}
 
 			// Requested inside the transaction so it merges with any layout work the
@@ -257,36 +281,13 @@ class TextEditManager(private val state: TextEditorState) {
 			// Single line replacement (no newlines in range or new text)
 			operation.range.isSingleLine() && !operation.newText.contains('\n') -> {
 				val line = state.textLines[operation.range.start.line]
-
-				// Handle inherited styles if needed
-				val inheritedStyles = if (operation.inheritStyle) {
-					line.spanStyles.filter { span ->
-						span.start <= operation.range.end.char &&
-								span.end >= operation.range.start.char
-					}.map { it.item }.toSet()
-				} else {
-					emptySet()
-				}
-
-				// Create new text with inherited styles if needed
-				val newText = if (inheritedStyles.isNotEmpty()) {
-					buildAnnotatedString {
-						append(operation.newText)
-						inheritedStyles.forEach { style ->
-							addStyle(style, 0, operation.newText.length)
-						}
-					}
-				} else {
-					operation.newText
-				}
-
 				state.setLine(
 					operation.range.start.line,
 					handleReplace(
 						line,
 						operation.range.start.char,
 						operation.range.end.char,
-						newText
+						operation.newText
 					)
 				)
 			}
@@ -296,7 +297,6 @@ class TextEditManager(private val state: TextEditorState) {
 					state,
 					operation.range,
 					operation.newText,
-					operation.inheritStyle
 				)
 
 				val leftPlaceholder = state.removeLines(
@@ -346,11 +346,45 @@ class TextEditManager(private val state: TextEditorState) {
 		return metadata
 	}
 
+	private fun TextEditOperation.isNoOp(): Boolean = when (this) {
+		is TextEditOperation.Insert -> text.isEmpty()
+		is TextEditOperation.Delete -> range.start == range.end
+		is TextEditOperation.Replace -> range.start == range.end && newText.isEmpty()
+		else -> false
+	}
+
+	/**
+	 * Bakes the styles an `inheritStyle` replace takes from the text it replaces
+	 * into its `newText`, so the operation that is applied, recorded, and announced
+	 * carries exactly the styling that lands in the document. On one line every
+	 * span touching the range is inherited; across lines, every span the range
+	 * overlaps. Inherited styles layer over the replacement's own.
+	 */
+	private fun resolveInheritedStyle(operation: TextEditOperation.Replace): TextEditOperation.Replace {
+		if (!operation.inheritStyle) return operation
+		val newText = operation.newText
+		val inherited = if (operation.range.isSingleLine() && !newText.contains('\n')) {
+			state.textLines[operation.range.start.line].spanStyles.filter { span ->
+				span.start <= operation.range.end.char && span.end >= operation.range.start.char
+			}.map { it.item }.toSet()
+		} else {
+			getStyles(operation.range)
+		}
+		val styled = if (inherited.isEmpty()) {
+			newText
+		} else {
+			buildAnnotatedString {
+				append(newText)
+				inherited.forEach { addStyle(it, 0, newText.length) }
+			}
+		}
+		return operation.copy(newText = styled, inheritStyle = false)
+	}
+
 	private fun handleMultiLineReplace(
 		state: TextEditorState,
 		range: TextEditorRange,
 		newText: AnnotatedString,
-		inheritStyle: Boolean
 	): List<AnnotatedString> {
 		// Extract prefix from the first line
 		val firstLine = state.textLines[range.start.line]
@@ -358,12 +392,6 @@ class TextEditManager(private val state: TextEditorState) {
 			firstLine.subSequence(0, range.start.char.coerceIn(0, firstLine.length)).ifEmpty {
 				AnnotatedString("")
 			}
-
-		val inheritedStyles = if (inheritStyle) {
-			getStyles(range)
-		} else {
-			emptySet()
-		}
 
 		// Extract suffix from the last line
 		val suffix = if (range.end.line < state.textLines.size) {
@@ -377,16 +405,7 @@ class TextEditManager(private val state: TextEditorState) {
 		}
 
 		return if (newText.contains('\n')) {
-			val newLines = if (inheritStyle) {
-				buildAnnotatedStringWithSpans { addSpan ->
-					append(newText.text)
-					inheritedStyles.forEach { style ->
-						addSpan(style, 0, newText.length)
-					}
-				}.splitAnnotatedString()
-			} else {
-				newText.splitAnnotatedString()
-			}
+			val newLines = newText.splitAnnotatedString()
 
 			buildList {
 				add(spanManager.appendAnnotatedStrings(prefix, newLines.first()))
@@ -401,18 +420,7 @@ class TextEditManager(private val state: TextEditorState) {
 			listOf(
 				buildAnnotatedString {
 					append(prefix)
-					if (inheritStyle) {
-						append(
-							buildAnnotatedStringWithSpans { addSpan ->
-								append(newText.text)
-								inheritedStyles.forEach { style ->
-									addSpan(style, 0, newText.length)
-								}
-							}
-						)
-					} else {
-						append(newText)
-					}
+					append(newText)
 					append(suffix)
 				}
 			)

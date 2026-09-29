@@ -402,6 +402,15 @@ class TextEditorState(
 		internal set
 
 	/**
+	 * Whether [composingRange] holds text the IME typed itself (`setComposingText`),
+	 * as opposed to existing text it marked (`setComposingRegion`, the shape of an
+	 * autocorrect). Only the former's commit is the user's own typing for undo.
+	 * Written only with the range, so the two cannot disagree.
+	 */
+	internal var composingIsTyped = false
+		private set
+
+	/**
 	 * Last calculated cursor pixel metrics.
 	 * Updated during rendering and used by IME for cursor anchor info.
 	 */
@@ -650,11 +659,13 @@ class TextEditorState(
 
 		clearHistory()
 		val previousComposing = composingRange
+		val previousComposingTyped = composingIsTyped
 		val previousSelection = selector.selection
-		composingRange = null
+		clearComposingRange()
 		selector.clearSelection()
 		onRollback {
 			composingRange = previousComposing
+			composingIsTyped = previousComposingTyped
 			previousSelection?.let { selector.updateSelection(it.start, it.end) }
 		}
 		updateBookKeeping()
@@ -681,7 +692,7 @@ class TextEditorState(
 		isFocused = focused
 		// Clear composing state when focus is lost
 		if (!focused) {
-			composingRange = null
+			clearComposingRange()
 		}
 	}
 
@@ -691,14 +702,16 @@ class TextEditorState(
 	 * @param startIndex Character index of composing start, or -1 to clear
 	 * @param endIndex Character index of composing end, or -1 to clear
 	 */
-	internal fun updateComposingRange(startIndex: Int, endIndex: Int) {
-		composingRange = if (startIndex >= 0 && endIndex > startIndex) {
+	internal fun updateComposingRange(startIndex: Int, endIndex: Int, typed: Boolean = false) {
+		val range = if (startIndex >= 0 && endIndex > startIndex) {
 			val startOffset = getOffsetAtCharacter(startIndex)
 			val endOffset = getOffsetAtCharacter(endIndex)
 			TextEditorRange(startOffset, endOffset)
 		} else {
 			null
 		}
+		composingRange = range
+		composingIsTyped = range != null && typed
 	}
 
 	/**
@@ -706,6 +719,7 @@ class TextEditorState(
 	 */
 	internal fun clearComposingRange() {
 		composingRange = null
+		composingIsTyped = false
 	}
 
 	/**
@@ -860,7 +874,10 @@ class TextEditorState(
 		editManager.applyOperation(operation)
 	}
 
-	/** Deletes the text covered by [range], leaving the cursor at the range start. */
+	/**
+	 * Deletes the text covered by [range], leaving the cursor at the range start.
+	 * A collapsed [range] covers nothing and is no edit at all.
+	 */
 	fun delete(range: TextEditorRange) = delete(range, cursorBefore = cursorPosition)
 
 	/**

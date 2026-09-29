@@ -436,11 +436,10 @@ class MarkdownExtension(
 	 * Makes [range] a hyperlink to [url]: bakes the configuration's link display
 	 * style over the text and attaches the [LinkSpanStyle] that carries the
 	 * destination through serialization. Both go through the undoable edit
-	 * pipeline as two recorded operations (the display style and the span), so
-	 * fully reverting a `setLink` takes two undo steps.
+	 * pipeline as one undo step.
 	 */
 	fun setLink(range: TextEditorRange, url: String) {
-		editorState.withAtomicEdit {
+		editorState.editGroup {
 			editorState.addStyleSpan(range, markdownConfiguration.linkStyle)
 			editorState.addRichSpan(range, LinkSpanStyle(url))
 		}

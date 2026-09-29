@@ -93,7 +93,9 @@ span re-anchoring, and the edit stream all at once.
 operation paired with the `OperationMetadata` needed to reverse it (deleted
 text, deleted spans), or a group of them. Consecutive single-character typing
 and backspacing coalesce into wordwise runs, so undo peels words, not
-keystrokes.
+keystrokes. IME commits and composition updates are recorded as typing
+whatever their length, so a composed word and its commit fold into the run
+they rewrite rather than leaving one step per keystroke.
 
 One transaction is one undo step. Operations recorded inside a
 `withAtomicEdit` are staged and land as a single group entry when the

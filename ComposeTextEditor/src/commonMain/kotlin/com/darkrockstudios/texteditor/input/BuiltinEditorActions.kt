@@ -14,6 +14,7 @@ import com.darkrockstudios.texteditor.input.EditorCommand.Action
 import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
 import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.applyStyleForEditAt
+import com.darkrockstudios.texteditor.state.insertTypedNewline
 import com.darkrockstudios.texteditor.state.moveToNextWord
 import com.darkrockstudios.texteditor.state.moveToPreviousWord
 import com.darkrockstudios.texteditor.state.moveToWordEnd
@@ -234,7 +235,7 @@ private fun TextEditorState.deleteToParagraphEnd() {
 	}
 }
 
-private fun TextEditorState.handleIndent() {
+private fun TextEditorState.handleIndent() = editGroup {
 	val selection = selector.selection
 	if (selection != null && selection.start.line != selection.end.line) {
 		indentLineRange(selection.start.line, selection.end.line)
@@ -318,9 +319,4 @@ private fun leadingOutdentWidth(line: AnnotatedString): Int {
 	return count
 }
 
-private fun TextEditorState.handleEnter() {
-	if (selector.selection != null) {
-		selector.deleteSelection()
-	}
-	insertNewlineAtCursor()
-}
+private fun TextEditorState.handleEnter() = insertTypedNewline()

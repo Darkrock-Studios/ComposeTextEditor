@@ -283,7 +283,9 @@ class TextEditorSelectionManager(
 
 	fun deleteSelection() {
 		val selection = selection ?: return
-		state.delete(selection)
+		// A deleted selection is its own step even when it is one character: not
+		// a backspace, so a backspace after it never joins it.
+		state.editManager.recordingAsTyping(false) { state.delete(selection) }
 		clearSelection()
 	}
 

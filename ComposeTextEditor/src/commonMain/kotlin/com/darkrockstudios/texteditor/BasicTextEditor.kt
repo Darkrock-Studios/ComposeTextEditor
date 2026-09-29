@@ -274,8 +274,14 @@ fun BasicTextEditor(
 							true
 						}
 						insertTextAtCursor { newText ->
-							if (state.selector.hasSelection()) state.selector.deleteSelection()
-							state.insertStringAtCursor(newText)
+							// One step, but not typing: dictated or assistive text is
+							// whole phrases, which a following keystroke must not join.
+							state.editGroup {
+								state.selector.deleteSelection()
+								state.editManager.recordingAsTyping(false) {
+									state.insertStringAtCursor(newText)
+								}
+							}
 							true
 						}
 						setSelection { start, end, _ ->

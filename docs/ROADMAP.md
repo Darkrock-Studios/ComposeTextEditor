@@ -993,11 +993,13 @@ iOS Safari; browser tests run in CI.
 
 ### Undo
 
-- [ ] **6.1 One user action, one undo step. C.** [Fable] [Lane G] These take
+- [x] **6.1 One user action, one undo step. C.** [Fable] [Lane G] These take
   several today: typing or Enter over a selection (two), a rich paste of N list
   items (N+1), find's replace-all (one per match), `setLink` (two), IME
   composition updates (several per word, because only Insert and Delete
-  coalesce and composition is a Replace).
+  coalesce and composition is a Replace). Done on 6.2: each runs in an
+  `editGroup`, and the IME text commands are recorded as typing so a
+  composition's updates and commit fold into the run they rewrite.
 - [x] **6.2 A public grouping API.** [Fable] [Lane G] `withAtomicEdit` is
   internal and does not group history. Done: `TextEditorState.editGroup { }`
   runs its block as one revision and one undo step; every transaction now
@@ -1013,6 +1015,14 @@ iOS Safari; browser tests run in CI.
   restore the text without its blocks. Inferred; no test covers it.
 - [ ] **6.6 Time-based coalescing breaks,** [Opus] [Lane G] and a configurable
   history cap.
+- [ ] **6.14 An IME composition inherits the style it touches. R.** [Opus]
+  [Lane G] A composition replace runs with `inheritStyle`, which takes every
+  span merely touching the replaced range (`TextEditManager`, the resolve of
+  inherited styles). Bold text, bold toggled off at the caret, then a composed
+  word: its first update is plain, its second re-bolds it, so on a composing
+  keyboard non-bold text cannot follow bold text. Inherit from the replaced
+  characters themselves, and from the caret's typing style when there are
+  none.
 
 ### Clipboard
 

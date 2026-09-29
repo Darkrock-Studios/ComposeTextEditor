@@ -13,6 +13,7 @@ import com.darkrockstudios.texteditor.input.EditorCommand.Action
 import com.darkrockstudios.texteditor.input.EditorCommand.Motion
 import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.caretParagraphIsRtl
+import com.darkrockstudios.texteditor.state.insertTypedString
 import com.darkrockstudios.texteditor.state.moveCursorDown
 import com.darkrockstudios.texteditor.state.moveCursorPageDown
 import com.darkrockstudios.texteditor.state.moveCursorPageUp
@@ -120,11 +121,7 @@ internal class TextEditorKeyCommandHandler(
 		// Convert code point to string (handles surrogate pairs for supplementary characters)
 		val character = codePointToString(codePoint)
 
-		// Delete selection if any, then insert character
-		if (state.selector.selection != null) {
-			state.selector.deleteSelection()
-		}
-		state.insertStringAtCursor(character)
+		state.insertTypedString(character)
 
 		return true
 	}
