@@ -334,9 +334,10 @@ fun BasicTextEditor(
 						// Handle resize exception gracefully
 					}
 
-					DrawSelection(state, style.selectionColor)
+					DrawSelection(state, style.selectionColorFor(state.hasFocus))
 
-					DrawSelectionHandles(state)
+					// Like native editors, an editor without focus shows no touch handles.
+					if (state.hasFocus) DrawSelectionHandles(state)
 
 					if (enabled && state.isFocused) {
 						DrawCursor(state, style.cursorColor, style.cursorWidth)

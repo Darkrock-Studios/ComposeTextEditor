@@ -190,8 +190,8 @@ private fun RichTextViewBody(
 			}
 
 			if (isSelectable) {
-				DrawSelection(state, style.selectionColor)
-				DrawSelectionHandles(state)
+				DrawSelection(state, style.selectionColorFor(state.hasFocus))
+				if (state.hasFocus) DrawSelectionHandles(state)
 			}
 		}
 	}

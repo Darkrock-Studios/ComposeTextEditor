@@ -341,6 +341,12 @@ class TextEditorState(
 	var isFocused by mutableStateOf(false)
 
 	/**
+	 * Whether the editor holds focus, enabled or not. [isFocused] also requires it
+	 * enabled, as it means the editor takes input; a read-only view is never that.
+	 */
+	internal var hasFocus by mutableStateOf(false)
+
+	/**
 	 * The current IME composing region (for autocomplete preview).
 	 * When non-null, this text should be rendered with an underline.
 	 * This is set by the Android InputConnection during text composition.

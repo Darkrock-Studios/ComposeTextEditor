@@ -4,6 +4,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.isSpecified
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -66,7 +67,20 @@ data class TextEditorStyle(
 	val codeFenceBorderColor: Color = Color.Unspecified,
 	/** Width of the caret. The default matches `BasicTextField`'s. */
 	val cursorWidth: Dp = 2.dp,
+	/**
+	 * Selection colour while the editor does not have focus, dimmed as native editors
+	 * dim it. `Color.Unspecified` falls back to [selectionColor] at half its alpha.
+	 */
+	val unfocusedSelectionColor: Color = Color.Unspecified,
 )
+
+/** The selection colour for an editor that has focus, or lacks it. */
+internal fun TextEditorStyle.selectionColorFor(focused: Boolean): Color = when {
+	focused -> selectionColor
+	unfocusedSelectionColor.isSpecified -> unfocusedSelectionColor
+	selectionColor.isSpecified -> selectionColor.copy(alpha = selectionColor.alpha / 2f)
+	else -> selectionColor
+}
 
 /**
  * Builds and remembers a [TextEditorStyle] whose defaults are drawn from the active
@@ -104,11 +118,13 @@ fun rememberTextEditorStyle(
 	codeFenceBackgroundColor: Color = MaterialTheme.colorScheme.surfaceContainerHigh,
 	codeFenceBorderColor: Color = MaterialTheme.colorScheme.outline,
 	cursorWidth: Dp = 2.dp,
+	// A neutral grey, as macOS and browsers draw a selection whose editor lost focus.
+	unfocusedSelectionColor: Color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f),
 ): TextEditorStyle = remember(
 	textColor, backgroundColor, placeholderText, placeholderColor,
 	cursorColor, selectionColor, focusedBorderColor, unfocusedBorderColor, textStyle,
 	bulletColor, blockquoteBarColor, blockquoteBackgroundColor, orderedListMarkerColor,
-	codeFenceBackgroundColor, codeFenceBorderColor, cursorWidth,
+	codeFenceBackgroundColor, codeFenceBorderColor, cursorWidth, unfocusedSelectionColor,
 ) {
 	TextEditorStyle(
 		textColor = textColor,
@@ -127,5 +143,6 @@ fun rememberTextEditorStyle(
 		codeFenceBackgroundColor = codeFenceBackgroundColor,
 		codeFenceBorderColor = codeFenceBorderColor,
 		cursorWidth = cursorWidth,
+		unfocusedSelectionColor = unfocusedSelectionColor,
 	)
 }

@@ -442,8 +442,19 @@ fixes what users feel every minute.
   highlighted too; a soft wrap adds none. Only rows in view are drawn, each
   its full height, block rows included (`drawing/SelectionDrawingTest.kt`).
   The sliver always goes right; right-to-left lines are 7.6's.
-- [ ] **1.18 Unfocused state. C.** [Opus] [Lane C] No unfocused selection
+- [x] **1.18 Unfocused state. C.** [Opus] [Lane C] No unfocused selection
   colour; selection and touch handles stay drawn unchanged after focus loss.
+  Done: `TextEditorStyle.unfocusedSelectionColor`, by default a neutral grey
+  from `rememberTextEditorStyle` or, constructed directly, the selection colour
+  at half its alpha, is drawn while the editor lacks focus. The context menu
+  keeps focus, so it does not dim the selection. Touch selection handles are
+  neither drawn nor grabbed without focus (the caret handle already hid,
+  from 3.5) (`drawing/UnfocusedSelectionTest.kt`). Focus here is
+  `TextEditorState.hasFocus`, set by the input node, since `isFocused` also
+  needs the editor enabled; a read-only editor or `RichTextView` with focus
+  keeps its colour and handles. Only Compose focus counts: switching to another
+  window does not dim the selection, as it does natively on macOS. A handle
+  drag under way when focus goes keeps going.
 
 ### Found by the differential tests
 

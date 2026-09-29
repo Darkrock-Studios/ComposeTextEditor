@@ -573,8 +573,8 @@ private fun findHandleAtPosition(
 	position: Offset,
 	state: TextEditorState,
 ): SelectionHandle? {
-	// Handles are drawn only for a touch selection, so only then can a finger grab one.
-	if (!state.selector.isTouchSelection) return null
+	// Handles are drawn only for a focused touch selection, so only then can a finger grab one.
+	if (!state.selector.isTouchSelection || !state.hasFocus) return null
 	val selection = state.selector.selection ?: return null
 
 	val startHandlePos = handleCenter(state.getPositionForOffset(selection.start))
