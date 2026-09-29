@@ -611,8 +611,9 @@ fixes what users feel every minute.
   at the viewport's bottom, as `BasicTextField` does, and a document that fits
   with its padding does not scroll; bottom content padding is the room below
   the last line when a host wants it. `TextEditorScrollState` reports
-  `canScrollForward` and `canScrollBackward`, so a wheel at an end reaches a
-  parent scroll container (`scrollmanager/ScrollRangeE2eTest.kt`,
+  `canScrollForward` and `canScrollBackward`, by Compose's meaning (forward
+  consumes a positive delta, which this state turns toward the start), so a
+  wheel at an end reaches a parent scroll container (`scrollmanager/ScrollRangeE2eTest.kt`,
   `ScrollIndicatorTest.kt`). Touch handles on the last row now sit below the
   viewport's edge with nothing to scroll them into view; the buffer never
   fully cleared them either (see 3.3).
@@ -765,8 +766,17 @@ Also seen:
   ibus on Linux, the macOS Japanese keyboard) in Chrome, Firefox, and Safari.
 - [ ] **4.13 Clipboard. C.** [Opus] [Lane H] Plain text only through
   `navigator.clipboard`, failures swallowed silently (shared with 6.7).
-- [ ] **4.14 Scrollbar. C.** [Opus] [Lane C] The implementation is commented
+- [x] **4.14 Scrollbar. C.** [Opus] [Lane C] The implementation is commented
   out.
+  Done: desktop and web share Compose's own `VerticalScrollbar`
+  (`skikoMain/.../scrollbar/EditorVerticalScrollbar.skiko.kt`) in a gutter at
+  the end edge, through an adapter over `TextEditorScrollState`: the thumb
+  drags, a press on the track pages (repeating while held), a wheel over it
+  scrolls the editor, and it is hidden when the document fits. A host's
+  `LocalScrollbarStyle` styles it; without one its colours come from the
+  Material theme's `onSurface`. It replaces the desktop's hand-drawn 16 dp bar
+  (the gutter is now the style's 8 dp, so text wraps 8 dp wider) and the web's
+  commented-out one (`scrollbar/EditorScrollbarE2eTest.kt`).
 - [ ] **4.15 Browser tests.** [Opus] [Lane L] Automation against the built demo
   (0.7), with composition events.
 - [ ] **4.21 Whole-document mirror per edit. S.** [Opus] [Lane E] Compose's web
@@ -1053,4 +1063,5 @@ records results and removes entries that passed.
 | 4.2 | Build `sampleAppiOS`, run it in the simulator, and repeat the baseline recording: type a sentence, backspace through it, accept an autocorrect suggestion, and compose Japanese (Settings > General > Keyboard, add Japanese Kana, type "nihongo" and pick a candidate). Compare against "Simulator baseline before 4.2" in the iOS section | Typed characters appear once each and backspace removes one character at a time (4.5); an accepted autocorrect replaces the word rather than appending it (4.5, hammer-editor#791); kana show underlined while composing and the chosen candidate replaces them once (4.5); the keyboard opens with a shifted first letter (4.7). If the baseline already passed any of these, note it as a regression check only | |
 | 2.6 | In Safari and Chrome on macOS, open the wasm demo and press Ctrl+A, E, F, B, N, P, D, H and K in a paragraph. The page's hidden text area has the same Cocoa Emacs bindings, so a chord could act twice | Each chord moves or deletes once, as in the desktop sample app | |
 | 3.12 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64`; `iosMain/.../scrollbar/TextEditorScrollbar.ios.kt` now calls the shared `ScrollIndicator` (commonMain `scrollbar/ScrollIndicator.kt`). Then in the simulator, scroll a long document in the sample app, and pull past its top and bottom | Compiles. The indicator's thumb shrinks as the document grows, shows while scrolling, and fades about half a second after; pulling past an end shows whatever overscroll Compose provides on iOS, and the text settles back | |
+| 4.14 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64`. 4.14 added `skikoMain/.../scrollbar/EditorVerticalScrollbar.skiko.kt`, Compose's skiko `VerticalScrollbar` over the editor's scroll state; iOS compiles it but does not use it | Compiles with no `iosMain` change | |
 | 3.6 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64`. 3.6 added `internal expect fun Modifier.textMagnifier` (commonMain `TextMagnifier.kt`) with its `actual` in `skikoMain` (`TextMagnifier.skiko.kt`, a no-op), not in `iosMain` | Compiles with no `iosMain` change | |

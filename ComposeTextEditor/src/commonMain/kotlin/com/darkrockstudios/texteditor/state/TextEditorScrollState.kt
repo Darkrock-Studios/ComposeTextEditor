@@ -29,6 +29,9 @@ class TextEditorScrollState(
 	private var _minValue by mutableStateOf(0)
 	private var _maxValue by mutableStateOf(0)
 	private var _isScrollInProgress by mutableStateOf(false)
+
+	/** Height of the viewport the range was computed for, which a scrollbar sizes its thumb by. */
+	internal var viewportHeight by mutableStateOf(0)
 	private val scrollMutex = MutatorMutex()
 
 	private val scrollScope: ScrollScope = object : ScrollScope {
@@ -58,11 +61,13 @@ class TextEditorScrollState(
 			_value = _value.coerceIn(_minValue, _maxValue)
 		}
 
+	// Compose's forward is a positive delta, which [dispatchRawDelta] turns into a smaller
+	// value: toward the document's start.
 	override val canScrollForward: Boolean
-		get() = _value < _maxValue
+		get() = _value > _minValue
 
 	override val canScrollBackward: Boolean
-		get() = _value > _minValue
+		get() = _value < _maxValue
 
 	/** `true` while a [scroll] or [animateScrollTo] is running. */
 	override val isScrollInProgress: Boolean

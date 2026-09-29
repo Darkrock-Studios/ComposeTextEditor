@@ -513,6 +513,10 @@ Android unless a step says otherwise.
 7. Android: scroll a long document; pull past its top and bottom. **Expect:** the
    stretch overscroll; the thin indicator on the right shows while scrolling, is
    sized to the visible share, and fades shortly after.
+8. Desktop and web (built demo): a long document. **Expect:** a scrollbar along the
+   right edge whose thumb drags the document, a press on the track above or below
+   the thumb pages toward the pointer (and keeps paging while held), and no thumb
+   once the document fits (delete most of it).
 
 ## 9. Consumer API sanity
 

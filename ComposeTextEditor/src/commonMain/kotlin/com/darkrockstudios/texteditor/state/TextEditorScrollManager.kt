@@ -58,6 +58,7 @@ class TextEditorScrollManager(
 		get() = maxOf(-topContentPaddingPx, contentHeight + bottomContentPaddingPx - viewportHeight)
 
 	private fun applyScrollRange() {
+		scrollState.viewportHeight = viewportHeight
 		scrollState.minValue = -topContentPaddingPx
 		scrollState.maxValue = maxScroll
 	}

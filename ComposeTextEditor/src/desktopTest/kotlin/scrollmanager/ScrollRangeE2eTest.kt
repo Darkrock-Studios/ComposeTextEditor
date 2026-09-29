@@ -62,14 +62,34 @@ class ScrollRangeE2eTest {
 		assertEquals(expected, state.scrollState.maxValue)
 	}
 
+	/** Compose's forward is a positive delta, which scrolls this state toward the start. */
 	@Test
-	fun `the scroll state reports which ways it can scroll`() = editorUiTest(initialText = longDocument) {
-		assertTrue(state.scrollState.canScrollForward)
-		assertEquals(false, state.scrollState.canScrollBackward, "at the top")
+	fun `the scroll state reports which deltas it can consume`() = editorUiTest(initialText = longDocument) {
+		assertEquals(false, state.scrollState.canScrollForward, "at the top")
+		assertTrue(state.scrollState.canScrollBackward)
+		assertEquals(0f, state.scrollState.dispatchRawDelta(10f), "a positive delta at the top goes nowhere")
 
 		state.scrollState.scrollTo(state.scrollState.maxValue)
-		assertEquals(false, state.scrollState.canScrollForward, "at the bottom")
-		assertTrue(state.scrollState.canScrollBackward)
+		assertTrue(state.scrollState.canScrollForward)
+		assertEquals(false, state.scrollState.canScrollBackward, "at the bottom")
+		assertEquals(0f, state.scrollState.dispatchRawDelta(-10f), "a negative delta at the bottom goes nowhere")
+	}
+
+	@Test
+	fun `a mouse wheel scrolls both ways`() = editorUiTest(initialText = longDocument) {
+		val scroll = state.scrollState
+		mouse {
+			moveTo(Offset(100f, 100f))
+			scroll(3f)
+		}
+		val down = scroll.value
+		assertTrue(down > scroll.minValue, "the wheel scrolled down to $down")
+
+		mouse {
+			moveTo(Offset(100f, 100f))
+			scroll(-3f)
+		}
+		assertTrue(scroll.value < down, "the wheel scrolled back up to ${scroll.value}")
 	}
 
 	@Test
