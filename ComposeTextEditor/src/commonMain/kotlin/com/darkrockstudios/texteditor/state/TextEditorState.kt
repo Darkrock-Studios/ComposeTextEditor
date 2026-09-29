@@ -883,11 +883,16 @@ class TextEditorState(
 		updateBookKeeping()
 	}
 
-	internal fun removeLines(startIndex: Int, count: Int) {
+	/**
+	 * Removes [count] lines from [startIndex]. Removing every line leaves one empty
+	 * placeholder line; returns true when that happened, so a caller inserting
+	 * replacement lines overwrites the placeholder rather than a real empty line.
+	 */
+	internal fun removeLines(startIndex: Int, count: Int): Boolean {
 		val lines = textLines
 		// If there are no lines, or we're trying to remove more lines than exist, abort
 		if (lines.isEmpty() || startIndex >= lines.size) {
-			return
+			return false
 		}
 
 		// Ensure we don't remove more lines than available. The floor matters: an
@@ -896,14 +901,16 @@ class TextEditorState(
 		val safeCount = minOf(count, lines.size - startIndex).coerceAtLeast(0)
 
 		// Always keep at least one empty line
-		if (lines.size <= safeCount) {
+		return if (lines.size <= safeCount) {
 			setLines(listOf(AnnotatedString("")))
+			true
 		} else {
 			setLines(
 				lines.toMutableList().also {
 					it.subList(startIndex, startIndex + safeCount).clear()
 				}
 			)
+			false
 		}
 	}
 

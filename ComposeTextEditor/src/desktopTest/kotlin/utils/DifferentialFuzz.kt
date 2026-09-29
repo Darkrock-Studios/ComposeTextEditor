@@ -12,7 +12,7 @@ import kotlin.test.fail
  * reference's state and the script continues. Delete an item here when it lands,
  * and the fuzzer starts failing on that class of divergence.
  */
-val OPEN_PARITY_ITEMS: Set<String> = setOf("1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.19", "1.20")
+val OPEN_PARITY_ITEMS: Set<String> = setOf("1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.19")
 
 /** Starting text for the Unicode fuzzers: an emoji, a combining mark, and a right-to-left word. */
 const val FUZZ_START_TEXT = "seed line\nsecond line of words\n\uD83D\uDE00 e\u0301 שלום end"
@@ -57,9 +57,6 @@ fun generateStrokeScript(seed: Long, count: Int): List<Stroke> {
 }
 
 /** Whether deleting one of this string's newlines can give [other]. */
-private fun String.withoutOneNewlineMatches(other: String): Boolean =
-	indices.any { this[it] == '\n' && removeRange(it, it + 1) == other }
-
 private fun Stroke.isVertical(): Boolean =
 	this is Stroke.Press && key in setOf(Key.DirectionUp, Key.DirectionDown, Key.PageUp, Key.PageDown)
 
@@ -80,7 +77,6 @@ fun explainDivergence(
 		!editor.text.isGraphemeBoundary(editor.caret) ||
 		!editor.text.isGraphemeBoundary(editor.anchor)
 	if (splitsCluster) add("1.1")
-	if (editor.text.length == native.text.length - 1 && native.text.withoutOneNewlineMatches(editor.text)) add("1.20")
 	if (stroke !is Stroke.Press) return@buildSet
 	when (stroke.key) {
 		Key.DirectionLeft, Key.DirectionRight -> if (stroke.ctrl) {

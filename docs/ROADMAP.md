@@ -359,7 +359,7 @@ fixes what users feel every minute.
   current one, and its Ctrl+Delete deletes to that end. Windows editors stop at
   the next word start, so the answer may be per platform (see 2.6 for macOS).
   Decide, then clear the `divergesUntil = "1.19"` cases.
-- [ ] **1.20 Joining lines deletes an empty line. R.** [Opus] [Lane G] In a
+- [x] **1.20 Joining lines deletes an empty line. R.** [Opus] [Lane G] In a
   three-line document with an empty line, joining the other two lines also
   deletes the empty one: Backspace before `c` in `\nb\nc` gives `bc`, and
   before `b` in `a\nb\n` gives `ab`. Typing over a selection that spans a line
