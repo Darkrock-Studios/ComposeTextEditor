@@ -59,7 +59,8 @@ Styling lives in two deliberately separate places:
   via `drawBackground`) and declares its behavior: `stickyAtStart` for
   line-anchored gutter markers that must track their whole line,
   `BlockSpanStyle` for spans that own an entire line and its height (images,
-  horizontal rules), and `isDecoration` for view overlays.
+  horizontal rules), `isDecoration` for view overlays, and `isHitTestable`,
+  false for a span that only tints and must leave clicks to what it covers.
 
 The `isDecoration` flag is a load-bearing distinction: content spans (things
 that round-trip through markdown) enter undo history and announce themselves on

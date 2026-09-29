@@ -1397,12 +1397,13 @@ class TextEditorState(
 	}
 
 	/**
-	 * Returns the [RichSpan] covering [position], or null if none does. Useful for
-	 * hit-testing taps on a list item or code fence.
+	 * Returns the hit-testable [RichSpan] covering [position], or null if none does.
+	 * Useful for hit-testing taps on a list item or code fence. A style whose
+	 * [RichSpanStyle.isHitTestable] is false is never returned.
 	 *
 	 * Spans nest, so several can cover one position and only one can answer. Content
 	 * spans (link, highlight) go first, then the editor's own decorations (spell
-	 * check squiggle, find match), then the line-anchored marker of the heading, list
+	 * check squiggle), then the line-anchored marker of the heading, list
 	 * item, blockquote or code fence the line belongs to. Within a tier the span
 	 * covering the least of the clicked line wins, so the marker answers only where
 	 * nothing more specific does.
@@ -1414,7 +1415,7 @@ class TextEditorState(
 		} ?: return null
 
 		return lineWrap.richSpans
-			.filter { it.containsPosition(position) }
+			.filter { it.style.isHitTestable && it.containsPosition(position) }
 			.minWithOrNull(hitTestOrder(position.line))
 	}
 

@@ -72,6 +72,15 @@ interface RichSpanStyle {
 	 * consumers watching the edit stream don't mistake an overlay for a real edit.
 	 */
 	val isDecoration: Boolean get() = false
+
+	/**
+	 * Whether [TextEditorState.findSpanAtPosition], and so a click, can find a span of
+	 * this style. Default `true`, which spell check's decorations rely on to answer
+	 * clicks. A span that only tints, like a find highlight, returns `false`, so a click
+	 * inside it answers to the spans it covers instead, such as its line's list or quote
+	 * marker.
+	 */
+	val isHitTestable: Boolean get() = true
 }
 
 /**

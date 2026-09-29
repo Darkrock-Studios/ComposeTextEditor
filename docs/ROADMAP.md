@@ -968,10 +968,16 @@ Shaping is one line per keystroke. These still scale with document length:
   Windows layouts; use `isCtrlShortcut`.
 - [ ] **7.26** [Opus] [Lane J] Regex replace inserts the replacement
   literally; `$1` and named groups are not expanded.
-- [ ] **7.27** [Opus] [Lane C] Decorations take part in span hit testing
+- [x] **7.27** [Opus] [Lane C] Decorations take part in span hit testing
   (`findSpanAtPosition`), ranked above line markers. While find in selection
   is on, its scope decoration answers clicks on list, blockquote, and code
   fence markers inside it. A decoration needs a way to opt out.
+  Done: `RichSpanStyle.isHitTestable`, default `true`, and false spans are
+  skipped by `findSpanAtPosition`; the find scope opts out, and so do the
+  find match highlights, which took marker clicks the same way. Decorations stay
+  hit-testable by default because spell check (`SpellCheckStyle`, the
+  diagnostics style) answers clicks with its suggestions
+  (`spans/SpanHitTestTest.kt`, find's `FindScopeHitTestTest.kt`).
 
 - [ ] **7.29 Find in selection loses its scope. C.** [Opus] [Lane J]
   `FindState.search` records `selectionBeforeSearch` unless the selection equals

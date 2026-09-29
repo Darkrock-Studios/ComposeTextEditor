@@ -1,19 +1,25 @@
 package spans
 
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.TextRange
 import com.darkrockstudios.texteditor.CharLineOffset
+import com.darkrockstudios.texteditor.LineWrap
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.richstyle.BlockquoteSpanStyle
 import com.darkrockstudios.texteditor.richstyle.HeaderSpanStyle
 import com.darkrockstudios.texteditor.richstyle.HighlightSpanStyle
 import com.darkrockstudios.texteditor.richstyle.LinkSpanStyle
 import com.darkrockstudios.texteditor.richstyle.RichSpan
+import com.darkrockstudios.texteditor.richstyle.RichSpanStyle
 import com.darkrockstudios.texteditor.richstyle.SpellCheckStyle
 import com.darkrockstudios.texteditor.state.TextEditorState
 import utils.editorUiTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 
 /**
  * Hit testing a position covered by several spans. Whole-line block markers
@@ -138,6 +144,39 @@ class SpanHitTestTest {
 			waitForIdle()
 
 			assertEquals(highlight, state.findSpanAtPosition(CharLineOffset(1, 5))?.style)
+		}
+	}
+
+	@Test
+	fun `a decoration that opts out of hit testing leaves the click to the span beneath`() =
+		editorUiTest(initialText = AnnotatedString(line)) {
+			state.addSpans(RichSpan(lineRange, BlockquoteSpanStyle))
+			state.addSpans(RichSpan(lineRange, TintOnly))
+			waitForIdle()
+
+			assertEquals(BlockquoteSpanStyle, state.findSpanAtPosition(CharLineOffset(0, 16))?.style)
+		}
+
+	@Test
+	fun `a decoration that opts out answers no click even on its own`() =
+		editorUiTest(initialText = AnnotatedString(line)) {
+			state.addSpans(RichSpan(lineRange, TintOnly))
+			waitForIdle()
+
+			assertNull(state.findSpanAtPosition(CharLineOffset(0, 16)))
+		}
+
+	/** A decoration that only tints its range, like find in selection's scope. */
+	private object TintOnly : RichSpanStyle {
+		override val isDecoration: Boolean = true
+		override val isHitTestable: Boolean = false
+
+		override fun DrawScope.drawCustomStyle(
+			layoutResult: TextLayoutResult,
+			lineWrap: LineWrap,
+			textRange: TextRange,
+			state: TextEditorState,
+		) {
 		}
 	}
 }
