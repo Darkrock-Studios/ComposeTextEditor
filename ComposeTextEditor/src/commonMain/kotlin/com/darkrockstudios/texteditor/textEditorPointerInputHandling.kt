@@ -170,7 +170,7 @@ private class ClickCounter(
 }
 
 /** How far apart two taps may land and still be a double tap: Android's double-tap slop. */
-private val DOUBLE_TAP_SLOP = 100.dp
+internal val DOUBLE_TAP_SLOP = 100.dp
 
 /**
  * Every mouse gesture. The primary button places the caret on press (or extends with

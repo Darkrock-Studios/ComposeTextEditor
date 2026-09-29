@@ -169,8 +169,10 @@ class DragAutoScrollE2eTest {
 @OptIn(ExperimentalTestApi::class)
 class LineDragAutoScrollE2eTest {
 
+	// Each paragraph is many viewports tall whatever the system font, so a line drag's
+	// caret (the paragraph end) starts off screen; the tests assert it before relying on it.
 	private val paragraphs = AnnotatedString(
-		(0 until 40).joinToString("\n") { p -> (0 until 60).joinToString(" ") { "p${p}w$it" } },
+		(0 until 8).joinToString("\n") { p -> (0 until 400).joinToString(" ") { "p${p}w$it" } },
 	)
 
 	@Test
@@ -189,7 +191,7 @@ class LineDragAutoScrollE2eTest {
 			moveTo(Offset(20f, viewportHeight + 40f))
 		}
 		assertTrue(selectedText.startsWith("p0w0 p0w1"), "a line drag: $selectedText")
-		assertFalse(state.scrollManager.isOffsetVisible(state.cursorPosition), "the caret is off screen")
+		assertFalse(state.scrollManager.isOffsetVisible(state.cursorPosition), "the caret is off screen: ${state.cursorPosition}")
 		test.mainClock.advanceTimeBy(100)
 		val deltas = (0 until 6).map {
 			val before = state.scrollState.value

@@ -4,6 +4,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.text.AnnotatedString
 import com.darkrockstudios.texteditor.CharLineOffset
+import com.darkrockstudios.texteditor.DOUBLE_TAP_SLOP
 import utils.editorUiTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -64,18 +65,25 @@ class TouchGesturesTest {
 	/** A finger drifts between taps, so nearby taps still pair; far apart ones are two taps. */
 	@Test
 	fun `two quick taps far apart do not select`() = editorUiTest(
-		initialText = AnnotatedString("alpha beta gamma delta epsilon zeta eta theta iota kappa lambda"),
+		// Rows apart rather than columns apart, so the distance does not depend on the font.
+		initialText = AnnotatedString("alpha" + "\n".repeat(10) + "omega"),
 	) {
+		val first = positionOfCharacter(2)
+		val second = positionOfCharacter(17)
+		assertTrue(
+			(second - first).getDistance() > with(test.density) { DOUBLE_TAP_SLOP.toPx() },
+			"the taps must be farther apart than the double tap slop",
+		)
 		touch {
-			down(positionOfCharacter(2))
+			down(first)
 			up()
 			advanceEventTime(50)
-			down(positionOfCharacter(56))
+			down(second)
 			up()
 		}
 
 		assertNull(state.selector.selection)
-		assertEquals(56, cursorIndex)
+		assertEquals(17, cursorIndex)
 	}
 
 	@Test

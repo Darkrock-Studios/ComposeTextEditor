@@ -188,7 +188,7 @@ review.
 | I | Markdown and block model | `markdown/`, `richstyle/` | 5.6, 7.14 to 7.16 |
 | J | Find addon | `ComposeTextEditorFind/` | 7.17 to 7.19, 7.26, 7.29 |
 | K | Spell check addon | `ComposeTextEditorSpellCheck/` | 7.20 to 7.22, 7.28, 7.30, 7.31 |
-| L | Tests and CI | test sources, `.github/workflows/` | 0.1 to 0.3, 0.5 to 0.8, 4.1, 4.15 |
+| L | Tests and CI | test sources, `.github/workflows/` | 0.1 to 0.3, 0.5 to 0.9, 4.1, 4.15 |
 | M | Accessibility and host API | semantics in `BasicTextEditor.kt`, `RichTextView.kt`, `state/rememberTextEditorState.kt` | 7.1 to 7.4, 7.13, 7.23 to 7.25, 7.32 |
 | N | Core layout and performance | `state/TextEditorState.kt` | 5.7, 7.8 to 7.12 |
 
@@ -273,6 +273,11 @@ editor does rather than what it should do.
   rectangles from layout. Stable across machines, unlike pixels.
   Started in lane C: `utils/DrawRecorder.kt` runs a draw function on a canvas
   that records each rectangle and line with its colour.
+- [ ] **0.9 A bundled test font. R.** [Opus] [Lane L] The e2e harness lays
+  text out in the machine's default sans-serif font, so any test that depends on
+  wrapping or text width can pass locally and fail on the CI runner. Two did
+  (`TouchGesturesTest`, `LineDragAutoScrollE2eTest`), reproduced by making DejaVu
+  the only font. Pin a bundled font in `editorUiTest` and `DifferentialHarness`.
 - [ ] **0.6 Golden screenshots.** [Opus] [Lane L] A small set of scenes with a
   bundled font on one CI machine: caret, selection across wrapped and empty
   lines, squiggles, list markers, composing underline.
