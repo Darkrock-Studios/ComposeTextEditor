@@ -153,6 +153,7 @@ private fun RichTextViewBody(
 			val selectionModifier = if (isSelectable) {
 				Modifier
 					.textEditorPointerIcon(state, linkClicks)
+					.textMagnifier(state)
 					.textEditorPointerInputHandling(
 						state = state,
 						onContextMenuRequest = onContextMenuRequest,

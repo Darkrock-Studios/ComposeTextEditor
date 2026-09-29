@@ -298,6 +298,7 @@ fun BasicTextEditor(
 				Canvas(
 					modifier = Modifier
 						.textEditorPointerIcon(state, linkClicks)
+						.textMagnifier(state)
 						.textEditorPointerInputHandling(
 							state = state,
 							onSpanClick = spanClickProxy,

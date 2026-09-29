@@ -427,13 +427,18 @@ private suspend fun AwaitPointerEventScope.dragSelectionHandle(
 ) {
 	val selection = state.selector.selection ?: return
 	val anchor = if (handle.isStart) selection.end else selection.start
+	val grabOffset = grabOffset(state, handle.position, down)
 	state.selector.setDraggingHandle(handle.isStart)
+	state.selector.magnifierCenter = magnifierCenter(state, handle.position, down.position + grabOffset)
 	state.endCompositionIfPointerLeft()
 
-	val autoScroll = DragAutoScroll(state, autoScrollScope, grabOffset(state, handle.position, down)) { target ->
+	val autoScroll = DragAutoScroll(state, autoScrollScope, grabOffset) { target ->
 		// Anything else that changes the selection mid-drag (an edit, an undo) ends it.
 		val current = state.selector.selection
-		if (current == null || (current.start != anchor && current.end != anchor)) return@DragAutoScroll
+		if (current == null || (current.start != anchor && current.end != anchor)) {
+			state.selector.magnifierCenter = null
+			return@DragAutoScroll
+		}
 		val position = state.getOffsetAtPosition(target)
 		// Meeting the fixed end would empty the selection and drop the handles
 		// mid-drag, so the last selection holds until the finger moves past.
@@ -446,11 +451,13 @@ private suspend fun AwaitPointerEventScope.dragSelectionHandle(
 			)
 			state.selector.setDraggingHandle(isStart = position isBefore anchor)
 		}
+		state.selector.magnifierCenter = magnifierCenter(state, position, target)
 	}
 	try {
 		followDrag(autoScroll, down, consumeAll = true)
 	} finally {
 		state.selector.clearDraggingHandle()
+		state.selector.magnifierCenter = null
 	}
 }
 
@@ -465,16 +472,42 @@ private suspend fun AwaitPointerEventScope.dragCaretHandle(
 	autoScrollScope: CoroutineScope,
 ) {
 	val grabOffset = grabOffset(state, state.cursorPosition, down)
+	state.selector.magnifierCenter = magnifierCenter(state, state.cursorPosition, down.position + grabOffset)
 	val autoScroll = DragAutoScroll(state, autoScrollScope, grabOffset) { target ->
-		if (!state.selector.isCaretHandleVisible) return@DragAutoScroll
-		state.selector.dragCaretHandleTo(state.getOffsetAtPosition(target))
+		if (!state.selector.isCaretHandleVisible) {
+			state.selector.magnifierCenter = null
+			return@DragAutoScroll
+		}
+		val position = state.getOffsetAtPosition(target)
+		state.selector.dragCaretHandleTo(position)
+		state.selector.magnifierCenter = magnifierCenter(state, position, target)
 		state.endCompositionIfPointerLeft()
 	}
 	try {
 		followDrag(autoScroll, down, consumeAll = true)
 	} finally {
 		state.selector.releaseCaretHandle()
+		state.selector.magnifierCenter = null
 	}
+}
+
+/**
+ * The magnifier's point for a handle dragged to [position]: on the middle of its row,
+ * and level with the dragged point [target] so it glides rather than jumping a character
+ * at a time, but never beyond the row's text, as Android's own text magnifier.
+ */
+private fun magnifierCenter(state: TextEditorState, position: CharLineOffset, target: Offset): Offset {
+	val row = state.getPositionForOffset(position)
+	val wrap = state.lineOffsets.lastOrNull { it.line == position.line && position.char >= it.wrapStartsAtIndex }
+	val x = if (wrap == null) {
+		row.position.x
+	} else {
+		val layout = wrap.textLayoutResult.multiParagraph
+		val left = wrap.offset.x + layout.getLineLeft(wrap.virtualLineIndex)
+		val right = wrap.offset.x + layout.getLineRight(wrap.virtualLineIndex)
+		target.x.coerceIn(minOf(left, right), maxOf(left, right))
+	}
+	return Offset(x, row.position.y + row.height / 2f)
 }
 
 /** From the finger at [down] to the middle of [position]'s row: what a handle drag moves. */

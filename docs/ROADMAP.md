@@ -165,7 +165,7 @@ review.
 | Lane | Area | Main files | Items |
 | --- | --- | --- | --- |
 | A | Caret motion | `state/TextEditorCursorState.kt`, `state/TextEditorStateCursorExt.kt`, `state/WordSegmentationUtils.kt`, `input/TextEditorKeyCommandHandler.kt` | 1.1 to 1.7, 1.19, 2.3, 2.6, 7.5 |
-| B | Pointer and touch | `textEditorPointerInputHandling.kt`, `state/TextEditorSelectionManager.kt`, `DrawSelectionHandles.kt` | 1.9, 1.12 to 1.16, 1.21, 1.22, 3.1, 3.2, 3.4 to 3.8, 3.13, 4.23 |
+| B | Pointer and touch | `textEditorPointerInputHandling.kt`, `state/TextEditorSelectionManager.kt`, `DrawSelectionHandles.kt` | 1.9, 1.12 to 1.16, 1.21, 1.22, 3.1, 3.2, 3.4 to 3.8, 3.13, 3.15, 4.23 |
 | C | Drawing and geometry | `Draw*.kt`, `cursor/`, `scrollbar/`, `state/TextEditorScrollState.kt`, hit testing | 1.8, 1.10, 1.11, 1.17, 1.18, 3.3, 3.12, 4.14, 7.6, 7.7 |
 | D | Bindings, actions, menu | `input/KeyBindings.kt`, `input/EditorCommand.kt`, `input/BuiltinEditorActions.kt`, `contextmenu/` | 2.1, 2.2, 2.4, 2.5, 2.7 to 2.11, 4.8, 5.8 |
 | E | Input sessions on desktop, iOS, web | `desktopMain`, `iosMain`, `wasmJsMain` under `input/` | 4.2 to 4.7, 4.10 to 4.12, 4.19, 4.21, 4.22 |
@@ -528,7 +528,13 @@ fixes what users feel every minute.
   selected, focus leaves, or after 4 s idle, as Android's insertion handle
   does. Its hit area is the drawn handle and a small margin, not the 80 px
   of the selection handles, because it hangs over the lines below the caret.
-- [ ] **3.6 Magnifier. C.** [Opus] [Lane B] Absent.
+- [x] **3.6 Magnifier. C.** [Opus] [Lane B] Absent. Compose Multiplatform
+  1.12.1 has `Modifier.magnifier` only in androidMain (it is the androidx
+  one, a no-op below API 28); commonMain and skiko have only foundation's
+  internal text-field magnifiers. The editor now shows it on Android while a
+  selection or caret handle is dragged, centred on the dragged end's row and
+  level with the finger. `textMagnifier` is an `expect` whose skiko `actual`
+  (desktop, iOS, web) adds nothing; see 3.15 and the Mac queue.
 - [ ] **3.7 Gestures. C.** [Fable] [Lane B] No double-tap word select, no
   long-press then drag. The long-press timeout is a hard-coded 500 ms.
 - [ ] **3.8 Reaching Paste by touch. C.** [Fable] [Lane B] The menu opens only
@@ -555,6 +561,13 @@ fixes what users feel every minute.
   long-press job with a second finger.
 - [ ] **3.14 Italics invisible on Android. U.** [Fable] [Lane F] Saved and
   exported correctly but not drawn (hammer-editor#956). Not reproduced.
+- [ ] **3.15 Magnifier on iOS and mobile web. C.** [Fable] [Lane B]
+  [Mac work] Compose has no magnifier outside Android (3.6). iOS text views
+  show a loupe while the caret or a handle is dragged; matching it means
+  drawing our own: an enlarged copy of the canvas around
+  `TextEditorSelectionManager.magnifierCenter` in a popup above the finger,
+  fed from the `skikoMain` `textMagnifier`. Mobile browsers show none for
+  canvas content. Desktop needs none: a mouse does not hide the text.
 
 ## Phase 4: platform parity (parallel track)
 
@@ -977,3 +990,4 @@ records results and removes entries that passed.
 | 4.2 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64`, then `./gradlew :ComposeTextEditor:iosSimulatorArm64Test`. The iOS file (`iosMain/.../input/TextEditorTextInputService.ios.kt`) now only passes `ImeOptions` into `skikoMain`'s `startSkikoInputSession`; if it does not compile, the fix is in that file or in `skikoMain/.../input/`, never a copy of the desktop code | Both tasks green with no change to the desktop or wasm sources | |
 | 4.2 | Build `sampleAppiOS`, run it in the simulator, and repeat the baseline recording: type a sentence, backspace through it, accept an autocorrect suggestion, and compose Japanese (Settings > General > Keyboard, add Japanese Kana, type "nihongo" and pick a candidate). Compare against "Simulator baseline before 4.2" in the iOS section | Typed characters appear once each and backspace removes one character at a time (4.5); an accepted autocorrect replaces the word rather than appending it (4.5, hammer-editor#791); kana show underlined while composing and the chosen candidate replaces them once (4.5); the keyboard opens with a shifted first letter (4.7). If the baseline already passed any of these, note it as a regression check only | |
 | 2.6 | In Safari and Chrome on macOS, open the wasm demo and press Ctrl+A, E, F, B, N, P, D, H and K in a paragraph. The page's hidden text area has the same Cocoa Emacs bindings, so a chord could act twice | Each chord moves or deletes once, as in the desktop sample app | |
+| 3.6 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64`. 3.6 added `internal expect fun Modifier.textMagnifier` (commonMain `TextMagnifier.kt`) with its `actual` in `skikoMain` (`TextMagnifier.skiko.kt`, a no-op), not in `iosMain` | Compiles with no `iosMain` change | |

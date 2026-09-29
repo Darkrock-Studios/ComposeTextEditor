@@ -299,7 +299,11 @@ was lengthened specifically so it can be scrolled and flung.
 9. Tap in the text. **Expect:** a single handle appears under the caret. Drag it: the
    caret follows. Leave it for 4 seconds, or type, or press an arrow key on a
    hardware keyboard. **Expect:** it disappears. Mouse clicks never show it.
-10. In a long document, drag the end handle below the editor and hold still.
+10. On Android 9 (API 28) or later, drag a selection handle and the caret handle.
+    **Expect:** the system magnifier appears above the finger, showing the row being
+    dragged, follows the finger sideways, and goes when the finger lifts (3.6). Below
+    API 28 there is none. None on desktop, iOS, or web.
+11. In a long document, drag the end handle below the editor and hold still.
    **Expect:** it keeps scrolling and the selection keeps growing (3.4); dragging
    back inside stops it. Repeat with the start handle above the editor.
 

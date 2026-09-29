@@ -3,6 +3,7 @@ package com.darkrockstudios.texteditor.state
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.text.AnnotatedString
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
@@ -56,6 +57,12 @@ class TextEditorSelectionManager(
 
 	// Set by startSelection for the selection that follows it.
 	private var nextSelectionIsTouch = false
+
+	/**
+	 * The point, in canvas coordinates, the magnifier enlarges while a touch handle is
+	 * dragged: the dragged end's row centre, level with the finger. Null when no handle is.
+	 */
+	internal var magnifierCenter: Offset? by mutableStateOf(null)
 
 	// Where the touch caret handle stands, and the document it was put in.
 	private class CaretHandleAnchor(val position: CharLineOffset, val content: DocumentSnapshot)
