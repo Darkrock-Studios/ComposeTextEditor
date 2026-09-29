@@ -45,9 +45,12 @@ internal fun TextEditorState.applyImeEditCommand(command: EditCommand) {
  * a single char so an edit behavior can claim it, exactly as the hardware key does.
  */
 internal fun TextEditorState.imeBackspace() {
+	// A range that outlived its document is no composition; committing over it
+	// would replace nothing and swallow the keystroke.
+	val composing = composingRange?.takeIf { isWithinDocument(it) }
 	when {
 		// Committing nothing is one replace of the composition with nothing.
-		composingRange != null -> imeCommitText("", newCursorPosition = 0)
+		composing != null -> imeCommitText("", newCursorPosition = 0)
 		selector.hasSelection() -> selector.deleteSelection()
 		else -> imeDeleteSurroundingTextInCodePoints(1, 0)
 	}

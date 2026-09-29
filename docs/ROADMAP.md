@@ -494,10 +494,22 @@ Constraints that shape the order:
   three platform files pass in `ImeOptions` only; the desktop suite plus
   `input/SkikoInputMethodRequestTest` cover it and wasm compiles. The Mac part
   is in the queue; the checkbox waits on it.
-- [ ] **4.3 Start a real input session on web.** [Fable] [Lane E] Replace the
+- [x] **4.3 Start a real input session on web.** [Fable] [Lane E] Replace the
   suspend-forever stub with `startInputMethod` using the shared request, then
   settle which path owns plain typing so keys are not inserted twice (today
   typed characters arrive as `keydown`; see `isCharacterInputCandidate`).
+  Done: `wasmJsMain` starts the shared session. Ownership follows DOM focus,
+  and the browser gives a keystroke to one element: with Compose's hidden
+  textarea focused, typing is `commitText` and the textarea forwards only
+  character-less keys; with the canvas focused, the `keydown` carries the
+  character and the predicate inserts it. Verified in Chromium against
+  `./gradlew :sampleApp:wasmJsBrowserDevelopmentRun` (localhost:8080): typing,
+  Backspace (one deletion per press), Enter, Home, arrows, insertion at the
+  caret, click then type, and composition driven by synthetic
+  `insertCompositionText` and `compositionend` events on the textarea (k
+  becomes か, committed once). The textarea lives in the viewport's shadow
+  root; find it with `host.shadowRoot.querySelector('.compose-backing-field')`.
+  A real IME, Firefox and Safari, and the mobile soft keyboard are 4.4.
 - [ ] **4.4 Verify on devices.** [Human] [Lane E] [Mac work] iOS simulator and
   a physical iPhone; desktop and mobile browsers. Record what works in the
   manual QA plan.
@@ -524,6 +536,9 @@ Constraints that shape the order:
   stays null because the editor lays out its own lines, so the spacebar
   trackpad's floating caret needs an editor-side equivalent of
   `getOffsetForPosition` before it can work. That is the remaining work here.
+  Also: the rectangles read the snapshot-backed viewport size, so a resize
+  re-runs iOS's geometry observer, but a move without a resize does not,
+  since `canvasLayoutCoordinates` is a plain field.
 - [ ] **4.7 Keyboard options. C.** [Opus] [Lane E] [Mac work] Capitalisation is
   not set. Set to sentences with autocorrect on in 4.2; confirm the keyboard
   shows it in the Mac queue pass.
@@ -569,9 +584,13 @@ Also seen:
 
 - [ ] **4.11 Soft keyboard on mobile web. C.** [Opus] [Lane E] Compose creates
   its backing DOM input inside `startInputMethod`, which is never called, so no
-  keyboard appears. Resolved by 4.3.
+  keyboard appears. Resolved by 4.3: the textarea now exists and is focused
+  on a tap, which is what raises the keyboard. Tick after a pass on Android
+  Chrome and iOS Safari (4.4); a headless browser cannot show one.
 - [ ] **4.12 Composition on desktop web. C.** [Opus] [Lane E] Dead keys and CJK
-  input. Also resolved by 4.3.
+  input. Also resolved by 4.3, and the event shape a browser IME sends is
+  verified with synthetic events. Tick after a pass with a real IME (fcitx or
+  ibus on Linux, the macOS Japanese keyboard) in Chrome, Firefox, and Safari.
 - [ ] **4.13 Clipboard. C.** [Opus] [Lane H] Plain text only through
   `navigator.clipboard`, failures swallowed silently (shared with 6.7).
 - [ ] **4.14 Scrollbar. C.** [Opus] [Lane C] The implementation is commented
@@ -780,10 +799,13 @@ Shaping is one line per keystroke. These still scale with document length:
 - [ ] `getOffsetAtCharacter` returns a negative char for negative input.
 - [ ] The document content is not snapshot state, so the skiko input session
   (4.2) collects `editOperations` and `documentGeneration` to bump a
-  snapshot-backed revision its text reads fold in. A revision advanced from
-  `TextEditorState.onCommit` would give every snapshot observer the same
-  signal with no collectors; do it when `state/TextEditorState.kt` is next
-  open (lane N).
+  snapshot-backed revision its text reads fold in. The bump lands one
+  dispatch after the caret move, so a keystroke evaluates the platform's
+  `snapshotFlow` twice, and each evaluation builds the whole text. A
+  revision advanced from `TextEditorState.onCommit` would land in the same
+  apply batch as the caret, give every snapshot observer the same signal,
+  and need no collectors; do it when `state/TextEditorState.kt` is next open
+  (lane N).
 
 ## User reports mapped to this roadmap
 

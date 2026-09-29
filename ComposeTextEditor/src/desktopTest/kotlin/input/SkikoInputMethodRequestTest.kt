@@ -26,6 +26,7 @@ import androidx.compose.ui.text.input.SetSelectionCommand
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.IntSize
 import com.darkrockstudios.texteditor.CharLineOffset
+import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.cursor.CursorMetrics
 import com.darkrockstudios.texteditor.input.SkikoTextEditorInputMethodRequest
 import com.darkrockstudios.texteditor.input.imeSetComposingRegion
@@ -187,6 +188,18 @@ class SkikoInputMethodRequestTest {
 		assertEquals("ab", text())
 	}
 
+	/** A composing range that outlived its document must not swallow the keystroke. */
+	@Test
+	fun `backspace with a stale composing range still deletes`() {
+		typeViaCommit("abc")
+		state.composingRange = TextEditorRange(CharLineOffset(4, 0), CharLineOffset(4, 2))
+
+		request.onEditCommand(listOf(BackspaceCommand()))
+
+		assertEquals("ab", text())
+		assertNull(state.composingRange)
+	}
+
 	@Test
 	fun `backspace with a caret deletes a whole surrogate pair`() {
 		typeViaCommit("ab😀")
@@ -199,7 +212,7 @@ class SkikoInputMethodRequestTest {
 	/** The web backspace must reach edit behaviors the same way the hardware key does. */
 	@Test
 	fun `backspace at the start of a bullet demotes it`() = runTest {
-		val state = TextEditorState(scope = this, measurer = mockk(relaxed = true), initialText = null as AnnotatedString?)
+		val state = TextEditorState(scope = this, measurer = mockk(relaxed = true))
 		MarkdownExtension(state, MarkdownConfiguration.DEFAULT).importMarkdown("plain\n- item")
 		val request = SkikoTextEditorInputMethodRequest(state, ImeOptions.Default)
 		state.cursor.updatePosition(CharLineOffset(1, 0))

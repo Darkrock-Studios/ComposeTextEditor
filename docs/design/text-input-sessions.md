@@ -43,13 +43,11 @@ What `startInput` actually does is the per-platform fork:
 
 - **Android**: starts an input method with a request that builds a real
   `InputConnection`; this is what opens the soft keyboard.
-- **Desktop and iOS**: start an input method with the one skiko
-  `PlatformTextInputMethodRequest` shared by all three skiko platforms
+- **Desktop, iOS, and WASM**: start an input method with the one skiko
+  `PlatformTextInputMethodRequest` shared by the three
   (`SkikoTextEditorInputMethodRequest` in `skikoMain`), which adapts the
   editor state and routes every edit into `ImeEditLogic`. Each platform file
   contributes only its `ImeOptions`.
-- **WASM**: suspends forever. There is no IME path in the browser; typed
-  characters arrive as `keydown`-derived key events.
 
 ## The contract has two directions
 
@@ -289,10 +287,54 @@ re-running at the edit sees the previous draw's rectangle (roadmap 4.19).
 
 ## WASM
 
-No input-method session exists: `startInput` suspends until cancelled, and
-all typing arrives as browser `keydown`-derived key events (the predicate
-accepts `KeyDown`; the browser never emits an `Unknown`-type event).
-Composed input (IME typing in a browser) is a known gap.
+Web starts the same shared request. Compose's web session (`WebTextInputSession`
+over `WebTextInputService`) creates a hidden `<textarea>` next to the canvas,
+focuses it (which is what raises the soft keyboard on a phone), mirrors the
+request's `value()` into it after every edit, and positions it at the caret
+rectangle so the browser's IME candidate window and the phone's keyboard land
+near the text. It is the older half of the skiko API: edits come back as an
+`EditCommand` list through `onEditCommand`, which the shared request
+translates into `ImeEditLogic` calls.
+
+What the browser delivers, and when (`DomInputStrategy` and
+`NativeInputEventsProcessor` in Compose's webMain):
+
+- A typed character is a `beforeinput` of type `insertText`, turned into a
+  `CommitTextCommand`. Dead keys and CJK input are `insertCompositionText`
+  (`SetComposingTextCommand`) followed by `compositionend`
+  (`CommitTextCommand`). Mobile autocorrect is `insertReplacementText` or a
+  `deleteContentBackward` over a range plus an insert, delivered as a
+  `SetSelectionCommand` and a commit, which is why the shared request applies
+  a batch in order.
+- `keydown` on the textarea is forwarded to Compose's key dispatch only when
+  the key carries no character (`isTypedEvent` is false: arrows, Backspace,
+  Enter, Tab, Ctrl and Meta chords). Those reach the key handler like any
+  other key event. A typed character's `keydown` is dropped by the textarea,
+  never forwarded.
+- Events are batched and replayed on the next animation frame, in timestamp
+  order, so a Backspace `keydown` that Compose consumed suppresses the
+  textarea's own `deleteContentBackward`.
+
+Which path owns plain typing therefore follows DOM focus, and the browser
+gives a keystroke to one element only. With the textarea focused, typing is
+`commitText` and the character-input predicate never sees it. After a mouse
+click on the canvas, DOM focus sits on the canvas until the input is
+refocused (the tap's `requestInput` and the session's next state mirror both
+do that), and a keystroke in that window arrives as a canvas `keydown`
+carrying the character, which the predicate (`KeyDown`) accepts. The same
+keystroke cannot reach both elements, but two shapes the textarea forwards
+would insert on their own and the predicate refuses them: a named key
+(F2, Insert, a dead key), whose Compose event carries the key code as its
+code point and would type a letter, and a Ctrl chord, because Windows
+browsers report AltGr as Ctrl+Alt and the textarea commits that character
+itself. Ctrl is never a typing modifier in a browser, so refusing it loses
+nothing.
+
+`ImeCursorSync` stays a no-op on web; the session's `snapshotFlow` over
+`value()` is the state-out direction, fed by the shared revision described
+above. Composition on desktop browsers and the soft keyboard on mobile
+browsers follow from the session existing; both need a manual pass in real
+browsers (roadmap 4.4, 4.15).
 
 ## Rules for new code
 

@@ -115,8 +115,13 @@ internal class SkikoTextEditorInputMethodRequest(
 		SkikoTextEditingScope(editorState).block()
 	}
 
-	private fun attachedCoordinates(): LayoutCoordinates? =
-		editorState.canvasLayoutCoordinates?.takeIf { it.isAttached }
+	private fun attachedCoordinates(): LayoutCoordinates? {
+		// The coordinates are a plain field. The viewport size is snapshot state that
+		// changes with every resize (a soft keyboard appearing, a rotation), so reading
+		// it lets an observer of the rectangles follow those relayouts.
+		editorState.viewportSize
+		return editorState.canvasLayoutCoordinates?.takeIf { it.isAttached }
+	}
 
 	private fun editorBoundsInRoot(): Rect? {
 		val coords = attachedCoordinates() ?: return null

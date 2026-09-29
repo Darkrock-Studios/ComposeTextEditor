@@ -164,8 +164,9 @@ translation paths:
   conventions ship as two `KeyBindings` values; hosts can substitute their
   own and register actions for their own chords to bind.
 - **Typed characters.** Printable typing that arrives as raw key events
-  (desktop `KEY_TYPED`, hardware keyboards on Android, browser keydown on
-  wasm) inserts through the same handler, gated by a per-platform predicate
+  (desktop `KEY_TYPED`, hardware keyboards on Android, a browser keydown on
+  wasm while the canvas rather than the input session's textarea holds DOM
+  focus) inserts through the same handler, gated by a per-platform predicate
   for "this event is a typed character", because every platform signals that
   differently and guessing wrong either drops or double-inserts keystrokes.
 - **The IME.** Everything that *composes* text (soft keyboards, autocorrect,
@@ -192,8 +193,7 @@ composing-region and cursor semantics are byte-for-byte identical on every
 platform; the per-platform adapters are pure translation. There are two of
 them: the Android `InputConnection`, and one skiko
 `PlatformTextInputMethodRequest` in the `skikoMain` source set shared by
-desktop, iOS, and web, each contributing only its `ImeOptions` (desktop and
-iOS start it; web is roadmap 4.3). State flows out,
+desktop, iOS, and web, each contributing only its `ImeOptions`. State flows out,
 because an IME keeps its own mirror of the text around the cursor and will
 issue commands against a stale buffer unless it is told about every change.
 On Android every report goes through one flush that compares the finished state

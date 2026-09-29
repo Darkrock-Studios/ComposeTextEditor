@@ -9,11 +9,10 @@ import com.darkrockstudios.texteditor.state.TextEditorState
  * platform input-method `TextEditorState` (a `CharSequence` plus
  * selection/composition).
  *
- * The adapter *class* that implements `androidx.compose.ui.text.input.TextEditorState`
- * must live per-platform (that interface is skiko-only — it isn't in the common
- * Compose API surface), but the mapping logic below is shared by the desktop and
- * iOS adapters so selection/composition/text access stays identical and is
- * defined once.
+ * The adapter class that implements `androidx.compose.ui.text.input.TextEditorState`
+ * lives in `skikoMain` (that interface is skiko-only, not in the common Compose API
+ * surface); the mapping below is common so the Android connection reads selection,
+ * composition, and text the same way.
  */
 
 /**
