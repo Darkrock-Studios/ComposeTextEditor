@@ -703,7 +703,7 @@ Shaping is one line per keystroke. These still scale with document length:
 - [ ] **7.21** [Opus] [Lane K] No ignore list or language API in
   `EditorSpellChecker`; add to dictionary exists only as a host menu extension
   (hammer-editor#861).
-- [ ] **7.22** [Opus] [Lane K] Hard-coded English strings ("Loading...", "No
+- [x] **7.22** [Opus] [Lane K] Hard-coded English strings ("Loading...", "No
   suggestions").
 
 ### Host API

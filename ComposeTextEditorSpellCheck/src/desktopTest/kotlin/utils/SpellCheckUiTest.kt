@@ -23,6 +23,7 @@ import com.darkrockstudios.texteditor.richstyle.SpellCheckStyle
 import com.darkrockstudios.texteditor.spellcheck.SpellCheckItem
 import com.darkrockstudios.texteditor.spellcheck.SpellCheckMode
 import com.darkrockstudios.texteditor.spellcheck.SpellCheckState
+import com.darkrockstudios.texteditor.spellcheck.SpellCheckStrings
 import com.darkrockstudios.texteditor.spellcheck.SpellCheckingTextEditor
 import com.darkrockstudios.texteditor.spellcheck.api.Correction
 import com.darkrockstudios.texteditor.spellcheck.api.EditorSpellChecker
@@ -51,6 +52,7 @@ fun spellCheckUiTest(
 	height: Dp = 300.dp,
 	spellCheckMenuItems: (SpellCheckItem) -> List<ContextMenuItem> = { emptyList() },
 	diagnosticsChecker: TextDiagnosticsChecker? = null,
+	spellCheckStrings: SpellCheckStrings = SpellCheckStrings.Default,
 	block: SpellCheckUiTestScope.() -> Unit,
 ) = runSkikoComposeUiTest {
 	lateinit var state: SpellCheckState
@@ -73,6 +75,7 @@ fun spellCheckUiTest(
 			enabled = enabled,
 			autoFocus = true,
 			spellCheckMenuItems = spellCheckMenuItems,
+			spellCheckStrings = spellCheckStrings,
 			diagnostics = diagnostics,
 		)
 	}

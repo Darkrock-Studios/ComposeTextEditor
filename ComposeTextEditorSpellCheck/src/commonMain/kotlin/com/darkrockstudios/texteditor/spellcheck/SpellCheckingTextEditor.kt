@@ -57,6 +57,7 @@ private val DefaultContentPadding = PaddingValues(start = 8.dp)
  * @param autoFocus Whether the editor requests focus on first composition.
  * @param style The [TextEditorStyle] controlling appearance.
  * @param contextMenuStrings Localized strings for the built-in context menu.
+ * @param spellCheckStrings Localized strings for the spell check menu.
  * @param spellCheckMenuItems Host items for the context menu opened on a flagged span, rendered
  *   as their own group after the suggestions (for example "Add to dictionary"). For a misspelled
  *   word they appear together with the suggestions once those have loaded. Not consulted while
@@ -77,6 +78,7 @@ fun SpellCheckingTextEditor(
 	autoFocus: Boolean = false,
 	style: TextEditorStyle = rememberTextEditorStyle(),
 	contextMenuStrings: ContextMenuStrings = ContextMenuStrings.Default,
+	spellCheckStrings: SpellCheckStrings = SpellCheckStrings.Default,
 	spellCheckMenuItems: (SpellCheckItem) -> List<ContextMenuItem> = { emptyList() },
 	diagnostics: TextDiagnosticsState? = null,
 	onRichSpanClick: RichSpanClickListener? = null,
@@ -160,7 +162,7 @@ fun SpellCheckingTextEditor(
 		} else {
 			listOf(
 				ContextMenuItem(
-					label = "No suggestions",
+					label = spellCheckStrings.noSuggestions,
 					enabled = false,
 					onClick = { }
 				)
@@ -181,7 +183,7 @@ fun SpellCheckingTextEditor(
 		val hostItems = spellCheckMenuItems(spellCheckItem)
 		when (spellCheckItem) {
 			is SpellCheckItem.MisspelledWord -> {
-				val placeholder = listOf(ContextMenuItem(label = "Loading...", enabled = false, onClick = {}))
+				val placeholder = listOf(ContextMenuItem(label = spellCheckStrings.loading, enabled = false, onClick = {}))
 				contextMenuState.showMenu(menuPos, placeholder)
 				// Host items arrive with the suggestions: shown under the placeholder, they
 				// would move under the pointer when it is replaced.
