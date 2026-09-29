@@ -20,6 +20,7 @@ import com.darkrockstudios.texteditor.richstyle.RichSpan
 import com.darkrockstudios.texteditor.state.SelectionGranularity
 import com.darkrockstudios.texteditor.state.SpanClickType
 import com.darkrockstudios.texteditor.state.TextEditorState
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -135,6 +136,8 @@ private fun Modifier.handleMouseInput(
 ): Modifier = pointerInput(state, links) {
 	val clickCounter = ClickCounter(viewConfiguration)
 	val touchSlop = viewConfiguration.touchSlop
+	coroutineScope {
+	val autoScrollScope = this
 	awaitEachGesture {
 		// Not awaitFirstDown: on skiko it ignores every mouse button but the primary one.
 		val press = awaitPointerEvent()
@@ -156,7 +159,8 @@ private fun Modifier.handleMouseInput(
 					granularity = SelectionGranularity.forClickCount(clicks),
 					isShiftPressed = isShiftPressed,
 				)
-				val release = followDrag(selection, down, touchSlop) ?: return@awaitEachGesture
+				val autoScroll = DragAutoScroll(state, autoScrollScope, selection::selectTo)
+				val release = followDrag(autoScroll, down, touchSlop) ?: return@awaitEachGesture
 				// A drag inside the slop that still selected something is a drag too.
 				if (pressed == null || state.selector.hasSelection()) return@awaitEachGesture
 				val released = ClickTarget.at(state, release.position)
@@ -186,6 +190,7 @@ private fun Modifier.handleMouseInput(
 
 			else -> clickCounter.reset()
 		}
+	}
 	}
 }
 
@@ -227,24 +232,28 @@ private class MouseSelection(
 }
 
 /**
- * Extends [selection] as the pointer drags, until it is released. Returns the release
+ * Feeds the drag to [autoScroll] until the pointer is released. Returns the release
  * when the pointer came up without having moved past [touchSlop], null otherwise.
  */
 private suspend fun AwaitPointerEventScope.followDrag(
-	selection: MouseSelection,
+	autoScroll: DragAutoScroll,
 	down: PointerInputChange,
 	touchSlop: Float,
 ): PointerInputChange? {
 	var dragged = false
-	while (true) {
-		val event = awaitPointerEvent()
-		val change = event.changes.firstOrNull { it.id == down.id } ?: return null
-		if (!change.pressed) return if (dragged) null else change
-		if (change.positionChanged()) {
-			dragged = dragged || (change.position - down.position).getDistance() > touchSlop
-			selection.selectTo(change.position)
-			change.consume()
+	try {
+		while (true) {
+			val event = awaitPointerEvent()
+			val change = event.changes.firstOrNull { it.id == down.id } ?: return null
+			if (!change.pressed) return if (dragged) null else change
+			if (change.positionChanged()) {
+				dragged = dragged || (change.position - down.position).getDistance() > touchSlop
+				autoScroll.update(change.position)
+				change.consume()
+			}
 		}
+	} finally {
+		autoScroll.stop()
 	}
 }
 

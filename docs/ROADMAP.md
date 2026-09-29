@@ -365,8 +365,12 @@ fixes what users feel every minute.
   `RichTextView` show the I-beam; a hand shows over a link a click would open
   (1.15), so in an editor only while Ctrl or Cmd is held. The icon changes on
   the next mouse move, not on the key press itself.
-- [ ] **1.14 Drag auto-scroll. C.** [Opus] [Lane B] Scrolls only on pointer
+- [x] **1.14 Drag auto-scroll. C.** [Opus] [Lane B] Scrolls only on pointer
   move events. Holding still outside the viewport stops the scroll.
+  `DragAutoScroll` now scrolls every frame while the pointer is above or below
+  the viewport, at 10 px per second for each pixel outside, and extends the
+  selection to the edge row as the text moves. It never jumps to the row
+  under the pointer any more.
 - [x] **1.15 Links. C.** [Opus] [Lane B] Span clicks are reported on press with
   no modifier state, so a host that opens links on click also fires when the
   user places the caret or starts a drag. Report on release, pass modifiers,

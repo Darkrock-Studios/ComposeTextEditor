@@ -256,6 +256,9 @@ the platform's double-tap timeout (300 ms on desktop), not the OS mouse setting.
    drag that starts on the link selects and opens nothing.
 7. RichTextView demo: click the link. **Expect:** it opens, with a hand shown over
    it. Drag a selection across it. **Expect:** nothing opens.
+8. In a long document, drag a selection below the editor and hold the mouse still.
+   **Expect:** the editor keeps scrolling and the selection keeps growing; farther
+   below scrolls faster; moving back inside stops it. Repeat above the editor.
 
 ## 4. Touch, focus and the soft keyboard (Android)
 

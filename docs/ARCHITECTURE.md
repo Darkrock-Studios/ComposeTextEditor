@@ -209,7 +209,8 @@ detected from pointer buttons rather than pointer type because Android
 reports external mice as `Touch`. Mouse-like input places the caret on press,
 extends with shift-click, and counts presses into double and triple clicks
 (word, then line) by the platform's double-tap timeout and touch slop; a drag
-extends by whatever unit the press selected. Only the primary button places
+extends by whatever unit the press selected, and keeps scrolling while it is
+held above or below the viewport. Only the primary button places
 the caret or selects; the secondary button opens the context menu, keeping a
 selection it lands inside. Finger input places the caret on release,
 long-presses to select a word or open the context menu, and drags selection
