@@ -14,6 +14,9 @@ import kotlin.test.fail
  */
 val OPEN_PARITY_ITEMS: Set<String> = setOf("1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.19", "1.20")
 
+/** Starting text for the Unicode fuzzers: an emoji, a combining mark, and a right-to-left word. */
+const val FUZZ_START_TEXT = "seed line\nsecond line of words\n\uD83D\uDE00 e\u0301 שלום end"
+
 /**
  * Text the fuzzer types: plain words, and every kind of multi-unit grapheme
  * cluster, plus right-to-left and CJK words.

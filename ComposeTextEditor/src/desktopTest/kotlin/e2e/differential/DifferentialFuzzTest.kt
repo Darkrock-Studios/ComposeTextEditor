@@ -2,6 +2,7 @@ package e2e.differential
 
 import androidx.compose.ui.unit.dp
 import utils.EditSnapshot
+import utils.FUZZ_START_TEXT
 import utils.differentialFuzz
 import utils.fuzzSeed
 import kotlin.test.Test
@@ -17,7 +18,7 @@ class DifferentialFuzzTest {
 	private fun fuzz(seed: Long) {
 		differentialFuzz(
 			seed = fuzzSeed(seed),
-			start = EditSnapshot(START_TEXT, caret = 0),
+			start = EditSnapshot(FUZZ_START_TEXT, caret = 0),
 			count = 120,
 			width = 160.dp,
 		)
@@ -46,8 +47,4 @@ class DifferentialFuzzTest {
 
 	@Test
 	fun `differential fuzz seed 1120`() = fuzz(1120)
-
-	private companion object {
-		const val START_TEXT = "seed line\nsecond line of words\n\uD83D\uDE00 e\u0301 שלום end"
-	}
 }

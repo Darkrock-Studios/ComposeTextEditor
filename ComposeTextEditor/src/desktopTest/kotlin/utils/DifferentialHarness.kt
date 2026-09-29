@@ -229,20 +229,7 @@ class DifferentialScope internal constructor(
 	private val focusField: () -> Unit,
 	private val fieldLayout: () -> TextLayoutResult?,
 ) {
-	val editorSnapshot: EditSnapshot
-		get() {
-			val text = editor.getAllText().text
-			val caret = editor.getCharacterIndex(editor.cursorPosition)
-			val selection = editor.selector.selection ?: return EditSnapshot(text, caret)
-			val start = editor.getCharacterIndex(selection.start)
-			val end = editor.getCharacterIndex(selection.end)
-			val anchor = when (caret) {
-				end -> start
-				start -> end
-				else -> fail("the editor's caret $caret is on neither end of its selection $start..$end")
-			}
-			return EditSnapshot(text, anchor, caret)
-		}
+	val editorSnapshot: EditSnapshot get() = editor.editSnapshot()
 
 	val referenceSnapshot: EditSnapshot
 		get() = EditSnapshot(reference.text.toString(), reference.selection.start, reference.selection.end)
@@ -290,20 +277,7 @@ class DifferentialScope internal constructor(
 	}
 
 	/** Sends [stroke] to whichever widget holds focus. */
-	fun send(stroke: Stroke) {
-		when (stroke) {
-			is Stroke.Press -> test.onRoot().performKeyInput {
-				if (stroke.ctrl) keyDown(Key.CtrlLeft)
-				if (stroke.shift) keyDown(Key.ShiftLeft)
-				pressKey(stroke.key)
-				if (stroke.shift) keyUp(Key.ShiftLeft)
-				if (stroke.ctrl) keyUp(Key.CtrlLeft)
-			}
-
-			is Stroke.Type -> test.typeCodePoints(stroke.text)
-		}
-		test.waitForIdle()
-	}
+	fun send(stroke: Stroke) = test.sendStroke(stroke)
 
 	/**
 	 * Asserts both widgets break the current text into the same visual rows, the
@@ -337,6 +311,42 @@ class DifferentialScope internal constructor(
 		return (0 until layout.lineCount).map { layout.getLineStart(it) }
 	}
 }
+
+/** The editor's text, caret, and selection as an [EditSnapshot]. */
+fun TextEditorState.editSnapshot(): EditSnapshot {
+	val text = getAllText().text
+	val caret = getCharacterIndex(cursorPosition)
+	val selection = selector.selection ?: return EditSnapshot(text, caret)
+	val start = getCharacterIndex(selection.start)
+	val end = getCharacterIndex(selection.end)
+	val anchor = when (caret) {
+		end -> start
+		start -> end
+		else -> fail("the editor's caret $caret is on neither end of its selection $start..$end")
+	}
+	return EditSnapshot(text, anchor, caret)
+}
+
+/** Sends [stroke] to whichever widget holds focus. */
+@OptIn(ExperimentalTestApi::class)
+fun SkikoComposeUiTest.sendStroke(stroke: Stroke) {
+	when (stroke) {
+		is Stroke.Press -> onRoot().performKeyInput {
+			if (stroke.ctrl) keyDown(Key.CtrlLeft)
+			if (stroke.shift) keyDown(Key.ShiftLeft)
+			pressKey(stroke.key)
+			if (stroke.shift) keyUp(Key.ShiftLeft)
+			if (stroke.ctrl) keyUp(Key.CtrlLeft)
+		}
+
+		is Stroke.Type -> typeCodePoints(stroke.text)
+	}
+	waitForIdle()
+}
+
+/** Sends [stroke] to the editor. */
+@OptIn(ExperimentalTestApi::class)
+fun EditorUiTestScope.send(stroke: Stroke) = test.sendStroke(stroke)
 
 /**
  * Types [text] one code point at a time as KeyDown, KEY_TYPED, KeyUp. The KEY_TYPED

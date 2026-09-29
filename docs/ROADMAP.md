@@ -235,10 +235,13 @@ editor does rather than what it should do.
   Done in `e2e/differential/DifferentialFuzzTest.kt`. A divergence explained by
   an item in `OPEN_PARITY_ITEMS` (`utils/DifferentialFuzz.kt`) is tolerated;
   delete the item there when it lands.
-- [ ] **0.3 Invariants in the fuzzer.** [Opus] [Lane L] After every op: no lone
+- [x] **0.3 Invariants in the fuzzer.** [Opus] [Lane L] After every op: no lone
   surrogate in the document, the caret never sits inside a grapheme cluster,
   Down moves exactly one visual row, Left then Right returns to the same
-  position.
+  position. Done in `e2e/torture/EditorInvariantFuzzTest.kt`. Each invariant
+  names the items it needs (`utils/EditorInvariants.kt`) and stays off while
+  any is in `OPEN_PARITY_ITEMS`; today only Left then Right is on. Set
+  `FUZZ_INVARIANTS=all` to run every one.
 - [ ] **0.4 Keyboard trace record and replay.** [Fable] [Lane F] A debug
   recorder on the Android `InputConnection` that logs every command and read. A
   user attaches the trace to a bug report; the trace replays in
