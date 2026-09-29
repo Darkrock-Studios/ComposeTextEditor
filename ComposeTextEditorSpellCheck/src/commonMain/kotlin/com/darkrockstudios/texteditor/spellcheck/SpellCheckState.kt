@@ -51,7 +51,9 @@ enum class SpellCheckMode {
  *
  * @property textState The underlying editor state whose content is spell checked.
  * @property spellChecker The [EditorSpellChecker] used to evaluate words and sentences; checks are
- *   no-ops while this is `null`.
+ *   no-ops while this is `null`. A checker serves one language: to change language, assign a
+ *   checker for the new one and call [runFullSpellCheck] ([rememberSpellCheckState] does both
+ *   when handed a new checker). The [ignoredWords] carry over.
  * @param enableSpellChecking Whether spell checking is active initially; exposed via
  *   [spellCheckingEnabled].
  * @property spellCheckMode Whether checking operates per-word or per-sentence; see [SpellCheckMode].
@@ -67,6 +69,13 @@ class SpellCheckState(
 	var spellCheckMode: SpellCheckMode = SpellCheckMode.Word,
 	private val scanContext: CoroutineContext = Dispatchers.Default,
 ) {
+	/** Words the user chose to ignore this session, through [ignoreWord]. */
+	var ignoredWords: Set<String> = emptySet()
+		private set
+
+	/** Words treated as correct this session: [ignoredWords] and words added to a dictionary. */
+	private var acceptedWords: Set<String> = emptySet()
+
 	/** Whether spell checking is currently active. Toggle via [setSpellCheckingEnabled]. */
 	var spellCheckingEnabled: Boolean = enableSpellChecking
 		private set
@@ -157,6 +166,33 @@ class SpellCheckState(
 		textState.replace(correction.range, selectedSuggestion, true)
 	}
 
+	/**
+	 * Stop flagging [word] for the rest of this session, whichever checker is in use, and clear
+	 * its current flags. Matches the flagged text exactly: the word, or a sentence issue's
+	 * [Correction.originalText].
+	 */
+	fun ignoreWord(word: String) {
+		ignoredWords = ignoredWords + word
+		accept(word)
+	}
+
+	/** Treats [word] as correct for the rest of this session and clears its current flags. */
+	internal fun accept(word: String) {
+		acceptedWords = acceptedWords + word
+		val doomed = textState.richSpanManager.getAllRichSpans().filter { span ->
+			when (val style = span.style) {
+				is MisspelledWordStyle -> textState.getStringInRange(span.range) == word
+				is SentenceIssueStyle -> style.correction.originalText == word
+				else -> false
+			}
+		}
+		if (doomed.isNotEmpty()) textState.updateRichSpans(remove = doomed, add = emptyList())
+	}
+
+	private fun isAccepted(segment: WordSegment): Boolean = segment.text in acceptedWords
+
+	private fun isAccepted(correction: Correction): Boolean = correction.originalText in acceptedWords
+
 	private fun clearSpellCheck() {
 		val doomed = textState.richSpanManager.getAllRichSpans()
 			.filter { it.style is SpellCheckStyle }
@@ -216,7 +252,7 @@ class SpellCheckState(
 		// existing spans intact rather than wiping them.
 		fullCheckGeneration = textState.documentGeneration.value
 		val scannedLines = textState.textLines
-		val candidates = textState.wordSegments().filter(::shouldSpellCheck).toList()
+		val candidates = textState.wordSegments().filter(::shouldSpellCheck).filterNot(::isAccepted).toList()
 		val misspelled = withContext(scanContext) {
 			candidates.filterNot { sp.isCorrectWord(it.text) }
 		}
@@ -227,7 +263,8 @@ class SpellCheckState(
 
 		val diff = LineDiff(scannedLines, textState.textLines)
 		installFullCheck(
-			misspelled.mapNotNull { segment ->
+			// An ignore can land while the lookups run.
+			misspelled.filterNot(::isAccepted).mapNotNull { segment ->
 				diff.move(segment.range)?.let { RichSpan(it, MisspelledWordStyle) }
 			},
 		)
@@ -256,7 +293,7 @@ class SpellCheckState(
 
 		val diff = LineDiff(scannedLines, textState.textLines)
 		installFullCheck(
-			corrections.mapNotNull { correction ->
+			corrections.filterNot(::isAccepted).mapNotNull { correction ->
 				diff.move(correction.range)?.let { RichSpan(it, SentenceIssueStyle(correction)) }
 			},
 		)
@@ -288,7 +325,7 @@ class SpellCheckState(
 			range = range,
 			computedAgainst = computedAgainst,
 			scan = { region ->
-				val candidates = textState.wordSegmentsInRange(region).filter(::shouldSpellCheck)
+				val candidates = textState.wordSegmentsInRange(region).filter(::shouldSpellCheck).filterNot(::isAccepted)
 				withContext(scanContext) { candidates.filterNot { sp.isCorrectWord(it.text) } }
 			},
 			move = { segment, diff -> diff.move(segment.range)?.let { segment.copy(range = it) } },
@@ -299,7 +336,7 @@ class SpellCheckState(
 				.filter { it.style is SpellCheckStyle }
 			textState.updateRichSpans(
 				remove = doomed,
-				add = misspelled.map { RichSpan(it.range, MisspelledWordStyle) },
+				add = misspelled.filterNot(::isAccepted).map { RichSpan(it.range, MisspelledWordStyle) },
 			)
 		}
 	}
@@ -329,7 +366,7 @@ class SpellCheckState(
 				.filter { it.style is SpellCheckStyle }
 			textState.updateRichSpans(
 				remove = doomed,
-				add = corrections.map { RichSpan(it.range, SentenceIssueStyle(it)) },
+				add = corrections.filterNot(::isAccepted).map { RichSpan(it.range, SentenceIssueStyle(it)) },
 			)
 		}
 	}
@@ -394,7 +431,7 @@ class SpellCheckState(
 
 			// Resolve the async lookup first; only mutate spans afterward so a
 			// cancellation can't leave the word's span removed-but-not-restored.
-			val isSpelledCorrectly = sp.isCorrectWord(segment.text)
+			val isSpelledCorrectly = isAccepted(segment) || sp.isCorrectWord(segment.text)
 
 			if (spellCheckingEnabled) {
 				val diff = LineDiff(computedAgainst, textState.textLines)
@@ -402,7 +439,7 @@ class SpellCheckState(
 				if (range != null) {
 					val doomed = textState.getRichSpansInRange(range)
 						.filter { it.style is SpellCheckStyle }
-					val add = if (isSpelledCorrectly) emptyList() else {
+					val add = if (isSpelledCorrectly || isAccepted(segment)) emptyList() else {
 						listOf(RichSpan(range, MisspelledWordStyle))
 					}
 					textState.updateRichSpans(remove = doomed, add = add)

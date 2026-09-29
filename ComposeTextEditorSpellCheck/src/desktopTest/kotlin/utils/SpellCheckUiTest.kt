@@ -53,6 +53,7 @@ fun spellCheckUiTest(
 	spellCheckMenuItems: (SpellCheckItem) -> List<ContextMenuItem> = { emptyList() },
 	diagnosticsChecker: TextDiagnosticsChecker? = null,
 	spellCheckStrings: SpellCheckStrings = SpellCheckStrings.Default,
+	onAddToDictionary: ((String) -> Unit)? = null,
 	block: SpellCheckUiTestScope.() -> Unit,
 ) = runSkikoComposeUiTest {
 	lateinit var state: SpellCheckState
@@ -76,6 +77,7 @@ fun spellCheckUiTest(
 			autoFocus = true,
 			spellCheckMenuItems = spellCheckMenuItems,
 			spellCheckStrings = spellCheckStrings,
+			onAddToDictionary = onAddToDictionary,
 			diagnostics = diagnostics,
 		)
 	}

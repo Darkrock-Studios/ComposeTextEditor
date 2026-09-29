@@ -12,7 +12,12 @@ import kotlin.test.assertTrue
 
 class SpellCheckStringsE2eTest {
 
-	private val german = SpellCheckStrings(loading = "Wird geladen", noSuggestions = "Keine Vorschläge")
+	private val german = SpellCheckStrings(
+		loading = "Wird geladen",
+		noSuggestions = "Keine Vorschläge",
+		ignore = "Ignorieren",
+		addToDictionary = "Zum Wörterbuch hinzufügen",
+	)
 
 	private class GatedSuggestions(private val delegate: EditorSpellChecker) : EditorSpellChecker by delegate {
 		private val gate = CompletableDeferred<Unit>()
@@ -39,6 +44,7 @@ class SpellCheckStringsE2eTest {
 			spellChecker = checker,
 			initialText = "fine brokenword fine",
 			spellCheckStrings = german,
+			onAddToDictionary = {},
 		) {
 			rightClickAtCharacter(7)
 			awaitMenuItem("Wird geladen")
@@ -48,6 +54,8 @@ class SpellCheckStringsE2eTest {
 			awaitMenuItem("Keine Vorschläge")
 			assertFalse(hasMenuItem(SpellCheckStrings.Default.noSuggestions))
 			assertTrue(hasMenuItem("Keine Vorschläge"))
+			assertTrue(hasMenuItem("Ignorieren"))
+			assertTrue(hasMenuItem("Zum Wörterbuch hinzufügen"))
 		}
 	}
 }

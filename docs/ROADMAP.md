@@ -700,7 +700,7 @@ Shaping is one line per keystroke. These still scale with document length:
 - [ ] **7.20** [Fable] [Lane K] Sentence mode: sentences run across line
   boundaries, offsets shift on indented lines, and each partial check rescans
   the whole document. Tested only against fakes.
-- [ ] **7.21** [Opus] [Lane K] No ignore list or language API in
+- [x] **7.21** [Opus] [Lane K] No ignore list or language API in
   `EditorSpellChecker`; add to dictionary exists only as a host menu extension
   (hammer-editor#861).
 - [x] **7.22** [Opus] [Lane K] Hard-coded English strings ("Loading...", "No

@@ -58,8 +58,11 @@ private val DefaultContentPadding = PaddingValues(start = 8.dp)
  * @param style The [TextEditorStyle] controlling appearance.
  * @param contextMenuStrings Localized strings for the built-in context menu.
  * @param spellCheckStrings Localized strings for the spell check menu.
+ * @param onAddToDictionary Adds a word to the host's dictionary. When set, the menu on a flagged
+ *   word offers "Add to dictionary", which calls this and stops flagging the word for the session,
+ *   so it clears at once however the host's dictionary reaches the checker.
  * @param spellCheckMenuItems Host items for the context menu opened on a flagged span, rendered
- *   as their own group after the suggestions (for example "Add to dictionary"). For a misspelled
+ *   after the built-in "Ignore" and "Add to dictionary" in a group below the suggestions. For a misspelled
  *   word they appear together with the suggestions once those have loaded. Not consulted while
  *   the editor is disabled. Read at click time, so it may close over changing state.
  * @param diagnostics Underlines from a checker other than spelling, such as grammar, kept up to date
@@ -79,6 +82,7 @@ fun SpellCheckingTextEditor(
 	style: TextEditorStyle = rememberTextEditorStyle(),
 	contextMenuStrings: ContextMenuStrings = ContextMenuStrings.Default,
 	spellCheckStrings: SpellCheckStrings = SpellCheckStrings.Default,
+	onAddToDictionary: ((String) -> Unit)? = null,
 	spellCheckMenuItems: (SpellCheckItem) -> List<ContextMenuItem> = { emptyList() },
 	diagnostics: TextDiagnosticsState? = null,
 	onRichSpanClick: RichSpanClickListener? = null,
@@ -180,7 +184,22 @@ fun SpellCheckingTextEditor(
 			return
 		}
 
-		val hostItems = spellCheckMenuItems(spellCheckItem)
+		val flagged = when (spellCheckItem) {
+			is SpellCheckItem.MisspelledWord -> spellCheckItem.segment.text
+			is SpellCheckItem.SentenceIssue -> spellCheckItem.correction.originalText
+		}
+		val builtInItems = buildList {
+			add(ContextMenuItem(label = spellCheckStrings.ignore) { state.ignoreWord(flagged) })
+			if (onAddToDictionary != null && flagged.none(Char::isWhitespace)) {
+				add(
+					ContextMenuItem(label = spellCheckStrings.addToDictionary) {
+						onAddToDictionary(flagged)
+						state.accept(flagged)
+					}
+				)
+			}
+		}
+		val hostItems = builtInItems + spellCheckMenuItems(spellCheckItem)
 		when (spellCheckItem) {
 			is SpellCheckItem.MisspelledWord -> {
 				val placeholder = listOf(ContextMenuItem(label = spellCheckStrings.loading, enabled = false, onClick = {}))
