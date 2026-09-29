@@ -21,7 +21,10 @@ import androidx.compose.ui.input.key.utf16CodePoint
  * - Compose's web `KeyEvent` substitutes the key code for the code point when the DOM
  *   key is a name, so F2 reads as 'q', Insert as '-', and a dead key on the quote key
  *   as 'Þ'. A code point equal to the key code marks that substitution, except on the
- *   letter, digit, and space keys, whose typed character can equal their code.
+ *   letter, digit, and space keys, whose typed character can equal their code. The
+ *   semicolon and equals keys (codes 59 and 61) also type their code, but stay refused:
+ *   German and Swiss layouts put a dead key on the equals key, which would insert '='.
+ *   While the canvas holds DOM focus, ';' and '=' are therefore dropped (4.22).
  * - Windows browsers report AltGr as Ctrl+Alt, which the textarea forwards and then
  *   commits as text itself; the forwarded copy must not insert. Ctrl is not a typing
  *   modifier in a browser (macOS Option chords carry Alt only), so any Ctrl is refused.

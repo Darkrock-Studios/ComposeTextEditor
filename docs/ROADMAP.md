@@ -157,16 +157,16 @@ review.
 | Lane | Area | Main files | Items |
 | --- | --- | --- | --- |
 | A | Caret motion | `state/TextEditorCursorState.kt`, `state/TextEditorStateCursorExt.kt`, `state/WordSegmentationUtils.kt`, `input/TextEditorKeyCommandHandler.kt` | 1.1 to 1.7, 1.19, 2.3, 2.6, 7.5 |
-| B | Pointer and touch | `textEditorPointerInputHandling.kt`, `state/TextEditorSelectionManager.kt`, `DrawSelectionHandles.kt` | 1.9, 1.12 to 1.16, 3.1, 3.2, 3.4 to 3.8, 3.13 |
+| B | Pointer and touch | `textEditorPointerInputHandling.kt`, `state/TextEditorSelectionManager.kt`, `DrawSelectionHandles.kt` | 1.9, 1.12 to 1.16, 1.21, 3.1, 3.2, 3.4 to 3.8, 3.13 |
 | C | Drawing and geometry | `Draw*.kt`, `cursor/`, `scrollbar/`, `state/TextEditorScrollState.kt`, hit testing | 1.8, 1.10, 1.11, 1.17, 1.18, 3.3, 3.12, 4.14, 7.6, 7.7 |
 | D | Bindings, actions, menu | `input/KeyBindings.kt`, `input/EditorCommand.kt`, `input/BuiltinEditorActions.kt`, `contextmenu/` | 2.1, 2.2, 2.4, 2.5, 2.7 to 2.10, 4.8, 5.8 |
-| E | Input sessions on desktop, iOS, web | `desktopMain`, `iosMain`, `wasmJsMain` under `input/` | 4.2 to 4.7, 4.10 to 4.12, 4.19 |
+| E | Input sessions on desktop, iOS, web | `desktopMain`, `iosMain`, `wasmJsMain` under `input/` | 4.2 to 4.7, 4.10 to 4.12, 4.19, 4.21, 4.22 |
 | F | Android input | `androidMain` | 0.4, 3.9 to 3.11, 3.14, 4.16, 4.18, 4.20 |
 | G | Edit pipeline and undo | `state/TextEditManager.kt`, `state/TextEditHistory.kt`, `state/EditBehavior.kt`, `input/ImeEditLogic.kt` | 1.20, 5.1 to 5.5, 6.1 to 6.6 |
 | H | Clipboard and HTML | `clipboard/`, `html/` | 4.9, 4.13, 4.17, 6.7 to 6.12 |
 | I | Markdown and block model | `markdown/`, `richstyle/` | 5.6, 7.14 to 7.16 |
-| J | Find addon | `ComposeTextEditorFind/` | 7.17 to 7.19 |
-| K | Spell check addon | `ComposeTextEditorSpellCheck/` | 7.20 to 7.22 |
+| J | Find addon | `ComposeTextEditorFind/` | 7.17 to 7.19, 7.26, 7.29 |
+| K | Spell check addon | `ComposeTextEditorSpellCheck/` | 7.20 to 7.22, 7.28 |
 | L | Tests and CI | test sources, `.github/workflows/` | 0.1 to 0.3, 0.5 to 0.8, 4.1, 4.15 |
 | M | Accessibility and host API | semantics in `BasicTextEditor.kt`, `RichTextView.kt`, `state/rememberTextEditorState.kt` | 7.1 to 7.4, 7.13, 7.23 to 7.25 |
 | N | Core layout and performance | `state/TextEditorState.kt` | 5.7, 7.8 to 7.12 |
@@ -343,6 +343,11 @@ fixes what users feel every minute.
   and offer a built-in Ctrl/Cmd+click convention.
 - [ ] **1.16 Middle-click paste on Linux. C.** [Opus] [Lane B] Not handled;
   middle click moves the caret.
+
+- [ ] **1.21 Empty selections. C.** [Opus] [Lane B] A drag that ends where it
+  began leaves a non-null selection with start equal to end. The delete-by-motion
+  actions (word, line, and paragraph deletes) then delete nothing and still
+  consume the key. Normalise an empty selection to none.
 
 ### Selection drawing
 
@@ -609,6 +614,16 @@ Exit criteria: typing, composition, and clipboard work in current Chrome,
 Firefox, and Safari on desktop; the soft keyboard works on Android Chrome and
 iOS Safari; browser tests run in CI.
 
+- [ ] **4.22 DOM focus left on the canvas. S.** [Opus] [Lane E] While the
+  editor holds Compose focus, the browser's focus can stay on the canvas rather
+  than the input session's textarea; a right-click, for one, skips
+  `onRequestInput` (`requestFocusOnPress` in `BasicTextEditor.kt`). Typing then
+  arrives as canvas key events, which cannot tell a typed character from a named
+  key whose code Compose substitutes (see `PlatformCharacterInput.wasmJs.kt`).
+  So ';' and '=' are dropped, and AltGr characters are refused, because Windows
+  reports AltGr as Ctrl+Alt and a focused textarea commits that keystroke
+  itself. Refocus the textarea whenever the editor holds focus.
+
 ### Android and desktop
 
 - [ ] **4.16 Japanese input. U.** [Fable] [Lane F] Reported broken with Fcitx5
@@ -768,6 +783,14 @@ Shaping is one line per keystroke. These still scale with document length:
   is on, its scope decoration answers clicks on list, blockquote, and code
   fence markers inside it. A decoration needs a way to opt out.
 
+- [ ] **7.29 Find in selection loses its scope. C.** [Opus] [Lane J]
+  `FindState.search` records `selectionBeforeSearch` unless the selection equals
+  a current match, and a query with no results empties the match list while the
+  selection still sits on the last match. Select a paragraph, type "cat", then
+  "catx", then back to "cat": the recorded selection is now the "cat" match, so
+  turning on find in selection scopes to that one word. Compare against the
+  last range the find session selected instead.
+
 ### Spell check addon
 
 - [ ] **7.20** [Fable] [Lane K] Sentence mode: sentences run across line
@@ -778,6 +801,10 @@ Shaping is one line per keystroke. These still scale with document length:
   (hammer-editor#861).
 - [x] **7.22** [Opus] [Lane K] Hard-coded English strings ("Loading...", "No
   suggestions").
+
+- [ ] **7.28** [Opus] [Lane K] Ignore and Add to dictionary match the exact
+  string, so ignoring "kotlinx" leaves "Kotlinx" at a sentence start flagged.
+  Match case-insensitively, or at least across a capitalised first letter.
 
 ### Host API
 
