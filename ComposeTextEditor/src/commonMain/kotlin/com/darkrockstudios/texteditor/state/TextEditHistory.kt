@@ -1,6 +1,7 @@
 package com.darkrockstudios.texteditor.state
 
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.richstyle.RichSpan
 import com.darkrockstudios.texteditor.richstyle.RichSpanStyle
@@ -353,6 +354,12 @@ data class OperationMetadata(
 	val deletedText: AnnotatedString? = null,
 	val deletedSpans: List<RichSpan> = emptyList(),
 	val preservedRichSpans: List<PreservedRichSpan> = emptyList(),
+	/**
+	 * For a [TextEditOperation.StyleSpan]: each touched line's character styles as
+	 * they stood before it, by line index, so undo restores them exactly rather
+	 * than applying a blind inverse over the range.
+	 */
+	val spanStylesBefore: Map<Int, List<AnnotatedString.Range<SpanStyle>>> = emptyMap(),
 )
 
 /** One undo step: a single recorded operation, or every operation of one [TextEditorState.editGroup]. */

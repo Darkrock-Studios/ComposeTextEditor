@@ -1005,11 +1005,13 @@ iOS Safari; browser tests run in CI.
   runs its block as one revision and one undo step; every transaction now
   stages its recorded operations and lands them as one history entry at
   commit. `canUndo`/`canRedo` refresh at every commit rather than at layout.
-- [ ] **6.3 Style undo. C.** [Fable] [Lane G] A blind inverse over the same
+- [x] **6.3 Style undo. C.** [Fable] [Lane G] A blind inverse over the same
   range, so undoing bold on a partly bold selection strips the bold that was
   already there (`state/TextEditManager.kt`). The formatting chords (2.1)
   apply over a partly styled selection, so this is one Ctrl+B and one undo
-  away.
+  away. Done: the entry records each touched line's character styles
+  (`OperationMetadata.spanStylesBefore`) and undo applies an exact inverse,
+  one operation per sub-range the style operation actually changed.
 - [ ] **6.4 Restore the selection,** [Opus] [Lane G] not only the caret.
 - [ ] **6.5 Pasted HTML blocks are unrecorded. C.** [Opus] [Lane G] Redo should
   restore the text without its blocks. Inferred; no test covers it.
@@ -1023,6 +1025,13 @@ iOS Safari; browser tests run in CI.
   keyboard non-bold text cannot follow bold text. Inherit from the replaced
   characters themselves, and from the caret's typing style when there are
   none.
+- [ ] **6.15 A style operation drops the line's paragraph style. C.** [Opus]
+  [Lane G] `SpanManager.applySingleLineSpanStyle` and
+  `removeSingleLineSpanStyle` rebuild the line from its text and character
+  styles only, so Ctrl+B on a list or quote line loses the indent
+  `ParagraphStyle` the block baked in, and nothing restores it (normalization
+  only repairs placeholder lines). Carry `paragraphStyles` through; 6.3's undo
+  then restores the line exactly.
 
 ### Clipboard
 

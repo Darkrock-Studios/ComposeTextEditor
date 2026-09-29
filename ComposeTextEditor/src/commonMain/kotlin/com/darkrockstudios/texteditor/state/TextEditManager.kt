@@ -613,7 +613,12 @@ class TextEditManager(private val state: TextEditorState) {
 		}
 	}
 
-	private fun applyStyleOperation(operation: TextEditOperation.StyleSpan): OperationMetadata? {
+	private fun applyStyleOperation(operation: TextEditOperation.StyleSpan): OperationMetadata {
+		// Captured before the change: undo puts these back rather than inverting
+		// the operation, which would strip styling the range already carried.
+		val before = (operation.range.start.line..operation.range.end.line)
+			.filter { it in state.textLines.indices }
+			.associateWith { state.textLines[it].spanStyles }
 		if (operation.range.isSingleLine()) {
 			if (operation.isAdd) {
 				val updatedLine = spanManager.applySingleLineSpanStyle(
@@ -664,7 +669,7 @@ class TextEditManager(private val state: TextEditorState) {
 			}
 		}
 
-		return null
+		return OperationMetadata(spanStylesBefore = before)
 	}
 
 	private fun applyRichSpanOperation(operation: TextEditOperation.RichSpan): OperationMetadata? {
@@ -771,7 +776,7 @@ class TextEditManager(private val state: TextEditorState) {
 			is TextEditOperation.Insert -> undoInsert(operation, entry)
 			is TextEditOperation.Delete -> undoDelete(entry, operation)
 			is TextEditOperation.Replace -> undoReplace(operation, entry)
-			is TextEditOperation.StyleSpan -> undoStyleSpan(operation)
+			is TextEditOperation.StyleSpan -> undoStyleSpan(operation, entry.metadata)
 			is TextEditOperation.RichSpan -> undoRichSpan(operation)
 			is TextEditOperation.LineBlock -> undoLineBlock(operation)
 		}
@@ -889,17 +894,67 @@ class TextEditManager(private val state: TextEditorState) {
 		)
 	}
 
-	private fun undoStyleSpan(operation: TextEditOperation.StyleSpan) {
-		// Create inverse operation - if it was adding a style, we remove it and vice versa
-		val inverseOperation = TextEditOperation.StyleSpan(
-			range = operation.range,
+	/**
+	 * Undoes a style operation with its exact inverse: the style is removed only
+	 * where the operation added it, or put back only where the operation removed
+	 * it, as read from the styles each line carried before. A blind inverse over
+	 * the whole range would strip styling the range already had (bold applied over
+	 * a partly bold selection). Each piece is an ordinary operation through the
+	 * pipeline, so what consumers are told is what changed.
+	 */
+	private fun undoStyleSpan(operation: TextEditOperation.StyleSpan, metadata: OperationMetadata) {
+		val pieces = exactInverseOf(operation, metadata.spanStylesBefore)
+		state.withAtomicEdit {
+			pieces.forEach { applyOperation(it, addToHistory = false) }
+			// An operation that changed nothing still moved the caret.
+			state.cursor.updatePosition(operation.cursorBefore)
+		}
+	}
+
+	/**
+	 * The inverse of [operation] as the operations that undo exactly what it did,
+	 * given [before], the styles each line had.
+	 */
+	private fun exactInverseOf(
+		operation: TextEditOperation.StyleSpan,
+		before: Map<Int, List<AnnotatedString.Range<SpanStyle>>>,
+	): List<TextEditOperation.StyleSpan> {
+		fun inverse(range: TextEditorRange) = TextEditOperation.StyleSpan(
+			range = range,
 			style = operation.style,
 			isAdd = !operation.isAdd,
 			cursorBefore = operation.cursorAfter,
-			cursorAfter = operation.cursorBefore
+			cursorAfter = operation.cursorBefore,
 		)
+		return before.entries.sortedBy { it.key }.flatMap { (line, spans) ->
+			val lineLength = state.textLines.getOrNull(line)?.length ?: return@flatMap emptyList()
+			val start = if (line == operation.range.start.line) operation.range.start.char else 0
+			val end = if (line == operation.range.end.line) operation.range.end.char else lineLength
+			val had = spans.filter { it.item == operation.style }
+				.map { maxOf(it.start, start) until minOf(it.end, end) }
+				.filter { !it.isEmpty() }
+				.sortedBy { it.first }
+			// Adding touched what was not styled; removing touched what was.
+			val touched = if (operation.isAdd) (start until end).minus(had) else had.mergedRuns()
+			touched.map { inverse(TextEditorRange(CharLineOffset(line, it.first), CharLineOffset(line, it.last + 1))) }
+		}
+	}
 
-		applyOperation(inverseOperation, addToHistory = false)
+	private fun List<IntRange>.mergedRuns(): List<IntRange> = fold(mutableListOf()) { runs, run ->
+		val last = runs.lastOrNull()
+		if (last != null && run.first <= last.last + 1) runs[runs.lastIndex] = last.first..maxOf(last.last, run.last)
+		else runs += run
+		runs
+	}
+
+	/** The parts of this range not covered by [runs]. */
+	private fun IntRange.minus(runs: List<IntRange>): List<IntRange> = buildList {
+		var from = first
+		for (run in runs.mergedRuns()) {
+			if (run.first > from) add(from until run.first)
+			from = maxOf(from, run.last + 1)
+		}
+		if (from <= last) add(from..last)
 	}
 
 	private fun undoRichSpan(operation: TextEditOperation.RichSpan) {
