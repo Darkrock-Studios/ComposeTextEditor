@@ -238,7 +238,10 @@ On every desktop platform unless a row names one; the macOS chords are in 3.1.
 | Backspace after a combining accent (type "e" then U+0301, or Vietnamese "ế") | Only the accent goes; the base stays. Delete before the pair removes both |
 | Up / Down / End onto a row that wraps right after an emoji | The caret lands after the emoji, never inside it |
 | Ctrl+Right / Ctrl+Delete on Linux | To / delete to the end of the word, or of the next one |
-| Ctrl+Right / Ctrl+Delete on Windows | To / delete to the start of the next word |
+| Ctrl+Right / Ctrl+Delete on Windows | To / delete to the start of the next word; from a line's last word, the line end first, and an empty line is a stop (hammer-editor#852) |
+| Ctrl+Left / Ctrl+Right through "hello, world... (again)" | Word starts and ends only; punctuation is skipped |
+| Ctrl+Left / Ctrl+Right through "don’t", "naïve" typed with a combining mark, "日本語を勉強します", and "a 😀 b" | The contraction and the accented word are one stop each, Japanese steps by dictionary word, the emoji is a stop of its own |
+| Double-click on "don’t", on an emoji, on a comma, on a space after a word | Selects the whole contraction; the whole emoji; nothing; the word before the space |
 | Ctrl+Up | Paragraph start, then the previous paragraph's start; with Shift, selects |
 | Ctrl+Down on Linux | Paragraph end, then the next paragraph's end; with Shift, selects |
 | Ctrl+Down on Windows | The next paragraph's start; from the last paragraph, the document end; with Shift, selects |
@@ -516,6 +519,8 @@ Guards #89, #90, #65, #83.
    nonsense words (or switch the checker to a language the text is not in).
    **Expect:** every word gets squiggled and the editor stays responsive. Checking must
    **not** suspend itself, and there is no "resume" state to get stuck in.
+6. Type "don’t" with a typographic apostrophe. **Expect:** no squiggle; the word is
+   looked up as "don't".
 6. Scroll a long spell-checked document quickly. **Expect:** smooth scrolling; squiggles
    render correctly deep in the document, not just near the top (#65).
 

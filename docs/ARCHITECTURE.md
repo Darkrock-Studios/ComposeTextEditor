@@ -115,7 +115,10 @@ line-indexed queries layout and drawing rely on.
   delete, and hit test snaps through it. Backspace is the one asymmetric edit:
   it removes the previous code point, or a whole emoji sequence, as
   `BasicTextField` and `EditText` do, so a combining mark comes off its base
-  on its own.
+  on its own. Words come from the same place: `wordRuns` segments a line with
+  the platform's ICU word iterator and tags each segment lexical, emoji, or
+  other, and word motion, double-click selection (`findWordSegmentAt`) and the
+  spell checker's candidates (`wordSegments`) all read that one segmentation.
 - **`TextEditorSelectionManager`**: the selection range and the gesture state
   behind it (touch handles, drag). Rule: any content mutation clears the
   selection; only span-level operations keep it.

@@ -74,6 +74,19 @@ class TypingAndDeletionE2eTest {
 	}
 
 	@Test
+	fun `ctrl+delete on windows stops at the line end`() = editorUiTest(
+		initialText = AnnotatedString("first line\nsecond"),
+		keyBindings = WindowsKeyBindings,
+	) {
+		clickAtCharacter(6)
+		press(Key.Delete, ctrl = true)
+		assertEquals("first \nsecond", text, "the next line's first word survives (hammer-editor#852)")
+
+		press(Key.Delete, ctrl = true)
+		assertEquals("first second", text, "at the line end the line break goes")
+	}
+
+	@Test
 	fun `ctrl+delete on windows deletes to the next word start`() = editorUiTest(
 		initialText = AnnotatedString("The quick brown"),
 		keyBindings = WindowsKeyBindings,

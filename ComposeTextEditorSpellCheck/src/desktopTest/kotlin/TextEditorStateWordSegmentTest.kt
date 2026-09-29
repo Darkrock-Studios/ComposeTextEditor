@@ -105,11 +105,8 @@ class TextEditorStateWordSegmentTest {
 			end = CharLineOffset(0, 21)
 		)
 		val segments = state.wordSegmentsInRange(range)
-		assertEquals(4, segments.size)
-		assertEquals("don't", segments[0].text)
-		assertEquals("U.S.A.", segments[1].text)
-		assertEquals("test", segments[2].text)
-		assertEquals("case", segments[3].text)
+		// ICU keeps the apostrophe inside the word and breaks letters at a period.
+		assertEquals(listOf("don't", "U", "S", "A", "test", "case"), segments.map { it.text })
 	}
 
 	@Test

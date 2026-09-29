@@ -85,110 +85,53 @@ internal fun TextEditorState.moveCursorToLineEnd() {
 }
 
 /**
- * Moves the cursor to the start of the next word, or to the document end if none
- * remains.
+ * The next word start (Windows' Ctrl+Right): the start of the next word on this
+ * line, else the line end; from a line end, the next line's first word start, or
+ * its end when it has none, so an empty line is a stop. Never crosses a line break
+ * and a word in one step (hammer-editor#852).
  */
 fun TextEditorState.moveToNextWord() {
-	// Get document length
-	val totalChars = textLines.sumOf { it.length + 1 } - 1
-	val currentCharIndex = getCharacterIndex(cursorPosition)
-	if (currentCharIndex >= totalChars) return
-
-	var newPosition = currentCharIndex
-
-	// First skip current word if we're in one
-	while (newPosition < totalChars) {
-		val pos = getOffsetAtCharacter(newPosition)
-		val line = textLines[pos.line]
-
-		if (pos.char < line.length && !isWordChar(line, pos.char)) {
-			break
-		}
-		newPosition++
+	val (line, char) = cursorPosition
+	val text = textLines[line].text
+	if (char < text.length) {
+		val next = text.wordRuns().firstOrNull { it.isWord && it.start > char }
+		cursor.updatePosition(CharLineOffset(line, next?.start ?: text.length))
+	} else if (line < textLines.lastIndex) {
+		val nextText = textLines[line + 1].text
+		val first = nextText.wordRuns().firstOrNull { it.isWord }
+		cursor.updatePosition(CharLineOffset(line + 1, first?.start ?: nextText.length))
 	}
-
-	// Then skip non-word characters
-	while (newPosition < totalChars) {
-		val pos = getOffsetAtCharacter(newPosition)
-		val line = textLines[pos.line]
-
-		if (pos.char < line.length && isWordChar(line, pos.char)) {
-			break
-		}
-		newPosition++
-	}
-
-	cursor.updatePosition(onGraphemeBoundary(getOffsetAtCharacter(newPosition), forward = true))
 }
 
 /**
- * Moves the cursor to the end of the current word, or of the next one when it is not
- * inside a word, or to the document end if no word remains.
+ * The end of the word the caret is in or before, on this line or a later one, or
+ * the document end when no word remains.
  */
 fun TextEditorState.moveToWordEnd() {
 	var (line, char) = cursorPosition
-	while (!isWordChar(textLines[line], char)) {
-		when {
-			char < textLines[line].length -> char++
-			line < textLines.lastIndex -> {
-				line++
-				char = 0
-			}
-
-			else -> break
-		}
+	while (true) {
+		val end = textLines[line].text.wordRuns().firstOrNull { it.isWord && it.end > char }?.end
+		if (end != null) return cursor.updatePosition(CharLineOffset(line, end))
+		if (line == textLines.lastIndex) return moveToDocumentEnd()
+		line++
+		char = 0
 	}
-	while (isWordChar(textLines[line], char)) char++
-	cursor.updatePosition(onGraphemeBoundary(CharLineOffset(line, char), forward = true))
 }
 
 /**
- * Moves the cursor to the start of the current or previous word, or to the
- * document start if already at the beginning.
+ * The start of the word the caret is in or after, on this line or an earlier one,
+ * or the document start when no word precedes it.
  */
 fun TextEditorState.moveToPreviousWord() {
-	// Get current absolute position
-	val currentCharIndex = getCharacterIndex(cursorPosition)
-	if (currentCharIndex == 0) return
-
-	// Convert to offset for easier text access
-	val currentOffset = cursorPosition
-	val currentLine = textLines[currentOffset.line]
-
-	var newPosition = currentCharIndex
-
-	// Handle if we're in whitespace or at word end
-	if (currentOffset.char == 0 ||
-		(currentOffset.char > 0 && !isWordChar(currentLine, currentOffset.char - 1))
-	) {
-		// Move back one to get to potential word
-		newPosition--
+	var (line, char) = cursorPosition
+	while (true) {
+		val start = textLines[line].text.wordRuns().lastOrNull { it.isWord && it.start < char }?.start
+		if (start != null) return cursor.updatePosition(CharLineOffset(line, start))
+		if (line == 0) return moveToDocumentStart()
+		line--
+		char = textLines[line].length
 	}
-
-	// Keep moving back until we hit the start of a word
-	while (newPosition > 0) {
-		val pos = getOffsetAtCharacter(newPosition)
-		val line = textLines[pos.line]
-
-		// If we're at a word char and either:
-		// 1. We're at the start of the line, or
-		// 2. The previous char is not a word char
-		// Then we've found the start of a word
-		if (pos.char < line.length && isWordChar(line, pos.char) &&
-			(pos.char == 0 || !isWordChar(line, pos.char - 1))
-		) {
-			break
-		}
-
-		newPosition--
-	}
-
-	cursor.updatePosition(onGraphemeBoundary(getOffsetAtCharacter(newPosition), forward = false))
 }
-
-/** [position] on a grapheme boundary, moved [forward] or back out of a cluster. */
-private fun TextEditorState.onGraphemeBoundary(position: CharLineOffset, forward: Boolean): CharLineOffset =
-	position.copy(char = textLines[position.line].text.snapToGraphemeBoundary(position.char, forward))
 
 /** Moves the cursor to the first character of the document. */
 fun TextEditorState.moveToDocumentStart() {

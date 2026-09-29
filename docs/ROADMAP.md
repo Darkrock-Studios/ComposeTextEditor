@@ -84,8 +84,12 @@ where it landed; PageUp and PageDown stop on the first and last rows instead of
 going on to the document start and end; with a selection, its Shift paragraph
 jumps measure from the selection's start and end rather than the caret; its
 goal x survives typed text and Enter, so Up or Down after typing measures from
-the column the typing started at. Its arrow keys in right-to-left text are
-logical, like the editor's (7.5).
+the column the typing started at; its word motions stop after every punctuation
+character, where GTK, `EditText` and Cocoa skip punctuation (they agree that an
+emoji is a word of its own), and its Ctrl+Left and Ctrl+Backspace pass over a
+one-character word ("a", "é", a lone ideograph), because its search steps back
+a character at a time and only stops at a word that began before the step. Its
+arrow keys in right-to-left text are logical, like the editor's (7.5).
 
 ## Workflow
 
@@ -169,7 +173,7 @@ review.
 | A | Caret motion | `state/TextEditorCursorState.kt`, `state/TextEditorStateCursorExt.kt`, `state/WordSegmentationUtils.kt`, `input/TextEditorKeyCommandHandler.kt` | 1.1 to 1.7, 1.19, 2.3, 2.6, 7.5 |
 | B | Pointer and touch | `textEditorPointerInputHandling.kt`, `state/TextEditorSelectionManager.kt`, `DrawSelectionHandles.kt` | 1.9, 1.12 to 1.16, 1.21 to 1.23, 3.1, 3.2, 3.4 to 3.8, 3.13, 3.15, 4.23 |
 | C | Drawing and geometry | `Draw*.kt`, `cursor/`, `scrollbar/`, `state/TextEditorScrollState.kt`, hit testing | 1.8, 1.10, 1.11, 1.17, 1.18, 3.3, 3.12, 4.14, 7.6, 7.7 |
-| D | Bindings, actions, menu | `input/KeyBindings.kt`, `input/EditorCommand.kt`, `input/BuiltinEditorActions.kt`, `contextmenu/` | 2.1, 2.2, 2.4, 2.5, 2.7 to 2.11, 4.8, 5.8 |
+| D | Bindings, actions, menu | `input/KeyBindings.kt`, `input/EditorCommand.kt`, `input/BuiltinEditorActions.kt`, `contextmenu/` | 2.1, 2.2, 2.4, 2.5, 2.7 to 2.12, 4.8, 5.8 |
 | E | Input sessions on desktop, iOS, web | `desktopMain`, `iosMain`, `wasmJsMain` under `input/` | 4.2 to 4.7, 4.10 to 4.12, 4.19, 4.21, 4.22 |
 | F | Android input | `androidMain` | 0.4, 3.9 to 3.11, 3.14, 4.16, 4.18, 4.20 |
 | G | Edit pipeline and undo | `state/TextEditManager.kt`, `state/TextEditHistory.kt`, `state/EditBehavior.kt`, `input/ImeEditLogic.kt` | 1.20, 5.1 to 5.5, 6.1 to 6.6 |
@@ -332,6 +336,20 @@ fixes what users feel every minute.
     an empty, non-null selection.
   - Prefer the platform word break iterator, shared by keyboard, mouse, and
     spell check. This part builds on the 1.1 utility: [Fable] [Mac work].
+  Linux part done: `wordRuns` (`state/TextBreaks.kt`) segments a line with the
+  platform's ICU word iterator (`wordCursor`, the second `expect` of 1.1) and
+  classifies each segment: lexical (holds a letter or digit), emoji, or other
+  (spaces, punctuation, symbols). Word motion and double-click stop at lexical
+  and emoji segments and skip the rest, as GTK, `EditText` and Cocoa do; spell
+  check gets the lexical ones. "don’t" and "don't" are one word, a combining
+  mark stays with its base, CJK breaks by dictionary word, and ICU breaks
+  letters at a period ("U.S.A." is U, S, A). Windows' `WordRight` and
+  `DeleteWordForward` stop at the line end and on an empty line. The spell
+  check addon looks "don’t" up with a straight apostrophe. Double-click on
+  punctuation or whitespace selects the word ending there, or nothing; the
+  empty non-null selection is lane B's 1.21. Windows' Ctrl+Left still crosses
+  a line break in one step (2.12). The Mac part (compile the shared `actual`
+  for iOS) is in the queue; the checkbox waits on it.
 - [ ] **1.6 End on a wrapped row, and caret affinity. R, C.** [Fable] [Lane A]
   End goes to `nextWrapStart - 1`. That is right when the row ends in a space,
   one character short when the wrap falls mid-word or in CJK, and past the
@@ -569,6 +587,13 @@ fixes what users feel every minute.
   paragraph end but keeps nothing. Cocoa saves killed text to a kill ring,
   consecutive kills append to it, and Ctrl+Y yanks it back. Separate from the
   clipboard.
+- [ ] **2.12 Windows Ctrl+Left stops at the previous line's end.** [Opus]
+  [Lane D] Since 1.5 Windows' Ctrl+Right stops at the line end before the next
+  line's first word, but `WordLeft` is one motion for every platform, so
+  Ctrl+Left and Ctrl+Backspace from a line start still reach the previous
+  line's last word in one step. Windows edit controls stop at the previous
+  line's end first; GTK and Cocoa do not. Needs a Windows-only motion beside
+  `WordRight` in the binding tables.
 
 ## Phase 3: touch polish (Android first)
 
@@ -1087,6 +1112,10 @@ Shaping is one line per keystroke. These still scale with document length:
 - [ ] **7.30** [Opus] [Lane K] `SpellCheckingTextEditor` does not forward
   `onLinkClick` or `onRichSpanClickEvent` (1.15) to the editor it wraps, so
   spell-checked editors have no link convention and no modifier state.
+- [ ] **7.31** [Opus] [Lane K] Since 1.5 words come from ICU, which breaks
+  letters at a period: "U.S.A." reaches the checker as U, S and A, and the s
+  of "U.S.'s" on its own. Skip one-letter segments, or rejoin an abbreviation
+  before the lookup, so typeset abbreviations stop drawing squiggles.
 
 ### Host API
 
@@ -1149,5 +1178,6 @@ records results and removes entries that passed.
 | Item | What to do | A pass looks like | Result |
 | --- | --- | --- | --- |
 | 1.1 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64`. `skikoMain/.../state/TextBreaks.skiko.kt` is the iOS `actual` for the break cursors (`org.jetbrains.skia.BreakIterator`, `org.jetbrains.skia.icu.CharProperties`); if it does not compile, the fix is in that file. Then in the iOS sample app: type an emoji, a family ZWJ sequence, a flag and a keycap, and backspace through each; type "e" then a combining acute (or Vietnamese "ế") and backspace once; arrow Left and Right across them; type Japanese and step through it | Backspace removes each emoji sequence whole and only the accent off its base; Left and Right never stop inside a sequence; no half character ever shows | |
+| 1.5 | The same iOS compile as 1.1 covers `wordCursor`. In the iOS sample app: Option+Left and Option+Right with a hardware keyboard through "don’t stop", "日本語を勉強します" and "a 😀 b"; double-tap "don’t" and an emoji | Option arrows stop at word ends and starts only, keeping "don’t" whole, stepping Japanese by dictionary word and stopping at the emoji; a double-tap selects the whole contraction or the whole emoji | |
 | 2.6 | In Safari and Chrome on macOS, open the wasm demo and press Ctrl+A, E, F, B, N, P, D, H and K in a paragraph. The page's hidden text area has the same Cocoa Emacs bindings, so a chord could act twice | Each chord moves or deletes once, as in the desktop sample app | Not run: needs a person at a real keyboard. Browser automation injects key events below the Cocoa text system, so it cannot reproduce a chord acting twice |
 | 3.8 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64`. 3.8 added `internal expect fun hasNativeTextToolbar()` (commonMain `TouchToolbar.kt`) with `iosMain/.../TouchToolbar.ios.kt` answering true. Then in the simulator: long-press a word, double-tap a word, long-press empty space, tap the caret handle, and drag a selection handle | Compiles. UIKit's edit menu appears over the selection or caret with Cut, Copy, Paste and Select all as applicable (Paste and Select all alone at a bare caret), hides while a handle is dragged and returns when it drops, and goes when the caret moves or the text is scrolled. If no menu appears, the input connection has no toolbar: fall back to `false` in `TouchToolbar.ios.kt` so the context menu stands in | |

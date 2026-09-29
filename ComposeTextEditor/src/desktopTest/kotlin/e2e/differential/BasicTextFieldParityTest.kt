@@ -251,8 +251,43 @@ class BasicTextFieldParityTest {
 	@Test
 	fun `a typographic apostrophe stays inside the word`() = assertMatchesNative(
 		start = EditSnapshot("go don’t stop", caret = 8),
-		strokes = listOf(CtrlLeft),
-		divergesUntil = "1.5",
+		strokes = listOf(CtrlLeft, CtrlRight, CtrlShiftLeft),
+	)
+
+	@Test
+	fun `word motion treats a combining mark as part of its word`() = assertMatchesNative(
+		start = EditSnapshot("a n\u0303o pin\u0303a b", caret = 0),
+		strokes = listOf(CtrlRight, CtrlRight, CtrlRight, CtrlLeft, CtrlLeft),
+	)
+
+	@Test
+	fun `word motion stops at each emoji`() = assertMatchesNative(
+		start = EditSnapshot("ab \uD83D\uDE00\uD83D\uDC4D\uD83C\uDFFD cd", caret = 0),
+		strokes = listOf(CtrlRight, CtrlRight, CtrlRight, CtrlRight, CtrlLeft, CtrlLeft, CtrlLeft),
+	)
+
+	@Test
+	fun `ctrl backspace and ctrl delete take one emoji at a time`() = assertMatchesNative(
+		start = EditSnapshot("ab \uD83D\uDE00\uD83D\uDE00 cd", caret = 5),
+		strokes = listOf(CtrlDelete, CtrlBackspace),
+	)
+
+	@Test
+	fun `word motion steps through cjk by dictionary word`() = assertMatchesNative(
+		start = EditSnapshot("日本語を勉強します", caret = 0),
+		strokes = listOf(CtrlRight, CtrlRight, CtrlRight, CtrlLeft),
+	)
+
+	@Test
+	fun `word motion crosses lines and empty lines`() = assertMatchesNative(
+		start = EditSnapshot("one two\n\nthree", caret = 7),
+		strokes = listOf(CtrlRight, CtrlLeft, CtrlLeft, CtrlLeft),
+	)
+
+	@Test
+	fun `ctrl shift left across hebrew selects the word`() = assertMatchesNative(
+		start = EditSnapshot("abc שלום def", caret = 8),
+		strokes = listOf(CtrlShiftLeft, CtrlShiftLeft),
 	)
 
 	// Paragraph stops

@@ -301,6 +301,40 @@ class NavigationE2eTest {
 	}
 
 	@Test
+	fun `ctrl+right and ctrl+left skip punctuation`() = editorUiTest(
+		initialText = AnnotatedString("hello, world... (again)"),
+	) {
+		clickAtCharacter(0)
+		press(Key.DirectionRight, ctrl = true)
+		assertEquals(5, cursorIndex, "after 'hello'")
+		press(Key.DirectionRight, ctrl = true)
+		assertEquals(12, cursorIndex, "after 'world'")
+		press(Key.DirectionRight, ctrl = true)
+		assertEquals(22, cursorIndex, "after 'again'")
+		press(Key.DirectionRight, ctrl = true)
+		assertEquals(23, cursorIndex, "then the document end")
+
+		press(Key.DirectionLeft, ctrl = true)
+		assertEquals(17, cursorIndex, "back to 'again'")
+		press(Key.DirectionLeft, ctrl = true)
+		assertEquals(7, cursorIndex, "back to 'world'")
+	}
+
+	@Test
+	fun `ctrl+right on windows stops at the line end before the next line's first word`() = editorUiTest(
+		initialText = AnnotatedString("first line\n\n  second"),
+		keyBindings = WindowsKeyBindings,
+	) {
+		clickAtCharacter(6)
+		press(Key.DirectionRight, ctrl = true)
+		assertEquals(CharLineOffset(0, 10), state.cursorPosition, "the line end is a stop (hammer-editor#852)")
+		press(Key.DirectionRight, ctrl = true)
+		assertEquals(CharLineOffset(1, 0), state.cursorPosition, "an empty line is a stop")
+		press(Key.DirectionRight, ctrl = true)
+		assertEquals(CharLineOffset(2, 2), state.cursorPosition, "the next line's first word")
+	}
+
+	@Test
 	fun `ctrl+right from a line end goes to the end of the next line's first word`() = editorUiTest(
 		initialText = AnnotatedString("first line\n  second line"),
 	) {

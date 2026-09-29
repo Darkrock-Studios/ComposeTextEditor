@@ -2,6 +2,7 @@ package utils
 
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.unit.Dp
+import com.darkrockstudios.texteditor.state.wordRuns
 import kotlin.math.abs
 import kotlin.random.Random
 import kotlin.test.fail
@@ -12,7 +13,7 @@ import kotlin.test.fail
  * reference's state and the script continues. Delete an item here when it lands,
  * and the fuzzer starts failing on that class of divergence.
  */
-val OPEN_PARITY_ITEMS: Set<String> = setOf("1.5", "1.6", "7.5")
+val OPEN_PARITY_ITEMS: Set<String> = setOf("1.6", "7.5")
 
 /** Starting text for the Unicode fuzzers: an emoji, a combining mark, and a right-to-left word. */
 const val FUZZ_START_TEXT = "seed line\nsecond line of words\n\uD83D\uDE00 e\u0301 שלום end"
@@ -143,6 +144,10 @@ private fun crossesWordBreakText(before: EditSnapshot, native: EditSnapshot, edi
 	}
 }
 
+/** Whether a word (not a space or punctuation) of exactly one character starts at [index]. */
+private fun String.isOneCharacterWord(index: Int): Boolean =
+	wordRuns().any { it.isWord && it.start == index && it.end == index + 1 }
+
 private fun String.paragraphHasRightToLeft(index: Int): Boolean {
 	val start = lastIndexOf('\n', index - 1) + 1
 	val end = indexOf('\n', index).let { if (it < 0) length else it }
@@ -164,7 +169,15 @@ fun referenceQuirk(
 	editor: EditSnapshot,
 	rows: List<Int> = emptyList(),
 ): String? {
-	if (stroke !is Stroke.Press || stroke.ctrl) return null
+	if (stroke !is Stroke.Press) return null
+	if (stroke.ctrl) {
+		// Its previous-word search steps back a character at a time and only stops at a
+		// segment that began before the step, so a one-character word is passed over.
+		val backwardWord = stroke.key == Key.DirectionLeft || stroke.key == Key.Backspace
+		val skipsShortWord = backwardWord && native.caret < editor.caret &&
+			before.text.isOneCharacterWord(editor.caret)
+		return if (skipsShortWord) "reference: Ctrl+Left skips a one-character word" else null
+	}
 	val text = before.text
 	if (stroke.isPage()) {
 		// A caret on the first wrap offset still draws on the first row (the reference's affinity).

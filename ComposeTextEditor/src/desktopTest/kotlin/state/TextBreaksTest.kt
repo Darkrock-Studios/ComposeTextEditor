@@ -5,6 +5,8 @@ import com.darkrockstudios.texteditor.state.followingGraphemeBoundary
 import com.darkrockstudios.texteditor.state.isGraphemeBoundary
 import com.darkrockstudios.texteditor.state.precedingGraphemeBoundary
 import com.darkrockstudios.texteditor.state.snapToGraphemeBoundary
+import com.darkrockstudios.texteditor.state.WordKind
+import com.darkrockstudios.texteditor.state.wordRuns
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -68,6 +70,27 @@ class TextBreaksTest {
 		assertEquals(2, "año".backspaceStart(3))
 		// Devanagari ka + virama + ssa: one cluster, deleted a code point at a time.
 		assertEquals(2, "क्ष".backspaceStart(3))
+	}
+
+	@Test
+	fun `word runs classify letters, emoji, keycaps, and symbols`() {
+		val runs = "ab1 $keycapOne #* $grin © ́".wordRuns()
+		val kinds = runs.map { it.kind }
+		assertEquals(WordKind.LEXICAL, kinds[0], "letters and digits")
+		assertEquals(WordKind.OTHER, kinds[1], "a space")
+		assertEquals(WordKind.EMOJI, kinds[2], "a keycap, whose base is a digit")
+		assertEquals(listOf("ab1", " ", keycapOne), runs.take(3).map { "ab1 $keycapOne #* $grin © ́".substring(it.start, it.end) })
+		assertTrue(runs.none { it.kind == WordKind.EMOJI && it.start in 5..6 }, "# and * are not emoji")
+		assertTrue(runs.any { it.kind == WordKind.EMOJI && it.end - it.start == 2 }, "the grinning face")
+		assertTrue(runs.last().kind == WordKind.OTHER, "a lone combining mark")
+	}
+
+	@Test
+	fun `word runs reuse one cursor across lines`() {
+		com.darkrockstudios.texteditor.state.wordCursor("").use { breaks ->
+			assertEquals(listOf(0, 5), "hello".wordRuns(breaks).flatMap { listOf(it.start, it.end) })
+			assertEquals(listOf(0, 3, 3, 4, 4, 9), "one three".wordRuns(breaks).flatMap { listOf(it.start, it.end) })
+		}
 	}
 
 	@Test
