@@ -62,7 +62,12 @@ object CtrlKeyBindings : KeyBindings {
 			Key.A -> if (ctrl) Action.SelectAll else null
 			Key.C -> if (ctrl) Action.Copy else null
 			Key.X -> if (ctrl) Action.Cut else null
-			Key.V -> if (ctrl) Action.Paste else null
+			Key.V -> when {
+				ctrl && event.isShiftPressed -> Action.PasteAsPlainText
+				ctrl -> Action.Paste
+				else -> null
+			}
+
 			Key.Y -> if (ctrl) Action.Redo else null
 			Key.Z -> when {
 				ctrl && event.isShiftPressed -> Action.Redo
@@ -101,7 +106,13 @@ object MacKeyBindings : KeyBindings {
 			Key.A -> if (cmd) Action.SelectAll else null
 			Key.C -> if (cmd) Action.Copy else null
 			Key.X -> if (cmd) Action.Cut else null
-			Key.V -> if (cmd) Action.Paste else null
+			// Cmd+Option+Shift+V is Cocoa's Paste and Match Style; Cmd+Shift+V is the common alias.
+			Key.V -> when {
+				cmd && event.isShiftPressed -> Action.PasteAsPlainText
+				cmd -> Action.Paste
+				else -> null
+			}
+
 			Key.Z -> when {
 				cmd && event.isShiftPressed -> Action.Redo
 				cmd -> Action.Undo

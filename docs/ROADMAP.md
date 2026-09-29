@@ -341,8 +341,10 @@ fixes what users feel every minute.
   the platform chords (ComposeTextEditor#22). Today `toggleBold` lives in the
   sample app (`sampleApp/.../BoldShortcut.kt`). Define mixed-selection
   behaviour once in the library.
-- [ ] **2.2 Paste as plain text.** [Opus] [Lane D] Ctrl/Cmd+Shift+V is
+- [x] **2.2 Paste as plain text.** [Opus] [Lane D] Ctrl/Cmd+Shift+V is
   currently a rich paste because `Key.V` ignores Shift (hammer-editor#929).
+  `Action.PasteAsPlainText`, on Ctrl+Shift+V, Cmd+Shift+V, and Cocoa's
+  Cmd+Option+Shift+V. The text takes the styling at its destination.
 - [ ] **2.3 Paragraph motion.** [Opus] [Lane A] Ctrl+Up/Down on Windows and
   Linux, Option+Up/Down on macOS.
 - [ ] **2.4 Delete to line end.** [Opus] [Lane D] Cmd+Delete and Ctrl+K on
@@ -369,7 +371,7 @@ fixes what users feel every minute.
   Undo or Redo. Unavailable items are hidden rather than disabled. The position
   is shifted by the start content padding. `TextEditor` does not expose
   `contextMenuStrings` or `contextMenuState`; `RichTextView` hard-codes
-  English.
+  English. No Paste as plain text item (2.2 added the action).
 
 ## Phase 3: touch polish (Android first)
 
@@ -602,6 +604,11 @@ iOS Safari; browser tests run in CI.
   copy per pasted line.
 - [ ] **6.12 Drag and drop** [Opus] [Lane H] of the selection, and drops of
   external text.
+- [ ] **6.13 Plain paste reads the HTML flavor.** [Opus] [Lane H] On desktop,
+  `Action.PasteAsPlainText` takes `ClipboardHelper.getText(...).text`, so a
+  foreign paste that offers HTML yields the text of the parsed markup rather
+  than the source's own `text/plain` flavor. Add a plain read to
+  `ClipboardHelper` (an `expect` member, so it joins the Mac queue).
 
 ## Phase 7: reach
 

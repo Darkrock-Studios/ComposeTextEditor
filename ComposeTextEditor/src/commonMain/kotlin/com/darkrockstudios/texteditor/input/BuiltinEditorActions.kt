@@ -40,7 +40,8 @@ internal fun EditorActionRegistry.registerBuiltinActions() {
 			perform = { it.cutSelection() },
 		)
 	)
-	register(EditorActionSpec(Action.Paste) { it.pasteClipboard() })
+	register(EditorActionSpec(Action.Paste) { it.pasteClipboard(plainText = false) })
+	register(EditorActionSpec(Action.PasteAsPlainText) { it.pasteClipboard(plainText = true) })
 
 	register(
 		EditorActionSpec(
@@ -100,15 +101,20 @@ private fun EditorActionContext.cutSelection() {
 	}
 }
 
-private fun EditorActionContext.pasteClipboard() {
+/**
+ * [plainText] keeps only the clipboard's characters: no copied styling, rich spans or
+ * block structure, so the text takes the styling of wherever it lands.
+ */
+private fun EditorActionContext.pasteClipboard(plainText: Boolean) {
 	scope.launch {
-		ClipboardHelper.getText(clipboard, state.markdownConfiguration)?.let { text ->
+		ClipboardHelper.getText(clipboard, state.markdownConfiguration)?.let { clipboardText ->
+			val text = if (plainText) AnnotatedString(clipboardText.text) else clipboardText
 			val curSelection = state.selector.selection
 			val insertPosition = curSelection?.start ?: state.cursorPosition
 			// Read the clipboard's HTML before mutating: the text, the in-editor
 			// rich spans and the pasted block structure then land as one revision.
-			val htmlDocument = state.readHtmlPasteDocument(clipboard, text)
-			val clipboardCopyId = ClipboardHelper.readCopyId(clipboard)
+			val htmlDocument = if (plainText) null else state.readHtmlPasteDocument(clipboard, text)
+			val clipboardCopyId = if (plainText) null else ClipboardHelper.readCopyId(clipboard)
 			state.preserveCopiedRichSpansThroughNextEdit()
 			state.withAtomicEdit {
 				if (curSelection != null) {
@@ -116,12 +122,14 @@ private fun EditorActionContext.pasteClipboard() {
 				} else {
 					state.insertStringAtCursor(text)
 				}
-				state.pasteRichSpans(
-					insertPosition,
-					text,
-					clipboardCopyId,
-					requireCopyIdMatch = ClipboardHelper.supportsCopyProvenance,
-				)
+				if (!plainText) {
+					state.pasteRichSpans(
+						insertPosition,
+						text,
+						clipboardCopyId,
+						requireCopyIdMatch = ClipboardHelper.supportsCopyProvenance,
+					)
+				}
 				htmlDocument?.let { state.applyHtmlPasteBlocks(it, insertPosition, text) }
 			}
 			state.selector.clearSelection()

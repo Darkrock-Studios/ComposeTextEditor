@@ -299,8 +299,10 @@ a character. `sampleApp/BoldShortcut.kt` is this worked out, including picking
 the modifier per platform.
 
 *Replace a built-in.* Register over its id. `editor.paste` bound to a paste that
-strips formatting changes the chord, the context menu and anything else that
-invokes it, because they all resolve through the same registry.
+sanitizes the clipboard changes the chord, the context menu and anything else
+that invokes it, because they all resolve through the same registry. Pasting has
+two actions, `editor.paste` and `editor.pasteAsPlainText`: a host that reroutes
+or disables pasting replaces or unregisters both.
 
 *Intercept an edit.* Implement `EditBehavior` and add it to
 `state.editBehaviors`. Use this, not an action, when the thing you are reacting

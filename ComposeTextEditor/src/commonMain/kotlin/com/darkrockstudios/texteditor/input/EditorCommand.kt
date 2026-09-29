@@ -44,6 +44,9 @@ sealed interface EditorCommand {
 			val Copy = Action("editor.copy", isEdit = false)
 			val Cut = Action("editor.cut", isEdit = true)
 			val Paste = Action("editor.paste", isEdit = true)
+
+			/** Pastes the clipboard's text alone, styled like text typed at the destination. */
+			val PasteAsPlainText = Action("editor.pasteAsPlainText", isEdit = true)
 			val Undo = Action("editor.undo", isEdit = true)
 			val Redo = Action("editor.redo", isEdit = true)
 			val DeleteBackward = Action("editor.deleteBackward", isEdit = true)
@@ -68,6 +71,7 @@ sealed interface EditorCommand {
 				Copy,
 				Cut,
 				Paste,
+				PasteAsPlainText,
 				Undo,
 				Redo,
 				DeleteBackward,

@@ -146,6 +146,7 @@ On macOS, verify each:
 | Option+Backspace | Delete previous word |
 | Cmd+Backspace | Delete to line start |
 | Option+8 | Types `{` (unclaimed Option chords must fall through to text) |
+| Cmd+Shift+V / Cmd+Option+Shift+V | Paste as plain text: no copied formatting, takes the style where it lands |
 | Shift+Return | New line |
 | Cmd+Return / Option+Return / Ctrl+Return | Nothing in the editor (left for the host to claim) |
 
@@ -183,11 +184,13 @@ The sample app registers Ctrl+B (Cmd+B on macOS) for bold as the worked example.
 2. **Expect:** the document is unchanged by every one of them. Copy and selection still
    work.
 
-### 3.5 Enter chords (Windows and Linux)
+### 3.5 Windows and Linux chords
 
-1. Shift+Enter. **Expect:** a new line.
-2. Ctrl+Enter, Ctrl+Shift+Enter, Alt+Enter. **Expect:** the document is unchanged; the
-   chord is left for the host.
+| Chord | Expected |
+| --- | --- |
+| Ctrl+Shift+V | Paste as plain text: no copied formatting, takes the style where it lands |
+| Shift+Enter | New line |
+| Ctrl+Enter / Ctrl+Shift+Enter / Alt+Enter | Nothing in the editor (left for the host to claim) |
 
 ## 4. Touch, focus and the soft keyboard (Android)
 

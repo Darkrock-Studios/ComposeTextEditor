@@ -246,6 +246,23 @@ class KeyBindingsTest {
 	}
 
 	@Test
+	fun `shift+v pastes as plain text`() {
+		assertEquals(
+			Action.PasteAsPlainText,
+			CtrlKeyBindings.commandFor(chord(Key.V, ctrl = true, shift = true)),
+		)
+		assertNull(CtrlKeyBindings.commandFor(chord(Key.V, ctrl = true, alt = true, shift = true)))
+		assertEquals(
+			Action.PasteAsPlainText,
+			MacKeyBindings.commandFor(chord(Key.V, meta = true, shift = true)),
+		)
+		assertEquals(
+			Action.PasteAsPlainText,
+			MacKeyBindings.commandFor(chord(Key.V, meta = true, alt = true, shift = true)),
+		)
+	}
+
+	@Test
 	fun `only plain and shifted enter break the line`() {
 		for (bindings in listOf(CtrlKeyBindings, MacKeyBindings)) {
 			for (enter in listOf(Key.Enter, Key.NumPadEnter)) {
