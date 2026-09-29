@@ -19,6 +19,34 @@ class DragAutoScrollE2eTest {
 	private val document = AnnotatedString((0 until 200).joinToString("\n") { "line $it" })
 
 	@Test
+	fun `dragging below a document that fits selects to its end`() = editorUiTest(
+		initialText = AnnotatedString("alpha beta\ngamma delta"),
+	) {
+		mouse {
+			moveTo(positionOfCharacter(2))
+			press()
+			moveTo(Offset(20f, state.viewportSize.height + 40f))
+			release()
+		}
+
+		assertEquals("pha beta\ngamma delta", selectedText)
+	}
+
+	@Test
+	fun `dragging above a document at its top selects to its start`() = editorUiTest(
+		initialText = AnnotatedString("alpha beta\ngamma delta"),
+	) {
+		mouse {
+			moveTo(positionOfCharacter(14))
+			press()
+			moveTo(Offset(200f, -40f))
+			release()
+		}
+
+		assertEquals("alpha beta\ngam", selectedText)
+	}
+
+	@Test
 	fun `holding a drag below the viewport keeps scrolling down`() = editorUiTest(initialText = document) {
 		test.mainClock.autoAdvance = false
 		val viewportHeight = state.viewportSize.height

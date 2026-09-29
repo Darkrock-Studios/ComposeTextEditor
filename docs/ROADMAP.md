@@ -165,7 +165,7 @@ review.
 | Lane | Area | Main files | Items |
 | --- | --- | --- | --- |
 | A | Caret motion | `state/TextEditorCursorState.kt`, `state/TextEditorStateCursorExt.kt`, `state/WordSegmentationUtils.kt`, `input/TextEditorKeyCommandHandler.kt` | 1.1 to 1.7, 1.19, 2.3, 2.6, 7.5 |
-| B | Pointer and touch | `textEditorPointerInputHandling.kt`, `state/TextEditorSelectionManager.kt`, `DrawSelectionHandles.kt` | 1.9, 1.12 to 1.16, 1.21, 1.22, 3.1, 3.2, 3.4 to 3.8, 3.13, 3.15, 4.23 |
+| B | Pointer and touch | `textEditorPointerInputHandling.kt`, `state/TextEditorSelectionManager.kt`, `DrawSelectionHandles.kt` | 1.9, 1.12 to 1.16, 1.21 to 1.23, 3.1, 3.2, 3.4 to 3.8, 3.13, 3.15, 4.23 |
 | C | Drawing and geometry | `Draw*.kt`, `cursor/`, `scrollbar/`, `state/TextEditorScrollState.kt`, hit testing | 1.8, 1.10, 1.11, 1.17, 1.18, 3.3, 3.12, 4.14, 7.6, 7.7 |
 | D | Bindings, actions, menu | `input/KeyBindings.kt`, `input/EditorCommand.kt`, `input/BuiltinEditorActions.kt`, `contextmenu/` | 2.1, 2.2, 2.4, 2.5, 2.7 to 2.11, 4.8, 5.8 |
 | E | Input sessions on desktop, iOS, web | `desktopMain`, `iosMain`, `wasmJsMain` under `input/` | 4.2 to 4.7, 4.10 to 4.12, 4.19, 4.21, 4.22 |
@@ -370,7 +370,8 @@ fixes what users feel every minute.
   `DragAutoScroll` now scrolls every frame while the pointer is above or below
   the viewport, at 10 px per second for each pixel outside, and extends the
   selection to the edge row as the text moves. It never jumps to the row
-  under the pointer any more.
+  under the pointer any more. With the first or last row in view, a drag past
+  that edge selects to the document's start or end.
 - [x] **1.15 Links. C.** [Opus] [Lane B] Span clicks are reported on press with
   no modifier state, so a host that opens links on click also fires when the
   user places the caret or starts a drag. Report on release, pass modifiers,
@@ -405,6 +406,12 @@ fixes what users feel every minute.
   right-click on an unfocused editor opens the menu without focusing it.
   `docs/design/touch-focus.md` expects it to focus. Watch for the press event
   directly instead.
+- [ ] **1.23 Word and line drags past the viewport. C.** [Opus] [Lane B]
+  Auto-scroll (1.14) keeps a character drag's caret on a wholly visible row,
+  but a word or line drag puts the caret at the far end of the unit under the
+  pointer. In a long wrapped paragraph that end is off screen, so the
+  editor's scroll-to-caret animation restarts every frame against the
+  auto-scroll and the scroll lurches.
 
 ### Selection drawing
 
