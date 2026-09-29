@@ -5,6 +5,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import com.darkrockstudios.texteditor.CharLineOffset
+import com.darkrockstudios.texteditor.effectiveHeight
 import com.darkrockstudios.texteditor.richstyle.LinkSpanStyle
 import com.darkrockstudios.texteditor.richstyle.RichSpan
 import utils.editorUiTest
@@ -88,5 +89,26 @@ class ClickOutsideTextE2eTest {
 			clickAtCharacter(8)
 			assertEquals(1, clicked.size, "precondition: a click on the link reaches the listener")
 		}
+	}
+
+	@Test
+	fun `dragging into the space under a short document selects to its end`() = editorUiTest(
+		initialText = AnnotatedString("alpha beta\ngamma delta"),
+	) {
+		val below = state.lineOffsets.last().let { it.offset.y + it.effectiveHeight } + 40f
+		assertTrue(below < state.viewportSize.height, "precondition: the point is inside the viewport")
+		dragBetween(positionOfCharacter(2), Offset(20f, below))
+
+		assertEquals("pha beta\ngamma delta", selectedText)
+	}
+
+	@Test
+	fun `dragging into the top padding selects to the document start`() = editorUiTest(
+		initialText = AnnotatedString("alpha beta\ngamma delta"),
+		contentPadding = PaddingValues(top = 40.dp),
+	) {
+		dragBetween(positionOfCharacter(14), Offset(200f, 10f))
+
+		assertEquals("alpha beta\ngam", selectedText)
 	}
 }

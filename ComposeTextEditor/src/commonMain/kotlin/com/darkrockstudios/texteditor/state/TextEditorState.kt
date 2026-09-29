@@ -1036,14 +1036,15 @@ class TextEditorState(
 
 	/**
 	 * The [RichSpan] under a pointer at [offset], in the same coordinates as
-	 * [getOffsetAtPosition]. Unlike that mapping, a point above the first row or
-	 * below the last row is over no span.
+	 * [getOffsetAtPosition]. Unlike that mapping, a point above the first row, below
+	 * the last row, or in the side padding is over no span.
 	 */
 	internal fun findSpanAtPoint(offset: Offset): RichSpan? {
 		val first = _lineOffsets.firstOrNull() ?: return null
 		val last = _lineOffsets.last()
 		val contentY = offset.y + scrollState.value
 		if (contentY < first.offset.y || contentY >= last.offset.y + last.effectiveHeight) return null
+		if (offset.x < 0f || offset.x > viewportSize.width) return null
 		return findSpanAtPosition(getOffsetAtPosition(offset))
 	}
 

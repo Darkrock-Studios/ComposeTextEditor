@@ -44,7 +44,7 @@ internal fun Modifier.textEditorPointerInputHandling(
 	readOnly: Boolean = false,
 	links: LinkClicks? = null,
 	caretHandle: Boolean = !readOnly,
-	contentOrigin: () -> Offset = { Offset.Zero },
+	contentOrigin: () -> Offset,
 ): Modifier {
 	return this
 		.handleHandleDrag(state, contentOrigin)
@@ -362,7 +362,7 @@ internal fun Modifier.textEditorPointerIcon(
 	state: TextEditorState,
 	links: LinkClicks?,
 	default: PointerIcon? = PointerIcon.Text,
-	contentOrigin: () -> Offset = { Offset.Zero },
+	contentOrigin: () -> Offset,
 ): Modifier = composed {
 	var icon by remember(state, default) { mutableStateOf(default) }
 	val tracking = pointerInput(state, links, default) {
@@ -385,7 +385,7 @@ internal fun Modifier.textEditorPointerIcon(
 internal fun Modifier.linkClickHandling(
 	state: TextEditorState,
 	links: LinkClicks,
-	contentOrigin: () -> Offset = { Offset.Zero },
+	contentOrigin: () -> Offset,
 ): Modifier =
 	pointerInput(state, links) {
 		val touchSlop = viewConfiguration.touchSlop

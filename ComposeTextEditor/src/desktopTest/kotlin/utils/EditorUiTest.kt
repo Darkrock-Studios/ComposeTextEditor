@@ -205,11 +205,11 @@ class EditorUiTestScope(
 	/** Where the selection's start or end touch handle is drawn. */
 	fun handleCenter(isStart: Boolean): Offset {
 		val selection = checkNotNull(state.selector.selection) { "no selection, so no handles" }
-		return drawnHandleCenter(state.getPositionForOffset(if (isStart) selection.start else selection.end))
+		return canvasToNode(drawnHandleCenter(state.getPositionForOffset(if (isStart) selection.start else selection.end)))
 	}
 
 	/** Where the touch caret handle is drawn, under the caret. */
-	fun caretHandleCenter(): Offset = drawnHandleCenter(state.getPositionForOffset(state.cursorPosition))
+	fun caretHandleCenter(): Offset = canvasToNode(drawnHandleCenter(state.getPositionForOffset(state.cursorPosition)))
 
 	/** Drags the touch caret handle so the caret travels to [toChar], then lifts. */
 	fun dragCaretHandle(toChar: Int, steps: Int = 8) {
@@ -229,7 +229,7 @@ class EditorUiTestScope(
 	 */
 	fun dragHandle(isStart: Boolean, toChar: Int, steps: Int = 8) {
 		val selection = checkNotNull(state.selector.selection)
-		val from = state.positionOfCharacter(state.getCharacterIndex(if (isStart) selection.start else selection.end))
+		val from = positionOfCharacter(state.getCharacterIndex(if (isStart) selection.start else selection.end))
 		val delta = positionOfCharacter(toChar) - from
 		val grab = handleCenter(isStart)
 		editor.performTouchInput {

@@ -133,7 +133,7 @@ fun BasicTextEditor(
 		)
 	}
 	val contentOrigin by rememberUpdatedState(
-		with(density) { Offset(contentPadding.calculateLeftPadding(layoutDirection).toPx(), 0f) }
+		with(density) { Offset(contentPadding.calculateLeftPadding(layoutDirection).roundToPx().toFloat(), 0f) }
 	)
 
 	LaunchedEffect(contentPadding, density) {

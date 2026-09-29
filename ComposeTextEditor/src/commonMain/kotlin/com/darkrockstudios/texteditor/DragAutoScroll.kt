@@ -79,11 +79,12 @@ internal class DragAutoScroll(
 	 * [position] moved onto the edge row the drag has reached when it is outside the
 	 * viewport. The row must be wholly visible: a caret on a partly visible one would start
 	 * the editor's own scroll to reveal it, which fights this one frame by frame. Once the
-	 * first or last row is in view, past that edge means the document's start or end.
+	 * first or last row is in view, past that edge means the document's start or end,
+	 * inside the viewport (its padding, the space under a short document) or out of it.
 	 */
 	private fun clampToViewport(position: Offset): Offset {
 		val overflow = overflow(position)
-		if (overflow == 0f) return position
+		if (overflow == 0f) return pastDocumentEdge(position) ?: position
 		val top = state.scrollState.value.toFloat()
 		val bottom = top + state.viewportSize.height
 		val rows = state.lineOffsets
@@ -111,6 +112,21 @@ internal class DragAutoScroll(
 		val y = row?.let { it.offset.y + it.effectiveHeight / 2f - top }
 			?: position.y.coerceIn(0f, (state.viewportSize.height - 1f).coerceAtLeast(0f))
 		return position.copy(y = y)
+	}
+
+	/** The document's start above its first row, its end below its last, else null. */
+	private fun pastDocumentEdge(position: Offset): Offset? {
+		val rows = state.lineOffsets
+		val first = rows.firstOrNull() ?: return null
+		val last = rows.last()
+		val top = state.scrollState.value.toFloat()
+		val y = position.y + top
+		return when {
+			y < first.offset.y -> Offset(-DOCUMENT_EDGE_X, first.offset.y + first.effectiveHeight / 2f - top)
+			y >= last.offset.y + last.effectiveHeight ->
+				Offset(DOCUMENT_EDGE_X, last.offset.y + last.effectiveHeight / 2f - top)
+			else -> null
+		}
 	}
 
 	private companion object {

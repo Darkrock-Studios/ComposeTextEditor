@@ -348,9 +348,12 @@ fixes what users feel every minute.
   `getOffsetAtPosition` (`state/TextEditorState.kt`) falls through to "end of
   last line" for any y above the content. Clicking in the top padding, or
   dragging a selection above the top, sends the caret to the document end.
-  Done: a point above the first row hits the first row and one below the last
+  Done: a click above the first row hits the first row and one below the last
   row hits the last row, x hit-tested either way, as `BasicTextField` does
-  (`e2e/ClickOutsideTextE2eTest.kt`).
+  (`e2e/ClickOutsideTextE2eTest.kt`). A drag past the first or last row, in the
+  viewport or out of it, selects to the document's start or end, following
+  1.14 (`DragAutoScroll`); `BasicTextField` keeps x there too. A click or tap
+  outside the text (above, below, or in the side padding) clicks no span.
 - [x] **1.11 Padding. C.** [Opus] [Lane C] The placeholder draws at `Offset(0,
   0)`, ignoring top padding (`DrawPlaceholderText.kt`). Horizontal padding sits
   outside pointer input, leaving dead click zones.

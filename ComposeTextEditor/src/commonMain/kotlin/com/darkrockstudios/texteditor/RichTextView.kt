@@ -153,8 +153,8 @@ private fun RichTextViewBody(
 		val contentOrigin by rememberUpdatedState(
 			with(density) {
 				Offset(
-					contentPadding.calculateLeftPadding(layoutDirection).toPx(),
-					contentPadding.calculateTopPadding().toPx(),
+					contentPadding.calculateLeftPadding(layoutDirection).roundToPx().toFloat(),
+					contentPadding.calculateTopPadding().roundToPx().toFloat(),
 				)
 			}
 		)

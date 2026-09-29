@@ -15,6 +15,8 @@ import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.RichTextView
 import com.darkrockstudios.texteditor.cursor.calculateCursorPosition
 import com.darkrockstudios.texteditor.placeholderTopLeft
+import com.darkrockstudios.texteditor.richstyle.RichSpan
+import com.darkrockstudios.texteditor.richstyle.SpellCheckStyle
 import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.rememberTextEditorState
 import utils.EditorUiTestScope
@@ -99,6 +101,28 @@ class ContentPaddingE2eTest {
 		clickAt(Offset(startPaddingMiddle(), positionOfCharacter(0).y))
 
 		assertTrue(state.isFocused)
+	}
+
+	@Test
+	fun `a click in the start padding does not click a span at the row start`() {
+		val clicked = mutableListOf<RichSpan>()
+		editorUiTest(
+			initialText = AnnotatedString("teh cat"),
+			contentPadding = PADDING,
+			onRichSpanClick = { span, _, _ ->
+				clicked += span
+				true
+			},
+		) {
+			state.addRichSpan(0, 3, SpellCheckStyle)
+
+			clickAt(Offset(startPaddingMiddle(), positionOfCharacter(0).y))
+			assertEquals(emptyList(), clicked, "the pointer was never over the word")
+			assertEquals(CharLineOffset(0, 0), state.cursorPosition)
+
+			clickAtCharacter(1)
+			assertEquals(1, clicked.size, "precondition: a click on the word reaches the listener")
+		}
 	}
 
 	@Test
