@@ -1,5 +1,6 @@
 package com.darkrockstudios.texteditor.find
 
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
@@ -34,6 +35,19 @@ class FindState(
 
 	var caseSensitive: Boolean by mutableStateOf(false)
 		private set
+
+	/** Whether a match must stand as a whole word. */
+	var wholeWord: Boolean by mutableStateOf(false)
+		private set
+
+	/** Whether [query] is a regular expression. */
+	var useRegex: Boolean by mutableStateOf(false)
+		private set
+
+	/** Whether [query] is a regular expression that does not compile; it then finds nothing. */
+	val isInvalidPattern: Boolean by derivedStateOf {
+		useRegex && query.isNotEmpty() && !isValidFindPattern(query)
+	}
 
 	// Search results
 	private val _matches = mutableStateListOf<TextEditorRange>()
@@ -117,9 +131,34 @@ class FindState(
 	fun toggleCaseSensitive(sensitive: Boolean) {
 		if (caseSensitive != sensitive) {
 			caseSensitive = sensitive
-			if (query.isNotEmpty()) {
-				search(query)
-			}
+			rerunSearch()
+		}
+	}
+
+	/**
+	 * Toggle whole-word matching and re-run search if there's an active query.
+	 */
+	fun toggleWholeWord(enabled: Boolean) {
+		if (wholeWord != enabled) {
+			wholeWord = enabled
+			rerunSearch()
+		}
+	}
+
+	/**
+	 * Toggle regular expression matching and re-run search if there's an active query.
+	 * See [isInvalidPattern].
+	 */
+	fun toggleRegex(enabled: Boolean) {
+		if (useRegex != enabled) {
+			useRegex = enabled
+			rerunSearch()
+		}
+	}
+
+	private fun rerunSearch() {
+		if (query.isNotEmpty()) {
+			search(query)
 		}
 	}
 
@@ -277,7 +316,8 @@ class FindState(
 		}
 	}
 
-	private fun findMatches(): List<TextEditorRange> = textState.findAll(query, caseSensitive)
+	private fun findMatches(): List<TextEditorRange> =
+		textState.findAll(query, caseSensitive, wholeWord, useRegex)
 
 	/**
 	 * Cancel any ongoing operations. Call this when done with FindState.

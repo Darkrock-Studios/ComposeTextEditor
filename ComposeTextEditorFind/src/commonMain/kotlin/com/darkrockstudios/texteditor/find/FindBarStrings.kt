@@ -33,6 +33,14 @@ data class FindBarStrings(
 	val showReplace: String,
 	/** Label for the control that hides the replace UI. */
 	val hideReplace: String,
+	/** Accessibility label for the case-sensitive toggle. */
+	val matchCase: String = "Match case",
+	/** Accessibility label for the whole-word toggle. */
+	val wholeWord: String = "Whole word",
+	/** Accessibility label for the regular expression toggle. */
+	val regex: String = "Regular expression",
+	/** Message shown when the query is not a valid regular expression. */
+	val invalidPattern: String = "Invalid pattern",
 ) {
 	companion object {
 		/**

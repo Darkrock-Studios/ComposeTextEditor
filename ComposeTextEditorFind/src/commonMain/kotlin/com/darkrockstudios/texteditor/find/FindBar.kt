@@ -1,8 +1,10 @@
 package com.darkrockstudios.texteditor.find
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
@@ -15,12 +17,20 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.*
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -112,7 +122,11 @@ fun FindBar(
 				Box(
 					modifier = Modifier
 						.weight(1f)
-						.border(borderWidth, borderColor, RoundedCornerShape(borderRadius))
+						.border(
+							borderWidth,
+							if (state.isInvalidPattern) MaterialTheme.colorScheme.error else borderColor,
+							RoundedCornerShape(borderRadius)
+						)
 						.padding(horizontal = fieldPaddingHorizontal, vertical = fieldPaddingVertical),
 					contentAlignment = Alignment.CenterStart
 				) {
@@ -169,6 +183,37 @@ fun FindBar(
 							)
 						}
 
+						Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+							OptionToggle(
+								glyph = "Aa",
+								description = strings.matchCase,
+								checked = state.caseSensitive,
+								onCheckedChange = {
+									state.toggleCaseSensitive(it)
+									focusRequester.requestFocus()
+								},
+							)
+							OptionToggle(
+								glyph = "ab",
+								description = strings.wholeWord,
+								checked = state.wholeWord,
+								onCheckedChange = {
+									state.toggleWholeWord(it)
+									focusRequester.requestFocus()
+								},
+								decoration = TextDecoration.Underline,
+							)
+							OptionToggle(
+								glyph = ".*",
+								description = strings.regex,
+								checked = state.useRegex,
+								onCheckedChange = {
+									state.toggleRegex(it)
+									focusRequester.requestFocus()
+								},
+							)
+						}
+
 						if (searchText.isNotEmpty()) {
 							IconButton(
 								onClick = {
@@ -188,7 +233,13 @@ fun FindBar(
 				}
 
 				// Match count
-				if (state.query.isNotEmpty()) {
+				if (state.isInvalidPattern) {
+					Text(
+						text = strings.invalidPattern,
+						style = MaterialTheme.typography.bodySmall,
+						color = MaterialTheme.colorScheme.error
+					)
+				} else if (state.query.isNotEmpty()) {
 					Text(
 						text = if (state.matchCount > 0) {
 							strings.matchCount(state.currentMatchIndex + 1, state.matchCount)
@@ -365,3 +416,35 @@ fun FindBar(
 
 private val KeyEvent.isEnter: Boolean
 	get() = key == Key.Enter || key == Key.NumPadEnter
+
+/** A small glyph toggle for a search option, in the style of code editors' find bars. */
+@Composable
+private fun OptionToggle(
+	glyph: String,
+	description: String,
+	checked: Boolean,
+	onCheckedChange: (Boolean) -> Unit,
+	decoration: TextDecoration? = null,
+) {
+	val colors = MaterialTheme.colorScheme
+	Box(
+		modifier = Modifier
+			.size(22.dp)
+			.clip(RoundedCornerShape(3.dp))
+			.background(if (checked) colors.primary.copy(alpha = 0.18f) else Color.Transparent)
+			.toggleable(value = checked, role = Role.Checkbox, onValueChange = onCheckedChange)
+			.semantics { contentDescription = description },
+		contentAlignment = Alignment.Center
+	) {
+		Text(
+			text = glyph,
+			style = TextStyle(
+				fontSize = 12.sp,
+				fontWeight = FontWeight.Medium,
+				textDecoration = decoration,
+				color = if (checked) colors.primary else colors.onSurfaceVariant,
+			),
+			modifier = Modifier.clearAndSetSemantics { },
+		)
+	}
+}

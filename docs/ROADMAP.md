@@ -688,6 +688,8 @@ Shaping is one line per keystroke. These still scale with document length:
 - [x] **7.19** [Opus] [Lane J] Esc and Ctrl+F close without clearing
   highlights. The shortcut tests `isCtrlPressed`, so AltGr+F is stolen on
   Windows layouts; use `isCtrlShortcut`.
+- [ ] **7.26** [Opus] [Lane J] Regex replace inserts the replacement
+  literally; `$1` and named groups are not expanded.
 
 ### Spell check addon
 
