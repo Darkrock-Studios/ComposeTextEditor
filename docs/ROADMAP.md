@@ -257,6 +257,8 @@ editor does rather than what it should do.
   Samsung, SwiftKey, AnySoftKeyboard). First case: hammer-editor#930.
 - [ ] **0.5 Geometry assertions.** [Opus] [Lane L] Assert caret and selection
   rectangles from layout. Stable across machines, unlike pixels.
+  Started in lane C: `utils/DrawRecorder.kt` runs a draw function on a canvas
+  that records each rectangle and line with its colour.
 - [ ] **0.6 Golden screenshots.** [Opus] [Lane L] A small set of scenes with a
   bundled font on one CI machine: caret, selection across wrapped and empty
   lines, squiggles, list markers, composing underline.
@@ -330,9 +332,15 @@ fixes what users feel every minute.
   document start or end, as GTK and browser text areas do. No margin: the view
   scrolls just far enough to show the caret's row, like every native editor; a
   host wanting room adds content padding.
-- [ ] **1.8 Caret drawing. C.** [Opus] [Lane C] Width is a raw `2f` px, not dp
+- [x] **1.8 Caret drawing. C.** [Opus] [Lane C] Width is a raw `2f` px, not dp
   and not configurable (`cursor/DrawCursorUi.kt`). Blink does not reset on
   forward delete. The caret is still drawn while a selection exists.
+  Done: `TextEditorStyle.cursorWidth`, 2.dp like `BasicTextField`, drawn with
+  its left edge on the glyph boundary and kept inside the canvas. The blink
+  restarts on every caret move and every edit. The caret is hidden while text is
+  selected, on every platform; its metrics still reach the IME
+  (`drawing/CaretDrawingTest.kt`, which records drawing through
+  `utils/DrawRecorder.kt` rather than reading pixels).
 
 ### Mouse
 
@@ -972,7 +980,7 @@ Shaping is one line per keystroke. These still scale with document length:
 - [x] `docs/design/text-input-sessions.md` describes iOS as routing through
   the shared IME logic; it does not yet (4.2). True since 4.2's Linux part.
 - [ ] `getOffsetAtCharacter` returns a negative char for negative input.
-- [ ] `rememberTextEditorStyle` leaves `backgroundColor` out of its `remember`
+- [x] `rememberTextEditorStyle` leaves `backgroundColor` out of its `remember`
   keys, so a new background colour is ignored until another key changes.
 - [ ] The document content is not snapshot state, so the skiko input session
   (4.2) collects `editOperations` and `documentGeneration` to bump a

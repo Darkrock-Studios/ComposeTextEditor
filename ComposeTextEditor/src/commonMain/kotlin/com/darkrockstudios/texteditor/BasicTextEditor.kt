@@ -62,7 +62,9 @@ import com.darkrockstudios.texteditor.state.SpanClickType
 import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.rememberTextEditorState
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.merge
 import kotlin.time.Duration.Companion.milliseconds
 
 private const val CURSOR_BLINK_SPEED_MS = 500L
@@ -161,10 +163,17 @@ fun BasicTextEditor(
 		}
 	}
 
-	LaunchedEffect(state.isFocused, state.cursorPosition, enabled) {
-		if (enabled && state.isFocused) {
+	// The blink restarts, caret shown, on focus, on every caret move, when a selection
+	// comes or goes, and on every edit, which may leave the caret in place (forward delete).
+	LaunchedEffect(state, enabled) {
+		if (!enabled) return@LaunchedEffect
+		merge(
+			snapshotFlow { Triple(state.isFocused, state.cursorPosition, state.selector.hasSelection()) },
+			state.editOperations,
+		).collectLatest {
+			if (!state.isFocused) return@collectLatest
 			state.cursor.setVisible()
-			while (state.isFocused) {
+			while (true) {
 				delay(CURSOR_BLINK_SPEED_MS.milliseconds)
 				state.cursor.toggleVisibility()
 			}
@@ -329,8 +338,8 @@ fun BasicTextEditor(
 
 					DrawSelectionHandles(state)
 
-					if (enabled && state.isFocused && state.cursor.isVisible) {
-						DrawCursor(state, style.cursorColor)
+					if (enabled && state.isFocused) {
+						DrawCursor(state, style.cursorColor, style.cursorWidth)
 					}
 				}
 			}

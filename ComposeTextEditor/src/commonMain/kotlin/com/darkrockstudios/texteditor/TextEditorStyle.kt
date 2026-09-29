@@ -5,6 +5,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 
 /**
  * The colors and text style applied to a [TextEditor]. Any `Color.Unspecified` field
@@ -62,6 +64,8 @@ data class TextEditorStyle(
 	 * `Color.Unspecified` falls back to `Color.Gray.copy(alpha = 0.55f)`.
 	 */
 	val codeFenceBorderColor: Color = Color.Unspecified,
+	/** Width of the caret. The default matches `BasicTextField`'s. */
+	val cursorWidth: Dp = 2.dp,
 )
 
 /**
@@ -99,11 +103,12 @@ fun rememberTextEditorStyle(
 	// already encodes the intended subtlety.
 	codeFenceBackgroundColor: Color = MaterialTheme.colorScheme.surfaceContainerHigh,
 	codeFenceBorderColor: Color = MaterialTheme.colorScheme.outline,
+	cursorWidth: Dp = 2.dp,
 ): TextEditorStyle = remember(
-	textColor, placeholderText, placeholderColor,
+	textColor, backgroundColor, placeholderText, placeholderColor,
 	cursorColor, selectionColor, focusedBorderColor, unfocusedBorderColor, textStyle,
 	bulletColor, blockquoteBarColor, blockquoteBackgroundColor, orderedListMarkerColor,
-	codeFenceBackgroundColor, codeFenceBorderColor,
+	codeFenceBackgroundColor, codeFenceBorderColor, cursorWidth,
 ) {
 	TextEditorStyle(
 		textColor = textColor,
@@ -121,5 +126,6 @@ fun rememberTextEditorStyle(
 		orderedListMarkerColor = orderedListMarkerColor,
 		codeFenceBackgroundColor = codeFenceBackgroundColor,
 		codeFenceBorderColor = codeFenceBorderColor,
+		cursorWidth = cursorWidth,
 	)
 }
