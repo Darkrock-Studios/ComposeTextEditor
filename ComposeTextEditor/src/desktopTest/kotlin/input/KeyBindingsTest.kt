@@ -246,6 +246,40 @@ class KeyBindingsTest {
 	}
 
 	@Test
+	fun `windows and linux honour the cua clipboard chords`() {
+		for (insert in listOf(Key.Insert, Key.NumPadInsert)) {
+			assertEquals(Action.Copy, CtrlKeyBindings.commandFor(chord(insert, ctrl = true)))
+			assertEquals(Action.Paste, CtrlKeyBindings.commandFor(chord(insert, shift = true)))
+			assertNull(CtrlKeyBindings.commandFor(chord(insert)))
+			assertNull(CtrlKeyBindings.commandFor(chord(insert, ctrl = true, alt = true)))
+		}
+		for (delete in listOf(Key.Delete, Key.NumPadDelete)) {
+			assertEquals(Action.Cut, CtrlKeyBindings.commandFor(chord(delete, shift = true)))
+			assertEquals(
+				Action.DeleteForward,
+				CtrlKeyBindings.commandFor(chord(delete, ctrl = true, alt = true, shift = true)),
+			)
+		}
+	}
+
+	@Test
+	fun `macos leaves the cua clipboard chords unbound`() {
+		assertNull(MacKeyBindings.commandFor(chord(Key.Insert, ctrl = true)))
+		assertNull(MacKeyBindings.commandFor(chord(Key.Insert, meta = true)))
+		assertNull(MacKeyBindings.commandFor(chord(Key.Insert, shift = true)))
+		assertEquals(Action.DeleteForward, MacKeyBindings.commandFor(chord(Key.Delete, shift = true)))
+	}
+
+	@Test
+	fun `the dedicated clipboard keys mean the same on both platforms`() {
+		for (bindings in listOf(CtrlKeyBindings, MacKeyBindings)) {
+			assertEquals(Action.Cut, bindings.commandFor(chord(Key.Cut)))
+			assertEquals(Action.Copy, bindings.commandFor(chord(Key.Copy)))
+			assertEquals(Action.Paste, bindings.commandFor(chord(Key.Paste)))
+		}
+	}
+
+	@Test
 	fun `shift+v pastes as plain text`() {
 		assertEquals(
 			Action.PasteAsPlainText,

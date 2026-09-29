@@ -82,7 +82,19 @@ object CtrlKeyBindings : KeyBindings {
 			Key.MoveHome -> if (ctrl) Motion.DocumentStart else Motion.LineStart
 			Key.MoveEnd -> if (ctrl) Motion.DocumentEnd else Motion.LineEnd
 			Key.Backspace -> if (ctrl) Action.DeleteWordBackward else Action.DeleteBackward
-			Key.Delete -> if (ctrl) Action.DeleteWordForward else Action.DeleteForward
+			Key.Delete -> when {
+				ctrl -> Action.DeleteWordForward
+				event.isShiftPressed && !event.isAltPressed -> Action.Cut
+				else -> Action.DeleteForward
+			}
+
+			// The IBM CUA clipboard chords, still honoured by Windows and Linux editors.
+			Key.Insert -> when {
+				ctrl -> Action.Copy
+				event.isShiftPressed && !event.isAltPressed -> Action.Paste
+				else -> null
+			}
+
 			else -> commonCommandFor(event)
 		}
 	}
@@ -153,6 +165,9 @@ private fun commonCommandFor(event: KeyEvent): EditorCommand? = when (event.navi
 	Key.PageDown -> Motion.PageDown
 	Key.Tab -> if (event.isShiftPressed) Action.Outdent else Action.Indent
 	Key.Enter, Key.NumPadEnter -> if (event.isEnterHostChord) null else Action.NewLine
+	Key.Cut -> Action.Cut
+	Key.Copy -> Action.Copy
+	Key.Paste -> Action.Paste
 	else -> null
 }
 
@@ -179,5 +194,6 @@ private val KeyEvent.navigationKey: Key
 		Key.NumPadPageUp -> Key.PageUp
 		Key.NumPadPageDown -> Key.PageDown
 		Key.NumPadDelete -> Key.Delete
+		Key.NumPadInsert -> Key.Insert
 		else -> key
 	}

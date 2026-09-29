@@ -189,6 +189,8 @@ The sample app registers Ctrl+B (Cmd+B on macOS) for bold as the worked example.
 | Chord | Expected |
 | --- | --- |
 | Ctrl+Shift+V | Paste as plain text: no copied formatting, takes the style where it lands |
+| Ctrl+Insert / Shift+Insert / Shift+Delete | Copy / paste / cut (Shift+Delete with no selection does nothing) |
+| The dedicated Cut, Copy and Paste keys, where the keyboard has them | Cut / copy / paste, on every platform |
 | Shift+Enter | New line |
 | Ctrl+Enter / Ctrl+Shift+Enter / Alt+Enter | Nothing in the editor (left for the host to claim) |
 

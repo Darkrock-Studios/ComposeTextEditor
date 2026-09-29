@@ -349,8 +349,10 @@ fixes what users feel every minute.
   Linux, Option+Up/Down on macOS.
 - [ ] **2.4 Delete to line end.** [Opus] [Lane D] Cmd+Delete and Ctrl+K on
   macOS.
-- [ ] **2.5 Legacy chords.** [Opus] [Lane D] Ctrl+Insert, Shift+Insert,
-  Shift+Delete, and the dedicated Cut, Copy, and Paste keys.
+- [x] **2.5 Legacy chords.** [Opus] [Lane D] Ctrl+Insert, Shift+Insert,
+  Shift+Delete, and the dedicated Cut, Copy, and Paste keys. The CUA chords
+  are on `CtrlKeyBindings` only; the dedicated keys are on both. Shift+Delete
+  with no selection is a no-op, as a cut of nothing is.
 - [ ] **2.6 macOS conventions.** [Opus] [Lane A] Option+Right stops at the end
   of the current word, not the start of the next. The Emacs-style Ctrl bindings
   (A, E, F, B, N, P, D, H, K) that every Cocoa text view has.
