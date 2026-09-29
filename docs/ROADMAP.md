@@ -286,7 +286,7 @@ fixes what users feel every minute.
   the caret overflows into a later row: the probe saw Down go from row 2 to row
   5. Use the caret's x and hit-test the target row; remember the goal x until a
   horizontal move or an edit.
-- [ ] **1.3 Document edges. R.** [Opus] [Lane A] Up on the first row and Down
+- [x] **1.3 Document edges. R.** [Opus] [Lane A] Up on the first row and Down
   on the last row do nothing. Native moves to document start and end.
 - [x] **1.4 Collapse the selection on an unshifted arrow. R.** [Opus] [Lane A]
   Left or Right with a selection moves one character from the caret

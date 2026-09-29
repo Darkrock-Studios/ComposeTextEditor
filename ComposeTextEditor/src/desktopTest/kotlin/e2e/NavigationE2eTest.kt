@@ -2,6 +2,7 @@ package e2e
 
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.unit.dp
 import com.darkrockstudios.texteditor.CharLineOffset
 import utils.editorUiTest
 import kotlin.test.Test
@@ -79,16 +80,50 @@ class NavigationE2eTest {
 	}
 
 	@Test
-	fun `up on the first line and down on the last line are no-ops`() = editorUiTest(
+	fun `up on the first line goes to the document start and down on the last line to its end`() = editorUiTest(
 		initialText = AnnotatedString("Hello\nWorld"),
 	) {
 		clickAtCharacter(2)
 		press(Key.DirectionUp)
-		assertEquals(CharLineOffset(0, 2), state.cursorPosition)
+		assertEquals(CharLineOffset(0, 0), state.cursorPosition)
 
 		clickAtCharacter(8)
 		press(Key.DirectionDown)
-		assertEquals(CharLineOffset(1, 2), state.cursorPosition)
+		assertEquals(CharLineOffset(1, 5), state.cursorPosition)
+	}
+
+	@Test
+	fun `shift up on the first line and shift down on the last line select to the document ends`() = editorUiTest(
+		initialText = AnnotatedString("Hello\nWorld"),
+	) {
+		clickAtCharacter(2)
+		press(Key.DirectionUp, shift = true)
+		assertEquals("He", selectedText)
+
+		clickAtCharacter(8)
+		press(Key.DirectionDown, shift = true)
+		assertEquals("rld", selectedText)
+	}
+
+	@Test
+	fun `up and down reach the document ends only from the first and last visual rows`() = editorUiTest(
+		initialText = AnnotatedString("alpha beta gamma delta epsilon zeta"),
+		width = 120.dp,
+	) {
+		assertTrue(state.lineOffsets.size >= 3, "the paragraph must wrap into at least three rows")
+		val secondRowStart = state.lineOffsets[1].wrapStartsAtIndex
+		clickAtCharacter(secondRowStart + 1)
+		press(Key.DirectionUp)
+		assertTrue(cursorIndex in 1 until secondRowStart, "up from the second row lands on the first, was $cursorIndex")
+		press(Key.DirectionUp)
+		assertEquals(0, cursorIndex)
+
+		val lastRowStart = state.lineOffsets.last().wrapStartsAtIndex
+		clickAtCharacter(lastRowStart - 2)
+		press(Key.DirectionDown)
+		assertTrue(cursorIndex in lastRowStart until text.length, "down from the second last row lands on the last, was $cursorIndex")
+		press(Key.DirectionDown)
+		assertEquals(text.length, cursorIndex)
 	}
 
 	@Test

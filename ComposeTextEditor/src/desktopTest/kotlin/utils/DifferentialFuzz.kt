@@ -12,7 +12,7 @@ import kotlin.test.fail
  * reference's state and the script continues. Delete an item here when it lands,
  * and the fuzzer starts failing on that class of divergence.
  */
-val OPEN_PARITY_ITEMS: Set<String> = setOf("1.1", "1.2", "1.3", "1.5", "1.6", "1.7", "1.19")
+val OPEN_PARITY_ITEMS: Set<String> = setOf("1.1", "1.2", "1.5", "1.6", "1.7", "1.19")
 
 /** Starting text for the Unicode fuzzers: an emoji, a combining mark, and a right-to-left word. */
 const val FUZZ_START_TEXT = "seed line\nsecond line of words\n\uD83D\uDE00 e\u0301 שלום end"

@@ -7,42 +7,42 @@ import com.darkrockstudios.texteditor.CharLineOffset
 // text. Missing cursors step by logical line; updatePosition clamps into the text.
 
 internal fun TextEditorState.moveCursorUp() {
-	val currentWrappedIndex = getWrappedLineIndex(cursorPosition)
-	if (currentWrappedIndex < 0) {
-		if (cursorPosition.line > 0) {
-			cursor.updatePosition(cursorPosition.copy(line = cursorPosition.line - 1))
-		}
-	} else if (currentWrappedIndex > 0) {
-		val curWrappedSegment = lineOffsets[currentWrappedIndex]
-		val previousWrappedSegment = lineOffsets[currentWrappedIndex - 1]
-		val localCharIndex = cursorPosition.char - curWrappedSegment.wrapStartsAtIndex
-
-		cursor.updatePosition(
-			CharLineOffset(
-				line = previousWrappedSegment.line,
-				char = previousWrappedSegment.wrapStartsAtIndex + localCharIndex
+	val index = getWrappedLineIndex(cursorPosition)
+	val row = lineOffsets.getOrNull(index)
+	when {
+		cursorPosition.line == 0 && (row == null || row.virtualLineIndex == 0) -> moveToDocumentStart()
+		index <= 0 -> cursor.updatePosition(cursorPosition.copy(line = cursorPosition.line - 1))
+		else -> {
+			val previousRow = lineOffsets[index - 1]
+			val localCharIndex = cursorPosition.char - row!!.wrapStartsAtIndex
+			cursor.updatePosition(
+				CharLineOffset(
+					line = previousRow.line,
+					char = previousRow.wrapStartsAtIndex + localCharIndex
+				)
 			)
-		)
+		}
 	}
 }
 
 internal fun TextEditorState.moveCursorDown() {
-	val currentWrappedIndex = getWrappedLineIndex(cursorPosition)
-	if (currentWrappedIndex < 0) {
-		if (cursorPosition.line < textLines.lastIndex) {
-			cursor.updatePosition(cursorPosition.copy(line = cursorPosition.line + 1))
-		}
-	} else if (currentWrappedIndex < lineOffsets.size - 1) {
-		val curWrappedSegment = lineOffsets[currentWrappedIndex]
-		val nextWrappedSegment = lineOffsets[currentWrappedIndex + 1]
-		val localCharIndex = cursorPosition.char - curWrappedSegment.wrapStartsAtIndex
+	val index = getWrappedLineIndex(cursorPosition)
+	val row = lineOffsets.getOrNull(index)
+	val nextRow = if (row == null) null else lineOffsets.getOrNull(index + 1)
+	when {
+		cursorPosition.line == textLines.lastIndex && (nextRow == null || nextRow.line != cursorPosition.line) ->
+			moveToDocumentEnd()
 
-		cursor.updatePosition(
-			CharLineOffset(
-				line = nextWrappedSegment.line,
-				char = nextWrappedSegment.wrapStartsAtIndex + localCharIndex
+		nextRow == null -> cursor.updatePosition(cursorPosition.copy(line = cursorPosition.line + 1))
+		else -> {
+			val localCharIndex = cursorPosition.char - row!!.wrapStartsAtIndex
+			cursor.updatePosition(
+				CharLineOffset(
+					line = nextRow.line,
+					char = nextRow.wrapStartsAtIndex + localCharIndex
+				)
 			)
-		)
+		}
 	}
 }
 

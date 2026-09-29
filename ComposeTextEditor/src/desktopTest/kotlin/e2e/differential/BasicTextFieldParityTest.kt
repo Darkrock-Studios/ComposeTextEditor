@@ -109,14 +109,12 @@ class BasicTextFieldParityTest {
 	fun `up on the first row goes to the document start`() = assertMatchesNative(
 		start = EditSnapshot("Hello\nWorld", caret = 3),
 		strokes = listOf(Up),
-		divergesUntil = "1.3",
 	)
 
 	@Test
 	fun `down on the last row goes to the document end`() = assertMatchesNative(
 		start = EditSnapshot("Hello\nWorld", caret = 8),
 		strokes = listOf(Down),
-		divergesUntil = "1.3",
 	)
 
 	@Test

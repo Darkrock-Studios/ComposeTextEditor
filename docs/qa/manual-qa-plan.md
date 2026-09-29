@@ -207,6 +207,7 @@ On every desktop platform; the macOS chords are in 3.1.
 | Keys | Expected |
 | --- | --- |
 | Left / Right with a selection | The selection collapses to its start / end; the caret moves no further |
+| Up on the first row / Down on the last row | Document start / end; with Shift, selects to it |
 
 ## 4. Touch, focus and the soft keyboard (Android)
 
