@@ -120,6 +120,10 @@ this exercises the clipboard's HTML as the block carrier.
    rather than doing something destructive; the menu is never empty.
 4. RichTextView demo (read-only): right-click. **Expect:** Copy and Select All work,
    editing actions are absent or disabled. Typing changes nothing.
+5. Select a word, then right-click inside it. **Expect:** the selection stays and the
+   menu offers Cut and Copy. Right-click outside it. **Expect:** the caret moves to the
+   click and the selection clears before the menu opens (1.9). In the RichTextView demo
+   a right-click outside the selection keeps it.
 
 ### 2.7 Export while editing (#48)
 

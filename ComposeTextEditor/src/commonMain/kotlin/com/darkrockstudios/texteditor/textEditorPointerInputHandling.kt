@@ -206,7 +206,14 @@ private fun handleSpanInteraction(
 
 	// A shift+click extends the selection; handleDragInput owns that, so leave the
 	// cursor and selection untouched here rather than collapsing them.
-	if (!isShiftPressed && (clickType == SpanClickType.PRIMARY_CLICK || clickType == SpanClickType.TAP)) {
+	val placesCaret = when (clickType) {
+		SpanClickType.PRIMARY_CLICK, SpanClickType.TAP -> !isShiftPressed
+		// Like native editors, a right-click inside the selection keeps it for the context
+		// menu, and one outside it moves the caret there first. Read-only views have no
+		// caret to move, so they keep the selection either way.
+		SpanClickType.SECONDARY_CLICK -> !readOnly && !state.selector.selectionContains(position)
+	}
+	if (placesCaret) {
 		if (!readOnly) {
 			state.cursor.updatePosition(position)
 		}
@@ -369,14 +376,14 @@ private fun Modifier.detectMouseClicksImperatively(
 			while (true) {
 				val down = awaitFirstDown(requireUnconsumed = false)
 
-				// Treat anything with a primary mouse button as mouse-like, since Android
-				// reports external mice as PointerType.Touch (see android_mouse_pointer_type
-				// memo). Real finger touches have no buttons and are skipped here so they
-				// don't trigger the click/double-click handlers.
-				val hasPrimaryButton = currentEvent.buttons.isPrimaryPressed &&
-						!currentEvent.buttons.isSecondaryPressed
-				val isMouseLike = down.type == PointerType.Mouse || hasPrimaryButton
-				if (!isMouseLike) {
+				// Only the primary button clicks: the secondary button belongs to the context
+				// menu, the middle button to paste. A finger has no buttons, and Android reports
+				// an external mouse as PointerType.Touch, so buttons rather than the pointer type
+				// tell the two apart; a mouse that reports no buttons at all counts as primary.
+				val buttons = currentEvent.buttons
+				val isPrimaryClick = (buttons.isPrimaryPressed && !buttons.isSecondaryPressed) ||
+						(down.type == PointerType.Mouse && !buttons.areAnyPressed)
+				if (!isPrimaryClick) {
 					do {
 						val event = awaitPointerEvent()
 					} while (event.changes.any { it.pressed })

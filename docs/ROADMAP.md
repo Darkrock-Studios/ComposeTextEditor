@@ -336,10 +336,14 @@ fixes what users feel every minute.
 
 ### Mouse
 
-- [ ] **1.9 Right-click keeps the selection. S.** [Opus] [Lane B] Any mouse
+- [x] **1.9 Right-click keeps the selection. S.** [Opus] [Lane B] Any mouse
   button counts as a click (`textEditorPointerInputHandling.kt`,
   `detectMouseClicksImperatively`) and the click handler clears the selection,
-  so the context menu opens with Cut and Copy hidden.
+  so the context menu opens with Cut and Copy hidden. Only the primary button
+  clicks now. A right-click inside the selection keeps it; one outside moves
+  the caret there first, as Chrome, VS Code, and GTK do. `BasicTextField`
+  leaves the caret where it was on any right-click, so this departs from it.
+  A read-only `RichTextView` keeps its selection on any right-click.
 - [ ] **1.10 Clicks above the first line. S.** [Opus] [Lane C]
   `getOffsetAtPosition` (`state/TextEditorState.kt`) falls through to "end of
   last line" for any y above the content. Clicking in the top padding, or

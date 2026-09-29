@@ -209,7 +209,8 @@ buttons rather than pointer type because Android reports external mice as
 `Touch`. Mouse-like input places the caret on press, drags to select, and
 extends with shift-click; finger input places the caret on release,
 long-presses to select a word or open the context menu, and drags selection
-handles.
+handles. Only the primary mouse button places the caret or selects; the
+secondary button opens the context menu, keeping a selection it lands inside.
 
 ## Document model and transactions
 

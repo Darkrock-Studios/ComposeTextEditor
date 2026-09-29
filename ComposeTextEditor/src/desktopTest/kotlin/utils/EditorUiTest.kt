@@ -17,6 +17,7 @@ import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performMouseInput
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.pressKey
+import androidx.compose.ui.test.rightClick
 import androidx.compose.ui.test.runSkikoComposeUiTest
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
@@ -193,6 +194,13 @@ class EditorUiTestScope(
 		if (shift) test.onRoot().performKeyInput { keyDown(Key.ShiftLeft) }
 		editor.performMouseInput { click(position) }
 		if (shift) test.onRoot().performKeyInput { keyUp(Key.ShiftLeft) }
+		test.waitForIdle()
+	}
+
+	/** Right-clicks the character at flat index [charIndex]. */
+	fun rightClickAtCharacter(charIndex: Int) {
+		defeatMultiClickDetection()
+		editor.performMouseInput { rightClick(positionOfCharacter(charIndex)) }
 		test.waitForIdle()
 	}
 

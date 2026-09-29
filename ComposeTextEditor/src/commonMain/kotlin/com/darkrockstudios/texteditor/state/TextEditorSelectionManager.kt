@@ -122,6 +122,12 @@ class TextEditorSelectionManager(
 
 	fun hasSelection(): Boolean = _selection != null
 
+	/** Whether [position] lies within the selection, either end included. */
+	fun selectionContains(position: CharLineOffset): Boolean {
+		val range = _selection ?: return false
+		return !isBeforeInDocument(position, range.start) && !isBeforeInDocument(range.end, position)
+	}
+
 	fun getSelectedText(): AnnotatedString {
 		val range = _selection ?: return AnnotatedString("")
 		return state.getTextInRange(range)
