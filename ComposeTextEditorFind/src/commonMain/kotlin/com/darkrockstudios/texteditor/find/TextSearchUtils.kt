@@ -34,7 +34,7 @@ fun TextEditorState.findAll(
 		var startIndex = 0
 		while (startIndex <= lineText.length) {
 			val found = if (pattern != null) {
-				val match = pattern.find(lineText, startIndex) ?: break
+				val match = pattern.regex.find(lineText, startIndex) ?: break
 				match.range.first until match.range.last + 1
 			} else {
 				val foundIndex = lineText.indexOf(query, startIndex, ignoreCase = !caseSensitive)
@@ -42,7 +42,8 @@ fun TextEditorState.findAll(
 				foundIndex until foundIndex + query.length
 			}
 
-			val keep = !found.isEmpty() && (pattern != null || !wholeWord || lineText.isWholeWord(found))
+			val keep = !found.isEmpty() &&
+				(!wholeWord || pattern?.enforcesWholeWord == true || lineText.isWholeWord(found))
 			if (keep) {
 				val start = CharLineOffset(line = lineIndex, char = found.first)
 				val end = CharLineOffset(line = lineIndex, char = found.last + 1)
@@ -60,15 +61,21 @@ fun TextEditorState.findAll(
 /** Whether [query] compiles as a regular expression for [findAll]. */
 fun isValidFindPattern(query: String): Boolean = compileOrNull(query, emptySet()) != null
 
+private class FindPattern(val regex: Regex, val enforcesWholeWord: Boolean)
+
 /**
  * Whole word is part of the pattern rather than a filter on its matches, so the engine can
  * backtrack to a longer or shorter match at the same start (`cat|category` in `category`).
  */
-private fun compileFindPattern(query: String, caseSensitive: Boolean, wholeWord: Boolean): Regex? {
+private fun compileFindPattern(query: String, caseSensitive: Boolean, wholeWord: Boolean): FindPattern? {
 	val options = if (caseSensitive) emptySet() else setOf(RegexOption.IGNORE_CASE)
 	// Checked alone first: wrapping can balance a broken query, as in `a)(b`.
 	val plain = compileOrNull(query, options) ?: return null
-	return if (wholeWord) compileOrNull("(?<!$WORD_CHAR)(?:$query)(?!$WORD_CHAR)", options) else plain
+	if (!wholeWord) return FindPattern(plain, enforcesWholeWord = false)
+	// A query that swallows the closing parenthesis (`\Qa.b`) cannot be wrapped; filter its matches.
+	return compileOrNull("(?<!$WORD_CHAR)(?:$query)(?!$WORD_CHAR)", options)
+		?.let { FindPattern(it, enforcesWholeWord = true) }
+		?: FindPattern(plain, enforcesWholeWord = false)
 }
 
 private fun compileOrNull(pattern: String, options: Set<RegexOption>): Regex? = try {

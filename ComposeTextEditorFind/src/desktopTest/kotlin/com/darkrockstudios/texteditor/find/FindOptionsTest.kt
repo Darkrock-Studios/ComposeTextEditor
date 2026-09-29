@@ -96,6 +96,11 @@ class FindAllOptionsTest {
 	}
 
 	@Test
+	fun `whole word still applies to a pattern that cannot be wrapped`() {
+		assertEquals(listOf(5), editor("xa.b a.b").starts("\\Qa.b", wholeWord = true, regex = true))
+	}
+
+	@Test
 	fun `a broken pattern stays invalid under whole word`() {
 		assertTrue(editor("a)(b").findAll("a)(b", wholeWord = true, regex = true).isEmpty())
 	}
