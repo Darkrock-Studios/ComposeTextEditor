@@ -173,6 +173,10 @@ fun BasicTextEditor(
 		state.textStyle = style.textStyle
 	}
 
+	LaunchedEffect(enabled) {
+		if (!enabled) state.selector.hideCaretHandle()
+	}
+
 	LaunchedEffect(
 		style.bulletColor,
 		style.blockquoteBarColor,
@@ -299,6 +303,7 @@ fun BasicTextEditor(
 							onSpanClick = spanClickProxy,
 							onContextMenuRequest = { offset -> effectiveContextMenuState.showMenu(offset) },
 							links = linkClicks,
+							caretHandle = enabled,
 						)
 						// Capture the canvas position so the desktop IME can place the
 						// composition/candidate window relative to the cursor.

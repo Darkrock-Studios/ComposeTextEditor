@@ -521,8 +521,13 @@ fixes what users feel every minute.
 - [x] **3.4 Auto-scroll while dragging a handle. C.** [Opus] [Lane B] Absent.
   A handle drag uses the mouse drag's `DragAutoScroll` (1.14), measured at the
   dragged end rather than the finger.
-- [ ] **3.5 Caret handle. C.** [Opus] [Lane B] Handles are drawn only with a
-  selection.
+- [x] **3.5 Caret handle. C.** [Opus] [Lane B] Handles are drawn only with a
+  selection. A tap in a non-empty editor now puts a handle under the caret,
+  and dragging it moves the caret (auto-scrolling like the others). It hides
+  when the caret moves any other way, the document changes, something is
+  selected, focus leaves, or after 4 s idle, as Android's insertion handle
+  does. Its hit area is the drawn handle and a small margin, not the 80 px
+  of the selection handles, because it hangs over the lines below the caret.
 - [ ] **3.6 Magnifier. C.** [Opus] [Lane B] Absent.
 - [ ] **3.7 Gestures. C.** [Fable] [Lane B] No double-tap word select, no
   long-press then drag. The long-press timeout is a hard-coded 500 ms.

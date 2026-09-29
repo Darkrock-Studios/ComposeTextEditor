@@ -6,7 +6,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.text.AnnotatedString
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
+import androidx.compose.runtime.MonotonicFrameClock
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameNanos
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.yield
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 
@@ -48,6 +56,85 @@ class TextEditorSelectionManager(
 
 	// Set by startSelection for the selection that follows it.
 	private var nextSelectionIsTouch = false
+
+	// Where the touch caret handle stands, and the document it was put in.
+	private class CaretHandleAnchor(val position: CharLineOffset, val content: DocumentSnapshot)
+
+	private var caretHandle: CaretHandleAnchor? by mutableStateOf(null)
+	private var caretHandleWatch: Job? = null
+	private var caretHandleIdle: Job? = null
+
+	/**
+	 * Whether the touch caret handle shows: after a tap placed the caret, until the caret
+	 * moves any other way, the document changes, something is selected, focus leaves, or
+	 * it has sat idle for a few seconds.
+	 */
+	internal val isCaretHandleVisible: Boolean
+		get() {
+			val anchor = caretHandle ?: return false
+			// The document is not snapshot state, so a change to it is caught here; the
+			// watcher in showCaretHandle drops the anchor for everything else.
+			return _selection == null && state.isFocused &&
+					anchor.position == state.cursorPosition && anchor.content === state.content
+		}
+
+	/**
+	 * Shows the caret handle under the caret, for a tap that just placed it. It goes after
+	 * [CARET_HANDLE_IDLE_MS], or at once when the caret moves other than by the handle, a
+	 * selection appears, or the editor is or becomes unfocused, and stays gone even if they
+	 * come back.
+	 */
+	internal fun showCaretHandle() {
+		hideCaretHandle()
+		if (state.isEmpty()) return
+		caretHandle = CaretHandleAnchor(state.cursorPosition, state.content)
+		caretHandleWatch = state.scope.launch {
+			// The tap focuses the editor after this runs, unless it opened a popup instead,
+			// and then there is no caret to handle. A frame later the focus has settled.
+			if (coroutineContext[MonotonicFrameClock] != null) withFrameNanos { } else yield()
+			snapshotFlow { CaretHandleWatch(state.cursorPosition, _selection, state.isFocused, caretHandle) }
+				.first { (caret, selection, focused, anchor) ->
+					anchor == null || caret != anchor.position || selection != null || !focused
+				}
+			caretHandle = null
+			caretHandleIdle?.cancel()
+		}
+		restartCaretHandleIdle()
+	}
+
+	/** Moves the caret, and the handle with it, for a drag of the handle. */
+	internal fun dragCaretHandleTo(position: CharLineOffset) {
+		caretHandleIdle?.cancel()
+		if (caretHandle == null) return
+		state.cursor.updatePosition(position)
+		caretHandle = CaretHandleAnchor(state.cursorPosition, state.content)
+	}
+
+	/** Ends a drag of the caret handle, restarting its idle timeout. */
+	internal fun releaseCaretHandle() {
+		if (isCaretHandleVisible) restartCaretHandleIdle() else hideCaretHandle()
+	}
+
+	private fun restartCaretHandleIdle() {
+		caretHandleIdle?.cancel()
+		caretHandleIdle = state.scope.launch {
+			delay(CARET_HANDLE_IDLE_MS)
+			hideCaretHandle()
+		}
+	}
+
+	internal fun hideCaretHandle() {
+		caretHandleWatch?.cancel()
+		caretHandleIdle?.cancel()
+		caretHandle = null
+	}
+
+	private data class CaretHandleWatch(
+		val caret: CharLineOffset,
+		val selection: TextEditorRange?,
+		val focused: Boolean,
+		val anchor: CaretHandleAnchor?,
+	)
 
 	/**
 	 * Stores [range], or no selection when it is empty: an empty selection is none. Touch
@@ -214,6 +301,9 @@ class TextEditorSelectionManager(
 		}
 	}
 }
+
+/** Android hides its insertion handle after the same idle time. */
+private const val CARET_HANDLE_IDLE_MS = 4_000L
 
 /** The unit a click selects and a drag after it extends by. */
 internal enum class SelectionGranularity {

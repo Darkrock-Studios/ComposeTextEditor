@@ -20,6 +20,7 @@ import com.darkrockstudios.texteditor.richstyle.RichSpan
 import com.darkrockstudios.texteditor.state.SelectionGranularity
 import com.darkrockstudios.texteditor.state.SpanClickType
 import com.darkrockstudios.texteditor.state.TextEditorState
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -42,10 +43,11 @@ internal fun Modifier.textEditorPointerInputHandling(
 	onContextMenuRequest: ((Offset) -> Unit)? = null,
 	readOnly: Boolean = false,
 	links: LinkClicks? = null,
+	caretHandle: Boolean = !readOnly,
 ): Modifier {
 	return this
 		.handleHandleDrag(state)
-		.handleTouchInteractions(state, onSpanClick, onContextMenuRequest, readOnly, links)
+		.handleTouchInteractions(state, onSpanClick, onContextMenuRequest, readOnly, links, caretHandle)
 		.handleMouseInput(state, onSpanClick, onContextMenuRequest, readOnly, links)
 }
 
@@ -223,6 +225,7 @@ private class MouseSelection(
 			} else {
 				state.selector.rangeAt(state.getOffsetAtPosition(position), granularity)
 			}
+			state.selector.hideCaretHandle()
 			return MouseSelection(state, anchor, granularity).also {
 				it.selectTo(position)
 				state.endCompositionIfPointerLeft()
@@ -234,11 +237,13 @@ private class MouseSelection(
 /**
  * Feeds the drag to [autoScroll] until the pointer is released. Returns the release
  * when the pointer came up without having moved past [touchSlop], null otherwise.
+ * [consumeAll] consumes every change rather than only the moves, as a handle drag does.
  */
 private suspend fun AwaitPointerEventScope.followDrag(
 	autoScroll: DragAutoScroll,
 	down: PointerInputChange,
-	touchSlop: Float,
+	touchSlop: Float = 0f,
+	consumeAll: Boolean = false,
 ): PointerInputChange? {
 	var dragged = false
 	try {
@@ -249,6 +254,8 @@ private suspend fun AwaitPointerEventScope.followDrag(
 			if (change.positionChanged()) {
 				dragged = dragged || (change.position - down.position).getDistance() > touchSlop
 				autoScroll.update(change.position)
+				change.consume()
+			} else if (consumeAll) {
 				change.consume()
 			}
 		}
@@ -388,60 +395,108 @@ internal fun Modifier.linkClickHandling(state: TextEditorState, links: LinkClick
 	}
 
 /**
- * Drags a touch selection handle. The other end of the selection is fixed for the whole
- * drag, so the dragged end can cross it; and the dragged end moves exactly as far as the
- * finger does from where it grabbed the handle, so grabbing moves nothing. Held above or
- * below the viewport, the drag auto-scrolls like a mouse drag.
+ * Drags a touch selection handle, or the caret handle. For a selection handle the other
+ * end of the selection is fixed for the whole drag, so the dragged end can cross it. The
+ * dragged end moves exactly as far as the finger does from where it grabbed the handle,
+ * so grabbing moves nothing. Held above or below the viewport, the drag auto-scrolls like
+ * a mouse drag.
  */
 private fun Modifier.handleHandleDrag(state: TextEditorState): Modifier {
 	return pointerInput(state) {
 		coroutineScope {
-		val autoScrollScope = this
-		awaitEachGesture {
-			val down = awaitFirstDown(requireUnconsumed = false)
-			if (currentEvent.isMouseLike(down)) return@awaitEachGesture
-			val handle = findHandleAtPosition(down.position, state) ?: return@awaitEachGesture
-			val selection = state.selector.selection ?: return@awaitEachGesture
-			val anchor = if (handle.isStart) selection.end else selection.start
-			val edge = state.getPositionForOffset(handle.position)
-			// From the finger to the middle of the dragged end's row.
-			val grabOffset = Offset(edge.position.x, edge.position.y + edge.height / 2f) - down.position
-
-			state.selector.setDraggingHandle(handle.isStart)
-			state.endCompositionIfPointerLeft()
-
-			val autoScroll = DragAutoScroll(state, autoScrollScope, targetOffset = grabOffset) { target ->
-				// Anything else that changes the selection mid-drag (an edit, an undo) ends it.
-				val current = state.selector.selection
-				if (current == null || (current.start != anchor && current.end != anchor)) return@DragAutoScroll
-				val position = state.getOffsetAtPosition(target)
-				// Meeting the fixed end would empty the selection and drop the handles
-				// mid-drag, so the last selection holds until the finger moves past.
-				if (position != anchor) {
-					state.selector.selectFromAnchor(
-						TextEditorRange(anchor, anchor),
-						position,
-						SelectionGranularity.Character,
-						isTouch = true,
-					)
-					state.selector.setDraggingHandle(isStart = position isBefore anchor)
+			val autoScrollScope = this
+			awaitEachGesture {
+				val down = awaitFirstDown(requireUnconsumed = false)
+				if (currentEvent.isMouseLike(down)) return@awaitEachGesture
+				if (isOnCaretHandle(down.position, state)) {
+					dragCaretHandle(state, down, autoScrollScope)
+				} else {
+					val handle = findHandleAtPosition(down.position, state) ?: return@awaitEachGesture
+					dragSelectionHandle(state, handle, down, autoScrollScope)
 				}
 			}
-			try {
-				while (true) {
-					val change = awaitPointerEvent().changes.firstOrNull { it.id == down.id } ?: break
-					if (!change.pressed) break
-					if (change.positionChanged()) autoScroll.update(change.position)
-					change.consume()
-				}
-			} finally {
-				autoScroll.stop()
-				state.selector.clearDraggingHandle()
-			}
-		}
 		}
 	}
 }
+
+private suspend fun AwaitPointerEventScope.dragSelectionHandle(
+	state: TextEditorState,
+	handle: SelectionHandle,
+	down: PointerInputChange,
+	autoScrollScope: CoroutineScope,
+) {
+	val selection = state.selector.selection ?: return
+	val anchor = if (handle.isStart) selection.end else selection.start
+	state.selector.setDraggingHandle(handle.isStart)
+	state.endCompositionIfPointerLeft()
+
+	val autoScroll = DragAutoScroll(state, autoScrollScope, grabOffset(state, handle.position, down)) { target ->
+		// Anything else that changes the selection mid-drag (an edit, an undo) ends it.
+		val current = state.selector.selection
+		if (current == null || (current.start != anchor && current.end != anchor)) return@DragAutoScroll
+		val position = state.getOffsetAtPosition(target)
+		// Meeting the fixed end would empty the selection and drop the handles
+		// mid-drag, so the last selection holds until the finger moves past.
+		if (position != anchor) {
+			state.selector.selectFromAnchor(
+				TextEditorRange(anchor, anchor),
+				position,
+				SelectionGranularity.Character,
+				isTouch = true,
+			)
+			state.selector.setDraggingHandle(isStart = position isBefore anchor)
+		}
+	}
+	try {
+		followDrag(autoScroll, down, consumeAll = true)
+	} finally {
+		state.selector.clearDraggingHandle()
+	}
+}
+
+/**
+ * Drags the touch caret handle, moving the caret. The handle stays up through the drag,
+ * and its idle timeout restarts on release. Anything else that moves the caret, edits,
+ * selects, or takes focus meanwhile takes the handle away and ends the drag.
+ */
+private suspend fun AwaitPointerEventScope.dragCaretHandle(
+	state: TextEditorState,
+	down: PointerInputChange,
+	autoScrollScope: CoroutineScope,
+) {
+	val grabOffset = grabOffset(state, state.cursorPosition, down)
+	val autoScroll = DragAutoScroll(state, autoScrollScope, grabOffset) { target ->
+		if (!state.selector.isCaretHandleVisible) return@DragAutoScroll
+		state.selector.dragCaretHandleTo(state.getOffsetAtPosition(target))
+		state.endCompositionIfPointerLeft()
+	}
+	try {
+		followDrag(autoScroll, down, consumeAll = true)
+	} finally {
+		state.selector.releaseCaretHandle()
+	}
+}
+
+/** From the finger at [down] to the middle of [position]'s row: what a handle drag moves. */
+private fun grabOffset(state: TextEditorState, position: CharLineOffset, down: PointerInputChange): Offset {
+	val edge = state.getPositionForOffset(position)
+	return Offset(edge.position.x, edge.position.y + edge.height / 2f) - down.position
+}
+
+/**
+ * Whether a finger at [position] lands on the touch caret handle. The hit area is the
+ * drawn handle and a margin, no wider: the handle hangs over the lines below the caret,
+ * and a tap or long press there must still reach them.
+ */
+private fun isOnCaretHandle(position: Offset, state: TextEditorState): Boolean {
+	if (!state.selector.isCaretHandleVisible) return false
+	val center = handleCenter(state.getPositionForOffset(state.cursorPosition))
+	return (position - center).getDistance() < SELECTION_HANDLE_RADIUS * 1.5f
+}
+
+/** Whether a finger at [position] lands on any touch handle. */
+private fun isOnAnyHandle(position: Offset, state: TextEditorState): Boolean =
+	findHandleAtPosition(position, state) != null || isOnCaretHandle(position, state)
 
 /**
  * Ends the IME composition once a pointer has put the caret or a selection outside it,
@@ -468,22 +523,23 @@ private fun findHandleAtPosition(
 	val startHandlePos = handleCenter(state.getPositionForOffset(selection.start))
 	val endHandlePos = handleCenter(state.getPositionForOffset(selection.end))
 
-	// Larger hit area for easier touch targeting
-	val handleHitArea = 80f
-
 	// The hit areas overlap on a short selection, so the nearer handle wins.
 	val toStart = (position - startHandlePos).getDistance()
 	val toEnd = (position - endHandlePos).getDistance()
 	return when {
-		toStart < handleHitArea && toStart <= toEnd -> SelectionHandle(selection.start, true, startHandlePos)
-		toEnd < handleHitArea -> SelectionHandle(selection.end, false, endHandlePos)
+		toStart < HANDLE_HIT_RADIUS && toStart <= toEnd -> SelectionHandle(selection.start, true, startHandlePos)
+		toEnd < HANDLE_HIT_RADIUS -> SelectionHandle(selection.end, false, endHandlePos)
 		else -> null
 	}
 }
 
+/** Larger than the drawn handle, for easier touch targeting. */
+private const val HANDLE_HIT_RADIUS = 80f
+
 /**
  * Places the caret for a tap or a right-click, then offers the event to the [RichSpan]
  * under it. A tap reports only when it lifts on the span it landed on, [pressedSpan].
+ * Returns whether the caret was placed.
  */
 private fun handleSpanInteraction(
 	state: TextEditorState,
@@ -493,8 +549,8 @@ private fun handleSpanInteraction(
 	onSpanClick: SpanClickSink?,
 	readOnly: Boolean,
 	pressedSpan: RichSpan? = null,
-) {
-	if (findHandleAtPosition(offset, state) != null) return
+): Boolean {
+	if (clickType == SpanClickType.TAP && isOnAnyHandle(offset, state)) return false
 
 	val position = state.getOffsetAtPosition(offset)
 	val placesCaret = when (clickType) {
@@ -512,9 +568,11 @@ private fun handleSpanInteraction(
 		state.endCompositionIfPointerLeft()
 	}
 
-	val span = state.spanAt(offset) ?: return
-	if (clickType == SpanClickType.TAP && span != pressedSpan) return
-	onSpanClick?.invoke(RichSpanClick(span, clickType, offset, modifiers))
+	val span = state.spanAt(offset)
+	if (span != null && (clickType != SpanClickType.TAP || span == pressedSpan)) {
+		onSpanClick?.invoke(RichSpanClick(span, clickType, offset, modifiers))
+	}
+	return placesCaret
 }
 
 /** Finger taps and long presses. */
@@ -524,13 +582,14 @@ private fun Modifier.handleTouchInteractions(
 	onContextMenuRequest: ((Offset) -> Unit)?,
 	readOnly: Boolean,
 	links: LinkClicks?,
+	caretHandle: Boolean,
 ): Modifier {
-	return pointerInput(state, links) {
+	return pointerInput(state, links, caretHandle) {
 		val touchSlop = viewConfiguration.touchSlop
 		awaitEachGesture {
 			val down = awaitFirstDown(requireUnconsumed = false)
 			if (currentEvent.isMouseLike(down)) return@awaitEachGesture
-			if (findHandleAtPosition(down.position, state) != null) return@awaitEachGesture
+			if (isOnAnyHandle(down.position, state)) return@awaitEachGesture
 
 			var didLongPress = false
 			var wasDrag = false
@@ -562,7 +621,7 @@ private fun Modifier.handleTouchInteractions(
 					val change = event.changes.firstOrNull { it.id == down.id } ?: break
 					if (!change.pressed) {
 						if (!didLongPress && !wasDrag) {
-							handleSpanInteraction(
+							val placed = handleSpanInteraction(
 								state,
 								change.position,
 								SpanClickType.TAP,
@@ -571,6 +630,7 @@ private fun Modifier.handleTouchInteractions(
 								readOnly,
 								pressedSpan = pressed.span,
 							)
+							if (placed && caretHandle) state.selector.showCaretHandle()
 							if (pressed.link != null && links?.opensOnTap == true &&
 								ClickTarget.at(state, change.position).link == pressed.link
 							) {

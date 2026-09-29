@@ -10,6 +10,11 @@ internal fun DrawScope.DrawSelectionHandles(
 	state: TextEditorState,
 	handleColor: Color = Color(0xFF2196F3),
 ) {
+	if (state.selector.isCaretHandleVisible) {
+		drawHandle(state.getPositionForOffset(state.cursorPosition), handleColor)
+		return
+	}
+
 	val selection = state.selector.selection?.takeIf { state.selector.isTouchSelection } ?: return
 
 	val startOffset = state.getPositionForOffset(selection.start)

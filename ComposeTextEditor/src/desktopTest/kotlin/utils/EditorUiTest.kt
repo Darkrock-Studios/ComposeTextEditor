@@ -204,6 +204,20 @@ class EditorUiTestScope(
 		return drawnHandleCenter(state.getPositionForOffset(if (isStart) selection.start else selection.end))
 	}
 
+	/** Where the touch caret handle is drawn, under the caret. */
+	fun caretHandleCenter(): Offset = drawnHandleCenter(state.getPositionForOffset(state.cursorPosition))
+
+	/** Drags the touch caret handle so the caret travels to [toChar], then lifts. */
+	fun dragCaretHandle(toChar: Int, steps: Int = 8) {
+		val delta = positionOfCharacter(toChar) - positionOfCharacter(cursorIndex)
+		val grab = caretHandleCenter()
+		touch {
+			down(grab)
+			for (step in 1..steps) moveTo(grab + delta * (step / steps.toFloat()))
+			up()
+		}
+	}
+
 	/**
 	 * Drags the start or end touch handle with a finger so that its end of the selection
 	 * travels to [toChar]: the finger moves by the distance between the two characters,

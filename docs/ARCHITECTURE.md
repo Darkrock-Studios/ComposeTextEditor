@@ -203,21 +203,21 @@ after any other change, never from inside an edit. The session machinery, the An
 [design/text-input-sessions.md](design/text-input-sessions.md).
 
 Pointer input on the canvas is split by device. One handler owns every mouse
-gesture; two own the finger ones (selection handle drags, and taps with long
-presses). The load-bearing distinction is *mouse-like versus finger*,
-detected from pointer buttons rather than pointer type because Android
-reports external mice as `Touch`. Mouse-like input places the caret on press,
-extends with shift-click, and counts presses into double and triple clicks
-(word, then line) by the platform's double-tap timeout and touch slop; a drag
-extends by whatever unit the press selected, and keeps scrolling while it is
-held above or below the viewport. Only the primary button places
-the caret or selects; the secondary button opens the context menu, keeping a
-selection it lands inside. Finger input places the caret on release,
-long-presses to select a word or open the context menu, and drags selection
-handles. A span click is reported on release, when the press and release land
-on the same span without a drag, so placing the caret or selecting never reads
-as a click; links open by the host's `onLinkClick` on Ctrl/Cmd+click in an
-editor and on a plain click in `RichTextView`.
+gesture; two own the finger ones (handle drags, and taps with long
+presses). The load-bearing distinction is *mouse-like versus finger*, detected
+from pointer buttons rather than pointer type because Android reports external
+mice as `Touch`. Mouse-like input places the caret on press, extends with
+shift-click, and counts presses into double and triple clicks (word, then
+line) by the platform's double-tap timeout and touch slop; a drag extends by
+whatever unit the press selected, and keeps scrolling while it is held above
+or below the viewport. Only the primary button places the caret or selects;
+the secondary button opens the context menu, keeping a selection it lands
+inside. Finger input places the caret on release and shows a caret handle
+under it, long-presses to select a word or open the context menu, and drags
+the caret and selection handles. A span click is reported on release, when the
+press and release land on the same span without a drag, so placing the caret
+or selecting never reads as a click; links open by the host's `onLinkClick` on
+Ctrl/Cmd+click in an editor and on a plain click in `RichTextView`.
 
 ## Document model and transactions
 
