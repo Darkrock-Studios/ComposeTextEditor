@@ -25,6 +25,7 @@ import androidx.compose.ui.test.rightClick
 import androidx.compose.ui.test.runSkikoComposeUiTest
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.darkrockstudios.texteditor.BasicTextEditor
@@ -66,8 +67,9 @@ internal fun editorUiTest(
 	contextMenuState: TextEditorContextMenuState? = null,
 	autoFocus: Boolean = enabled,
 	contentPadding: PaddingValues = PaddingValues(0.dp),
+	density: Float = 1f,
 	block: EditorUiTestScope.() -> Unit,
-) = runSkikoComposeUiTest {
+) = runSkikoComposeUiTest(density = Density(density)) {
 	val clipboard = InMemoryClipboard()
 	lateinit var state: TextEditorState
 	setContent {
@@ -205,11 +207,13 @@ class EditorUiTestScope(
 	/** Where the selection's start or end touch handle is drawn. */
 	fun handleCenter(isStart: Boolean): Offset {
 		val selection = checkNotNull(state.selector.selection) { "no selection, so no handles" }
-		return canvasToNode(drawnHandleCenter(state.getPositionForOffset(if (isStart) selection.start else selection.end)))
+		val metrics = state.getPositionForOffset(if (isStart) selection.start else selection.end)
+		return canvasToNode(with(test.density) { drawnHandleCenter(metrics) })
 	}
 
 	/** Where the touch caret handle is drawn, under the caret. */
-	fun caretHandleCenter(): Offset = canvasToNode(drawnHandleCenter(state.getPositionForOffset(state.cursorPosition)))
+	fun caretHandleCenter(): Offset =
+		canvasToNode(with(test.density) { drawnHandleCenter(state.getPositionForOffset(state.cursorPosition)) })
 
 	/** Drags the touch caret handle so the caret travels to [toChar], then lifts. */
 	fun dragCaretHandle(toChar: Int, steps: Int = 8) {

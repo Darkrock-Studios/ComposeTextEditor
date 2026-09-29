@@ -5,6 +5,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.isSpecified
+import androidx.compose.ui.graphics.takeOrElse
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -72,7 +73,12 @@ data class TextEditorStyle(
 	 * dim it. `Color.Unspecified` falls back to [selectionColor] at half its alpha.
 	 */
 	val unfocusedSelectionColor: Color = Color.Unspecified,
+	/** Colour of the touch selection and caret handles. `Color.Unspecified` falls back to a blue. */
+	val handleColor: Color = Color.Unspecified,
 )
+
+internal val TextEditorStyle.effectiveHandleColor: Color
+	get() = handleColor.takeOrElse { DefaultSelectionHandleColor }
 
 /** The selection colour for an editor that has focus, or lacks it. */
 internal fun TextEditorStyle.selectionColorFor(focused: Boolean): Color = when {
@@ -120,11 +126,12 @@ fun rememberTextEditorStyle(
 	cursorWidth: Dp = 2.dp,
 	// A neutral grey, as macOS and browsers draw a selection whose editor lost focus.
 	unfocusedSelectionColor: Color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f),
+	handleColor: Color = MaterialTheme.colorScheme.primary,
 ): TextEditorStyle = remember(
 	textColor, backgroundColor, placeholderText, placeholderColor,
 	cursorColor, selectionColor, focusedBorderColor, unfocusedBorderColor, textStyle,
 	bulletColor, blockquoteBarColor, blockquoteBackgroundColor, orderedListMarkerColor,
-	codeFenceBackgroundColor, codeFenceBorderColor, cursorWidth, unfocusedSelectionColor,
+	codeFenceBackgroundColor, codeFenceBorderColor, cursorWidth, unfocusedSelectionColor, handleColor,
 ) {
 	TextEditorStyle(
 		textColor = textColor,
@@ -144,5 +151,6 @@ fun rememberTextEditorStyle(
 		codeFenceBorderColor = codeFenceBorderColor,
 		cursorWidth = cursorWidth,
 		unfocusedSelectionColor = unfocusedSelectionColor,
+		handleColor = handleColor,
 	)
 }

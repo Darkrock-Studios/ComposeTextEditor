@@ -11,6 +11,8 @@ import androidx.compose.ui.composed
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.*
 import androidx.compose.ui.platform.ViewConfiguration
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.dp
 import com.darkrockstudios.texteditor.input.CtrlKeyBindings
 import com.darkrockstudios.texteditor.input.KeyBindings
 import com.darkrockstudios.texteditor.input.MacKeyBindings
@@ -547,14 +549,14 @@ private fun grabOffset(state: TextEditorState, position: CharLineOffset, down: O
  * drawn handle and a margin, no wider: the handle hangs over the lines below the caret,
  * and a tap or long press there must still reach them.
  */
-private fun isOnCaretHandle(position: Offset, state: TextEditorState): Boolean {
+private fun Density.isOnCaretHandle(position: Offset, state: TextEditorState): Boolean {
 	if (!state.selector.isCaretHandleVisible) return false
 	val center = handleCenter(state.getPositionForOffset(state.cursorPosition))
-	return (position - center).getDistance() < SELECTION_HANDLE_RADIUS * 1.5f
+	return (position - center).getDistance() < CaretHandleHitRadius.toPx()
 }
 
 /** Whether a finger at [position] lands on any touch handle. */
-private fun isOnAnyHandle(position: Offset, state: TextEditorState): Boolean =
+private fun Density.isOnAnyHandle(position: Offset, state: TextEditorState): Boolean =
 	findHandleAtPosition(position, state) != null || isOnCaretHandle(position, state)
 
 /**
@@ -571,7 +573,7 @@ private fun TextEditorState.endCompositionIfPointerLeft() {
 	if (!caretInside) clearComposingRange()
 }
 
-private fun findHandleAtPosition(
+private fun Density.findHandleAtPosition(
 	position: Offset,
 	state: TextEditorState,
 ): SelectionHandle? {
@@ -581,26 +583,29 @@ private fun findHandleAtPosition(
 
 	val startHandlePos = handleCenter(state.getPositionForOffset(selection.start))
 	val endHandlePos = handleCenter(state.getPositionForOffset(selection.end))
+	val hitRadius = SelectionHandleHitRadius.toPx()
 
 	// The hit areas overlap on a short selection, so the nearer handle wins.
 	val toStart = (position - startHandlePos).getDistance()
 	val toEnd = (position - endHandlePos).getDistance()
 	return when {
-		toStart < HANDLE_HIT_RADIUS && toStart <= toEnd -> SelectionHandle(selection.start, true, startHandlePos)
-		toEnd < HANDLE_HIT_RADIUS -> SelectionHandle(selection.end, false, endHandlePos)
+		toStart < hitRadius && toStart <= toEnd -> SelectionHandle(selection.start, true, startHandlePos)
+		toEnd < hitRadius -> SelectionHandle(selection.end, false, endHandlePos)
 		else -> null
 	}
 }
 
 /** Larger than the drawn handle, for easier touch targeting. */
-private const val HANDLE_HIT_RADIUS = 80f
+private val SelectionHandleHitRadius = 30.dp
+
+private val CaretHandleHitRadius = SelectionHandleDiameter / 2 * 1.5f
 
 /**
  * Places the caret for a tap or a right-click, then offers the event to the [RichSpan]
  * under it. A tap reports only when it lifts on the span it landed on, [pressedSpan].
  * Returns whether the caret was placed.
  */
-private fun handleSpanInteraction(
+private fun Density.handleSpanInteraction(
 	state: TextEditorState,
 	offset: Offset,
 	clickType: SpanClickType,

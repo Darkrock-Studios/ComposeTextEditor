@@ -14,13 +14,25 @@ import androidx.compose.ui.unit.LayoutDirection
 import kotlin.math.max
 import kotlin.math.min
 
-/** A rectangle or line [block] drew, as its bounds and colour. */
-data class DrawnShape(val bounds: Rect, val color: Color)
+/** What a recorded primitive was. */
+enum class ShapeKind { Rect, Line, Circle }
 
 /**
- * Runs [block] on a real canvas of [size] that also records each `drawRect` and
- * `drawLine`, so a test can assert drawing geometry without reading pixels. A line is
- * recorded as its end points' bounding box. Other primitives are drawn, not recorded.
+ * A rectangle, line, or circle [recordDrawing] saw, as its bounds, colour, and the
+ * paint's stroke width (which a line is drawn with).
+ */
+data class DrawnShape(
+	val kind: ShapeKind,
+	val bounds: Rect,
+	val color: Color,
+	val strokeWidth: Float = 0f,
+)
+
+/**
+ * Runs [block] on a real canvas of [size] that also records each `drawRect`,
+ * `drawLine`, and `drawCircle`, so a test can assert drawing geometry without reading
+ * pixels. A line is recorded as its end points' bounding box. Other primitives are
+ * drawn, not recorded.
  */
 fun recordDrawing(
 	size: Size,
@@ -37,7 +49,7 @@ private class RecordingCanvas(private val inner: Canvas) : Canvas by inner {
 	val shapes = mutableListOf<DrawnShape>()
 
 	override fun drawRect(left: Float, top: Float, right: Float, bottom: Float, paint: Paint) {
-		shapes += DrawnShape(Rect(left, top, right, bottom), paint.color)
+		shapes += DrawnShape(ShapeKind.Rect, Rect(left, top, right, bottom), paint.color)
 		inner.drawRect(left, top, right, bottom, paint)
 	}
 
@@ -45,9 +57,16 @@ private class RecordingCanvas(private val inner: Canvas) : Canvas by inner {
 
 	override fun drawLine(p1: Offset, p2: Offset, paint: Paint) {
 		shapes += DrawnShape(
+			ShapeKind.Line,
 			Rect(min(p1.x, p2.x), min(p1.y, p2.y), max(p1.x, p2.x), max(p1.y, p2.y)),
 			paint.color,
+			paint.strokeWidth,
 		)
 		inner.drawLine(p1, p2, paint)
+	}
+
+	override fun drawCircle(center: Offset, radius: Float, paint: Paint) {
+		shapes += DrawnShape(ShapeKind.Circle, Rect(center, radius), paint.color)
+		inner.drawCircle(center, radius, paint)
 	}
 }

@@ -191,7 +191,7 @@ private fun RichTextViewBody(
 
 			if (isSelectable) {
 				DrawSelection(state, style.selectionColorFor(state.hasFocus))
-				if (state.hasFocus) DrawSelectionHandles(state)
+				if (state.hasFocus) DrawSelectionHandles(state, style.effectiveHandleColor)
 			}
 		}
 	}

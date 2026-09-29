@@ -561,9 +561,16 @@ fixes what users feel every minute.
 - [x] **3.2 Handle grab offset. C.** [Opus] [Lane B] A fixed 162 px upward
   offset is applied instead of the grab delta, so the edge jumps on grab. The
   edge now moves by exactly the finger's travel from where it grabbed.
-- [ ] **3.3 Density. C.** [Opus] [Lane C] Handle sizes, the 80 px hit radius,
+- [x] **3.3 Density. C.** [Opus] [Lane C] Handle sizes, the 80 px hit radius,
   stroke widths, and the composing underline are raw px; handle colour is
   hard-coded (`DrawSelectionHandles.kt`).
+  Done: in dp, sized to match the old pixels on a 2.625x phone: a 20 dp knob
+  19 dp below the row on a 2 dp stem, a 30 dp selection handle hit radius, the
+  caret handle's still 1.5 times the knob's radius, and a 1 dp composing
+  underline drawn on whole pixels. Hit tests use the pointer input's own
+  density. `TextEditorStyle.handleColor` sets the colour, by default the
+  theme's `primary` from `rememberTextEditorStyle`, otherwise the old blue
+  (`drawing/HandleDensityTest.kt`).
 - [x] **3.4 Auto-scroll while dragging a handle. C.** [Opus] [Lane B] Absent.
   A handle drag uses the mouse drag's `DragAutoScroll` (1.14), measured at the
   dragged end rather than the finger.

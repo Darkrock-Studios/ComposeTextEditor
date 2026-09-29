@@ -344,7 +344,7 @@ fun BasicTextEditor(
 					DrawSelection(state, style.selectionColorFor(state.hasFocus))
 
 					// Like native editors, an editor without focus shows no touch handles.
-					if (state.hasFocus) DrawSelectionHandles(state)
+					if (state.hasFocus) DrawSelectionHandles(state, style.effectiveHandleColor)
 
 					if (enabled && state.isFocused) {
 						DrawCursor(state, style.cursorColor, style.cursorWidth)
