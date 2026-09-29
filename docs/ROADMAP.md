@@ -148,7 +148,7 @@ review.
 
 | Lane | Area | Main files | Items |
 | --- | --- | --- | --- |
-| A | Caret motion | `state/TextEditorCursorState.kt`, `state/TextEditorStateCursorExt.kt`, `state/WordSegmentationUtils.kt`, `input/TextEditorKeyCommandHandler.kt` | 1.1 to 1.7, 2.3, 2.6, 7.5 |
+| A | Caret motion | `state/TextEditorCursorState.kt`, `state/TextEditorStateCursorExt.kt`, `state/WordSegmentationUtils.kt`, `input/TextEditorKeyCommandHandler.kt` | 1.1 to 1.7, 1.19, 2.3, 2.6, 7.5 |
 | B | Pointer and touch | `textEditorPointerInputHandling.kt`, `state/TextEditorSelectionManager.kt`, `DrawSelectionHandles.kt` | 1.9, 1.12 to 1.16, 3.1, 3.2, 3.4 to 3.8, 3.13 |
 | C | Drawing and geometry | `Draw*.kt`, `cursor/`, `scrollbar/`, `state/TextEditorScrollState.kt`, hit testing | 1.8, 1.10, 1.11, 1.17, 1.18, 3.3, 3.12, 4.14, 7.6, 7.7 |
 | D | Bindings, actions, menu | `input/KeyBindings.kt`, `input/EditorCommand.kt`, `input/BuiltinEditorActions.kt`, `contextmenu/` | 2.1, 2.2, 2.4, 2.5, 2.7 to 2.10, 4.8, 5.8 |
@@ -213,11 +213,14 @@ editor does rather than what it should do.
 | CI | `check` on Ubuntu only |
 | Rendering | One proof-of-concept pixel test |
 
-- [ ] **0.1 Differential tests against `BasicTextField`.** [Opus] [Lane L]
+- [x] **0.1 Differential tests against `BasicTextField`.** [Opus] [Lane L]
   Replay one key script through both widgets and compare text, caret, and
   selection. Covers navigation, selection, word stops, and Unicode. Plain text
   only. Confirmed workable: `BasicTextField(TextFieldState)` runs under
   `runSkikoComposeUiTest` and accepts the same synthetic key input.
+  Done in `desktopTest/.../e2e/differential/BasicTextFieldParityTest.kt`. A
+  case the editor fails today carries `divergesUntil = "<item>"`; it fails once
+  the editor matches, so each fix deletes its item's markers.
 - [ ] **0.2 Differential fuzzing.** [Opus] [Lane L] Feed `FuzzScript` scripts
   to both widgets. Add navigation keys, shift-selection, emoji, ZWJ sequences,
   flags, combining marks, and right-to-left words to the vocabulary.
@@ -333,6 +336,14 @@ fixes what users feel every minute.
   the newline.
 - [ ] **1.18 Unfocused state. C.** [Opus] [Lane C] No unfocused selection
   colour; selection and touch handles stay drawn unchanged after focus loss.
+
+### Found by the differential tests
+
+- [ ] **1.19 Word ends. R.** [Opus] [Lane A] Ctrl+Right and Ctrl+Shift+Right
+  stop at the start of the next word; `BasicTextField` stops at the end of the
+  current one, and its Ctrl+Delete deletes to that end. Windows editors stop at
+  the next word start, so the answer may be per platform (see 2.6 for macOS).
+  Decide, then clear the `divergesUntil = "1.19"` cases.
 
 ## Phase 2: command completeness
 
@@ -638,7 +649,8 @@ iOS Safari; browser tests run in CI.
 ### Right-to-left and bidirectional text
 
 - [ ] **7.5** [Fable] [Lane A] Arrow keys are logical, so visually inverted in
-  right-to-left text.
+  right-to-left text. `BasicTextField` is logical too, so it is no reference
+  here.
 - [ ] **7.6** [Fable] [Lane C] Selection draws one rect per row from x(start)
   to x(end); wrong in right-to-left, and mixed text needs several rects.
 - [ ] **7.7** [Fable] [Lane C] Underline boxes (spell check, composing, links)
