@@ -11,13 +11,16 @@ import kotlinx.coroutines.launch
 /**
  * Auto-scroll for a drag that selects: while the pointer is above or below the
  * viewport the editor keeps scrolling, even with the pointer held still, at a speed
- * proportional to how far outside it is. [onDrag] receives the pointer moved onto the
- * nearest row wholly inside the viewport, on every move and on every scrolled frame,
- * so the selection follows the text as it moves under the pointer.
+ * proportional to how far outside it is. [onDrag] receives the point being dragged, the
+ * pointer plus [targetOffset], kept on a row wholly inside the viewport; it gets it on
+ * every move and on every scrolled frame, so the selection follows the text as it moves
+ * under the pointer. A handle drag passes the offset from the finger to the text it
+ * moves; the scroll still starts at the finger, where the user can reach.
  */
 internal class DragAutoScroll(
 	private val state: TextEditorState,
 	private val scope: CoroutineScope,
+	private val targetOffset: Offset = Offset.Zero,
 	private val onDrag: (Offset) -> Unit,
 ) {
 	private var pointer = Offset.Zero
@@ -28,7 +31,7 @@ internal class DragAutoScroll(
 
 	fun update(position: Offset) {
 		pointer = position
-		onDrag(clampToViewport(position))
+		onDrag(clampToViewport(position + targetOffset))
 		if (overflow(position) == 0f) {
 			stop()
 		} else if (ticker == null) {
@@ -53,7 +56,7 @@ internal class DragAutoScroll(
 					val whole = wanted.toInt()
 					fraction = wanted - whole
 					if (whole != 0) state.scrollState.scrollBy(whole.toFloat())
-					onDrag(clampToViewport(pointer))
+					onDrag(clampToViewport(pointer + targetOffset))
 				}
 			}
 		}
@@ -70,9 +73,9 @@ internal class DragAutoScroll(
 	}
 
 	/**
-	 * [position] moved onto the edge row the drag has reached. The row must be wholly
-	 * visible: a caret on a partly visible one would start the editor's own scroll to
-	 * reveal it, which fights this one frame by frame.
+	 * [position] moved onto the edge row the drag has reached when it is outside the
+	 * viewport. The row must be wholly visible: a caret on a partly visible one would start
+	 * the editor's own scroll to reveal it, which fights this one frame by frame.
 	 */
 	private fun clampToViewport(position: Offset): Offset {
 		val overflow = overflow(position)

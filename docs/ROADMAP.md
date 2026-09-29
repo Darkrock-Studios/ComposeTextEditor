@@ -391,10 +391,14 @@ fixes what users feel every minute.
   and selection alone everywhere. Compose has no primary selection API; the
   paste itself is 4.23.
 
-- [ ] **1.21 Empty selections. C.** [Opus] [Lane B] A drag that ends where it
+- [x] **1.21 Empty selections. C.** [Opus] [Lane B] A drag that ends where it
   began leaves a non-null selection with start equal to end. The delete-by-motion
   actions (word, line, and paragraph deletes) then delete nothing and still
-  consume the key. Normalise an empty selection to none.
+  consume the key. Normalise an empty selection to none. In the code an empty
+  update was ignored rather than stored, which kept the last non-empty
+  selection: a drag back to its start left a character selected. An empty
+  update now clears the selection and its touch mode. A long press on blank
+  space places the caret there and selects nothing.
 - [ ] **1.22 Right-click does not focus on desktop. R.** [Opus] [Lane B]
   `requestFocusOnPress` (`BasicTextEditor.kt`) waits for `awaitFirstDown`,
   which on skiko ignores every mouse button but the primary one, so a
@@ -498,16 +502,25 @@ fixes what users feel every minute.
 
 ## Phase 3: touch polish (Android first)
 
-- [ ] **3.1 Crossing handles. C.** [Opus] [Lane B] The drag uses
+- [x] **3.1 Crossing handles. C.** [Opus] [Lane B] The drag uses
   `selection.start`/`end` as the fixed edge while the range is reordered, so
   the anchor is lost once the handles cross. A user describes handles that
-  "jump all over" (hammer-editor#956).
-- [ ] **3.2 Handle grab offset. C.** [Opus] [Lane B] A fixed 162 px upward
-  offset is applied instead of the grab delta, so the edge jumps on grab.
+  "jump all over" (hammer-editor#956). The other end is now fixed for the
+  whole drag, so a handle crosses cleanly; landing exactly on the other end
+  keeps the last selection rather than emptying it. The two handles' hit
+  areas overlap on a short selection, and the start handle used to win even
+  under the end handle; the nearer one wins now. A finger can grab a handle
+  only when handles are drawn (a touch selection). `startSelection` is
+  deprecated: an empty selection is none, so it can only clear.
+- [x] **3.2 Handle grab offset. C.** [Opus] [Lane B] A fixed 162 px upward
+  offset is applied instead of the grab delta, so the edge jumps on grab. The
+  edge now moves by exactly the finger's travel from where it grabbed.
 - [ ] **3.3 Density. C.** [Opus] [Lane C] Handle sizes, the 80 px hit radius,
   stroke widths, and the composing underline are raw px; handle colour is
   hard-coded (`DrawSelectionHandles.kt`).
-- [ ] **3.4 Auto-scroll while dragging a handle. C.** [Opus] [Lane B] Absent.
+- [x] **3.4 Auto-scroll while dragging a handle. C.** [Opus] [Lane B] Absent.
+  A handle drag uses the mouse drag's `DragAutoScroll` (1.14), measured at the
+  dragged end rather than the finger.
 - [ ] **3.5 Caret handle. C.** [Opus] [Lane B] Handles are drawn only with a
   selection.
 - [ ] **3.6 Magnifier. C.** [Opus] [Lane B] Absent.

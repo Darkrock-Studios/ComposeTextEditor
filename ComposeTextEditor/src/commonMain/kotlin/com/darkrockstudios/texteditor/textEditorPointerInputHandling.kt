@@ -159,7 +159,7 @@ private fun Modifier.handleMouseInput(
 					granularity = SelectionGranularity.forClickCount(clicks),
 					isShiftPressed = isShiftPressed,
 				)
-				val autoScroll = DragAutoScroll(state, autoScrollScope, selection::selectTo)
+				val autoScroll = DragAutoScroll(state, autoScrollScope, onDrag = selection::selectTo)
 				val release = followDrag(autoScroll, down, touchSlop) ?: return@awaitEachGesture
 				// A drag inside the slop that still selected something is a drag too.
 				if (pressed == null || state.selector.hasSelection()) return@awaitEachGesture
@@ -387,42 +387,58 @@ internal fun Modifier.linkClickHandling(state: TextEditorState, links: LinkClick
 		}
 	}
 
-/** Drags a touch selection handle. */
+/**
+ * Drags a touch selection handle. The other end of the selection is fixed for the whole
+ * drag, so the dragged end can cross it; and the dragged end moves exactly as far as the
+ * finger does from where it grabbed the handle, so grabbing moves nothing. Held above or
+ * below the viewport, the drag auto-scrolls like a mouse drag.
+ */
 private fun Modifier.handleHandleDrag(state: TextEditorState): Modifier {
 	return pointerInput(state) {
+		coroutineScope {
+		val autoScrollScope = this
 		awaitEachGesture {
 			val down = awaitFirstDown(requireUnconsumed = false)
 			if (currentEvent.isMouseLike(down)) return@awaitEachGesture
 			val handle = findHandleAtPosition(down.position, state) ?: return@awaitEachGesture
+			val selection = state.selector.selection ?: return@awaitEachGesture
+			val anchor = if (handle.isStart) selection.end else selection.start
+			val edge = state.getPositionForOffset(handle.position)
+			// From the finger to the middle of the dragged end's row.
+			val grabOffset = Offset(edge.position.x, edge.position.y + edge.height / 2f) - down.position
 
 			state.selector.setDraggingHandle(handle.isStart)
 			state.endCompositionIfPointerLeft()
 
+			val autoScroll = DragAutoScroll(state, autoScrollScope, targetOffset = grabOffset) { target ->
+				// Anything else that changes the selection mid-drag (an edit, an undo) ends it.
+				val current = state.selector.selection
+				if (current == null || (current.start != anchor && current.end != anchor)) return@DragAutoScroll
+				val position = state.getOffsetAtPosition(target)
+				// Meeting the fixed end would empty the selection and drop the handles
+				// mid-drag, so the last selection holds until the finger moves past.
+				if (position != anchor) {
+					state.selector.selectFromAnchor(
+						TextEditorRange(anchor, anchor),
+						position,
+						SelectionGranularity.Character,
+						isTouch = true,
+					)
+					state.selector.setDraggingHandle(isStart = position isBefore anchor)
+				}
+			}
 			try {
 				while (true) {
-					val event = awaitPointerEvent()
-					val dragEvent = event.changes.firstOrNull { it.id == down.id } ?: break
-					if (!dragEvent.pressed) break
-
-					// Offset the finger position well above where the finger is touching
-					// so the user can clearly see the text being selected above their finger.
-					// This includes: handle visual offset + handle size + extra clearance for finger
-					val dragOffset = SELECTION_HANDLE_OFFSET + SELECTION_HANDLE_DIAMETER + 60f
-					val adjustedPosition = dragEvent.position.copy(y = dragEvent.position.y - dragOffset)
-					val newPosition = state.getOffsetAtPosition(adjustedPosition)
-					val selection = state.selector.selection
-					if (selection != null) {
-						if (state.selector.isDraggingStartHandle()) {
-							state.selector.updateSelection(newPosition, selection.end)
-						} else {
-							state.selector.updateSelection(selection.start, newPosition)
-						}
-					}
-					dragEvent.consume()
+					val change = awaitPointerEvent().changes.firstOrNull { it.id == down.id } ?: break
+					if (!change.pressed) break
+					if (change.positionChanged()) autoScroll.update(change.position)
+					change.consume()
 				}
 			} finally {
+				autoScroll.stop()
 				state.selector.clearDraggingHandle()
 			}
+		}
 		}
 	}
 }
@@ -445,25 +461,23 @@ private fun findHandleAtPosition(
 	position: Offset,
 	state: TextEditorState,
 ): SelectionHandle? {
+	// Handles are drawn only for a touch selection, so only then can a finger grab one.
+	if (!state.selector.isTouchSelection) return null
 	val selection = state.selector.selection ?: return null
 
-	val startMetrics = state.getPositionForOffset(selection.start)
-	val startHandleY = startMetrics.position.y + startMetrics.height + SELECTION_HANDLE_OFFSET + SELECTION_HANDLE_RADIUS
-	val startHandlePos = startMetrics.position.copy(y = startHandleY)
-
-	val endMetrics = state.getPositionForOffset(selection.end)
-	val endHandleY = endMetrics.position.y + endMetrics.height + SELECTION_HANDLE_OFFSET + SELECTION_HANDLE_RADIUS
-	val endHandlePos = endMetrics.position.copy(y = endHandleY)
+	val startHandlePos = handleCenter(state.getPositionForOffset(selection.start))
+	val endHandlePos = handleCenter(state.getPositionForOffset(selection.end))
 
 	// Larger hit area for easier touch targeting
 	val handleHitArea = 80f
 
-	return if ((position - startHandlePos).getDistance() < handleHitArea) {
-		SelectionHandle(selection.start, true, startHandlePos)
-	} else if ((position - endHandlePos).getDistance() < handleHitArea) {
-		SelectionHandle(selection.end, false, endHandlePos)
-	} else {
-		null
+	// The hit areas overlap on a short selection, so the nearer handle wins.
+	val toStart = (position - startHandlePos).getDistance()
+	val toEnd = (position - endHandlePos).getDistance()
+	return when {
+		toStart < handleHitArea && toStart <= toEnd -> SelectionHandle(selection.start, true, startHandlePos)
+		toEnd < handleHitArea -> SelectionHandle(selection.end, false, endHandlePos)
+		else -> null
 	}
 }
 
@@ -533,8 +547,9 @@ private fun Modifier.handleTouchInteractions(
 				if (isOnSelection) {
 					onContextMenuRequest?.invoke(down.position)
 				} else {
-					state.selector.startSelection(wordPosition, isTouch = true)
-					state.selector.selectWordAt(wordPosition)
+					// Off any word this selects nothing and leaves the caret at the press.
+					val word = state.selector.rangeAt(wordPosition, SelectionGranularity.Word)
+					state.selector.selectFromAnchor(word, wordPosition, SelectionGranularity.Word, isTouch = true)
 					state.endCompositionIfPointerLeft()
 				}
 

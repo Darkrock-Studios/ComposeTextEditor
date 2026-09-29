@@ -285,6 +285,20 @@ was lengthened specifically so it can be scrolled and flung.
    replaced.
 4. Tap right next to a selection handle. **Expect:** focus and caret placement, not a
    swallowed tap.
+5. Long-press a word, then grab a handle a little off its centre and hold still.
+   **Expect:** the selection does not change on grab (3.2). Drag it: the edge follows
+   the finger by exactly the distance moved.
+6. Drag the start handle past the end handle, and the end handle past the start.
+   **Expect:** the handles cross and the selection runs from the fixed end to the
+   finger, with no jumping (3.1, hammer-editor#956). Dropping one handle exactly on
+   the other leaves at least a character selected.
+7. Select a short word (two or three letters) and grab the end handle. **Expect:** the
+   end handle moves, not the start one.
+8. Long-press blank space between words. **Expect:** the caret moves there and no
+   handles appear.
+9. In a long document, drag the end handle below the editor and hold still.
+   **Expect:** it keeps scrolling and the selection keeps growing (3.4); dragging
+   back inside stops it. Repeat with the start handle above the editor.
 
 ### 4.3 Spans do not fight the keyboard
 

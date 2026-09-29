@@ -46,17 +46,35 @@ class TextEditorSelectionManager(
 
 	fun isDraggingStartHandle() = draggingStartHandle
 
+	// Set by startSelection for the selection that follows it.
+	private var nextSelectionIsTouch = false
+
+	/**
+	 * Stores [range], or no selection when it is empty: an empty selection is none. Touch
+	 * mode ends with the selection, since touch handles need one to stand on. Drags repeat
+	 * the same range many times over, and only a change is announced.
+	 */
 	private fun updateSelectionRange(range: TextEditorRange?) {
-		if (range != null && !range.validate()) {
-			return
+		val normalized = range?.takeIf { it.start != it.end }
+		if (normalized == null) {
+			_isTouchSelection = false
+		} else if (nextSelectionIsTouch) {
+			_isTouchSelection = true
+			nextSelectionIsTouch = false
 		}
-		_selection = range
-		_selectionRangeFlow.tryEmit(range)
+		if (normalized == _selection) return
+		_selection = normalized
+		_selectionRangeFlow.tryEmit(normalized)
 	}
 
+	/**
+	 * Clears the selection to start a new one at [position]. Nothing is selected yet, since
+	 * an empty selection is none; the next [updateSelection] makes the selection, with
+	 * touch handles when [isTouch].
+	 */
 	fun startSelection(position: CharLineOffset, isTouch: Boolean = false) {
-		_isTouchSelection = isTouch
-		updateSelectionRange(TextEditorRange(position, position))
+		clearSelection()
+		nextSelectionIsTouch = isTouch
 	}
 
 	fun updateSelection(start: CharLineOffset, end: CharLineOffset) {
@@ -72,11 +90,7 @@ class TextEditorSelectionManager(
 	 */
 	fun extendSelection(anchor: CharLineOffset, newPosition: CharLineOffset): CharLineOffset {
 		val fixedAnchor = extensionAnchor(anchor)
-		if (fixedAnchor == newPosition) {
-			clearSelection()
-		} else {
-			updateSelection(fixedAnchor, newPosition)
-		}
+		updateSelection(fixedAnchor, newPosition)
 		return fixedAnchor
 	}
 
@@ -109,13 +123,15 @@ class TextEditorSelectionManager(
 
 	/**
 	 * Selects from [anchor] to the [granularity] unit at [position], the way a click, a
-	 * multi-click, or a drag after one does: [anchor] always stays selected, and the caret
-	 * goes to the end that moves. Collapses to a caret when the two meet.
+	 * multi-click, a long press, or a drag after one does: [anchor] always stays selected,
+	 * and the caret goes to the end that moves. Collapses to a caret when the two meet.
+	 * [isTouch] gives the selection touch handles.
 	 */
 	internal fun selectFromAnchor(
 		anchor: TextEditorRange,
 		position: CharLineOffset,
 		granularity: SelectionGranularity,
+		isTouch: Boolean = false,
 	) {
 		val target = rangeAt(position, granularity)
 		val (start, end, caret) = if (isBeforeInDocument(target.start, anchor.start)) {
@@ -125,12 +141,8 @@ class TextEditorSelectionManager(
 			Triple(anchor.start, end, end)
 		}
 		state.cursor.updatePosition(caret)
-		if (start == end) {
-			clearSelection()
-		} else {
-			_isTouchSelection = false
-			updateSelection(start, end)
-		}
+		updateSelection(start, end)
+		if (start != end) _isTouchSelection = isTouch
 	}
 
 	private fun makeRange(start: CharLineOffset, end: CharLineOffset): TextEditorRange {
@@ -142,7 +154,7 @@ class TextEditorSelectionManager(
 	}
 
 	fun clearSelection() {
-		_isTouchSelection = false
+		nextSelectionIsTouch = false
 		updateSelectionRange(null)
 	}
 

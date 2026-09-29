@@ -11,6 +11,7 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.MouseButton
 import androidx.compose.ui.test.MouseInjectionScope
 import androidx.compose.ui.test.SkikoComposeUiTest
+import androidx.compose.ui.test.TouchInjectionScope
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
@@ -26,6 +27,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.darkrockstudios.texteditor.BasicTextEditor
 import com.darkrockstudios.texteditor.RichSpanClickEventListener
+import com.darkrockstudios.texteditor.handleCenter as drawnHandleCenter
 import com.darkrockstudios.texteditor.RichSpanClickListener
 import com.darkrockstudios.texteditor.contextmenu.TextEditorContextMenuState
 import com.darkrockstudios.texteditor.input.CtrlKeyBindings
@@ -185,6 +187,36 @@ class EditorUiTestScope(
 		editor.performTouchInput {
 			down(position)
 			moveTo(position + Offset(0f, dy))
+			up()
+		}
+		test.waitForIdle()
+	}
+
+	/** Runs finger [gestures] on the editor. */
+	fun touch(gestures: TouchInjectionScope.() -> Unit) {
+		editor.performTouchInput(gestures)
+		test.waitForIdle()
+	}
+
+	/** Where the selection's start or end touch handle is drawn. */
+	fun handleCenter(isStart: Boolean): Offset {
+		val selection = checkNotNull(state.selector.selection) { "no selection, so no handles" }
+		return drawnHandleCenter(state.getPositionForOffset(if (isStart) selection.start else selection.end))
+	}
+
+	/**
+	 * Drags the start or end touch handle with a finger so that its end of the selection
+	 * travels to [toChar]: the finger moves by the distance between the two characters,
+	 * in [steps] moves, then lifts.
+	 */
+	fun dragHandle(isStart: Boolean, toChar: Int, steps: Int = 8) {
+		val selection = checkNotNull(state.selector.selection)
+		val from = state.positionOfCharacter(state.getCharacterIndex(if (isStart) selection.start else selection.end))
+		val delta = positionOfCharacter(toChar) - from
+		val grab = handleCenter(isStart)
+		editor.performTouchInput {
+			down(grab)
+			for (step in 1..steps) moveTo(grab + delta * (step / steps.toFloat()))
 			up()
 		}
 		test.waitForIdle()
