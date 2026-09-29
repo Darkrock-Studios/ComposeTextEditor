@@ -21,8 +21,8 @@ import kotlin.test.assertTrue
 
 /**
  * Drives the real [Modifier.textEditorPointerInputHandling] through [BasicTextEditor] to guard
- * the handler race in issue #23: three parallel pointerInput handlers must not clear the
- * selection a shift+click extends. Asserting on real mouse input catches a regression that the
+ * issue #23: the parallel pointerInput handlers must not clear the selection a shift+click
+ * extends. Asserting on real mouse input catches a regression that the
  * selection-math unit test cannot.
  */
 @OptIn(ExperimentalTestApi::class)

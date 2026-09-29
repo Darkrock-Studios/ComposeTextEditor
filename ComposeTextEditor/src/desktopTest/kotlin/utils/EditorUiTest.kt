@@ -9,9 +9,9 @@ import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.MouseButton
+import androidx.compose.ui.test.MouseInjectionScope
 import androidx.compose.ui.test.SkikoComposeUiTest
 import androidx.compose.ui.test.click
-import androidx.compose.ui.test.doubleClick
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performKeyInput
@@ -190,50 +190,76 @@ class EditorUiTestScope(
 	}
 
 	/** Left-clicks an arbitrary pixel [position], optionally with shift held. */
-	fun clickAt(position: Offset, shift: Boolean = false) {
-		defeatMultiClickDetection()
-		if (shift) test.onRoot().performKeyInput { keyDown(Key.ShiftLeft) }
-		editor.performMouseInput { click(position) }
-		if (shift) test.onRoot().performKeyInput { keyUp(Key.ShiftLeft) }
-		test.waitForIdle()
+	fun clickAt(position: Offset, shift: Boolean = false) = mouse(shift) {
+		click(position)
 	}
 
 	/** Right-clicks the character at flat index [charIndex]. */
-	fun rightClickAtCharacter(charIndex: Int) {
-		defeatMultiClickDetection()
-		editor.performMouseInput { rightClick(positionOfCharacter(charIndex)) }
-		test.waitForIdle()
+	fun rightClickAtCharacter(charIndex: Int) = mouse {
+		rightClick(positionOfCharacter(charIndex))
 	}
 
 	/** Middle-clicks the character at flat index [charIndex]. */
-	fun middleClickAtCharacter(charIndex: Int) {
-		defeatMultiClickDetection()
-		editor.performMouseInput {
-			moveTo(positionOfCharacter(charIndex))
-			press(MouseButton.Tertiary)
-			release(MouseButton.Tertiary)
-		}
-		test.waitForIdle()
+	fun middleClickAtCharacter(charIndex: Int) = mouse {
+		moveTo(positionOfCharacter(charIndex))
+		press(MouseButton.Tertiary)
+		release(MouseButton.Tertiary)
 	}
 
 	/** Double-clicks the character at flat index [charIndex] (word select). */
-	fun doubleClickAtCharacter(charIndex: Int) {
-		defeatMultiClickDetection()
-		editor.performMouseInput { doubleClick(positionOfCharacter(charIndex)) }
-		test.waitForIdle()
+	fun doubleClickAtCharacter(charIndex: Int, shift: Boolean = false) =
+		multiClickAtCharacter(charIndex, clicks = 2, shift = shift)
+
+	/** Triple-clicks the character at flat index [charIndex] (line select). */
+	fun tripleClickAtCharacter(charIndex: Int, shift: Boolean = false) =
+		multiClickAtCharacter(charIndex, clicks = 3, shift = shift)
+
+	/**
+	 * Clicks [clicks] times in quick succession on the character at [fromChar]. With
+	 * [toChar], the last press drags there before releasing, the double-click-drag
+	 * shape. [beforeRelease] runs while the last press is still held.
+	 */
+	fun multiClickAtCharacter(
+		fromChar: Int,
+		clicks: Int,
+		toChar: Int? = null,
+		shift: Boolean = false,
+		beforeRelease: () -> Unit = {},
+	) {
+		mouse(shift) {
+			moveTo(positionOfCharacter(fromChar))
+			repeat(clicks - 1) {
+				press()
+				release()
+				advanceEventTime(MULTI_CLICK_INTERVAL_MS)
+			}
+			press()
+			if (toChar != null) moveTo(positionOfCharacter(toChar))
+		}
+		beforeRelease()
+		mouse(shift, fresh = false) { release() }
 	}
 
 	/** Presses at [fromChar], drags to [toChar], and releases. */
-	fun dragSelect(fromChar: Int, toChar: Int) {
-		defeatMultiClickDetection()
-		val from = positionOfCharacter(fromChar)
-		val to = positionOfCharacter(toChar)
+	fun dragSelect(fromChar: Int, toChar: Int) = mouse {
+		moveTo(positionOfCharacter(fromChar))
+		press()
+		moveTo(positionOfCharacter(toChar))
+		release()
+	}
+
+	/**
+	 * Runs mouse [gestures] on the editor, with shift held throughout when [shift] is set.
+	 * Unless [fresh] is false, the first press starts a new click sequence rather than
+	 * continuing the previous gesture's multi-click.
+	 */
+	fun mouse(shift: Boolean = false, fresh: Boolean = true, gestures: MouseInjectionScope.() -> Unit) {
+		if (shift) test.onRoot().performKeyInput { keyDown(Key.ShiftLeft) }
 		editor.performMouseInput {
-			moveTo(from)
-			press()
-			moveTo(to)
-			release()
+			if (fresh) defeatMultiClickDetection()
+			gestures()
 		}
+		if (shift) test.onRoot().performKeyInput { keyUp(Key.ShiftLeft) }
 		test.waitForIdle()
 	}
 
@@ -257,3 +283,6 @@ class EditorUiTestScope(
 
 	fun waitForIdle() = test.waitForIdle()
 }
+
+/** Gap between the presses of a multi-click: well inside any double-click timeout. */
+private const val MULTI_CLICK_INTERVAL_MS = 50L

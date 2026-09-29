@@ -45,6 +45,8 @@ class SpellCheckIgnoreE2eTest {
 			assertEquals(0, spellCheckSpanCount)
 			assertEquals(setOf("zorp"), state.ignoredWords)
 
+			// The right-click moved the caret into the word; type a fresh one at the start.
+			state.textState.cursor.updatePosition(CharLineOffset(0, 0))
 			typeText("zorp ")
 			letSpellCheckSettle()
 			assertEquals(0, spellCheckSpanCount)

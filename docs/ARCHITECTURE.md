@@ -202,15 +202,18 @@ after any other change, never from inside an edit. The session machinery, the An
 `InputConnection`, and the per-platform differences:
 [design/text-input-sessions.md](design/text-input-sessions.md).
 
-Pointer input is three cooperating handlers on the canvas: caret placement
-and span clicks, drag selection, and multi-click (word, then line). The
-load-bearing distinction is *mouse-like versus finger*, detected from pointer
-buttons rather than pointer type because Android reports external mice as
-`Touch`. Mouse-like input places the caret on press, drags to select, and
-extends with shift-click; finger input places the caret on release,
+Pointer input on the canvas is split by device. One handler owns every mouse
+gesture; two own the finger ones (selection handle drags, and taps with long
+presses). The load-bearing distinction is *mouse-like versus finger*,
+detected from pointer buttons rather than pointer type because Android
+reports external mice as `Touch`. Mouse-like input places the caret on press,
+extends with shift-click, and counts presses into double and triple clicks
+(word, then line) by the platform's double-tap timeout and touch slop; a drag
+extends by whatever unit the press selected. Only the primary button places
+the caret or selects; the secondary button opens the context menu, keeping a
+selection it lands inside. Finger input places the caret on release,
 long-presses to select a word or open the context menu, and drags selection
-handles. Only the primary mouse button places the caret or selects; the
-secondary button opens the context menu, keeping a selection it lands inside.
+handles.
 
 ## Document model and transactions
 

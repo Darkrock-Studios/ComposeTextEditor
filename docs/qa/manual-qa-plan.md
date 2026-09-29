@@ -235,6 +235,20 @@ On every desktop platform unless a row names one; the macOS chords are in 3.1.
 | Ctrl+Down on Windows | The next paragraph's start; from the last paragraph, the document end; with Shift, selects |
 | Ctrl+Up / Ctrl+Down with a selection, no Shift | Jumps from the selection's start / end |
 
+### 3.7 Mouse selection (desktop, and Android with a mouse)
+
+Compare against a native text field on the same machine. The double-click window is
+the platform's double-tap timeout (300 ms on desktop), not the OS mouse setting.
+
+1. Double-click a word and hold the button down. **Expect:** the word is selected
+   before release. Drag right, then left past the start. **Expect:** the selection
+   grows and shrinks by whole words and always keeps the first word.
+2. Triple-click and drag down. **Expect:** whole lines, the first line always kept.
+3. Click, then shift+double-click a later word. **Expect:** the selection runs from
+   the click to the end of that word.
+4. Click twice slowly, or twice a few characters apart. **Expect:** two single
+   clicks, no word selection.
+
 ## 4. Touch, focus and the soft keyboard (Android)
 
 Guards #88, #91. **Android device or emulator required.** Use the Markdown demo, which

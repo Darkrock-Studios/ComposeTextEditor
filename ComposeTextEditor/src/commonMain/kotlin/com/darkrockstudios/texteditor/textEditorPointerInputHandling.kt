@@ -5,12 +5,12 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.*
+import androidx.compose.ui.platform.ViewConfiguration
+import com.darkrockstudios.texteditor.state.SelectionGranularity
 import com.darkrockstudios.texteditor.state.SpanClickType
 import com.darkrockstudios.texteditor.state.TextEditorState
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlin.time.ExperimentalTime
 
 data class SelectionHandle(
 	val position: CharLineOffset,
@@ -18,6 +18,12 @@ data class SelectionHandle(
 	val bounds: Offset
 )
 
+/**
+ * Pointer input for the text canvas, split by device: [handleMouseInput] owns every
+ * mouse gesture, [handleHandleDrag] and [handleTouchInteractions] every finger gesture.
+ * Mouse versus finger is decided from the buttons, not the pointer type, because
+ * Android reports an external mouse as [PointerType.Touch] with its buttons filled in.
+ */
 internal fun Modifier.textEditorPointerInputHandling(
 	state: TextEditorState,
 	onSpanClick: RichSpanClickListener? = null,
@@ -25,100 +31,160 @@ internal fun Modifier.textEditorPointerInputHandling(
 	readOnly: Boolean = false,
 ): Modifier {
 	return this
-		.handleDragInput(state, readOnly)
-		.handleTextInteractions(state, onSpanClick, onContextMenuRequest, readOnly)
-		.detectMouseClicksImperatively(
-			onClick = { offset: Offset, isShiftPressed: Boolean ->
-				// On shift+click handleDragInput extends the selection; clearing it here
-				// (handlers run in parallel) would race away the extension.
-				if (!isShiftPressed) {
-					val position = state.getOffsetAtPosition(offset)
-					if (!readOnly) {
-						state.cursor.updatePosition(position)
-					}
-					state.selector.clearSelection()
-					state.endCompositionIfPointerLeft()
-				}
-			},
-			onDoubleClick = { offset: Offset ->
-				val position = state.getOffsetAtPosition(offset)
-				state.selector.startSelection(position, isTouch = false)
-				state.selector.selectWordAt(position)
-				state.endCompositionIfPointerLeft()
-			},
-			onTripleClick = { offset: Offset ->
-				val position = state.getOffsetAtPosition(offset)
-				state.selector.startSelection(position, isTouch = false)
-				state.selector.selectLineAt(position)
-				state.endCompositionIfPointerLeft()
-			}
-		)
+		.handleHandleDrag(state)
+		.handleTouchInteractions(state, onSpanClick, onContextMenuRequest, readOnly)
+		.handleMouseInput(state, onSpanClick, onContextMenuRequest, readOnly)
 }
 
-private fun Modifier.handleDragInput(state: TextEditorState, readOnly: Boolean): Modifier {
+private fun PointerEvent.isMouseLike(down: PointerInputChange): Boolean =
+	down.type == PointerType.Mouse || buttons.areAnyPressed
+
+/**
+ * Counts successive primary presses into single, double, and triple clicks. A press
+ * continues the sequence when it lands within the platform's double-tap timeout and
+ * touch slop of the previous one.
+ */
+private class ClickCounter(private val viewConfiguration: ViewConfiguration) {
+	private var lastTime = 0L
+	private var lastPosition: Offset? = null
+	private var clicks = 0
+
+	fun register(down: PointerInputChange): Int {
+		val previous = lastPosition
+		val continues = previous != null &&
+				down.uptimeMillis - lastTime < viewConfiguration.doubleTapTimeoutMillis &&
+				(down.position - previous).getDistance() < viewConfiguration.touchSlop
+		clicks = if (continues) (clicks + 1).coerceAtMost(3) else 1
+		lastTime = down.uptimeMillis
+		lastPosition = down.position
+		return clicks
+	}
+
+	fun reset() {
+		lastPosition = null
+		clicks = 0
+	}
+}
+
+/**
+ * Every mouse gesture. The primary button places the caret on press (or extends with
+ * shift), a second and third press select the word and the line, and a drag extends by
+ * whatever unit the press selected. The secondary button opens the context menu; any
+ * other button does nothing.
+ */
+private fun Modifier.handleMouseInput(
+	state: TextEditorState,
+	onSpanClick: RichSpanClickListener?,
+	onContextMenuRequest: ((Offset) -> Unit)?,
+	readOnly: Boolean,
+): Modifier = pointerInput(Unit) {
+	val clickCounter = ClickCounter(viewConfiguration)
+	awaitEachGesture {
+		// Not awaitFirstDown: on skiko it ignores every mouse button but the primary one.
+		val press = awaitPointerEvent()
+		val down = press.changes.firstOrNull { it.changedToDownIgnoreConsumed() }
+			?: return@awaitEachGesture
+		if (!press.isMouseLike(down)) return@awaitEachGesture
+
+		val buttons = press.buttons
+		when {
+			(buttons.isPrimaryPressed && !buttons.isSecondaryPressed) || !buttons.areAnyPressed -> {
+				val isShiftPressed = press.keyboardModifiers.isShiftPressed
+				val selection = MouseSelection.press(
+					state,
+					position = down.position,
+					granularity = SelectionGranularity.forClickCount(clickCounter.register(down)),
+					isShiftPressed = isShiftPressed,
+				)
+				if (!isShiftPressed) {
+					reportSpanClick(state, down.position, SpanClickType.PRIMARY_CLICK, onSpanClick)
+				}
+				followDrag(selection, down.id)
+			}
+
+			buttons.isSecondaryPressed -> {
+				clickCounter.reset()
+				handleSpanInteraction(state, down.position, SpanClickType.SECONDARY_CLICK, onSpanClick, readOnly)
+				onContextMenuRequest?.invoke(down.position)
+			}
+
+			else -> clickCounter.reset()
+		}
+	}
+}
+
+/**
+ * A primary-button selection in progress: the unit the press selected stays selected,
+ * and the drag extends from it by the same [granularity]. The caret follows the moving
+ * end even in a read-only view, where it is not drawn, because shift+click extends from
+ * wherever the caret is.
+ */
+private class MouseSelection(
+	private val state: TextEditorState,
+	private val anchor: TextEditorRange,
+	private val granularity: SelectionGranularity,
+) {
+	fun selectTo(position: Offset) {
+		state.selector.selectFromAnchor(anchor, state.getOffsetAtPosition(position), granularity)
+	}
+
+	companion object {
+		/** Selects for a press at [position]: a caret, word, or line, or a shift extension. */
+		fun press(
+			state: TextEditorState,
+			position: Offset,
+			granularity: SelectionGranularity,
+			isShiftPressed: Boolean,
+		): MouseSelection {
+			val anchor = if (isShiftPressed) {
+				val fixed = state.selector.extensionAnchor(state.cursorPosition)
+				TextEditorRange(fixed, fixed)
+			} else {
+				state.selector.rangeAt(state.getOffsetAtPosition(position), granularity)
+			}
+			return MouseSelection(state, anchor, granularity).also {
+				it.selectTo(position)
+				state.endCompositionIfPointerLeft()
+			}
+		}
+	}
+}
+
+/** Extends [selection] as the pointer drags, until it is released. */
+private suspend fun AwaitPointerEventScope.followDrag(selection: MouseSelection, pointerId: PointerId) {
+	while (true) {
+		val event = awaitPointerEvent()
+		val change = event.changes.firstOrNull { it.id == pointerId } ?: break
+		if (!change.pressed) break
+		if (change.positionChanged()) {
+			selection.selectTo(change.position)
+			change.consume()
+		}
+	}
+}
+
+/** Drags a touch selection handle. */
+private fun Modifier.handleHandleDrag(state: TextEditorState): Modifier {
 	return pointerInput(Unit) {
 		awaitEachGesture {
 			val down = awaitFirstDown(requireUnconsumed = false)
+			if (currentEvent.isMouseLike(down)) return@awaitEachGesture
+			val handle = findHandleAtPosition(down.position, state) ?: return@awaitEachGesture
 
-			// Android reports external mouse input as PointerType.Touch but still populates
-			// PointerButtons correctly, so detect "mouse-like" input by the presence of a
-			// primary button rather than the pointer type alone. A real finger has no buttons.
-			val hasPrimaryButton = currentEvent.buttons.isPrimaryPressed &&
-					!currentEvent.buttons.isSecondaryPressed
-			val isMouseLike = down.type == PointerType.Mouse || hasPrimaryButton
-			val isFingerTouch = down.type == PointerType.Touch && !hasPrimaryButton
-			val isShiftPressed = currentEvent.keyboardModifiers.isShiftPressed
+			state.selector.setDraggingHandle(handle.isStart)
+			state.endCompositionIfPointerLeft()
 
-			val initialPosition = down.position
+			try {
+				while (true) {
+					val event = awaitPointerEvent()
+					val dragEvent = event.changes.firstOrNull { it.id == down.id } ?: break
+					if (!dragEvent.pressed) break
 
-			var mouseSelectionAnchor: CharLineOffset? = null
-
-			if (isFingerTouch) {
-				val handle = findHandleAtPosition(initialPosition, state)
-				if (handle != null) {
-					state.selector.setDraggingHandle(handle.isStart)
-					state.endCompositionIfPointerLeft()
-				}
-			} else if (isMouseLike && hasPrimaryButton) {
-				// Only start selection drag on primary (left) mouse button
-				// Secondary (right) click should preserve existing selection for context menu
-				val clickedPosition = state.getOffsetAtPosition(initialPosition)
-				if (isShiftPressed) {
-					// This handler owns the shift+click extension; the other two pointer
-					// handlers must leave the selection alone while shift is held.
-					val anchor = state.cursorPosition
-					mouseSelectionAnchor = state.selector.extendSelection(anchor, clickedPosition)
-					if (!readOnly) {
-						state.cursor.updatePosition(clickedPosition)
-					}
-				} else {
-					mouseSelectionAnchor = clickedPosition
-					state.selector.startSelection(position = clickedPosition, isTouch = false)
-				}
-				state.endCompositionIfPointerLeft()
-			}
-
-			val pointerId = down.id
-			var currentPosition: Offset
-
-			// Continue reading pointer events until release
-			while (true) {
-				val event = awaitPointerEvent()
-				val dragEvent = event.changes.firstOrNull { it.id == pointerId } ?: break
-
-				if (!dragEvent.pressed) {
-					state.selector.clearDraggingHandle()
-					break
-				}
-
-				currentPosition = dragEvent.position
-
-				if (state.selector.isDraggingHandle()) {
 					// Offset the finger position well above where the finger is touching
 					// so the user can clearly see the text being selected above their finger.
 					// This includes: handle visual offset + handle size + extra clearance for finger
 					val dragOffset = SELECTION_HANDLE_OFFSET + SELECTION_HANDLE_DIAMETER + 60f
-					val adjustedPosition = currentPosition.copy(y = currentPosition.y - dragOffset)
+					val adjustedPosition = dragEvent.position.copy(y = dragEvent.position.y - dragOffset)
 					val newPosition = state.getOffsetAtPosition(adjustedPosition)
 					val selection = state.selector.selection
 					if (selection != null) {
@@ -129,16 +195,9 @@ private fun Modifier.handleDragInput(state: TextEditorState, readOnly: Boolean):
 						}
 					}
 					dragEvent.consume()
-				} else {
-					if (isMouseLike && mouseSelectionAnchor != null) {
-						val currentOffset = state.getOffsetAtPosition(currentPosition)
-						state.selector.updateSelection(mouseSelectionAnchor, currentOffset)
-						if (!readOnly) {
-							state.cursor.updatePosition(currentOffset)
-						}
-						dragEvent.consume()
-					}
 				}
+			} finally {
+				state.selector.clearDraggingHandle()
 			}
 		}
 	}
@@ -184,10 +243,21 @@ private fun findHandleAtPosition(
 	}
 }
 
+/** Offers a click to the [RichSpan] under [offset], if there is one. */
+private fun reportSpanClick(
+	state: TextEditorState,
+	offset: Offset,
+	clickType: SpanClickType,
+	onSpanClick: RichSpanClickListener?,
+) {
+	if (onSpanClick == null) return
+	val span = state.findSpanAtPosition(state.getOffsetAtPosition(offset)) ?: return
+	onSpanClick(span, clickType, offset)
+}
+
 /**
- * Places the caret for a click or tap and offers the event to any [RichSpan] under
- * it. Returns true when a span (or a selection handle) claimed the event, meaning
- * the click was answered by something other than plain caret placement.
+ * Places the caret for a tap or a right-click, then offers the event to any [RichSpan]
+ * under it.
  */
 private fun handleSpanInteraction(
 	state: TextEditorState,
@@ -195,19 +265,12 @@ private fun handleSpanInteraction(
 	clickType: SpanClickType,
 	onSpanClick: RichSpanClickListener?,
 	readOnly: Boolean,
-	isShiftPressed: Boolean = false,
-): Boolean {
-	if (findHandleAtPosition(offset, state) != null) {
-		return true
-	}
+) {
+	if (findHandleAtPosition(offset, state) != null) return
 
 	val position = state.getOffsetAtPosition(offset)
-	val clickedSpan = state.findSpanAtPosition(position)
-
-	// A shift+click extends the selection; handleDragInput owns that, so leave the
-	// cursor and selection untouched here rather than collapsing them.
 	val placesCaret = when (clickType) {
-		SpanClickType.PRIMARY_CLICK, SpanClickType.TAP -> !isShiftPressed
+		SpanClickType.PRIMARY_CLICK, SpanClickType.TAP -> true
 		// Like native editors, a right-click inside the selection keeps it for the context
 		// menu, and one outside it moves the caret there first. Read-only views have no
 		// caret to move, so they keep the selection either way.
@@ -221,11 +284,11 @@ private fun handleSpanInteraction(
 		state.endCompositionIfPointerLeft()
 	}
 
-	return !isShiftPressed && clickedSpan != null && onSpanClick != null &&
-			onSpanClick.invoke(clickedSpan, clickType, offset)
+	reportSpanClick(state, offset, clickType, onSpanClick)
 }
 
-private fun Modifier.handleTextInteractions(
+/** Finger taps and long presses. */
+private fun Modifier.handleTouchInteractions(
 	state: TextEditorState,
 	onSpanClick: RichSpanClickListener?,
 	onContextMenuRequest: ((Offset) -> Unit)?,
@@ -234,217 +297,51 @@ private fun Modifier.handleTextInteractions(
 	return pointerInput(Unit) {
 		val touchSlop = viewConfiguration.touchSlop
 		awaitEachGesture {
-			var didHandlePress = false
-			var longPressJob: Job? = null
+			val down = awaitFirstDown(requireUnconsumed = false)
+			if (currentEvent.isMouseLike(down)) return@awaitEachGesture
+			if (findHandleAtPosition(down.position, state) != null) return@awaitEachGesture
+
 			var didLongPress = false
 			var wasDrag = false
-			var initialPressPosition: Offset? = null
-			// Whether this gesture is a real finger touch (vs mouse / mouse-as-touch on Android).
-			// Set on Press; controls whether Release fires a TAP. See android_mouse_pointer_type memo.
-			var isFingerTouchGesture = false
+			val existingSelection = state.selector.selection
+			val longPressJob = state.scope.launch {
+				delay(500)
+				val wordPosition = state.getOffsetAtPosition(down.position)
 
-			while (true) {
-				val event = awaitPointerEvent()
-				val eventChange = event.changes.first()
+				val isOnSelection = existingSelection != null &&
+						(wordPosition isAfterOrEqual existingSelection.start) &&
+						(wordPosition isBeforeOrEqual existingSelection.end)
 
-				when (event.type) {
-					PointerEventType.Press -> {
-						val position = eventChange.position
-						val hasPrimaryButton = event.buttons.isPrimaryPressed &&
-								!event.buttons.isSecondaryPressed
-						val hasSecondaryButton = event.buttons.isSecondaryPressed
-						val isMouseLike = eventChange.type == PointerType.Mouse ||
-								hasPrimaryButton || hasSecondaryButton
-						isFingerTouchGesture = !isMouseLike
-
-						// Only check for handle interaction on real finger-touch events
-						if (isFingerTouchGesture) {
-							val handle = findHandleAtPosition(position, state)
-							if (handle != null) {
-								didHandlePress = true
-								break
-							}
-						}
-
-						if (isMouseLike) {
-							if (hasPrimaryButton) {
-								handleSpanInteraction(
-									state,
-									position,
-									SpanClickType.PRIMARY_CLICK,
-									onSpanClick,
-									readOnly,
-									isShiftPressed = event.keyboardModifiers.isShiftPressed,
-								)
-								didHandlePress = true
-							} else if (hasSecondaryButton) {
-								handleSpanInteraction(
-									state,
-									position,
-									SpanClickType.SECONDARY_CLICK,
-									onSpanClick,
-									readOnly,
-								)
-								onContextMenuRequest?.invoke(position)
-								didHandlePress = true
-							}
-						} else {
-							// Real finger touch: long-press to select word / show context menu.
-							wasDrag = false
-							didLongPress = false
-							initialPressPosition = position
-							val existingSelection = state.selector.selection
-							longPressJob = state.scope.launch {
-								delay(500)
-								val wordPosition = state.getOffsetAtPosition(position)
-
-								val isOnSelection = existingSelection != null &&
-										(wordPosition isAfterOrEqual existingSelection.start) &&
-										(wordPosition isBeforeOrEqual existingSelection.end)
-
-								if (isOnSelection) {
-									onContextMenuRequest?.invoke(position)
-								} else {
-									state.selector.startSelection(wordPosition, isTouch = true)
-									state.selector.selectWordAt(wordPosition)
-									state.endCompositionIfPointerLeft()
-								}
-
-								didLongPress = true
-								didHandlePress = true
-							}
-						}
-					}
-
-					PointerEventType.Release -> {
-						// Only treat as a tap on real finger touch — mouse-like presses already
-						// positioned the cursor on Press, and a TAP here would clobber any
-						// selection a parallel double-click handler just set.
-						if (isFingerTouchGesture && !didLongPress && !wasDrag) {
-							val position = eventChange.position
-							handleSpanInteraction(
-								state,
-								position,
-								SpanClickType.TAP,
-								onSpanClick,
-								readOnly,
-							)
-						}
-
-						longPressJob?.cancel()
-						longPressJob = null
-
-						if (didHandlePress) {
-							break
-						}
-					}
-
-					PointerEventType.Move -> {
-						val movement = event.changes.first()
-						// Only consider it a drag if movement exceeds touch slop threshold
-						// This prevents high-precision touch screens from treating micro-movements as drags
-						initialPressPosition?.let { pressPosition ->
-							if (movement.positionChanged()) {
-								val distance = (movement.position - pressPosition).getDistance()
-								if (distance > touchSlop) {
-									wasDrag = true
-									longPressJob?.cancel()
-									longPressJob = null
-								}
-							}
-						}
-					}
+				if (isOnSelection) {
+					onContextMenuRequest?.invoke(down.position)
+				} else {
+					state.selector.startSelection(wordPosition, isTouch = true)
+					state.selector.selectWordAt(wordPosition)
+					state.endCompositionIfPointerLeft()
 				}
+
+				didLongPress = true
 			}
-		}
-	}
-}
 
-@OptIn(ExperimentalTime::class)
-private fun Modifier.detectMouseClicksImperatively(
-	onClick: (Offset, Boolean) -> Unit,
-	onDoubleClick: (Offset) -> Unit,
-	onTripleClick: (Offset) -> Unit,
-): Modifier {
-	return pointerInput(Unit) {
-		awaitPointerEventScope {
-			var lastTapTime = 0L
-			var secondLastTapTime = 0L
-			var lastTapPosition: Offset? = null
-			var secondLastTapPosition: Offset? = null
-
-			while (true) {
-				val down = awaitFirstDown(requireUnconsumed = false)
-
-				// Only the primary button clicks: the secondary button belongs to the context
-				// menu, the middle button to paste. A finger has no buttons, and Android reports
-				// an external mouse as PointerType.Touch, so buttons rather than the pointer type
-				// tell the two apart; a mouse that reports no buttons at all counts as primary.
-				val buttons = currentEvent.buttons
-				val isPrimaryClick = (buttons.isPrimaryPressed && !buttons.isSecondaryPressed) ||
-						(down.type == PointerType.Mouse && !buttons.areAnyPressed)
-				if (!isPrimaryClick) {
-					do {
-						val event = awaitPointerEvent()
-					} while (event.changes.any { it.pressed })
-					continue
-				}
-
-				val downTime = kotlin.time.Clock.System.now().toEpochMilliseconds()
-				val downPosition = down.position
-
-				onClick(downPosition, currentEvent.keyboardModifiers.isShiftPressed)
-
-				do {
+			try {
+				while (true) {
 					val event = awaitPointerEvent()
-				} while (event.changes.any { it.pressed })
-
-				val isTripleTap = lastTapPosition?.let { lastPos ->
-					secondLastTapPosition?.let { secondLastPos ->
-						val firstToSecondTimeDiff = lastTapTime - secondLastTapTime
-						val secondToThirdTimeDiff = downTime - lastTapTime
-						val firstToSecondPosDiff = (lastPos - secondLastPos).getDistance()
-						val secondToThirdPosDiff = (downPosition - lastPos).getDistance()
-
-						firstToSecondTimeDiff < 300L &&
-								secondToThirdTimeDiff < 300L &&
-								firstToSecondPosDiff < 20f &&
-								secondToThirdPosDiff < 20f
+					val change = event.changes.firstOrNull { it.id == down.id } ?: break
+					if (!change.pressed) {
+						if (!didLongPress && !wasDrag) {
+							handleSpanInteraction(state, change.position, SpanClickType.TAP, onSpanClick, readOnly)
+						}
+						break
 					}
-				} ?: false
-
-				val isDoubleTap = if (!isTripleTap) {
-					lastTapPosition?.let { lastPos ->
-						val timeDiff = downTime - lastTapTime
-						val posDiff = (downPosition - lastPos).getDistance()
-						timeDiff < 300L && posDiff < 20f
-					} ?: false
-				} else false
-
-				when {
-					isTripleTap -> {
-						onTripleClick(downPosition)
-						lastTapTime = 0L
-						secondLastTapTime = 0L
-						lastTapPosition = null
-						secondLastTapPosition = null
-					}
-
-					isDoubleTap -> {
-						onDoubleClick(downPosition)
-						secondLastTapTime = lastTapTime
-						secondLastTapPosition = lastTapPosition
-						lastTapTime = downTime
-						lastTapPosition = downPosition
-					}
-
-					else -> {
-						secondLastTapTime = lastTapTime
-						secondLastTapPosition = lastTapPosition
-						lastTapTime = downTime
-						lastTapPosition = downPosition
+					// Only a move past touch slop is a drag, so a high-precision touch screen's
+					// micro-movements still tap.
+					if (!wasDrag && (change.position - down.position).getDistance() > touchSlop) {
+						wasDrag = true
+						longPressJob.cancel()
 					}
 				}
+			} finally {
+				longPressJob.cancel()
 			}
 		}
 	}

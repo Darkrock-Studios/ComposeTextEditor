@@ -71,19 +71,66 @@ class TextEditorSelectionManager(
 	 * selection. Shared by shift+arrow keys and shift+click so both extend identically.
 	 */
 	fun extendSelection(anchor: CharLineOffset, newPosition: CharLineOffset): CharLineOffset {
-		val currentSelection = _selection
-		val fixedAnchor = when {
-			currentSelection == null -> anchor
-			anchor == currentSelection.start -> currentSelection.end
-			anchor == currentSelection.end -> currentSelection.start
-			else -> anchor
-		}
+		val fixedAnchor = extensionAnchor(anchor)
 		if (fixedAnchor == newPosition) {
 			clearSelection()
 		} else {
 			updateSelection(fixedAnchor, newPosition)
 		}
 		return fixedAnchor
+	}
+
+	/**
+	 * The end that stays put when the selection is extended from [caret]: the end of the
+	 * selection opposite the caret, or the caret itself when nothing is selected.
+	 */
+	internal fun extensionAnchor(caret: CharLineOffset): CharLineOffset {
+		val currentSelection = _selection
+		return when {
+			currentSelection == null -> caret
+			caret == currentSelection.start -> currentSelection.end
+			caret == currentSelection.end -> currentSelection.start
+			else -> caret
+		}
+	}
+
+	/** The [granularity] unit containing [position]: the position itself, its word, or its line. */
+	internal fun rangeAt(position: CharLineOffset, granularity: SelectionGranularity): TextEditorRange =
+		when (granularity) {
+			SelectionGranularity.Character -> TextEditorRange(position, position)
+			SelectionGranularity.Word -> state.findWordSegmentAt(position)?.range
+				?: TextEditorRange(position, position)
+
+			SelectionGranularity.Line -> TextEditorRange(
+				CharLineOffset(position.line, 0),
+				CharLineOffset(position.line, state.textLines[position.line].length),
+			)
+		}
+
+	/**
+	 * Selects from [anchor] to the [granularity] unit at [position], the way a click, a
+	 * multi-click, or a drag after one does: [anchor] always stays selected, and the caret
+	 * goes to the end that moves. Collapses to a caret when the two meet.
+	 */
+	internal fun selectFromAnchor(
+		anchor: TextEditorRange,
+		position: CharLineOffset,
+		granularity: SelectionGranularity,
+	) {
+		val target = rangeAt(position, granularity)
+		val (start, end, caret) = if (isBeforeInDocument(target.start, anchor.start)) {
+			Triple(target.start, anchor.end, target.start)
+		} else {
+			val end = if (isBeforeInDocument(target.end, anchor.end)) anchor.end else target.end
+			Triple(anchor.start, end, end)
+		}
+		state.cursor.updatePosition(caret)
+		if (start == end) {
+			clearSelection()
+		} else {
+			_isTouchSelection = false
+			updateSelection(start, end)
+		}
 	}
 
 	private fun makeRange(start: CharLineOffset, end: CharLineOffset): TextEditorRange {
@@ -152,6 +199,21 @@ class TextEditorSelectionManager(
 		state.findWordSegmentAt(position)?.let { wordSegment ->
 			state.cursor.updatePosition(wordSegment.range.end)
 			updateSelection(wordSegment.range.start, wordSegment.range.end)
+		}
+	}
+}
+
+/** The unit a click selects and a drag after it extends by. */
+internal enum class SelectionGranularity {
+	Character,
+	Word,
+	Line;
+
+	companion object {
+		fun forClickCount(clicks: Int): SelectionGranularity = when (clicks) {
+			1 -> Character
+			2 -> Word
+			else -> Line
 		}
 	}
 }

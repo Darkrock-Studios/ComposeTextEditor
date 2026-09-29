@@ -116,9 +116,11 @@ class SpellCheckUiTestScope(
 
 	/** Right-clicks the character at flat index [charIndex], opening the context menu. */
 	fun rightClickAtCharacter(charIndex: Int) {
-		defeatMultiClickDetection()
 		val position = state.textState.positionOfCharacter(charIndex)
-		test.onNodeWithTag(EDITOR_TEST_TAG).performMouseInput { rightClick(position) }
+		test.onNodeWithTag(EDITOR_TEST_TAG).performMouseInput {
+			defeatMultiClickDetection()
+			rightClick(position)
+		}
 		test.waitForIdle()
 	}
 

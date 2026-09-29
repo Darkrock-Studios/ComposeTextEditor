@@ -351,11 +351,15 @@ fixes what users feel every minute.
 - [ ] **1.11 Padding. C.** [Opus] [Lane C] The placeholder draws at `Offset(0,
   0)`, ignoring top padding (`DrawPlaceholderText.kt`). Horizontal padding sits
   outside pointer input, leaving dead click zones.
-- [ ] **1.12 Multi-click drag. C.** [Opus] [Lane B] Double-click then drag
+- [x] **1.12 Multi-click drag. C.** [Opus] [Lane B] Double-click then drag
   should extend by word, triple-click then drag by line. Today multi-click
   resolves on release and replaces the drag. Word selection should appear on
   press. Shift plus double-click ignores shift. Thresholds are hard-coded 300
-  ms and 20 px instead of `viewConfiguration`.
+  ms and 20 px instead of `viewConfiguration`. One mouse handler now owns
+  caret placement, click counting (by event time, so tests drive it with the
+  virtual clock), and the drag, all matching `BasicTextField`. Words come from
+  `findWordSegmentAt`, the same function double-click and long press use, so
+  1.5's break iterator reaches all three.
 - [ ] **1.13 Pointer icons. C.** [Opus] [Lane B] No I-beam over the editor
   (`RichTextView` has one). No hand over links.
 - [ ] **1.14 Drag auto-scroll. C.** [Opus] [Lane B] Scrolls only on pointer
