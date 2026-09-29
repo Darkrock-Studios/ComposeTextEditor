@@ -208,12 +208,13 @@ private fun TextEditorState.deleteByMotion(locateRangeEdge: () -> Unit) {
 }
 
 /**
- * Past the last character of the caret's visual row. Not the End motion, which on a
- * wrapped row stops before that character so the caret stays drawn on the row.
+ * Past the last character of the caret's visual row, as a plain position: on a
+ * wrapped row that is the wrap offset, which End places upstream and this leaves
+ * downstream, since it only bounds a delete.
  */
 private fun TextEditorState.moveCursorToVisualRowEnd() {
 	val position = cursorPosition
-	val row = getWrappedLineIndex(position)
+	val row = cursorRowIndex()
 	val nextRow = lineOffsets.getOrNull(row + 1)
 	val end = if (row >= 0 && nextRow != null && nextRow.line == position.line) {
 		nextRow.wrapStartsAtIndex

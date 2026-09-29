@@ -1,6 +1,7 @@
 package com.darkrockstudios.texteditor.state
 
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.text.style.ResolvedTextDirection
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.LineWrap
 import com.darkrockstudios.texteditor.effectiveHeight
@@ -10,7 +11,7 @@ import com.darkrockstudios.texteditor.effectiveHeight
 // text. Missing cursors step by logical line; updatePosition clamps into the text.
 
 internal fun TextEditorState.moveCursorUp() {
-	val index = getWrappedLineIndex(cursorPosition)
+	val index = cursorRowIndex()
 	val row = lineOffsets.getOrNull(index)
 	when {
 		cursorPosition.line == 0 && (row == null || row.virtualLineIndex == 0) -> moveToDocumentStart()
@@ -20,7 +21,7 @@ internal fun TextEditorState.moveCursorUp() {
 }
 
 internal fun TextEditorState.moveCursorDown() {
-	val index = getWrappedLineIndex(cursorPosition)
+	val index = cursorRowIndex()
 	val nextRow = if (index < 0) null else lineOffsets.getOrNull(index + 1)
 	when {
 		cursorPosition.line == textLines.lastIndex && (nextRow == null || nextRow.line != cursorPosition.line) ->
@@ -36,49 +37,71 @@ internal fun TextEditorState.moveCursorDown() {
  * current run of vertical moves aims for (the caret's own x when a run starts).
  */
 private fun TextEditorState.moveCursorToRow(rowIndex: Int) {
-	val goalX = cursor.verticalGoalX ?: getPositionForOffset(cursorPosition).position.x
+	val goalX = cursor.verticalGoalX ?: getPositionForOffset(cursorPosition, cursor.affinity).position.x
 	val row = lineOffsets[rowIndex]
-	cursor.updatePosition(CharLineOffset(row.line, row.charAtX(goalX)))
+	val (char, affinity) = row.caretAtX(goalX)
+	cursor.updatePosition(CharLineOffset(row.line, char), affinity)
 	cursor.rememberVerticalGoalX(goalX)
 }
 
 /**
- * The caret position on this row nearest to [x]. On a row that wraps, that stops
- * short of the wrap, since a position on the wrap draws on the next row.
+ * The caret position on this row nearest to [x], with the affinity that keeps it
+ * drawn here: upstream when it lands on the wrap that ends the row.
  */
-private fun LineWrap.charAtX(x: Float): Int {
+private fun LineWrap.caretAtX(x: Float): Pair<Int, CaretAffinity> {
 	val layout = textLayoutResult
 	val row = virtualLineIndex
 	val text = layout.layoutInput.text.text
-	val rowEnd = if (row == layout.lineCount - 1) {
-		layout.getLineEnd(row)
+	val rowEnd = layout.getLineEnd(row)
+	val wraps = row < layout.lineCount - 1
+	// At or past a wrapped row's far edge the layout answers with the last glyph's
+	// start, since it puts the wrap offset on the next row; the caret belongs at the end.
+	val pastEdge = wraps && if (layout.getParagraphDirection(0) == ResolvedTextDirection.Ltr) {
+		x >= rowEndX()
 	} else {
-		maxOf(wrapStartsAtIndex, text.precedingGraphemeBoundary(layout.getLineEnd(row)))
+		x <= rowEndX()
 	}
+	if (pastEdge) return rowEnd to CaretAffinity.Upstream
 	val y = (layout.getLineTop(row) + layout.getLineBottom(row)) / 2f
 	val hit = layout.getOffsetForPosition(Offset(x, y)).coerceIn(wrapStartsAtIndex, rowEnd)
-	return text.snapToGraphemeBoundary(hit, forward = false)
+	val char = text.snapToGraphemeBoundary(hit, forward = false)
+	return char to if (wraps && char == rowEnd) CaretAffinity.Upstream else CaretAffinity.Downstream
 }
 
+/**
+ * The x of a caret at [char] drawn on this row. At the wrap that ends the row (an
+ * upstream caret) it is the row's end, where the layout would otherwise answer
+ * with the start of the next row.
+ */
+internal fun LineWrap.caretX(char: Int): Float {
+	val layout = textLayoutResult
+	val safe = char.coerceIn(0, layout.layoutInput.text.length)
+	val atWrap = virtualLineIndex < layout.lineCount - 1 && safe == layout.getLineEnd(virtualLineIndex)
+	return if (atWrap) rowEndX() else layout.getHorizontalPosition(safe, usePrimaryDirection = true)
+}
+
+/**
+ * The x past this row's last glyph, trailing spaces included: the line's own right
+ * edge (left in a right-to-left paragraph) stops before them.
+ */
+private fun LineWrap.rowEndX(): Float {
+	val layout = textLayoutResult
+	val row = virtualLineIndex
+	val last = layout.getLineEnd(row) - 1
+	return if (layout.getParagraphDirection(0) == ResolvedTextDirection.Ltr) {
+		maxOf(layout.getLineRight(row), if (last >= 0) layout.getBoundingBox(last).right else 0f)
+	} else {
+		minOf(layout.getLineLeft(row), if (last >= 0) layout.getBoundingBox(last).left else 0f)
+	}
+}
+
+/** End: the end of the caret's visual row, drawn there even when the row wraps. */
 internal fun TextEditorState.moveCursorToLineEnd() {
 	val (line, _) = cursorPosition
-	val currentWrappedLineIndex = getWrappedLineIndex(cursorPosition)
-	if (currentWrappedLineIndex < 0) {
-		cursor.updatePosition(cursorPosition.copy(char = textLines[line].length))
-		return
-	}
-	val currentWrappedLine = lineOffsets[currentWrappedLineIndex]
-
-	if (currentWrappedLineIndex < lineOffsets.size - 1) {
-		val nextWrappedLine = lineOffsets[currentWrappedLineIndex + 1]
-		if (nextWrappedLine.line == currentWrappedLine.line) {
-			// The last cluster of this row: a position on the wrap draws on the next row.
-			val text = textLines[line].text
-			cursor.updatePosition(cursorPosition.copy(char = text.precedingGraphemeBoundary(nextWrappedLine.wrapStartsAtIndex)))
-		} else {
-			// Go to the end of this real line
-			cursor.updatePosition(cursorPosition.copy(char = textLines[line].length))
-		}
+	val rowIndex = cursorRowIndex()
+	val nextRow = if (rowIndex < 0) null else lineOffsets.getOrNull(rowIndex + 1)
+	if (nextRow != null && nextRow.line == line) {
+		cursor.updatePosition(cursorPosition.copy(char = nextRow.wrapStartsAtIndex), CaretAffinity.Upstream)
 	} else {
 		cursor.updatePosition(cursorPosition.copy(char = textLines[line].length))
 	}
@@ -190,7 +213,7 @@ internal fun TextEditorState.moveCursorPageDown() = moveCursorByPage(1)
  * the scroll range allows, and always ends up visible.
  */
 private fun TextEditorState.moveCursorByPage(direction: Int) {
-	val index = getWrappedLineIndex(cursorPosition)
+	val index = cursorRowIndex()
 	val row = lineOffsets.getOrNull(index) ?: return
 	val pageHeight = scrollManager.viewportHeight
 	val targetY = row.offset.y + row.effectiveHeight / 2f + direction * pageHeight
@@ -206,7 +229,7 @@ private fun TextEditorState.moveCursorByPage(direction: Int) {
 		else -> moveCursorToRow(targetIndex)
 	}
 
-	val newRow = lineOffsets.getOrNull(getWrappedLineIndex(cursorPosition)) ?: return
+	val newRow = lineOffsets.getOrNull(cursorRowIndex()) ?: return
 	val newTop = newRow.offset.y.toInt()
 	val keepsScreenPlace = scrollState.value + newTop - row.offset.y.toInt()
 	val showsRowFrom = minOf(newTop, (newRow.offset.y + newRow.effectiveHeight).toInt() - pageHeight)

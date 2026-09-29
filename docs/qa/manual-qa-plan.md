@@ -237,6 +237,9 @@ On every desktop platform unless a row names one; the macOS chords are in 3.1.
 | Backspace after an emoji, a ZWJ sequence, a flag, a skin tone, or a keycap | The whole sequence goes at once |
 | Backspace after a combining accent (type "e" then U+0301, or Vietnamese "ế") | Only the accent goes; the base stays. Delete before the pair removes both |
 | Up / Down / End onto a row that wraps right after an emoji | The caret lands after the emoji, never inside it |
+| End on a row that wraps mid-word (narrow the window) | The caret sits at the end of that row, drawn there, not at the start of the next row; End again stays; Home returns to the row's start; Down moves one row; typing inserts at the wrap |
+| End on a row that wraps after a space | The caret sits after the space at the row's right edge |
+| Down through a wrapped paragraph from a caret at a row's right edge | One row at a time, staying at the right edge |
 | Ctrl+Right / Ctrl+Delete on Linux | To / delete to the end of the word, or of the next one |
 | Ctrl+Right / Ctrl+Delete on Windows | To / delete to the start of the next word; from a line's last word, the line end first, and an empty line is a stop (hammer-editor#852) |
 | Ctrl+Left / Ctrl+Right through "hello, world... (again)" | Word starts and ends only; punctuation is skipped |

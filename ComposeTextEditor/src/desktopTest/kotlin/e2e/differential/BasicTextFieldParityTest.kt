@@ -123,14 +123,20 @@ class BasicTextFieldParityTest {
 		start = EditSnapshot("abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz", caret = 0),
 		strokes = listOf(End),
 		width = 80.dp,
-		divergesUntil = "1.6",
 	)
 
 	@Test
-	fun `end on a row wrapped at a space stops before the space`() = assertMatchesNative(
-		start = EditSnapshot("hello world again", caret = 0),
-		strokes = listOf(End),
-		width = 60.dp,
+	fun `shift end on a row wrapped mid-word selects to the wrap`() = assertMatchesNative(
+		start = EditSnapshot("abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz", caret = 2),
+		strokes = listOf(ShiftEnd),
+		width = 80.dp,
+	)
+
+	@Test
+	fun `down with a goal x past a row wrapped mid-word lands on the wrap`() = assertMatchesNative(
+		start = EditSnapshot("ab\nabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz", caret = 2),
+		strokes = listOf(Down),
+		width = 80.dp,
 	)
 
 	@Test

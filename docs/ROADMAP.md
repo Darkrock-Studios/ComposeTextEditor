@@ -75,9 +75,11 @@ and `BasicTextField` were both probed, `BasicTextField` gave the native answer.
 Exceptions, where `BasicTextField` is not native (found by 0.2, and tolerated
 by its `referenceQuirk`): with a selection, its Home and End measure from the
 selection's start and end rather than the caret; Home on an empty last line
-moves to the end of the line above; End on a paragraph's last row stops before
-its trailing spaces, and Up and Down stop before a row's trailing spaces when
-the goal x is over or past them; a word wider than the row is broken where it
+moves to the end of the line above; End stops before a row's trailing spaces,
+and Up and Down stop before a row's trailing spaces when the goal x is over or
+past them; it has no caret affinity, so a caret on a wrap offset is on the lower
+row to it: Home from there stays put, End runs on to the lower row's end, and Up
+and Down measure from that row; a word wider than the row is broken where it
 starts instead of moving to the next row; a page move neither starts nor follows
 a goal x, so it measures from the caret, and Up or Down after one measures from
 where it landed; PageUp and PageDown stop on the first and last rows instead of
@@ -86,9 +88,11 @@ jumps measure from the selection's start and end rather than the caret; its
 goal x survives typed text and Enter, so Up or Down after typing measures from
 the column the typing started at; its word motions stop after every punctuation
 character, where GTK, `EditText` and Cocoa skip punctuation (they agree that an
-emoji is a word of its own), and its Ctrl+Left and Ctrl+Backspace pass over a
-one-character word ("a", "é", a lone ideograph), because its search steps back
-a character at a time and only stops at a word that began before the step. Its
+emoji is a word of its own), and its Ctrl+Left and Ctrl+Backspace step back
+one character at a time and stop at the first segment that began before the
+step, so they pass over one-character segments (a space, a mark, a flag, a lone
+ideograph) and stop one short of a word when the step lands inside it, where
+GTK and Cocoa go to the previous word's start. Its
 arrow keys in right-to-left text are logical, like the editor's (7.5).
 
 ## Workflow
@@ -350,12 +354,24 @@ fixes what users feel every minute.
   empty non-null selection is lane B's 1.21. Windows' Ctrl+Left still crosses
   a line break in one step (2.12). The Mac part (compile the shared `actual`
   for iOS) is in the queue; the checkbox waits on it.
-- [ ] **1.6 End on a wrapped row, and caret affinity. R, C.** [Fable] [Lane A]
+- [x] **1.6 End on a wrapped row, and caret affinity. R, C.** [Fable] [Lane A]
   End goes to `nextWrapStart - 1`. That is right when the row ends in a space,
   one character short when the wrap falls mid-word or in CJK, and past the
   first space when the row ends in several.
   `CharLineOffset` has no affinity, so a position at a wrap boundary always
   draws on the later row.
+  Done: affinity lives on the caret, not on positions.
+  `TextEditorCursorState.affinity` (`CaretAffinity.Upstream` or `Downstream`)
+  says which row a caret at a wrap offset draws on; every `updatePosition`
+  resets it to downstream, and End on a wrapped row, and a vertical move whose
+  goal x reaches past a row's end, place the caret on the wrap offset upstream.
+  `TextEditorState.cursorRowIndex()` is the one read of the caret's row (Up,
+  Down, Home, End, page moves, delete to the row end, scrolling), and
+  `LineWrap.caretX` draws an upstream caret at its row's right edge (left in a
+  right-to-left row). Positions elsewhere (selections, spans, hit tests) stay
+  affinity-free, so the blast radius is the caret's own readers. Left, Right
+  and a click still land downstream: a click past a wrapped row's end puts the
+  caret on the next row's start (1.24).
 - [x] **1.7 PageUp and PageDown. C.** [Opus] [Lane A] Driven by scroll position
   rather than the caret's row; PageDown never reaches the document end. The
   scroll margin is a hard-coded 10 px (`state/TextEditorScrollManager.kt`).
@@ -443,6 +459,11 @@ fixes what users feel every minute.
   and selection alone everywhere. Compose has no primary selection API; the
   paste itself is 4.23.
 
+- [ ] **1.24 Pointer affinity. C.** [Opus] [Lane B] A click or drag past the
+  end of a wrapped row lands on its wrap offset, which `getOffsetAtPosition`
+  returns as a bare position, so the caret draws at the start of the next row
+  (1.6 gave only the keyboard an upstream caret). Return the affinity from the
+  hit test and place the caret with it.
 - [x] **1.21 Empty selections. C.** [Opus] [Lane B] A drag that ends where it
   began leaves a non-null selection with start equal to end. The delete-by-motion
   actions (word, line, and paragraph deletes) then delete nothing and still

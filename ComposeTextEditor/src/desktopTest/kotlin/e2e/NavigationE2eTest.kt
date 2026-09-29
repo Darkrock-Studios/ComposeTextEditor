@@ -4,6 +4,7 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import com.darkrockstudios.texteditor.CharLineOffset
+import com.darkrockstudios.texteditor.cursor.calculateCursorPosition
 import com.darkrockstudios.texteditor.input.WindowsKeyBindings
 import utils.EditorUiTestScope
 import utils.editorUiTest
@@ -301,6 +302,87 @@ class NavigationE2eTest {
 	}
 
 	@Test
+	fun `end on a row wrapped mid-word sits at the wrap and draws on that row`() = editorUiTest(
+		initialText = AnnotatedString(WRAPPED_WORD),
+		width = 80.dp,
+	) {
+		clickAtCharacter(0)
+		val wrap = state.lineOffsets[1].wrapStartsAtIndex
+		press(Key.MoveEnd)
+		assertEquals(wrap, cursorIndex)
+		assertEquals(0, state.cursorRowIndex(), "drawn on the first row")
+		val metrics = state.calculateCursorPosition()
+		assertEquals(state.lineOffsets[0].offset.y, metrics.position.y)
+		val beforeWrap = state.getPositionForOffset(CharLineOffset(0, wrap - 1)).position.x
+		assertTrue(metrics.position.x > beforeWrap, "at the row's end, not the next row's start")
+
+		press(Key.MoveEnd)
+		assertEquals(wrap, cursorIndex, "End again stays")
+		assertEquals(0, state.cursorRowIndex())
+
+		press(Key.MoveHome)
+		assertEquals(0, cursorIndex, "Home goes to the start of the row the caret is drawn on")
+	}
+
+	@Test
+	fun `down and up from the end of a wrapped row move one row`() = editorUiTest(
+		initialText = AnnotatedString(WRAPPED_WORD),
+		width = 80.dp,
+	) {
+		clickAtCharacter(0)
+		press(Key.MoveEnd)
+		press(Key.DirectionDown)
+		assertEquals(1, state.cursorRowIndex())
+		assertEquals(state.lineOffsets[2].wrapStartsAtIndex, cursorIndex, "the goal x is at the row's edge")
+		press(Key.DirectionUp)
+		assertEquals(0, state.cursorRowIndex())
+		assertEquals(state.lineOffsets[1].wrapStartsAtIndex, cursorIndex, "back at the first row's end")
+	}
+
+	/** Native editors put End after a row's trailing space; BasicTextField stops before it. */
+	@Test
+	fun `end on a row wrapped at a space goes past the space`() = editorUiTest(
+		initialText = AnnotatedString("hello world again"),
+		width = 60.dp,
+	) {
+		clickAtCharacter(0)
+		press(Key.MoveEnd)
+		assertEquals(6, cursorIndex)
+		assertEquals(0, state.cursorRowIndex())
+		val beforeSpace = state.getPositionForOffset(CharLineOffset(0, 5)).position.x
+		assertTrue(state.calculateCursorPosition().position.x > beforeSpace, "drawn after the space")
+	}
+
+	@Test
+	fun `right from the end of a wrapped row steps onto the next row`() = editorUiTest(
+		initialText = AnnotatedString(WRAPPED_WORD),
+		width = 80.dp,
+	) {
+		clickAtCharacter(0)
+		val wrap = state.lineOffsets[1].wrapStartsAtIndex
+		press(Key.MoveEnd)
+		press(Key.DirectionRight)
+		assertEquals(wrap + 1, cursorIndex)
+		assertEquals(1, state.cursorRowIndex())
+		press(Key.DirectionLeft)
+		assertEquals(wrap, cursorIndex)
+		assertEquals(1, state.cursorRowIndex(), "Left arrives on the lower row's start")
+	}
+
+	@Test
+	fun `typing at the end of a wrapped row inserts at the wrap`() = editorUiTest(
+		initialText = AnnotatedString(WRAPPED_WORD),
+		width = 80.dp,
+	) {
+		clickAtCharacter(0)
+		val wrap = state.lineOffsets[1].wrapStartsAtIndex
+		press(Key.MoveEnd)
+		typeText("X")
+		assertEquals('X', text[wrap])
+		assertEquals(wrap + 1, cursorIndex)
+	}
+
+	@Test
 	fun `ctrl+right and ctrl+left skip punctuation`() = editorUiTest(
 		initialText = AnnotatedString("hello, world... (again)"),
 	) {
@@ -409,3 +491,6 @@ class NavigationE2eTest {
 		)
 	}
 }
+
+/** One word too wide for an 80 dp editor, so every row wraps mid-word. */
+private const val WRAPPED_WORD = "abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz"

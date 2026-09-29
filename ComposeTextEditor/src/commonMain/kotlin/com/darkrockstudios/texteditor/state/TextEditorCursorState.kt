@@ -13,11 +13,23 @@ import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 
+/**
+ * Which row the caret draws on when its position is a wrap offset: [Downstream]
+ * puts it at the start of the row after the wrap, [Upstream] at the end of the row
+ * before it. Anywhere else the two name the same row.
+ */
+enum class CaretAffinity { Downstream, Upstream }
+
 class TextEditorCursorState(
 	private val editorState: TextEditorState
 ) {
 	private var _position by mutableStateOf(CharLineOffset(0, 0))
 	val position: CharLineOffset get() = _position
+
+	private var _affinity by mutableStateOf(CaretAffinity.Downstream)
+
+	/** The row the caret draws on at a wrap offset; every move resets it to [CaretAffinity.Downstream]. */
+	val affinity: CaretAffinity get() = _affinity
 
 	private var _isVisible by mutableStateOf(true)
 	val isVisible: Boolean get() = _isVisible
@@ -74,10 +86,19 @@ class TextEditorCursorState(
 	 * an emoji passes through a caret inside the joined cluster, so each movement
 	 * and hit-test path snaps for itself.
 	 */
-	fun updatePosition(position: CharLineOffset, updateStyles: Boolean = true) {
+	fun updatePosition(position: CharLineOffset, updateStyles: Boolean = true) =
+		updatePosition(position, CaretAffinity.Downstream, updateStyles)
+
+	/** [updatePosition], then the row the caret draws on: End on a wrapped row places it [CaretAffinity.Upstream]. */
+	internal fun updatePosition(position: CharLineOffset, affinity: CaretAffinity) =
+		updatePosition(position, affinity, updateStyles = true)
+
+	private fun updatePosition(position: CharLineOffset, affinity: CaretAffinity, updateStyles: Boolean) {
 		val oldPosition = _position
 		val newPosition = position.coerceInto(editorState.textLines)
 		verticalGoal = null
+		// Before the scroll request below, which reads the row the caret is on.
+		_affinity = affinity
 		_position = newPosition
 		_cursorPositionFlow.tryEmit(newPosition)
 
@@ -217,8 +238,7 @@ class TextEditorCursorState(
 	}
 
 	fun moveToLineStart() {
-		val wrapStart = editorState.lineOffsets.getOrNull(editorState.getWrappedLineIndex(position))
-			?.wrapStartsAtIndex ?: 0
+		val wrapStart = editorState.lineOffsets.getOrNull(editorState.cursorRowIndex())?.wrapStartsAtIndex ?: 0
 		updatePosition(position.copy(char = wrapStart))
 	}
 }

@@ -21,9 +21,9 @@ enum class EditorInvariant(vararg val needs: String) {
 
 	/**
 	 * Without a selection, Down moves to the next visual row, or stays on the last
-	 * one. Rows come from [com.darkrockstudios.texteditor.state.TextEditorState.getWrappedLineIndex],
-	 * which puts a wrap offset on the later row; once the caret carries affinity (1.6)
-	 * this must read the row the caret is drawn on.
+	 * one. Rows are the ones the caret is drawn on
+	 * ([com.darkrockstudios.texteditor.state.TextEditorState.cursorRowIndex]), so a
+	 * caret at the end of a wrapped row counts on that row.
 	 */
 	DownMovesOneRow("1.2"),
 
@@ -73,15 +73,16 @@ fun EditorUiTestScope.checkInvariants(invariants: Set<EditorInvariant>) {
 	}
 	if (EditorInvariant.DownMovesOneRow in invariants) {
 		val position = state.cursorPosition
-		val row = state.getWrappedLineIndex(position)
+		val affinity = state.cursor.affinity
+		val row = state.cursorRowIndex()
 		send(Down)
 		val expected = minOf(row + 1, state.lineOffsets.lastIndex)
 		assertEquals(
 			expected,
-			state.getWrappedLineIndex(state.cursorPosition),
+			state.cursorRowIndex(),
 			"DownMovesOneRow: from row $row at $snapshot, landed at ${state.editSnapshot()}",
 		)
-		state.cursor.updatePosition(position)
+		state.cursor.updatePosition(position, affinity)
 		waitForIdle()
 	}
 }

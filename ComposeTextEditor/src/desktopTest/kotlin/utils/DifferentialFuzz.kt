@@ -2,6 +2,7 @@ package utils
 
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.unit.Dp
+import com.darkrockstudios.texteditor.state.CaretAffinity
 import com.darkrockstudios.texteditor.state.wordRuns
 import kotlin.math.abs
 import kotlin.random.Random
@@ -13,7 +14,7 @@ import kotlin.test.fail
  * reference's state and the script continues. Delete an item here when it lands,
  * and the fuzzer starts failing on that class of divergence.
  */
-val OPEN_PARITY_ITEMS: Set<String> = setOf("1.6", "7.5")
+val OPEN_PARITY_ITEMS: Set<String> = setOf("7.5")
 
 /** Starting text for the Unicode fuzzers: an emoji, a combining mark, and a right-to-left word. */
 const val FUZZ_START_TEXT = "seed line\nsecond line of words\n\uD83D\uDE00 e\u0301 שלום end"
@@ -105,23 +106,14 @@ fun explainDivergence(
 				val edge = if (stroke.key == Key.DirectionUp) 0 else native.text.length
 				if (native.caret == edge && editor.caret == before.caret) add("1.3") else add("1.2")
 			}
-			// One cluster short of a wrap, where only affinity can hold the caret on the upper row.
-			val text = before.text
-			val atWrap = native.caret in rows && native.caret > 0 && text[native.caret - 1] != '\n'
-			if (atWrap && text.isOneGrapheme(editor.caret, native.caret)) add("1.6")
 			// The caret's x, and the row edge a far goal x snaps to, depend on direction.
+			val text = before.text
 			if (listOf(before.caret, native.caret, editor.caret).any { text.paragraphHasRightToLeft(it) }) {
 				add("7.5")
 			}
 		}
 
-		Key.MoveEnd -> if (!stroke.ctrl && native.caret != editor.caret) {
-			val paragraphEnd = editor.caret == before.text.length || before.text[editor.caret] == '\n'
-			val pastWrapSpaces = native.caret < editor.caret && !paragraphEnd &&
-				before.text.substring(native.caret, editor.caret).isBlank()
-			// One cluster short of a mid-word wrap, or past spaces the reference leaves at a wrap.
-			if (before.text.isOneGrapheme(editor.caret, native.caret) || pastWrapSpaces) add("1.6")
-		}
+		else -> {}
 	}
 }
 
@@ -144,9 +136,37 @@ private fun crossesWordBreakText(before: EditSnapshot, native: EditSnapshot, edi
 	}
 }
 
-/** Whether a word (not a space or punctuation) of exactly one character starts at [index]. */
-private fun String.isOneCharacterWord(index: Int): Boolean =
-	wordRuns().any { it.isWord && it.start == index && it.end == index + 1 }
+/**
+ * Where the reference's previous-word search lands from [from]: it steps back one
+ * character at a time and stops at the start of the first segment that began before
+ * the step, so it passes over one-character segments (a space, a mark, a flag, a
+ * lone ideograph) and stops one short of a word when the step lands inside it.
+ */
+private fun String.referencePreviousWord(from: Int): Int {
+	var offset = from
+	while (offset > 0) {
+		val start = referenceWordBoundary(minOf(offset, length - 1)).first
+		if (start < offset) return start
+		offset--
+	}
+	return 0
+}
+
+/** `SkiaParagraph.getWordBoundary`: an empty range in whitespace, else the ICU segment. */
+private fun String.referenceWordBoundary(offset: Int): Pair<Int, Int> {
+	if (offset == length || this[offset].isWhitespace()) {
+		return if (offset > 0 && !this[offset - 1].isWhitespace()) icuSegment(offset - 1) else offset to offset
+	}
+	return icuSegment(offset)
+}
+
+private fun String.icuSegment(offset: Int): Pair<Int, Int> {
+	if (this[offset] == '\n') return offset to offset + 1
+	val lineStart = lastIndexOf('\n', offset) + 1
+	val lineEnd = indexOf('\n', offset).let { if (it < 0) length else it }
+	val run = substring(lineStart, lineEnd).wordRuns().first { offset - lineStart in it.start until it.end }
+	return lineStart + run.start to lineStart + run.end
+}
 
 private fun String.paragraphHasRightToLeft(index: Int): Boolean {
 	val start = lastIndexOf('\n', index - 1) + 1
@@ -168,17 +188,22 @@ fun referenceQuirk(
 	native: EditSnapshot,
 	editor: EditSnapshot,
 	rows: List<Int> = emptyList(),
+	upstream: Boolean = false,
 ): String? {
 	if (stroke !is Stroke.Press) return null
 	if (stroke.ctrl) {
-		// Its previous-word search steps back a character at a time and only stops at a
-		// segment that began before the step, so a one-character word is passed over.
 		val backwardWord = stroke.key == Key.DirectionLeft || stroke.key == Key.Backspace
-		val skipsShortWord = backwardWord && native.caret < editor.caret &&
-			before.text.isOneCharacterWord(editor.caret)
-		return if (skipsShortWord) "reference: Ctrl+Left skips a one-character word" else null
+		val asReference = backwardWord && native.caret != editor.caret &&
+			native.caret == before.text.referencePreviousWord(before.caret)
+		return if (asReference) "reference: Ctrl+Left passes over one-character segments" else null
 	}
 	val text = before.text
+	// The reference has no affinity, so a caret the editor draws at the end of a wrapped
+	// row (upstream, on the wrap offset) is on the lower row to it.
+	val fromWrap = upstream && before.caret in rows && before.caret > 0 && text[before.caret - 1] != '\n'
+	if (stroke.isVertical() && fromWrap) {
+		return "reference: Up and Down from a wrap offset measure from the lower row"
+	}
 	if (stroke.isPage()) {
 		// A caret on the first wrap offset still draws on the first row (the reference's affinity).
 		val onEdgeRow = if (stroke.key == Key.PageUp) {
@@ -195,14 +220,21 @@ fun referenceQuirk(
 	}
 	val home = stroke.key == Key.MoveHome
 	if (!home && stroke.key != Key.MoveEnd) return null
-	val stopsBeforeTrailingSpaces = nativeBeforeSpaces && (editor.caret == text.length || text[editor.caret] == '\n')
+	val atRowEnd = editor.caret == text.length || text[editor.caret] == '\n' || editor.caret in rows
+	val stopsBeforeTrailingSpaces = nativeBeforeSpaces && atRowEnd
 	val measuredFrom = if (home) minOf(before.anchor, before.caret) else maxOf(before.anchor, before.caret)
 	return when {
 		measuredFrom != before.caret -> "reference: Home and End measure from the selection edge"
 		home && text.endsWith('\n') && before.caret == text.length && native.caret == text.length - 1 ->
 			"reference: Home on an empty last line goes up"
 
-		!home && stopsBeforeTrailingSpaces -> "reference: End stops before a line's trailing spaces"
+		home && fromWrap && native.caret == before.caret && editor.caret < before.caret ->
+			"reference: Home from a wrap offset stays on the lower row"
+
+		!home && fromWrap && editor.caret == before.caret && native.caret > before.caret ->
+			"reference: End from a wrap offset runs on to the lower row's end"
+
+		!home && stopsBeforeTrailingSpaces -> "reference: End stops before a row's trailing spaces"
 
 		else -> null
 	}
@@ -253,6 +285,7 @@ internal fun differentialFuzz(
 		var runStartedByPage = false
 		var goalKeptThroughTyping = false
 		script.forEachIndexed { index, stroke ->
+			val upstream = editor.cursor.affinity == CaretAffinity.Upstream
 			send(stroke)
 			val native = reference[index]
 			val actual = editorSnapshot
@@ -269,7 +302,7 @@ internal fun differentialFuzz(
 			if (actual != native) {
 				val rows = editorRows()
 				val explained = explainDivergence(before, stroke, native, actual, rows) intersect openItems
-				val quirk = referenceQuirk(before, stroke, native, actual, rows)
+				val quirk = referenceQuirk(before, stroke, native, actual, rows, upstream)
 				val cause = when {
 					explained.isNotEmpty() -> explained
 					quirk != null -> setOf(quirk)

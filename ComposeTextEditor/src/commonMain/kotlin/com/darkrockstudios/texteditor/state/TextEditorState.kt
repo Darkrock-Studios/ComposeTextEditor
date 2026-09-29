@@ -28,6 +28,7 @@ import com.darkrockstudios.texteditor.annotatedstring.toAnnotatedString
 import com.darkrockstudios.texteditor.coerceInto
 import com.darkrockstudios.texteditor.cursor.CursorMetrics
 import com.darkrockstudios.texteditor.cursor.getWrapForDrawing
+import com.darkrockstudios.texteditor.cursor.getWrappedLineIndex
 import com.darkrockstudios.texteditor.effectiveHeight
 import com.darkrockstudios.texteditor.input.EditorActionRegistry
 import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
@@ -445,6 +446,7 @@ class TextEditorState(
 		getLines = { textLines },
 		getViewportSize = { viewportSize },
 		getCursorPosition = { cursorPosition },
+		getCursorAffinity = { cursor.affinity },
 		getLineOffsets = { _lineOffsets },
 	)
 
@@ -994,6 +996,13 @@ class TextEditorState(
 		}
 	}
 
+	/**
+	 * The index into [lineOffsets] of the row the caret is drawn on, or -1 if none
+	 * matches. At a wrap offset the caret's affinity picks the row; every other read
+	 * of the caret's row goes through here.
+	 */
+	internal fun cursorRowIndex(): Int = _lineOffsets.getWrappedLineIndex(cursorPosition, cursor.affinity)
+
 	/** Returns the [LineWrap] (visual line) that contains [position]. */
 	fun getWrappedLine(position: CharLineOffset): LineWrap {
 		return _lineOffsets.last { lineOffset ->
@@ -1017,16 +1026,15 @@ class TextEditorState(
 	 * Returns the [CursorMetrics] (pixel position and line height) for the caret at
 	 * [CharLineOffset] [position], accounting for the current scroll offset.
 	 */
-	fun getPositionForOffset(position: CharLineOffset): CursorMetrics {
-		val (_, charIndex) = position
+	fun getPositionForOffset(position: CharLineOffset): CursorMetrics =
+		getPositionForOffset(position, CaretAffinity.Downstream)
 
-		val currentWrappedLine = lineOffsets.getWrapForDrawing(position)
+	/** [getPositionForOffset] on the row [affinity] picks at a wrap offset. */
+	internal fun getPositionForOffset(position: CharLineOffset, affinity: CaretAffinity): CursorMetrics {
+		val currentWrappedLine = lineOffsets.getWrapForDrawing(position, affinity)
 			?: return CursorMetrics(position = Offset.Zero, height = 0f)
 
-		val layout = currentWrappedLine.textLayoutResult
-		val safeCharIndex = charIndex.coerceIn(0, layout.layoutInput.text.length)
-
-		val cursorX = layout.getHorizontalPosition(safeCharIndex, usePrimaryDirection = true)
+		val cursorX = currentWrappedLine.caretX(position.char)
 		val cursorY = currentWrappedLine.offset.y - scrollState.value
 
 		val lineHeight = currentWrappedLine.effectiveHeight
