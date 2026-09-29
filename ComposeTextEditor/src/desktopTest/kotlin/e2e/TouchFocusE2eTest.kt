@@ -1,5 +1,6 @@
 package e2e
 
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.text.AnnotatedString
 import com.darkrockstudios.texteditor.contextmenu.TextEditorContextMenuState
@@ -247,11 +248,11 @@ class TouchFocusE2eTest {
 	}
 
 	/**
-	 * Handles stay drawn after focus is lost, and a selection the user is shaping has to
-	 * be typeable over, so dropping a handle focuses even though the finger travelled.
+	 * Touch handles go with focus (1.18), so there is none to drag on an unfocused
+	 * editor: a finger where one stood is a tap, and taps focus.
 	 */
 	@Test
-	fun `dropping a selection handle restores focus`() = editorUiTest(
+	fun `with focus gone a finger where the handle stood taps and focuses`() = editorUiTest(
 		initialText = document,
 		autoFocus = false,
 	) {
@@ -261,6 +262,24 @@ class TouchFocusE2eTest {
 		}
 		waitForIdle()
 		assertFalse(state.isFocused, "precondition: unfocused with a touch selection")
+		val formerHandle = handleCenter(isStart = false)
+
+		touch {
+			down(formerHandle)
+			moveTo(formerHandle + Offset(40f, 0f))
+			up()
+		}
+		assertFalse(state.isFocused, "no handle to drag, so the travel is a pan")
+
+		tapAt(formerHandle)
+
+		assertTrue(state.isFocused)
+	}
+
+	/** A handle dropped while focused keeps the editor focused, so the selection can be typed over. */
+	@Test
+	fun `dropping a selection handle keeps focus`() = editorUiTest(initialText = document) {
+		longPressAtCharacter(8)
 
 		dragHandle(isStart = false, toChar = 16)
 
