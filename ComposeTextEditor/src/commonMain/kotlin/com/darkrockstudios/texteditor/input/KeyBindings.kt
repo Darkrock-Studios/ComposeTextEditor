@@ -30,7 +30,7 @@ val KeyEvent.isCtrlShortcut: Boolean
  *
  * ```kotlin
  * val bindings = KeyBindings { event ->
- *     if (event.key == Key.D && event.isCtrlShortcut) InsertDate
+ *     if (event.key == Key.D && event.isCtrlShortcut && event.isShiftPressed) InsertDate
  *     else platformKeyBindings().commandFor(event)
  * }
  * ```
@@ -89,8 +89,8 @@ object CtrlKeyBindings : KeyBindings {
 
 			Key.DirectionLeft -> if (ctrl) Motion.WordLeft else Motion.Left
 			Key.DirectionRight -> if (ctrl) Motion.WordEnd else Motion.Right
-			Key.DirectionUp -> if (ctrl) Motion.ParagraphStart else Motion.Up
-			Key.DirectionDown -> if (ctrl) Motion.ParagraphEnd else Motion.Down
+			Key.DirectionUp -> if (ctrl) Motion.ParagraphBackward else Motion.Up
+			Key.DirectionDown -> if (ctrl) Motion.ParagraphForward else Motion.Down
 			Key.MoveHome -> if (ctrl) Motion.DocumentStart else Motion.LineStart
 			Key.MoveEnd -> if (ctrl) Motion.DocumentEnd else Motion.LineEnd
 			Key.Backspace -> if (ctrl) Action.DeleteWordBackward else Action.DeleteBackward
@@ -136,10 +136,11 @@ object WindowsKeyBindings : KeyBindings {
 /**
  * macOS conventions: Cmd for shortcuts, Option+Left/Right for word jumps (Option+Right to the
  * end of the word), Option+Up/Down for paragraph jumps, Cmd+Arrow for line and document
- * bounds. Ctrl never selects a different command than the unmodified key would, since on
- * macOS it belongs to the system and to the Emacs-style text bindings. The exceptions are
- * Ctrl+K, which is one of those Emacs-style bindings, and Enter, where every Ctrl, Cmd or
- * Option chord is left for the host.
+ * bounds, and the Emacs-style Ctrl chords of every Cocoa text view: A and E for the
+ * paragraph's start and end, F, B, N and P for a character or a row, D and H to delete
+ * forward and backward, K to delete to the paragraph end. Ctrl+Y needs a kill ring and is
+ * unbound. Every other Ctrl chord selects the same command as the unmodified key, since on
+ * macOS Ctrl belongs to the system; Enter with Ctrl, Cmd or Option is left for the host.
  *
  * Option is also the macOS compose modifier (Option+8 types '{'), so only the chords claimed here
  * may consume an Option event; everything else must fall through to
@@ -147,10 +148,12 @@ object WindowsKeyBindings : KeyBindings {
  */
 object MacKeyBindings : KeyBindings {
 	override fun commandFor(event: KeyEvent): EditorCommand? {
+		if (event.isEmacsChord) emacsCommandFor(event)?.let { return it }
 		val cmd = event.isMetaPressed
 		val option = event.isAltPressed
 		return when (event.navigationKey) {
 			Key.A -> if (cmd) Action.SelectAll else null
+
 			Key.C -> if (cmd) Action.Copy else null
 			Key.X -> when {
 				cmd && event.isShiftPressed -> Action.ToggleStrikethrough
@@ -186,13 +189,13 @@ object MacKeyBindings : KeyBindings {
 
 			Key.DirectionUp -> when {
 				cmd -> Motion.DocumentStart
-				option -> Motion.ParagraphStart
+				option -> Motion.ParagraphBackward
 				else -> Motion.Up
 			}
 
 			Key.DirectionDown -> when {
 				cmd -> Motion.DocumentEnd
-				option -> Motion.ParagraphEnd
+				option -> Motion.ParagraphForward
 				else -> Motion.Down
 			}
 
@@ -208,12 +211,6 @@ object MacKeyBindings : KeyBindings {
 				cmd -> Action.DeleteToLineEnd
 				option -> Action.DeleteToWordEnd
 				else -> Action.DeleteForward
-			}
-
-			Key.K -> if (event.isCtrlPressed && !cmd && !option && !event.isShiftPressed) {
-				Action.DeleteToParagraphEnd
-			} else {
-				null
 			}
 
 			else -> commonCommandFor(event)
@@ -243,6 +240,28 @@ private fun commonCommandFor(event: KeyEvent): EditorCommand? = when (event.navi
 	Key.Cut -> Action.Cut
 	Key.Copy -> Action.Copy
 	Key.Paste -> Action.Paste
+	else -> null
+}
+
+/** Ctrl alone, with or without Shift: the Emacs-style chords of Cocoa text views. */
+private val KeyEvent.isEmacsChord: Boolean
+	get() = isCtrlShortcut && !isMetaPressed
+
+/**
+ * Cocoa's Emacs-style Ctrl chords. A and E are `moveToBeginningOfParagraph:` and
+ * `moveToEndOfParagraph:`; the motions extend the selection with Shift, the deletions
+ * take none.
+ */
+private fun emacsCommandFor(event: KeyEvent): EditorCommand? = when (event.key) {
+	Key.A -> Motion.ParagraphStart
+	Key.E -> Motion.ParagraphEnd
+	Key.F -> Motion.Right
+	Key.B -> Motion.Left
+	Key.N -> Motion.Down
+	Key.P -> Motion.Up
+	Key.D -> if (event.isShiftPressed) null else Action.DeleteForward
+	Key.H -> if (event.isShiftPressed) null else Action.DeleteBackward
+	Key.K -> if (event.isShiftPressed) null else Action.DeleteToParagraphEnd
 	else -> null
 }
 

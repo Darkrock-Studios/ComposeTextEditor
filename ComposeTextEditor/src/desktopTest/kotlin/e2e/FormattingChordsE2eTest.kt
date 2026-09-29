@@ -143,14 +143,16 @@ class FormattingChordsE2eTest {
 	}
 
 	@Test
-	fun `macos formats with cmd and leaves ctrl alone`() = editorUiTest(
+	fun `macos formats with cmd, and ctrl+b moves back a character`() = editorUiTest(
 		initialText = AnnotatedString("Hello world"),
 		keyBindings = MacKeyBindings,
 	) {
 		dragSelect(fromChar = 0, toChar = 5)
 		press(Key.B, ctrl = true)
 		assertFalse(bold in stylesAt(0), "Ctrl+B is not bold on macOS")
+		assertEquals(0, cursorIndex, "Ctrl+B is Emacs' backward character, collapsing the selection")
 
+		dragSelect(fromChar = 0, toChar = 5)
 		press(Key.B, meta = true)
 		press(Key.I, meta = true)
 		press(Key.U, meta = true)

@@ -81,7 +81,7 @@ host:
 | --- | --- | --- |
 | `CtrlKeyBindings` | Linux, Android, and any other Ctrl host | The base: Ctrl for shortcuts and jumps; going forward stops at ends (GTK, `EditText`) |
 | `WindowsKeyBindings` | Windows desktop, browsers on Windows | Going forward runs on to the next start: Ctrl+Right and Ctrl+Delete to the next word's (`WordRight`, `DeleteWordForward`), Ctrl+Down to the next paragraph's |
-| `MacKeyBindings` | macOS, iPadOS, browsers on macOS | Cmd for shortcuts, Option for word and paragraph jumps; Option+Right and Option+Delete stop at the word end |
+| `MacKeyBindings` | macOS, iPadOS, browsers on macOS | Cmd for shortcuts, Option for word and paragraph jumps; Option+Right and Option+Delete stop at the word end; Cocoa's Emacs-style Ctrl+A, E, F, B, N, P, D, H and K |
 
 Windows and Linux are the same desktop JVM target, so the choice is made at
 runtime from `os.name` (desktop) or the browser's platform and user agent
@@ -335,7 +335,7 @@ val InsertDate = EditorCommand.Action("myapp.insertDate", isEdit = true)
 state.actions.register(EditorActionSpec(InsertDate) { it.state.insertStringAtCursor(today()) })
 
 val bindings = KeyBindings { event ->
-    if (event.key == Key.D && event.isCtrlShortcut) InsertDate
+    if (event.key == Key.D && event.isCtrlShortcut && event.isShiftPressed) InsertDate
     else platformKeyBindings().commandFor(event)
 }
 

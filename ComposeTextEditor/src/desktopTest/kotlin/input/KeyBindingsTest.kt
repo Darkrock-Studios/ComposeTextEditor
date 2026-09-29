@@ -12,6 +12,7 @@ import com.darkrockstudios.texteditor.input.MacKeyBindings
 import com.darkrockstudios.texteditor.input.WindowsKeyBindings
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
 
 @OptIn(InternalComposeUiApi::class)
@@ -78,10 +79,10 @@ class KeyBindingsTest {
 	fun `ctrl up and down move by paragraph`() {
 		assertEquals(Motion.Up, CtrlKeyBindings.commandFor(chord(Key.DirectionUp)))
 		assertEquals(Motion.Down, CtrlKeyBindings.commandFor(chord(Key.DirectionDown)))
-		assertEquals(Motion.ParagraphStart, CtrlKeyBindings.commandFor(chord(Key.DirectionUp, ctrl = true)))
-		assertEquals(Motion.ParagraphEnd, CtrlKeyBindings.commandFor(chord(Key.DirectionDown, ctrl = true)))
+		assertEquals(Motion.ParagraphBackward, CtrlKeyBindings.commandFor(chord(Key.DirectionUp, ctrl = true)))
+		assertEquals(Motion.ParagraphForward, CtrlKeyBindings.commandFor(chord(Key.DirectionDown, ctrl = true)))
 		assertEquals(
-			Motion.ParagraphEnd,
+			Motion.ParagraphForward,
 			CtrlKeyBindings.commandFor(chord(Key.NumPadDirectionDown, ctrl = true, shift = true)),
 		)
 		assertEquals(Motion.Down, CtrlKeyBindings.commandFor(chord(Key.DirectionDown, ctrl = true, alt = true)))
@@ -104,7 +105,7 @@ class KeyBindingsTest {
 
 	@Test
 	fun `windows ctrl down goes on to the next paragraph start`() {
-		assertEquals(Motion.ParagraphStart, WindowsKeyBindings.commandFor(chord(Key.DirectionUp, ctrl = true)))
+		assertEquals(Motion.ParagraphBackward, WindowsKeyBindings.commandFor(chord(Key.DirectionUp, ctrl = true)))
 		assertEquals(
 			Motion.NextParagraphStart,
 			WindowsKeyBindings.commandFor(chord(Key.DirectionDown, ctrl = true)),
@@ -141,10 +142,10 @@ class KeyBindingsTest {
 
 	@Test
 	fun `macos moves by paragraph with option up and down`() {
-		assertEquals(Motion.ParagraphStart, MacKeyBindings.commandFor(chord(Key.DirectionUp, alt = true)))
-		assertEquals(Motion.ParagraphEnd, MacKeyBindings.commandFor(chord(Key.DirectionDown, alt = true)))
+		assertEquals(Motion.ParagraphBackward, MacKeyBindings.commandFor(chord(Key.DirectionUp, alt = true)))
+		assertEquals(Motion.ParagraphForward, MacKeyBindings.commandFor(chord(Key.DirectionDown, alt = true)))
 		assertEquals(
-			Motion.ParagraphEnd,
+			Motion.ParagraphForward,
 			MacKeyBindings.commandFor(chord(Key.DirectionDown, alt = true, shift = true)),
 		)
 		assertEquals(Motion.DocumentEnd, MacKeyBindings.commandFor(chord(Key.DirectionDown, alt = true, meta = true)))
@@ -300,8 +301,40 @@ class KeyBindingsTest {
 	}
 
 	@Test
+	fun `macos has the emacs ctrl chords of cocoa text views`() {
+		val chords = mapOf(
+			Key.A to Motion.ParagraphStart,
+			Key.E to Motion.ParagraphEnd,
+			Key.F to Motion.Right,
+			Key.B to Motion.Left,
+			Key.N to Motion.Down,
+			Key.P to Motion.Up,
+			Key.D to Action.DeleteForward,
+			Key.H to Action.DeleteBackward,
+			Key.K to Action.DeleteToParagraphEnd,
+		)
+		for ((key, command) in chords) {
+			assertEquals(command, MacKeyBindings.commandFor(chord(key, ctrl = true)), "Ctrl+$key")
+			assertNull(MacKeyBindings.commandFor(chord(key, ctrl = true, alt = true)), "Ctrl+Option+$key")
+			assertNull(CtrlKeyBindings.commandFor(chord(key, ctrl = true, alt = true)), "Ctrl+Alt+$key off macOS")
+			val shifted = MacKeyBindings.commandFor(chord(key, ctrl = true, shift = true))
+			if (command is Motion) {
+				assertEquals(command, shifted, "Ctrl+Shift+$key extends the selection")
+			} else {
+				assertNull(shifted, "Ctrl+Shift+$key")
+			}
+		}
+		assertEquals(Action.SelectAll, MacKeyBindings.commandFor(chord(Key.A, meta = true)))
+		assertEquals(Action.SelectAll, MacKeyBindings.commandFor(chord(Key.A, meta = true, ctrl = true)))
+		assertEquals(Action.ToggleBold, MacKeyBindings.commandFor(chord(Key.B, meta = true)))
+		assertEquals(Action.ToggleInlineCode, MacKeyBindings.commandFor(chord(Key.E, meta = true)))
+		assertNull(MacKeyBindings.commandFor(chord(Key.F)))
+		assertNull(MacKeyBindings.commandFor(chord(Key.D, meta = true)))
+		assertNull(MacKeyBindings.commandFor(chord(Key.Y, ctrl = true)), "no kill ring to yank from")
+	}
+
+	@Test
 	fun `macos leaves ctrl to the system`() {
-		assertNull(MacKeyBindings.commandFor(chord(Key.A, ctrl = true)))
 		assertNull(MacKeyBindings.commandFor(chord(Key.C, ctrl = true)))
 		assertNull(MacKeyBindings.commandFor(chord(Key.X, ctrl = true)))
 		assertNull(MacKeyBindings.commandFor(chord(Key.V, ctrl = true)))
@@ -385,7 +418,9 @@ class KeyBindingsTest {
 			assertEquals(action, MacKeyBindings.commandFor(chord(key, meta = true, shift = shift)))
 			assertNull(CtrlKeyBindings.commandFor(chord(key, ctrl = true, alt = true, shift = shift)))
 			assertNull(CtrlKeyBindings.commandFor(chord(key, meta = true, shift = shift)))
-			assertNull(MacKeyBindings.commandFor(chord(key, ctrl = true, shift = shift)))
+			// Ctrl+B and Ctrl+E are Emacs motions on macOS; every other formatting key is unbound.
+			val macCtrl = MacKeyBindings.commandFor(chord(key, ctrl = true, shift = shift))
+			if (key == Key.B || key == Key.E) assertNotEquals(action, macCtrl) else assertNull(macCtrl)
 		}
 		for (key in listOf(Key.B, Key.I, Key.U, Key.E)) {
 			assertNull(CtrlKeyBindings.commandFor(chord(key, ctrl = true, shift = true)))

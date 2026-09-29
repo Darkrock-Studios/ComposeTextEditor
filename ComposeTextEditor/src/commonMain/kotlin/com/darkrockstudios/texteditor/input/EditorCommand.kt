@@ -28,10 +28,10 @@ sealed interface EditorCommand {
 		PageDown,
 
 		/** To the start of the paragraph, or of the previous one when already at a start. */
-		ParagraphStart,
+		ParagraphBackward,
 
 		/** To the end of the paragraph, or of the next one when already at an end. */
-		ParagraphEnd,
+		ParagraphForward,
 
 		/** To the start of the next paragraph, or the document end from the last one. */
 		NextParagraphStart,
@@ -40,7 +40,13 @@ sealed interface EditorCommand {
 		 * To the end of the word, or of the next one when not inside a word: Ctrl+Right on
 		 * Linux, Option+Right on macOS.
 		 */
-		WordEnd;
+		WordEnd,
+
+		/** To the start of the paragraph, past any wrap: Emacs' Ctrl+A on macOS. */
+		ParagraphStart,
+
+		/** To the end of the paragraph, past any wrap: Emacs' Ctrl+E on macOS. */
+		ParagraphEnd;
 
 		override val isEdit: Boolean get() = false
 	}

@@ -7,6 +7,7 @@ import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.key.utf16CodePoint
 import androidx.compose.ui.platform.Clipboard
+import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.input.EditorCommand.Action
 import com.darkrockstudios.texteditor.input.EditorCommand.Motion
 import com.darkrockstudios.texteditor.state.TextEditorState
@@ -15,6 +16,8 @@ import com.darkrockstudios.texteditor.state.moveCursorPageDown
 import com.darkrockstudios.texteditor.state.moveCursorPageUp
 import com.darkrockstudios.texteditor.state.moveCursorToLineEnd
 import com.darkrockstudios.texteditor.state.moveCursorUp
+import com.darkrockstudios.texteditor.state.moveParagraphBackward
+import com.darkrockstudios.texteditor.state.moveParagraphForward
 import com.darkrockstudios.texteditor.state.moveToDocumentEnd
 import com.darkrockstudios.texteditor.state.moveToDocumentStart
 import com.darkrockstudios.texteditor.state.moveToNextParagraphStart
@@ -127,8 +130,17 @@ internal class TextEditorKeyCommandHandler(
 					Motion.Left -> return state.cursor.updatePosition(selection.start)
 					Motion.Right -> return state.cursor.updatePosition(selection.end)
 					// Paragraph jumps measure from the edge they head towards.
-					Motion.ParagraphStart -> state.cursor.updatePosition(selection.start)
-					Motion.ParagraphEnd, Motion.NextParagraphStart -> state.cursor.updatePosition(selection.end)
+					Motion.ParagraphBackward, Motion.ParagraphStart -> state.cursor.updatePosition(selection.start)
+					Motion.ParagraphForward, Motion.NextParagraphStart -> state.cursor.updatePosition(selection.end)
+					// A selection ending just past a line break still belongs to the paragraph above.
+					Motion.ParagraphEnd -> state.cursor.updatePosition(
+						if (selection.end.char == 0 && selection.end.line > selection.start.line) {
+							CharLineOffset(selection.end.line - 1, state.textLines[selection.end.line - 1].length)
+						} else {
+							selection.end
+						}
+					)
+
 					else -> {}
 				}
 			}
@@ -148,9 +160,11 @@ internal class TextEditorKeyCommandHandler(
 			Motion.DocumentEnd -> state.moveToDocumentEnd()
 			Motion.PageUp -> state.moveCursorPageUp()
 			Motion.PageDown -> state.moveCursorPageDown()
+			Motion.ParagraphBackward -> state.moveParagraphBackward()
+			Motion.ParagraphForward -> state.moveParagraphForward()
+			Motion.NextParagraphStart -> state.moveToNextParagraphStart()
 			Motion.ParagraphStart -> state.moveToParagraphStart()
 			Motion.ParagraphEnd -> state.moveToParagraphEnd()
-			Motion.NextParagraphStart -> state.moveToNextParagraphStart()
 		}
 
 		if (extendSelection) {

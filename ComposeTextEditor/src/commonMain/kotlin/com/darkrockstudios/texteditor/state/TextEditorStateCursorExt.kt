@@ -197,15 +197,25 @@ fun TextEditorState.moveToDocumentEnd() {
 	cursor.updatePosition(CharLineOffset(lastLine, textLines[lastLine].length))
 }
 
-/** Moves the caret to the start of its paragraph, or of the previous one when already at a start. */
+/** Moves the caret to the start of its paragraph. */
 internal fun TextEditorState.moveToParagraphStart() {
+	cursor.updatePosition(cursorPosition.copy(char = 0))
+}
+
+/** Moves the caret to the end of its paragraph. */
+internal fun TextEditorState.moveToParagraphEnd() {
+	cursor.updatePosition(cursorPosition.copy(char = textLines[cursorPosition.line].length))
+}
+
+/** Moves the caret to the start of its paragraph, or of the previous one when already at a start. */
+internal fun TextEditorState.moveParagraphBackward() {
 	val (line, char) = cursorPosition
 	val target = if (char == 0 && line > 0) line - 1 else line
 	cursor.updatePosition(CharLineOffset(target, 0))
 }
 
 /** Moves the caret to the end of its paragraph, or of the next one when already at an end. */
-internal fun TextEditorState.moveToParagraphEnd() {
+internal fun TextEditorState.moveParagraphForward() {
 	val (line, char) = cursorPosition
 	val target = if (char >= textLines[line].length && line < textLines.lastIndex) line + 1 else line
 	cursor.updatePosition(CharLineOffset(target, textLines[target].length))
