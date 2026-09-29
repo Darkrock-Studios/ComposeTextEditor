@@ -325,9 +325,14 @@ class BasicTextFieldParityTest {
 	)
 
 	@Test
-	fun `page down reaches the document end`() = assertMatchesNative(
+	fun `page down and page up move the caret by the viewport height`() = assertMatchesNative(
 		start = EditSnapshot((1..60).joinToString("\n"), caret = 0),
-		strokes = listOf(PageDown, PageDown, PageDown, PageDown, PageDown, PageUp),
-		divergesUntil = "1.7",
+		strokes = listOf(PageDown, PageDown, PageUp),
+	)
+
+	@Test
+	fun `page down keeps the caret's x`() = assertMatchesNative(
+		start = EditSnapshot((1..60).joinToString("\n") { "line number $it" }, caret = 5),
+		strokes = listOf(PageDown, PageDown, PageUp),
 	)
 }

@@ -210,6 +210,9 @@ On every desktop platform; the macOS chords are in 3.1.
 | Up on the first row / Down on the last row | Document start / end; with Shift, selects to it |
 | Up / Down through a short line, in a proportional font | The caret keeps its x on longer lines past the short one; a Left, Right, click or edit starts a new column |
 | Up / Down in a wrapped paragraph | One visual row at a time, never skipping a row |
+| PageDown / PageUp in a long document | The caret moves a viewport's height and keeps its place on screen and its column; the view scrolls with it |
+| PageDown on the last page / PageUp on the first | Document end / start |
+| Arrow down past the viewport bottom while typing | The view scrolls just enough to show the caret's row, with no extra margin |
 
 ## 4. Touch, focus and the soft keyboard (Android)
 

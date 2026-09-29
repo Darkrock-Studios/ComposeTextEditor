@@ -12,7 +12,7 @@ import kotlin.test.fail
  * reference's state and the script continues. Delete an item here when it lands,
  * and the fuzzer starts failing on that class of divergence.
  */
-val OPEN_PARITY_ITEMS: Set<String> = setOf("1.1", "1.5", "1.6", "1.7", "1.19", "7.5")
+val OPEN_PARITY_ITEMS: Set<String> = setOf("1.1", "1.5", "1.6", "1.19", "7.5")
 
 /** Starting text for the Unicode fuzzers: an emoji, a combining mark, and a right-to-left word. */
 const val FUZZ_START_TEXT = "seed line\nsecond line of words\n\uD83D\uDE00 e\u0301 שלום end"
@@ -56,7 +56,6 @@ fun generateStrokeScript(seed: Long, count: Int): List<Stroke> {
 	}
 }
 
-/** Whether deleting one of this string's newlines can give [other]. */
 private fun Stroke.isVertical(): Boolean =
 	this is Stroke.Press && key in setOf(Key.DirectionUp, Key.DirectionDown, Key.PageUp, Key.PageDown)
 
@@ -68,14 +67,14 @@ private fun Stroke.dependsOnRows(): Boolean =
 /**
  * The roadmap items that explain the editor reaching [editor] where the reference
  * reached [native], both from [before] by [stroke]. Empty means unexplained.
- * [wraps] are the flat offsets where the editor wraps a paragraph onto a new row.
+ * [rows] are the flat offsets where the editor's visual rows start.
  */
 fun explainDivergence(
 	before: EditSnapshot,
 	stroke: Stroke,
 	native: EditSnapshot,
 	editor: EditSnapshot,
-	wraps: Set<Int> = emptySet(),
+	rows: List<Int> = emptyList(),
 ): Set<String> = buildSet {
 	val splitsCluster = editor.text.firstLoneSurrogate() != null ||
 		!editor.text.isGraphemeBoundary(editor.caret) ||
@@ -100,19 +99,20 @@ fun explainDivergence(
 			add("1.1")
 		}
 
-		Key.DirectionUp, Key.DirectionDown -> {
-			val edge = if (stroke.key == Key.DirectionUp) 0 else native.text.length
-			if (native.caret == edge && editor.caret == before.caret) add("1.3") else add("1.2")
+		Key.DirectionUp, Key.DirectionDown, Key.PageUp, Key.PageDown -> {
+			if (!stroke.isPage()) {
+				val edge = if (stroke.key == Key.DirectionUp) 0 else native.text.length
+				if (native.caret == edge && editor.caret == before.caret) add("1.3") else add("1.2")
+			}
 			// One short of a wrap, where only affinity can hold the caret on the upper row.
-			if (editor.caret == native.caret - 1 && native.caret in wraps) add("1.6")
 			val text = before.text
+			val atWrap = native.caret in rows && native.caret > 0 && text[native.caret - 1] != '\n'
+			if (editor.caret == native.caret - 1 && atWrap) add("1.6")
 			// The caret's x, and the row edge a far goal x snaps to, depend on direction.
 			if (listOf(before.caret, native.caret, editor.caret).any { text.paragraphHasRightToLeft(it) }) {
 				add("7.5")
 			}
 		}
-
-		Key.PageUp, Key.PageDown -> add("1.7")
 
 		Key.MoveEnd -> if (!stroke.ctrl && native.caret != editor.caret) {
 			val paragraphEnd = editor.caret == before.text.length || before.text[editor.caret] == '\n'
@@ -122,6 +122,11 @@ fun explainDivergence(
 			if (editor.caret == native.caret - 1 || pastWrapSpaces) add("1.6")
 		}
 	}
+}
+
+private fun DifferentialScope.sameRow(a: EditSnapshot, b: EditSnapshot): Boolean {
+	val rows = editorRows()
+	return rows.indexOfLast { it <= a.caret } == rows.indexOfLast { it <= b.caret }
 }
 
 private fun String.paragraphHasRightToLeft(index: Int): Boolean {
@@ -143,9 +148,18 @@ fun referenceQuirk(
 	stroke: Stroke,
 	native: EditSnapshot,
 	editor: EditSnapshot,
+	rows: List<Int> = emptyList(),
 ): String? {
 	if (stroke !is Stroke.Press || stroke.ctrl) return null
 	val text = before.text
+	if (stroke.isPage()) {
+		val onEdgeRow = if (stroke.key == Key.PageUp) {
+			editor.caret == 0 && native.caret < (rows.getOrNull(1) ?: text.length + 1)
+		} else {
+			editor.caret == text.length && native.caret >= (rows.lastOrNull() ?: 0)
+		}
+		return if (onEdgeRow) "reference: PageUp and PageDown stop on the first and last rows" else null
+	}
 	val nativeBeforeSpaces = native.caret < editor.caret && text.substring(native.caret, editor.caret).isBlank()
 	if (stroke.key == Key.DirectionUp || stroke.key == Key.DirectionDown) {
 		val atRunStart = native.caret == 0 || text[native.caret - 1] == '\n' || !text[native.caret - 1].isWhitespace()
@@ -180,8 +194,9 @@ fun referenceQuirk(
  *
  * The reset cannot carry the reference's remembered goal column, so a vertical
  * move straight after a reset is tolerated too, until the next other stroke.
- * Nor does the reference start a goal column at a page move, as the editor does,
- * so Up and Down in a run of vertical moves that began with one are tolerated.
+ * Nor does the reference start or follow a goal column at a page move, as the
+ * editor does, so a page move inside a run of vertical moves, and Up and Down in
+ * a run that began with a page move, are tolerated.
  *
  * To widen the check once a lane A item lands, delete it from [OPEN_PARITY_ITEMS].
  *
@@ -210,17 +225,22 @@ internal fun differentialFuzz(
 			val native = reference[index]
 			val actual = editorSnapshot
 			if (!stroke.isVertical()) goalColumnLost = false
+			val pageInRun = inVerticalRun && stroke.isPage()
 			if (!inVerticalRun) runStartedByPage = stroke.isPage()
 			inVerticalRun = stroke.isVertical()
 			if (actual != native) {
-				val explained = explainDivergence(before, stroke, native, actual, editorWraps()) intersect openItems
-				val quirk = referenceQuirk(before, stroke, native, actual)
+				val rows = editorRows()
+				val explained = explainDivergence(before, stroke, native, actual, rows) intersect openItems
+				val quirk = referenceQuirk(before, stroke, native, actual, rows)
 				val cause = when {
 					explained.isNotEmpty() -> explained
 					quirk != null -> setOf(quirk)
 					goalColumnLost && stroke.isVertical() -> setOf("reset")
-					runStartedByPage && stroke.isVertical() && !stroke.isPage() ->
+					// A goal column moves the caret along its row, never onto another one.
+					runStartedByPage && stroke.isVertical() && !stroke.isPage() && sameRow(native, actual) ->
 						setOf("reference: a page move does not start a goal column")
+
+					pageInRun && sameRow(native, actual) -> setOf("reference: a page move does not follow the goal column")
 
 					stroke.dependsOnRows() && !rowsAgree() -> setOf("reference: rows wrap differently")
 					else -> fail(

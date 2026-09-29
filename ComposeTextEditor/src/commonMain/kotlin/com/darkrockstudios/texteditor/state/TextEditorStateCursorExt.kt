@@ -3,6 +3,7 @@ package com.darkrockstudios.texteditor.state
 import androidx.compose.ui.geometry.Offset
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.LineWrap
+import com.darkrockstudios.texteditor.effectiveHeight
 
 // The layout can lag the text (it is skipped while the viewport is collapsed), so the
 // cursor may be missing from lineOffsets, and a wrap's line may be missing from the
@@ -175,39 +176,42 @@ fun TextEditorState.moveToDocumentEnd() {
 	cursor.updatePosition(CharLineOffset(lastLine, textLines[lastLine].length))
 }
 
-internal fun TextEditorState.moveCursorPageUp() {
-	// Get current viewport boundaries
-	val viewportTop = scrollState.value
-	val viewportHeight = scrollManager.viewportHeight
+internal fun TextEditorState.moveCursorPageUp() = moveCursorByPage(-1)
 
-	// Calculate target scroll position
-	val targetScroll = maxOf(scrollState.minValue, viewportTop - viewportHeight)
+internal fun TextEditorState.moveCursorPageDown() = moveCursorByPage(1)
 
-	val targetRow = lineOffsets.indexOfFirst { it.offset.y >= targetScroll }.takeIf { it >= 0 } ?: 0
-
-	if (lineOffsets.isNotEmpty()) {
-		moveCursorToRow(targetRow)
-
-		// Update scroll position
-		scrollManager.scrollToPosition(targetScroll, animated = true)
+/**
+ * Moves the caret a viewport's height up or down: onto the row under the middle of
+ * the caret's row once shifted that far, at the goal x of [moveCursorToRow], and at
+ * least one row. A shift past the first or last row goes to the document start or
+ * end. The view jumps with the caret, so the caret keeps its place on screen where
+ * the scroll range allows, and always ends up visible.
+ */
+private fun TextEditorState.moveCursorByPage(direction: Int) {
+	val index = getWrappedLineIndex(cursorPosition)
+	val row = lineOffsets.getOrNull(index) ?: return
+	val pageHeight = scrollManager.viewportHeight
+	val targetY = row.offset.y + row.effectiveHeight / 2f + direction * pageHeight
+	val lastRow = lineOffsets.last()
+	val targetIndex = lineOffsets.indexOfLast { it.offset.y <= targetY }.let {
+		if (it == index) index + direction else it
 	}
-}
+	when {
+		targetY < 0f || targetIndex < 0 -> moveToDocumentStart()
+		targetY >= lastRow.offset.y + lastRow.effectiveHeight || targetIndex > lineOffsets.lastIndex ->
+			moveToDocumentEnd()
 
-internal fun TextEditorState.moveCursorPageDown() {
-	// Get current viewport boundaries
-	val viewportTop = scrollState.value
-	val viewportHeight = scrollManager.viewportHeight
-	val maxScroll = maxOf(scrollState.minValue, scrollManager.totalContentHeight - viewportHeight + scrollManager.bottomContentPaddingPx)
-
-	// Calculate target scroll position
-	val targetScroll = minOf(maxScroll, viewportTop + viewportHeight)
-
-	val targetRow = lineOffsets.indexOfFirst { it.offset.y >= targetScroll }.takeIf { it >= 0 } ?: lineOffsets.lastIndex
-
-	if (lineOffsets.isNotEmpty()) {
-		moveCursorToRow(targetRow)
-
-		// Update scroll position
-		scrollManager.scrollToPosition(targetScroll, animated = true)
+		else -> moveCursorToRow(targetIndex)
 	}
+
+	val newRow = lineOffsets.getOrNull(getWrappedLineIndex(cursorPosition)) ?: return
+	val newTop = newRow.offset.y.toInt()
+	val keepsScreenPlace = scrollState.value + newTop - row.offset.y.toInt()
+	val showsRowFrom = minOf(newTop, (newRow.offset.y + newRow.effectiveHeight).toInt() - pageHeight)
+	val maxScroll = maxOf(
+		scrollState.minValue,
+		scrollManager.totalContentHeight - pageHeight + scrollManager.bottomContentPaddingPx,
+	)
+	val target = keepsScreenPlace.coerceIn(showsRowFrom, newTop).coerceIn(scrollState.minValue, maxScroll)
+	scrollManager.scrollToPosition(target, animated = false)
 }

@@ -299,6 +299,47 @@ class NavigationE2eTest {
 	}
 
 	@Test
+	fun `page down past the last row reaches the document end and page up the start`() = editorUiTest(
+		initialText = AnnotatedString((1..40).joinToString("\n") { "line number $it" }),
+	) {
+		clickAtCharacter(5)
+		repeat(4) { press(Key.PageDown) }
+		assertEquals(text.length, cursorIndex)
+
+		repeat(4) { press(Key.PageUp) }
+		assertEquals(0, cursorIndex)
+	}
+
+	@Test
+	fun `page down keeps the caret's place on screen and the goal column`() = editorUiTest(
+		initialText = AnnotatedString("1234567890\n12\n" + List(60) { "1234567890" }.joinToString("\n")),
+	) {
+		clickAtCharacter(8)
+		press(Key.DirectionDown)
+		assertEquals(13, cursorIndex)
+		val screenY = state.getPositionForOffset(state.cursorPosition).position.y
+
+		press(Key.PageDown)
+		assertTrue(state.cursorPosition.line > 10, "page down moved to line ${state.cursorPosition.line}")
+		assertEquals(8, state.cursorPosition.char, "page down keeps the goal column")
+		assertTrue(state.scrollState.value > 0, "the view scrolls with the caret")
+		assertEquals(screenY, state.getPositionForOffset(state.cursorPosition).position.y, 1f)
+		assertTrue(state.scrollManager.isOffsetVisible(state.cursorPosition))
+	}
+
+	@Test
+	fun `shift page down selects a page`() = editorUiTest(
+		initialText = AnnotatedString((1..40).joinToString("\n") { "line number $it" }),
+	) {
+		clickAtCharacter(0)
+		press(Key.PageDown, shift = true)
+		val line = state.cursorPosition.line
+		assertTrue(line > 5, "shift page down moved to line $line")
+		assertEquals(0, state.getCharacterIndex(state.selector.selection!!.start))
+		assertEquals(cursorIndex, state.getCharacterIndex(state.selector.selection!!.end))
+	}
+
+	@Test
 	fun `page down moves the cursor far down a tall document`() = editorUiTest(
 		initialText = AnnotatedString((1..80).joinToString("\n") { "line number $it" }),
 	) {

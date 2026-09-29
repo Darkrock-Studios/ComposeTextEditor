@@ -78,9 +78,10 @@ selection's start and end rather than the caret; Home on an empty last line
 moves to the end of the line above; End on a paragraph's last row stops before
 its trailing spaces, and Up and Down stop before a row's trailing spaces when
 the goal x is over or past them; a word wider than the row is broken where it
-starts instead of moving to the next row; a page move does not start a goal x,
-so Up or Down after one measures from where it landed rather than from where
-the run began. Its arrow keys in right-to-left text are logical, like the
+starts instead of moving to the next row; a page move neither starts nor follows
+a goal x, so it measures from the caret, and Up or Down after one measures from
+where it landed; PageUp and PageDown stop on the first and last rows instead of
+going on to the document start and end. Its arrow keys in right-to-left text are logical, like the
 editor's (7.5).
 
 ## Workflow
@@ -318,9 +319,14 @@ fixes what users feel every minute.
   first space when the row ends in several.
   `CharLineOffset` has no affinity, so a position at a wrap boundary always
   draws on the later row.
-- [ ] **1.7 PageUp and PageDown. C.** [Opus] [Lane A] Driven by scroll position
+- [x] **1.7 PageUp and PageDown. C.** [Opus] [Lane A] Driven by scroll position
   rather than the caret's row; PageDown never reaches the document end. The
   scroll margin is a hard-coded 10 px (`state/TextEditorScrollManager.kt`).
+  Done: a page move shifts the caret's row by the viewport height, keeps the
+  goal x, and scrolls with the caret; past the first or last row it goes to the
+  document start or end, as GTK and browser text areas do. No margin: the view
+  scrolls just far enough to show the caret's row, like every native editor; a
+  host wanting room adds content padding.
 - [ ] **1.8 Caret drawing. C.** [Opus] [Lane C] Width is a raw `2f` px, not dp
   and not configurable (`cursor/DrawCursorUi.kt`). Blink does not reset on
   forward delete. The caret is still drawn while a selection exists.
