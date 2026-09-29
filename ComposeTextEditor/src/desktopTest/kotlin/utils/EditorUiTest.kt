@@ -175,13 +175,55 @@ class EditorUiTestScope(
 
 	/** Holds a finger on the character at flat index [charIndex] past the long-press threshold. */
 	fun longPressAtCharacter(charIndex: Int) {
-		val position = positionOfCharacter(charIndex)
+		longPressAt(positionOfCharacter(charIndex))
+		editor.performTouchInput { up() }
+		test.waitForIdle()
+	}
+
+	/**
+	 * Puts a finger down at [position] and holds it past the long-press threshold. The
+	 * finger is still down when this returns, for a drag or a lift to follow.
+	 */
+	fun longPressAt(position: Offset) {
 		editor.performTouchInput { down(position) }
 		// The long-press timer is a coroutine on the editor's scope, which the test
 		// clock drives; sleeping the thread would not move it.
 		test.mainClock.advanceTimeBy(800)
 		test.waitForIdle()
-		editor.performTouchInput { up() }
+	}
+
+	/**
+	 * Taps the character at [charIndex] twice in quick succession with a finger, the touch
+	 * word-select gesture. With [toChar], the second tap drags there before lifting.
+	 */
+	fun doubleTapAtCharacter(charIndex: Int, toChar: Int? = null, steps: Int = 4) {
+		val position = positionOfCharacter(charIndex)
+		editor.performTouchInput {
+			down(position)
+			up()
+			advanceEventTime(MULTI_CLICK_INTERVAL_MS)
+			down(position)
+			if (toChar != null) {
+				val delta = positionOfCharacter(toChar) - position
+				for (step in 1..steps) moveTo(position + delta * (step / steps.toFloat()))
+			}
+			up()
+		}
+		test.waitForIdle()
+	}
+
+	/**
+	 * Holds a finger on the character at [fromChar] past the long-press threshold, then
+	 * drags it to [toChar] in [steps] moves and lifts.
+	 */
+	fun longPressDragToCharacter(fromChar: Int, toChar: Int, steps: Int = 4) {
+		val from = positionOfCharacter(fromChar)
+		longPressAt(from)
+		val delta = positionOfCharacter(toChar) - from
+		editor.performTouchInput {
+			for (step in 1..steps) moveTo(from + delta * (step / steps.toFloat()))
+			up()
+		}
 		test.waitForIdle()
 	}
 

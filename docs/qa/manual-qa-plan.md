@@ -311,6 +311,17 @@ was lengthened specifically so it can be scrolled and flung.
 11. In a long document, drag the end handle below the editor and hold still.
    **Expect:** it keeps scrolling and the selection keeps growing (3.4); dragging
    back inside stops it. Repeat with the start handle above the editor.
+12. Double-tap a word. **Expect:** the word selects with handles and the keyboard
+    rises (3.7). Double-tap and keep the second finger down, then drag across the
+    line. **Expect:** the selection grows by whole words, the first word always kept,
+    the page does not scroll under the finger, and the magnifier follows the moving
+    end. Two taps a second apart, or on different words, place the caret twice.
+13. Long-press a word and, without lifting, drag along and down a line.
+    **Expect:** the same word-by-word growth as 12, no scrolling under the finger,
+    and the keyboard up when the finger lifts. Drag below the editor and hold.
+    **Expect:** it auto-scrolls. Compare the hold time before the word selects with
+    the system's long-press setting (Settings > Accessibility > Touch & hold
+    delay): the editor follows it.
 
 ### 4.3 Spans do not fight the keyboard
 

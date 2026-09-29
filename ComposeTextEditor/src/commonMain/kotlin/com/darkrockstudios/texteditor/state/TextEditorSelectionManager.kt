@@ -64,6 +64,14 @@ class TextEditorSelectionManager(
 	 */
 	internal var magnifierCenter: Offset? by mutableStateOf(null)
 
+	/**
+	 * Advances every time a finger gesture selects or moves a selection. The focus handler
+	 * compares it across a gesture: a finger that travels past touch slop is a pan unless
+	 * it selected on the way, as a long press or a handle drag does.
+	 */
+	internal var touchSelectionGeneration: Int = 0
+		private set
+
 	// Where the touch caret handle stands, and the document it was put in.
 	private class CaretHandleAnchor(val position: CharLineOffset, val content: DocumentSnapshot)
 
@@ -237,6 +245,7 @@ class TextEditorSelectionManager(
 		state.cursor.updatePosition(caret)
 		updateSelection(start, end)
 		if (start != end) _isTouchSelection = isTouch
+		if (isTouch) touchSelectionGeneration++
 	}
 
 	private fun makeRange(start: CharLineOffset, end: CharLineOffset): TextEditorRange {

@@ -209,7 +209,19 @@ The `RichSpanClickListener` KDoc now states the Boolean's real contract
 - A tap reports a span click on release, and only when it lifts on the span it
   landed on (1.15). The release is still dispatched to the Canvas handler before
   the container's focus handler, so the popup check above is unchanged.
-- Long press selects and focuses (test-pinned).
+- Long press selects and focuses (test-pinned). A double tap selects the word
+  too, and dragging on from either extends by word (3.7). Such a drag travels
+  past touch slop, which alone would read as a pan, so the container handler
+  also focuses when the gesture selected: `TextEditorSelectionManager.
+  touchSelectionGeneration` advances on every finger selection, and the handler
+  compares it between press and release. This is still an editor-observable
+  outcome, not a listener's answer, and it needs no consumption. The handler
+  reads the press on the Initial pass, because a second tap selects its word on
+  the down and the Main pass would sample the generation after the bump. A
+  gesture that selected focuses even when a popup is showing, since a selection
+  must be typeable over, but then does not ask for the soft keyboard, which
+  would cover the popup; the popup check alone guards gestures that selected
+  nothing.
 - Focus is skipped only when the tap or long press left a popup showing
   (test-pinned from both sides: popup-opening tap does not focus, span-claimed
   tap with no popup does). Bullets and blockquotes focus by touch again.
@@ -232,7 +244,8 @@ Deliberately not addressed, tracked as follow-ups:
   claimed-tap-still-focuses and long-press-on-selection tests go red, the other
   eight stay green.
 - Harness additions in `EditorUiTest`: `tapAt`, `tapAtCharacter`, `panFrom`,
-  `longPressAtCharacter`, `autoFocus` and `contextMenuState` parameters. Gotchas
+  `longPressAtCharacter`, `doubleTapAtCharacter`, `longPressDragToCharacter`,
+  `autoFocus` and `contextMenuState` parameters. Gotchas
   recorded: the long-press timer is a coroutine on the editor's scope driven by
   the virtual test clock, so tests must use `mainClock.advanceTimeBy`, never
   `Thread.sleep`; and pointer input is injected at the tagged editor node, not

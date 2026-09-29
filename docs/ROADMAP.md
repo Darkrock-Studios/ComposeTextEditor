@@ -591,8 +591,18 @@ fixes what users feel every minute.
   selection or caret handle is dragged, centred on the dragged end's row and
   level with the finger. `textMagnifier` is an `expect` whose skiko `actual`
   (desktop, iOS, web) adds nothing; see 3.15 and the Mac queue.
-- [ ] **3.7 Gestures. C.** [Fable] [Lane B] No double-tap word select, no
-  long-press then drag. The long-press timeout is a hard-coded 500 ms.
+- [x] **3.7 Gestures. C.** [Fable] [Lane B] No double-tap word select, no
+  long-press then drag. The long-press timeout is a hard-coded 500 ms. A
+  second tap within the platform's double-tap timeout of the first tap's lift,
+  and within Android's 100 dp double-tap slop of it, now selects the word
+  under it with handles, and dragging on from a double tap or a long press
+  extends by word from the first word, with the magnifier and auto-scroll a
+  handle drag has; the moves are consumed so the ancestor scrollable does not
+  pan. The timeout is `viewConfiguration.longPressTimeoutMillis`. A drag that
+  selected focuses on release although it travelled past touch slop: the focus
+  handler compares `TextEditorSelectionManager.touchSelectionGeneration` across
+  the gesture, which every finger selection advances. No triple tap: Android's
+  text fields have none.
 - [ ] **3.8 Reaching Paste by touch. C.** [Fable] [Lane B] The menu opens only
   on a second long-press over an existing selection, and long-press on an empty
   line does nothing. Paste is unreachable in an empty editor and at a bare

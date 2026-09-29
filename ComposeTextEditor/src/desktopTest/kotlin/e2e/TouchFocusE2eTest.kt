@@ -7,6 +7,7 @@ import com.darkrockstudios.texteditor.richstyle.BulletListSpanStyle
 import com.darkrockstudios.texteditor.richstyle.SpellCheckStyle
 import utils.editorUiTest
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -211,6 +212,37 @@ class TouchFocusE2eTest {
 			assertTrue(menuState.isVisible, "precondition: the long press opened the context menu")
 			assertFalse(state.isFocused, "the keyboard would cover the menu this press opened")
 			assertTrue(selectedText.isNotEmpty(), "the existing selection must survive")
+		}
+	}
+
+	/**
+	 * The second tap of a double tap selects on its down, before the focus handler sees
+	 * the release. It must still count as a selection: a popup the first tap opened
+	 * would otherwise leave a selection with no way to type over it. The clock is held
+	 * so the popup's open animation cannot push the second tap out of the window, and
+	 * so the popup is still showing when the second tap lifts.
+	 */
+	@Test
+	fun `a second tap under a popup the first tap opened selects and focuses`() {
+		val menuState = TextEditorContextMenuState()
+		editorUiTest(
+			initialText = document,
+			autoFocus = false,
+			contextMenuState = menuState,
+			onRichSpanClick = { _, _, offset ->
+				menuState.showMenu(offset)
+				true
+			},
+		) {
+			state.addRichSpan(0, 5, SpellCheckStyle)
+			test.mainClock.autoAdvance = false
+			tapAtCharacter(2)
+			assertTrue(menuState.isVisible, "precondition: the first tap opened the popup")
+
+			tapAtCharacter(2)
+
+			assertEquals("hello", selectedText, "the second tap pairs into a double tap")
+			assertTrue(state.isFocused)
 		}
 	}
 

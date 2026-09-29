@@ -111,6 +111,8 @@ class TouchCaretHandleTest {
 	) {
 		tapAtCharacter(3)
 		val below = positionOfCharacter(14)
+		// Past the double-tap window, so this is a second single tap.
+		test.mainClock.advanceTimeBy(1_000)
 
 		tapAt(below)
 

@@ -26,6 +26,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.isSecondaryPressed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -242,6 +243,7 @@ fun BasicTextEditor(
 				modifier = editorModifier
 					.focusRequester(focusRequester)
 					.requestFocusOnPress(
+						state,
 						focusRequester,
 						popupIsShowing = { effectiveContextMenuState.isVisible },
 						onRequestInput = inputRequester::requestInput,
@@ -360,7 +362,10 @@ fun BasicTextEditor(
  * keyboard, so focusing on the down event pops the keyboard over the text every
  * time the user tries to pan. A finger therefore has to lift roughly where it
  * landed before this counts as a tap, which matches how the editor already
- * decides caret placement: mouse on press, finger on release.
+ * decides caret placement: mouse on press, finger on release. A finger that
+ * travelled further still focuses when it selected on the way (a long press or a
+ * double tap dragged on, a handle drag), read from the selection manager's
+ * touch selection generation: a selection has to be typeable over.
  *
  * A tap that opened a popup is skipped as well, reported by [popupIsShowing]. The
  * thing to avoid is a keyboard sliding up over the spell-check suggestions or the
@@ -373,34 +378,41 @@ fun BasicTextEditor(
  * have focus. A right-click only focuses, since it opens the context menu.
  */
 internal fun Modifier.requestFocusOnPress(
+	state: TextEditorState,
 	focusRequester: FocusRequester,
 	popupIsShowing: () -> Boolean,
 	onRequestInput: () -> Unit = {},
-) = pointerInput(Unit) {
+) = pointerInput(state) {
 	val touchSlop = viewConfiguration.touchSlop
 	awaitEachGesture {
-		// Any button, so a right-click focuses the editor its menu acts on.
-		val down = awaitAnyPress()
+		// Any button, so a right-click focuses the editor its menu acts on. The Initial
+		// pass, so the generation below is read before the Canvas handler has acted on
+		// the press: a second tap selects its word on the down.
+		val down = awaitAnyPress(PointerEventPass.Initial)
 		if (currentEvent.isMouseLike(down)) {
 			focusRequester.requestFocus()
 			if (!currentEvent.buttons.isSecondaryPressed) onRequestInput()
 			return@awaitEachGesture
 		}
 
+		val generationAtPress = state.selector.touchSelectionGeneration
+		var panned = false
 		while (true) {
 			val event = awaitPointerEvent()
 			val change = event.changes.firstOrNull { it.id == down.id } ?: return@awaitEachGesture
-			if ((change.position - down.position).getDistance() > touchSlop) {
-				// Panning, not pointing.
-				return@awaitEachGesture
-			}
+			panned = panned || (change.position - down.position).getDistance() > touchSlop
 			if (!change.pressed) {
 				// Safe to read synchronously: the Main pass dispatches child-first, so
-				// the Canvas gesture handler has already run this tap's dispatch (which
-				// opens any menu) before this container-level handler sees the release.
-				if (!popupIsShowing()) {
+				// the Canvas gesture handler has already run this gesture's dispatch
+				// (which opens any menu, or selects) before this container-level
+				// handler sees the release.
+				val selected = state.selector.touchSelectionGeneration != generationAtPress
+				val popup = popupIsShowing()
+				if (selected || (!panned && !popup)) {
 					focusRequester.requestFocus()
-					onRequestInput()
+					// A selection made under an open popup still needs focus to be typed
+					// over, but the keyboard would cover the popup.
+					if (!popup) onRequestInput()
 				}
 				return@awaitEachGesture
 			}
