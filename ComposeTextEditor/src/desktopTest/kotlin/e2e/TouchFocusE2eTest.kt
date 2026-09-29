@@ -1,6 +1,5 @@
 package e2e
 
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.text.AnnotatedString
 import com.darkrockstudios.texteditor.contextmenu.TextEditorContextMenuState
@@ -264,11 +263,7 @@ class TouchFocusE2eTest {
 		assertFalse(state.isFocused, "precondition: unfocused with a touch selection")
 		val formerHandle = handleCenter(isStart = false)
 
-		touch {
-			down(formerHandle)
-			moveTo(formerHandle + Offset(40f, 0f))
-			up()
-		}
+		panFrom(formerHandle)
 		assertFalse(state.isFocused, "no handle to drag, so the travel is a pan")
 
 		tapAt(formerHandle)
@@ -276,14 +271,21 @@ class TouchFocusE2eTest {
 		assertTrue(state.isFocused)
 	}
 
-	/** A handle dropped while focused keeps the editor focused, so the selection can be typed over. */
+	/**
+	 * A handle drag travels past touch slop, which alone reads as a pan. What lets the
+	 * focus handler tell it apart, and ask for a dismissed keyboard back on the drop, is
+	 * the touch selection generation, which every move of the drag advances. The handler's
+	 * side of that is pinned by the long-press and double-tap drag tests.
+	 */
 	@Test
-	fun `dropping a selection handle keeps focus`() = editorUiTest(initialText = document) {
+	fun `a handle drag advances the touch selection generation`() = editorUiTest(initialText = document) {
 		longPressAtCharacter(8)
+		val before = state.selector.touchSelectionGeneration
 
 		dragHandle(isStart = false, toChar = 16)
 
 		assertTrue(selectedText.startsWith("world"), "the drag extended the selection: $selectedText")
+		assertTrue(state.selector.touchSelectionGeneration > before)
 		assertTrue(state.isFocused)
 	}
 

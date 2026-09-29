@@ -335,8 +335,8 @@ fun BasicTextEditor(
 						.textMagnifier(state)
 						.background(style.backgroundColor)
 						.onSizeChanged { size -> state.onViewportSizeChange(size.toSize()) }
-						// Capture the canvas position so the desktop IME can place the
-						// composition/candidate window relative to the cursor.
+						// The content canvas's position, below the padding: the desktop IME places
+						// its candidate window by it, and the touch toolbar its menu.
 						.onGloballyPositioned { state.canvasLayoutCoordinates = it }
 						.fillMaxSize()
 						.graphicsLayer {
@@ -414,8 +414,7 @@ internal fun Modifier.requestFocusOnPress(
 			val event = awaitPointerEvent()
 			val change = event.changes.firstOrNull { it.id == down.id } ?: return@awaitEachGesture
 			// Travel, or a second finger, means a pan or a pinch rather than pointing.
-			panned = panned || (change.position - down.position).getDistance() > touchSlop ||
-					event.hasOtherFingerDown(down)
+			panned = panned || event.leavesTap(down, change, touchSlop)
 			if (!change.pressed) {
 				// Safe to read synchronously: the Main pass dispatches child-first, so
 				// the Canvas gesture handler has already run this gesture's dispatch

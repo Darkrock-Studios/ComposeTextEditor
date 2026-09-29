@@ -114,7 +114,7 @@ internal fun PointerEvent.hasOtherFingerDown(down: PointerInputChange): Boolean 
 	changes.any { it.id != down.id && it.pressed }
 
 /** Whether [change], of the pointer that went down at [down], has left the tap: travelled or joined. */
-private fun PointerEvent.leavesTap(down: PointerInputChange, change: PointerInputChange, touchSlop: Float): Boolean =
+internal fun PointerEvent.leavesTap(down: PointerInputChange, change: PointerInputChange, touchSlop: Float): Boolean =
 	(change.position - down.position).getDistance() > touchSlop || hasOtherFingerDown(down)
 
 internal fun PointerEvent.isMouseLike(down: PointerInputChange): Boolean =

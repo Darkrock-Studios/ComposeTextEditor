@@ -238,10 +238,10 @@ Formerly open, closed by 3.13:
 
 - Dragging a selection handle to restore focus is moot: 1.18 drops the handles
   with focus, so an unfocused editor has none to grab, and a finger where one
-  stood is an ordinary tap, which focuses (test-pinned). A drag advances the
-  touch selection generation on every move, so a drop while focused keeps
-  focus like any selecting gesture; the keyboard is requested too, unless a
-  popup is showing.
+  stood is an ordinary tap, which focuses (test-pinned). A drag still advances
+  the touch selection generation on every move (test-pinned), so a drop focuses
+  like any selecting gesture even under a popup and asks for a dismissed
+  keyboard back, unless a popup is showing.
 - A second finger landing mid-gesture cancels the long press and the tap in the
   gesture handler, and reads as a pan in the focus handler, so a pinch or a
   two-finger scroll neither selects nor raises the keyboard. Only pointers that

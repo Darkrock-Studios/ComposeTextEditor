@@ -99,10 +99,11 @@ internal class TouchToolbar(
 	/**
 	 * Hides the toolbar when what it was shown over moves, or the editor loses focus, and
 	 * moves it with the text when only the scroll changed, the editor's own scroll into
-	 * view included.
+	 * view included. Focus is [TextEditorState.hasFocus], the signal the handles and the
+	 * selection colour follow: a read-only editor or view is never `isFocused`.
 	 */
 	suspend fun watch() {
-		snapshotFlow { anchor() to state.isFocused }.collect { (anchor, focused) ->
+		snapshotFlow { anchor() to state.hasFocus }.collect { (anchor, focused) ->
 			val shown = shownFor ?: return@collect
 			when {
 				!focused || anchor.selection != shown.selection || anchor.caret != shown.caret -> hide()

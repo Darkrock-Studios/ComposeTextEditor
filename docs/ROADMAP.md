@@ -664,8 +664,9 @@ fixes what users feel every minute.
   `docs/design/touch-focus.md`: a handle drag cannot restore focus; an orphaned
   long-press job with a second finger. The handle case is closed by 1.18: the
   handles go with focus, so there is none to drag on an unfocused editor, and
-  a finger where one stood is a tap, which focuses (test-pinned); a drop while
-  focused keeps focus through the touch selection generation 3.7 added. The
+  a finger where one stood is a tap, which focuses (test-pinned). A drag still
+  advances the touch selection generation 3.7 added (test-pinned), so a drop
+  asks for the soft keyboard back and focuses even under a popup. The
   long-press job cannot outlive its gesture (a `finally`
   cancels it), and a second finger on the editor now cancels it and the tap
   (the caret handle's and a link's too), and keeps the focus handler from
