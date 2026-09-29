@@ -62,6 +62,8 @@ import com.darkrockstudios.texteditor.richstyle.RichSpan
 import com.darkrockstudios.texteditor.scrollbar.TextEditorScrollbar
 import com.darkrockstudios.texteditor.state.SpanClickType
 import com.darkrockstudios.texteditor.state.TextEditorState
+import com.darkrockstudios.texteditor.state.insertTypedNewline
+import com.darkrockstudios.texteditor.state.typedInput
 import com.darkrockstudios.texteditor.state.rememberTextEditorState
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
@@ -274,12 +276,19 @@ fun BasicTextEditor(
 							true
 						}
 						insertTextAtCursor { newText ->
-							// One step, but not typing: dictated or assistive text is
-							// whole phrases, which a following keystroke must not join.
-							state.editGroup {
-								state.selector.deleteSelection()
-								state.editManager.recordingAsTyping(false) {
-									state.insertStringAtCursor(newText)
+							if (newText.text == "\n") {
+								state.insertTypedNewline()
+							} else {
+								// Dictated or assistive text: one step that is not typing, since
+								// whole phrases are not something a following keystroke should
+								// join, then told to the behaviors like any typed text.
+								state.typedInput(newText.text) {
+									state.editGroup {
+										state.selector.deleteSelection()
+										state.editManager.recordingAsTyping(false) {
+											state.insertStringAtCursor(newText)
+										}
+									}
 								}
 							}
 							true

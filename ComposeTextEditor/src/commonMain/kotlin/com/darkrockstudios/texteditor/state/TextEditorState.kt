@@ -513,8 +513,9 @@ class TextEditorState(
 
 	/**
 	 * Behaviors consulted before [insertNewlineAtCursor], [backspaceAtCursor] and
-	 * [deleteAtCursor], in order; the first to claim an edit wins. Every input
-	 * path reaches these three, hardware keys and IME alike.
+	 * [deleteAtCursor], and told after typed text has landed ([insertTypedString]
+	 * and the IME's commits), in order; the first to claim an edit wins. Every
+	 * input path reaches these, hardware keys and IME alike.
 	 *
 	 * Pre-loaded with [LineBlockEditBehavior] at index 0, which claims every
 	 * newline and column-0 backspace on a block line, so a behavior appended
@@ -537,17 +538,39 @@ class TextEditorState(
 	 * of the text can express.
 	 */
 	private fun claimedByBehavior(hook: (EditBehavior) -> Boolean): Boolean {
-		if (behaviorDepth > 0) return false
+		val claimed = runBehaviors(hook)
+		if (claimed) requestImeResync()
+		return claimed
+	}
 
+	private fun runBehaviors(hook: (EditBehavior) -> Boolean): Boolean {
+		if (behaviorDepth > 0) return false
 		behaviorDepth++
-		val claimed = try {
+		return try {
 			editBehaviors.toList().any(hook)
 		} finally {
 			behaviorDepth--
 		}
+	}
 
-		if (claimed) requestImeResync()
-		return claimed
+	/**
+	 * Tells the behaviors that typed [text] has landed at [range], after the
+	 * default edit and any IME caret placement, so a behavior edits on top of the
+	 * finished insert and owns the caret from there. The IME is asked to resync
+	 * only when a behavior changed the document or moved the caret: the edit it
+	 * expected has already happened, so a claim alone leaves its mirror right.
+	 */
+	internal fun textInputLanded(text: String, range: TextEditorRange) {
+		// A lone line break is the Enter key, which has its own hook; the one that
+		// lands here raw (an IME committing "\n" over its composition) is a
+		// replacement of the composition, not typed text.
+		if (text.isEmpty() || text == "\n") return
+		// The working content, so an edit inside a host's open transaction counts.
+		val contentBefore = workingContent
+		val caretBefore = cursorPosition
+		// An edit ends the chain, claimed or not: the range no longer holds.
+		runBehaviors { it.onTextInput(this, text, range) || workingContent !== contentBefore }
+		if (workingContent !== contentBefore || cursorPosition != caretBefore) requestImeResync()
 	}
 
 	// In-editor rich-span clipboard. The system clipboard only carries the

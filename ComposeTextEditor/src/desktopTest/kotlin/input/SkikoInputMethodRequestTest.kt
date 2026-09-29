@@ -34,6 +34,7 @@ import com.darkrockstudios.texteditor.input.startSkikoInputSession
 import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
 import com.darkrockstudios.texteditor.markdown.MarkdownExtension
 import com.darkrockstudios.texteditor.richstyle.BulletListSpanStyle
+import com.darkrockstudios.texteditor.state.EditBehavior
 import com.darkrockstudios.texteditor.state.TextEditorState
 import io.mockk.every
 import io.mockk.mockk
@@ -325,5 +326,39 @@ class SkikoInputMethodRequestTest {
 		assertEquals(listOf("abc", "bc"), seen)
 		observer.cancel()
 		sessionJob.cancel()
+	}
+
+	// --- the typed-text hook ---
+
+	@Test
+	fun `a commit through editText reaches the text input behavior`() {
+		val offered = mutableListOf<String>()
+		state.editBehaviors += object : EditBehavior {
+			override fun onTextInput(state: TextEditorState, text: String, range: TextEditorRange): Boolean {
+				offered += text
+				return false
+			}
+		}
+
+		request.editText { setComposingText("a", 1) }
+		request.editText { commitText("ab", 1) }
+
+		assertEquals(listOf("ab"), offered, "only the commit is offered")
+		assertEquals("ab", text())
+	}
+
+	@Test
+	fun `a commit through onEditCommand reaches the text input behavior`() {
+		val offered = mutableListOf<String>()
+		state.editBehaviors += object : EditBehavior {
+			override fun onTextInput(state: TextEditorState, text: String, range: TextEditorRange): Boolean {
+				offered += text
+				return false
+			}
+		}
+
+		request.onEditCommand(listOf(CommitTextCommand("x", 1)))
+
+		assertEquals(listOf("x"), offered)
 	}
 }

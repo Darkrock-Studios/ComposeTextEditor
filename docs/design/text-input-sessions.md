@@ -70,7 +70,12 @@ The semantics they pin down:
 
 - `commitText` replaces the composing region when there is one, otherwise
   replaces the selection or inserts at the cursor, then always ends
-  composition (even when no text changed).
+  composition (even when no text changed). Once the text has landed and the
+  caret is placed, the `EditBehavior` chain is told where (`onTextInput`); a
+  behavior that edits on top owns the caret and the IME is asked to resync.
+  `setComposingText` never tells it: composing updates are not committed
+  text. `finishComposingText` over a typed composition does, since it
+  commits the composition as it stands.
 - `setComposingText` is the same replacement, but the inserted text becomes
   the new composing region (rendered underlined). This is the path dead-key
   and accent composition takes.

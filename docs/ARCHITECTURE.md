@@ -221,12 +221,14 @@ input session, losing focus (or disabling the editor) cancels it.
 Two extension points hang off this, and they are not interchangeable. An
 **action** is invoked by name, so it needs something to invoke it: a chord, a
 menu item, a toolbar button. An **edit behavior** intercepts one of the
-semantic edits (newline, backspace, forward delete) and may have no trigger at
-all, because an IME can commit a newline or delete a character without ever
-producing a key event. Line-block smart editing is the first behavior, which is
-what makes it reach every input path rather than only the ones that go through
-key handling. Both, and the reasoning for keeping them separate:
-[design/editor-actions.md](design/editor-actions.md).
+semantic edits (typed text, newline, backspace, forward delete) and may have
+no trigger at all, because an IME can commit a word or a newline, or delete a
+character, without ever producing a key event. Line-block smart editing is the
+first behavior, which is what makes it reach every input path rather than only
+the ones that go through key handling; the typed-text hook sees what every
+path commits (never an IME's composing updates) and is what smart punctuation,
+markdown as you type, and auto-link build on. Both, and the reasoning for
+keeping them separate: [design/editor-actions.md](design/editor-actions.md).
 
 The IME contract runs in two directions. Commands flow in, and each one lands
 in a single shared implementation (`ImeEditLogic` in commonMain) so that

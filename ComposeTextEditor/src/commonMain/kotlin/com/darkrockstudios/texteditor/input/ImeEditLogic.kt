@@ -7,6 +7,7 @@ import com.darkrockstudios.texteditor.state.backspaceStart
 import com.darkrockstudios.texteditor.state.followingGraphemeBoundary
 import com.darkrockstudios.texteditor.state.insertTypedNewline
 import com.darkrockstudios.texteditor.state.insertTypedString
+import com.darkrockstudios.texteditor.state.isOneTypedWord
 
 /**
  * Shared IME edit operations used by every platform that drives the editor
@@ -40,17 +41,29 @@ internal fun TextEditorState.imeCommitText(text: String, newCursorPosition: Int)
 		return
 	}
 
+	// A typed composition committed unchanged is still the user's word landing.
+	val committingTyped = composingIsTyped && composingRange != null
+	var landed: TextEditorRange? = null
 	editGroup {
 		// Committing what the IME composed is the user's typing; committing over text
 		// it merely marked (the shape of an autocorrect) is not, so that stays its
 		// own step and undo gives back what was typed, as native editors do.
-		val insertStart = replaceComposingOrInsert(text, typing = composingIsTyped).start
+		val insertion = replaceComposingOrInsert(text, typing = composingIsTyped)
+		val insertStart = insertion.start
 		val insertEnd = insertStart + text.length
 		// Commit semantics end the composition even when no mutation ran (empty text
 		// with nothing composing), so clear explicitly rather than rely on applyOperation.
 		clearComposingRange()
 		applyNewCursorPosition(insertStart, insertEnd, newCursorPosition)
+		if (insertion.edited || committingTyped) {
+			landed = TextEditorRange(getOffsetAtCharacter(insertStart), getOffsetAtCharacter(insertEnd))
+		}
 	}
+	// Composing updates never reach the typed-text hook, nor does a commit that
+	// changed nothing over text the IME merely marked. Told after the commit has
+	// landed and the caret is placed, so a behavior edits on top of it and owns
+	// the caret.
+	landed?.let { textInputLanded(text, it) }
 }
 
 /**
@@ -92,9 +105,15 @@ internal fun TextEditorState.imeSetComposingRegion(start: Int, end: Int) {
 	}
 }
 
-/** `finishComposingText`: keep the text, drop the composing highlight. */
+/**
+ * `finishComposingText`: keep the text, drop the composing highlight. Finishing
+ * a typed composition commits it, so the typed-text hook is told, as for
+ * [imeCommitText]; some keyboards end every word this way.
+ */
 internal fun TextEditorState.imeFinishComposing() {
+	val composing = composingRange?.takeIf { composingIsTyped && isWithinDocument(it) }
 	clearComposingRange()
+	if (composing != null) textInputLanded(getStringInRange(composing), composing)
 }
 
 /**
@@ -274,8 +293,9 @@ private fun TextEditorState.replaceComposingOrInsert(text: String, typing: Boole
 		val start = getCharacterIndex(selection?.start ?: cursorPosition)
 		when {
 			text.isEmpty() -> selector.deleteSelection() // An IME commits "" routinely: a delete or nothing.
-			typing -> insertTypedString(text, typing = true)
-			else -> insertTypedString(text)
+			// Past the behavior chain: the commit path offered the text already, and
+			// a composing update is never offered.
+			else -> insertTypedString(text, typing = typing || text.isOneTypedWord())
 		}
 		ImeInsertion(start, edited = text.isNotEmpty() || selection != null)
 	}

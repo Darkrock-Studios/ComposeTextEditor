@@ -965,13 +965,43 @@ iOS Safari; browser tests run in CI.
   through the normal paste path so undo and line blocks behave. AWT under
   native Wayland has no primary selection (see 4.17), so it only works under
   X11 or XWayland.
+- [ ] **4.25 The skiko request ignores IME resync requests. S.** [Opus]
+  [Lane E] `TextEditorState.requestImeResync` advances a generation that only
+  the Android cursor sync consumes (`ImeCursorSync.android.kt`); the shared
+  skiko request (desktop, iOS, web) never restarts its session or tells the
+  platform IME. After an `EditBehavior` claims a newline or edits on top of a
+  committed word (5.1), the IME's mirror of the text is stale, and its next
+  `deleteSurroundingText` or `setComposingRegion` addresses the wrong
+  characters. Consume the generation in `startSkikoInputSession`. Needed
+  before 5.2 to 5.4 ship a behavior that edits on the IME path.
+- [ ] **4.26 A behavior's edit mid IME batch. C.** [Fable] [Lane E] A
+  behavior edits on top of an IME commit (5.1) at once, but a batch (an
+  Android `beginBatchEdit`, a web `onEditCommand` list) may hold further
+  commands the IME computed against its own mirror, and the resync only
+  lands after the batch. A `setComposingRegion` or `deleteSurroundingText`
+  after the commit then addresses the wrong characters. Defer the hook to
+  the batch's end, or drop the batch's remaining offsets once a behavior
+  has edited.
+- [ ] **4.27 Android resyncs by restarting input. C.** [Opus] [Lane E]
+  `requestImeResync` becomes `restartInput`, which clears the keyboard's
+  suggestions and shift state. That suits a whole-document replace, not a
+  smart-punctuation substitution beside the caret (5.2), which native
+  `EditText` reports through `updateSelection` and a text-changed notice.
+  Add a lighter resync for a local edit.
 
 ## Phase 5: writer conveniences
 
-- [ ] **5.1 A typed-text hook.** [Fable] [Lane G] `EditBehavior` covers
+- [x] **5.1 A typed-text hook.** [Fable] [Lane G] `EditBehavior` covers
   newline, backspace, and forward delete only (`state/EditBehavior.kt`). Add a
   hook that sees committed text from every input path, keys and IME alike.
-  Everything below in this phase builds on it, as opt-in behaviours.
+  Everything below in this phase builds on it, as opt-in behaviours. Done:
+  `EditBehavior.onTextInput(state, text, range)` is told where committed
+  text landed, after the default edit, by `insertTypedString` (keys),
+  `imeCommitText` and `imeFinishComposing` over a typed composition (the
+  shared skiko request and the Android connection; composing updates are
+  never offered), and the accessibility insert. A
+  behaviour edits on top, so a substitution undoes back to what was typed.
+  A paste is not offered; 5.4's pasted-URL half needs its own seam.
 - [ ] **5.2 Smart punctuation.** [Opus] [Lane G] Curly quotes, dashes from
   double hyphens, ellipsis. One undo step reverts the substitution, as in
   native editors.
