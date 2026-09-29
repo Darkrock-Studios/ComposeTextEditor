@@ -27,8 +27,11 @@ import androidx.compose.ui.unit.sp
 /**
  * A find bar UI component that provides search and replace functionality.
  *
+ * Closing the bar (Escape, the find shortcut, the close button, or the host removing it from
+ * the composition) ends the session through [FindState.close], clearing the highlights.
+ *
  * @param state The FindState managing the search
- * @param onClose Called when the user closes the find bar
+ * @param onClose Called when the user closes the find bar; the host should hide it
  * @param modifier Modifier for the find bar
  * @param strings Localizable strings for the UI. Defaults to English.
  * @param requestFocus Whether to request focus on the search field when shown
@@ -45,6 +48,20 @@ fun FindBar(
 	var replaceText by remember { mutableStateOf("") }
 	var showReplace by remember { mutableStateOf(false) }
 	val focusRequester = remember { FocusRequester() }
+	val close = {
+		state.close()
+		onClose()
+	}
+
+	// The session can end or restart without this bar (close, a host call to search).
+	LaunchedEffect(state.query) {
+		if (searchText != state.query) searchText = state.query
+	}
+
+	// However the host hides the bar, leaving the composition ends the session.
+	DisposableEffect(state) {
+		onDispose { state.close() }
+	}
 
 	// Request focus when shown
 	LaunchedEffect(requestFocus) {
@@ -119,7 +136,7 @@ fun FindBar(
 								modifier = Modifier
 									.fillMaxWidth()
 									.focusRequester(focusRequester)
-									.findShortcut { onClose() }
+									.findShortcut(close)
 									.onPreviewKeyEvent { event ->
 										if (event.type == KeyEventType.KeyDown) {
 											when {
@@ -134,7 +151,7 @@ fun FindBar(
 												}
 
 												event.key == Key.Escape -> {
-													onClose()
+													close()
 													true
 												}
 
@@ -228,10 +245,7 @@ fun FindBar(
 
 				// Close button
 				IconButton(
-					onClick = {
-						state.clearSearch()
-						onClose()
-					},
+					onClick = close,
 					modifier = Modifier.size(buttonSize)
 				) {
 					Icon(
@@ -275,6 +289,7 @@ fun FindBar(
 									onValueChange = { replaceText = it },
 									modifier = Modifier
 										.fillMaxWidth()
+										.findShortcut(close)
 										.onPreviewKeyEvent { event ->
 											if (event.type == KeyEventType.KeyDown) {
 												when {
@@ -284,7 +299,7 @@ fun FindBar(
 													}
 
 													event.key == Key.Escape -> {
-														onClose()
+														close()
 														true
 													}
 

@@ -176,6 +176,17 @@ class FindState(
 	}
 
 	/**
+	 * End the find session: remove all highlights and reset the query and results, but keep the
+	 * selection so the last match found stays selected in the editor.
+	 */
+	fun close() {
+		query = ""
+		clearHighlights()
+		_matches.clear()
+		currentMatchIndex = -1
+	}
+
+	/**
 	 * Replace the current match with the given text and move to the next match.
 	 * @param replaceText The text to replace with
 	 * @return true if a replacement was made, false if no current match

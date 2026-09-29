@@ -685,7 +685,7 @@ Shaping is one line per keystroke. These still scale with document length:
   `FindState` but `FindBar` has no control for it.
 - [ ] **7.18** [Opus] [Lane J] Replace-all drops the replaced text's styling,
   and overlapping matches are applied against already modified text.
-- [ ] **7.19** [Opus] [Lane J] Esc and Ctrl+F close without clearing
+- [x] **7.19** [Opus] [Lane J] Esc and Ctrl+F close without clearing
   highlights. The shortcut tests `isCtrlPressed`, so AltGr+F is stolen on
   Windows layouts; use `isCtrlShortcut`.
 
