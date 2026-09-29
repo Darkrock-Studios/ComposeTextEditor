@@ -121,10 +121,12 @@ line-indexed queries layout and drawing rely on.
   spell checker's candidates (`wordSegments`) all read that one segmentation.
   The caret also carries an affinity (`CaretAffinity`): a position on a wrap
   offset belongs to two visual rows, and the affinity says which one the caret
-  is on. Positions stay affinity-free; `TextEditorState.cursorRowIndex()` is
-  the one place the caret's row is resolved, and every move resets the caret
-  to downstream unless it deliberately lands at a row's end (End, or a
-  vertical move past the row's end).
+  is on. Positions stay affinity-free; the motions read the caret's row
+  through `TextEditorState.cursorRowIndex()`, drawing, handles, the touch
+  toolbar and scrolling through the affinity overloads of `getWrapForDrawing`
+  and `getPositionForOffset`, and every move resets the caret to downstream
+  unless it deliberately lands at a row's end (End, or a vertical move past
+  the row's end).
 - **`TextEditorSelectionManager`**: the selection range and the gesture state
   behind it (touch handles, drag). Rule: any content mutation clears the
   selection; only span-level operations keep it.

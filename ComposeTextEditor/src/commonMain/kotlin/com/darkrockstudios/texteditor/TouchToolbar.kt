@@ -120,8 +120,10 @@ internal class TouchToolbar(
 	 */
 	private fun contentRect(): Rect {
 		val selection = state.selector.selection
-		val start = state.getPositionForOffset(selection?.start ?: state.cursorPosition)
-		val end = state.getPositionForOffset(selection?.end ?: state.cursorPosition)
+		// A bare caret anchors on the row it is drawn on.
+		val caret = state.getPositionForOffset(state.cursorPosition, state.cursor.affinity)
+		val start = selection?.let { state.getPositionForOffset(it.start) } ?: caret
+		val end = selection?.let { state.getPositionForOffset(it.end) } ?: caret
 		val sameRow = start.position.y == end.position.y
 		val left = if (sameRow) minOf(start.position.x, end.position.x) else 0f
 		val right = if (sameRow) maxOf(start.position.x, end.position.x) else state.viewportSize.width

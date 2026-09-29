@@ -526,7 +526,7 @@ Guards #89, #90, #65, #83.
    **not** suspend itself, and there is no "resume" state to get stuck in.
 6. Type "don’t" with a typographic apostrophe. **Expect:** no squiggle; the word is
    looked up as "don't".
-6. Scroll a long spell-checked document quickly. **Expect:** smooth scrolling; squiggles
+7. Scroll a long spell-checked document quickly. **Expect:** smooth scrolling; squiggles
    render correctly deep in the document, not just near the top (#65).
 
 ## 8. Performance and smoke pass

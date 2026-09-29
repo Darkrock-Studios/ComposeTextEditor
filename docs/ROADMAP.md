@@ -96,7 +96,7 @@ GTK and Cocoa go to the previous word's start; and its paragraph direction is
 the whole text's, from its first strong character, so a right-to-left paragraph
 after a left-to-right one keeps left-to-right arrows, where native editors and
 the editor resolve each paragraph on its own. Its
-arrow keys inside a mixed paragraph are logical, like the editor's (7.32).
+arrow keys inside a mixed paragraph are logical, like the editor's (7.33).
 
 ## Workflow
 
@@ -177,8 +177,8 @@ review.
 
 | Lane | Area | Main files | Items |
 | --- | --- | --- | --- |
-| A | Caret motion | `state/TextEditorCursorState.kt`, `state/TextEditorStateCursorExt.kt`, `state/WordSegmentationUtils.kt`, `input/TextEditorKeyCommandHandler.kt` | 1.1 to 1.7, 1.19, 2.3, 2.6, 7.5 |
-| B | Pointer and touch | `textEditorPointerInputHandling.kt`, `state/TextEditorSelectionManager.kt`, `DrawSelectionHandles.kt` | 1.9, 1.12 to 1.16, 1.21 to 1.23, 3.1, 3.2, 3.4 to 3.8, 3.13, 3.15, 4.23 |
+| A | Caret motion | `state/TextEditorCursorState.kt`, `state/TextEditorStateCursorExt.kt`, `state/WordSegmentationUtils.kt`, `input/TextEditorKeyCommandHandler.kt` | 1.1 to 1.7, 1.19, 2.3, 2.6, 7.5, 7.33 |
+| B | Pointer and touch | `textEditorPointerInputHandling.kt`, `state/TextEditorSelectionManager.kt`, `DrawSelectionHandles.kt` | 1.9, 1.12 to 1.16, 1.21 to 1.24, 3.1, 3.2, 3.4 to 3.8, 3.13, 3.15, 4.23 |
 | C | Drawing and geometry | `Draw*.kt`, `cursor/`, `scrollbar/`, `state/TextEditorScrollState.kt`, hit testing | 1.8, 1.10, 1.11, 1.17, 1.18, 3.3, 3.12, 4.14, 7.6, 7.7 |
 | D | Bindings, actions, menu | `input/KeyBindings.kt`, `input/EditorCommand.kt`, `input/BuiltinEditorActions.kt`, `contextmenu/` | 2.1, 2.2, 2.4, 2.5, 2.7 to 2.12, 4.8, 5.8 |
 | E | Input sessions on desktop, iOS, web | `desktopMain`, `iosMain`, `wasmJsMain` under `input/` | 4.2 to 4.7, 4.10 to 4.12, 4.19, 4.21, 4.22 |
@@ -187,9 +187,9 @@ review.
 | H | Clipboard and HTML | `clipboard/`, `html/` | 4.9, 4.13, 4.17, 6.7 to 6.12 |
 | I | Markdown and block model | `markdown/`, `richstyle/` | 5.6, 7.14 to 7.16 |
 | J | Find addon | `ComposeTextEditorFind/` | 7.17 to 7.19, 7.26, 7.29 |
-| K | Spell check addon | `ComposeTextEditorSpellCheck/` | 7.20 to 7.22, 7.28, 7.30 |
+| K | Spell check addon | `ComposeTextEditorSpellCheck/` | 7.20 to 7.22, 7.28, 7.30, 7.31 |
 | L | Tests and CI | test sources, `.github/workflows/` | 0.1 to 0.3, 0.5 to 0.8, 4.1, 4.15 |
-| M | Accessibility and host API | semantics in `BasicTextEditor.kt`, `RichTextView.kt`, `state/rememberTextEditorState.kt` | 7.1 to 7.4, 7.13, 7.23 to 7.25 |
+| M | Accessibility and host API | semantics in `BasicTextEditor.kt`, `RichTextView.kt`, `state/rememberTextEditorState.kt` | 7.1 to 7.4, 7.13, 7.23 to 7.25, 7.32 |
 | N | Core layout and performance | `state/TextEditorState.kt` | 5.7, 7.8 to 7.12 |
 
 Housekeeping items are [Opus] and fit any lane that is already in the file.
@@ -371,8 +371,10 @@ fixes what users feel every minute.
   says which row a caret at a wrap offset draws on; every `updatePosition`
   resets it to downstream, and End on a wrapped row, and a vertical move whose
   goal x reaches past a row's end, place the caret on the wrap offset upstream.
-  `TextEditorState.cursorRowIndex()` is the one read of the caret's row (Up,
-  Down, Home, End, page moves, delete to the row end, scrolling), and
+  `TextEditorState.cursorRowIndex()` is the one read of the caret's row for
+  the motions (Up, Down, Home, End, page moves, delete to the row end); the
+  scroll manager, which has no state reference, resolves the same row through
+  `getWrapForDrawing(position, affinity)`; and
   `LineWrap.caretX` draws an upstream caret at its row's right edge (left in a
   right-to-left row). Positions elsewhere (selections, spans, hit tests) stay
   affinity-free, so the blast radius is the caret's own readers. Left, Right
@@ -465,11 +467,6 @@ fixes what users feel every minute.
   and selection alone everywhere. Compose has no primary selection API; the
   paste itself is 4.23.
 
-- [ ] **1.24 Pointer affinity. C.** [Opus] [Lane B] A click or drag past the
-  end of a wrapped row lands on its wrap offset, which `getOffsetAtPosition`
-  returns as a bare position, so the caret draws at the start of the next row
-  (1.6 gave only the keyboard an upstream caret). Return the affinity from the
-  hit test and place the caret with it.
 - [x] **1.21 Empty selections. C.** [Opus] [Lane B] A drag that ends where it
   began leaves a non-null selection with start equal to end. The delete-by-motion
   actions (word, line, and paragraph deletes) then delete nothing and still
@@ -503,6 +500,11 @@ fixes what users feel every minute.
 
 ### Selection drawing
 
+- [ ] **1.24 Pointer affinity. C.** [Opus] [Lane B] A click or drag past the
+  end of a wrapped row lands on its wrap offset, which `getOffsetAtPosition`
+  returns as a bare position, so the caret draws at the start of the next row
+  (1.6 gave only the keyboard an upstream caret). Return the affinity from the
+  hit test and place the caret with it.
 - [x] **1.17 Empty lines and newlines. C.** [Opus] [Lane C] Empty lines inside
   a selection draw nothing (`DrawSelectionUi.kt`). Native shows a sliver for
   the newline.
@@ -1061,9 +1063,9 @@ iOS Safari; browser tests run in CI.
   `TextDirection.Unspecified` is the app's layout direction: an all-Hebrew
   paragraph in a left-to-right app is left-to-right based and stays logical,
   exactly as `BasicTextField` is; a host that sets `TextDirection.Content` on
-  the editor's text style gets the mirroring (7.31). Mixed runs inside a
-  paragraph stay logical (7.32).
-- [ ] **7.31** [Fable] [Lane M] The editor's text style leaves `textDirection`
+  the editor's text style gets the mirroring (7.32). Mixed runs inside a
+  paragraph stay logical (7.33).
+- [ ] **7.32** [Fable] [Lane M] The editor's text style leaves `textDirection`
   unspecified, so the paragraph direction is the app's layout direction: a
   right-to-left paragraph in a left-to-right app is laid out left-to-right
   based (aligned left, caret motion logical), and an English paragraph in a
@@ -1072,7 +1074,7 @@ iOS Safari; browser tests run in CI.
   same, but native editors resolve each paragraph from its first strong
   character. Decide whether the editor should default to `Content`, or
   document the host's job.
-- [ ] **7.32** [Fable] [Lane A] Arrow keys inside a mixed paragraph (a Hebrew
+- [ ] **7.33** [Fable] [Lane A] Arrow keys inside a mixed paragraph (a Hebrew
   word in English text, or the reverse) move logically, so the caret jumps
   visually at the run boundaries. macOS and Windows move visually through the
   runs, with the caret carrying a direction at each boundary; `BasicTextField`
@@ -1186,6 +1188,8 @@ Shaping is one line per keystroke. These still scale with document length:
 
 - [ ] The README's "Work left to do" is stale: desktop copy and paste now
   preserves formatting.
+- [ ] `TextEditorScrollManager.scrollToCursor()` is public and bypasses
+  `cursorScrollSuppressed` (1.23); only `ensureCursorVisible` honours it.
 - [ ] Stray `println` calls in `state/TextEditorState.kt` and
   `SpellCheckState.kt`.
 - [ ] The sample app's toolbar Link button attaches its own

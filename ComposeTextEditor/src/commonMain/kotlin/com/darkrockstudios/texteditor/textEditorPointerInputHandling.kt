@@ -618,7 +618,7 @@ private fun grabOffset(state: TextEditorState, position: CharLineOffset, down: O
  */
 private fun Density.isOnCaretHandle(position: Offset, state: TextEditorState): Boolean {
 	if (!state.selector.isCaretHandleVisible) return false
-	val center = handleCenter(state.getPositionForOffset(state.cursorPosition))
+	val center = handleCenter(state.getPositionForOffset(state.cursorPosition, state.cursor.affinity))
 	return (position - center).getDistance() < CaretHandleHitRadius.toPx()
 }
 

@@ -38,7 +38,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.darkrockstudios.texteditor.BasicTextEditor
 import com.darkrockstudios.texteditor.CharLineOffset
-import com.darkrockstudios.texteditor.TextEditorStyle
+import com.darkrockstudios.texteditor.rememberTextEditorStyle
 import com.darkrockstudios.texteditor.input.CtrlKeyBindings
 import com.darkrockstudios.texteditor.input.LocalKeyBindings
 import com.darkrockstudios.texteditor.state.TextEditorState
@@ -204,7 +204,7 @@ internal fun differentialUiTest(
 						state = editorState,
 						modifier = Modifier.size(width, height).testTag(EDITOR_TEST_TAG),
 						autoFocus = true,
-						style = TextEditorStyle(textStyle = textStyle),
+						style = rememberTextEditorStyle(textStyle = textStyle),
 					)
 					val textWidth = with(LocalDensity.current) { editorState.viewportSize.width.toDp() }
 					BasicTextField(

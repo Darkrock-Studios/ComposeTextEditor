@@ -14,7 +14,7 @@ internal fun DrawScope.DrawSelectionHandles(
 	handleColor: Color,
 ) {
 	if (state.selector.isCaretHandleVisible) {
-		drawHandle(state.getPositionForOffset(state.cursorPosition), handleColor)
+		drawHandle(state.getPositionForOffset(state.cursorPosition, state.cursor.affinity), handleColor)
 		return
 	}
 
