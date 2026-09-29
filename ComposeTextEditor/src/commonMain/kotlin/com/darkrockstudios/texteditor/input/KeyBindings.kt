@@ -30,7 +30,7 @@ val KeyEvent.isCtrlShortcut: Boolean
  *
  * ```kotlin
  * val bindings = KeyBindings { event ->
- *     if (event.key == Key.B && event.isCtrlShortcut) ToggleBold
+ *     if (event.key == Key.D && event.isCtrlShortcut) InsertDate
  *     else platformKeyBindings().commandFor(event)
  * }
  * ```
@@ -61,7 +61,13 @@ object CtrlKeyBindings : KeyBindings {
 		return when (event.navigationKey) {
 			Key.A -> if (ctrl) Action.SelectAll else null
 			Key.C -> if (ctrl) Action.Copy else null
-			Key.X -> if (ctrl) Action.Cut else null
+			Key.X -> when {
+				ctrl && event.isShiftPressed -> Action.ToggleStrikethrough
+				ctrl -> Action.Cut
+				else -> null
+			}
+
+			Key.B, Key.I, Key.U, Key.E -> if (ctrl && !event.isShiftPressed) formattingToggleFor(event.key) else null
 			Key.V -> when {
 				ctrl && event.isShiftPressed -> Action.PasteAsPlainText
 				ctrl -> Action.Paste
@@ -118,7 +124,13 @@ object MacKeyBindings : KeyBindings {
 		return when (event.navigationKey) {
 			Key.A -> if (cmd) Action.SelectAll else null
 			Key.C -> if (cmd) Action.Copy else null
-			Key.X -> if (cmd) Action.Cut else null
+			Key.X -> when {
+				cmd && event.isShiftPressed -> Action.ToggleStrikethrough
+				cmd -> Action.Cut
+				else -> null
+			}
+
+			Key.B, Key.I, Key.U, Key.E -> if (cmd && !event.isShiftPressed) formattingToggleFor(event.key) else null
 			// Cmd+Option+Shift+V is Cocoa's Paste and Match Style; Cmd+Shift+V is the common alias.
 			Key.V -> when {
 				cmd && event.isShiftPressed -> Action.PasteAsPlainText
@@ -169,6 +181,19 @@ object MacKeyBindings : KeyBindings {
 			else -> commonCommandFor(event)
 		}
 	}
+}
+
+/**
+ * Bold, italic and underline sit on B, I and U everywhere. Inline code is on E (GitHub,
+ * Notion). Strikethrough, bound beside Cut, is on Shift+X (Google Docs on macOS, Slack,
+ * Teams): the other common choice, Shift+S, is Save As in most hosts.
+ */
+private fun formattingToggleFor(key: Key): Action? = when (key) {
+	Key.B -> Action.ToggleBold
+	Key.I -> Action.ToggleItalic
+	Key.U -> Action.ToggleUnderline
+	Key.E -> Action.ToggleInlineCode
+	else -> null
 }
 
 /** Chords that mean the same thing everywhere. */

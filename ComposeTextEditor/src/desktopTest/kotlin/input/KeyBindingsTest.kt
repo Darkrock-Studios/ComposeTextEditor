@@ -295,6 +295,30 @@ class KeyBindingsTest {
 	}
 
 	@Test
+	fun `formatting chords use the platform shortcut modifier`() {
+		val chords = listOf(
+			Triple(Key.B, false, Action.ToggleBold),
+			Triple(Key.I, false, Action.ToggleItalic),
+			Triple(Key.U, false, Action.ToggleUnderline),
+			Triple(Key.X, true, Action.ToggleStrikethrough),
+			Triple(Key.E, false, Action.ToggleInlineCode),
+		)
+		for ((key, shift, action) in chords) {
+			assertEquals(action, CtrlKeyBindings.commandFor(chord(key, ctrl = true, shift = shift)))
+			assertEquals(action, MacKeyBindings.commandFor(chord(key, meta = true, shift = shift)))
+			assertNull(CtrlKeyBindings.commandFor(chord(key, ctrl = true, alt = true, shift = shift)))
+			assertNull(CtrlKeyBindings.commandFor(chord(key, meta = true, shift = shift)))
+			assertNull(MacKeyBindings.commandFor(chord(key, ctrl = true, shift = shift)))
+		}
+		for (key in listOf(Key.B, Key.I, Key.U, Key.E)) {
+			assertNull(CtrlKeyBindings.commandFor(chord(key, ctrl = true, shift = true)))
+			assertNull(MacKeyBindings.commandFor(chord(key, meta = true, shift = true)))
+		}
+		assertEquals(Action.Cut, CtrlKeyBindings.commandFor(chord(Key.X, ctrl = true)))
+		assertEquals(Action.Cut, MacKeyBindings.commandFor(chord(Key.X, meta = true)))
+	}
+
+	@Test
 	fun `shift+v pastes as plain text`() {
 		assertEquals(
 			Action.PasteAsPlainText,

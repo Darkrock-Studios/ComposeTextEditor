@@ -336,11 +336,13 @@ fixes what users feel every minute.
 
 ## Phase 2: command completeness
 
-- [ ] **2.1 Formatting actions and chords.** [Opus] [Lane D] Built-in toggle
+- [x] **2.1 Formatting actions and chords.** [Opus] [Lane D] Built-in toggle
   actions for bold, italic, underline, strikethrough, and inline code, bound to
   the platform chords (ComposeTextEditor#22). Today `toggleBold` lives in the
   sample app (`sampleApp/.../BoldShortcut.kt`). Define mixed-selection
-  behaviour once in the library.
+  behaviour once in the library. `Action.ToggleBold` and friends on Ctrl/Cmd+B,
+  I, U, Shift+X (strikethrough) and E (inline code), all through
+  `TextEditorState.toggleSpanStyle`; see `docs/design/editor-actions.md`.
 - [x] **2.2 Paste as plain text.** [Opus] [Lane D] Ctrl/Cmd+Shift+V is
   currently a rich paste because `Key.V` ignores Shift (hammer-editor#929).
   `Action.PasteAsPlainText`, on Ctrl+Shift+V, Cmd+Shift+V, and Cocoa's
@@ -590,7 +592,9 @@ iOS Safari; browser tests run in CI.
   internal and does not group history.
 - [ ] **6.3 Style undo. C.** [Fable] [Lane G] A blind inverse over the same
   range, so undoing bold on a partly bold selection strips the bold that was
-  already there (`state/TextEditManager.kt`).
+  already there (`state/TextEditManager.kt`). The formatting chords (2.1)
+  apply over a partly styled selection, so this is one Ctrl+B and one undo
+  away.
 - [ ] **6.4 Restore the selection,** [Opus] [Lane G] not only the caret.
 - [ ] **6.5 Pasted HTML blocks are unrecorded. C.** [Opus] [Lane G] Redo should
   restore the text without its blocks. Inferred; no test covers it.

@@ -28,7 +28,7 @@ sealed interface EditorCommand {
 
 	/**
 	 * A named operation. Identified by [id] rather than enum membership so a host
-	 * can introduce its own (`Action("myapp.toggleBold", isEdit = true)`) and bind
+	 * can introduce its own (`Action("myapp.insertDate", isEdit = true)`) and bind
 	 * it from a custom [KeyBindings] exactly like a built-in. Ids are namespaced
 	 * by convention (`editor.` is the built-ins'), and equality is by [id] alone,
 	 * so two actions sharing an id are the same action however they disagree on
@@ -65,6 +65,16 @@ sealed interface EditorCommand {
 			val Outdent = Action("editor.outdent", isEdit = true)
 			val NewLine = Action("editor.newLine", isEdit = true)
 
+			// The formatting toggles apply the styles of the state's markdownConfiguration,
+			// so a markdown editor exports what they apply. Underline has no markdown form
+			// and toggles SpanStyle(textDecoration = TextDecoration.Underline). Each follows
+			// TextEditorState.toggleSpanStyle.
+			val ToggleBold = Action("editor.toggleBold", isEdit = true)
+			val ToggleItalic = Action("editor.toggleItalic", isEdit = true)
+			val ToggleUnderline = Action("editor.toggleUnderline", isEdit = true)
+			val ToggleStrikethrough = Action("editor.toggleStrikethrough", isEdit = true)
+			val ToggleInlineCode = Action("editor.toggleInlineCode", isEdit = true)
+
 			/**
 			 * The built-in carrying [id], or null for a host's own action. Identity is
 			 * the id alone, so a built-in's [isEdit] is taken from here, never from
@@ -91,6 +101,11 @@ sealed interface EditorCommand {
 				Indent,
 				Outdent,
 				NewLine,
+				ToggleBold,
+				ToggleItalic,
+				ToggleUnderline,
+				ToggleStrikethrough,
+				ToggleInlineCode,
 			)
 
 			private val builtinsById: Map<String, Action> = Builtins.associateBy { it.id }

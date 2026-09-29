@@ -165,19 +165,23 @@ Requires a layout with AltGr: switch the Windows input to Hungarian or Polish.
 2. Polish: AltGr+Z. **Expect:** `ż` typed, not an undo.
 3. With the US layout restored, plain Ctrl+X/V/Z still work.
 
-### 3.3 Custom action binding (#87)
+### 3.3 Formatting chords (#22, #87)
 
-The sample app registers Ctrl+B (Cmd+B on macOS) for bold as the worked example.
+Bold, italic, underline, strikethrough and inline code are built-in actions on
+Ctrl/Cmd+B, I, U, Shift+X and E.
 
 1. Markdown demo. Select a word, press Ctrl/Cmd+B. **Expect:** bold toggles on; the
    toolbar Bold button lights up.
 2. Press it again. **Expect:** bold toggles off.
-3. Toggle bold from the **toolbar button** and confirm the chord and the button agree
+3. Select a range that is partly bold and press Ctrl/Cmd+B. **Expect:** the whole range
+   becomes bold, and the toolbar Bold button lights only once it is.
+4. Toggle bold from the **toolbar button** and confirm the chord and the button agree
    (they share one implementation).
-4. Navigate back to the home menu and re-enter the demo a few times. **Expect:** the
-   chord still works and is registered exactly once (the `DisposableEffect`
-   unregister path).
-5. Press an unbound Ctrl chord (say Ctrl+J). **Expect:** nothing happens and the editor
+5. With no selection, press Ctrl/Cmd+B and type. **Expect:** the typed text is bold;
+   press it again and the text typed after is not.
+6. Repeat 1 and 2 with italic (I), strikethrough (Shift+X) and inline code (E). Export
+   the markdown. **Expect:** `*`, `~~` and backticks where the styles were applied.
+7. Press an unbound Ctrl chord (say Ctrl+J). **Expect:** nothing happens and the editor
    does not become unresponsive; the keystroke is not silently swallowed into text.
 
 ### 3.4 Read-only enforcement (#87)

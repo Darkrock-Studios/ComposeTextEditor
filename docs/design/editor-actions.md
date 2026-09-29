@@ -63,7 +63,7 @@ sealed interface EditorCommand {
 }
 ```
 
-A host writes `Action("myapp.toggleBold", isEdit = true)` and binds it from
+A host writes `Action("myapp.insertDate", isEdit = true)` and binds it from
 its own `KeyBindings`. Ids are namespaced by convention (`editor.`,
 `markdown.`, `myapp.`) and the registry is keyed by id string, not object
 identity, so a duplicate id is a detectable collision rather than a silent
@@ -104,10 +104,42 @@ what any of them mean.
 
 The core registers its built-ins (`BuiltinEditorActions`) when the state is
 constructed. Nothing else in the library registers an action:
-`MarkdownExtension` still exposes its toggles as plain functions, and a host
-that wants a markdown chord registers the action itself, as
-`sampleApp/BoldShortcut.kt` does. Having the extension register
-`markdown.toggleBold` and friends from its `init` is the obvious follow-up.
+`MarkdownExtension` still exposes its block toggles as plain functions, and a
+host that wants a chord for one registers the action itself.
+
+### Formatting toggles
+
+`editor.toggleBold`, `editor.toggleItalic`, `editor.toggleUnderline`,
+`editor.toggleStrikethrough` and `editor.toggleInlineCode` are built-ins. They
+apply the styles of the state's `markdownConfiguration`, which a
+`MarkdownExtension` keeps in sync with its own, so one action serves a plain
+editor and a markdown one, and a markdown editor exports what it applied.
+Underline has no markdown form and toggles
+`SpanStyle(textDecoration = TextDecoration.Underline)`.
+
+All five follow `TextEditorState.toggleSpanStyle`, which a toolbar calls too:
+
+- A selection carrying the style on every character loses it.
+- Any other selection, including a partly styled one, gains it throughout.
+- A collapsed caret toggles the style for the text typed next; the document is
+  untouched.
+
+Empty lines inside a selection do not count against "every character".
+`hasStyleThroughout` answers the same question for a toolbar's active state, so
+a button lights exactly when pressing it would remove the style. Styles match
+by equality, as `addStyleSpan` and `removeStyleSpan` do.
+
+| Action | Windows, Linux | macOS |
+| --- | --- | --- |
+| Bold | Ctrl+B | Cmd+B |
+| Italic | Ctrl+I | Cmd+I |
+| Underline | Ctrl+U | Cmd+U |
+| Strikethrough | Ctrl+Shift+X | Cmd+Shift+X |
+| Inline code | Ctrl+E | Cmd+E |
+
+Strikethrough follows Google Docs on macOS, Slack and Teams; the other common
+choice, Shift+S, is Save As in most hosts. Inline code follows GitHub and
+Notion.
 
 ### Resolution and consumption
 
@@ -281,12 +313,12 @@ Three seams, in the order you are likely to reach for them.
 chords you do not claim or you lose every built-in:
 
 ```kotlin
-val ToggleBold = EditorCommand.Action("myapp.toggleBold", isEdit = true)
+val InsertDate = EditorCommand.Action("myapp.insertDate", isEdit = true)
 
-state.actions.register(EditorActionSpec(ToggleBold) { it.state.toggleBold() })
+state.actions.register(EditorActionSpec(InsertDate) { it.state.insertStringAtCursor(today()) })
 
 val bindings = KeyBindings { event ->
-    if (event.key == Key.B && event.isCtrlShortcut) ToggleBold
+    if (event.key == Key.D && event.isCtrlShortcut) InsertDate
     else platformKeyBindings().commandFor(event)
 }
 
@@ -295,8 +327,8 @@ TextEditor(state = state, keyBindings = bindings)
 
 Use `isCtrlShortcut` rather than `isCtrlPressed`: Windows synthesizes AltGr as
 left-Ctrl plus right-Alt, so a bare Ctrl test steals the layout chords that type
-a character. `sampleApp/BoldShortcut.kt` is this worked out, including picking
-the modifier per platform.
+a character. On macOS shortcuts belong on Cmd (`isMetaPressed`); a host chord
+that should follow the platform checks `platformKeyBindings() === MacKeyBindings`.
 
 *Replace a built-in.* Register over its id. `editor.paste` bound to a paste that
 sanitizes the clipboard changes the chord, the context menu and anything else

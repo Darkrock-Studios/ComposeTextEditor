@@ -1,7 +1,9 @@
 package com.darkrockstudios.texteditor.input
 
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.style.TextDecoration
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.clipboard.ClipboardHelper
@@ -9,10 +11,12 @@ import com.darkrockstudios.texteditor.clipboard.applyHtmlPasteBlocks
 import com.darkrockstudios.texteditor.clipboard.readHtmlPasteDocument
 import com.darkrockstudios.texteditor.html.selectionAsHtml
 import com.darkrockstudios.texteditor.input.EditorCommand.Action
+import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
 import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.applyStyleForEditAt
 import com.darkrockstudios.texteditor.state.moveToNextWord
 import com.darkrockstudios.texteditor.state.moveToPreviousWord
+import com.darkrockstudios.texteditor.state.toggleSpanStyle
 import kotlinx.coroutines.launch
 
 /** One outdent level: a single hard tab, else up to this many spaces. */
@@ -77,6 +81,24 @@ internal fun EditorActionRegistry.registerBuiltinActions() {
 	register(EditorActionSpec(Action.Indent) { it.state.handleIndent() })
 	register(EditorActionSpec(Action.Outdent) { it.state.handleOutdent() })
 	register(EditorActionSpec(Action.NewLine) { it.state.handleEnter() })
+
+	registerFormattingToggle(Action.ToggleBold) { it.boldStyle }
+	registerFormattingToggle(Action.ToggleItalic) { it.italicStyle }
+	registerFormattingToggle(Action.ToggleUnderline) { UNDERLINE }
+	registerFormattingToggle(Action.ToggleStrikethrough) { it.strikethroughStyle }
+	registerFormattingToggle(Action.ToggleInlineCode) { it.codeStyle }
+}
+
+private val UNDERLINE = SpanStyle(textDecoration = TextDecoration.Underline)
+
+/** Reads the style at invocation, so a later markdown configuration change is honoured. */
+private fun EditorActionRegistry.registerFormattingToggle(
+	action: Action,
+	style: (MarkdownConfiguration) -> SpanStyle,
+) {
+	register(EditorActionSpec(action) { ctx ->
+		ctx.state.toggleSpanStyle(style(ctx.state.markdownConfiguration))
+	})
 }
 
 private fun EditorActionContext.copySelection() {
