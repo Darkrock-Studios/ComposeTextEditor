@@ -146,6 +146,8 @@ On macOS, verify each:
 | Option+Backspace | Delete previous word |
 | Cmd+Backspace | Delete to line start |
 | Option+8 | Types `{` (unclaimed Option chords must fall through to text) |
+| Shift+Return | New line |
+| Cmd+Return / Option+Return / Ctrl+Return | Nothing in the editor (left for the host to claim) |
 
 After **Option+Backspace** and **Cmd+Backspace**, press Cmd+Z. **Expect:** the deleted
 text returns *and the caret lands at the correct end of it* (this was the undo defect
@@ -180,6 +182,12 @@ The sample app registers Ctrl+B (Cmd+B on macOS) for bold as the worked example.
 1. RichTextView demo. Attempt paste (Ctrl+V), Ctrl+B, backspace, Enter.
 2. **Expect:** the document is unchanged by every one of them. Copy and selection still
    work.
+
+### 3.5 Enter chords (Windows and Linux)
+
+1. Shift+Enter. **Expect:** a new line.
+2. Ctrl+Enter, Ctrl+Shift+Enter, Alt+Enter. **Expect:** the document is unchanged; the
+   chord is left for the host.
 
 ## 4. Touch, focus and the soft keyboard (Android)
 

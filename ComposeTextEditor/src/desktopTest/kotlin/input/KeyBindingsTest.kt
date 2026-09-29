@@ -246,6 +246,22 @@ class KeyBindingsTest {
 	}
 
 	@Test
+	fun `only plain and shifted enter break the line`() {
+		for (bindings in listOf(CtrlKeyBindings, MacKeyBindings)) {
+			for (enter in listOf(Key.Enter, Key.NumPadEnter)) {
+				assertEquals(Action.NewLine, bindings.commandFor(chord(enter)))
+				assertEquals(Action.NewLine, bindings.commandFor(chord(enter, shift = true)))
+				assertNull(bindings.commandFor(chord(enter, ctrl = true)))
+				assertNull(bindings.commandFor(chord(enter, ctrl = true, shift = true)))
+				assertNull(bindings.commandFor(chord(enter, meta = true)))
+				assertNull(bindings.commandFor(chord(enter, meta = true, shift = true)))
+				assertNull(bindings.commandFor(chord(enter, alt = true)))
+				assertNull(bindings.commandFor(chord(enter, alt = true, shift = true)))
+			}
+		}
+	}
+
+	@Test
 	fun `numpad navigation keys mean the same as the dedicated keys on both platforms`() {
 		val numPadKeys = mapOf(
 			Key.NumPadDirectionUp to Key.DirectionUp,

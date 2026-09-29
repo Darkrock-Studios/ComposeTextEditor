@@ -86,7 +86,8 @@ object CtrlKeyBindings : KeyBindings {
 /**
  * macOS conventions: Cmd for shortcuts, Option+Arrow for word jumps, Cmd+Arrow for line and
  * document bounds. Ctrl never selects a different command than the unmodified key would, since
- * on macOS it belongs to the system and to the Emacs-style text bindings.
+ * on macOS it belongs to the system and to the Emacs-style text bindings. The exception is
+ * Enter, where every Ctrl, Cmd or Option chord is left for the host.
  *
  * Option is also the macOS compose modifier (Option+8 types '{'), so only the chords claimed here
  * may consume an Option event; everything else must fall through to
@@ -140,9 +141,16 @@ private fun commonCommandFor(event: KeyEvent): EditorCommand? = when (event.navi
 	Key.PageUp -> Motion.PageUp
 	Key.PageDown -> Motion.PageDown
 	Key.Tab -> if (event.isShiftPressed) Action.Outdent else Action.Indent
-	Key.Enter, Key.NumPadEnter -> Action.NewLine
+	Key.Enter, Key.NumPadEnter -> if (event.isEnterHostChord) null else Action.NewLine
 	else -> null
 }
+
+/**
+ * Enter with Ctrl, Cmd or Alt is left for the host to claim (send, submit, a page break).
+ * Shift+Enter still breaks the line, as it does in every native editor.
+ */
+private val KeyEvent.isEnterHostChord: Boolean
+	get() = isCtrlPressed || isMetaPressed || isAltPressed
 
 /**
  * The dedicated key a numpad key stands in for when Num Lock is off. Desktop Compose

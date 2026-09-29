@@ -355,8 +355,12 @@ fixes what users feel every minute.
 - [ ] **2.7 Layout-aware shortcuts. U.** [Fable] [Lane D] A BEPO user reports
   shortcuts follow physical QWERTY positions on desktop (hammer-editor#945).
   Confirm, then match on the produced character where the platform provides it.
-- [ ] **2.8 Enter with modifiers. S.** [Opus] [Lane D] Every Enter chord
+- [x] **2.8 Enter with modifiers. S.** [Opus] [Lane D] Every Enter chord
   inserts a newline. Leave Ctrl/Cmd+Enter unbound so hosts can claim it.
+  Enter and Shift+Enter break the line; any chord with Ctrl, Cmd or Alt is
+  unbound. A deliberate departure from `BasicTextField`, which also breaks the
+  line on Ctrl+Enter (Windows, Linux) and Option+Enter (macOS), and from Cocoa,
+  which breaks it on Ctrl+Return and Option+Return.
 - [ ] **2.9 Tab. C.** [Opus] [Lane D] Always inserts four spaces and is always
   consumed, so there is no keyboard way out of the editor. Make Tab and
   Shift+Tab list-aware, make the tab size and the insert-tab behaviour
