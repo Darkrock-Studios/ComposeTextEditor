@@ -288,10 +288,11 @@ fixes what users feel every minute.
   horizontal move or an edit.
 - [ ] **1.3 Document edges. R.** [Opus] [Lane A] Up on the first row and Down
   on the last row do nothing. Native moves to document start and end.
-- [ ] **1.4 Collapse the selection on an unshifted arrow. R.** [Opus] [Lane A]
+- [x] **1.4 Collapse the selection on an unshifted arrow. R.** [Opus] [Lane A]
   Left or Right with a selection moves one character from the caret
   (`input/TextEditorKeyCommandHandler.kt`, `moveCursor`). Native collapses to
   the selection's start or end without moving further.
+  Word motions and Up/Down still move from the caret, as `BasicTextField`'s do.
 - [ ] **1.5 Word motion and word selection. C, U.** [Opus] [Lane A]
   - Line end is not a boundary: Ctrl+Right from the last word of a line skips
     the first word of the next, and Ctrl+Delete deletes it
@@ -726,7 +727,8 @@ iOS Safari; browser tests run in CI.
 
 - [ ] **7.5** [Fable] [Lane A] Arrow keys are logical, so visually inverted in
   right-to-left text. `BasicTextField` is logical too, so it is no reference
-  here.
+  here. Collapsing a selection with Left or Right (1.4) goes to its logical start
+  or end; `BasicTextField` swaps the two in a right-to-left paragraph.
 - [ ] **7.6** [Fable] [Lane C] Selection draws one rect per row from x(start)
   to x(end); wrong in right-to-left, and mixed text needs several rects.
 - [ ] **7.7** [Fable] [Lane C] Underline boxes (spell check, composing, links)

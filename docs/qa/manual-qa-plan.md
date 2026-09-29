@@ -200,6 +200,14 @@ Ctrl/Cmd+B, I, U, Shift+X and E.
 | Shift+Enter | New line |
 | Ctrl+Enter / Ctrl+Shift+Enter / Alt+Enter | Nothing in the editor (left for the host to claim) |
 
+### 3.6 Caret motion
+
+On every desktop platform; the macOS chords are in 3.1.
+
+| Keys | Expected |
+| --- | --- |
+| Left / Right with a selection | The selection collapses to its start / end; the caret moves no further |
+
 ## 4. Touch, focus and the soft keyboard (Android)
 
 Guards #88, #91. **Android device or emulator required.** Use the Markdown demo, which

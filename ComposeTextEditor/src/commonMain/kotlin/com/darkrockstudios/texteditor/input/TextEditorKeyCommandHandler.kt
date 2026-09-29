@@ -113,7 +113,15 @@ internal class TextEditorKeyCommandHandler(
 
 	private fun moveCursor(motion: Motion, state: TextEditorState, extendSelection: Boolean) {
 		val initialPosition = state.cursorPosition
-		if (!extendSelection) state.selector.clearSelection()
+		if (!extendSelection) {
+			val selection = state.selector.selection
+			state.selector.clearSelection()
+			// Native editors collapse onto the selection's edge without moving further.
+			if (selection != null && (motion == Motion.Left || motion == Motion.Right)) {
+				state.cursor.updatePosition(if (motion == Motion.Left) selection.start else selection.end)
+				return
+			}
+		}
 
 		when (motion) {
 			Motion.Left -> state.cursor.moveLeft()

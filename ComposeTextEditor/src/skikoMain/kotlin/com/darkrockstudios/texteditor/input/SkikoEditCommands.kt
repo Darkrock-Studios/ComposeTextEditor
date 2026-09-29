@@ -58,7 +58,7 @@ internal fun TextEditorState.imeBackspace() {
 
 /**
  * Compose's `MoveCursorCommand`: collapse any selection to its start, then step the
- * caret [amount] characters, as the arrow keys do.
+ * caret [amount] characters.
  */
 internal fun TextEditorState.imeMoveCursor(amount: Int) {
 	val start = selectionAsTextRange().min

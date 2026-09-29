@@ -177,14 +177,12 @@ class BasicTextFieldParityTest {
 	fun `left with a selection collapses to its start`() = assertMatchesNative(
 		start = EditSnapshot("Hello world", anchor = 2, caret = 7),
 		strokes = listOf(Left),
-		divergesUntil = "1.4",
 	)
 
 	@Test
 	fun `right with a selection collapses to its end`() = assertMatchesNative(
 		start = EditSnapshot("Hello world", anchor = 7, caret = 2),
 		strokes = listOf(Right),
-		divergesUntil = "1.4",
 	)
 
 	@Test
