@@ -44,8 +44,7 @@ class EditorStateFuzzTest {
 			checkCheapInvariants(state)
 		}
 
-		// canUndo never refreshes without layout bookkeeping; undo() no-ops when drained.
-		repeat(300) { state.undo() }
+		while (state.canUndo) state.undo()
 		assertEquals(
 			origin,
 			snapshotOf(state),

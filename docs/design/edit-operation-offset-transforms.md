@@ -144,6 +144,12 @@ selection clearing, layout derivation, and edit announcement all follow the
 exact rules above. An insert undoes as a delete of the inserted range, a delete
 as an insert of the captured text, a replace as the mirrored replace;
 `cursorBefore`/`cursorAfter` swap roles. Redo replays the original operation.
+A group entry (every operation of one `editGroup`, or of any transaction that
+recorded more than one) undoes by inverting its operations last to first
+inside a single transaction, so each inverse runs against exactly the document
+the next-later operation left; redo replays them first to last. The group's
+caret is the first operation's `cursorBefore` and the last one's
+`cursorAfter`.
 
 Positions in history are stored in the coordinates of the revision the
 operation was built against; replaying through the pipeline is what keeps them

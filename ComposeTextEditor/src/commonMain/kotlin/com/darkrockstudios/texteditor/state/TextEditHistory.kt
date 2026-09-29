@@ -1,19 +1,62 @@
 package com.darkrockstudios.texteditor.state
 
 import androidx.compose.ui.text.AnnotatedString
+import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.richstyle.RichSpan
 import com.darkrockstudios.texteditor.richstyle.RichSpanStyle
 
-// History manager for undo/redo support
+/**
+ * The undo and redo stacks.
+ *
+ * Edits recorded while a group is open ([beginGroup] / [endGroup]) are staged
+ * and land as one [HistoryEntry.Group] when the outermost group commits, so
+ * every edit inside one transaction is one undo step. A group of a single edit
+ * is recorded as that edit, so typing keeps coalescing.
+ */
 class TextEditHistory(private val maxHistorySize: Int = 1000) {
 	private val undoQueue = ArrayDeque<HistoryEntry>(maxHistorySize)
 	private val redoQueue = ArrayDeque<HistoryEntry>(maxHistorySize)
 
+	private var groupDepth = 0
+	private val staged = mutableListOf<HistoryEntry.Edit>()
+
 	fun hasUndoLevels(): Boolean = undoQueue.isNotEmpty()
 	fun hasRedoLevels(): Boolean = redoQueue.isNotEmpty()
 
+	/** True while a group is open and recorded edits are being staged. */
+	internal val isGrouping: Boolean get() = groupDepth > 0
+
 	fun recordEdit(operation: TextEditOperation, metadata: OperationMetadata) {
-		val merged = coalesceWithLast(operation, metadata)
+		val entry = HistoryEntry.Edit(operation, metadata, operation.isSingleTypedChar(metadata))
+		if (groupDepth > 0) staged += entry else push(entry)
+	}
+
+	/** Opens a group; nested calls join the open one. */
+	internal fun beginGroup() {
+		groupDepth++
+	}
+
+	/**
+	 * Closes the innermost group. When the outermost closes with [commit], its
+	 * staged edits are recorded as one step; without, they are dropped, because
+	 * they describe a revision that was rolled back.
+	 */
+	internal fun endGroup(commit: Boolean) {
+		check(groupDepth > 0) { "endGroup without beginGroup" }
+		groupDepth--
+		if (groupDepth > 0) return
+		val entries = staged.toList()
+		staged.clear()
+		if (!commit) return
+		when (entries.size) {
+			0 -> Unit
+			1 -> push(entries.single())
+			else -> push(HistoryEntry.Group(entries))
+		}
+	}
+
+	private fun push(entry: HistoryEntry) {
+		val merged = coalesceWithLast(entry)
 		if (merged != null) {
 			undoQueue.removeLast()
 			undoQueue.addLast(merged)
@@ -21,9 +64,27 @@ class TextEditHistory(private val maxHistorySize: Int = 1000) {
 			if (undoQueue.size >= maxHistorySize) {
 				undoQueue.removeFirstOrNull()
 			}
-			undoQueue.addLast(HistoryEntry(operation, metadata, operation.isSingleTypedChar(metadata)))
+			undoQueue.addLast(entry)
 		}
 		redoQueue.clear() // Clear redo queue when new edit is made
+	}
+
+	/**
+	 * A single typed character continues the last entry's typing run. The run may
+	 * be the last edit of a group (a character typed over a selection), in which
+	 * case the group grows with it and stays one step.
+	 */
+	private fun coalesceWithLast(entry: HistoryEntry): HistoryEntry? {
+		val edit = entry as? HistoryEntry.Edit ?: return null
+		return when (val last = undoQueue.lastOrNull()) {
+			null -> null
+			is HistoryEntry.Edit -> coalesceWithLast(last, edit.operation, edit.metadata)
+			is HistoryEntry.Group -> {
+				val merged = coalesceWithLast(last.entries.last(), edit.operation, edit.metadata)
+					?: return null
+				last.copy(entries = last.entries.dropLast(1) + merged)
+			}
+		}
 	}
 
 	/**
@@ -33,10 +94,10 @@ class TextEditHistory(private val maxHistorySize: Int = 1000) {
 	 * never grows out of a multi-character operation like a paste.
 	 */
 	private fun coalesceWithLast(
+		last: HistoryEntry.Edit,
 		operation: TextEditOperation,
 		metadata: OperationMetadata,
-	): HistoryEntry? {
-		val last = undoQueue.lastOrNull() ?: return null
+	): HistoryEntry.Edit? {
 		if (!last.typingRun) return null
 		return when {
 			operation is TextEditOperation.Insert && last.operation is TextEditOperation.Insert ->
@@ -50,10 +111,10 @@ class TextEditHistory(private val maxHistorySize: Int = 1000) {
 	}
 
 	private fun coalesceInsert(
-		last: HistoryEntry,
+		last: HistoryEntry.Edit,
 		previous: TextEditOperation.Insert,
 		operation: TextEditOperation.Insert,
-	): HistoryEntry? {
+	): HistoryEntry.Edit? {
 		val newChar = operation.text.text.singleOrNull() ?: return null
 		if (newChar == '\n') return null
 		if (operation.position.line != previous.position.line) return null
@@ -62,7 +123,7 @@ class TextEditHistory(private val maxHistorySize: Int = 1000) {
 		// character begins the next word, so undo peels one word at a time.
 		val runLast = previous.text.text.last()
 		if (runLast.isWhitespace() && !newChar.isWhitespace()) return null
-		return HistoryEntry(
+		return HistoryEntry.Edit(
 			operation = TextEditOperation.Insert(
 				position = previous.position,
 				text = previous.text + operation.text,
@@ -75,11 +136,11 @@ class TextEditHistory(private val maxHistorySize: Int = 1000) {
 	}
 
 	private fun coalesceDelete(
-		last: HistoryEntry,
+		last: HistoryEntry.Edit,
 		previous: TextEditOperation.Delete,
 		operation: TextEditOperation.Delete,
 		metadata: OperationMetadata,
-	): HistoryEntry? {
+	): HistoryEntry.Edit? {
 		val newText = metadata.deletedText ?: return null
 		val newChar = newText.text.singleOrNull() ?: return null
 		if (newChar == '\n') return null
@@ -105,7 +166,7 @@ class TextEditHistory(private val maxHistorySize: Int = 1000) {
 			)
 		}
 		val mergedText = if (backward) newText + runText else runText + newText
-		return HistoryEntry(
+		return HistoryEntry.Edit(
 			operation = TextEditOperation.Delete(
 				range = mergedRange,
 				cursorBefore = previous.cursorBefore,
@@ -133,21 +194,26 @@ class TextEditHistory(private val maxHistorySize: Int = 1000) {
 		return redoQueue.removeLastOrNull()?.also { undoQueue.addLast(it) }
 	}
 
+	/** Empties both queues and whatever the open group has staged. */
 	fun clear() {
 		undoQueue.clear()
 		redoQueue.clear()
+		staged.clear()
 	}
 
-	/** Empties both queues, returning an action that puts their entries back. */
+	/** Empties both queues and the staged edits, returning an action that puts them back. */
 	internal fun clearRestorably(): () -> Unit {
 		val undo = undoQueue.toList()
 		val redo = redoQueue.toList()
+		val pending = staged.toList()
 		clear()
 		return {
 			undoQueue.clear()
 			undoQueue.addAll(undo)
 			redoQueue.clear()
 			redoQueue.addAll(redo)
+			staged.clear()
+			staged.addAll(pending)
 		}
 	}
 }
@@ -176,9 +242,27 @@ data class OperationMetadata(
 	val preservedRichSpans: List<PreservedRichSpan> = emptyList(),
 )
 
-data class HistoryEntry(
-	val operation: TextEditOperation,
-	val metadata: OperationMetadata,
-	/** True for entries built from single typed/backspaced characters, which may coalesce. */
-	val typingRun: Boolean = false,
-)
+/** One undo step: a single recorded operation, or every operation of one [TextEditorState.editGroup]. */
+sealed class HistoryEntry {
+	/** Where the caret was before the step, which undo returns it to. */
+	abstract val cursorBefore: CharLineOffset
+
+	/** Where the caret was after the step, which redo returns it to. */
+	abstract val cursorAfter: CharLineOffset
+
+	data class Edit(
+		val operation: TextEditOperation,
+		val metadata: OperationMetadata,
+		/** True for entries built from single typed/backspaced characters, which may coalesce. */
+		val typingRun: Boolean = false,
+	) : HistoryEntry() {
+		override val cursorBefore: CharLineOffset get() = operation.cursorBefore
+		override val cursorAfter: CharLineOffset get() = operation.cursorAfter
+	}
+
+	/** The edits of one group, in the order they were applied. Never empty, never nested. */
+	data class Group(val entries: List<Edit>) : HistoryEntry() {
+		override val cursorBefore: CharLineOffset get() = entries.first().cursorBefore
+		override val cursorAfter: CharLineOffset get() = entries.last().cursorAfter
+	}
+}

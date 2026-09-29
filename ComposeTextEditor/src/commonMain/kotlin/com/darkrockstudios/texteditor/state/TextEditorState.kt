@@ -234,16 +234,25 @@ class TextEditorState(
 	 * paired with span line indices from the previous revision, which serializes
 	 * block markers onto the wrong lines.
 	 *
+	 * The revision is also one undo step: edits recorded inside are staged by the
+	 * history and land together when the transaction commits (see [editGroup]).
+	 *
 	 * Re-entrant: a nested call joins the outer transaction and commits with it. A
 	 * throwing [block] discards the draft and leaves [content] on the previous
 	 * revision, because a half-applied revision would keep serializing block markers
-	 * onto the wrong lines long after the failure rather than only during it. State
-	 * outside the document that the block changed is put back by its [onRollback]
-	 * actions.
+	 * onto the wrong lines long after the failure rather than only during it. The
+	 * caret and selection return to where they were, other state outside the
+	 * document is put back by the block's [onRollback] actions, and the staged
+	 * history entries are dropped with the draft.
 	 */
 	internal fun <T> withAtomicEdit(block: () -> T): T {
 		if (draft != null) return block()
 		draft = content
+		editManager.history.beginGroup()
+		// The caret and selection live outside the draft; a rollback puts them back
+		// too, or they would address the revision that was discarded.
+		val cursorBefore = cursor.position
+		val selectionBefore = selector.selection
 		var committed = false
 		try {
 			val result = block()
@@ -262,6 +271,8 @@ class TextEditorState(
 			draft = null
 			committed = true
 			pendingRollbackActions.clear()
+			editManager.history.endGroup(commit = true)
+			refreshHistoryFlags()
 			// Flush the deferred relayout, then the cursor scroll that must read the
 			// fresh offsets, then the commit actions that announce the edit. All of
 			// this runs only on the committing path.
@@ -279,8 +290,8 @@ class TextEditorState(
 			return result
 		} finally {
 			// The throwing path discards everything staged: the draft, the relayout,
-			// the scroll, and the queued actions, which would announce an edit that
-			// no longer exists.
+			// the scroll, the history entries, and the queued actions, which would
+			// announce an edit that no longer exists.
 			draft = null
 			pendingLayoutUpdate = null
 			pendingCursorScroll = false
@@ -289,8 +300,42 @@ class TextEditorState(
 				val rollbacks = pendingRollbackActions.asReversed().toList()
 				pendingRollbackActions.clear()
 				rollbacks.forEach { it() }
+				// After the rollbacks: a document load's rollback restores the entries
+				// it cleared, staged ones included, and those go with the draft too.
+				editManager.history.endGroup(commit = false)
+				if (selectionBefore != null) {
+					selector.updateSelection(selectionBefore.start, selectionBefore.end)
+				} else {
+					selector.clearSelection()
+				}
+				cursor.updatePosition(cursorBefore)
 			}
 		}
+	}
+
+	/**
+	 * Runs [block] as one undo step and one published revision: every edit made
+	 * inside, through any of the editing functions, is reverted by a single [undo]
+	 * and re-applied by a single [redo], which restore the text, the spans, and the
+	 * caret from before and after the group.
+	 *
+	 * Nested groups join the outermost one. A group of one typed character
+	 * coalesces with surrounding typing as the character alone would, and typing
+	 * right after a group that ended in a typed character (a character typed over a
+	 * selection) continues that group's step. If [block] throws, the document is
+	 * left as it was, nothing is recorded, and the redo stack is untouched. [canUndo]
+	 * and [canRedo] reflect the step once the group has committed, not before, and
+	 * calling [undo] or [redo] inside the block is an error.
+	 *
+	 * The built-in compound edits (a rich paste, a link) already run in a group; a
+	 * host uses this for its own, such as a find-and-replace-all or a template
+	 * insertion.
+	 */
+	fun <T> editGroup(block: () -> T): T = withAtomicEdit(block)
+
+	private fun refreshHistoryFlags() {
+		_canUndo = editManager.history.hasUndoLevels()
+		_canRedo = editManager.history.hasRedoLevels()
 	}
 
 	/**
@@ -624,12 +669,10 @@ class TextEditorState(
 	 */
 	private fun clearHistory() {
 		val restore = editManager.history.clearRestorably()
-		_canUndo = false
-		_canRedo = false
+		refreshHistoryFlags()
 		onRollback {
 			restore()
-			_canUndo = editManager.history.hasUndoLevels()
-			_canRedo = editManager.history.hasRedoLevels()
+			refreshHistoryFlags()
 		}
 	}
 
@@ -1339,9 +1382,6 @@ class TextEditorState(
 		scrollManager.updateContentHeight(ceil(yOffset).toInt())
 		lastLayoutLineCount = textLines.size
 		lastLayoutGeneration = layoutInputGeneration
-
-		_canUndo = editManager.history.hasUndoLevels()
-		_canRedo = editManager.history.hasRedoLevels()
 	}
 
 	/**

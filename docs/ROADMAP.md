@@ -998,8 +998,11 @@ iOS Safari; browser tests run in CI.
   items (N+1), find's replace-all (one per match), `setLink` (two), IME
   composition updates (several per word, because only Insert and Delete
   coalesce and composition is a Replace).
-- [ ] **6.2 A public grouping API.** [Fable] [Lane G] `withAtomicEdit` is
-  internal and does not group history.
+- [x] **6.2 A public grouping API.** [Fable] [Lane G] `withAtomicEdit` is
+  internal and does not group history. Done: `TextEditorState.editGroup { }`
+  runs its block as one revision and one undo step; every transaction now
+  stages its recorded operations and lands them as one history entry at
+  commit. `canUndo`/`canRedo` refresh at every commit rather than at layout.
 - [ ] **6.3 Style undo. C.** [Fable] [Lane G] A blind inverse over the same
   range, so undoing bold on a partly bold selection strips the bold that was
   already there (`state/TextEditManager.kt`). The formatting chords (2.1)

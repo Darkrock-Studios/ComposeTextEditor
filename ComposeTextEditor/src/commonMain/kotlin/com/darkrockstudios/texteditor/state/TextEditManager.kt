@@ -736,15 +736,36 @@ class TextEditManager(private val state: TextEditorState) {
 	}
 
 	fun undo() {
-		history.undo()?.let { entry ->
-			when (entry.operation) {
-				is TextEditOperation.Insert -> undoInsert(entry.operation, entry)
-				is TextEditOperation.Delete -> undoDelete(entry, entry.operation)
-				is TextEditOperation.Replace -> undoReplace(entry.operation, entry)
-				is TextEditOperation.StyleSpan -> undoStyleSpan(entry.operation)
-				is TextEditOperation.RichSpan -> undoRichSpan(entry.operation)
-				is TextEditOperation.LineBlock -> undoLineBlock(entry.operation)
+		check(!history.isGrouping) { "undo inside an edit group" }
+		val entry = history.undo() ?: return
+		var done = false
+		try {
+			// One revision for the whole step: a group's edits are reverted last to
+			// first, each against the document the next-later one left behind.
+			state.withAtomicEdit {
+				when (entry) {
+					is HistoryEntry.Edit -> undoEdit(entry)
+					is HistoryEntry.Group -> {
+						entry.entries.asReversed().forEach(::undoEdit)
+						state.cursor.updatePosition(entry.cursorBefore)
+					}
+				}
 			}
+			done = true
+		} finally {
+			// The document was rolled back, so the step is still applied: put it back.
+			if (!done) history.redo()
+		}
+	}
+
+	private fun undoEdit(entry: HistoryEntry.Edit) {
+		when (val operation = entry.operation) {
+			is TextEditOperation.Insert -> undoInsert(operation, entry)
+			is TextEditOperation.Delete -> undoDelete(entry, operation)
+			is TextEditOperation.Replace -> undoReplace(operation, entry)
+			is TextEditOperation.StyleSpan -> undoStyleSpan(operation)
+			is TextEditOperation.RichSpan -> undoRichSpan(operation)
+			is TextEditOperation.LineBlock -> undoLineBlock(operation)
 		}
 	}
 
@@ -756,15 +777,14 @@ class TextEditManager(private val state: TextEditorState) {
 			state.cursor.releaseManualStyles()
 			state.cursor.updatePosition(operation.cursorBefore)
 			state.invalidateCopiedRichSpans()
-			// Requested inside the transaction so the commit flushes one pass; this
-			// also refreshes canUndo/canRedo after the history pop.
+			// Requested inside the transaction so the commit flushes one pass.
 			state.updateBookKeeping(lineBlockLayoutUpdate(operation.lines))
 		}
 	}
 
 	private fun undoReplace(
 		operation: TextEditOperation.Replace,
-		entry: HistoryEntry
+		entry: HistoryEntry.Edit
 	) {
 		// Calculate the current range of the replaced text
 		val undoRange = if (operation.newText.contains('\n')) {
@@ -811,7 +831,7 @@ class TextEditManager(private val state: TextEditorState) {
 	}
 
 	private fun undoDelete(
-		entry: HistoryEntry,
+		entry: HistoryEntry.Edit,
 		operation: TextEditOperation.Delete
 	) {
 		entry.metadata.deletedText?.let { deletedText ->
@@ -834,7 +854,7 @@ class TextEditManager(private val state: TextEditorState) {
 
 	private fun undoInsert(
 		operation: TextEditOperation.Insert,
-		entry: HistoryEntry
+		entry: HistoryEntry.Edit
 	) {
 		val endPosition = if (operation.text.contains('\n')) {
 			val lines = operation.text.text.split('\n')
@@ -887,8 +907,21 @@ class TextEditManager(private val state: TextEditorState) {
 	}
 
 	fun redo() {
-		history.redo()?.let { entry ->
-			applyOperation(entry.operation, addToHistory = false)
+		check(!history.isGrouping) { "redo inside an edit group" }
+		val entry = history.redo() ?: return
+		var done = false
+		try {
+			state.withAtomicEdit {
+				when (entry) {
+					is HistoryEntry.Edit -> applyOperation(entry.operation, addToHistory = false)
+					is HistoryEntry.Group -> entry.entries.forEach {
+						applyOperation(it.operation, addToHistory = false)
+					}
+				}
+			}
+			done = true
+		} finally {
+			if (!done) history.undo()
 		}
 	}
 

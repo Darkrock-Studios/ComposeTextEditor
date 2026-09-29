@@ -89,10 +89,20 @@ announce the operation on `editOperations`. Code that mutates lines without
 going through an operation is a bug by definition; it would bypass history,
 span re-anchoring, and the edit stream all at once.
 
-`TextEditHistory` holds the undo and redo stacks. Each entry pairs the
-operation with the `OperationMetadata` needed to reverse it (deleted text,
-deleted spans). Consecutive single-character typing and backspacing coalesce
-into wordwise runs, so undo peels words, not keystrokes.
+`TextEditHistory` holds the undo and redo stacks. An entry is one recorded
+operation paired with the `OperationMetadata` needed to reverse it (deleted
+text, deleted spans), or a group of them. Consecutive single-character typing
+and backspacing coalesce into wordwise runs, so undo peels words, not
+keystrokes.
+
+One transaction is one undo step. Operations recorded inside a
+`withAtomicEdit` are staged and land as a single group entry when the
+outermost transaction commits (a group of one is recorded as that operation,
+so typing keeps coalescing); a throwing transaction drops them with the
+draft. `TextEditorState.editGroup` is the public face of this: a host wraps a
+compound edit in it and gets one undo step that restores text, spans, and
+caret. Undo of a group reverts its operations last to first inside one
+transaction, redo replays them first to last.
 
 How positions (cursor, selection, spans, history) are carried across edits:
 [design/edit-operation-offset-transforms.md](design/edit-operation-offset-transforms.md).
@@ -262,12 +272,15 @@ lines, and clears undo history like any other document load. `setText` keeps
 only character-level spans. Both announce the swap by bumping `documentGeneration`
 once it commits, which is how spell check knows to re-scan.
 
-Edits that must land together run inside `TextEditorState.withAtomicEdit`. The
-transaction accumulates mutations in a draft and publishes them as one revision
-at commit, after line-block normalization. A throwing transaction discards the
-draft along with everything staged against it: the deferred relayout, the
-cursor scroll, and the queued `editOperations` announcements. Nothing observes
-a half-applied edit, and nothing announces an edit that never landed.
+Edits that must land together run inside `TextEditorState.withAtomicEdit`
+(public as `editGroup`). The transaction accumulates mutations in a draft and
+publishes them as one revision at commit, after line-block normalization, and
+records the operations made inside it as one undo step. A throwing transaction
+discards the draft along with everything staged against it: the deferred
+relayout, the cursor scroll, the history entries, and the queued
+`editOperations` announcements, and puts the caret and selection back where
+they were. Nothing observes a half-applied edit, and nothing announces or
+remembers an edit that never landed.
 
 ## Layout: the deferred, incremental relayout pass
 

@@ -356,9 +356,10 @@ or disables pasting replaces or unregisters both.
 *Intercept an edit.* Implement `EditBehavior` and add it to
 `state.editBehaviors`. Use this, not an action, when the thing you are reacting
 to has no chord: an IME commits a newline without ever producing a key event.
-Note that `withAtomicEdit` and the raw primitives are `internal`, so an
-out-of-module behavior builds on the public edit API (`insertStringAtCursor`,
-`delete`, `replace`) and cannot wrap a primitive in its own transaction.
+An out-of-module behavior builds on the public edit API
+(`insertStringAtCursor`, `delete`, `replace`) and wraps a compound edit in
+`state.editGroup { }`, which makes it one revision and one undo step; the raw
+primitives stay `internal`.
 
 ## Known limitations and follow-ups
 
@@ -369,10 +370,6 @@ out-of-module behavior builds on the public edit API (`insertStringAtCursor`,
 - Behaviors are consulted for newline, backspace and forward delete only.
   Typed-character interception (auto-pairing quotes and brackets) is the
   obvious next hook and is deliberately out of scope until something needs it.
-- `EditBehavior` is public but the transactional primitives it would want are
-  not. An out-of-module behavior can claim an edit and can mutate through the
-  public API, but cannot compose several mutations into one revision. Widen
-  this when a host asks for it, rather than guessing at the shape now.
 - The IME routing is unverified on real hardware. See "Device verification
   still owed" above; that list should be worked through before a release ships
   this.
