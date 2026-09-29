@@ -208,6 +208,8 @@ On every desktop platform; the macOS chords are in 3.1.
 | --- | --- |
 | Left / Right with a selection | The selection collapses to its start / end; the caret moves no further |
 | Up on the first row / Down on the last row | Document start / end; with Shift, selects to it |
+| Up / Down through a short line, in a proportional font | The caret keeps its x on longer lines past the short one; a Left, Right, click or edit starts a new column |
+| Up / Down in a wrapped paragraph | One visual row at a time, never skipping a row |
 
 ## 4. Touch, focus and the soft keyboard (Android)
 

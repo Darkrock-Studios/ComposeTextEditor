@@ -49,6 +49,7 @@ internal class TextEditorKeyCommandHandler(
 		if (keyEvent.type != KeyEventType.KeyDown) return false
 
 		val command = keyBindings.commandFor(keyEvent) ?: return false
+		if (command !is Motion || !command.isVertical) state.cursor.forgetVerticalGoal()
 
 		return when (command) {
 			is Motion -> {
@@ -142,6 +143,9 @@ internal class TextEditorKeyCommandHandler(
 			state.selector.extendSelection(initialPosition, state.cursorPosition)
 		}
 	}
+
+	private val Motion.isVertical: Boolean
+		get() = this == Motion.Up || this == Motion.Down || this == Motion.PageUp || this == Motion.PageDown
 
 	/**
 	 * Converts a Unicode code point to a String.

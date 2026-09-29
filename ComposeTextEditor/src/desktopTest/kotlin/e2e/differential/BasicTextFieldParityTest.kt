@@ -87,14 +87,12 @@ class BasicTextFieldParityTest {
 	fun `down keeps the x position across proportional glyphs`() = assertMatchesNative(
 		start = EditSnapshot("iiiiiiiiii\nWWWWWWWWWW", caret = 8),
 		strokes = listOf(Down),
-		divergesUntil = "1.2",
 	)
 
 	@Test
 	fun `down and up pass through a short line and keep the goal column`() = assertMatchesNative(
 		start = EditSnapshot("1234567890\n12\n1234567890", caret = 8),
 		strokes = listOf(Down, Down, Up, Up),
-		divergesUntil = "1.2",
 	)
 
 	@Test
@@ -102,7 +100,6 @@ class BasicTextFieldParityTest {
 		start = EditSnapshot("alpha beta gamma delta epsilon zeta eta theta", caret = 2),
 		strokes = listOf(Down, Down, Up),
 		width = 120.dp,
-		divergesUntil = "1.2",
 	)
 
 	@Test

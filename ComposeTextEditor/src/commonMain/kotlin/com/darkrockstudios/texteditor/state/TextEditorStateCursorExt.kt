@@ -1,6 +1,8 @@
 package com.darkrockstudios.texteditor.state
 
+import androidx.compose.ui.geometry.Offset
 import com.darkrockstudios.texteditor.CharLineOffset
+import com.darkrockstudios.texteditor.LineWrap
 
 // The layout can lag the text (it is skipped while the viewport is collapsed), so the
 // cursor may be missing from lineOffsets, and a wrap's line may be missing from the
@@ -12,38 +14,50 @@ internal fun TextEditorState.moveCursorUp() {
 	when {
 		cursorPosition.line == 0 && (row == null || row.virtualLineIndex == 0) -> moveToDocumentStart()
 		index <= 0 -> cursor.updatePosition(cursorPosition.copy(line = cursorPosition.line - 1))
-		else -> {
-			val previousRow = lineOffsets[index - 1]
-			val localCharIndex = cursorPosition.char - row!!.wrapStartsAtIndex
-			cursor.updatePosition(
-				CharLineOffset(
-					line = previousRow.line,
-					char = previousRow.wrapStartsAtIndex + localCharIndex
-				)
-			)
-		}
+		else -> moveCursorToRow(index - 1)
 	}
 }
 
 internal fun TextEditorState.moveCursorDown() {
 	val index = getWrappedLineIndex(cursorPosition)
-	val row = lineOffsets.getOrNull(index)
-	val nextRow = if (row == null) null else lineOffsets.getOrNull(index + 1)
+	val nextRow = if (index < 0) null else lineOffsets.getOrNull(index + 1)
 	when {
 		cursorPosition.line == textLines.lastIndex && (nextRow == null || nextRow.line != cursorPosition.line) ->
 			moveToDocumentEnd()
 
 		nextRow == null -> cursor.updatePosition(cursorPosition.copy(line = cursorPosition.line + 1))
-		else -> {
-			val localCharIndex = cursorPosition.char - row!!.wrapStartsAtIndex
-			cursor.updatePosition(
-				CharLineOffset(
-					line = nextRow.line,
-					char = nextRow.wrapStartsAtIndex + localCharIndex
-				)
-			)
-		}
+		else -> moveCursorToRow(index + 1)
 	}
+}
+
+/**
+ * Moves the caret onto the visual row at [rowIndex] in [lineOffsets], at the x the
+ * current run of vertical moves aims for (the caret's own x when a run starts).
+ */
+private fun TextEditorState.moveCursorToRow(rowIndex: Int) {
+	val goalX = cursor.verticalGoalX ?: getPositionForOffset(cursorPosition).position.x
+	val row = lineOffsets[rowIndex]
+	cursor.updatePosition(CharLineOffset(row.line, row.charAtX(goalX)))
+	cursor.rememberVerticalGoalX(goalX)
+}
+
+/**
+ * The caret position on this row nearest to [x]. On a row that wraps, that stops
+ * short of the wrap, since a position on the wrap draws on the next row.
+ */
+private fun LineWrap.charAtX(x: Float): Int {
+	val layout = textLayoutResult
+	val row = virtualLineIndex
+	val rowEnd = if (row == layout.lineCount - 1) {
+		layout.getLineEnd(row)
+	} else {
+		val wrap = layout.getLineEnd(row)
+		val text = layout.layoutInput.text
+		val step = if (wrap >= 2 && text[wrap - 1].isLowSurrogate() && text[wrap - 2].isHighSurrogate()) 2 else 1
+		maxOf(wrapStartsAtIndex, wrap - step)
+	}
+	val y = (layout.getLineTop(row) + layout.getLineBottom(row)) / 2f
+	return layout.getOffsetForPosition(Offset(x, y)).coerceIn(wrapStartsAtIndex, rowEnd)
 }
 
 internal fun TextEditorState.moveCursorToLineEnd() {
@@ -169,24 +183,10 @@ internal fun TextEditorState.moveCursorPageUp() {
 	// Calculate target scroll position
 	val targetScroll = maxOf(scrollState.minValue, viewportTop - viewportHeight)
 
-	// Find the wrapped line at the target position
-	val targetLine = lineOffsets.firstOrNull { wrap ->
-		wrap.offset.y >= targetScroll
-	} ?: lineOffsets.firstOrNull()
+	val targetRow = lineOffsets.indexOfFirst { it.offset.y >= targetScroll }.takeIf { it >= 0 } ?: 0
 
-	if (targetLine != null) {
-		// Try to maintain the same horizontal position
-		val currentWrapStart = lineOffsets.getOrNull(getWrappedLineIndex(cursorPosition))
-			?.wrapStartsAtIndex ?: 0
-		val localCharIndex = cursorPosition.char - currentWrapStart
-
-		// Update cursor position
-		cursor.updatePosition(
-			CharLineOffset(
-				line = targetLine.line,
-				char = targetLine.wrapStartsAtIndex + localCharIndex
-			)
-		)
+	if (lineOffsets.isNotEmpty()) {
+		moveCursorToRow(targetRow)
 
 		// Update scroll position
 		scrollManager.scrollToPosition(targetScroll, animated = true)
@@ -202,24 +202,10 @@ internal fun TextEditorState.moveCursorPageDown() {
 	// Calculate target scroll position
 	val targetScroll = minOf(maxScroll, viewportTop + viewportHeight)
 
-	// Find the wrapped line at the target position
-	val targetLine = lineOffsets.firstOrNull { wrap ->
-		wrap.offset.y >= targetScroll
-	} ?: lineOffsets.lastOrNull()
+	val targetRow = lineOffsets.indexOfFirst { it.offset.y >= targetScroll }.takeIf { it >= 0 } ?: lineOffsets.lastIndex
 
-	if (targetLine != null) {
-		// Try to maintain the same horizontal position
-		val currentWrapStart = lineOffsets.getOrNull(getWrappedLineIndex(cursorPosition))
-			?.wrapStartsAtIndex ?: 0
-		val localCharIndex = cursorPosition.char - currentWrapStart
-
-		// Update cursor position
-		cursor.updatePosition(
-			CharLineOffset(
-				line = targetLine.line,
-				char = targetLine.wrapStartsAtIndex + localCharIndex
-			)
-		)
+	if (lineOffsets.isNotEmpty()) {
+		moveCursorToRow(targetRow)
 
 		// Update scroll position
 		scrollManager.scrollToPosition(targetScroll, animated = true)

@@ -56,10 +56,6 @@ class EditorInvariantFuzzTest {
 	fun `CaretOnGraphemeBoundary still fails while its items are open`() =
 		assertStillFails(EditorInvariant.CaretOnGraphemeBoundary, seed = 1)
 
-	@Test
-	fun `DownMovesOneRow still fails while its items are open`() =
-		assertStillFails(EditorInvariant.DownMovesOneRow, seed = 12)
-
 	private companion object {
 		val WIDTH = 160.dp
 	}

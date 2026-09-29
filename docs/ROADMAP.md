@@ -76,9 +76,12 @@ Exceptions, where `BasicTextField` is not native (found by 0.2, and tolerated
 by its `referenceQuirk`): with a selection, its Home and End measure from the
 selection's start and end rather than the caret; Home on an empty last line
 moves to the end of the line above; End on a paragraph's last row stops before
-its trailing spaces; a word wider than the row is broken where it starts
-instead of moving to the next row. Its arrow keys in right-to-left text are
-logical, like the editor's (7.5).
+its trailing spaces, and Up and Down stop before a row's trailing spaces when
+the goal x is over or past them; a word wider than the row is broken where it
+starts instead of moving to the next row; a page move does not start a goal x,
+so Up or Down after one measures from where it landed rather than from where
+the run began. Its arrow keys in right-to-left text are logical, like the
+editor's (7.5).
 
 ## Workflow
 
@@ -243,8 +246,8 @@ editor does rather than what it should do.
   Down moves exactly one visual row, Left then Right returns to the same
   position. Done in `e2e/torture/EditorInvariantFuzzTest.kt`. Each invariant
   names the items it needs (`utils/EditorInvariants.kt`) and stays off while
-  any is in `OPEN_PARITY_ITEMS`; today only Left then Right is on. Set
-  `FUZZ_INVARIANTS=all` to run every one.
+  any is in `OPEN_PARITY_ITEMS`; today Left then Right, and Down moves one row,
+  are on. Set `FUZZ_INVARIANTS=all` to run every one.
 - [ ] **0.4 Keyboard trace record and replay.** [Fable] [Lane F] A debug
   recorder on the Android `InputConnection` that logs every command and read. A
   user attaches the trace to a bug report; the trace replays in
@@ -279,13 +282,16 @@ fixes what users feel every minute.
   grapheme-boundary utility, `expect`/`actual` over the platform break
   iterators, used by every movement, delete, and hit-test path. Mac part: the
   iOS `actual`.
-- [ ] **1.2 Pixel-based vertical movement with a goal column. R.** [Opus]
+- [x] **1.2 Pixel-based vertical movement with a goal column. R.** [Opus]
   [Lane A] Up, Down, PageUp, and PageDown add a character count to the target
   row's start (`state/TextEditorStateCursorExt.kt`). With proportional fonts
   the caret jumps sideways, and when the target row is shorter in characters
   the caret overflows into a later row: the probe saw Down go from row 2 to row
   5. Use the caret's x and hit-test the target row; remember the goal x until a
   horizontal move or an edit.
+  The goal x lives on `TextEditorCursorState` and ends with any other caret
+  move or any document change. A goal x past a wrapped row's end stops one
+  short of the wrap, where 1.6's affinity is needed to sit at the row's end.
 - [x] **1.3 Document edges. R.** [Opus] [Lane A] Up on the first row and Down
   on the last row do nothing. Native moves to document start and end.
 - [x] **1.4 Collapse the selection on an unshifted arrow. R.** [Opus] [Lane A]

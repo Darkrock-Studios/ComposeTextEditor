@@ -22,9 +22,10 @@ enum class EditorInvariant(vararg val needs: String) {
 	/**
 	 * Without a selection, Down moves to the next visual row, or stays on the last
 	 * one. Rows come from [com.darkrockstudios.texteditor.state.TextEditorState.getWrappedLineIndex],
-	 * which puts a wrap offset on the later row, so this also needs affinity (1.6).
+	 * which puts a wrap offset on the later row; once the caret carries affinity (1.6)
+	 * this must read the row the caret is drawn on.
 	 */
-	DownMovesOneRow("1.2", "1.6"),
+	DownMovesOneRow("1.2"),
 
 	/** Without a selection and away from the document start, Left then Right puts the caret back. */
 	LeftThenRightReturns,

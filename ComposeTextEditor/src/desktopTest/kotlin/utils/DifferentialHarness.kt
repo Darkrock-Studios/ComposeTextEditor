@@ -306,6 +306,11 @@ class DifferentialScope internal constructor(
 		editor.getCharacterIndex(CharLineOffset(it.line, it.wrapStartsAtIndex))
 	}
 
+	/** The flat offsets where the editor wraps a paragraph onto another row. */
+	fun editorWraps(): Set<Int> = editor.lineOffsets
+		.filter { it.wrapStartsAtIndex > 0 }
+		.mapTo(mutableSetOf()) { editor.getCharacterIndex(CharLineOffset(it.line, it.wrapStartsAtIndex)) }
+
 	private fun referenceRows(): List<Int> {
 		val layout = test.runOnIdle { fieldLayout() } ?: fail("the reference field has no layout")
 		return (0 until layout.lineCount).map { layout.getLineStart(it) }

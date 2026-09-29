@@ -4,13 +4,17 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import com.darkrockstudios.texteditor.CharLineOffset
+import utils.EditorUiTestScope
 import utils.editorUiTest
+import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /** Cursor movement via arrow keys, Home/End, word jumps, and page keys. */
 class NavigationE2eTest {
+
+	private fun EditorUiTestScope.caretX(): Float = state.getPositionForOffset(state.cursorPosition).position.x
 
 	@Test
 	fun `right and left arrows move the cursor by one character`() = editorUiTest(
@@ -59,7 +63,7 @@ class NavigationE2eTest {
 
 	@Test
 	fun `down arrow keeps the column and up arrow returns`() = editorUiTest(
-		initialText = AnnotatedString("first line\nsecond line"),
+		initialText = AnnotatedString("1234567890\n0987654321"),
 	) {
 		clickAtCharacter(3)
 		press(Key.DirectionDown)
@@ -67,6 +71,101 @@ class NavigationE2eTest {
 
 		press(Key.DirectionUp)
 		assertEquals(CharLineOffset(0, 3), state.cursorPosition)
+	}
+
+	@Test
+	fun `down keeps the caret's x across proportional glyphs`() = editorUiTest(
+		initialText = AnnotatedString("iiiiiiiiii\nWWWWWWWWWW"),
+	) {
+		clickAtCharacter(8)
+		val before = caretX()
+		press(Key.DirectionDown)
+
+		assertEquals(1, state.cursorPosition.line)
+		val halfGlyph = (positionOfCharacter(12).x - positionOfCharacter(11).x) / 2
+		assertTrue(abs(caretX() - before) <= halfGlyph, "caret x moved from $before to ${caretX()}")
+	}
+
+	@Test
+	fun `vertical moves keep the goal column through a short line`() = editorUiTest(
+		initialText = AnnotatedString("1234567890\n12\n1234567890"),
+	) {
+		clickAtCharacter(8)
+		press(Key.DirectionDown)
+		assertEquals(13, cursorIndex)
+		press(Key.DirectionDown)
+		assertEquals(22, cursorIndex)
+		press(Key.DirectionUp)
+		assertEquals(13, cursorIndex)
+		press(Key.DirectionUp)
+		assertEquals(8, cursorIndex)
+	}
+
+	@Test
+	fun `shift down extends by rows and keeps the goal column`() = editorUiTest(
+		initialText = AnnotatedString("1234567890\n12\n1234567890"),
+	) {
+		clickAtCharacter(8)
+		press(Key.DirectionDown, shift = true)
+		press(Key.DirectionDown, shift = true)
+		assertEquals("90\n12\n12345678", selectedText)
+	}
+
+	@Test
+	fun `a horizontal move resets the goal column`() = editorUiTest(
+		initialText = AnnotatedString("1234567890\n12\n1234567890"),
+	) {
+		clickAtCharacter(8)
+		press(Key.DirectionDown)
+		press(Key.DirectionLeft)
+		press(Key.DirectionDown)
+		assertEquals(15, cursorIndex)
+	}
+
+	@Test
+	fun `a click resets the goal column`() = editorUiTest(
+		initialText = AnnotatedString("1234567890\n12\n1234567890"),
+	) {
+		clickAtCharacter(8)
+		press(Key.DirectionDown)
+		clickAtCharacter(12)
+		press(Key.DirectionDown)
+		assertEquals(15, cursorIndex)
+	}
+
+	@Test
+	fun `an edit that leaves the caret in place resets the goal column`() = editorUiTest(
+		initialText = AnnotatedString("1234567890\n12\n1234567890\n1234567890"),
+	) {
+		clickAtCharacter(8)
+		press(Key.DirectionDown)
+		assertEquals(13, cursorIndex)
+		press(Key.Delete)
+		assertEquals(13, cursorIndex)
+		press(Key.DirectionDown)
+		assertEquals(26, cursorIndex)
+	}
+
+	@Test
+	fun `select all resets the goal column`() = editorUiTest(
+		initialText = AnnotatedString("1234567890\n12\n1234567890"),
+	) {
+		clickAtCharacter(8)
+		press(Key.DirectionDown)
+		press(Key.A, ctrl = true)
+		press(Key.DirectionDown)
+		assertEquals(16, cursorIndex)
+	}
+
+	@Test
+	fun `an edit resets the goal column`() = editorUiTest(
+		initialText = AnnotatedString("1234567890\n12\n1234567890"),
+	) {
+		clickAtCharacter(8)
+		press(Key.DirectionDown)
+		typeText("3")
+		press(Key.DirectionDown)
+		assertEquals(18, cursorIndex)
 	}
 
 	@Test
@@ -119,9 +218,13 @@ class NavigationE2eTest {
 		assertEquals(0, cursorIndex)
 
 		val lastRowStart = state.lineOffsets.last().wrapStartsAtIndex
-		clickAtCharacter(lastRowStart - 2)
+		val secondLastRowStart = state.lineOffsets[state.lineOffsets.lastIndex - 1].wrapStartsAtIndex
+		clickAtCharacter(secondLastRowStart)
 		press(Key.DirectionDown)
-		assertTrue(cursorIndex in lastRowStart until text.length, "down from the second last row lands on the last, was $cursorIndex")
+		assertEquals(lastRowStart, cursorIndex, "down from the second last row's start lands on the last row's start")
+		clickAtCharacter(secondLastRowStart + 2)
+		press(Key.DirectionDown)
+		assertTrue(cursorIndex in lastRowStart + 1 until text.length, "down from mid row lands mid row, was $cursorIndex")
 		press(Key.DirectionDown)
 		assertEquals(text.length, cursorIndex)
 	}
