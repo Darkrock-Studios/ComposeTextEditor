@@ -49,16 +49,15 @@ private fun TextEditorState.moveCursorToRow(rowIndex: Int) {
 private fun LineWrap.charAtX(x: Float): Int {
 	val layout = textLayoutResult
 	val row = virtualLineIndex
+	val text = layout.layoutInput.text.text
 	val rowEnd = if (row == layout.lineCount - 1) {
 		layout.getLineEnd(row)
 	} else {
-		val wrap = layout.getLineEnd(row)
-		val text = layout.layoutInput.text
-		val step = if (wrap >= 2 && text[wrap - 1].isLowSurrogate() && text[wrap - 2].isHighSurrogate()) 2 else 1
-		maxOf(wrapStartsAtIndex, wrap - step)
+		maxOf(wrapStartsAtIndex, text.precedingGraphemeBoundary(layout.getLineEnd(row)))
 	}
 	val y = (layout.getLineTop(row) + layout.getLineBottom(row)) / 2f
-	return layout.getOffsetForPosition(Offset(x, y)).coerceIn(wrapStartsAtIndex, rowEnd)
+	val hit = layout.getOffsetForPosition(Offset(x, y)).coerceIn(wrapStartsAtIndex, rowEnd)
+	return text.snapToGraphemeBoundary(hit, forward = false)
 }
 
 internal fun TextEditorState.moveCursorToLineEnd() {
@@ -73,8 +72,9 @@ internal fun TextEditorState.moveCursorToLineEnd() {
 	if (currentWrappedLineIndex < lineOffsets.size - 1) {
 		val nextWrappedLine = lineOffsets[currentWrappedLineIndex + 1]
 		if (nextWrappedLine.line == currentWrappedLine.line) {
-			// Go to the end of this virtual line
-			cursor.updatePosition(cursorPosition.copy(char = nextWrappedLine.wrapStartsAtIndex - 1))
+			// The last cluster of this row: a position on the wrap draws on the next row.
+			val text = textLines[line].text
+			cursor.updatePosition(cursorPosition.copy(char = text.precedingGraphemeBoundary(nextWrappedLine.wrapStartsAtIndex)))
 		} else {
 			// Go to the end of this real line
 			cursor.updatePosition(cursorPosition.copy(char = textLines[line].length))
@@ -118,7 +118,7 @@ fun TextEditorState.moveToNextWord() {
 		newPosition++
 	}
 
-	cursor.updatePosition(getOffsetAtCharacter(newPosition))
+	cursor.updatePosition(onGraphemeBoundary(getOffsetAtCharacter(newPosition), forward = true))
 }
 
 /**
@@ -139,7 +139,7 @@ fun TextEditorState.moveToWordEnd() {
 		}
 	}
 	while (isWordChar(textLines[line], char)) char++
-	cursor.updatePosition(CharLineOffset(line, char))
+	cursor.updatePosition(onGraphemeBoundary(CharLineOffset(line, char), forward = true))
 }
 
 /**
@@ -183,8 +183,12 @@ fun TextEditorState.moveToPreviousWord() {
 		newPosition--
 	}
 
-	cursor.updatePosition(getOffsetAtCharacter(newPosition))
+	cursor.updatePosition(onGraphemeBoundary(getOffsetAtCharacter(newPosition), forward = false))
 }
+
+/** [position] on a grapheme boundary, moved [forward] or back out of a cluster. */
+private fun TextEditorState.onGraphemeBoundary(position: CharLineOffset, forward: Boolean): CharLineOffset =
+	position.copy(char = textLines[position.line].text.snapToGraphemeBoundary(position.char, forward))
 
 /** Moves the cursor to the first character of the document. */
 fun TextEditorState.moveToDocumentStart() {

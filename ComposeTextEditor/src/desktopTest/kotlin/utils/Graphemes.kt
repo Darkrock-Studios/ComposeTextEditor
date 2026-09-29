@@ -15,6 +15,10 @@ fun String.isGraphemeBoundary(index: Int): Boolean {
 	}
 }
 
+/** Whether [from] until [to] is exactly one grapheme cluster of this string. */
+fun String.isOneGrapheme(from: Int, to: Int): Boolean =
+	from < to && isGraphemeBoundary(from) && isGraphemeBoundary(to) && (from + 1 until to).none { isGraphemeBoundary(it) }
+
 /** The index of the first unpaired surrogate, or null when every surrogate is paired. */
 fun String.firstLoneSurrogate(): Int? {
 	var i = 0

@@ -700,22 +700,24 @@ class TextEditorState(
 	}
 
 	/**
-	 * Deletes the character before the cursor, merging with the previous line when
-	 * at column 0, unless an [EditBehavior] claims the edit first.
+	 * Deletes the code point before the cursor, or a whole emoji sequence (see
+	 * [backspaceStart]), merging with the previous line when at column 0, unless an
+	 * [EditBehavior] claims the edit first.
 	 */
 	fun backspaceAtCursor() {
 		if (claimedByBehavior { it.onBackspace(this) }) return
 
 		if (cursorPosition.char > 0) {
+			val start = textLines[cursorPosition.line].text.backspaceStart(cursorPosition.char)
 			val deleteRange = TextEditorRange(
-				CharLineOffset(cursorPosition.line, cursorPosition.char - 1),
+				CharLineOffset(cursorPosition.line, start),
 				cursorPosition
 			)
 
 			val operation = TextEditOperation.Delete(
 				range = deleteRange,
 				cursorBefore = cursorPosition,
-				cursorAfter = CharLineOffset(cursorPosition.line, cursorPosition.char - 1)
+				cursorAfter = CharLineOffset(cursorPosition.line, start)
 			)
 			editManager.applyOperation(operation)
 		} else if (cursorPosition.line > 0) {
@@ -735,17 +737,18 @@ class TextEditorState(
 	}
 
 	/**
-	 * Deletes the character after the cursor, merging the next line into the current
-	 * one when at end of line (forward delete), unless an [EditBehavior] claims the
-	 * edit first.
+	 * Deletes the grapheme cluster after the cursor, merging the next line into the
+	 * current one when at end of line (forward delete), unless an [EditBehavior]
+	 * claims the edit first.
 	 */
 	fun deleteAtCursor() {
 		if (claimedByBehavior { it.onDeleteForward(this) }) return
 
-		if (cursorPosition.char < textLines[cursorPosition.line].length) {
+		val lineText = textLines[cursorPosition.line].text
+		if (cursorPosition.char < lineText.length) {
 			val deleteRange = TextEditorRange(
 				cursorPosition,
-				CharLineOffset(cursorPosition.line, cursorPosition.char + 1)
+				CharLineOffset(cursorPosition.line, lineText.followingGraphemeBoundary(cursorPosition.char))
 			)
 
 			val operation = TextEditOperation.Delete(
@@ -1056,7 +1059,9 @@ class TextEditorState(
 		val charPos = paragraph.getOffsetForPosition(
 			Offset(offset.x - row.offset.x, paragraph.getLineTop(row.virtualLineIndex) + yInLine)
 		)
-		return CharLineOffset(row.line, min(charPos, lineLength))
+		val lineText = textLines[row.line].text
+		// Skia already answers on a cluster boundary; the snap guards the caret invariant.
+		return CharLineOffset(row.line, lineText.snapToGraphemeBoundary(min(charPos, lineLength), forward = false))
 	}
 
 	/**

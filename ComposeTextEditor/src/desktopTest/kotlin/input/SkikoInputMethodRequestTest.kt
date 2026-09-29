@@ -209,6 +209,18 @@ class SkikoInputMethodRequestTest {
 		assertEquals("ab", text())
 	}
 
+	@Test
+	fun `backspace with a caret deletes a zwj sequence whole and a combining mark alone`() {
+		typeViaCommit("ab\uD83D\uDC68\u200D\uD83D\uDC69\u200D\uD83D\uDC67e\u0301")
+
+		request.onEditCommand(listOf(BackspaceCommand()))
+		assertEquals("ab\uD83D\uDC68\u200D\uD83D\uDC69\u200D\uD83D\uDC67e", text())
+
+		request.onEditCommand(listOf(BackspaceCommand()))
+		request.onEditCommand(listOf(BackspaceCommand()))
+		assertEquals("ab", text())
+	}
+
 	/** The web backspace must reach edit behaviors the same way the hardware key does. */
 	@Test
 	fun `backspace at the start of a bullet demotes it`() = runTest {

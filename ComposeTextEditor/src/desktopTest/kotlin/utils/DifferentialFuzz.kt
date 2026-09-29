@@ -12,7 +12,7 @@ import kotlin.test.fail
  * reference's state and the script continues. Delete an item here when it lands,
  * and the fuzzer starts failing on that class of divergence.
  */
-val OPEN_PARITY_ITEMS: Set<String> = setOf("1.1", "1.5", "1.6", "7.5")
+val OPEN_PARITY_ITEMS: Set<String> = setOf("1.5", "1.6", "7.5")
 
 /** Starting text for the Unicode fuzzers: an emoji, a combining mark, and a right-to-left word. */
 const val FUZZ_START_TEXT = "seed line\nsecond line of words\n\uD83D\uDE00 e\u0301 שלום end"
@@ -61,6 +61,8 @@ private fun Stroke.isVertical(): Boolean =
 
 private fun Stroke.isPage(): Boolean = this is Stroke.Press && (key == Key.PageUp || key == Key.PageDown)
 
+private fun Stroke.isTyping(): Boolean = this is Stroke.Type || (this is Stroke.Press && key == Key.Enter && !ctrl)
+
 private fun Stroke.dependsOnRows(): Boolean =
 	isVertical() || (this is Stroke.Press && !ctrl && (key == Key.MoveHome || key == Key.MoveEnd))
 
@@ -102,10 +104,10 @@ fun explainDivergence(
 				val edge = if (stroke.key == Key.DirectionUp) 0 else native.text.length
 				if (native.caret == edge && editor.caret == before.caret) add("1.3") else add("1.2")
 			}
-			// One short of a wrap, where only affinity can hold the caret on the upper row.
+			// One cluster short of a wrap, where only affinity can hold the caret on the upper row.
 			val text = before.text
 			val atWrap = native.caret in rows && native.caret > 0 && text[native.caret - 1] != '\n'
-			if (editor.caret == native.caret - 1 && atWrap) add("1.6")
+			if (atWrap && text.isOneGrapheme(editor.caret, native.caret)) add("1.6")
 			// The caret's x, and the row edge a far goal x snaps to, depend on direction.
 			if (listOf(before.caret, native.caret, editor.caret).any { text.paragraphHasRightToLeft(it) }) {
 				add("7.5")
@@ -116,8 +118,8 @@ fun explainDivergence(
 			val paragraphEnd = editor.caret == before.text.length || before.text[editor.caret] == '\n'
 			val pastWrapSpaces = native.caret < editor.caret && !paragraphEnd &&
 				before.text.substring(native.caret, editor.caret).isBlank()
-			// One short of a mid-word wrap, or past spaces the reference leaves at a wrap.
-			if (editor.caret == native.caret - 1 || pastWrapSpaces) add("1.6")
+			// One cluster short of a mid-word wrap, or past spaces the reference leaves at a wrap.
+			if (before.text.isOneGrapheme(editor.caret, native.caret) || pastWrapSpaces) add("1.6")
 		}
 	}
 }
@@ -165,8 +167,9 @@ fun referenceQuirk(
 	if (stroke !is Stroke.Press || stroke.ctrl) return null
 	val text = before.text
 	if (stroke.isPage()) {
+		// A caret on the first wrap offset still draws on the first row (the reference's affinity).
 		val onEdgeRow = if (stroke.key == Key.PageUp) {
-			editor.caret == 0 && native.caret < (rows.getOrNull(1) ?: text.length + 1)
+			editor.caret == 0 && native.caret <= (rows.getOrNull(1) ?: text.length)
 		} else {
 			editor.caret == text.length && native.caret >= (rows.lastOrNull() ?: 0)
 		}
@@ -208,7 +211,10 @@ fun referenceQuirk(
  * move straight after a reset is tolerated too, until the next other stroke.
  * Nor does the reference start or follow a goal column at a page move, as the
  * editor does, so a page move inside a run of vertical moves, and Up and Down in
- * a run that began with a page move, are tolerated.
+ * a run that began with a page move, are tolerated. The reference also keeps its
+ * goal column across typed text and Enter, where the editor (like native editors)
+ * starts afresh, so a vertical move after typing that followed a vertical move is
+ * tolerated.
  *
  * To widen the check once a lane A item lands, delete it from [OPEN_PARITY_ITEMS].
  *
@@ -232,6 +238,7 @@ internal fun differentialFuzz(
 		var goalColumnLost = false
 		var inVerticalRun = false
 		var runStartedByPage = false
+		var goalKeptThroughTyping = false
 		script.forEachIndexed { index, stroke ->
 			send(stroke)
 			val native = reference[index]
@@ -239,6 +246,12 @@ internal fun differentialFuzz(
 			if (!stroke.isVertical()) goalColumnLost = false
 			val pageInRun = inVerticalRun && stroke.isPage()
 			if (!inVerticalRun) runStartedByPage = stroke.isPage()
+			val staleGoal = goalKeptThroughTyping && stroke.isVertical() && !stroke.isPage()
+			goalKeptThroughTyping = when {
+				stroke.isVertical() -> goalKeptThroughTyping
+				stroke.isTyping() -> inVerticalRun || goalKeptThroughTyping
+				else -> false
+			}
 			inVerticalRun = stroke.isVertical()
 			if (actual != native) {
 				val rows = editorRows()
@@ -253,6 +266,7 @@ internal fun differentialFuzz(
 						setOf("reference: a page move does not start a goal column")
 
 					pageInRun && sameRow(native, actual) -> setOf("reference: a page move does not follow the goal column")
+					staleGoal -> setOf("reference: the goal column survives typing")
 
 					stroke.dependsOnRows() && !rowsAgree() -> setOf("reference: rows wrap differently")
 					else -> fail(

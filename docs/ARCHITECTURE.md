@@ -109,6 +109,13 @@ line-indexed queries layout and drawing rely on.
 - **`TextEditorCursorState`**: the caret. Its position, blink visibility, and
   the *typing styles*: the set of `SpanStyle`s the next typed character will
   carry, derived from the text around the caret or toggled by toolbar actions.
+  The caret moves by grapheme cluster, never by UTF-16 unit: `TextBreaks`
+  wraps the platform's ICU break iterators (skia's on desktop, iOS and web,
+  `android.icu` on Android) behind one `expect`, and every motion, forward
+  delete, and hit test snaps through it. Backspace is the one asymmetric edit:
+  it removes the previous code point, or a whole emoji sequence, as
+  `BasicTextField` and `EditText` do, so a combining mark comes off its base
+  on its own.
 - **`TextEditorSelectionManager`**: the selection range and the gesture state
   behind it (touch handles, drag). Rule: any content mutation clears the
   selection; only span-level operations keep it.

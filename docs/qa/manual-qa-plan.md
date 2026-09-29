@@ -233,6 +233,10 @@ On every desktop platform unless a row names one; the macOS chords are in 3.1.
 | PageDown / PageUp in a long document | The caret moves a viewport's height and keeps its place on screen and its column; the view scrolls with it |
 | PageDown on the last page / PageUp on the first | Document end / start |
 | Arrow down past the viewport bottom while typing | The view scrolls just enough to show the caret's row, with no extra margin |
+| Left / Right across an emoji, a family ZWJ sequence, a flag, or "e" plus a combining accent | One step per cluster, never stopping inside one; Shift selects the whole cluster |
+| Backspace after an emoji, a ZWJ sequence, a flag, a skin tone, or a keycap | The whole sequence goes at once |
+| Backspace after a combining accent (type "e" then U+0301, or Vietnamese "ế") | Only the accent goes; the base stays. Delete before the pair removes both |
+| Up / Down / End onto a row that wraps right after an emoji | The caret lands after the emoji, never inside it |
 | Ctrl+Right / Ctrl+Delete on Linux | To / delete to the end of the word, or of the next one |
 | Ctrl+Right / Ctrl+Delete on Windows | To / delete to the start of the next word |
 | Ctrl+Up | Paragraph start, then the previous paragraph's start; with Shift, selects |

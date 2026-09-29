@@ -306,14 +306,12 @@ class BasicTextFieldParityTest {
 	fun `right and left step over an emoji whole`() = assertMatchesNative(
 		start = EditSnapshot("a\uD83D\uDE00b", caret = 1),
 		strokes = listOf(Right, Left),
-		divergesUntil = "1.1",
 	)
 
 	@Test
 	fun `backspace after an emoji removes it whole`() = assertMatchesNative(
 		start = EditSnapshot("a\uD83D\uDE00b", caret = 3),
 		strokes = listOf(Backspace),
-		divergesUntil = "1.1",
 	)
 
 	@Test
@@ -326,35 +324,85 @@ class BasicTextFieldParityTest {
 	fun `delete before an emoji removes it whole`() = assertMatchesNative(
 		start = EditSnapshot("a\uD83D\uDE00b", caret = 1),
 		strokes = listOf(Delete),
-		divergesUntil = "1.1",
 	)
 
 	@Test
 	fun `shift right selects an emoji whole`() = assertMatchesNative(
 		start = EditSnapshot("a\uD83D\uDE00b", caret = 1),
 		strokes = listOf(ShiftRight),
-		divergesUntil = "1.1",
 	)
 
 	@Test
 	fun `right steps over a zwj sequence whole`() = assertMatchesNative(
 		start = EditSnapshot("a\uD83D\uDC68\u200D\uD83D\uDC69\u200D\uD83D\uDC67b", caret = 1),
 		strokes = listOf(Right),
-		divergesUntil = "1.1",
 	)
 
 	@Test
 	fun `right steps over a flag whole`() = assertMatchesNative(
 		start = EditSnapshot("a\uD83C\uDDEF\uD83C\uDDF5b", caret = 1),
 		strokes = listOf(Right),
-		divergesUntil = "1.1",
 	)
 
 	@Test
 	fun `right steps over a combining mark with its base`() = assertMatchesNative(
 		start = EditSnapshot("ae\u0301b", caret = 1),
 		strokes = listOf(Right),
-		divergesUntil = "1.1",
+	)
+
+	@Test
+	fun `backspace after a zwj sequence removes it whole`() = assertMatchesNative(
+		start = EditSnapshot("a\uD83D\uDC68\u200D\uD83D\uDC69\u200D\uD83D\uDC67b", caret = 9),
+		strokes = listOf(Backspace),
+	)
+
+	@Test
+	fun `backspace after a flag removes it whole`() = assertMatchesNative(
+		start = EditSnapshot("a\uD83C\uDDEF\uD83C\uDDF5b", caret = 5),
+		strokes = listOf(Backspace),
+	)
+
+	@Test
+	fun `backspace after a skin tone modifier removes the emoji whole`() = assertMatchesNative(
+		start = EditSnapshot("a\uD83D\uDC4D\uD83C\uDFFDb", caret = 5),
+		strokes = listOf(Backspace),
+	)
+
+	@Test
+	fun `backspace after a keycap removes it whole`() = assertMatchesNative(
+		start = EditSnapshot("a1\uFE0F\u20E3b", caret = 4),
+		strokes = listOf(Backspace),
+	)
+
+	@Test
+	fun `delete before a combining mark removes the base with its mark`() = assertMatchesNative(
+		start = EditSnapshot("ae\u0301b", caret = 1),
+		strokes = listOf(Delete),
+	)
+
+	@Test
+	fun `left steps back over a zwj sequence whole`() = assertMatchesNative(
+		start = EditSnapshot("a\uD83D\uDC68\u200D\uD83D\uDC69\u200D\uD83D\uDC67b", caret = 9),
+		strokes = listOf(Left, Left, Right),
+	)
+
+	@Test
+	fun `shift left selects a combining mark with its base`() = assertMatchesNative(
+		start = EditSnapshot("ae\u0301b", caret = 3),
+		strokes = listOf(ShiftLeft, ShiftLeft),
+	)
+
+	@Test
+	fun `left and right step over cjk one character at a time`() = assertMatchesNative(
+		start = EditSnapshot("日本語", caret = 0),
+		strokes = listOf(Right, Right, Left),
+	)
+
+	@Test
+	fun `down onto a row ending in an emoji lands after it`() = assertMatchesNative(
+		start = EditSnapshot("ab\nabcdefghijkl \uD83D\uDE00\uD83D\uDE00\uD83D\uDE00\uD83D\uDE00 xyz", caret = 2),
+		strokes = listOf(End, Down),
+		width = 120.dp,
 	)
 
 	@Test

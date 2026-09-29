@@ -68,6 +68,12 @@ class TextEditorCursorState(
 	)
 	val positionFlow: SharedFlow<CharLineOffset> = _cursorPositionFlow
 
+	/**
+	 * Moves the caret to [position], clamped into the document. Not snapped to a
+	 * grapheme boundary: typing a ZWJ sequence one code point at a time in front of
+	 * an emoji passes through a caret inside the joined cluster, so each movement
+	 * and hit-test path snaps for itself.
+	 */
 	fun updatePosition(position: CharLineOffset, updateStyles: Boolean = true) {
 		val oldPosition = _position
 		val newPosition = position.coerceInto(editorState.textLines)
@@ -161,17 +167,53 @@ class TextEditorCursorState(
 		}
 	}
 
+	/** Moves the caret back [n] grapheme clusters, a line break counting as one. */
 	fun moveLeft(n: Int = 1) {
-		val currentCharIndex = editorState.getCharacterIndex(position)
-		val newCharIndex = maxOf(currentCharIndex - n, 0)
-		updatePosition(editorState.getOffsetAtCharacter(newCharIndex))
+		val lines = editorState.textLines
+		var (line, char) = position.coerceInto(lines)
+		var remaining = n
+		while (remaining > 0) {
+			if (char > 0) {
+				graphemeCursor(lines[line].text).use { breaks ->
+					while (remaining > 0 && char > 0) {
+						char = breaks.preceding(char).coerceAtLeast(0)
+						remaining--
+					}
+				}
+			} else if (line > 0) {
+				line--
+				char = lines[line].length
+				remaining--
+			} else {
+				break
+			}
+		}
+		updatePosition(CharLineOffset(line, char))
 	}
 
+	/** Moves the caret forward [n] grapheme clusters, a line break counting as one. */
 	fun moveRight(n: Int = 1) {
-		val currentCharIndex = editorState.getCharacterIndex(position)
-		val totalChars = editorState.textLines.sumOf { it.length + 1 } - 1
-		val newCharIndex = minOf(currentCharIndex + n, totalChars)
-		updatePosition(editorState.getOffsetAtCharacter(newCharIndex))
+		val lines = editorState.textLines
+		var (line, char) = position.coerceInto(lines)
+		var remaining = n
+		while (remaining > 0) {
+			val length = lines[line].length
+			if (char < length) {
+				graphemeCursor(lines[line].text).use { breaks ->
+					while (remaining > 0 && char < length) {
+						char = breaks.following(char).let { if (it == BreakCursor.DONE) length else it }
+						remaining--
+					}
+				}
+			} else if (line < lines.lastIndex) {
+				line++
+				char = 0
+				remaining--
+			} else {
+				break
+			}
+		}
+		updatePosition(CharLineOffset(line, char))
 	}
 
 	fun moveToLineStart() {

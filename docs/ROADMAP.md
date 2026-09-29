@@ -82,8 +82,10 @@ starts instead of moving to the next row; a page move neither starts nor follows
 a goal x, so it measures from the caret, and Up or Down after one measures from
 where it landed; PageUp and PageDown stop on the first and last rows instead of
 going on to the document start and end; with a selection, its Shift paragraph
-jumps measure from the selection's start and end rather than the caret. Its arrow keys in right-to-left text are logical, like the
-editor's (7.5).
+jumps measure from the selection's start and end rather than the caret; its
+goal x survives typed text and Enter, so Up or Down after typing measures from
+the column the typing started at. Its arrow keys in right-to-left text are
+logical, like the editor's (7.5).
 
 ## Workflow
 
@@ -286,6 +288,18 @@ fixes what users feel every minute.
   grapheme-boundary utility, `expect`/`actual` over the platform break
   iterators, used by every movement, delete, and hit-test path. Mac part: the
   iOS `actual`.
+  Linux part done: `state/TextBreaks.kt` declares `graphemeCursor`,
+  `wordCursor` and `isEmojiCodePoint`; `skikoMain` backs them with skia's ICU
+  (`org.jetbrains.skia.BreakIterator`, the iterator `BasicTextField` uses, so
+  desktop, iOS and wasm share one `actual`) and `androidMain` with
+  `java.text.BreakIterator`, ICU-backed on a device and real on the host JVM. Left, Right, Delete, vertical moves, End on
+  a wrapped row and hit testing step by cluster; Backspace removes the previous
+  code point, or the whole cluster when it is an emoji sequence, the rule
+  `BasicTextField` and `EditText` share (a combining mark comes off its base
+  on its own). The `NoLoneSurrogate` and `CaretOnGraphemeBoundary` invariants
+  are on. IME `deleteSurroundingText` deletes stay as the keyboard counts them.
+  The Mac part (compile the shared `actual` for iOS) is in the queue; the
+  checkbox waits on it.
 - [x] **1.2 Pixel-based vertical movement with a goal column. R.** [Opus]
   [Lane A] Up, Down, PageUp, and PageDown add a character count to the target
   row's start (`state/TextEditorStateCursorExt.kt`). With proportional fonts
@@ -1134,5 +1148,6 @@ records results and removes entries that passed.
 
 | Item | What to do | A pass looks like | Result |
 | --- | --- | --- | --- |
+| 1.1 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64`. `skikoMain/.../state/TextBreaks.skiko.kt` is the iOS `actual` for the break cursors (`org.jetbrains.skia.BreakIterator`, `org.jetbrains.skia.icu.CharProperties`); if it does not compile, the fix is in that file. Then in the iOS sample app: type an emoji, a family ZWJ sequence, a flag and a keycap, and backspace through each; type "e" then a combining acute (or Vietnamese "ế") and backspace once; arrow Left and Right across them; type Japanese and step through it | Backspace removes each emoji sequence whole and only the accent off its base; Left and Right never stop inside a sequence; no half character ever shows | |
 | 2.6 | In Safari and Chrome on macOS, open the wasm demo and press Ctrl+A, E, F, B, N, P, D, H and K in a paragraph. The page's hidden text area has the same Cocoa Emacs bindings, so a chord could act twice | Each chord moves or deletes once, as in the desktop sample app | Not run: needs a person at a real keyboard. Browser automation injects key events below the Cocoa text system, so it cannot reproduce a chord acting twice |
 | 3.8 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64`. 3.8 added `internal expect fun hasNativeTextToolbar()` (commonMain `TouchToolbar.kt`) with `iosMain/.../TouchToolbar.ios.kt` answering true. Then in the simulator: long-press a word, double-tap a word, long-press empty space, tap the caret handle, and drag a selection handle | Compiles. UIKit's edit menu appears over the selection or caret with Cut, Copy, Paste and Select all as applicable (Paste and Select all alone at a bare caret), hides while a handle is dragged and returns when it drops, and goes when the caret moves or the text is scrolled. If no menu appears, the input connection has no toolbar: fall back to `false` in `TouchToolbar.ios.kt` so the context menu stands in | |

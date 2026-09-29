@@ -3,6 +3,8 @@ package com.darkrockstudios.texteditor.input
 import androidx.compose.ui.text.TextRange
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.state.TextEditorState
+import com.darkrockstudios.texteditor.state.backspaceStart
+import com.darkrockstudios.texteditor.state.followingGraphemeBoundary
 
 /**
  * Shared IME edit operations used by every platform that drives the editor
@@ -109,9 +111,8 @@ internal fun TextEditorState.imeDeleteSurroundingTextInCodePoints(beforeLength: 
 	val cursorIndex = selection.start
 	val deleteStart = cursorIndex - charsBefore
 	val deleteEnd = cursorIndex + charsAfter
-	// charsBefore/charsAfter of 2 is one astral code point, which the semantic paths
-	// would split: they delete a single UTF-16 char. 0 is the document edge, where
-	// the request is still a keystroke even though there is nothing to remove.
+	// charsBefore/charsAfter of 0 is the document edge, where the request is still a
+	// keystroke even though there is nothing to remove.
 	deleteSurroundingRange(
 		singleCharBefore = beforeLength == 1 && afterLength == 0 && charsBefore <= 1,
 		singleCharAfter = beforeLength == 0 && afterLength == 1 && charsAfter <= 1,
@@ -149,11 +150,17 @@ private fun TextEditorState.deleteSurroundingRange(
 	val available = deleteEnd - deleteStart
 
 	if (undisturbed && available <= 1) {
-		if (singleCharBefore && deleteEnd <= cursorIndex) {
+		// The semantic deletes take a code point, an emoji sequence, or a cluster; a
+		// count of one char is honoured as asked when they would take more.
+		val lineText = textLines[cursorPosition.line].text
+		val char = cursorPosition.char
+		if (singleCharBefore && deleteEnd <= cursorIndex && (char == 0 || lineText.backspaceStart(char) == char - 1)) {
 			backspaceAtCursor()
 			return
 		}
-		if (singleCharAfter && deleteStart >= cursorIndex) {
+		if (singleCharAfter && deleteStart >= cursorIndex &&
+			(char >= lineText.length || lineText.followingGraphemeBoundary(char) == char + 1)
+		) {
 			deleteAtCursor()
 			return
 		}
