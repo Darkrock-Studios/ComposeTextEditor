@@ -1819,8 +1819,25 @@ Shaping is one line per keystroke. These still scale with document length:
 - [ ] **7.9** [Opus] [Lane N] `getAllText()` rebuilds the whole document per
   revision when read by semantics, the Android IME, and the desktop adapter.
   214 µs per revision at 200k characters on the desktop JVM (4.21).
-- [ ] **7.10** [Opus] [Lane N] Any viewport change, height-only included,
+- [x] **7.10** [Opus] [Lane N] Any viewport change, height-only included,
   reshapes the entire document. This is every soft keyboard open and close.
+  Rows are shaped to the width alone, so a change of height now only moves
+  the scroll range, unless the last pass was skipped while the viewport was
+  collapsed (which now also invalidates the layout inputs, so no partial pass
+  can build on rows that lag the text). `ViewportResizeCostTest` pins a
+  height-only resize to no shaping and the same row list. Desktop JVM at 200k
+  characters: a height-only change took 101.8 ms, now 8.5 µs. A width change
+  still reshapes everything (107 ms); making it lazy is 7.48.
+- [ ] **7.48** [Fable] [Lane N] A width change (a window resize, a rotation, a
+  split screen) reshapes every line at once: 107 ms at 200k characters on the
+  desktop JVM, per frame of a window drag. Reshaping the visible rows first
+  needs rows that can hold a layout shaped at another width, or an estimated
+  height, with the offsets after them provisional until the rest is shaped;
+  a scroll position kept by its line rather than its pixel offset while the
+  heights settle; and every consumer that reads `lineOffsets` (hit testing,
+  caret, selection, scrolling, the scrollbar) tolerating provisional rows or
+  forcing the rows it needs. Best designed together with 7.8, which also
+  changes how rows are stored.
 - [ ] **7.11** [Opus] [Lane N] Linear scans per frame or event: visible-line
   lookup in drawing, unculled selection drawing, `getWrappedLineIndex`,
   `getOffsetAtPosition` on each drag move. On the iOS simulator at 200k

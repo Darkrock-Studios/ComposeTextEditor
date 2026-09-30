@@ -101,6 +101,9 @@ class TextEditorScrollManager(
 		applyScrollRange()
 	}
 
+	/** The viewport's height changed while the rows did not. */
+	internal fun onViewportHeightChange() = updateContentHeight(contentHeight)
+
 	/**
 	 * Set while a drag auto-scroll runs: it owns the scroll then, and a caret it puts off
 	 * screen (a line drag's, at the paragraph end) must not start a scroll against it.

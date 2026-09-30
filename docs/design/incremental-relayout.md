@@ -32,8 +32,11 @@ line on every pass.
 the pass must do:
 
 - `Full`: re-shape every line. Required when an input that affects all lines
-  changes: text style, measurer, density, viewport size, or a line-block
-  normalization rewrite at commit.
+  changes: text style, measurer, density, viewport width, or a line-block
+  normalization rewrite at commit. A change of the viewport's height alone
+  runs no pass when the rows are current (the last pass laid out the same
+  lines at the same width, with no transaction open): it only moves the
+  scroll range.
 - `Partial(remeasureFirst, remeasureLast, lineDelta)`: re-shape only that
   range, expressed in **post-edit** line indices. `lineDelta` is the post-edit
   line count minus the pre-edit count. A line after the range reuses its
@@ -126,7 +129,8 @@ degrades the update to `Full` when:
   viewport got its first real size),
 - `layoutInputGeneration` moved since the last completed pass (any full
   invalidator fired, even one whose own pass was skipped by the viewport
-  sentinel), or
+  sentinel; a pass the sentinel skips is itself an invalidator, since it
+  leaves the rows behind the text), or
 - the previous pass's line count does not equal the current count minus the
   update's declared delta.
 

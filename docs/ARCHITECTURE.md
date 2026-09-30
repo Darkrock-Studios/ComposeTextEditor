@@ -344,7 +344,8 @@ Text shaping is by far the most expensive work per edit, so the layout pass
   each pass's dirty range, derived centrally from the edit operation itself;
   unchanged lines reuse their previous shaping result and only their offsets,
   spans, and numbering are recomputed. Span overlays (spell-check underlines,
-  find highlights) shape nothing at all.
+  find highlights) shape nothing at all, and neither does a viewport that
+  changes only its height (a soft keyboard): rows depend on the width alone.
 - **One pass per logical operation.** Relayouts requested inside a transaction
   merge and flush as a single pass at commit, in a fixed order: publish the
   revision, flush the layout, scroll the cursor against the fresh offsets,

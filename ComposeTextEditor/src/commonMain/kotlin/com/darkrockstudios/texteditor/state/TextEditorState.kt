@@ -476,6 +476,12 @@ class TextEditorState(
 	private var lastLayoutGeneration = -1
 	private var lastLayoutLineCount = -1
 
+	/** The viewport width the last completed pass shaped to; rows depend on no other viewport dimension. */
+	private var lastLayoutWidth = -1f
+
+	/** The lines the last completed pass laid out. */
+	private var lastLayoutLines: List<AnnotatedString>? = null
+
 	internal fun invalidateLayoutInputs() {
 		layoutInputGeneration++
 	}
@@ -1192,20 +1198,38 @@ class TextEditorState(
 	}
 
 	/**
-	 * Records the editor's new viewport [size] and re-wraps the document to fit. When a
-	 * focused editor gets shorter, as when the window shrinks for a soft keyboard, a caret
+	 * Records the editor's new viewport [size] and re-wraps the document to fit a new
+	 * width. A change of height alone, as when a soft keyboard opens or closes, shapes
+	 * nothing: it only moves the scroll range. When a focused editor gets shorter, a caret
 	 * in view (or on its way there) stays in view.
 	 */
 	fun onViewportSizeChange(size: Size) {
-		val keepCaret = isFocused && lineOffsets.isNotEmpty() &&
+		val collapsed = size.width <= 1f || size.height <= 1f
+		val keepCaret = isFocused && lineOffsets.isNotEmpty() && !collapsed &&
 				size.width == viewportSize.width && size.height < viewportSize.height &&
 				scrollManager.isCursorInViewOrScrolling()
 		viewportSize = size
-		invalidateLayoutInputs()
-		updateBookKeeping()
+		when {
+			!rowsAreCurrent(size.width) -> {
+				invalidateLayoutInputs()
+				updateBookKeeping()
+			}
+			// The rows wait, unchanged, for the viewport to open again.
+			collapsed -> Unit
+			else -> scrollManager.onViewportHeightChange()
+		}
 		// After the relayout, which an open transaction holds until it commits.
 		if (keepCaret) onCommit { scrollManager.snapCursorVisible() }
 	}
+
+	/**
+	 * Whether the last completed pass laid out the current lines at [width] against the
+	 * current layout inputs, outside any transaction. A pass the collapsed viewport
+	 * skipped leaves the rows behind the text, which the generation records.
+	 */
+	private fun rowsAreCurrent(width: Float): Boolean =
+		draft == null && _lineOffsets.isNotEmpty() && width == lastLayoutWidth &&
+				lastLayoutGeneration == layoutInputGeneration && lastLayoutLines === textLines
 
 	/**
 	 * Returns the [CursorMetrics] (pixel position and line height) for the caret at
@@ -1358,7 +1382,11 @@ class TextEditorState(
 		}
 
 		// Defer until the viewport has a real size; the 1×1 sentinel forces character-wide wraps.
-		if (viewportSize.width <= 1f || viewportSize.height <= 1f) return
+		// The skipped pass leaves the rows behind the text, so the next one must be full.
+		if (viewportSize.width <= 1f || viewportSize.height <= 1f) {
+			invalidateLayoutInputs()
+			return
+		}
 
 		// A partial pass is only sound against the exact layout the last pass produced.
 		// Degrade to full when the cache is missing, a full invalidator (style, measurer,
@@ -1535,6 +1563,8 @@ class TextEditorState(
 		scrollManager.updateContentHeight(ceil(yOffset).toInt())
 		lastLayoutLineCount = textLines.size
 		lastLayoutGeneration = layoutInputGeneration
+		lastLayoutWidth = viewportSize.width
+		lastLayoutLines = textLines
 	}
 
 	/**
