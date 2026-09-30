@@ -17,6 +17,9 @@ import com.darkrockstudios.texteditor.richstyle.OrderedList
 import com.darkrockstudios.texteditor.richstyle.hasLineBlock
 import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.applyStyleForEditAt
+import com.darkrockstudios.texteditor.state.clearFormatting
+import com.darkrockstudios.texteditor.state.linksAtSelection
+import com.darkrockstudios.texteditor.state.unlink
 import com.darkrockstudios.texteditor.state.insertTypedNewline
 import com.darkrockstudios.texteditor.state.moveToNextWord
 import com.darkrockstudios.texteditor.state.moveToPreviousWord
@@ -111,6 +114,14 @@ internal fun EditorActionRegistry.registerBuiltinActions() {
 	registerFormattingToggle(Action.ToggleUnderline) { UNDERLINE }
 	registerFormattingToggle(Action.ToggleStrikethrough) { it.strikethroughStyle }
 	registerFormattingToggle(Action.ToggleInlineCode) { it.codeStyle }
+	register(EditorActionSpec(Action.ClearFormatting) { it.state.clearFormatting() })
+	register(
+		EditorActionSpec(
+			action = Action.Unlink,
+			isEnabled = { it.state.linksAtSelection().isNotEmpty() },
+			perform = { it.state.unlink() },
+		)
+	)
 }
 
 private val UNDERLINE = SpanStyle(textDecoration = TextDecoration.Underline)

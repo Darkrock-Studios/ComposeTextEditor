@@ -120,6 +120,12 @@ sealed interface EditorCommand {
 			val ToggleStrikethrough = Action("editor.toggleStrikethrough", isEdit = true)
 			val ToggleInlineCode = Action("editor.toggleInlineCode", isEdit = true)
 
+			/** Follows TextEditorState.clearFormatting. */
+			val ClearFormatting = Action("editor.clearFormatting", isEdit = true)
+
+			/** Follows TextEditorState.unlink; disabled away from a link. */
+			val Unlink = Action("editor.unlink", isEdit = true)
+
 			/** Opens the editor's context menu under the caret: Shift+F10 and the Menu key. */
 			val ShowContextMenu = Action("editor.showContextMenu", isEdit = false)
 
@@ -157,6 +163,8 @@ sealed interface EditorCommand {
 				ToggleUnderline,
 				ToggleStrikethrough,
 				ToggleInlineCode,
+				ClearFormatting,
+				Unlink,
 				ShowContextMenu,
 			)
 

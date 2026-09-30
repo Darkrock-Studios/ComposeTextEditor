@@ -402,6 +402,20 @@ class KeyBindingsTest {
 		assertNull(MacKeyBindings.commandFor(chord(Key(java.awt.event.KeyEvent.VK_CONTEXT_MENU))))
 	}
 
+	/** Google Docs' chord. Ctrl+Space, Word's, switches the input method on every desktop. */
+	@Test
+	fun `ctrl or cmd+backslash clears formatting`() {
+		for (bindings in listOf(CtrlKeyBindings, WindowsKeyBindings)) {
+			assertEquals(Action.ClearFormatting, bindings.commandFor(chord(Key.Backslash, ctrl = true)))
+			assertNull(bindings.commandFor(chord(Key.Backslash, ctrl = true, shift = true)))
+			assertNull(bindings.commandFor(chord(Key.Backslash, ctrl = true, alt = true)), "AltGr")
+			assertNull(bindings.commandFor(chord(Key.Spacebar, ctrl = true)))
+		}
+		assertEquals(Action.ClearFormatting, MacKeyBindings.commandFor(chord(Key.Backslash, meta = true)))
+		assertNull(MacKeyBindings.commandFor(chord(Key.Backslash, ctrl = true)))
+		assertNull(MacKeyBindings.commandFor(chord(Key.Backslash, meta = true, shift = true)))
+	}
+
 	/** Ctrl+Tab is how GTK, Cocoa and Swing text views let the keyboard out; the focus system takes it. */
 	@Test
 	fun `tab with ctrl or cmd is left for focus traversal`() {

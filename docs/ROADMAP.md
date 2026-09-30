@@ -1107,7 +1107,15 @@ iOS Safari; browser tests run in CI.
   exist; rows stack with no gap. No per-paragraph alignment, indent, or line
   height. Global `textIndent`, `lineHeight`, and `textAlign` already work
   through `textStyle` (relevant to hammer-editor#927).
-- [ ] **5.8 Clear formatting and unlink** [Opus] [Lane D] actions.
+- [x] **5.8 Clear formatting and unlink** [Opus] [Lane D] actions.
+  Done: `Action.ClearFormatting` on Ctrl+\ and Cmd+\ (Google Docs; Word's
+  Ctrl+Space switches the input method) and `Action.Unlink`, unbound, through
+  `TextEditorState.clearFormatting` and `unlink`, each one undo step. Clear
+  formatting keeps heading and code block styles and, in a markdown editor, the
+  body style and the link style on links; at a caret it resets the typing
+  style. Unlink removes whole links the selection
+  touches or the caret is in. See `docs/design/editor-actions.md`,
+  "Formatting toggles".
 - [ ] **5.9 A composition the editor ends is not offered. C.** [Fable]
   [Lane G] 5.1 offers a typed composition when the IME commits or finishes
   it, but the editor also ends one itself, with a bare `clearComposingRange`:

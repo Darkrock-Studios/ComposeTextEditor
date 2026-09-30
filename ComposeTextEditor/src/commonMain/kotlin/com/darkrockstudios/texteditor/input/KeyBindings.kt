@@ -91,6 +91,7 @@ object CtrlKeyBindings : KeyBindings {
 			}
 
 			Key.B, Key.I, Key.U, Key.E -> if (ctrl && !event.isShiftPressed) formattingToggleFor(event.key) else null
+			Key.Backslash -> if (ctrl && !event.isShiftPressed) Action.ClearFormatting else null
 			Key.V -> when {
 				ctrl && event.isShiftPressed -> Action.PasteAsPlainText
 				ctrl -> Action.Paste
@@ -189,6 +190,7 @@ object MacKeyBindings : KeyBindings {
 			}
 
 			Key.B, Key.I, Key.U, Key.E -> if (cmd && !event.isShiftPressed) formattingToggleFor(event.key) else null
+			Key.Backslash -> if (cmd && !event.isShiftPressed && !option) Action.ClearFormatting else null
 			// Cmd+Option+Shift+V is Cocoa's Paste and Match Style; Cmd+Shift+V is the common alias.
 			Key.V -> when {
 				cmd && event.isShiftPressed -> Action.PasteAsPlainText
@@ -248,7 +250,9 @@ object MacKeyBindings : KeyBindings {
 /**
  * Bold, italic and underline sit on B, I and U everywhere. Inline code is on E (GitHub,
  * Notion). Strikethrough, bound beside Cut, is on Shift+X (Google Docs on macOS, Slack,
- * Teams): the other common choice, Shift+S, is Save As in most hosts.
+ * Teams): the other common choice, Shift+S, is Save As in most hosts. Clear formatting is
+ * on backslash (Google Docs): Word's Ctrl+Space switches the input method on Windows,
+ * Linux and macOS. Unlink has no common chord and is left unbound.
  */
 private fun formattingToggleFor(key: Key): Action? = when (key) {
 	Key.B -> Action.ToggleBold

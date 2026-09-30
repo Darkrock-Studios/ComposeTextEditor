@@ -208,7 +208,11 @@ Ctrl/Cmd+B, I, U, Shift+X and E.
    press it again and the text typed after is not.
 6. Repeat 1 and 2 with italic (I), strikethrough (Shift+X) and inline code (E). Export
    the markdown. **Expect:** `*`, `~~` and backticks where the styles were applied.
-7. Press an unbound Ctrl chord (say Ctrl+J). **Expect:** nothing happens and the editor
+7. Select a paragraph with bold, italic, a link and a heading line in it and press
+   Ctrl/Cmd+\. **Expect:** bold and italic go; the heading keeps its size, the link
+   stays a link; one undo brings the formatting back. At a bare caret after
+   Ctrl/Cmd+B, Ctrl/Cmd+\ makes the next typed text plain.
+8. Press an unbound Ctrl chord (say Ctrl+J). **Expect:** nothing happens and the editor
    does not become unresponsive; the keystroke is not silently swallowed into text.
 
 ### 3.4 Read-only enforcement (#87)

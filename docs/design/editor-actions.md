@@ -153,10 +153,24 @@ by equality, as `addStyleSpan` and `removeStyleSpan` do.
 | Underline | Ctrl+U | Cmd+U |
 | Strikethrough | Ctrl+Shift+X | Cmd+Shift+X |
 | Inline code | Ctrl+E | Cmd+E |
+| Clear formatting | Ctrl+\ | Cmd+\ |
+| Unlink | none | none |
 
 Strikethrough follows Google Docs on macOS, Slack and Teams; the other common
 choice, Shift+S, is Save As in most hosts. Inline code follows GitHub and
-Notion.
+Notion. Clear formatting follows Google Docs; Word's Ctrl+Space switches the
+input method on Windows, Linux and macOS. Unlink has no chord common enough to
+claim.
+
+`editor.clearFormatting` (`TextEditorState.clearFormatting`) takes every
+character style off the selection except those structure puts there: a
+heading's or code block's line style and, in a markdown editor, the body text
+style and the link style where a link covers the text. At a collapsed caret it
+sets the style of the text typed next to its line's plain style, like the
+toggles leaving the document alone. `editor.unlink` (`TextEditorState.unlink`) takes off,
+whole, every link the selection touches or the one the caret is in or at the
+edge of, with its link style; its `isEnabled` is false away from a link. Each
+is one undo step.
 
 ### Tab
 
