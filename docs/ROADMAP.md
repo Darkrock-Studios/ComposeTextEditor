@@ -1815,7 +1815,13 @@ Shaping is one line per keystroke. These still scale with document length:
 - [ ] **7.8** [Fable] [Lane N] Per keystroke: the line list is copied, every
   `LineWrap` is rebuilt, and every rich span is re-anchored. Measured on the
   iOS simulator (4.21): one keyboard edit takes 9.4 ms at 200k characters
-  against 0.7 ms at 2k, wherever the caret is.
+  against 0.7 ms at 2k, wherever the caret is. Design in
+  `docs/design/incremental-relayout.md`, section 9. Landed so far: the line
+  list is chunked (`state/LineList.kt`, chunks of 32 to 64 lines), so an
+  edit splices the chunk or two it touches and shares the rest, and a line's
+  flat character index is a prefix total in place of the per-revision
+  `lineStartOffsets` table (`LineListCostTest`; `DocumentTextCostTest` now
+  counts through the readers themselves).
 - [x] **7.9** [Opus] [Lane N] `getAllText()` rebuilds the whole document per
   revision when read by semantics, the Android IME, and the desktop adapter.
   214 µs per revision at 200k characters on the desktop JVM (4.21).

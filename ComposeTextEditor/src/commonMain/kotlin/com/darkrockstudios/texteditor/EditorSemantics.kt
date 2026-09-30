@@ -204,9 +204,10 @@ internal class SemanticsDocument(
 		val listener = linkListener ?: return all
 		val links = richSpans.filter { it.style is LinkSpanStyle }
 		if (links.isEmpty()) return all
-		val starts = lineStartOffsets
-		fun indexOf(position: CharLineOffset) =
-			(starts.getOrElse(position.line) { all.length } + position.char).coerceIn(0, all.length)
+		fun indexOf(position: CharLineOffset): Int {
+			val lineStart = if (position.line in 0..lines.size) lineStart(position.line) else all.length
+			return (lineStart + position.char).coerceIn(0, all.length)
+		}
 		return buildAnnotatedString {
 			append(all)
 			for (link in links) {

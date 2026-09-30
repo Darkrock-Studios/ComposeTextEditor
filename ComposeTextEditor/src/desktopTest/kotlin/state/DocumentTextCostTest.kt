@@ -23,26 +23,16 @@ import kotlin.random.Random
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
  * The whole text is built only for the readers that need it, and after an edit it is
  * spliced from the last built revision, reading only the lines the edit changed. Every
  * other reader (the input methods' reads around the caret) reads its window in place.
- * Counted through a line list that tallies each line it hands out.
+ * Counted by the line list, which tallies each line it hands out.
  */
 class DocumentTextCostTest {
-
-	private class CountingLines(private val backing: List<AnnotatedString>) : AbstractList<AnnotatedString>() {
-		var reads = 0
-
-		override val size: Int get() = backing.size
-
-		override fun get(index: Int): AnnotatedString {
-			reads++
-			return backing[index]
-		}
-	}
 
 	private val bold = SpanStyle(fontWeight = FontWeight.Bold)
 
@@ -134,70 +124,74 @@ class DocumentTextCostTest {
 		val doc = DocumentSnapshot(base)
 		doc.getAllText()
 		doc.plainText
-		val edited = CountingLines(base.toMutableList().also { it[250] = AnnotatedString("edited") })
+		val edited = base.toMutableList().also { it[250] = AnnotatedString("edited") }
 
 		val next = doc.withLines(edited, LineSplice(250, lineCount - 251))
-		next.lineStartOffsets
-		edited.reads = 0
+		val reads = next.lineList.reads
 		val text = next.getAllText()
 		val plain = next.plainText
 
-		assertTrue(edited.reads <= 3, "the splice read ${edited.reads} of $lineCount lines")
-		assertEquals(DocumentSnapshot(edited.toList()).getAllText(), text)
+		assertTrue(next.lineList.reads - reads <= 3, "the splice read ${next.lineList.reads - reads} of $lineCount lines")
+		assertEquals(DocumentSnapshot(edited).getAllText(), text)
 		assertEquals(text.text, plain)
 	}
 
-	private fun TestScope.editorWithCountedLines(): Pair<TextEditorState, CountingLines> {
+	private fun TestScope.editorWithDocument(): TextEditorState {
 		val state = editorWithCounter(MeasureCounter())
 		state.setText(AnnotatedString((0 until lineCount).joinToString("\n") { "line $it has a few words" }))
-		val lines = CountingLines(state.textLines)
-		state.setLines(lines)
-		state.getTextLength()
-		return state to lines
+		return state
 	}
 
 	/**
-	 * The edit says which line it changed, so the splice never compares the old lines. The
-	 * splice's own reads of the new lines are pinned on the snapshot above.
+	 * The edit says which line it changed, so the splice never compares the old lines and
+	 * reads only the changed one and its neighbours of the new ones.
 	 */
 	@Test
-	fun `typing after the text was read does not compare the old lines`() = runTest {
-		val (state, lines) = editorWithCountedLines()
+	fun `typing after the text was read reads the changed line and compares none`() = runTest {
+		val state = editorWithDocument()
 		state.getAllText()
 		state.cursor.updatePosition(CharLineOffset(250, 4))
+		val old = state.snapshot().lineList
+		val oldReads = old.reads
 		state.insertCharacterAtCursor('x')
-		lines.reads = 0
+		val new = state.snapshot().lineList
+		val newReads = new.reads
 
 		val text = state.getAllText()
 
-		assertTrue(lines.reads <= 2, "the text after a keystroke read ${lines.reads} of the old lines")
+		assertTrue(old.reads - oldReads <= 4, "a keystroke read ${old.reads - oldReads} of the old lines")
+		assertTrue(new.reads - newReads <= 3, "the text after a keystroke read ${new.reads - newReads} lines")
 		assertEquals(state.textLines.joinToString("\n") { it.text }, text.text)
 	}
 
 	@Test
 	fun `input method reads around the caret read their window`() = runTest {
-		val (state, lines) = editorWithCountedLines()
+		val state = editorWithDocument()
 		val caret = state.getCharacterIndex(CharLineOffset(250, 4))
-		lines.reads = 0
+		val lines = state.snapshot().lineList
+		val before = lines.reads
 
 		val window = state.imeSubSequence(caret - 30, caret + 30).toString()
 		val char = state.imeCharAt(caret)
 
-		assertTrue(lines.reads <= 6, "reading 60 characters read ${lines.reads} of $lineCount lines")
+		val reads = lines.reads - before
+		assertTrue(reads <= 6, "reading 60 characters read $reads of $lineCount lines")
 		assertEquals(state.getAllPlainText().substring(caret - 30, caret + 30), window)
 		assertEquals(state.getAllPlainText()[caret], char)
 	}
 
 	@Test
 	fun `a code point delete does not build the whole text`() = runTest {
-		val (state, lines) = editorWithCountedLines()
+		val state = editorWithDocument()
 		state.cursor.updatePosition(CharLineOffset(250, 4))
-		lines.reads = 0
+		val before = state.snapshot().lineList
+		val reads = before.reads
 
 		state.imeDeleteSurroundingTextInCodePoints(3, 0)
 
-		// The edit itself copies the line list (7.8); the whole text would read every line again.
-		assertTrue(lines.reads <= lineCount + 10, "a three code point delete read ${lines.reads} of $lineCount lines")
+		assertTrue(before.reads - reads <= 8, "a three code point delete read ${before.reads - reads} of $lineCount lines")
+		assertFalse(state.snapshot().text.plain.isInitialized(), "the delete built the whole plain text")
+		assertFalse(state.snapshot().text.annotated.isInitialized(), "the delete built the whole styled text")
 		assertEquals("l 250 has a few words", state.textLines[250].text)
 	}
 

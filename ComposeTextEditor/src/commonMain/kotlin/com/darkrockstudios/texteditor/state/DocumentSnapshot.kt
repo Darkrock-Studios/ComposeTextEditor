@@ -14,8 +14,8 @@ import com.darkrockstudios.texteditor.richstyle.RichSpan
  * [TextEditorState.setDocument].
  */
 class DocumentSnapshot private constructor(
-	/** The document as one [AnnotatedString] per line, in order. */
-	val lines: List<AnnotatedString>,
+	/** The lines, chunked: an edit shares the chunks it leaves alone. */
+	internal val lineList: LineList,
 	/** Every rich span in the document, its ranges addressing [lines]. */
 	val richSpans: Set<RichSpan>,
 	/**
@@ -26,28 +26,29 @@ class DocumentSnapshot private constructor(
 	 */
 	private val spansByLine: Lazy<Map<Int, List<RichSpan>>>,
 	/**
-	 * Backs [lineStartOffsets]. Held as the [Lazy] for the same reasons as
-	 * [spansByLine], and shared with the revision [withRichSpans] produces
-	 * because a span-only edit leaves every line length untouched.
+	 * Backs [getAllText] and [plainText]. Depends only on the text, so it is shared
+	 * with the revision [withRichSpans] produces.
 	 */
-	private val lineStarts: Lazy<IntArray>,
-	/**
-	 * Backs [getAllText] and [plainText]. Depends only on the text, so like
-	 * [lineStarts] it is shared with the revision [withRichSpans] produces.
-	 */
-	private val text: DocumentText,
+	internal val text: DocumentText,
 ) {
+	private constructor(lineList: LineList, richSpans: Set<RichSpan>) : this(
+		lineList = lineList,
+		richSpans = richSpans,
+		spansByLine = spansByLineOf(richSpans),
+		text = DocumentText(lineList),
+	)
+
 	/**
 	 * Builds a snapshot by hand. [richSpans] need not fit [lines]:
 	 * [TextEditorState.setDocument] clamps them onto the document on load.
 	 */
 	constructor(lines: List<AnnotatedString>, richSpans: Set<RichSpan> = emptySet()) : this(
-		lines = lines,
+		lineList = LineList.of(lines),
 		richSpans = richSpans,
-		spansByLine = spansByLineOf(richSpans),
-		lineStarts = lineStartsOf(lines),
-		text = DocumentText(lines),
 	)
+
+	/** The document as one [AnnotatedString] per line, in order. */
+	val lines: List<AnnotatedString> get() = lineList
 
 	/**
 	 * [richSpans] grouped by every line each one covers; a multi-line span appears
@@ -58,17 +59,17 @@ class DocumentSnapshot private constructor(
 	internal val richSpansByLine: Map<Int, List<RichSpan>> get() = spansByLine.value
 
 	/**
-	 * Flat character index at which each line starts, counting one newline between
-	 * lines. Has one entry per line plus a trailing entry for the position just past
-	 * the document's final newline slot, so `lineStartOffsets[n + 1] - 1` is the end
-	 * of line `n`.
-	 *
-	 * Built on first read and reused until a revision changes the text, which turns
-	 * offset/index conversion from a walk over every preceding line into an array
-	 * read. Draw does that conversion several times per rich span per frame, so the
-	 * walk showed up directly in frame time on long documents.
+	 * Flat character index at which [line] starts, counting one newline between
+	 * lines; `line` may be the line count, for the position just past the document's
+	 * final newline slot, so `lineStart(n + 1) - 1` is the end of line `n`.
 	 */
-	internal val lineStartOffsets: IntArray get() = lineStarts.value
+	internal fun lineStart(line: Int): Int = lineList.charStart(line)
+
+	/** The line holding flat character [index], which must be within the document. */
+	internal fun lineOfCharacter(index: Int): Int = lineList.lineOf(index)
+
+	/** The flat length of the document, newlines between lines counted. */
+	internal val textLength: Int get() = lineList.textLength
 
 	/**
 	 * The whole document as a single [AnnotatedString], lines joined with newlines.
@@ -87,26 +88,27 @@ class DocumentSnapshot private constructor(
 	 * character costs a binary search over the line starts and a range costs its own
 	 * length, so an input method's reads around the caret never build the whole text.
 	 */
-	internal val chars: CharSequence by lazy(LazyThreadSafetyMode.PUBLICATION) { DocumentChars(lines, lineStartOffsets) }
+	internal val chars: CharSequence by lazy(LazyThreadSafetyMode.PUBLICATION) { DocumentChars(lineList) }
 
 	/**
 	 * Keeps the span index: the ranges are untouched by a text edit, so the lines they
 	 * start on are the same ones they started on before. [splice], when the caller knows
 	 * it, says which lines changed; otherwise the lines are compared by identity.
 	 */
-	internal fun withLines(lines: List<AnnotatedString>, splice: LineSplice? = null) = DocumentSnapshot(
-		lines = lines,
-		richSpans = richSpans,
-		spansByLine = spansByLine,
-		lineStarts = lineStartsOf(lines),
-		text = text.next(this.lines, lineStarts, lines, splice),
-	)
+	internal fun withLines(lines: List<AnnotatedString>, splice: LineSplice? = null): DocumentSnapshot {
+		val list = LineList.of(lines)
+		return DocumentSnapshot(
+			lineList = list,
+			richSpans = richSpans,
+			spansByLine = spansByLine,
+			text = text.next(lineList, list, splice),
+		)
+	}
 
 	internal fun withRichSpans(richSpans: Set<RichSpan>) = DocumentSnapshot(
-		lines = lines,
+		lineList = lineList,
 		richSpans = richSpans,
 		spansByLine = spansByLineOf(richSpans),
-		lineStarts = lineStarts,
 		text = text,
 	)
 }
@@ -120,20 +122,29 @@ internal class LineSplice(val unchangedBefore: Int, val unchangedAfter: Int)
 /**
  * A revision whose [text] was built, with its line starts, and how many lines at each
  * end the revision holding this shares with it. Holds no lines, so an unread revision
- * keeps one old text of each kind alive at most, never a chain of them.
+ * keeps one old text of each kind alive at most, never a chain of them or their lines.
  */
 internal class TextBase<T : CharSequence>(
 	val text: T,
-	val lineCount: Int,
+	/** Each line's start in [text], then the index past the final line's break slot. */
 	val starts: IntArray,
 	val unchangedBefore: Int,
 	val unchangedAfter: Int,
 ) {
+	constructor(text: T, lines: LineList, unchangedBefore: Int, unchangedAfter: Int) : this(
+		text = text,
+		starts = IntArray(lines.size + 1) { lines.charStart(it) },
+		unchangedBefore = unchangedBefore,
+		unchangedAfter = unchangedAfter,
+	)
+
+	val lineCount: Int get() = starts.size - 1
+
 	/** This base for a revision that further kept [step]'s ends, or null when it shares no line with it. */
 	fun narrowed(step: LineSplice): TextBase<T>? {
 		val before = minOf(unchangedBefore, step.unchangedBefore)
 		val after = minOf(unchangedAfter, step.unchangedAfter)
-		return if (before == 0 && after == 0) null else TextBase(text, lineCount, starts, before, after)
+		return if (before == 0 && after == 0) null else TextBase(text, starts, before, after)
 	}
 }
 
@@ -142,13 +153,13 @@ internal class TextBase<T : CharSequence>(
  * be. A base is dropped once its text is built, so a read revision holds no old text.
  */
 internal class DocumentText(
-	private val lines: List<AnnotatedString>,
+	private val lines: LineList,
 	private var plainBase: TextBase<String>? = null,
 	private var annotatedBase: TextBase<AnnotatedString>? = null,
 ) {
 	val annotated: Lazy<AnnotatedString> = lazy(LazyThreadSafetyMode.PUBLICATION) {
 		val base = annotatedBase
-		val capacity = base?.text?.length ?: (lines.sumOf { it.length } + lines.size)
+		val capacity = base?.text?.length ?: (lines.textLength + 1)
 		val text = with(AnnotatedString.Builder(capacity + 16)) {
 			if (base == null) {
 				lines.forEachIndexed { index, line ->
@@ -169,7 +180,7 @@ internal class DocumentText(
 		val text = when {
 			// One string for both when the styled text is already there.
 			annotated.isInitialized() -> annotated.value.text
-			base == null -> buildString(lines.sumOf { it.length } + lines.size) {
+			base == null -> buildString(lines.textLength + 1) {
 				lines.forEachIndexed { index, line ->
 					if (index > 0) append('\n')
 					append(line.text)
@@ -230,12 +241,7 @@ internal class DocumentText(
 	 * from the styled text's string when only that was built), else from this one's own
 	 * base, with the unchanged ends narrowed to what both edits kept.
 	 */
-	fun next(
-		oldLines: List<AnnotatedString>,
-		oldStarts: Lazy<IntArray>,
-		newLines: List<AnnotatedString>,
-		splice: LineSplice?,
-	): DocumentText {
+	fun next(oldLines: LineList, newLines: LineList, splice: LineSplice?): DocumentText {
 		val plainBuilt = plain.isInitialized()
 		val annotatedBuilt = annotated.isInitialized()
 		val oldPlainBase = plainBase
@@ -245,8 +251,7 @@ internal class DocumentText(
 		}
 		val step = splice ?: diff(oldLines, newLines)
 		val shares = step.unchangedBefore > 0 || step.unchangedAfter > 0
-		fun <T : CharSequence> baseOf(text: T) =
-			TextBase(text, oldLines.size, oldStarts.value, step.unchangedBefore, step.unchangedAfter)
+		fun <T : CharSequence> baseOf(text: T) = TextBase(text, oldLines, step.unchangedBefore, step.unchangedAfter)
 		return DocumentText(
 			lines = newLines,
 			plainBase = when {
@@ -262,27 +267,26 @@ internal class DocumentText(
 			},
 		)
 	}
-}
 
-
-/** The lines two revisions share at each end, compared by identity. */
-private fun diff(old: List<AnnotatedString>, new: List<AnnotatedString>): LineSplice {
-	val shorter = minOf(old.size, new.size)
-	var before = 0
-	while (before < shorter && old[before] === new[before]) before++
-	var after = 0
-	while (after < shorter - before && old[old.size - 1 - after] === new[new.size - 1 - after]) after++
-	return LineSplice(before, after)
+	/** The lines two revisions share at each end, compared by identity. */
+	private fun diff(old: List<AnnotatedString>, new: List<AnnotatedString>): LineSplice {
+		val shorter = minOf(old.size, new.size)
+		var before = 0
+		while (before < shorter && old[before] === new[before]) before++
+		var after = 0
+		while (after < shorter - before && old[old.size - 1 - after] === new[new.size - 1 - after]) after++
+		return LineSplice(before, after)
+	}
 }
 
 /** [DocumentSnapshot.chars]: the lines read in place, with a line break between each two. */
-private class DocumentChars(private val lines: List<AnnotatedString>, private val starts: IntArray) : CharSequence {
-	override val length: Int get() = maxOf(0, starts[lines.size] - 1)
+internal class DocumentChars(private val lines: LineList) : CharSequence {
+	override val length: Int get() = lines.textLength
 
 	override fun get(index: Int): Char {
 		if (index < 0 || index >= length) throw IndexOutOfBoundsException("index: $index, length: $length")
-		val line = lineOf(index)
-		val char = index - starts[line]
+		val line = lines.lineOf(index)
+		val char = index - lines.charStart(line)
 		val text = lines[line].text
 		return if (char < text.length) text[char] else '\n'
 	}
@@ -293,10 +297,10 @@ private class DocumentChars(private val lines: List<AnnotatedString>, private va
 		}
 		return buildString(endIndex - startIndex) {
 			var index = startIndex
-			var line = if (startIndex < endIndex) lineOf(startIndex) else 0
+			var line = if (startIndex < endIndex) lines.lineOf(startIndex) else 0
 			while (index < endIndex) {
 				val text = lines[line].text
-				val char = index - starts[line]
+				val char = index - lines.charStart(line)
 				val take = minOf(text.length, char + endIndex - index)
 				if (char < take) append(text, char, take)
 				index += take - char
@@ -310,22 +314,6 @@ private class DocumentChars(private val lines: List<AnnotatedString>, private va
 	}
 
 	override fun toString(): String = subSequence(0, length).toString()
-
-	private fun lineOf(index: Int): Int = lineOfCharacter(starts, lines.size, index)
-}
-
-/**
- * Index of the line containing flat character [index], by binary search over a
- * snapshot's line [starts] for [lineCount] lines. [index] must be within the document.
- */
-internal fun lineOfCharacter(starts: IntArray, lineCount: Int, index: Int): Int {
-	var low = 0
-	var high = lineCount - 1
-	while (low < high) {
-		val mid = (low + high + 1) ushr 1
-		if (starts[mid] <= index) low = mid else high = mid - 1
-	}
-	return low
 }
 
 private fun spansByLineOf(richSpans: Set<RichSpan>): Lazy<Map<Int, List<RichSpan>>> =
@@ -337,16 +325,4 @@ private fun spansByLineOf(richSpans: Set<RichSpan>): Lazy<Map<Int, List<RichSpan
 			}
 		}
 		byLine
-	}
-
-private fun lineStartsOf(lines: List<AnnotatedString>): Lazy<IntArray> =
-	lazy(LazyThreadSafetyMode.PUBLICATION) {
-		val starts = IntArray(lines.size + 1)
-		var offset = 0
-		for (index in lines.indices) {
-			starts[index] = offset
-			offset += lines[index].length + 1
-		}
-		starts[lines.size] = offset
-		starts
 	}

@@ -13,20 +13,9 @@ import kotlin.test.assertTrue
 
 /**
  * The keyboard's reads around the caret read the lines in their window, never the
- * whole document. Counted through a line list that tallies each line it hands out.
+ * whole document. Counted by the line list, which tallies each line it hands out.
  */
 class InputConnectionReadCostTest {
-
-	private class CountingLines(private val backing: List<AnnotatedString>) : AbstractList<AnnotatedString>() {
-		var reads = 0
-
-		override val size: Int get() = backing.size
-
-		override fun get(index: Int): AnnotatedString {
-			reads++
-			return backing[index]
-		}
-	}
 
 	private val lineCount = 500
 
@@ -37,17 +26,16 @@ class InputConnectionReadCostTest {
 			measurer = mockk(relaxed = true),
 			initialText = AnnotatedString((0 until lineCount).joinToString("\n") { "line $it has a few words" }),
 		)
-		val lines = CountingLines(state.textLines)
-		state.setLines(lines)
-		state.getTextLength()
 		state.cursor.updatePosition(CharLineOffset(250, 4))
 		val connection = TextEditorInputConnection(state, mockk<View>(relaxed = true))
-		lines.reads = 0
+		val lines = state.snapshot().lineList
+		val readsBefore = lines.reads
 
 		val before = connection.getTextBeforeCursor(30, 0).toString()
 		val after = connection.getTextAfterCursor(30, 0).toString()
 
-		assertTrue(lines.reads <= 8, "reading 60 characters read ${lines.reads} of $lineCount lines")
+		val reads = lines.reads - readsBefore
+		assertTrue(reads <= 8, "reading 60 characters read $reads of $lineCount lines")
 		assertEquals("\nline 249 has a few words\nline", before)
 		assertEquals(" 250 has a few words\nline 251 ", after)
 	}

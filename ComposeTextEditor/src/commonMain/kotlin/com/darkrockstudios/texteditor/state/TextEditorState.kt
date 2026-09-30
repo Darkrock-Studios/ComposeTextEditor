@@ -1120,19 +1120,17 @@ class TextEditorState(
 	}
 
 	/**
-	 * Replaces lines [first] through [last] with [replacement] in one new list, so a
-	 * splice of many lines copies the document once. [last] of `first - 1` inserts
+	 * Replaces lines [first] through [last] with [replacement], splicing the line list so
+	 * only the chunks holding those lines are copied. [last] of `first - 1` inserts
 	 * before [first]. A document left with no lines gets one empty line.
 	 */
 	internal fun replaceLines(first: Int, last: Int, replacement: List<AnnotatedString>) {
-		val lines = textLines
+		val lines = workingContent.lineList
 		val from = first.coerceIn(0, lines.size)
 		val to = last.coerceIn(from - 1, lines.lastIndex)
-		val updated = ArrayList<AnnotatedString>(lines.size - (to - from + 1) + replacement.size)
-		updated.addAll(lines.subList(0, from))
-		updated.addAll(replacement)
-		updated.addAll(lines.subList(to + 1, lines.size))
+		val updated = lines.splice(from, to + 1, replacement)
 		if (updated.isEmpty()) return setLines(listOf(AnnotatedString("")))
+		linesWritten += replacement.size
 		setLines(updated, LineSplice(unchangedBefore = from, unchangedAfter = lines.size - (to + 1)))
 	}
 
@@ -1148,13 +1146,17 @@ class TextEditorState(
 		announceReplacement()
 	}
 
-	/** How many lines [setLines] has been handed; the cost tests read it to catch a list rebuilt per line. */
+	/**
+	 * How many lines have been written: [replaceLines]' replacements and the whole of any
+	 * list [setLines] is handed that is not the spliced line list itself. The cost tests
+	 * read it to catch a list rebuilt per line.
+	 */
 	internal var linesWritten = 0L
 		private set
 
 	/** Publishes [lines]; [splice] says which lines changed, when the caller knows. */
 	internal fun setLines(lines: List<AnnotatedString>, splice: LineSplice? = null) {
-		linesWritten += lines.size
+		if (lines !is LineList) linesWritten += lines.size
 		mutateContent { it.withLines(lines, splice) }
 	}
 
@@ -1307,15 +1309,15 @@ class TextEditorState(
 	 * The inverse of [getCharacterIndex]; clamps to the document start or end when out of range.
 	 */
 	fun getOffsetAtCharacter(index: Int): CharLineOffset {
-		val starts = workingContent.lineStartOffsets
-		val lineCount = textLines.size
+		val content = workingContent
+		val lineCount = content.lines.size
 		if (index < 0 || lineCount == 0) return CharLineOffset(0, 0)
-		if (index >= starts[lineCount]) {
-			return CharLineOffset(textLines.lastIndex, textLines.last().length)
+		if (index > content.textLength) {
+			return CharLineOffset(lineCount - 1, content.lines[lineCount - 1].length)
 		}
 
-		val line = lineOfCharacter(starts, lineCount, index)
-		return CharLineOffset(line, index - starts[line])
+		val line = content.lineOfCharacter(index)
+		return CharLineOffset(line, index - content.lineStart(line))
 	}
 
 	/**
@@ -1328,7 +1330,7 @@ class TextEditorState(
 		// Belt-and-braces: applyOperation already clears stale selections, but
 		// any future flow-emit-before-coerce path would crash here without this.
 		val safe = offset.coerceInto(textLines)
-		return workingContent.lineStartOffsets[safe.line] + safe.char
+		return workingContent.lineStart(safe.line) + safe.char
 	}
 
 	fun CharLineOffset.toCharacterIndex(): Int = getCharacterIndex(this)
@@ -1347,7 +1349,7 @@ class TextEditorState(
 		require(lineIndex >= 0) { "Line index must be non-negative" }
 		require(lineIndex < textLines.size) { "Line index $lineIndex out of bounds for ${textLines.size} lines" }
 
-		return workingContent.lineStartOffsets[lineIndex]
+		return workingContent.lineStart(lineIndex)
 	}
 
 	internal fun updateBookKeeping(update: LayoutUpdate = LayoutUpdate.Full) {
@@ -1885,10 +1887,7 @@ class TextEditorState(
 	internal val documentChars: CharSequence get() = workingContent.chars
 
 	/** Returns the total character count of the document, counting newlines between lines. */
-	fun getTextLength(): Int {
-		val starts = workingContent.lineStartOffsets
-		return starts[starts.lastIndex] - 1
-	}
+	fun getTextLength(): Int = workingContent.textLength
 
 	/**
 	 * Returns a hash of the document text and inline character spans, suitable for

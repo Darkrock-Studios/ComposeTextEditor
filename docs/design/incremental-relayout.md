@@ -192,7 +192,7 @@ of flat span-set iterations.
 by semantics) and `plainText` (the same without styles, read by the skiko
 input request and Android's extracted text) are memoized per text revision:
 built on first read and shared across span-only revisions, the same pattern as
-the line-start and span indices. After an edit, a revision's text is spliced
+the span index. After an edit, a revision's text is spliced
 from the last revision whose text was built: that one's unchanged first and
 last lines are copied as two ranges of its text, and only the changed lines
 are read, with the line at each end of a copied range, whose empty

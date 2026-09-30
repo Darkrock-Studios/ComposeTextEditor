@@ -36,27 +36,15 @@ import kotlin.test.assertTrue
 
 /**
  * A caret move reads the lines around the caret, never the document: the flat length
- * and the line starts are memoized per revision, so no motion needs a sum over lines.
- * Counted by publishing the document through a list that tallies every line it hands
- * out. Every line holds a word, so the word motions, which walk on to the next line
- * with a word as native editors do, stop on a neighbour.
+ * and the line starts are prefix totals of the line list, so no motion needs a sum over
+ * lines. Counted by the line list, which tallies every line it hands out. Every line
+ * holds a word, so the word motions, which walk on to the next line with a word as
+ * native editors do, stop on a neighbour.
  */
 @OptIn(InternalComposeUiApi::class)
 class CaretMoveCostTest {
 
-	/** Every other list operation (iteration, `toArray`, `indexOf`, `equals`) reads through [get]. */
-	private class CountingLines(private val backing: List<AnnotatedString>) : AbstractList<AnnotatedString>() {
-		var reads = 0
-
-		override val size: Int get() = backing.size
-
-		override fun get(index: Int): AnnotatedString {
-			reads++
-			return backing[index]
-		}
-	}
-
-	private class CountedEditor(val state: TextEditorState, val lines: CountingLines)
+	private class CountedEditor(val state: TextEditorState)
 
 	private val lineCount = 500
 
@@ -66,11 +54,7 @@ class CaretMoveCostTest {
 	private fun TestScope.editorWithCountedLines(): CountedEditor {
 		val state = editorWithCounter(MeasureCounter())
 		state.setText(AnnotatedString((0 until lineCount).joinToString("\n") { "line $it has a few words" }))
-		val lines = CountingLines(state.textLines)
-		state.setLines(lines)
-		// Builds the line starts, which read every line once per revision.
-		state.getTextLength()
-		return CountedEditor(state, lines)
+		return CountedEditor(state)
 	}
 
 	private fun CountedEditor.assertReadsFewLines(
@@ -80,11 +64,14 @@ class CaretMoveCostTest {
 	) {
 		state.selector.clearSelection()
 		state.cursor.updatePosition(from)
-		lines.reads = 0
+		// A move edits nothing, so the list it reads is the one published now.
+		val lines = state.snapshot().lineList
+		val before = lines.reads
 
 		state.move()
 
-		assertTrue(lines.reads <= bound, "$name read ${lines.reads} lines of $lineCount")
+		val reads = lines.reads - before
+		assertTrue(reads <= bound, "$name read $reads lines of $lineCount")
 	}
 
 	@Test

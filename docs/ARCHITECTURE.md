@@ -17,8 +17,8 @@ index plus a character offset within that line. `TextEditorRange` is an ordered
 pair of them. Every selection, span, edit, and cursor position speaks these two
 types. The alternate coordinate is the flat character index over the whole
 document (used by IMEs and find); `TextEditorState` converts between the two
-using a per-revision line-start table, so conversion is an array read, not a
-walk over the document.
+through the line list's running character totals, so conversion is a binary
+search over a few dozen chunks and an array read, not a walk over the document.
 
 The other axis is logical versus visual lines: a logical line (one entry in the
 document) may wrap into several visual rows. Visual rows exist only in layout
@@ -40,13 +40,16 @@ layout pass, and enforce the transaction rules that keep the two consistent.
 
 The document is an immutable value: one `AnnotatedString` per logical line plus
 a flat set of `RichSpan`s, published wholesale on every mutation (see
-"Document model and transactions" below). The snapshot also memoizes the
-indices derived from it (line-start offsets, spans grouped by start line), so
-hot queries stay cheap and survive across revisions that did not invalidate
-them. The whole text as one string is built only for the readers that need
-it (semantics, the skiko input request, Android's extracted text), spliced
-from the last built revision; everything else reads characters in place
-through `chars`.
+"Document model and transactions" below). The lines are held chunked
+(`LineList`, chunks of 32 to 64 lines with a directory of each chunk's first
+line and first character), so an edit copies the chunk or two it touches and
+shares the rest with the previous revision, and a line's flat character index
+is a prefix total rather than a table rebuilt per revision. The snapshot also
+memoizes the span index (spans grouped by line), which survives across
+revisions that did not invalidate it. The whole text as one string is built
+only for the readers that need it (semantics, the skiko input request,
+Android's extracted text), spliced from the last built revision; everything
+else reads characters in place through `chars`.
 
 ### Two span systems
 

@@ -45,10 +45,10 @@ private fun repairPlaceholders(
 	}
 	if (violations.isEmpty()) return snapshot
 
-	val lines = snapshot.lines.toMutableList()
+	var lines = snapshot.lineList
 	violations.forEach { (span, block) ->
 		val line = span.range.start.line
-		lines.getOrNull(line)?.let { lines[line] = rebuildWithoutBlock(it, block) }
+		if (line in lines.indices) lines = lines.splice(line, line + 1, listOf(rebuildWithoutBlock(lines[line], block)))
 	}
 	val rebuilt = violations.map { it.first.range.start.line }.filter { it in lines.indices }
 	val splice = if (rebuilt.isEmpty()) null else LineSplice(rebuilt.min(), lines.size - 1 - rebuilt.max())
