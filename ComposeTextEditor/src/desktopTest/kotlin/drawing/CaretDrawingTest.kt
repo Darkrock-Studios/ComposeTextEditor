@@ -56,7 +56,7 @@ class CaretDrawingTest {
 		state.lastCursorMetrics = null
 
 		assertEquals(emptyList(), state.drawCaret(Density(1f), 2.dp))
-		assertNotNull(state.lastCursorMetrics, "the IME still needs the caret's position")
+		assertNotNull(state.lastCursorMetrics, "the drawn caret's position is recorded while the blink hides it")
 	}
 
 	@Test

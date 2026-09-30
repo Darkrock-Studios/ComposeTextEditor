@@ -533,7 +533,7 @@ Soft keyboard only:
 6. Type with a swipe/gesture keyboard across a list item boundary. **Expect:** no
    duplicated text, no caret jumping backwards.
 
-### 4.6 Hardware keyboard on Android
+### 4.6 Android keyboards: hardware, floating, stylus
 
 A Bluetooth or USB keyboard, with a layout that has dead keys (Settings >
 System > Keyboard > Physical keyboard: English (US), International style, or
@@ -547,6 +547,12 @@ German, or French).
 3. Dead key, then an arrow key or Enter. **Expect:** the accent stays as typed and
    the arrow or Enter acts after it. Dead key then Backspace. **Expect:** the accent
    goes.
+
+4. With Gboard's floating keyboard, or a stylus on a device with stylus
+   handwriting (Android 14 or later), move the caret with the arrow keys and
+   by tapping, across rows. **Expect:** what follows the caret (the floating
+   candidates, the handwriting insertion marker) follows at once, not one move
+   behind (4.30).
 
 Checked on an emulator (2026-09-29, API 36, Gboard active) through
 `adb shell input`, whose virtual keyboard has Alt+E as a combining acute:

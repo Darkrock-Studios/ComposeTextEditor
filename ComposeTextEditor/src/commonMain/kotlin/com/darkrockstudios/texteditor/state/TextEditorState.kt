@@ -418,8 +418,9 @@ class TextEditorState(
 		private set
 
 	/**
-	 * Last calculated cursor pixel metrics.
-	 * Updated during rendering and used by Android's IME for cursor anchor info.
+	 * The caret's pixel metrics as the last frame drew them, whether or not the blink
+	 * showed it. A caret move is reflected from the next frame; the input methods
+	 * measure the caret when they ask instead.
 	 */
 	var lastCursorMetrics: CursorMetrics? = null
 		internal set

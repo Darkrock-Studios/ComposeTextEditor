@@ -8,6 +8,7 @@ import android.view.inputmethod.InputMethodManager
 import com.darkrockstudios.texteditor.input.ImeCursorSync
 import com.darkrockstudios.texteditor.input.TextEditorInputConnection
 import com.darkrockstudios.texteditor.input.composingAsTextRange
+import com.darkrockstudios.texteditor.input.measureCursorMetrics
 import com.darkrockstudios.texteditor.input.selectionAsTextRange
 
 /**
@@ -151,8 +152,7 @@ actual class PlatformTextEditorExtensions actual constructor(
 		matrix.setTranslate(location[0].toFloat(), location[1].toFloat())
 		builder.setMatrix(matrix)
 
-		// Set insertion marker location if we have cursor metrics
-		state.lastCursorMetrics?.let { metrics ->
+		state.measureCursorMetrics()?.let { metrics ->
 			builder.setInsertionMarkerLocation(
 				metrics.position.x,
 				metrics.lineTop,

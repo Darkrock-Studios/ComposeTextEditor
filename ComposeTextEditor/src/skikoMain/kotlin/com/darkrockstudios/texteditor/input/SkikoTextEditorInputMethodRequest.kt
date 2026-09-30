@@ -21,7 +21,6 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.ImeOptions
 import androidx.compose.ui.text.input.TextEditingScope
 import androidx.compose.ui.text.input.TextFieldValue
-import com.darkrockstudios.texteditor.cursor.calculateCursorPosition
 import com.darkrockstudios.texteditor.state.TextEditorState
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineStart
@@ -167,9 +166,7 @@ internal class SkikoTextEditorInputMethodRequest(
 		// geometry tracking expects; a scroll alone does not move the rectangle.
 		editorState.cursorPosition
 		val coords = attachedCoordinates()
-		val metrics = Snapshot.withoutReadObservation {
-			if (editorState.lineOffsets.isEmpty()) null else editorState.calculateCursorPosition()
-		}
+		val metrics = Snapshot.withoutReadObservation { editorState.measureCursorMetrics() }
 		if (coords != null && metrics != null) {
 			val origin = coords.positionInRoot()
 			Rect(

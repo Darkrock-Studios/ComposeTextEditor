@@ -208,7 +208,8 @@ when the IME's batch ends.
 Cursor anchor info (`updateCursorAnchorInfo`, used by floating toolbars,
 stylus handwriting, and some candidate windows) is requested by the IME via
 `requestCursorUpdates` and sent by the flush whenever the selection report
-changes, from the caret's layout metrics plus the view's screen location.
+changes, from the caret measured from the layout as it is sent (the last
+frame's drawn caret is one move behind) plus the view's screen location.
 Reports go through the view the live connection is bound to, the one the
 `InputMethodManager` is serving; between sessions they fall back to the view
 the `CaptureViewForIme` composable captures into `platformExtensions`.
