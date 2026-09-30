@@ -180,10 +180,10 @@ fun BasicTextEditor(
 		ContextMenuActions(state, clipboard, state.scope, enabled)
 	}
 	val latestOnLinkClick by rememberUpdatedState(onLinkClick)
-	val semanticsModifier = remember(state, enabled, focusRequester, contextMenuActions, contentDescription) {
-		Modifier.editorSemantics(state, enabled, focusRequester, contextMenuActions, contentDescription) { url ->
-			latestOnLinkClick?.invoke(url)
-		}
+	val hasLinkClick = onLinkClick != null
+	val semanticsModifier = remember(state, enabled, focusRequester, contextMenuActions, contentDescription, hasLinkClick) {
+		val openLink: ((String) -> Unit)? = if (hasLinkClick) { url -> latestOnLinkClick?.invoke(url) } else null
+		Modifier.editorSemantics(state, enabled, focusRequester, contextMenuActions, contentDescription, openLink)
 	}
 	val menuPlacement = remember(state, effectiveContextMenuState) {
 		ContextMenuPlacement(state, effectiveContextMenuState)

@@ -1584,7 +1584,15 @@ iOS Safari; browser tests run in CI.
 
 ### Accessibility
 
-- [ ] **7.1** [Opus] [Lane M] `RichTextView` has no semantics at all.
+- [x] **7.1** [Opus] [Lane M] `RichTextView` has no semantics at all.
+  Done, as a text view publishes itself (`BasicText`, a selectable
+  `TextView`): its text, with links as `LinkAnnotation.Url` opening through
+  `onLinkClick`, and its whole-document text layout. A selectable view adds the
+  selection range, `setSelection`, copy while there is a selection, and a long
+  press that opens its menu, a click that focuses it, and stays focusable; it
+  offers nothing that edits. The semantics sit on the node that carries the
+  host's `modifier` and the focus, as in the editor, so a host's own semantics
+  (a content description) join the same node.
 - [x] **7.2** [Opus] [Lane M] A disabled editor still exposes `setText` and
   `insertTextAtCursor`, and is still focusable, contrary to its KDoc.
   Done: a disabled editor reports `disabled()` and `isEditable = false`, and
@@ -1613,7 +1621,8 @@ iOS Safari; browser tests run in CI.
   `textCompositionRange`; a `contentDescription` parameter on both editor
   composables, since a host's `Modifier.semantics` lands on a container around
   the editable node, not on it; links published as `LinkAnnotation.Url` in the
-  text, which TalkBack lists and opens through the host's `onLinkClick`.
+  text, which TalkBack lists and opens through the host's `onLinkClick` (only
+  when there is one, so no link is offered that cannot open).
   `getTextLayoutResult` measures the whole document on request (cached per
   revision, width and style) the way the editor measures a line, each line its
   own paragraph, so line navigation matches the editor's rows; its geometry
@@ -1623,9 +1632,10 @@ iOS Safari; browser tests run in CI.
   an explicit IME action belongs to 3.11's keyboard options. Headings and lists
   stay unexposed: an editable node is one text, and native editors
   (`EditText`, `UITextView`) do not expose them either.
-- [ ] **7.36** [Opus] [Lane M] The semantics text layout (7.4) is measured apart
-  from the editor's rows, so its character bounds are offset by the start and
-  top content padding and the scroll offset, and rows below an image or rule
+- [ ] **7.36** [Opus] [Lane M] The semantics text layout (7.4, 7.1) is measured
+  apart from the editor's rows, so its character bounds are offset by the start
+  and top content padding (in `RichTextView` too) and the editor's scroll
+  offset, and rows below an image or rule
   sit higher than drawn. Screen readers that draw a highlight from character
   bounds (Select to Speak, braille cursors) place it wrong on a scrolled or
   padded editor. Compose offers no way to translate a `TextLayoutResult`; a fix

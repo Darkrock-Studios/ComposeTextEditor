@@ -833,6 +833,21 @@ toolbar's Link button over a word.
 4. Turn Enabled off and repeat 1 and 2. **Expect:** Copy only; no Cut, Paste or Set
    text.
 
+### 8c.4 RichTextView
+
+RichTextView demo: the top view is selectable and opens links; the cards below are
+selectable but pass no `onLinkClick`, so they offer no links to screen readers.
+
+1. TalkBack: swipe onto the top view. **Expect:** its text is read as text, not as an
+   edit box; reading by Lines follows the drawn rows; the Links menu lists its link
+   and opens it. Enter text selection mode, select a word, and the actions menu
+   offers Copy (never Cut, Paste or Set text); Copy works. On a card, the Links
+   menu is empty.
+2. VoiceOver (iOS): swipe onto the view: the text is read as static text; rotor Lines
+   and Words step through it; the link is reachable with the rotor's Links.
+3. VoiceOver (macOS), NVDA, Orca: Tab to the selectable view. **Expect:** the text is
+   read; Ctrl+A (Cmd+A) then Ctrl+C (Cmd+C) copies it; typing does nothing.
+
 ## 9. Consumer API sanity
 
 Guards #82, #48, #87, #90. Not strictly manual UI testing, but worth one pass before

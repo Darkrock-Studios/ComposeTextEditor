@@ -59,7 +59,7 @@ internal fun Modifier.editorSemantics(
 	focusRequester: FocusRequester,
 	actions: ContextMenuActions,
 	contentDescription: String?,
-	onLinkClick: (String) -> Unit,
+	onLinkClick: ((String) -> Unit)?,
 ): Modifier {
 	val document = SemanticsDocument(state, onLinkClick)
 	return semantics {
@@ -72,10 +72,7 @@ internal fun Modifier.editorSemantics(
 		contentDescription?.let { this.contentDescription = it }
 		getTextLayoutResult { results -> document.addLayoutTo(results) }
 		clipboardActions(actions)
-		onLongClick {
-			focusRequester.requestFocus()
-			actions.canPerform(Action.ShowContextMenu).also { if (it) actions.perform(Action.ShowContextMenu) }
-		}
+		longPressOpensMenu(focusRequester, actions)
 		editorSemanticsEdits(state, enabled)
 		selectionSemantics(state)
 		onClick { focusRequester.requestFocus(); true }
@@ -119,6 +116,14 @@ internal fun SemanticsPropertyReceiver.clipboardActions(actions: ContextMenuActi
 	if (actions.canPaste()) pasteText { actions.paste(); true }
 }
 
+/** Focuses, then opens the context menu, as a long press does. */
+internal fun SemanticsPropertyReceiver.longPressOpensMenu(focusRequester: FocusRequester, actions: ContextMenuActions) {
+	onLongClick {
+		focusRequester.requestFocus()
+		actions.canPerform(Action.ShowContextMenu).also { if (it) actions.perform(Action.ShowContextMenu) }
+	}
+}
+
 /** Places the caret, or selects, at the flat character offsets a screen reader asks for. */
 internal fun SemanticsPropertyReceiver.selectionSemantics(state: TextEditorState) {
 	setSelection { start, end, _ ->
@@ -141,13 +146,16 @@ internal fun SemanticsPropertyReceiver.selectionSemantics(state: TextEditorState
 
 /**
  * The document as accessibility services see it, each part cached per revision (a
- * snapshot, compared by identity, since every edit publishes a new one).
+ * snapshot, compared by identity, since every edit publishes a new one). Links are
+ * published only with an [onLinkClick] to open them.
  */
 internal class SemanticsDocument(
 	private val state: TextEditorState,
-	onLinkClick: (String) -> Unit,
+	onLinkClick: ((String) -> Unit)?,
 ) {
-	private val linkListener = LinkInteractionListener { link -> onLinkClick((link as LinkAnnotation.Url).url) }
+	private val linkListener = onLinkClick?.let { open ->
+		LinkInteractionListener { link -> open((link as LinkAnnotation.Url).url) }
+	}
 
 	private var textContent: DocumentSnapshot? = null
 	private var text = AnnotatedString("")
@@ -177,6 +185,7 @@ internal class SemanticsDocument(
 
 	private fun DocumentSnapshot.textWithLinks(): AnnotatedString {
 		val all = getAllText()
+		val listener = linkListener ?: return all
 		val links = richSpans.filter { it.style is LinkSpanStyle }
 		if (links.isEmpty()) return all
 		val starts = lineStartOffsets
@@ -188,7 +197,7 @@ internal class SemanticsDocument(
 				val start = indexOf(link.range.start)
 				val end = indexOf(link.range.end)
 				if (start < end) {
-					addLink(LinkAnnotation.Url((link.style as LinkSpanStyle).url, linkInteractionListener = linkListener), start, end)
+					addLink(LinkAnnotation.Url((link.style as LinkSpanStyle).url, linkInteractionListener = listener), start, end)
 				}
 			}
 		}
@@ -199,8 +208,8 @@ internal class SemanticsDocument(
 	 * read line boundaries and character bounds from it. The editor shapes each line on
 	 * its own, so this is measured separately, on request, the way the editor measures a
 	 * line (the same width, and the outer indent baked into plain lines). Its line breaks
-	 * match the editor's rows; its geometry leaves out the content padding, the scroll
-	 * offset and the height of block spans (7.36).
+	 * match the editor's rows. Its geometry leaves out the content padding, the height of
+	 * block spans, and in the editor the scroll offset (7.36).
 	 */
 	fun addLayoutTo(results: MutableList<TextLayoutResult>): Boolean {
 		val width = maxOf(1, state.viewportSize.width.toInt())

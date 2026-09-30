@@ -21,6 +21,12 @@ import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalTextToolbar
+import androidx.compose.ui.semantics.SemanticsPropertyReceiver
+import androidx.compose.ui.semantics.getTextLayoutResult
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.text
+import androidx.compose.ui.semantics.textSelectionRange
 import androidx.compose.ui.unit.dp
 import com.darkrockstudios.texteditor.contextmenu.ContextMenuActions
 import com.darkrockstudios.texteditor.contextmenu.ContextMenuOpener
@@ -30,6 +36,7 @@ import com.darkrockstudios.texteditor.contextmenu.TextEditorContextMenuProvider
 import com.darkrockstudios.texteditor.contextmenu.TextEditorContextMenuState
 import com.darkrockstudios.texteditor.input.LocalKeyBindings
 import com.darkrockstudios.texteditor.input.TextEditorInputModifierElement
+import com.darkrockstudios.texteditor.input.selectionAsTextRange
 import com.darkrockstudios.texteditor.state.TextEditorState
 
 /**
@@ -65,6 +72,10 @@ fun RichTextView(
 ) {
 	val currentOnLinkClick by rememberUpdatedState(onLinkClick)
 	val linkClicks = remember { LinkClicks.forReadOnly { currentOnLinkClick } }
+	val hasLinkClick = onLinkClick != null
+	val document = remember(state, hasLinkClick) {
+		SemanticsDocument(state, if (hasLinkClick) { url -> currentOnLinkClick?.invoke(url) } else null)
+	}
 
 	LaunchedEffect(style.textStyle) {
 		state.textStyle = style.textStyle
@@ -104,6 +115,15 @@ fun RichTextView(
 			strings = contextMenuStrings,
 			enabled = false,
 		) {
+			val semantics = remember(document, contextMenuActions, focusRequester) {
+				Modifier.viewSemantics(document) {
+					textSelectionRange = state.selectionAsTextRange()
+					selectionSemantics(state)
+					clipboardActions(contextMenuActions)
+					longPressOpensMenu(focusRequester, contextMenuActions)
+					onClick { focusRequester.requestFocus(); true }
+				}
+			}
 			RichTextViewBody(
 				state = state,
 				modifier = menuPlacement.modifier
@@ -113,7 +133,8 @@ fun RichTextView(
 					// only to route copy/select-all shortcuts, so no tap ever suppresses it.
 					.requestFocusOnPress(state, focusRequester, popupIsShowing = { false })
 					.then(inputModifierElement)
-					.focusable(enabled = true, interactionSource = interactionSource),
+					.focusable(enabled = true, interactionSource = interactionSource)
+					.then(semantics),
 				contentPadding = contentPadding,
 				style = style,
 				isSelectable = true,
@@ -125,7 +146,7 @@ fun RichTextView(
 	} else {
 		RichTextViewBody(
 			state = state,
-			modifier = modifier,
+			modifier = modifier.then(remember(document) { Modifier.viewSemantics(document) {} }),
 			contentPadding = contentPadding,
 			style = style,
 			isSelectable = false,
@@ -218,4 +239,17 @@ private fun RichTextViewBody(
 			}
 		}
 	}
+}
+
+/**
+ * A read-only view's text as a text view publishes it: the text, with its links, and
+ * its layout. [more] adds what a selectable view offers.
+ */
+private fun Modifier.viewSemantics(
+	document: SemanticsDocument,
+	more: SemanticsPropertyReceiver.() -> Unit,
+): Modifier = semantics {
+	text = document.text()
+	getTextLayoutResult { results -> document.addLayoutTo(results) }
+	more()
 }
