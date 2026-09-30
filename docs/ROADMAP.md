@@ -1696,13 +1696,18 @@ iOS Safari; browser tests run in CI.
   range's end would (the caret's typing style when the caret is there), so a
   re-marked bold word typed on with bold off gains plain letters
   (`state/InheritedStyleTest.kt`).
-- [ ] **6.15 A style operation drops the line's paragraph style. C.** [Opus]
+- [x] **6.15 A style operation drops the line's paragraph style. C.** [Opus]
   [Lane G] `SpanManager.applySingleLineSpanStyle` and
   `removeSingleLineSpanStyle` rebuild the line from its text and character
   styles only, so Ctrl+B on a list or quote line loses the indent
   `ParagraphStyle` the block baked in, and nothing restores it (normalization
   only repairs placeholder lines). Carry `paragraphStyles` through; 6.3's undo
-  then restores the line exactly.
+  then restores the line exactly. Done: both replace only the line's span styles
+  (`withSpanStyles`), keeping its paragraph styles and other annotations in
+  place and its spans in their order rather than sorted by start, so a later
+  span still wins (a heading's size over the body size) and the undo gives back
+  an equal line. A strike over the head of an italic run now exports the space
+  it covers struck (`state/StyleKeepsParagraphStyleTest.kt`).
 - [ ] **6.22 A replace of nothing moves a block marker. C.** [Opus] [Lane G]
   `RichSpanManager.handleReplace` has no `stickyAtStart` case, so a `Replace`
   over an empty range at a line's start shifts that line's list, quote or

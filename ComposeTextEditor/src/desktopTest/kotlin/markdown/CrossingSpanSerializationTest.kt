@@ -74,7 +74,7 @@ class CrossingSpanSerializationTest {
 	@Test
 	fun `strike over the head of an italic run keeps the text intact`() = runTest {
 		val back = roundTrip("He said *hello there* now.", "said hello")
-		assertEquals("saidhello", struckText(back).joinToString(""))
+		assertEquals("said hello", struckText(back).joinToString(""))
 	}
 
 	@Test
