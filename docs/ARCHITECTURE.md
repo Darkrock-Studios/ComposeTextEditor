@@ -222,7 +222,8 @@ text that differs, as one undo step, so the rest keeps its spans. Copy, cut,
 paste and the long-press menu run through the action registry, as the keyboard
 and context menu do, so a read-only editor refuses the same edits; links ride
 in the text as URL links. `getTextLayoutResult` is a whole-document layout
-measured on request, because the editor has no single one. `RichTextView`
+measured on request from the editor's rows (each line as the editor shaped it, the
+space between rows as placeholders), because the editor has no single one. `RichTextView`
 publishes the same text and layout as a read-only text (and, when selectable,
 the selection and copy). The
 document is not snapshot state, so the semantics block reads the state's

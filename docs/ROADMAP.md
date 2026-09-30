@@ -1733,13 +1733,14 @@ iOS Safari; browser tests run in CI.
   revision, width and style) the way the editor measures a line, each line its
   own paragraph, so line navigation matches the editor's rows; its geometry
   leaves out the content
-  padding, the scroll offset and block span heights (7.36). `onImeAction` is
+  padding and the scroll offset (7.36 added the block heights and paragraph
+  spacing). `onImeAction` is
   offered only for an action key the host chose (3.11's
   `KeyboardSettings.imeAction`); the default is Enter, where
   `BasicTextField`'s default action is a no-op. Headings and lists
   stay unexposed: an editable node is one text, and native editors
   (`EditText`, `UITextView`) do not expose them either.
-- [ ] **7.36** [Opus] [Lane M] The semantics text layout (7.4, 7.1) is measured
+- [x] **7.36** [Opus] [Lane M] The semantics text layout (7.4, 7.1) is measured
   apart from the editor's rows, so its character bounds are offset by the start
   and top content padding (in `RichTextView` too) and the editor's scroll
   offset, and rows below an image or rule
@@ -1751,6 +1752,23 @@ iOS Safari; browser tests run in CI.
   reader that asks for caret bounds after every keystroke (NVDA through the
   Java Access Bridge) pays a whole-document shape per keystroke on a long
   document.
+  Done where Compose allows: the layout is measured from the editor's rows, each
+  line as the editor shaped it (its block's and 5.7 format's paragraph style, the
+  baked indent), so rows break and align as drawn, and the space under a row (a
+  block's height, paragraph spacing) is a top-aligned placeholder on the line
+  break below it, so rows below an image, a rule or a spaced paragraph sit where
+  drawn. A paragraph's line height spreads over a placeholder as over text, so a
+  placeholder that missed its row is corrected and the text measured once more.
+  It is reused while its measured input is equal, so a span pass (spell check,
+  find) reshapes nothing (`SemanticsLayoutTest`). What cannot match: a
+  `TextLayoutResult` is one measured text with no constructor from existing
+  paragraphs and no offset, so a text edit still shapes the whole document on the
+  next request, and the layout still starts at the first row and the text's left
+  edge: the content padding, the space above the first paragraph and the scroll
+  offset stay out (moving the semantics node to the content origin would move the
+  field's own bounds). A block shorter than its line's text, on any row but its
+  line's last, or on the last line, keeps the text's height. The first two stay open as 7.57. Checked
+  on desktop only; Android shapes line heights through its own spans.
 - [ ] **7.37** [Opus] [Lane E] Turning input back on while the editor keeps
   focus (`enabled` or, since 7.13, `readOnly` switched off) marks it focused
   but starts no input session until the next tap, by design, so the soft
@@ -2305,6 +2323,14 @@ Shaping is one line per keystroke. These still scale with document length:
   `find`, an abandoned iterator) never closes it, and the native break iterator
   waits for the finalizer. The spell checker drains the sequence, so only other
   callers leak; close the cursor per line or return a closeable scan.
+- [ ] **7.57** [Fable] [Lane M] What 7.36 could not match in the semantics text
+  layout: character bounds sit off by the content padding, the space above the
+  first paragraph and the editor's scroll offset, since a `TextLayoutResult`
+  cannot be offset and moving the semantics node to the content origin would move
+  the field's bounds; and a text edit shapes the whole document again on the next
+  request, since a `TextLayoutResult` cannot be put together from the editor's
+  per-line layouts. Needs a semantics node or a platform accessibility hook that
+  answers character bounds from the rows directly.
 
 ## Housekeeping
 
