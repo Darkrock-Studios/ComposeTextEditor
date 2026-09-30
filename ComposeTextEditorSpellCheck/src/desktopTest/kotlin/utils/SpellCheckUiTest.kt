@@ -2,6 +2,8 @@ package utils
 
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.size
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.key.Key
@@ -29,12 +31,13 @@ import com.darkrockstudios.texteditor.EditorLineLimits
 import com.darkrockstudios.texteditor.RichSpanClickEventListener
 import com.darkrockstudios.texteditor.RichSpanClickListener
 import com.darkrockstudios.texteditor.TextEditorRange
-import com.darkrockstudios.texteditor.rememberTextEditorStyle
 import com.darkrockstudios.texteditor.contextmenu.ContextMenuItem
 import com.darkrockstudios.texteditor.input.CtrlKeyBindings
 import com.darkrockstudios.texteditor.input.KeyBindings
+import com.darkrockstudios.texteditor.rememberTextEditorStyle
 import com.darkrockstudios.texteditor.richstyle.RichSpan
 import com.darkrockstudios.texteditor.richstyle.SpellCheckStyle
+import com.darkrockstudios.texteditor.spellcheck.LocalScanContext
 import com.darkrockstudios.texteditor.spellcheck.SpellCheckItem
 import com.darkrockstudios.texteditor.spellcheck.SpellCheckMode
 import com.darkrockstudios.texteditor.spellcheck.SpellCheckState
@@ -48,6 +51,7 @@ import com.darkrockstudios.texteditor.spellcheck.diagnostics.TextDiagnosticsChec
 import com.darkrockstudios.texteditor.spellcheck.diagnostics.TextDiagnosticsState
 import com.darkrockstudios.texteditor.spellcheck.diagnostics.rememberTextDiagnosticsState
 import com.darkrockstudios.texteditor.spellcheck.rememberSpellCheckState
+import kotlin.coroutines.EmptyCoroutineContext
 
 /**
  * Harness for end-to-end spell check tests: composes a real [SpellCheckingTextEditor]
@@ -85,7 +89,7 @@ fun spellCheckUiTest(
 	lateinit var state: SpellCheckState
 	var diagnostics: TextDiagnosticsState? = null
 	val editorTextStyle = textStyle.withTestFont()
-	setContent {
+	setScanningContent {
 		state = rememberSpellCheckState(
 			spellChecker = spellChecker,
 			initialText = AnnotatedString(initialText),
@@ -116,6 +120,16 @@ fun spellCheckUiTest(
 	}
 	waitForIdle()
 	SpellCheckUiTestScope(this, state, diagnostics).block()
+}
+
+/**
+ * [setContent] with spell check and diagnostics scans on the test's own dispatcher, so
+ * waiting for idle waits for them too. Real hosts scan on a worker; the state unit tests
+ * cover that hop.
+ */
+@OptIn(ExperimentalTestApi::class)
+fun SkikoComposeUiTest.setScanningContent(content: @Composable () -> Unit) = setContent {
+	CompositionLocalProvider(LocalScanContext provides EmptyCoroutineContext, content = content)
 }
 
 @OptIn(ExperimentalTestApi::class)

@@ -2615,7 +2615,7 @@ Shaping is one line per keystroke. These still scale with document length:
   `SpellCheckingTextEditor` the edit's invalidation removes it at once, and without
   that it marks text nothing has checked. A fix removes only its own underline, as
   before (`SpellCheckStateTest`, `TextDiagnosticsStateTest`).
-- [ ] **7.61 `TextDiagnosticsE2eTest` is flaky. R.** [Opus] [Lane K] Rerun alone
+- [x] **7.61 `TextDiagnosticsE2eTest` is flaky. R.** [Opus] [Lane K] Rerun alone
   at `ec0f83f`, "spelling and diagnostics underline side by side" failed once in
   three (`expected:<1> but was:<0>`), and in a full `./gradlew check` "a fix
   shows its label, and applies its replacement" timed out waiting for its
@@ -2624,6 +2624,11 @@ Shaping is one line per keystroke. These still scale with document length:
   `SpellCheckIgnoreE2eTest` "ignore clears every flag of the word and keeps it
   clear" fails the same way under load ("other words are still checked",
   expected 1, was 0) and passes alone.
+  Done: the scans ran on `Dispatchers.Default`, which waiting for idle does
+  not wait for. An internal `LocalScanContext`, read by
+  `rememberSpellCheckState` and `rememberTextDiagnosticsState`, lets the UI
+  tests (`setScanningContent`) run them on the test's dispatcher. Three forced
+  runs alongside the core suite with `--parallel` all passed.
 
 ### Host API
 

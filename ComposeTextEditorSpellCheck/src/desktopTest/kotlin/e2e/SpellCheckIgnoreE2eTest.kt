@@ -20,6 +20,7 @@ import com.darkrockstudios.texteditor.spellcheck.api.EditorSpellChecker
 import com.darkrockstudios.texteditor.spellcheck.api.Suggestion
 import com.darkrockstudios.texteditor.spellcheck.rememberSpellCheckState
 import utils.CountingSpellChecker
+import utils.setScanningContent
 import utils.spellCheckUiTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -205,7 +206,7 @@ class SpellCheckIgnoreE2eTest {
 		val french = Dictionary(setOf("le", "chat"))
 		var checker: EditorSpellChecker by mutableStateOf(english)
 		lateinit var state: SpellCheckState
-		setContent {
+		setScanningContent {
 			state = rememberSpellCheckState(checker, AnnotatedString("the cat le chat zorp"))
 			SpellCheckingTextEditor(state = state, modifier = Modifier.size(400.dp, 300.dp))
 		}
