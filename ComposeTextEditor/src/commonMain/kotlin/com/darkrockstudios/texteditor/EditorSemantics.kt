@@ -264,16 +264,17 @@ internal class SemanticsDocument(
 private const val ZERO_WIDTH_SPACE = '​'
 
 /**
- * Replaces the whole text with [newText] as one undoable edit of only the part that
+ * Replaces the whole text with [text] as one undoable edit of only the part that
  * differs. The common prefix and suffix are left in place, so their character styles
  * and rich spans survive, and a line's block marker stays on an insertion at its
  * start. The new part takes the style typing there would, unless it carries
- * formatting of its own; [newText]'s formatting elsewhere is not applied. The edit
+ * formatting of its own; [text]'s formatting elsewhere is not applied. The edit
  * is never typing, so a following keystroke is a step of its own, and the new part
  * is then offered to the [com.darkrockstudios.texteditor.state.EditBehavior]s like
  * any inserted text. Unlike [TextEditorState.setText] this keeps the undo history.
  */
-internal fun TextEditorState.replaceAllAsEdit(newText: AnnotatedString) {
+internal fun TextEditorState.replaceAllAsEdit(text: AnnotatedString) {
+	val newText = text.normalizeLineEndings()
 	val old = getAllText().text
 	val new = newText.text
 	val shorter = minOf(old.length, new.length)

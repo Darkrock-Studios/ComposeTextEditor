@@ -139,6 +139,23 @@ class SemanticsSetTextTest {
 	}
 
 	@Test
+	fun `set text turns carriage returns into line breaks`() = editorUiTest(
+		initialText = AnnotatedString("onetwo"),
+	) {
+		setTextBySemantics("one\r\ntwo")
+		assertEquals(listOf("one", "two"), lines)
+	}
+
+	@Test
+	fun `a carriage return where a line break already is makes no edit`() = editorUiTest(
+		initialText = AnnotatedString("one\ntwo"),
+	) {
+		setTextBySemantics("one\r\ntwo")
+		assertEquals(listOf("one", "two"), lines)
+		assertFalse(state.canUndo)
+	}
+
+	@Test
 	fun `set text to the same text is no edit`() = editorUiTest(
 		initialText = AnnotatedString("Hello"),
 	) {

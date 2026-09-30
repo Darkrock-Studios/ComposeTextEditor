@@ -1447,6 +1447,11 @@ iOS Safari; browser tests run in CI.
   heading marker off column 0, where an `Insert` at the same place keeps it.
   Found in 7.3, whose `setText` sends an insertion as an `Insert` to avoid it;
   `TextEditorState.replace` with a collapsed range still hits it.
+- [ ] **6.23 Line endings are normalised per entry point. C.** [Opus] [Lane G]
+  6.8 normalises in `insertStringAtCursor`, `replace`, `setText`, the IME and
+  paste; an operation built directly and handed to `applyOperation` (the
+  semantics `setText`'s insert, found in 7.3's rebase) skips all of them.
+  Normalise once where `Insert` and `Replace` are applied.
 
 ### Clipboard
 
