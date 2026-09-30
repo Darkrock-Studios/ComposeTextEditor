@@ -352,11 +352,34 @@ private fun TextEditorState.writeLineBlock(write: LineBlockWrite?) {
  * or already carries it. The demotions and the rebuilt line come from
  * [resolveLineBlock].
  */
-internal fun TextEditorState.planLineBlock(line: Int, block: LineBlockStyle): LineBlockWrite? {
-	val existing = textLines.getOrNull(line) ?: return null
-	val resolved = resolveLineBlock(lineBlocks(line), block, existing) ?: return null
-	val kept = lineBlockSpanStyles(line).filter { style -> resolved.demoted.none { it.spanStyle === style } }
-	return LineBlockWrite(line, resolved.text, kept + block.spanStyle)
+internal fun TextEditorState.planLineBlock(line: Int, block: LineBlockStyle): LineBlockWrite? =
+	planLineBlocks(line, listOf(block))
+
+/**
+ * [planLineBlock] for each of [blocks] in turn, starting from [text] in place of the
+ * line's own, or null when none changes [line].
+ */
+internal fun TextEditorState.planLineBlocks(
+	line: Int,
+	blocks: List<LineBlockStyle>,
+	text: AnnotatedString? = null,
+): LineBlockWrite? {
+	var content = text ?: textLines.getOrNull(line) ?: return null
+	val present = lineBlocks(line).toMutableList()
+	val spanStyles = lineBlockSpanStyles(line).toMutableList()
+	var changed = false
+	for (block in blocks) {
+		val resolved = resolveLineBlock(present, block, content) ?: continue
+		resolved.demoted.forEach { demoted ->
+			present.remove(demoted)
+			spanStyles.removeAll { it === demoted.spanStyle }
+		}
+		present += block
+		spanStyles += block.spanStyle
+		content = resolved.text
+		changed = true
+	}
+	return if (changed) LineBlockWrite(line, content, spanStyles) else null
 }
 
 /**

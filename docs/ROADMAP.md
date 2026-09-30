@@ -2521,7 +2521,7 @@ Shaping is one line per keystroke. These still scale with document length:
   decoration span: a span would ride into the clipboard and undo metadata and
   split on Enter (7.53, 7.54).
 
-- [ ] **7.43 Line breaks inserted into a line block. R.** [Opus] [Lane I]
+- [x] **7.43 Line breaks inserted into a line block. R.** [Opus] [Lane I]
   Text with a line break inserted into a list item or other line block leaves
   the new line as body text, where Enter at the same spot continues the block
   (and Word and Google Docs keep both halves in the list). Seen with find's
@@ -2538,6 +2538,26 @@ Shaping is one line per keystroke. These still scale with document length:
   new lines with `applyLineBlock`, inside the same atomic edit, as
   `LineBlockEditBehavior.onNewline` already does for Enter (undo removes the
   lines, so nothing extra is recorded). Headings do not continue (5.5).
+  Done: a line-anchored marker on the line an insert or single-line replace
+  breaks after its start stays on that first line, trimmed to it; one the break
+  lands in front of follows its text down, as Enter at a line's start moves it.
+  `applyOperation` then continues that line's blocks onto the other new lines (a
+  list item at its level, a quote, a fence) with `writeLineBlocks`, recorded as a
+  `LineBlock` step of the same undo group: a redo, which replays the text
+  unrecorded, puts the markers back, and an undo never continues a block onto
+  the text it restores. Enter (`insertNewlineRaw`) is left to
+  `LineBlockEditBehavior`, and an editor without that behavior gets none. A
+  heading continues only when the break falls inside its text, as Enter inside a
+  heading keeps both halves headings; lines added at its end are body text
+  without its text style. A replace across lines leaves its last line the blocks
+  of the line its tail came from; one that joins a marker's line onto the kept
+  head of an earlier line drops the marker, as a joining delete does. Find's
+  replace, programmatic `replace`, paste and typed or IME text all take this
+  path, and a block copied in the editor and pasted onto a continued line
+  demotes the block that refuses to share it (`pasteRichSpans`)
+  (`blocks/LineBreakContinuationTest.kt`). A rich HTML paste lays its own blocks
+  over the continued ones afterwards, unrecorded, so a redo of it loses them
+  (6.5).
 
 ### Spell check addon
 

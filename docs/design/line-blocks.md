@@ -315,6 +315,12 @@ conflicting block demoted as a side effect) in one step.
 - Enter on an empty block line other than a heading exits the block instead
   (an empty quoted list item leaves the list and stays quoted), routed through
   the toggle so the demotion lands in undo history.
+- Line breaks that arrive any other way (a paste, a replace, find and replace,
+  typed or IME text holding a break) continue the broken line's blocks onto the
+  new lines the same way, recorded in the edit's own undo step (an undo never
+  continues a block onto the text it restores); a heading continues only when
+  the break falls inside its text. A replace across lines leaves its last line
+  the blocks of the line its tail came from.
 - Backspace at column 0 of a block line demotes first (marker off, content
   kept); a second backspace merges. Exception: when the previous line carries
   the same block, backspace merges directly, so joining two adjacent items is

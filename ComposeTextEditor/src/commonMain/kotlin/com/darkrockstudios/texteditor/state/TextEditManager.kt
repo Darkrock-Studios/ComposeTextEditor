@@ -9,19 +9,26 @@ import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.annotatedstring.normalizeLineEndings
 import com.darkrockstudios.texteditor.annotatedstring.splitAnnotatedString
 import com.darkrockstudios.texteditor.annotatedstring.withInheritedStyles
+import com.darkrockstudios.texteditor.annotatedstring.withSpanStyles
+import com.darkrockstudios.texteditor.richstyle.LineBlockEditBehavior
 import com.darkrockstudios.texteditor.richstyle.LineBlockStyle
 import com.darkrockstudios.texteditor.richstyle.LineBlockWrite
 import com.darkrockstudios.texteditor.richstyle.RichSpanStyle
 import com.darkrockstudios.texteditor.richstyle.allowedOn
 import com.darkrockstudios.texteditor.richstyle.atListLevel
+import com.darkrockstudios.texteditor.richstyle.demoteLineBlock
 import com.darkrockstudios.texteditor.richstyle.hasLineBlock
+import com.darkrockstudios.texteditor.richstyle.isHeading
 import com.darkrockstudios.texteditor.richstyle.isList
 import com.darkrockstudios.texteditor.richstyle.lineBlockSpanStyles
+import com.darkrockstudios.texteditor.richstyle.lineBlocks
 import com.darkrockstudios.texteditor.richstyle.listBlockAt
 import com.darkrockstudios.texteditor.richstyle.listLevel
 import com.darkrockstudios.texteditor.richstyle.placeholderKindOf
 import com.darkrockstudios.texteditor.richstyle.planDemoteLineBlock
 import com.darkrockstudios.texteditor.richstyle.planLineBlock
+import com.darkrockstudios.texteditor.richstyle.planLineBlocks
+import com.darkrockstudios.texteditor.richstyle.rebuildWithoutBlock
 import com.darkrockstudios.texteditor.richstyle.recordListEdit
 import com.darkrockstudios.texteditor.richstyle.sameListKind
 import com.darkrockstudios.texteditor.richstyle.writeLineBlocks
@@ -190,14 +197,15 @@ class TextEditManager(private val state: TextEditorState) {
 			// Requested inside the transaction so it merges with any layout work the
 			// handlers posted and the commit flushes a single pass for the operation.
 			state.updateBookKeeping(layoutUpdateFor(operation, oldLineCount, state.textLines.size))
-		}
 
-		if (!isDecoration) {
 			// Deferred to the outermost commit: callers that wrap applyOperation in
 			// their own transaction would otherwise announce an edit whose revision
 			// is still staged, and a subscriber that serializes on the announcement
-			// would write the document as it stood before the edit.
-			state.onCommit { _editOperations.tryEmit(operation) }
+			// would write the document as it stood before the edit. Queued before the
+			// continuation's own operation, so the two are announced in order.
+			if (!isDecoration) state.onCommit { _editOperations.tryEmit(operation) }
+
+			if (addToHistory) continueLineBlocks(operation)
 		}
 	}
 
@@ -722,6 +730,109 @@ class TextEditManager(private val state: TextEditorState) {
 				LineBlockWrite(line, content, spanStyles)
 			}
 		)
+	}
+
+	/**
+	 * Continues a block onto the lines [operation] breaks its line into, as Enter does:
+	 * a list item at its level, a quote, a fence. The block is the first line's, or,
+	 * when the break came at the line's start and its markers followed the text down,
+	 * the last's. A heading continues only when the break falls inside its text; the
+	 * lines added at its end are body text, without its text style. A replace across
+	 * lines leaves its last line the blocks of the line its tail came from. Recorded as
+	 * a LineBlock step of the same undo group, so a redo, which replays the text
+	 * unrecorded, puts the markers back, and an undo never continues a block onto the
+	 * text it restores. Enter is [LineBlockEditBehavior]'s, and an editor without that
+	 * behavior wants plain line breaks.
+	 */
+	private fun continueLineBlocks(operation: TextEditOperation) {
+		if (enterDepth > 0 || LineBlockEditBehavior !in state.editBehaviors) return
+		val (range, text) = when (operation) {
+			is TextEditOperation.Insert -> TextEditorRange(operation.position, operation.position) to operation.text.text
+			is TextEditOperation.Replace -> operation.range to operation.newText.text
+			else -> return
+		}
+		val breaks = text.count { it == '\n' }
+		if (breaks == 0) return
+		val first = range.start.line
+		val last = first + breaks
+		val singleLine = range.isSingleLine()
+		val fromLast = singleLine && range.start.char == 0 && state.lineBlocks(first).isEmpty()
+		val blocks = state.lineBlocks(if (fromLast) last else first)
+		if (blocks.isEmpty()) return
+		val tail = state.textLines[last].length - (text.length - text.lastIndexOf('\n') - 1)
+		val breakInside = singleLine && tail > 0
+		val (ended, continued) = blocks.partition { it.isHeading && !breakInside }
+		if (fromLast && ended.isNotEmpty()) {
+			// A lone break in an empty line took its markers down; a heading belongs to
+			// the line above, as Enter leaves it.
+			state.keepingCopiedRichSpans { continuationOf(first..last, first..first, blocks, emptyList(), last to ended) }
+			return
+		}
+		val targets = when {
+			fromLast -> first until last
+			singleLine -> (first + 1)..last
+			else -> (first + 1) until last
+		}
+		// The last line of a replace across lines keeps its own blocks, but not a heading's style.
+		val touched = if (singleLine || ended.isEmpty()) targets else first + 1..last
+		if (touched.isEmpty()) return
+		// Part of the edit that broke the line, so a paste's copied spans outlive it too.
+		state.keepingCopiedRichSpans { continuationOf(touched, targets, continued, ended) }
+	}
+
+	/**
+	 * Continues [continued] onto [targets], strips [ended] headings from the rest of
+	 * [touched], and first takes the blocks [demoted] names off its line, as one
+	 * recorded step.
+	 */
+	private fun continuationOf(
+		touched: IntRange,
+		targets: IntRange,
+		continued: List<LineBlockStyle>,
+		ended: List<LineBlockStyle>,
+		demoted: Pair<Int, List<LineBlockStyle>>? = null,
+	) {
+		recordLineBlockChanges(touched.toList()) {
+			demoted?.let { (line, gone) -> gone.forEach { state.demoteLineBlock(line, it) } }
+			state.writeLineBlocks(
+				touched.mapNotNull { line ->
+					val kind = placeholderKindOf(state.workingContent, line)
+					val own = state.lineBlocks(line)
+					// A tail carried onto the line brings its block's indent over part of it;
+					// the block is put back over the whole line.
+					val adding = if (line in targets) continued.filter { it.allowedOn(kind) && it !in own } else emptyList()
+					val unwrapped = adding.fold(state.textLines[line]) { lineText, block -> rebuildWithoutBlock(lineText, block) }
+					val planned = state.planLineBlocks(line, adding, unwrapped)
+					val content = planned?.content ?: state.textLines[line]
+					// Every heading shares its paragraph style, so a line that is a heading keeps
+					// it and loses only an ended heading's text style.
+					val plain = ended.filter { it !in own }.fold(content) { lineText, heading ->
+						when {
+							own.none { it.isHeading } -> rebuildWithoutBlock(lineText, heading)
+							heading.textStyle == null -> lineText
+							else -> lineText.withSpanStyles(lineText.spanStyles.filter { it.item != heading.textStyle })
+						}
+					}
+					when {
+						planned != null -> LineBlockWrite(line, plain, planned.spanStyles)
+						plain != content -> LineBlockWrite(line, plain, state.lineBlockSpanStyles(line))
+						else -> null
+					}
+				}
+			)
+		}
+	}
+
+	private var enterDepth = 0
+
+	/** Runs [block], the Enter key's own line break, which [continueLineBlocks] leaves to the behaviors. */
+	internal fun <T> asEnter(block: () -> T): T {
+		enterDepth++
+		try {
+			return block()
+		} finally {
+			enterDepth--
+		}
 	}
 
 	/**

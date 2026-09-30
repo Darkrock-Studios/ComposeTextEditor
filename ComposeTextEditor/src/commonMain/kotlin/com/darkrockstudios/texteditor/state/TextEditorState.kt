@@ -49,6 +49,10 @@ import com.darkrockstudios.texteditor.richstyle.LineBlockEditBehavior
 import com.darkrockstudios.texteditor.richstyle.ParagraphFormatSpanStyle
 import com.darkrockstudios.texteditor.richstyle.RichSpan
 import com.darkrockstudios.texteditor.richstyle.RichSpanStyle
+import com.darkrockstudios.texteditor.richstyle.allBlockRegistry
+import com.darkrockstudios.texteditor.richstyle.conflicts
+import com.darkrockstudios.texteditor.richstyle.demoteLineBlock
+import com.darkrockstudios.texteditor.richstyle.lineBlocks
 import com.darkrockstudios.texteditor.richstyle.normalizeLineBlocks
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
@@ -973,7 +977,7 @@ class TextEditorState(
 			cursorBefore = cursorPosition,
 			cursorAfter = CharLineOffset(cursorPosition.line + 1, 0)
 		)
-		editManager.applyOperation(operation)
+		editManager.asEnter { editManager.applyOperation(operation) }
 	}
 
 	/**
@@ -2042,6 +2046,16 @@ class TextEditorState(
 		richSpanBufferSurvivesNextEdit = copiedRichSpans != null
 	}
 
+	/** Runs [block], an edit that finishes the one before it, keeping the copied rich spans that edit kept. */
+	internal fun <T> keepingCopiedRichSpans(block: () -> T): T {
+		val kept = copiedRichSpans
+		try {
+			return block()
+		} finally {
+			if (kept != null) copiedRichSpans = kept
+		}
+	}
+
 	/**
 	 * Drops the remembered rich spans. Any document mutation that is not the
 	 * paste's own edit invalidates the buffer, so a buffer captured before an
@@ -2099,6 +2113,18 @@ class TextEditorState(
 				else
 					preserved.relativeEnd.char
 			)
+			// A copied block takes a pasted line from whatever block there refuses to
+			// share it, a list the paste continued onto a pasted heading. The line the
+			// paste began in keeps its own.
+			val block = allBlockRegistry.firstOrNull { it.spanStyle === preserved.style }
+			if (block != null && preserved.relativeStart.lineDiff > 0 && startPos.char == 0) {
+				val refusing = lineBlocks(startPos.line).filter { conflicts(block.spanStyle, it.spanStyle) }
+				if (refusing.isNotEmpty()) {
+					editManager.recordLineBlockChanges(listOf(startPos.line)) {
+						refusing.forEach { demoteLineBlock(startPos.line, it) }
+					}
+				}
+			}
 			val covered = richSpanManager.getSpansInRange(TextEditorRange(startPos, endPos)).any {
 				it.style == preserved.style && it.range.start <= startPos && it.range.end >= endPos
 			}
