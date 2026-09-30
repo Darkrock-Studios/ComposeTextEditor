@@ -2,15 +2,26 @@ package input
 
 import android.view.View
 import android.view.inputmethod.InputConnection
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.text.AnnotatedString
 import com.darkrockstudios.texteditor.CharLineOffset
+import com.darkrockstudios.texteditor.input.ImeCaretGeometry
 import com.darkrockstudios.texteditor.input.ImeCursorSync
 import com.darkrockstudios.texteditor.input.ImeUpdateSink
 import com.darkrockstudios.texteditor.input.TextEditorInputConnection
+import com.darkrockstudios.texteditor.state.CursorAnchor
 import com.darkrockstudios.texteditor.state.EditBehavior
 import com.darkrockstudios.texteditor.state.TextEditorState
 import io.mockk.mockk
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.setMain
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -40,13 +51,14 @@ class ImeCursorSyncTest {
 			events += "extracted($token)"
 		}
 
-		override fun sendCursorAnchorInfo() {
+		override fun sendCursorAnchorInfo(anchor: CursorAnchor) {
 			events += "anchor"
 		}
 	}
 
 	private val sink = RecordingSink()
 	private val posted = mutableListOf<Runnable>()
+	private var anchor: CursorAnchor? = null
 	private lateinit var state: TextEditorState
 	private lateinit var sync: ImeCursorSync
 
@@ -57,7 +69,7 @@ class ImeCursorSyncTest {
 			initialText = AnnotatedString(text),
 		)
 		state.cursor.updatePosition(CharLineOffset(0, cursor))
-		sync = ImeCursorSync(state, sink) { posted += it }
+		sync = ImeCursorSync(state, sink, cursorAnchor = { anchor }) { posted += it }
 		sync.attach()
 		// Establish what the keyboard already knows, so each test sees only its own reports.
 		sync.flush()
@@ -272,5 +284,98 @@ class ImeCursorSyncTest {
 		TextEditorInputConnection(state, view)
 
 		assertSame(view, state.platformExtensions.imeView)
+	}
+
+	private fun caretAt(top: Float, viewY: Int = 0) = CursorAnchor(
+		ImeCaretGeometry(
+			x = 10f, top = top, baseline = top + 12f, bottom = top + 16f,
+			topVisible = true, bottomVisible = true,
+		),
+		viewX = 0,
+		viewY = viewY,
+	)
+
+	/** A scroll moves the caret on screen with the selection unchanged (roadmap 3.10). */
+	@Test
+	fun `a monitored cursor anchor is resent when the caret moves on screen`() {
+		editor("hello")
+		anchor = caretAt(0f)
+		state.platformExtensions.cursorAnchorMonitoringEnabled = true
+		sync.flush()
+		sink.events.clear()
+
+		anchor = caretAt(-20f)
+		sync.flush()
+		sync.flush()
+		anchor = caretAt(-20f, viewY = 100)
+		sync.flush()
+
+		assertEquals(listOf("anchor", "anchor"), sink.events)
+	}
+
+	@Test
+	fun `a caret moving on screen is not reported unless the anchor is monitored`() {
+		editor("hello")
+		anchor = caretAt(0f)
+		sync.flush()
+
+		anchor = caretAt(-20f)
+		sync.flush()
+
+		assertTrue(sink.events.isEmpty())
+	}
+
+	@Test
+	fun `a selection change resends the anchor with the selection`() {
+		editor("hello")
+		anchor = caretAt(0f)
+		state.platformExtensions.cursorAnchorMonitoringEnabled = true
+		sync.flush()
+		sink.events.clear()
+
+		state.cursor.updatePosition(CharLineOffset(0, 1))
+		sync.flush()
+
+		assertEquals(listOf("sel(1,1,-1,-1)", "anchor"), sink.events)
+	}
+
+	/** What an immediate send reported is what the next flush compares against. */
+	@Test
+	fun `an anchor sent on request is not sent again unchanged`() {
+		editor("hello")
+		anchor = caretAt(0f)
+		state.platformExtensions.cursorAnchorMonitoringEnabled = true
+		sync.flush()
+		sink.events.clear()
+		anchor = caretAt(-20f)
+
+		state.platformExtensions.sendCursorAnchorInfo()
+		sync.flush()
+
+		assertEquals(listOf("anchor"), sink.events)
+	}
+
+	@OptIn(ExperimentalCoroutinesApi::class)
+	@Test
+	fun `a caret moving on screen while the anchor is monitored posts a flush`() {
+		Dispatchers.setMain(UnconfinedTestDispatcher())
+		try {
+			editor("hello")
+			var top by mutableFloatStateOf(0f)
+			val watching = ImeCursorSync(state, sink, cursorAnchor = { caretAt(top) }) { posted += it }
+			state.platformExtensions.cursorAnchorMonitoringEnabled = true
+			watching.startSync()
+			runPosted()
+			sink.events.clear()
+
+			top = -20f
+			Snapshot.sendApplyNotifications()
+			runPosted()
+
+			assertEquals(listOf("anchor"), sink.events)
+			watching.stopSync()
+		} finally {
+			Dispatchers.resetMain()
+		}
 	}
 }

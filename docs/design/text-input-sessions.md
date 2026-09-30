@@ -208,8 +208,19 @@ when the IME's batch ends.
 Cursor anchor info (`updateCursorAnchorInfo`, used by floating toolbars,
 stylus handwriting, and some candidate windows) is requested by the IME via
 `requestCursorUpdates` and sent by the flush whenever the selection report
-changes, from the caret measured from the layout as it is sent (the last
-frame's drawn caret is one move behind) plus the view's screen location.
+changes, and while it monitors, whenever the caret moves on screen without
+the selection changing (a scroll, a relayout, the editor moving or resizing
+in its window): the flush compares the caret's geometry and the view's screen
+location too, and remembers what any report sent, an immediate one included.
+A view that moves on screen with nothing in the editor changing is not
+noticed until the next flush (roadmap 4.31). The marker is the caret
+measured from the layout as it is sent (the last frame's drawn caret is one
+move behind), in the view's coordinates (the canvas's position in the Compose
+root, so content padding and scroll are in it), with flags saying whether its
+top and bottom are inside the editor's clipped bounds less a strip the
+keyboard covers; the matrix is the view's screen location. The skiko
+request's caret rectangle is built from the same geometry
+(`imeCaretInRoot`).
 Reports go through the view the live connection is bound to, the one the
 `InputMethodManager` is serving; between sessions they fall back to the view
 the `CaptureViewForIme` composable captures into `platformExtensions`.

@@ -165,18 +165,9 @@ internal class SkikoTextEditorInputMethodRequest(
 		// caret is measured here. Observers re-run on a caret move only, as the platforms'
 		// geometry tracking expects; a scroll alone does not move the rectangle.
 		editorState.cursorPosition
-		val coords = attachedCoordinates()
-		val metrics = Snapshot.withoutReadObservation { editorState.measureCursorMetrics() }
-		if (coords != null && metrics != null) {
-			val origin = coords.positionInRoot()
-			Rect(
-				left = origin.x + metrics.position.x,
-				top = origin.y + metrics.lineTop,
-				right = origin.x + metrics.position.x,
-				bottom = origin.y + metrics.lineBottom,
-			)
-		} else {
-			null
+		attachedCoordinates()?.let {
+			Snapshot.withoutReadObservation { editorState.imeCaretInRoot() }
+				?.let { caret -> Rect(left = caret.x, top = caret.top, right = caret.x, bottom = caret.bottom) }
 		}
 	}
 

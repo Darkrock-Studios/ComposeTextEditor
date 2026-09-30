@@ -552,7 +552,10 @@ German, or French).
    handwriting (Android 14 or later), move the caret with the arrow keys and
    by tapping, across rows. **Expect:** what follows the caret (the floating
    candidates, the handwriting insertion marker) follows at once, not one move
-   behind (4.30).
+   behind (4.30), and sits at the caret, not above and left of it by the
+   editor's offset in the window (3.10). Scroll the text under a fixed caret.
+   **Expect:** the floating candidates follow it, and hide or move off when
+   the caret row leaves the editor.
 
 Checked on an emulator (2026-09-29, API 36, Gboard active) through
 `adb shell input`, whose virtual keyboard has Alt+E as a combining acute:

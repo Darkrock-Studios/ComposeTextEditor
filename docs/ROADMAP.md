@@ -183,7 +183,7 @@ review.
 | C | Drawing and geometry | `Draw*.kt`, `cursor/`, `scrollbar/`, `state/TextEditorScrollState.kt`, hit testing | 1.8, 1.10, 1.11, 1.17, 1.18, 3.3, 3.12, 4.14, 7.6, 7.7 |
 | D | Bindings, actions, menu | `input/KeyBindings.kt`, `input/EditorCommand.kt`, `input/BuiltinEditorActions.kt`, `contextmenu/` | 2.1, 2.2, 2.4, 2.5, 2.7 to 2.12, 4.8, 5.8 |
 | E | Input sessions on desktop, iOS, web | `desktopMain`, `iosMain`, `wasmJsMain` under `input/` | 4.2 to 4.7, 4.10 to 4.12, 4.19, 4.21, 4.22, 4.24 to 4.26, 4.28, 4.29 |
-| F | Android input | `androidMain` | 0.4, 3.9 to 3.11, 3.14, 4.16, 4.18, 4.20, 4.27, 4.30 |
+| F | Android input | `androidMain` | 0.4, 3.9 to 3.11, 3.14, 4.16, 4.18, 4.20, 4.27, 4.30, 4.31 |
 | G | Edit pipeline and undo | `state/TextEditManager.kt`, `state/TextEditHistory.kt`, `state/EditBehavior.kt`, `input/ImeEditLogic.kt` | 1.20, 5.1 to 5.5, 5.9, 6.1 to 6.6, 6.14, 6.15, 6.17 |
 | H | Clipboard and HTML | `clipboard/`, `html/` | 4.9, 4.13, 4.17, 6.7 to 6.13, 6.18, 6.19 |
 | I | Markdown and block model | `markdown/`, `richstyle/` | 5.6, 7.14 to 7.16 |
@@ -737,10 +737,21 @@ fixes what users feel every minute.
 - [ ] **3.9 Caret under the soft keyboard. C, U.** [Opus] [Lane F] A viewport
   resize relayouts but does not re-run `ensureCursorVisible`, and there is no
   `BringIntoViewRequester` (hammer-editor#932).
-- [ ] **3.10 Cursor anchor info. C.** [Opus] [Lane F] Translated by the view's
+- [x] **3.10 Cursor anchor info. C.** [Opus] [Lane F] Translated by the view's
   screen position but built from canvas-local metrics, so it is off by the
   editor's offset inside the view
   (`androidMain/.../state/PlatformTextEditorExtensions.android.kt`).
+  Done: the marker is the caret in the view's coordinates, content padding and
+  scroll included (`imeCaretInRoot`, `input/ImeCaret.kt`; `ImeCaretTest`), and
+  its flags say whether its top and bottom lie inside the editor's visible
+  bounds (clipped by its ancestors, less a strip the keyboard covers), as
+  `TextView` reports them. While the IME monitors the anchor, a scroll,
+  relayout, move or resize that moves the caret on screen resends it, and so
+  does any flush that finds the view moved on screen (`ImeCursorSyncTest`).
+  The skiko request's caret rectangle is built from the same geometry. Checked on an emulator (API 36, Gboard) through
+  `dumpsys input_method`: a tap at y 700 reported a marker from 663 to 712 with
+  the visible flag, and a scroll that took the caret row above the editor
+  resent it at 245 to 294, flagged invisible, with the selection unchanged.
 - [ ] **3.11 Keyboard options. C.** [Opus] [Lane F] `inputType` and
   `imeOptions` are hard-coded; hosts cannot configure capitalisation,
   autocorrect, or keyboard type. `initialCapsMode` and initial surrounding text
@@ -1218,6 +1229,16 @@ iOS Safari; browser tests run in CI.
   scroll that follows the caret lands after the send; resending then is 3.10.
   A stylus or floating keyboard pass is a person's (QA plan, "Android
   keyboards").
+- [ ] **4.31 Android's cursor anchor misses a view that moves alone. C.**
+  [Opus] [Lane F] The anchor is resent when the caret moves in the view
+  (3.10), but a view that moves on screen with nothing in the editor changing
+  (a window panned by `adjustPan`, a `ComposeView` inside a scrolling Android
+  parent, a freeform window dragged) goes unreported until the next caret
+  move, so floating candidates stay where the view was. The same holds for a
+  change in the strip a keyboard covers alone (Gboard switched to floating),
+  which the marker's visibility flags depend on. `TextView` checks its screen
+  location in an `OnPreDrawListener` while the IME monitors; watch the view
+  the same way, only while monitoring.
 - [ ] **4.27 Android resyncs by restarting input. C.** [Opus] [Lane F]
   `requestImeResync` becomes `restartInput`, which clears the keyboard's
   suggestions and shift state. That suits a whole-document replace, not a
@@ -1647,4 +1668,4 @@ records results and removes entries that passed.
 | 2.9 | In the iOS sample app with a hardware keyboard: press Tab, Ctrl+Tab, then Escape followed by Tab; then set `state.tabSettings = TabSettings(movesFocus = true)` on the demo editor and press Tab | Tab indents by four spaces; Ctrl+Tab, Escape then Tab, and Tab under `movesFocus` either move focus to another control or do nothing, and never type a tab character (4.28) || Not run: hardware keyboard, left for a person |
 | 3.8 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64`. 3.8 added `internal expect fun hasNativeTextToolbar()` (commonMain `TouchToolbar.kt`) with `iosMain/.../TouchToolbar.ios.kt` answering true. Then in the simulator: long-press a word, double-tap a word, long-press empty space, tap the caret handle, and drag a selection handle | Compiles. UIKit's edit menu appears over the selection or caret with Cut, Copy, Paste and Select all as applicable (Paste and Select all alone at a bare caret), hides while a handle is dragged and returns when it drops, and goes when the caret moves or the text is scrolled. If no menu appears, the input connection has no toolbar: fall back to `false` in `TouchToolbar.ios.kt` so the context menu stands in |  Partial, same run. Compiles. The UIKit menu works over a selection: double-tap or long-press a word shows Cut, Copy, Paste, Select All, and each works. **Fails:** long-press in an empty document calls `show()` with a zero-width caret rect and only Paste, and UIKit shows nothing (the toolbar reports Hidden right after `showMenu`); a tap on the caret handle never calls `show()`. Native reference: a tap in Safari's focused empty field shows Paste. Also: a long-press past a line's end selects the line's last word instead of placing the caret; with a selection ending at the document end, a long-press below the text counts as on the selection. When the screen was shifted by 4.24 the selection menu did not appear either. Did not fall back to `false`, since the menu works for selections |
 | 4.13 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64`. `clipboard/ClipboardEvents.kt` adds `internal expect fun ClipboardEventsEffect`; the iOS actual (`iosMain/.../clipboard/ClipboardEvents.ios.kt`) is a no-op. Then the web demo in Safari on macOS: Cmd+C a bold word, Cmd+V it back, and paste a bulleted list from another page; also the context menu's Paste | Compiles. Safari pastes the bold word bold and the list as a list; the context menu's Paste either pastes or logs a `ComposeTextEditor:` warning in the console, never fails silently || Compile part passed 2026-09-30 at `f3b8d8f`. The Safari part is not run: it needs Safari on macOS with a person at the keyboard, since the clipboard events only fire for real key presses and driving Safari needs its Remote Automation setting turned on |
-| 4.20, 4.30 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64`. 4.20 added `internal expect fun deadChar` (commonMain `input/DeadKeys.kt`) with its `actual` in `skikoMain/.../input/DeadKeys.skiko.kt`, which composes nothing. 4.30 moved the skiko request's caret measure into `measureCursorMetrics` (commonMain `input/ImeCaret.kt`), called from `focusedRectInRoot` | Compiles. Nothing to run for 4.20: iOS never delivers a dead key as a key event; the caret rectangle behaves as in the 4.19 row | |
+| 4.20, 4.30, 3.10 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64`. 4.20 added `internal expect fun deadChar` (commonMain `input/DeadKeys.kt`) with its `actual` in `skikoMain/.../input/DeadKeys.skiko.kt`, which composes nothing. 4.30 moved the skiko request's caret measure into `measureCursorMetrics` (commonMain `input/ImeCaret.kt`), called from `focusedRectInRoot`; 3.10 builds that rectangle from `imeCaretInRoot` in the same file | Compiles. Nothing to run for 4.20: iOS never delivers a dead key as a key event; the caret rectangle behaves as in the 4.19 row | |

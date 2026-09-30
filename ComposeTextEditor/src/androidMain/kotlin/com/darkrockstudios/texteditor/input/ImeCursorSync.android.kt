@@ -3,11 +3,14 @@ package com.darkrockstudios.texteditor.input
 import android.os.Handler
 import android.os.Looper
 import android.view.inputmethod.InputMethodManager
+import androidx.compose.runtime.snapshotFlow
+import com.darkrockstudios.texteditor.state.CursorAnchor
 import com.darkrockstudios.texteditor.state.TextEditorState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.launch
 import java.lang.ref.WeakReference
@@ -22,7 +25,9 @@ import java.lang.ref.WeakReference
  * - when the outermost batch edit ends. Every IME command runs inside one, so an IME hears
  *   about its own edit once, after it is complete;
  * - posted to the main looper after any other change (keys, pointer, undo, programmatic
- *   edits).
+ *   edits), and, while the IME monitors the cursor anchor, after a scroll, a relayout, or
+ *   a move or resize of the editor, which move the caret on screen without changing the
+ *   selection.
  *
  * A flush while a batch is open does nothing; the batch's end flushes instead. Reporting a
  * half-applied edit is not harmless: a composing IME told that its composition vanished
@@ -31,12 +36,13 @@ import java.lang.ref.WeakReference
 actual class ImeCursorSync internal constructor(
 	private val state: TextEditorState,
 	private val sink: ImeUpdateSink,
+	private val cursorAnchor: () -> CursorAnchor? = { state.platformExtensions.currentCursorAnchor() },
 	private val postToMain: (Runnable) -> Unit,
 ) {
 	actual constructor(state: TextEditorState) : this(
 		state,
 		InputMethodManagerSink(state),
-		{ mainHandler.post(it) },
+		postToMain = { mainHandler.post(it) },
 	)
 
 	private var attached = false
@@ -48,6 +54,7 @@ actual class ImeCursorSync internal constructor(
 	}
 
 	private var lastSelection: ImeSelection? = null
+	private var lastAnchor: CursorAnchor? = null
 	private var handledResyncGeneration = 0
 	private var handledDocumentGeneration = 0
 
@@ -69,6 +76,18 @@ actual class ImeCursorSync internal constructor(
 				state.documentGeneration,
 			).collect { requestFlush() }
 		}
+		scope.launch {
+			// The anchor reads the layout and the scroll; the canvas's coordinates are a plain
+			// field, so its position and size are read for their moves and resizes. Nothing is
+			// measured unless the IME monitors, which it asks for with an immediate report.
+			snapshotFlow {
+				state.canvasPositionInRoot
+				state.viewportSize
+				if (state.platformExtensions.cursorAnchorMonitoringEnabled) cursorAnchor() else null
+			}
+				.filter { it != null }
+				.collect { requestFlush() }
+		}
 	}
 
 	/** Registers for batch-end flushes; [startSync] without the flow observation. */
@@ -89,6 +108,7 @@ actual class ImeCursorSync internal constructor(
 			state.platformExtensions.imeSync = null
 		}
 		lastSelection = null
+		lastAnchor = null
 		lastExtractedText = null
 	}
 
@@ -132,10 +152,22 @@ actual class ImeCursorSync internal constructor(
 		if (selectionChanged) {
 			lastSelection = selection
 			sink.updateSelection(selection.selStart, selection.selEnd, selection.compStart, selection.compEnd)
-			if (extensions.cursorAnchorMonitoringEnabled) {
-				sink.sendCursorAnchorInfo()
-			}
 		}
+
+		if (extensions.cursorAnchorMonitoringEnabled) {
+			val anchor = cursorAnchor()
+			if (anchor != null && (selectionChanged || anchor != lastAnchor)) send(anchor)
+		}
+	}
+
+	/** Sends the cursor anchor now, for an IME that asked for it immediately. */
+	internal fun sendCursorAnchor() {
+		cursorAnchor()?.let(::send)
+	}
+
+	private fun send(anchor: CursorAnchor) {
+		lastAnchor = anchor
+		sink.sendCursorAnchorInfo(anchor)
 	}
 
 	/** The selection and composing indices as the IME should currently see them. */
@@ -169,7 +201,7 @@ internal interface ImeUpdateSink {
 	fun restartInput()
 	fun updateSelection(selStart: Int, selEnd: Int, compStart: Int, compEnd: Int)
 	fun updateExtractedText(token: Int)
-	fun sendCursorAnchorInfo()
+	fun sendCursorAnchorInfo(anchor: CursorAnchor)
 }
 
 private class InputMethodManagerSink(private val state: TextEditorState) : ImeUpdateSink {
@@ -193,5 +225,5 @@ private class InputMethodManagerSink(private val state: TextEditorState) : ImeUp
 		imm?.updateExtractedText(view, token, state.toExtractedText())
 	}
 
-	override fun sendCursorAnchorInfo() = state.platformExtensions.sendCursorAnchorInfo()
+	override fun sendCursorAnchorInfo(anchor: CursorAnchor) = state.platformExtensions.sendCursorAnchor(anchor)
 }
