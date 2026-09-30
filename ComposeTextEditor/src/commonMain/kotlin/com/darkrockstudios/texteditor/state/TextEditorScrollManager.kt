@@ -108,7 +108,7 @@ class TextEditorScrollManager(
 	/**
 	 * Set while a drag auto-scroll runs: it owns the scroll then, and a caret it puts off
 	 * screen (a line drag's, at the paragraph end) must not start a scroll against it.
-	 * Every scroll to the caret goes through [ensureCursorVisible], which honours it.
+	 * Every scroll to the caret honours it.
 	 */
 	internal var cursorScrollSuppressed = false
 
@@ -132,15 +132,14 @@ class TextEditorScrollManager(
 		}
 	}
 
+	/** Scrolls to [position]; without [animated], at once, before this returns. */
 	fun scrollToPosition(position: Int, animated: Boolean = true) {
 		stopScrolling()
-		scrollJob = scope.launch {
-			val scrollToY = position.coerceIn(scrollState.minValue, maxScroll)
-			if (animated) {
-				scrollState.animateScrollTo(scrollToY)
-			} else {
-				scrollState.scrollTo(scrollToY)
-			}
+		val scrollToY = position.coerceIn(scrollState.minValue, maxScroll)
+		if (animated) {
+			scrollJob = scope.launch { scrollState.animateScrollTo(scrollToY) }
+		} else {
+			scrollState.scrollTo(scrollToY)
 		}
 	}
 
@@ -183,13 +182,11 @@ class TextEditorScrollManager(
 			return
 		}
 
-		val viewportTop = scrollState.value
 		val targetScroll = scrollShowing(offset, affinity)
-		if(targetScroll != viewportTop) {
-			stopScrolling()
-			scrollJob = scope.launch {
-				scrollState.animateScrollTo(targetScroll)
-			}
+		when {
+			targetScroll != scrollState.value -> scrollToPosition(targetScroll, animated = animated)
+			// In view now: an immediate request keeps it there rather than let a scroll carry it off.
+			!animated -> stopScrolling()
 		}
 	}
 
@@ -209,8 +206,9 @@ class TextEditorScrollManager(
 		}
 	}
 
-	/** Scrolls to the row the caret is drawn on. */
+	/** Scrolls to the row the caret is drawn on, unless a drag auto-scroll owns the scroll ([cursorScrollSuppressed]). */
 	fun scrollToCursor() {
+		if (cursorScrollSuppressed) return
 		val before = scrollJob
 		scrollToPosition(getCursorPosition(), getCursorAffinity(), top = false, animated = true)
 		if (scrollJob !== before) cursorScrollJob = scrollJob

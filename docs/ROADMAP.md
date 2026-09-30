@@ -2162,11 +2162,15 @@ Shaping is one line per keystroke. These still scale with document length:
 
 - [ ] The README's "Work left to do" is stale: desktop copy and paste now
   preserves formatting.
-- [ ] `TextEditorScrollManager.scrollToCursor()` is public and bypasses
+- [x] `TextEditorScrollManager.scrollToCursor()` is public and bypasses
   `cursorScrollSuppressed` (1.23); only `ensureCursorVisible` honours it.
-- [ ] `TextEditorScrollManager.scrollToPosition(offset, animated = false)`
+  Now it honours it too (`TextEditorScrollManagerTest`).
+- [x] `TextEditorScrollManager.scrollToPosition(offset, animated = false)`
   animates anyway unless `top` is set: the path that scrolls just far enough
-  always calls `animateScrollTo` (found in 3.9).
+  always calls `animateScrollTo` (found in 3.9). That path now goes through
+  the pixel `scrollToPosition`, which honours `animated` and without it now
+  scrolls before returning rather than a dispatch later
+  (`TextEditorScrollManagerTest`).
 - [ ] `imeSetComposingRegion` (`input/ImeEditLogic.kt`) clears the composition
   when an IME passes the bounds reversed; `BaseInputConnection` orders them.
   Found in 4.27, whose expectation follows the contract.
