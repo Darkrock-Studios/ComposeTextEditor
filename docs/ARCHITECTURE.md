@@ -176,6 +176,13 @@ editor: the top and bottom padding are scroll range, and the start and end
 padding are applied inside the canvas, below its pointer input, so a press
 anywhere in the padding reaches the nearest row.
 
+Accessibility services see the editor through its semantics
+(`EditorSemantics.kt`), modelled on `BasicTextField`'s: the whole text as an
+editable field, the selection, and the actions a screen reader or test drives.
+A disabled editor reports itself disabled and offers no edit actions. The
+document is not snapshot state, so the semantics block reads `lineOffsets`,
+which every edit republishes, to stay current.
+
 ### Observation and extensions
 
 The state exposes a small reactive surface: `editOperations` streams applied

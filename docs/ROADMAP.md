@@ -1579,8 +1579,15 @@ iOS Safari; browser tests run in CI.
 ### Accessibility
 
 - [ ] **7.1** [Opus] [Lane M] `RichTextView` has no semantics at all.
-- [ ] **7.2** [Opus] [Lane M] A disabled editor still exposes `setText` and
+- [x] **7.2** [Opus] [Lane M] A disabled editor still exposes `setText` and
   `insertTextAtCursor`, and is still focusable, contrary to its KDoc.
+  Done: a disabled editor reports `disabled()` and `isEditable = false`, and
+  offers no `setText` or `insertTextAtCursor` (`EditorSemantics.kt`). It stays
+  focusable, deliberately: its text can be selected, and focus is what routes
+  the copy and select-all shortcuts to it. The KDoc now says so. Also fixed:
+  the published text went stale after an edit that left the caret in place
+  (a forward delete), since the document is not snapshot state; the semantics
+  block now reads `lineOffsets`, which every edit republishes.
 - [ ] **7.3** [Opus] [Lane M] The semantics `setText` calls `state.setText`,
   wiping rich spans and undo history.
 - [ ] **7.4** [Opus] [Lane M] Missing: `getTextLayoutResult`, copy, cut, and

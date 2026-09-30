@@ -26,8 +26,10 @@ private val DefaultContentPadding = PaddingValues(16.dp)
  *
  * @param state Holds the document, cursor, selection, and undo history.
  * @param contentPadding Padding between the surface edge and the text.
- * @param enabled When `false`, the editor is read-only and cannot take focus.
- * @param autoFocus Requests focus once when first composed.
+ * @param enabled When `false`, the editor is disabled: it takes no input, shows no
+ *   caret, and reports itself disabled, with no edit actions, to accessibility
+ *   services. It still takes focus, so its text can be selected and copied.
+ * @param autoFocus Requests focus once when first composed, if [enabled].
  * @param style Colors and text style for the editor and its gutter markers.
  * @param onRichSpanClick Invoked when a rich span (link, list, blockquote, code
  *   block, …) is clicked or tapped; see [RichSpanClick] for when, and

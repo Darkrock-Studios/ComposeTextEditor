@@ -783,6 +783,27 @@ Android unless a step says otherwise.
    the thumb pages toward the pointer (and keeps paging while held), and no thumb
    once the document fits (delete most of it).
 
+## 8c. Accessibility
+
+Screen readers: TalkBack on Android, VoiceOver on iOS and macOS, NVDA on Windows,
+Orca on Linux. Compose publishes the editor's semantics to each of them; the steps
+below say what each must find. Desktop screen readers reach Compose through the Java
+Access Bridge (Windows) or the AT-SPI bridge (Linux), which must be enabled first.
+
+### 8c.1 A disabled editor
+
+1. Rich Text Editor demo, turn the header's Enabled switch off (the toolbar hides with it,
+   since it edits the state directly).
+2. TalkBack and VoiceOver (iOS): move accessibility focus to the editor. **Expect:**
+   the text is read, and the editor is announced as disabled (TalkBack: "disabled";
+   VoiceOver: "dimmed"). The actions menu (TalkBack) or rotor (VoiceOver) offers no
+   paste, cut or set text, and double-tap does not raise a keyboard.
+3. VoiceOver (macOS), NVDA, Orca: Tab to the editor. **Expect:** the text is read
+   and announced as unavailable or read-only; typing does nothing; Ctrl+A (Cmd+A)
+   then Ctrl+C (Cmd+C) copies it.
+4. Turn Enabled back on. **Expect:** the editor is announced as an editable text
+   field again and typing works.
+
 ## 9. Consumer API sanity
 
 Guards #82, #48, #87, #90. Not strictly manual UI testing, but worth one pass before
@@ -813,3 +834,4 @@ tagging, since these change what downstream code compiles against.
 | §6 Undo / redo | | | | | | |
 | §7 Spell check | | | | | | |
 | §8 Perf / smoke | | | | | | |
+| §8c Accessibility | | | | | | |

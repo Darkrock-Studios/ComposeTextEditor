@@ -39,16 +39,8 @@ import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalTextToolbar
-import androidx.compose.ui.semantics.editableText
-import androidx.compose.ui.semantics.insertTextAtCursor
-import androidx.compose.ui.semantics.onClick
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.setSelection
-import androidx.compose.ui.semantics.setText
-import androidx.compose.ui.semantics.textSelectionRange
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.toSize
-import com.darkrockstudios.texteditor.annotatedstring.normalizeLineEndings
 import com.darkrockstudios.texteditor.clipboard.ClipboardEventsEffect
 import com.darkrockstudios.texteditor.contextmenu.ContextMenuActions
 import com.darkrockstudios.texteditor.contextmenu.ContextMenuOpener
@@ -65,15 +57,12 @@ import com.darkrockstudios.texteditor.input.KeyBindings
 import com.darkrockstudios.texteditor.input.LocalKeyBindings
 import com.darkrockstudios.texteditor.input.TextEditorInputModifierElement
 import com.darkrockstudios.texteditor.input.TextInputRequester
-import com.darkrockstudios.texteditor.input.selectionAsTextRange
 import com.darkrockstudios.texteditor.richstyle.BlockSpanStyle
 import com.darkrockstudios.texteditor.state.LayoutUpdate
 import com.darkrockstudios.texteditor.richstyle.RichSpan
 import com.darkrockstudios.texteditor.scrollbar.TextEditorScrollbar
 import com.darkrockstudios.texteditor.state.SpanClickType
 import com.darkrockstudios.texteditor.state.TextEditorState
-import com.darkrockstudios.texteditor.state.insertTypedNewline
-import com.darkrockstudios.texteditor.state.typedInput
 import com.darkrockstudios.texteditor.state.rememberTextEditorState
 import com.darkrockstudios.texteditor.state.updateKeyboardCover
 import kotlinx.coroutines.delay
@@ -92,8 +81,10 @@ private const val CURSOR_BLINK_SPEED_MS = 500L
  *
  * @param state Holds the document, cursor, selection, and undo history.
  * @param contentPadding Padding between the editor bounds and the text.
- * @param enabled When `false`, the editor is read-only and cannot take focus.
- * @param autoFocus Requests focus once when first composed.
+ * @param enabled When `false`, the editor is disabled: it takes no input, shows no
+ *   caret, and reports itself disabled, with no edit actions, to accessibility
+ *   services. It still takes focus, so its text can be selected and copied.
+ * @param autoFocus Requests focus once when first composed, if [enabled].
  * @param style Colors and text style for the editor and its gutter markers.
  * @param contextMenuStrings Localized labels for the built-in context menu.
  * @param contextMenuState Drives context-menu visibility; pass your own to add
@@ -177,6 +168,9 @@ fun BasicTextEditor(
 			.collect { (keyboardHeight, _) -> state.updateKeyboardCover(keyboardHeight) }
 	}
 	val caretFocusRect = remember(state) { CaretFocusRect(state) }
+	val semanticsModifier = remember(state, enabled, focusRequester) {
+		Modifier.editorSemantics(state, enabled, focusRequester)
+	}
 
 	// Use provided context menu state or create internal one
 	val internalContextMenuState = remember { TextEditorContextMenuState() }
@@ -288,55 +282,9 @@ fun BasicTextEditor(
 					)
 					.then(inputModifierElement)
 					.then(caretFocusRect.modifier)
+					// Focusable even when disabled, so a selection can be copied by keyboard.
 					.focusable(enabled = true, interactionSource = interactionSource)
-					// Publish text-editing semantics so the node is recognized as an editable
-					// text field. This drives accessibility services (VoiceOver/TalkBack read and
-					// edit the content) and, on iOS, lets the platform expose the focused editor as
-					// a keyboard-focused text element — without which XCUITest can't type into it.
-					.semantics {
-						editableText = state.getAllText()
-						textSelectionRange = state.selectionAsTextRange()
-						setText { newText ->
-							state.setText(newText)
-							true
-						}
-						insertTextAtCursor { inserted ->
-							val newText = inserted.normalizeLineEndings()
-							if (newText.text == "\n") {
-								state.insertTypedNewline()
-							} else {
-								// Dictated or assistive text: one step that is not typing, since
-								// whole phrases are not something a following keystroke should
-								// join, then told to the behaviors like any typed text.
-								state.typedInput(newText.text) {
-									state.editGroup {
-										state.selector.deleteSelection()
-										state.editManager.recordingAsTyping(false) {
-											state.insertStringAtCursor(newText)
-										}
-									}
-								}
-							}
-							true
-						}
-						setSelection { start, end, _ ->
-							val length = state.getTextLength()
-							val from = start.coerceIn(0, length)
-							val to = end.coerceIn(0, length)
-							if (from == to) {
-								state.cursor.updatePosition(state.getOffsetAtCharacter(from))
-								state.selector.clearSelection()
-							} else {
-								state.selector.updateSelection(
-									state.getOffsetAtCharacter(from),
-									state.getOffsetAtCharacter(to),
-								)
-								state.cursor.updatePosition(state.getOffsetAtCharacter(to))
-							}
-							true
-						}
-						onClick { focusRequester.requestFocus(); true }
-					}
+					.then(semanticsModifier)
 					.fillMaxSize()
 					.overscroll(overscrollEffect)
 					.scrollable(

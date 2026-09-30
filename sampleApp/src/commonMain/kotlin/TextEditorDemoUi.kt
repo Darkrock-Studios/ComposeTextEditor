@@ -1,15 +1,22 @@
 package com.darkrockstudios.texteditor.sample
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.darkrockstudios.texteditor.TextEditor
 import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
@@ -75,16 +82,30 @@ fun TextEditorDemoUi(
 		}
 	}
 
+	var enabled by remember { mutableStateOf(true) }
+
 	Column(modifier = modifier) {
 		Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
 			Text(
 				"Compose Text Editor",
-				modifier = Modifier.padding(8.dp),
+				modifier = Modifier.padding(8.dp).weight(1f),
 				style = MaterialTheme.typography.titleLarge,
-				fontWeight = FontWeight.Bold
+				fontWeight = FontWeight.Bold,
+				maxLines = 1,
+				overflow = TextOverflow.Ellipsis,
 			)
-			Spacer(modifier = Modifier.weight(1f))
-			if (demoContent != DemoContent.Rich) {
+			// The editor's enabled flag gates user input only; the toolbar and Roundtrip
+			// act on the state directly, so they hide with it.
+			Row(
+				modifier = Modifier
+					.toggleable(value = enabled, role = Role.Switch, onValueChange = { enabled = it })
+					.padding(horizontal = 8.dp),
+				verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+			) {
+				Text("Enabled", modifier = Modifier.padding(end = 4.dp))
+				Switch(checked = enabled, onCheckedChange = null)
+			}
+			if (enabled && demoContent != DemoContent.Rich) {
 				Button(
 					onClick = {
 						val markdown = markdownExtension.exportAsMarkdown()
@@ -99,10 +120,12 @@ fun TextEditorDemoUi(
 			}
 		}
 
-		TextEditorToolbar(
-			mardkown = markdownExtension,
-			markdownControls = (demoContent != DemoContent.Rich)
-		)
+		if (enabled) {
+			TextEditorToolbar(
+				mardkown = markdownExtension,
+				markdownControls = (demoContent != DemoContent.Rich)
+			)
+		}
 
 		val uriHandler = LocalUriHandler.current
 		val style = rememberTextEditorStyle(
@@ -116,6 +139,7 @@ fun TextEditorDemoUi(
 				.padding(8.dp)
 				.fillMaxSize(),
 			style = style,
+			enabled = enabled,
 			onRichSpanClick = { span, clickType, _ ->
 				when (clickType) {
 					SpanClickType.TAP -> println("Touch tap on span: $span")
