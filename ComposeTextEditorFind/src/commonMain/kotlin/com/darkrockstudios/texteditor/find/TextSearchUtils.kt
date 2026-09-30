@@ -84,6 +84,83 @@ private fun compileOrNull(pattern: String, options: Set<RegexOption>): Regex? = 
 	null
 }
 
+/**
+ * The replacement for each of [targets], matches of the regex [query] as [findAll] reported them,
+ * with the group references in [replacement] expanded by [expandReplacement]. All are read before
+ * any is replaced, since a lookahead lets a match's groups reach into text a later match covers.
+ * A target the pattern does not match again, from its own start, gets [replacement] as written.
+ */
+internal fun TextEditorState.regexReplacements(
+	targets: List<TextEditorRange>,
+	query: String,
+	caseSensitive: Boolean,
+	wholeWord: Boolean,
+	replacement: String,
+): List<String> {
+	val regex = compileFindPattern(query, caseSensitive, wholeWord)?.regex
+		?: return targets.map { replacement }
+	return targets.map { range ->
+		val line = textLines[range.start.line].text
+		regex.find(line, range.start.char)
+			?.takeIf { it.range.first == range.start.char && it.range.last + 1 == range.end.char }
+			?.let { expandReplacement(it, replacement) }
+			?: replacement
+	}
+}
+
+/**
+ * [replacement] expanded against [match] in the syntax of Kotlin's `Regex.replace`: `$n` and
+ * `${name}` insert a group, empty when it took no part in the match, and a backslash makes the
+ * next character literal. A group number takes as many digits as still name a group, so `$12`
+ * with one group is group 1 then `2`. Where `Regex.replace` would throw, the text is inserted as
+ * written instead: a reference to a group the pattern lacks, a `$` that starts no reference, and
+ * a trailing backslash.
+ */
+internal fun expandReplacement(match: MatchResult, replacement: String): String = buildString {
+	val lastGroup = match.groups.size - 1
+	var i = 0
+	while (i < replacement.length) {
+		val c = replacement[i]
+		val next = replacement.getOrNull(i + 1)
+		if (c == '\\' && next != null) {
+			append(next)
+			i += 2
+		} else if (c == '$' && next != null && next.isAsciiDigit() && next.digitToInt() <= lastGroup) {
+			var group = next.digitToInt()
+			i += 2
+			while (i < replacement.length && replacement[i].isAsciiDigit()) {
+				val longer = group * 10 + replacement[i].digitToInt()
+				if (longer > lastGroup) break
+				group = longer
+				i++
+			}
+			append(match.groups[group]?.value.orEmpty())
+		} else if (c == '$' && next == '{') {
+			val close = replacement.indexOf('}', i + 2)
+			val value = if (close >= 0) namedGroupValue(match, replacement.substring(i + 2, close)) else null
+			if (value != null) {
+				append(value)
+				i = close + 1
+			} else {
+				append(c)
+				i++
+			}
+		} else {
+			append(c)
+			i++
+		}
+	}
+}
+
+/** The group [name] of [match], empty when it took no part; null when the pattern has no such group. */
+private fun namedGroupValue(match: MatchResult, name: String): String? = try {
+	match.groups[name]?.value.orEmpty()
+} catch (_: IllegalArgumentException) {
+	null
+}
+
+private fun Char.isAsciiDigit(): Boolean = this in '0'..'9'
+
 /** The regex form of [isWordChar]. */
 private const val WORD_CHAR = """[\p{L}\p{Nd}_]"""
 

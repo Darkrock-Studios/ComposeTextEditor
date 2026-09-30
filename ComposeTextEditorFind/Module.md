@@ -63,6 +63,12 @@ val replaced = findState.replaceAll("thread")
 findState.clearSearch()
 ```
 
+With regular expressions on, a replacement can refer to the match's groups in the syntax of
+Kotlin's `Regex.replace`: `$0` for the whole match, `$1` and up for numbered groups, `${name}`
+for named ones, and a backslash to make the next character literal (`\$`, `\\`). A reference
+to a group the pattern does not have is inserted as written. With regular expressions off, the
+replacement is always literal.
+
 For a headless, one-shot search with no state object, use
 [TextEditorState.findAll][com.darkrockstudios.texteditor.find.findAll], which returns the
 matching [TextEditorRange][com.darkrockstudios.texteditor.TextEditorRange]s in document

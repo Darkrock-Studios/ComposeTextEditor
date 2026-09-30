@@ -1825,8 +1825,13 @@ Shaping is one line per keystroke. These still scale with document length:
 - [x] **7.19** [Opus] [Lane J] Esc and Ctrl+F close without clearing
   highlights. The shortcut tests `isCtrlPressed`, so AltGr+F is stolen on
   Windows layouts; use `isCtrlShortcut`.
-- [ ] **7.26** [Opus] [Lane J] Regex replace inserts the replacement
+- [x] **7.26** [Opus] [Lane J] Regex replace inserts the replacement
   literally; `$1` and named groups are not expanded.
+  Done: with regex on, the replacement uses Kotlin's `Regex.replace` syntax
+  (`$0`, `$1`, `${name}`, backslash escapes), with each match's groups read before
+  any edit. A reference to a group the pattern lacks, where `Regex.replace` would
+  throw, is inserted as written: the groups are only known once a match exists,
+  and the result is visible and one undo away (`FindRegexReplaceTest`).
 - [x] **7.27** [Opus] [Lane C] Decorations take part in span hit testing
   (`findSpanAtPosition`), ranked above line markers. While find in selection
   is on, its scope decoration answers clicks on list, blockquote, and code
