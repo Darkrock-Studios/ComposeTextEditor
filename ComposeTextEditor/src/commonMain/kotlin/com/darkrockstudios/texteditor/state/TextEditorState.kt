@@ -1463,7 +1463,12 @@ class TextEditorState(
 			val virtualLineCount = textLayoutResult.multiParagraph.lineCount
 			val paragraphTop = yOffset
 
-			val orderedListNumber: Int? = listLines[lineIndex]?.let { (ordered, level) ->
+			val listLine = listLines[lineIndex]
+			val orderedListNumber: Int? = if (listLine == null) {
+				orderedCounters.fill(0)
+				null
+			} else {
+				val (ordered, level) = listLine
 				for (deeper in level + 1..MAX_LIST_LEVEL) orderedCounters[deeper] = 0
 				if (ordered) {
 					orderedCounters[level] += 1
@@ -1472,9 +1477,6 @@ class TextEditorState(
 					orderedCounters[level] = 0
 					null
 				}
-			} ?: run {
-				orderedCounters.fill(0)
-				null
 			}
 
 			val codeFenceBoundary: CodeFenceBoundary? = if (lineIndex in codeFenceLines) {

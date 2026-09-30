@@ -11,10 +11,16 @@ import com.darkrockstudios.texteditor.richstyle.LineBlockStyle
 import com.darkrockstudios.texteditor.richstyle.RichSpanStyle
 import com.darkrockstudios.texteditor.richstyle.allowedOn
 import com.darkrockstudios.texteditor.richstyle.applyLineBlock
+import com.darkrockstudios.texteditor.richstyle.atListLevel
 import com.darkrockstudios.texteditor.richstyle.demoteLineBlock
 import com.darkrockstudios.texteditor.richstyle.hasLineBlock
+import com.darkrockstudios.texteditor.richstyle.isList
 import com.darkrockstudios.texteditor.richstyle.lineBlockSpanStyles
+import com.darkrockstudios.texteditor.richstyle.listBlockAt
+import com.darkrockstudios.texteditor.richstyle.listLevel
 import com.darkrockstudios.texteditor.richstyle.placeholderKinds
+import com.darkrockstudios.texteditor.richstyle.recordListEdit
+import com.darkrockstudios.texteditor.richstyle.sameListKind
 import com.darkrockstudios.texteditor.richstyle.setLineBlockSpans
 import com.darkrockstudios.texteditor.utils.appendAnnotatedStrings
 import com.darkrockstudios.texteditor.utils.buildAnnotatedStringWithSpans
@@ -724,28 +730,56 @@ class TextEditManager(private val state: TextEditorState) {
 			line in state.textLines.indices && block.allowedOn(kinds[line])
 		}
 		if (targets.isEmpty()) return@withAtomicEdit
-		val anyOff = targets.any { !state.hasLineBlock(it, block) }
-		val cursorBefore = state.cursorPosition
-
-		// The toggle mutates lines and spans here, before applyOperation records it;
-		// this outer transaction keeps that prelude out of public view too.
-		val changes = targets.map { lineIdx ->
-			val contentBefore = state.getLine(lineIdx)
-			val spansBefore = state.lineBlockSpanStyles(lineIdx)
-			if (anyOff) {
-				if (!state.hasLineBlock(lineIdx, block)) state.applyLineBlock(lineIdx, block)
-			} else {
-				state.demoteLineBlock(lineIdx, block)
+		// A list toggle asks for a kind at any nesting level: a nested item has
+		// bullets, and switching kinds keeps the level.
+		fun present(line: Int): LineBlockStyle? = if (block.isList) {
+			state.listBlockAt(line)?.takeIf { it.sameListKind(block) }
+		} else {
+			block.takeIf { state.hasLineBlock(line, block) }
+		}
+		val anyOff = targets.any { present(it) == null }
+		// Clearing, demoting or re-quoting a list item changes what the items
+		// after the range may hang from; recordListEdit brings them up with it.
+		state.recordListEdit(targets) {
+			targets.forEach { lineIdx ->
+				if (anyOff) {
+					if (present(lineIdx) == null) {
+						val level = state.listBlockAt(lineIdx)?.listLevel ?: 0
+						state.applyLineBlock(lineIdx, block.atListLevel(level))
+					}
+				} else {
+					state.demoteLineBlock(lineIdx, present(lineIdx)!!)
+				}
 			}
+		}
+	}
+
+	/**
+	 * Records what [mutate] does to the content and block spans of [lines] as one
+	 * atomic LineBlock entry: each line's state is captured before and after, and
+	 * the lines [mutate] left as they were are not recorded. [mutate] changes
+	 * lines and spans through the direct (non-recording) path; the outer
+	 * transaction keeps that prelude out of public view.
+	 */
+	internal fun recordLineBlockChanges(lines: Collection<Int>, mutate: () -> Unit) = state.withAtomicEdit {
+		val cursorBefore = state.cursorPosition
+		val before = lines.distinct().filter { it in state.textLines.indices }.map { line ->
+			Triple(line, state.getLine(line), state.lineBlockSpanStyles(line))
+		}
+		mutate()
+		val changes = before.mapNotNull { (line, content, spans) ->
+			val contentAfter = state.getLine(line)
+			val spansAfter = state.lineBlockSpanStyles(line)
+			if (contentAfter == content && spansAfter == spans) return@mapNotNull null
 			LineBlockChange(
-				lineIndex = lineIdx,
-				contentBefore = contentBefore,
-				contentAfter = state.getLine(lineIdx),
-				blockSpansBefore = spansBefore,
-				blockSpansAfter = state.lineBlockSpanStyles(lineIdx),
+				lineIndex = line,
+				contentBefore = content,
+				contentAfter = contentAfter,
+				blockSpansBefore = spans,
+				blockSpansAfter = spansAfter,
 			)
 		}
-
+		if (changes.isEmpty()) return@withAtomicEdit
 		applyOperation(
 			TextEditOperation.LineBlock(
 				lines = changes,

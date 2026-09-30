@@ -35,7 +35,7 @@ And now, it's working, and at this point, working pretty well.
 - ✅ Diagnostics from your own checker (grammar, style), underlined with a menu of fixes
 - ☑️ CommonMark Spec (partial)
   - Inline styles (bold, italics, ect)
-  - Block styles (code fence with its language tag, lists, images)
+  - Block styles (code fence with its language tag, nested lists, images)
   - Underline (`<u>`), highlight (`==text==` or `<mark>`), colour and size (`<span style>`)
 
 You can [Give it a try here](https://darkrock-studios.github.io/ComposeTextEditor/), or
@@ -87,7 +87,7 @@ See the [roadmap](docs/ROADMAP.md) for what is planned.
 - Copy/Paste of rich text always strips the formatting (_this is a Compose MP bug_)
 - Right-to-Left text is probably broken
 - Sentence level spell checking is not working as expected
-- Full CommonMark Spec compliance (_nested lists_)
+- Full CommonMark Spec compliance (_tables, task lists, reference links, setext headings and nested quotes stay literal text_)
 
 ## Want to try it?
 

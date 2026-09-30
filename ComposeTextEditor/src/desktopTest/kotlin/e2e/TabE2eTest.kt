@@ -85,11 +85,13 @@ class TabE2eTest {
 		press(Key.A, ctrl = true)
 		press(Key.Tab)
 		assertEquals(listOf("    one", "two", "three", "    four"), lines)
+		// The bullet has nothing to nest under; the numbered item nests under it (5.6).
 		assertEquals(listOf(1), state.linesWith(BulletListSpanStyle))
-		assertEquals(listOf(2), state.linesWith(OrderedListSpanStyle))
+		assertEquals(listOf(2), state.linesWith(OrderedListSpanStyle.of(1)))
 
 		press(Key.Z, ctrl = true)
 		assertEquals(listOf("one", "two", "three", "four"), lines)
+		assertEquals(listOf(2), state.linesWith(OrderedListSpanStyle))
 	}
 
 	@Test

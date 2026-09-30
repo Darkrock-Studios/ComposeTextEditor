@@ -14,6 +14,9 @@ import com.darkrockstudios.texteditor.html.selectionAsHtml
 import com.darkrockstudios.texteditor.input.EditorCommand.Action
 import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
 import com.darkrockstudios.texteditor.richstyle.listBlockAt
+import com.darkrockstudios.texteditor.richstyle.listLevel
+import com.darkrockstudios.texteditor.richstyle.nestListItems
+import com.darkrockstudios.texteditor.richstyle.unnestListItems
 import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.applyStyleForEditAt
 import com.darkrockstudios.texteditor.state.clearFormatting
@@ -308,9 +311,13 @@ private fun TextEditorState.handleIndent() = editGroup {
 		indentLineRange(selection.start.line, selection.end.line)
 	} else {
 		val at = selection?.start ?: cursorPosition
-		// A list item has no indent level to take until nested lists exist (roadmap 5.6),
-		// and leading spaces in one do not survive a markdown round trip.
-		if (at.char == 0 && isListItem(at.line)) return@editGroup
+		// At a list item's start Tab nests the item one level (5.6); inside its
+		// text it still inserts, as Word has it. Leading spaces in an item do not
+		// survive a markdown round trip, so a nest that is not allowed does nothing.
+		if (at.char == 0 && isListItem(at.line)) {
+			nestListItems(at.line..at.line)
+			return@editGroup
+		}
 		if (selection != null) {
 			selector.deleteSelection()
 		}
@@ -320,17 +327,23 @@ private fun TextEditorState.handleIndent() = editGroup {
 
 private fun TextEditorState.isListItem(line: Int): Boolean = listBlockAt(line) != null
 
-private fun TextEditorState.handleOutdent() {
+private fun TextEditorState.handleOutdent() = editGroup {
 	val selection = selector.selection
 	if (selection != null) {
+		unnestListItems(selection.start.line..selection.end.line)
 		outdentLineRange(selection.start.line, selection.end.line)
+	} else if ((listBlockAt(cursorPosition.line)?.listLevel ?: 0) > 0) {
+		// Shift+Tab anywhere in a nested item un-nests it, as Google Docs has it;
+		// a top-level item has only its leading spaces to give (2.9).
+		unnestListItems(cursorPosition.line..cursorPosition.line)
 	} else {
 		outdentCurrentLine()
 	}
 }
 
-/** Indents every line in the range but the list items, as Tab at a list item's start does. */
+/** Nests the list items in the range and indents the other lines, as Tab does on each alone. */
 private fun TextEditorState.indentLineRange(startLine: Int, endLine: Int) {
+	nestListItems(startLine..endLine)
 	val lines = (startLine..endLine).filterNot { isListItem(it) }
 	if (lines.isEmpty()) return
 	val prefix = tabSettings.indentText

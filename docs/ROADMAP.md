@@ -1425,18 +1425,26 @@ iOS Safari; browser tests run in CI.
 - [ ] **5.5 Enter after a heading. S.** [Opus] [Lane G] `LineBlockEditBehavior`
   continues any line block, headings included, so the line after a chapter
   title is another heading. It should be body text.
-- [ ] **5.6 Nested lists.** [Fable] [Lane I] Unsupported in the block model and
+- [x] **5.6 Nested lists.** [Fable] [Lane I] Unsupported in the block model and
   the markdown parser (`docs/design/line-blocks.md`, known limitations).
   Tab and Shift+Tab at a list item's start are the chords to nest and un-nest
   it; since 2.9 Tab does nothing there (`handleIndent` in
-  `input/BuiltinEditorActions.kt`). Landed (model and markdown): a list
-  line's level lives in its span style (`BulletListSpanStyle.of(level)`,
+  `input/BuiltinEditorActions.kt`). Done. Model and markdown: a list line's
+  level lives in its span style (`BulletListSpanStyle.of(level)`,
   `OrderedListSpanStyle.of(level)`, the bare names level 0), one list block
   per line, indent and marker glyph per level, numbering per level; import
   resolves levels from indentation by CommonMark's content offsets and export
   writes them back, an orphaned deeper item at the level its predecessor
-  allows. Design in `docs/design/line-blocks.md`, "Nested lists". Left: the
-  chords and smart editing (Tab, Shift+Tab, Enter, Backspace, toggles).
+  allows. Editing, as Google Docs, Word, Notion and Apple Notes have it: Tab
+  at an item's start nests it (never deeper than one below the item above,
+  a selection as one block), Shift+Tab un-nests it with the items under it,
+  Enter continues the level, Enter on an empty nested item un-nests and on an
+  empty top-level item ends the list, Backspace at a nested item's start
+  un-nests, a toggle keeps the level when switching kinds and lifts a cleared
+  parent's children; each is one undo step (`richstyle/ListNesting.kt`,
+  `MarkdownExtension.nestList` and `unnestList`). Tab inside an item's text
+  still inserts, per 2.9. HTML flattens nesting until 7.47. Design in
+  `docs/design/line-blocks.md`, "Nested lists".
 - [ ] **5.7 Paragraph formatting.** [Fable] [Lane N] Paragraph spacing does not
   exist; rows stack with no gap. No per-paragraph alignment, indent, or line
   height. Global `textIndent`, `lineHeight`, and `textAlign` already work

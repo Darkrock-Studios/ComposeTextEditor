@@ -94,11 +94,14 @@ allows that the text form cannot hold, a deliberate exception to rule 1:
 export writes it at the level its predecessor allows, so it reloads one
 level shallower, a mild and visible change rather than a silent one. The
 edit paths keep followers valid inside their own undo step so the exception
-is rarely reached: nesting a line (Tab) leaves its followers where they are,
-its former children now its siblings, as Google Docs does; un-nesting a line
-(Shift+Tab), making it body text (toggle or Backspace at level 0) or exiting
-the list lifts its subtree (the following deeper items) one level with it,
-as the markdown text would read.
+is rarely reached (`recordListEdit` in `richstyle/ListNesting.kt`, one undo
+step with the followers it touches): nesting a line (Tab) leaves its
+followers where they are, its former children now its siblings, as Google
+Docs does; un-nesting a line (Shift+Tab), making it body text (toggle,
+heading, Backspace at level 0), re-quoting it or exiting the list brings the
+items nested under it up to what it now allows, the subtree moving together
+and ending at its first sibling. A selection moves only its own items, as in
+Docs; the items under the last of them follow it.
 
 **Markdown.** Export indents a level-k item by the content offset of its
 level-(k − 1) ancestor: two columns after `- `, the marker's width after
@@ -276,8 +279,9 @@ consequences of its own.
 
 ## Known limitations
 
-- Nested blocks are unsupported: indented list items do not parse, and a
-  nested `> > ` quote collapses one level per import pass.
+- A nested `> > ` quote collapses one level per import pass; only lists nest.
+- HTML export writes a nested list item as a sibling and HTML import reads a
+  nested `<ul>` at the top level (roadmap 7.47).
 - Exporting a document whose last line is a heading appends a trailing blank
   line that survives re-import (stable at one extra line).
 - Toggling a style off after a blanket apply does not restore the styles lines

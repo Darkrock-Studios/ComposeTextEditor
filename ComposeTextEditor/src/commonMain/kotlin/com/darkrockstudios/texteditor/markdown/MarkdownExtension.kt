@@ -28,9 +28,12 @@ import com.darkrockstudios.texteditor.richstyle.documentBlocksOf
 import com.darkrockstudios.texteditor.richstyle.hasLineBlock
 import com.darkrockstudios.texteditor.richstyle.headerBlock
 import com.darkrockstudios.texteditor.richstyle.isList
+import com.darkrockstudios.texteditor.richstyle.isNestingBlank
 import com.darkrockstudios.texteditor.richstyle.lineBlockStyles
 import com.darkrockstudios.texteditor.richstyle.listBlockAt
 import com.darkrockstudios.texteditor.richstyle.listLevel
+import com.darkrockstudios.texteditor.richstyle.nestListItems
+import com.darkrockstudios.texteditor.richstyle.unnestListItems
 import com.darkrockstudios.texteditor.richstyle.RichSpan
 import com.darkrockstudios.texteditor.richstyle.rebuildWithBlock
 import com.darkrockstudios.texteditor.richstyle.rebuildWithoutBlock
@@ -343,15 +346,15 @@ class MarkdownExtension(
 		val lines = content.lines
 		val separateParagraphs =
 			markdownConfiguration.paragraphSeparator == ParagraphSeparator.BLANK_LINE
-		val headerBlocks = registry.filter { it.spanStyle is HeaderSpanStyle }
 		fun isList(line: Int) = blocks.listBlockAt(line) != null
 		fun isQuoted(line: Int) = blocks.has(line, Blockquote)
 
 		// A blank editor line, as opposed to a block with empty content: an empty
-		// list item, heading or fenced line is a block of its own.
+		// list item, heading or fenced line is a block of its own. The same
+		// definition the editor nests by, read from the snapshot.
+		val spansByLine = content.richSpans.groupBy { it.range.start.line }
 		fun isBlankLine(line: Int): Boolean =
-			lines[line].text.isBlank() && !isList(line) && line !in codeFenceLines &&
-				line !in hrLines && line !in imageLines && headerBlocks.none { blocks.has(line, it) }
+			isNestingBlank(lines[line], spansByLine[line].orEmpty())
 
 		// Whether a blank line goes between [line] and the next. Every block gets
 		// one, except that a list's items and a fence's lines stay together, and
@@ -783,6 +786,20 @@ class MarkdownExtension(
 
 	/** The nesting level (0 for a top-level item) of the list item on [line], or null when it is not one. */
 	fun listLevel(line: Int): Int? = editorState.listBlockAt(line)?.listLevel
+
+	/**
+	 * Nests each list item in [lines] one level, never deeper than one below
+	 * the item before it, as Tab at an item's start does. One undo step; lines
+	 * that are not list items are left alone. Returns whether any item moved.
+	 */
+	fun nestList(lines: IntRange): Boolean = editorState.nestListItems(lines)
+
+	/**
+	 * Un-nests each nested list item in [lines] one level, the items nested
+	 * under the last of them coming up with it, as Shift+Tab does. One undo
+	 * step. Returns whether any item moved.
+	 */
+	fun unnestList(lines: IntRange): Boolean = editorState.unnestListItems(lines)
 
 	/** Returns whether [line] is currently rendered as a fenced code line. */
 	fun isCodeFence(line: Int): Boolean = editorState.hasLineBlock(line, CodeFence)
