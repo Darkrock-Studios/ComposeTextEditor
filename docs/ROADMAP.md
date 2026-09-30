@@ -182,7 +182,7 @@ review.
 | B | Pointer and touch | `textEditorPointerInputHandling.kt`, `state/TextEditorSelectionManager.kt`, `DrawSelectionHandles.kt` | 1.9, 1.12 to 1.16, 1.21 to 1.24, 3.1, 3.2, 3.4 to 3.8, 3.13, 3.15, 4.23 |
 | C | Drawing and geometry | `Draw*.kt`, `cursor/`, `scrollbar/`, `state/TextEditorScrollState.kt`, hit testing | 1.8, 1.10, 1.11, 1.17, 1.18, 3.3, 3.12, 4.14, 7.6, 7.7 |
 | D | Bindings, actions, menu | `input/KeyBindings.kt`, `input/EditorCommand.kt`, `input/BuiltinEditorActions.kt`, `contextmenu/` | 2.1, 2.2, 2.4, 2.5, 2.7 to 2.12, 4.8, 5.8 |
-| E | Input sessions on desktop, iOS, web | `desktopMain`, `iosMain`, `wasmJsMain` under `input/` | 4.2 to 4.7, 4.10 to 4.12, 4.19, 4.21, 4.22, 4.24 to 4.26, 4.28 |
+| E | Input sessions on desktop, iOS, web | `desktopMain`, `iosMain`, `wasmJsMain` under `input/` | 4.2 to 4.7, 4.10 to 4.12, 4.19, 4.21, 4.22, 4.24 to 4.26, 4.28, 4.29 |
 | F | Android input | `androidMain` | 0.4, 3.9 to 3.11, 3.14, 4.16, 4.18, 4.20, 4.27 |
 | G | Edit pipeline and undo | `state/TextEditManager.kt`, `state/TextEditHistory.kt`, `state/EditBehavior.kt`, `input/ImeEditLogic.kt` | 1.20, 5.1 to 5.5, 5.9, 6.1 to 6.6, 6.14, 6.15 |
 | H | Clipboard and HTML | `clipboard/`, `html/` | 4.9, 4.13, 4.17, 6.7 to 6.12 |
@@ -1060,7 +1060,7 @@ iOS Safari; browser tests run in CI.
   through the normal paste path so undo and line blocks behave. AWT under
   native Wayland has no primary selection (see 4.17), so it only works under
   X11 or XWayland.
-- [ ] **4.25 The skiko request ignores IME resync requests. S.** [Opus]
+- [x] **4.25 The skiko request ignores IME resync requests. S.** [Opus]
   [Lane E] `TextEditorState.requestImeResync` advances a generation that only
   the Android cursor sync consumes (`ImeCursorSync.android.kt`); the shared
   skiko request (desktop, iOS, web) never restarts its session or tells the
@@ -1069,6 +1069,18 @@ iOS Safari; browser tests run in CI.
   `deleteSurroundingText` or `setComposingRegion` addresses the wrong
   characters. Consume the generation in `startSkikoInputSession`. Needed
   before 5.2 to 5.4 ship a behavior that edits on the IME path.
+  Done: `startSkikoInputSession` watches the generation (now snapshot state)
+  and hands each advance to the platform's `SkikoImeResync`. Desktop passes
+  `None`: the AWT input method asks the request for text as it needs it and
+  keeps no copy. Web passes `Rewrite`: Compose leaves a key's default action
+  to the backing textarea and mirrors the editor back only when the value
+  changes, so Enter leaving a list left the browser's line break in the
+  textarea, where the next ranged `beforeinput` would read its offsets; the
+  rewrite puts the editor's value and selection back. Verified in Chromium:
+  Enter on an empty bullet in the Markdown demo left a 6243-character
+  textarea with the caret at 753; the rewrite restored 6242 and 752. iOS
+  keeps the default `None` for now, split out as 4.29. `RestartInput` exists
+  for it and is tested.
 - [ ] **4.26 A behavior's edit mid IME batch. C.** [Fable] [Lane E] A
   behavior edits on top of an IME commit (5.1) at once, but a batch (an
   Android `beginBatchEdit`, a web `onEditCommand` list) may hold further
@@ -1077,6 +1089,19 @@ iOS Safari; browser tests run in CI.
   after the commit then addresses the wrong characters. Defer the hook to
   the batch's end, or drop the batch's remaining offsets once a behavior
   has edited.
+- [ ] **4.29 iOS ignores IME resync requests. C.** [Opus] [Lane E] [Mac work]
+  Compose's iOS connection absorbs a value change made during the keyboard's
+  own edit (`TextInputConnection.edit` stores the post-edit value with
+  `postponeSelectionUpdate` and tells UIKit nothing), so an `EditBehavior`
+  that answers or edits on top of a keyboard command (Return leaving a list,
+  Backspace demoting a bullet, 5.2's substitutions) never reaches UIKit, and
+  the keyboard's autocorrect and capitalisation context keeps what it typed.
+  The shared session offers `SkikoImeResync.RestartInput`, which restarts the
+  input connection (the keyboard resets and may flicker, and a resync fires
+  on every list Return), so it is not switched on blind. On the simulator:
+  leave a list with Return and demote a bullet with Backspace, then type a
+  word that autocorrects; compare with `RestartInput` passed in
+  `TextEditorTextInputService.ios.kt`. Needed before 5.2 ships on iOS.
 - [ ] **4.27 Android resyncs by restarting input. C.** [Opus] [Lane F]
   `requestImeResync` becomes `restartInput`, which clears the keyboard's
   suggestions and shift state. That suits a whole-document replace, not a
@@ -1432,3 +1457,4 @@ records results and removes entries that passed.
 | 4.6 | With a hardware keyboard in the iOS sample app (a person: the simulator tools here cannot press arrow keys), press Up and Down through a wrapped paragraph and a heading | Each press moves the caret one drawn row, once. `verticalPositionFromPosition` now answers from the unstyled layout, so a double move or a move by an undrawn row would come from UIKit handling the arrow through `UITextInput` as well | |
 | 2.9 | In the iOS sample app with a hardware keyboard: press Tab, Ctrl+Tab, then Escape followed by Tab; then set `state.tabSettings = TabSettings(movesFocus = true)` on the demo editor and press Tab | Tab indents by four spaces; Ctrl+Tab, Escape then Tab, and Tab under `movesFocus` either move focus to another control or do nothing, and never type a tab character (4.28) | |
 | 3.8 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64`. 3.8 added `internal expect fun hasNativeTextToolbar()` (commonMain `TouchToolbar.kt`) with `iosMain/.../TouchToolbar.ios.kt` answering true. Then in the simulator: long-press a word, double-tap a word, long-press empty space, tap the caret handle, and drag a selection handle | Compiles. UIKit's edit menu appears over the selection or caret with Cut, Copy, Paste and Select all as applicable (Paste and Select all alone at a bare caret), hides while a handle is dragged and returns when it drops, and goes when the caret moves or the text is scrolled. If no menu appears, the input connection has no toolbar: fall back to `false` in `TouchToolbar.ios.kt` so the context menu stands in |  Partial, same run. Compiles. The UIKit menu works over a selection: double-tap or long-press a word shows Cut, Copy, Paste, Select All, and each works. **Fails:** long-press in an empty document calls `show()` with a zero-width caret rect and only Paste, and UIKit shows nothing (the toolbar reports Hidden right after `showMenu`); a tap on the caret handle never calls `show()`. Native reference: a tap in Safari's focused empty field shows Paste. Also: a long-press past a line's end selects the line's last word instead of placing the caret; with a selection ending at the document end, a long-press below the text counts as on the selection. When the screen was shifted by 4.24 the selection menu did not appear either. Did not fall back to `false`, since the menu works for selections |
+| 4.25 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64`. `skikoMain/.../input/SkikoTextEditorInputMethodRequest.kt` gained an `imeResync` parameter (default `SkikoImeResync.None`, which iOS uses) and a `snapshotFlow` collector; `imeResyncGeneration` in `TextEditorState.kt` is now snapshot state. Then the 4.29 comparison | Compiles; iOS typing, backspace and list Return behave as in the 4.5 pass | |

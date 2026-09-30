@@ -320,6 +320,10 @@ Run in Chrome, Firefox and Safari on desktop. Roadmap 4.11, 4.12 and 4.22.
    type an AltGr character (AltGr+Z, AltGr+Q). **Expect:** it is typed once.
 4. German layout: the dead key on the `´` key, then `e`. **Expect:** `é`, no
    stray `=` or `´`.
+5. Markdown demo: at the end of a bullet item press Enter twice, then type a
+   word. With a browser IME or a phone keyboard, also leave a list this way
+   and accept an autocorrect suggestion right after. **Expect:** the second
+   Enter ends the list, and nothing lands one character off.
 
 ## 4. Touch, focus and the soft keyboard (Android)
 

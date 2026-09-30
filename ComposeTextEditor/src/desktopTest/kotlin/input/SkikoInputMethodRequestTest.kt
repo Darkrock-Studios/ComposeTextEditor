@@ -28,7 +28,10 @@ import androidx.compose.ui.unit.IntSize
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.cursor.CursorMetrics
+import com.darkrockstudios.texteditor.input.SkikoImeResync
 import com.darkrockstudios.texteditor.input.SkikoTextEditorInputMethodRequest
+import com.darkrockstudios.texteditor.input.imeCommitText
+import com.darkrockstudios.texteditor.input.imeDeleteSurroundingText
 import com.darkrockstudios.texteditor.input.imeSetComposingRegion
 import com.darkrockstudios.texteditor.input.startSkikoInputSession
 import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
@@ -39,6 +42,7 @@ import com.darkrockstudios.texteditor.state.TextEditorState
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
@@ -355,6 +359,101 @@ class SkikoInputMethodRequestTest {
 		assertEquals(listOf("abc", "bc"), seen)
 		observer.cancel()
 		sessionJob.cancel()
+	}
+
+	// --- resync ---
+
+	/** Counts the input methods a session starts; each runs until it is cancelled. */
+	private class RecordingSession : PlatformTextInputSession {
+		var starts = 0
+		override suspend fun startInputMethod(request: PlatformTextInputMethodRequest): Nothing {
+			starts++
+			awaitCancellation()
+		}
+	}
+
+	private fun TestScope.settle() {
+		testScheduler.runCurrent()
+		Snapshot.sendApplyNotifications()
+		testScheduler.runCurrent()
+	}
+
+	private fun TestScope.startSession(
+		state: TextEditorState,
+		session: PlatformTextInputSession,
+		resync: SkikoImeResync,
+	): Job {
+		val job = launch { state.startSkikoInputSession(session, ImeOptions.Default, imeResync = resync) }
+		settle()
+		return job
+	}
+
+	private fun TestScope.markdownEditor(markdown: String): TextEditorState {
+		val state = TextEditorState(scope = this, measurer = mockk(relaxed = true))
+		MarkdownExtension(state, MarkdownConfiguration.DEFAULT).importMarkdown(markdown)
+		return state
+	}
+
+	/**
+	 * Enter on an empty bullet leaves the list without changing the text or the caret, so
+	 * no platform observer hears of it, while the keyboard believes it typed a line break.
+	 */
+	@Test
+	fun `a restart resync starts the input method again`() = runTest {
+		val state = markdownEditor("- one\n- ")
+		state.cursor.updatePosition(CharLineOffset(1, 0))
+		val session = RecordingSession()
+		val job = startSession(state, session, SkikoImeResync.RestartInput)
+
+		state.imeCommitText("\n", newCursorPosition = 1)
+		settle()
+
+		assertEquals(listOf("one", ""), state.textLines.map { it.text })
+		assertEquals(2, session.starts)
+		job.cancel()
+	}
+
+	@Test
+	fun `a rewrite resync is handed the value after a claim that edited nothing`() = runTest {
+		val state = markdownEditor("plain\n- item")
+		state.cursor.updatePosition(CharLineOffset(1, 0))
+		val rewrites = mutableListOf<TextFieldValue>()
+		val job = startSession(state, RecordingSession(), SkikoImeResync.Rewrite { rewrites += it })
+
+		state.imeDeleteSurroundingText(1, 0)
+		settle()
+
+		assertEquals(listOf(TextFieldValue("plain\nitem", TextRange(6))), rewrites)
+		job.cancel()
+	}
+
+	/** Web mirrors the text only when it changes, so a claim that edited is rewritten too. */
+	@Test
+	fun `a rewrite resync is handed the value after a claim that edited`() = runTest {
+		val state = markdownEditor("- one")
+		state.cursor.updatePosition(CharLineOffset(0, 3))
+		val rewrites = mutableListOf<TextFieldValue>()
+		val job = startSession(state, RecordingSession(), SkikoImeResync.Rewrite { rewrites += it })
+
+		state.imeCommitText("\n", newCursorPosition = 1)
+		settle()
+
+		assertEquals(listOf(TextFieldValue("one\n", TextRange(4))), rewrites)
+		job.cancel()
+	}
+
+	@Test
+	fun `a platform with no mirror ignores a resync`() = runTest {
+		val state = markdownEditor("plain\n- item")
+		state.cursor.updatePosition(CharLineOffset(1, 0))
+		val session = RecordingSession()
+		val job = startSession(state, session, SkikoImeResync.None)
+
+		state.imeDeleteSurroundingText(1, 0)
+		settle()
+
+		assertEquals(1, session.starts)
+		job.cancel()
 	}
 
 	// --- the typed-text hook ---

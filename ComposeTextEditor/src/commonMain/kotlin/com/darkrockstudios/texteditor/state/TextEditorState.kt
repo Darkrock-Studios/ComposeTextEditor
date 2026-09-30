@@ -1,6 +1,7 @@
 package com.darkrockstudios.texteditor.state
 
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
@@ -775,9 +776,9 @@ class TextEditorState(
 	 * Advances whenever the editor answered an IME request in a way the IME cannot infer
 	 * from the text or the caret, so its mirror of the buffer has to be discarded and
 	 * re-read. A platform with an IME remembers the generation it last acted on; the
-	 * others ignore it.
+	 * others ignore it. Snapshot state, so the skiko session can observe it.
 	 */
-	internal var imeResyncGeneration = 0
+	internal var imeResyncGeneration by mutableIntStateOf(0)
 		private set
 
 	internal fun requestImeResync() {

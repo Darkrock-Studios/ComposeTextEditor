@@ -298,6 +298,19 @@ snapshot-backed revision that the request's text reads fold in. Without it an
 edit that moves nothing observable (a forward delete) would never reach the
 platform's mirror.
 
+A resync request (`requestImeResync`, the Android restart) reaches the skiko
+platforms through the same session: it watches the generation and hands each
+advance to the platform's `SkikoImeResync`. What a platform needs differs.
+Desktop's AWT input method asks the request for text as it needs it and keeps
+no copy, so desktop does nothing. Web keeps a real copy in its textarea,
+and Compose lets a key's default action edit that copy while mirroring the
+editor back only when the editor's value changes, so a key the editor answered
+without that edit (Enter leaving a list) leaves the browser's own line break
+there; web rewrites the textarea from the request's value. iOS does nothing
+for now: Compose's iOS connection tells UIKit nothing about a change made
+during the keyboard's own edit, and the one tool the session has, restarting
+the input method, resets the keyboard (roadmap 4.29).
+
 The caret rectangle reads the caret position for the same reason, but the
 metrics themselves are written when the caret is drawn, so an observer
 re-running at the edit sees the previous draw's rectangle (roadmap 4.19).
