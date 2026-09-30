@@ -184,7 +184,7 @@ review.
 | D | Bindings, actions, menu | `input/KeyBindings.kt`, `input/EditorCommand.kt`, `input/BuiltinEditorActions.kt`, `contextmenu/` | 2.1, 2.2, 2.4, 2.5, 2.7 to 2.12, 4.8, 5.8 |
 | E | Input sessions on desktop, iOS, web | `desktopMain`, `iosMain`, `wasmJsMain` under `input/` | 4.2 to 4.7, 4.10 to 4.12, 4.19, 4.21, 4.22, 4.24 to 4.26, 4.28, 4.29, 4.32, 4.33 |
 | F | Android input | `androidMain` | 0.4, 3.9 to 3.11, 3.14, 3.17, 4.16, 4.18, 4.20, 4.27, 4.30, 4.31 |
-| G | Edit pipeline and undo | `state/TextEditManager.kt`, `state/TextEditHistory.kt`, `state/EditBehavior.kt`, `input/ImeEditLogic.kt` | 1.20, 5.1 to 5.5, 5.9, 6.1 to 6.6, 6.14, 6.15, 6.17 |
+| G | Edit pipeline and undo | `state/TextEditManager.kt`, `state/TextEditHistory.kt`, `state/EditBehavior.kt`, `input/ImeEditLogic.kt` | 1.20, 5.1 to 5.5, 5.9, 6.1 to 6.6, 6.14, 6.15, 6.17, 6.22 |
 | H | Clipboard and HTML | `clipboard/`, `html/`, `dragdrop/` | 4.9, 4.13, 4.17, 6.7 to 6.13, 6.18 to 6.21 |
 | I | Markdown and block model | `markdown/`, `richstyle/` | 5.6, 7.14 to 7.16 |
 | J | Find addon | `ComposeTextEditorFind/` | 7.17 to 7.19, 7.26, 7.29 |
@@ -1441,6 +1441,12 @@ iOS Safari; browser tests run in CI.
   `ParagraphStyle` the block baked in, and nothing restores it (normalization
   only repairs placeholder lines). Carry `paragraphStyles` through; 6.3's undo
   then restores the line exactly.
+- [ ] **6.22 A replace of nothing moves a block marker. C.** [Opus] [Lane G]
+  `RichSpanManager.handleReplace` has no `stickyAtStart` case, so a `Replace`
+  over an empty range at a line's start shifts that line's list, quote or
+  heading marker off column 0, where an `Insert` at the same place keeps it.
+  Found in 7.3, whose `setText` sends an insertion as an `Insert` to avoid it;
+  `TextEditorState.replace` with a collapsed range still hits it.
 
 ### Clipboard
 
@@ -1588,8 +1594,16 @@ iOS Safari; browser tests run in CI.
   the published text went stale after an edit that left the caret in place
   (a forward delete), since the document is not snapshot state; the semantics
   block now reads `lineOffsets`, which every edit republishes.
-- [ ] **7.3** [Opus] [Lane M] The semantics `setText` calls `state.setText`,
+- [x] **7.3** [Opus] [Lane M] The semantics `setText` calls `state.setText`,
   wiping rich spans and undo history.
+  Done: it replaces only the part that differs (the text between the common
+  prefix and suffix, never splitting a surrogate pair) as one undo step on top
+  of the history, never recorded as typing. Styles and rich spans outside that
+  part survive (a pure insertion is an insert, so a line's block marker stays
+  at its start), the new part takes the style typing there would, the caret
+  ends after it, and the new part is then offered to the edit behaviors as
+  `insertTextAtCursor`'s text is (`replaceAllAsEdit` in `EditorSemantics.kt`).
+  The incoming text's own formatting is applied only inside the changed part.
 - [ ] **7.4** [Opus] [Lane M] Missing: `getTextLayoutResult`, copy, cut, and
   paste actions, content description, and any structure (headings, links,
   lists).

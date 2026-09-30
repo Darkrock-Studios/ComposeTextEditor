@@ -179,7 +179,9 @@ anywhere in the padding reaches the nearest row.
 Accessibility services see the editor through its semantics
 (`EditorSemantics.kt`), modelled on `BasicTextField`'s: the whole text as an
 editable field, the selection, and the actions a screen reader or test drives.
-A disabled editor reports itself disabled and offers no edit actions. The
+A disabled editor reports itself disabled and offers no edit actions. Its
+`setText` is an edit, not a document load: it replaces only the part of the
+text that differs, as one undo step, so the rest keeps its spans. The
 document is not snapshot state, so the semantics block reads `lineOffsets`,
 which every edit republishes, to stay current.
 

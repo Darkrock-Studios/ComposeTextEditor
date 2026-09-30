@@ -804,6 +804,15 @@ Access Bridge (Windows) or the AT-SPI bridge (Linux), which must be enabled firs
 4. Turn Enabled back on. **Expect:** the editor is announced as an editable text
    field again and typing works.
 
+### 8c.2 Replacing the text by voice or autofill
+
+1. Rich Text Editor demo. Android with Voice Access: say "type hello" into the
+   editor, then use a text replacement command on one word; or on any platform with
+   a password manager or autofill service, let it fill the editor.
+2. **Expect:** only the changed words change; bold, lists and headings elsewhere
+   survive; one undo (Ctrl+Z or the toolbar) reverts the whole replacement, and a
+   second undo reaches the edits made before it.
+
 ## 9. Consumer API sanity
 
 Guards #82, #48, #87, #90. Not strictly manual UI testing, but worth one pass before
