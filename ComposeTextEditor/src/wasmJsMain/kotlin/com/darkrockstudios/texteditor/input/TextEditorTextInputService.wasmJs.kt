@@ -175,3 +175,7 @@ private fun rewriteBackingField(
 	field.setSelectionRange(start, end, backward ? 'backward' : 'forward');
 }"""
 )
+
+// Starting a session focuses the backing text area, which raises a phone's keyboard, and
+// hiding it blurs the text area and ends the typing it is there for.
+internal actual val startsInputQuietly: Boolean = false

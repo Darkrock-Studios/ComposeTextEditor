@@ -868,6 +868,11 @@ Rich Text Editor demo.
    line wraps. On Android the soft keyboard shows a Done key instead of a return key,
    and Done and a hardware Enter both hide it (7.40); turning Single line off brings
    the return key back.
+3. With the keyboard up (Android) or composing with a dead key (desktop), turn
+   Read only on and off, and Enabled off and on, without touching the editor.
+   **Expect:** the keyboard stays down, and a dead key or an IME composes at once
+   on desktop; a tap then brings the keyboard back (7.37). iOS and the web still
+   need that tap before IME input.
 
 ## 8b2. Saved state (Android)
 

@@ -1869,12 +1869,22 @@ iOS Safari; browser tests run in CI.
   field's own bounds). A block shorter than its line's text, on any row but its
   line's last, or on the last line, keeps the text's height. The first two stay open as 7.57. Checked
   on desktop only; Android shapes line heights through its own spans.
-- [ ] **7.37** [Opus] [Lane E] Turning input back on while the editor keeps
+- [x] **7.37** [Opus] [Lane E] Turning input back on while the editor keeps
   focus (`enabled` or, since 7.13, `readOnly` switched off) marks it focused
   but starts no input session until the next tap, by design, so the soft
   keyboard does not rise unasked. Desktop dead keys and IME composition, and
   Android and iOS IME text, do nothing until then. Start a session that shows
   no keyboard, or document the host's `requestFocus` after the toggle.
+  Done on Android and desktop: the input node starts a session at once and
+  queues a hide of the keyboard behind the session's own request to show it,
+  which Android's input service coalesces into none (`startsInputQuietly`, a
+  new `expect`; `e2e/InputSessionE2eTest.kt` records the hide through a stand-in
+  keyboard controller). Checked on an emulator (API 36, Gboard): with the
+  keyboard up, the sample's Read only on and off left the keyboard down
+  (`mInputShown=false`) with the editor's input type bound again, and a tap
+  raised it. iOS and the web still wait for a tap: iOS's keyboard follows the
+  session's first responder and the web's its focused text area, which a hide
+  blurs; the iOS half is in the Mac queue.
 - [x] **7.38** [Opus] [Lane K] `SpellCheckingTextEditor` has no `readOnly`
   or `lineLimits` (7.13), and its corrections are menu items that call
   `correctSpelling` directly, past `ContextMenuActions`' editable gate.
@@ -2606,3 +2616,4 @@ records results and removes entries that passed.
 | 7.10, 7.11 | Re-time the iOS simulator as 4.21 did (iPhone 17 Pro Max simulator, Debug framework, a 200,000-character document of 2,000 lines of 99 characters, temporary logging): the idle caret-blink frame, frames over 20 ms while typing twelve keys with the soft keyboard (count and worst), and the keyboard's `editText` block; also the time to open and close the soft keyboard, which no longer reshapes the document | Before (4.21, `f3b8d8f`): an idle blink frame 33 ms at 200k against under one vsync at 2k; typing frames up to 137 ms, about six over 20 ms a keystroke; `editText` 9.4 ms median. A pass: the blink frame at 200k within a vsync, as at 2k (7.11). Typing frames should drop by the row scans and the whole-text build; `editText` is 7.8's and is not expected to move. Record the numbers here and in 7.11 | |
 | 5.2 | In the iOS sample app with the soft keyboard (Settings > General > Keyboard > Smart Punctuation on), type `"quoted"`, `it's`, and `a--b` into the editor | Record whether curly quotes, the apostrophe, and the dash arrive already converted through the input session; this decides whether 5.2 must stay off on iOS by default | |
 | 3.16 | No `iosMain` change: commonMain now measures the keyboard cover (4.24) in the placement of a layout node on the canvas (`state/KeyboardCover.kt`, `measuresKeyboardCover`) instead of from a flow over `WindowInsets.ime`. Repeat 4.24's simulator check: tap a line the keyboard will cover, type Returns at the bottom, and dismiss and raise the keyboard | Compiles. The tapped line comes above the keyboard at once, Returns keep the caret at the keyboard's top, and the text does not jump while the keyboard slides | |
+| 7.37 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64`. commonMain `input/TextEditorTextInputService.kt` adds `internal expect val startsInputQuietly`; the iOS actual (`iosMain/.../input/TextEditorTextInputService.ios.kt`) is `false`. Then in the iOS sample app, with the keyboard up, turn Read only on and off without touching the editor, then type with the soft keyboard; and try the iOS actual as `true` (a session started, then `LocalSoftwareKeyboardController.hide()` after it) | Compiles. With `false`, the keyboard goes with Read only and comes back only on a tap, and typing then works. With `true`, if the keyboard stays down while a hardware keyboard or dictation can type at once, and a tap raises it, keep `true` and record it in 7.37 | |

@@ -34,8 +34,14 @@ if none is running. It never restarts a live one for a tap, since a restart
 resets the keyboard mid-word and discards whatever it had in flight.
 
 A session starts only when the user asks for input, because starting one
-raises the soft keyboard: on gaining focus, or on a tap. Re-enabling a focused
-editor restores its focus state but waits for a tap. Rebinding it to a
+raises the soft keyboard: on gaining focus, or on a tap. Turning input back on
+under focus (`enabled`, or `readOnly` switched off) restores the focus state and,
+where the platform can keep the keyboard down (`startsInputQuietly`: Android and
+desktop), starts a session with a request to hide the keyboard queued behind it,
+which Android's input service coalesces with the session's own request to show,
+so the keyboard never rises; a tap then shows it in that session. iOS and the web
+wait for a tap, since their keyboard follows the session's first responder or
+focused text area. Rebinding the editor to a
 different state restarts a live session, since a session is bound to its
 state.
 
@@ -414,7 +420,7 @@ blurs the textarea to hide the soft keyboard, and refocusing would raise it
 again.
 
 The canvas keeps DOM focus only while the editor has no session (a focused
-editor disabled and enabled again waits for a tap) or after such a touch,
+editor disabled and enabled again waits for a tap on the web) or after such a touch,
 and a keystroke then
 arrives as a canvas `keydown` carrying the character, which the predicate
 (`KeyDown`) accepts. The same keystroke cannot reach both elements, but two

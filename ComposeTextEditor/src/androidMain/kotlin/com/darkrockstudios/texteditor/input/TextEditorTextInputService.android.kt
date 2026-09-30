@@ -14,6 +14,8 @@ import androidx.compose.ui.platform.PlatformTextInputMethodRequest
 import androidx.compose.ui.platform.PlatformTextInputSession
 import com.darkrockstudios.texteditor.state.TextEditorState
 
+internal actual val startsInputQuietly: Boolean = true
+
 /**
  * Android implementation of [TextEditorTextInputService]: opens the soft keyboard with a
  * [TextEditorInputConnection] bound to the session's view.

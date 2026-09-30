@@ -482,6 +482,9 @@ class TextEditorState(
 	var hasFocus by mutableStateOf(false)
 		internal set
 
+	/** Whether a composed editor runs a platform input session for this state. */
+	internal var hasInputSession = false
+
 	/**
 	 * The current IME composing region (for autocomplete preview).
 	 * When non-null, this text should be rendered with an underline.

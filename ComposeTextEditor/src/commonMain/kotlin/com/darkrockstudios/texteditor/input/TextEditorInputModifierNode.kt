@@ -94,15 +94,15 @@ internal class TextEditorInputModifierNode(
 	 * Matches the input session to focus and [enabled]. A disabled editor still receives
 	 * key events but neither shows as focused nor takes IME input. A session starts only
 	 * when [startSession] says the user asked for input, because starting one raises the
-	 * soft keyboard.
+	 * soft keyboard, unless [showKeyboard] is false.
 	 */
-	private fun syncInputSession(startSession: Boolean) {
+	private fun syncInputSession(startSession: Boolean, showKeyboard: Boolean = true) {
 		val wantsInput = enabled && isFocused
 		state.updateFocus(wantsInput)
 		if (!wantsInput) {
 			stopTextInputSession()
 		} else if (startSession && inputSessionJob?.isActive != true) {
-			launchTextInputSession()
+			launchTextInputSession(showKeyboard)
 		}
 	}
 
@@ -124,11 +124,12 @@ internal class TextEditorInputModifierNode(
 	private fun stopTextInputSession() {
 		inputSessionJob?.cancel()
 		inputSessionJob = null
+		state.hasInputSession = false
 		imeCursorSync?.stopSync()
 		imeCursorSync = null
 	}
 
-	private fun launchTextInputSession() {
+	private fun launchTextInputSession(showKeyboard: Boolean = true) {
 		inputSessionJob?.cancel()
 
 		// Start IME cursor synchronization (syncs cursor/selection changes to keyboard)
@@ -138,10 +139,19 @@ internal class TextEditorInputModifierNode(
 		}
 
 		inputSessionJob = coroutineScope.launch {
-			establishTextInputSession {
-				// The platform's session: an InputConnection on Android, the shared
-				// skiko request elsewhere. See TextEditorTextInputService.
-				TextEditorTextInputService(state).startInput(this)
+			val job = coroutineContext[Job]
+			state.hasInputSession = true
+			try {
+				establishTextInputSession {
+					// Dispatched, so it lands after the start below has asked to show the
+					// keyboard: no session came before this one to wait on.
+					if (!showKeyboard) launch { currentValueOf(LocalSoftwareKeyboardController)?.hide() }
+					// The platform's session: an InputConnection on Android, the shared
+					// skiko request elsewhere. See TextEditorTextInputService.
+					TextEditorTextInputService(state).startInput(this)
+				}
+			} finally {
+				if (inputSessionJob === job) state.hasInputSession = false
 			}
 		}
 	}
@@ -179,8 +189,10 @@ internal class TextEditorInputModifierNode(
 		val stateChanged = state !== this.state
 		val enabledChanged = enabled != this.enabled
 		// A session is bound to its state, so a swapped state needs a new one. Only a live
-		// session carries over: turning input back on must not raise the keyboard unasked.
+		// session carries over: turning input back on must not raise the keyboard unasked,
+		// so where the platform can, it starts one that keeps the keyboard down.
 		val restartSession = stateChanged && inputSessionJob?.isActive == true
+		val quietSession = enabledChanged && enabled && !restartSession && startsInputQuietly
 		if (isFocused && stateChanged) {
 			stopTextInputSession()
 			this.state.updateFocus(false)
@@ -198,7 +210,9 @@ internal class TextEditorInputModifierNode(
 			this.inputRequester = inputRequester
 			inputRequester?.node = this
 		}
-		if (isFocused && (stateChanged || enabledChanged)) syncInputSession(startSession = restartSession)
+		if (isFocused && (stateChanged || enabledChanged)) {
+			syncInputSession(startSession = restartSession || quietSession, showKeyboard = !quietSession)
+		}
 	}
 }
 
