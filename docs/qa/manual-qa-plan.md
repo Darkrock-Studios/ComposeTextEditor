@@ -252,6 +252,10 @@ In Chrome, Firefox and Safari, against the built demo:
    Docs. **Expect:** the word stays bold, with no permission prompt and no console
    warning (7.39). Try Ctrl+Insert on Windows and Linux too.
 
+7. Web demo: click into the editor, press Escape then Tab, then Shift+Tab (4.28).
+   **Expect:** no tab character is typed, focus leaves the editor and comes back
+   to it, and the keyboard keeps working throughout without a click.
+
 ### 2.10 Links (6.9)
 
 1. Copy a sentence with a link from a web page and paste it into the Markdown demo

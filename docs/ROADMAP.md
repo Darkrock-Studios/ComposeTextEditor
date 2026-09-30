@@ -1456,6 +1456,22 @@ iOS Safari; browser tests run in CI.
   focus; on the web the input session's hidden text area may take the browser's
   default Tab and move DOM focus off the canvas. Confirm on both (the iOS half
   is in the Mac queue) and consume or drop the Tab in the session if so.
+  Web done: Compose's text area prevents a Tab's default itself and hands the
+  key to the focus system, so no tab is typed and the browser does not move
+  focus; on the canvas (no session) Compose prevents it when it moves focus.
+  The loss was elsewhere: when focus moved off the editor, the session ended
+  and Compose removed the focused text area, dropping DOM focus to the page
+  body, where no key reached Compose until a click. The web session now puts
+  DOM focus back on its canvas a task after it ends, when its text area held
+  it, the last press was not outside the viewport, and nothing else has taken
+  it (`stopRefocusing`). A session whose root lookup fails (two viewports)
+  does not.
+  Compose's own `BasicTextField` (the find bar's) still drops focus the same
+  way. Checked in Chromium against the dev server: Escape
+  then Tab left no tab in the text and DOM focus on the canvas, Shift+Tab from
+  there brought focus back to the editor with a new session, and a Tab in a
+  read-only editor was prevented and handled by Compose. The iOS half stays in
+  the Mac queue (2.9's row).
 
 ## Phase 5: writer conveniences
 

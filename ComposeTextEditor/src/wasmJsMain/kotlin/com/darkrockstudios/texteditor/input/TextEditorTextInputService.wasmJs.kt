@@ -66,6 +66,11 @@ private class BackingField {
 	 * this is launched, so it is looked for over a few frames. Then keeps DOM focus on it
 	 * until the session ends; the focus listener is removed as the session is cancelled,
 	 * not on a later dispatch, so it can never move focus for a session that has ended.
+	 *
+	 * A session ends when Compose focus leaves the editor, a Tab the editor left to the
+	 * focus system among them. Compose removes the field then, and DOM focus, if the field
+	 * held it, would fall to the page body, where no key reaches Compose again until a
+	 * click; so it goes back to the canvas.
 	 */
 	suspend fun adopt() {
 		var found = findRoot()
@@ -75,7 +80,8 @@ private class BackingField {
 			found = findRoot()
 			attempts++
 		}
-		val handle = refocusFromCanvas(found ?: return, BACKING_FIELD)
+		val root = found ?: return
+		val handle = refocusFromCanvas(root, BACKING_FIELD)
 		suspendCancellableCoroutine<Nothing> { continuation ->
 			continuation.invokeOnCancellation { stopRefocusing(handle) }
 		}
@@ -130,26 +136,53 @@ private fun backingFieldRoot(selector: String): JsAny? = js(
  * A touch leaves focus where the browser put it: a tap Compose did not consume blurs the
  * field to hide the keyboard, and giving focus back there would raise the keyboard again
  * over whatever the tap was for.
+ *
+ * The handle also follows whether the field holds DOM focus, for [stopRefocusing], and
+ * whether the last press on the page landed outside this viewport.
  */
 private fun refocusFromCanvas(root: JsAny, selector: String): JsAny = js(
 	"""{
-	let lastPointerType = 'mouse';
-	const onPointerDown = (event) => { lastPointerType = event.pointerType; };
-	const onFocusIn = (event) => {
-		if (event.target.tagName !== 'CANVAS' || lastPointerType !== 'mouse') return;
-		const field = root.querySelector(selector);
+	const field = root.querySelector(selector);
+	const handle = { root, field, fieldFocused: root.activeElement === field, pointerType: 'mouse', pressedOutside: false };
+	handle.onPointerDown = (event) => { handle.pointerType = event.pointerType; };
+	handle.onPagePointerDown = (event) => { handle.pressedOutside = !event.composedPath().includes(root); };
+	handle.onFocusIn = (event) => {
+		if (event.target === field) handle.fieldFocused = true;
+		if (event.target.tagName !== 'CANVAS' || handle.pointerType !== 'mouse') return;
 		if (field) field.focus({ preventScroll: true });
 	};
-	root.addEventListener('pointerdown', onPointerDown, true);
-	root.addEventListener('focusin', onFocusIn);
-	return { root, onPointerDown, onFocusIn };
+	// A move to another element names it. The session's end blurs the field to nowhere
+	// (Compose hides the keyboard, then removes the field), which leaves this set.
+	handle.onBlur = (event) => { if (event.relatedTarget) handle.fieldFocused = false; };
+	root.addEventListener('pointerdown', handle.onPointerDown, true);
+	document.addEventListener('pointerdown', handle.onPagePointerDown, true);
+	root.addEventListener('focusin', handle.onFocusIn);
+	if (field) field.addEventListener('blur', handle.onBlur);
+	return handle;
 }"""
 )
 
+/**
+ * Removes [refocusFromCanvas]'s listeners as the session ends, and when the session's
+ * field held DOM focus and the last press was not outside the viewport, gives it to the
+ * canvas once Compose has removed the field, unless something else has taken it by then
+ * (the next session's field). A task later, so no focus event runs inside the
+ * cancellation.
+ */
 private fun stopRefocusing(handle: JsAny): Unit = js(
 	"""{
 	handle.root.removeEventListener('pointerdown', handle.onPointerDown, true);
+	document.removeEventListener('pointerdown', handle.onPagePointerDown, true);
 	handle.root.removeEventListener('focusin', handle.onFocusIn);
+	if (handle.field) handle.field.removeEventListener('blur', handle.onBlur);
+	if (!handle.field || !handle.fieldFocused || handle.pressedOutside) return;
+	setTimeout(() => {
+		const active = document.activeElement;
+		const stranded = handle.root.activeElement === handle.field || !active || active === document.body;
+		if (!stranded) return;
+		const canvas = handle.root.querySelector('canvas');
+		if (canvas) canvas.focus({ preventScroll: true });
+	});
 }"""
 )
 

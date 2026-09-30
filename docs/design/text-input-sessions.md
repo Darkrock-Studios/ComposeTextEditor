@@ -404,20 +404,24 @@ What the browser delivers, and when (`DomInputStrategy` and
   order, so a Backspace `keydown` that Compose consumed suppresses the
   textarea's own `deleteContentBackward`.
 
-Which path owns plain typing therefore follows DOM focus, and the browser
-gives a keystroke to one element only. With the textarea focused, typing is
-`commitText` and the character-input predicate never sees it. A mouse press
-on the canvas moves DOM focus there even when Compose focus stays on the
-editor: a right-click (which skips `requestInput`, so a menu is not covered
-by a phone keyboard), a toolbar button that takes no focus, a context menu
-item. Canvas key events cannot tell some typed characters from named keys,
-so while its session is live the web input service listens for `focusin` on
-the viewport's shadow root and hands DOM focus from the canvas straight back
-to the textarea. The listener sits on the shadow root because a focus move
-inside a shadow tree is not reported outside it, and it is removed as the
-session is cancelled. A touch is left alone: a tap Compose did not consume
-blurs the textarea to hide the soft keyboard, and refocusing would raise it
-again.
+Which path owns plain typing therefore follows DOM focus, and the browser gives
+a keystroke to one element only. With the textarea focused, typing is
+`commitText` and the character-input predicate never sees it. A mouse press on
+the canvas moves DOM focus there even when Compose focus stays on the editor: a
+right-click (which skips `requestInput`, so a menu is not covered by a phone
+keyboard), a toolbar button that takes no focus, a context menu item. Canvas key
+events cannot tell some typed characters from named keys, so while its session
+is live the web input service listens for `focusin` on the viewport's shadow
+root and hands DOM focus from the canvas straight back to the textarea. The
+listener sits on the shadow root because a focus move inside a shadow tree is
+not reported outside it, and it is removed as the session is cancelled. The
+textarea prevents a Tab's default itself and leaves the key to Compose's focus
+system; when that moves focus off the editor the session ends and Compose
+removes the focused textarea, which would drop DOM focus to the page body, so a
+task later the session puts it back on the canvas, unless the last press was
+outside the viewport or something else has taken focus. A touch is left alone:
+a tap Compose did not consume blurs the textarea to hide the soft keyboard, and
+refocusing would raise it again.
 
 The canvas keeps DOM focus only while the editor has no session (a focused
 editor disabled and enabled again waits for a tap on the web) or after such a touch,
