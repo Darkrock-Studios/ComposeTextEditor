@@ -110,8 +110,8 @@ internal class RowList private constructor(
 	private val firstRow: IntArray,
 	/** Each chunk's top, then the content height. Doubles, so the running total does not drift with the chunking. */
 	private val top: DoubleArray,
-	/** The spans on each line that has any. */
-	internal val spans: Map<Int, List<RichSpan>>,
+	/** The spans of the revision the rows were laid out against. */
+	internal val spans: SpanIndex,
 ) : AbstractList<LineWrap>(), RandomAccess {
 
 	internal class Chunk(val layouts: Array<LineLayout>) {
@@ -169,8 +169,8 @@ internal class RowList private constructor(
 		return at(index) { line, layout, row, lineTop ->
 			val rowStart = layout.rowStarts[row]
 			val rowEnd = layout.rowEnds[row]
-			val onLine = spans[line]
-			val rowSpans = if (onLine.isNullOrEmpty()) emptyList() else onLine.filter { it.intersectsRow(line, rowStart, rowEnd) }
+			val onLine = spans.spansOn(line)
+			val rowSpans = if (onLine.isEmpty()) onLine else onLine.filter { it.intersectsRow(line, rowStart, rowEnd) }
 			LineWrap(
 				line = line,
 				wrapStartsAtIndex = rowStart,
@@ -245,7 +245,7 @@ internal class RowList private constructor(
 	 * against the revision whose span index is [spans]. Shares the chunks it does not
 	 * touch, as [LineList.splice] does.
 	 */
-	fun splice(from: Int, to: Int, replacement: List<LineLayout>, spans: Map<Int, List<RichSpan>>): RowList {
+	fun splice(from: Int, to: Int, replacement: List<LineLayout>, spans: SpanIndex): RowList {
 		if (from < 0 || from > to || to > lineCount) throw IndexOutOfBoundsException("lines $from until $to of $lineCount")
 		if (chunks.isEmpty()) return of(replacement, spans)
 		val touched = touchedChunks(firstLine, chunks.size, from, to, replacement.size)
@@ -262,13 +262,13 @@ internal class RowList private constructor(
 	}
 
 	/** The same rows, laid out against the revision whose span index is [spans]; this list when that is this list's. */
-	fun withSpans(spans: Map<Int, List<RichSpan>>): RowList =
+	fun withSpans(spans: SpanIndex): RowList =
 		if (spans === this.spans) this else RowList(chunks, firstLine, firstRow, top, spans)
 
 	private fun chunkOfLine(line: Int): Int = hint.find(firstLine, chunks.size, line)
 
 	companion object {
-		fun of(layouts: List<LineLayout>, spans: Map<Int, List<RichSpan>>): RowList =
+		fun of(layouts: List<LineLayout>, spans: SpanIndex): RowList =
 			of(chunk(layouts.toTypedArray()), 0, IntArray(1), IntArray(1), DoubleArray(1), spans)
 
 		/** A list of [chunks] whose directory matches the given one up to chunk [unchangedBefore]. */
@@ -278,7 +278,7 @@ internal class RowList private constructor(
 			firstLine: IntArray,
 			firstRow: IntArray,
 			top: DoubleArray,
-			spans: Map<Int, List<RichSpan>>,
+			spans: SpanIndex,
 		): RowList {
 			val newFirstLine = IntArray(chunks.size + 1)
 			val newFirstRow = IntArray(chunks.size + 1)

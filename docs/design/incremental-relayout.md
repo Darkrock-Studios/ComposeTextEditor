@@ -187,13 +187,11 @@ shared across modules):
 
 ## 7. Per-line span queries
 
-`DocumentSnapshot` memoizes a per-line span index (`richSpansByLine`, every
-span grouped under each line it covers), built lazily once per span revision
-and shared across text-only revisions. `getSpansForLineWrap`,
-`getSpansInRange`, and the line-anchored block queries all read it, so each
-per-line query the layout pass runs costs the spans on that line, not the
-spans in the document. `SpanScanCostTest` pins a relayout to a constant number
-of flat span-set iterations.
+`DocumentSnapshot` keeps its spans by line (`SpanIndex`, section 9.4), so
+`spansOn(line)`, `getSpansForLineWrap`, `getSpansInRange`, and the
+line-anchored block queries all cost the spans on their line, not the spans
+in the document, and a text-only revision shares the index. `SpanScanCostTest`
+pins a relayout to a constant number of flat span-set iterations.
 
 ## 8. Whole-document text
 
@@ -317,35 +315,45 @@ where the one above ends" on purpose.
 
 `DocumentSnapshot` stores its rich spans in a `SpanIndex`: a chunked sequence
 keyed by line, each entry the spans that start and end on that line as
-line-relative `(startChar, endChar, style)` triples, plus one flat set of the
-spans that cross a line break. Nearly every span is single-line (blocks,
-links, spell-check underlines, find highlights, images, rules, fence
-languages), so the flat set is normally empty and never large. A text edit
-that inserts or deletes lines splices the index like the line list, and the
-spans on the lines after the edit move with their chunk untouched: no line
-number is stored in them.
+line-relative `(startChar, endChar, style)` triples (`LineSpan`), plus one
+flat set of the spans it cannot key (`loose`): those crossing a line break,
+and those beyond the lines until a load clamps them. Nearly every span is
+single-line (blocks, links, spell-check underlines, find highlights, images,
+rules, fence languages), so the loose set is normally empty and never large.
+A text edit that inserts or deletes lines splices the index like the line
+list, and the spans on the lines after the edit move with their chunk
+untouched: no line number is stored in them. A chunk builds its lines'
+`RichSpan`s with their line on read and keeps them while the chunk keeps its
+first line.
 
 Re-anchoring an edit reads only the spans on the edit's pre-edit lines and
-the crossing set, runs them through the existing insert, delete and replace
+the loose set, runs them through the existing insert, delete and replace
 transforms, merges same-line duplicates of line-anchored styles among the
-results, clamps them onto the post-edit lines, and writes them back to the
-edit's post-edit lines. The transforms shift a span on any other line by the
-edit's line delta and nothing else, which is exactly what the splice does.
+results, clamps them onto the post-edit lines, and writes them back over the
+edit's post-edit lines, splicing the index to the new line count. The
+transforms shift a span on any other line by the edit's line delta and
+nothing else, which is exactly what the splice does. The text edit itself
+leaves the index alone; the re-anchoring in the same transaction brings it
+to the new line count, and the publish checks that it did.
 
-The public `richSpans: Set<RichSpan>` is materialized on first read per span
-revision, with absolute ranges, as is each line's list (`spansOn(line)`,
-which replaces the `richSpansByLine` map). Readers that walk the document
+The public `richSpans: Set<RichSpan>` is materialized on first read per
+revision, with absolute ranges, and each line's list is `spansOn(line)`
+(which replaces the `richSpansByLine` map). Readers that walk the document
 (export, `getAllRichSpans`, the saver) still pay O(spans) once; the per-line
 readers (layout, hit testing, drawing, the line-block queries) pay for their
-line. `getSpansInRange` walks the range's lines. Span-only mutations write
-one line or a batch of lines and share every other chunk.
+line. `getSpansInRange` walks the range's lines. Span-only mutations rewrite
+the chunks holding their lines and share every other; a span operation's
+range is clamped onto the document as it lands, and a same-line duplicate of
+a line-anchored style folds into the span already there.
 
 Line-block normalization runs on every publish and used to scan every span.
-A snapshot now records how many of its first and last lines are unchanged
-since the last published revision (narrowed across a transaction's mutations
-exactly as the whole-text base is, section 8), and normalization examines
-only the lines between, plus the fence run they touch for the language
-repair.
+The state now records how many of the document's first and last lines are
+untouched since the last publish (narrowed across a transaction's mutations
+exactly as the whole-text base is, section 8) and whether a span was added,
+removed or lost or a line came or went; normalization examines only the
+lines between for placeholder violations, and repairs fence languages over
+the runs those lines touch only when the span structure changed, so a
+keystroke inside a long fence walks no run.
 
 ### 9.5 Costs to pin
 

@@ -16,8 +16,11 @@ import androidx.compose.ui.unit.dp
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.DrawEditorText
 import com.darkrockstudios.texteditor.DrawSelection
+import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.TextEditorStyle
 import com.darkrockstudios.texteditor.cursor.DrawCursor
+import com.darkrockstudios.texteditor.richstyle.HighlightSpanStyle
+import com.darkrockstudios.texteditor.richstyle.RichSpan
 import com.darkrockstudios.texteditor.state.DocumentSnapshot
 import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.moveToNextWord
@@ -183,6 +186,14 @@ class LongDocumentBenchmark {
 		measure("width viewport change", warmup = 5, runs = 20) {
 			wide = !wide
 			state.onViewportSizeChange(Size(if (wide) viewport.width else viewport.width - 100f, viewport.height))
+		}
+
+		// A span on every line, as a spell-checked or fully highlighted document has.
+		state.updateRichSpans(emptyList(), (0 until state.textLines.size).map { line ->
+			RichSpan(TextEditorRange(CharLineOffset(line, 0), CharLineOffset(line, 5)), HighlightSpanStyle(Color.Yellow))
+		})
+		measure("keystroke with a span on every line", warmup = 100, runs = 300, setup = ::toNextLine) {
+			state.insertCharacterAtCursor('x')
 		}
 	}
 }

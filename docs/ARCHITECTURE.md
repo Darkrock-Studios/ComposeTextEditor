@@ -44,9 +44,12 @@ a flat set of `RichSpan`s, published wholesale on every mutation (see
 (`LineList`, chunks of 32 to 64 lines with a directory of each chunk's first
 line and first character), so an edit copies the chunk or two it touches and
 shares the rest with the previous revision, and a line's flat character index
-is a prefix total rather than a table rebuilt per revision. The snapshot also
-memoizes the span index (spans grouped by line), which survives across
-revisions that did not invalidate it. The whole text as one string is built
+is a prefix total rather than a table rebuilt per revision. The rich spans are
+held the same way (`SpanIndex`: each line's spans by their columns, chunked
+by line, plus a loose set for the few that cross a line break), so an edit
+re-anchors the spans on its own lines and splices the index, and the spans on
+every other line move with their chunk; the whole set is built on first read
+per revision. The whole text as one string is built
 only for the readers that need it (semantics, the skiko input request,
 Android's extracted text), spliced from the last built revision; everything
 else reads characters in place through `chars`.
@@ -125,9 +128,11 @@ How positions (cursor, selection, spans, history) are carried across edits:
 ### `RichSpanManager`: keeping spans anchored
 
 The bookkeeper for the document's rich spans. Its two jobs: publish span
-mutations copy-on-write into the snapshot, and re-anchor every span across each
-edit using the operation's own offset transform. It also serves the
-line-indexed queries layout and drawing rely on.
+mutations copy-on-write into the snapshot's per-line index, and re-anchor the
+spans on an edit's own lines (and the loose ones) across each edit using the
+operation's own offset transform, splicing the index so the rest move with
+their lines. It also serves the line-indexed queries layout and drawing rely
+on.
 
 ### The delegates: cursor, selection, scroll
 

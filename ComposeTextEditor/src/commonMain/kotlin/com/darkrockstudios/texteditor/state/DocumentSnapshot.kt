@@ -16,27 +16,18 @@ import com.darkrockstudios.texteditor.richstyle.RichSpan
 class DocumentSnapshot private constructor(
 	/** The lines, chunked: an edit shares the chunks it leaves alone. */
 	internal val lineList: LineList,
-	/** Every rich span in the document, its ranges addressing [lines]. */
-	val richSpans: Set<RichSpan>,
 	/**
-	 * Backs [richSpansByLine]. Held as the [Lazy] rather than the map so
-	 * [withLines] can hand the same one to the revision it produces, which keeps the
-	 * memoized index alive across a text-only edit. Sharing it also carries the
-	 * `PUBLICATION` safety over, where a plain field would publish the map unsafely.
+	 * The rich spans keyed by line, chunked like the lines: a text edit splices it in
+	 * step with them, and a span edit rewrites the chunks holding its lines.
 	 */
-	private val spansByLine: Lazy<Map<Int, List<RichSpan>>>,
+	internal val spanIndex: SpanIndex,
 	/**
 	 * Backs [getAllText] and [plainText]. Depends only on the text, so it is shared
-	 * with the revision [withRichSpans] produces.
+	 * with the revision [withSpanIndex] produces.
 	 */
 	internal val text: DocumentText,
 ) {
-	private constructor(lineList: LineList, richSpans: Set<RichSpan>) : this(
-		lineList = lineList,
-		richSpans = richSpans,
-		spansByLine = spansByLineOf(richSpans),
-		text = DocumentText(lineList),
-	)
+	private constructor(lineList: LineList, spanIndex: SpanIndex) : this(lineList, spanIndex, DocumentText(lineList))
 
 	/**
 	 * Builds a snapshot by hand. [richSpans] need not fit [lines]:
@@ -44,19 +35,21 @@ class DocumentSnapshot private constructor(
 	 */
 	constructor(lines: List<AnnotatedString>, richSpans: Set<RichSpan> = emptySet()) : this(
 		lineList = LineList.of(lines),
-		richSpans = richSpans,
+		spanIndex = SpanIndex.of(lines.size, richSpans),
 	)
 
 	/** The document as one [AnnotatedString] per line, in order. */
 	val lines: List<AnnotatedString> get() = lineList
 
 	/**
-	 * [richSpans] grouped by every line each one covers; a multi-line span appears
-	 * under each of its lines. Built on first read and reused until a revision
-	 * changes the spans, so the per-line queries the layout pass runs once per
-	 * visual line cost a map lookup instead of a scan of every span in the document.
+	 * Every rich span in the document, its ranges addressing [lines]. Built from the
+	 * per-line index on first read; a reader that wants one line's spans reads
+	 * [spansOn] instead.
 	 */
-	internal val richSpansByLine: Map<Int, List<RichSpan>> get() = spansByLine.value
+	val richSpans: Set<RichSpan> get() = spanIndex.all
+
+	/** Every span covering [line]: those on it, and those crossing it from another line. */
+	internal fun spansOn(line: Int): List<RichSpan> = spanIndex.spansOn(line)
 
 	/**
 	 * Flat character index at which [line] starts, counting one newline between
@@ -91,26 +84,26 @@ class DocumentSnapshot private constructor(
 	internal val chars: CharSequence by lazy(LazyThreadSafetyMode.PUBLICATION) { DocumentChars(lineList) }
 
 	/**
-	 * Keeps the span index: the ranges are untouched by a text edit, so the lines they
-	 * start on are the same ones they started on before. [splice], when the caller knows
-	 * it, says which lines changed; otherwise the lines are compared by identity.
+	 * Keeps the span index as it is: the edit that replaced the lines re-anchors the
+	 * spans on the lines it touched and splices the index to match, in the same
+	 * transaction. [splice], when the caller knows it, says which lines changed;
+	 * otherwise the lines are compared by identity.
 	 */
 	internal fun withLines(lines: List<AnnotatedString>, splice: LineSplice? = null): DocumentSnapshot {
 		val list = LineList.of(lines)
 		return DocumentSnapshot(
 			lineList = list,
-			richSpans = richSpans,
-			spansByLine = spansByLine,
+			spanIndex = spanIndex,
 			text = text.next(lineList, list, splice),
 		)
 	}
 
-	internal fun withRichSpans(richSpans: Set<RichSpan>) = DocumentSnapshot(
-		lineList = lineList,
-		richSpans = richSpans,
-		spansByLine = spansByLineOf(richSpans),
-		text = text,
-	)
+	internal fun withSpanIndex(spanIndex: SpanIndex): DocumentSnapshot =
+		if (spanIndex === this.spanIndex) this else DocumentSnapshot(lineList, spanIndex, text)
+
+	/** This revision with its spans replaced wholesale by [richSpans]. */
+	internal fun withRichSpans(richSpans: Set<RichSpan>): DocumentSnapshot =
+		withSpanIndex(SpanIndex.of(lineList.size, richSpans))
 }
 
 /**
@@ -315,14 +308,3 @@ internal class DocumentChars(private val lines: LineList) : CharSequence {
 
 	override fun toString(): String = subSequence(0, length).toString()
 }
-
-private fun spansByLineOf(richSpans: Set<RichSpan>): Lazy<Map<Int, List<RichSpan>>> =
-	lazy(LazyThreadSafetyMode.PUBLICATION) {
-		val byLine = mutableMapOf<Int, MutableList<RichSpan>>()
-		for (span in richSpans) {
-			for (line in span.range.start.line..span.range.end.line) {
-				byLine.getOrPut(line) { mutableListOf() }.add(span)
-			}
-		}
-		byLine
-	}

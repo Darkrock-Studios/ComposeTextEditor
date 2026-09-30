@@ -4,7 +4,6 @@ import com.darkrockstudios.texteditor.CodeFenceBoundary
 import com.darkrockstudios.texteditor.richstyle.CodeFenceSpanStyle
 import com.darkrockstudios.texteditor.richstyle.MAX_LIST_LEVEL
 import com.darkrockstudios.texteditor.richstyle.OrderedListSpanStyle
-import com.darkrockstudios.texteditor.richstyle.RichSpan
 import com.darkrockstudios.texteditor.richstyle.listBlock
 import com.darkrockstudios.texteditor.richstyle.listLevel
 
@@ -16,7 +15,7 @@ import com.darkrockstudios.texteditor.richstyle.listLevel
  * neighbours are fenced. A walk starts at the document or [resume]s from the counters a
  * [LineLayout] kept.
  */
-internal class LineFacts(private val spans: Map<Int, List<RichSpan>>) {
+internal class LineFacts(private val spans: SpanIndex) {
 	private val running = IntArray(MAX_LIST_LEVEL + 1)
 
 	/** The facts of the line [next] was last given. */
@@ -37,8 +36,7 @@ internal class LineFacts(private val spans: Map<Int, List<RichSpan>>) {
 
 	/** The list on [line]: its level doubled, plus one when ordered; -1 for none. */
 	private fun listOn(line: Int): Int {
-		val onLine = spans[line] ?: return -1
-		for (span in onLine) {
+		for (span in spans.spansOn(line)) {
 			val block = span.style.listBlock() ?: continue
 			if (span.range.start.line != line) continue
 			return block.listLevel!! * 2 + if (block.spanStyle is OrderedListSpanStyle) 1 else 0
@@ -47,7 +45,7 @@ internal class LineFacts(private val spans: Map<Int, List<RichSpan>>) {
 	}
 
 	private fun fenced(line: Int): Boolean =
-		spans[line]?.any { it.style === CodeFenceSpanStyle && it.range.start.line == line } == true
+		spans.spansOn(line).any { it.style === CodeFenceSpanStyle && it.range.start.line == line }
 
 	/** Derives the facts of [line], which must follow the line last given, or start the walk. */
 	fun next(line: Int) {

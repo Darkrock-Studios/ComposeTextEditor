@@ -176,11 +176,40 @@ class TextEditorState(
 	@Volatile
 	internal var content = DocumentSnapshot(emptyList(), emptySet())
 		private set(value) {
+			// The edit that replaced the lines re-anchors the spans in the same transaction.
+			check(value.spanIndex.lineCount == value.lines.size) { "spans indexed for ${value.spanIndex.lineCount} of ${value.lines.size} lines" }
 			val textChanged = value.lines !== field.lines
 			field = value
 			_revision.intValue++
 			if (textChanged) _textRevision.intValue++
 		}
+
+	/**
+	 * The lines mutated since the last publish, as how many at each end are untouched,
+	 * narrowed by every mutation (the same composition as the whole-text base's), and
+	 * whether a span was added, removed or lost, or a line came or went. Normalization
+	 * examines only those lines.
+	 */
+	private var untouchedBefore = Int.MAX_VALUE
+	private var untouchedAfter = Int.MAX_VALUE
+	private var spansChanged = false
+
+	private fun markChanged(unchangedBefore: Int, unchangedAfter: Int) {
+		untouchedBefore = minOf(untouchedBefore, unchangedBefore)
+		untouchedAfter = minOf(untouchedAfter, unchangedAfter)
+	}
+
+	/** [snapshot] with the line-block invariants repaired over the lines changed since the last publish. */
+	private fun normalized(snapshot: DocumentSnapshot): DocumentSnapshot {
+		val lines = snapshot.lines.size
+		val first = minOf(untouchedBefore, lines)
+		val end = lines - minOf(untouchedAfter, lines)
+		val result = normalizeLineBlocks(snapshot, markdownConfiguration, first until end, spansChanged)
+		untouchedBefore = Int.MAX_VALUE
+		untouchedAfter = Int.MAX_VALUE
+		spansChanged = false
+		return result
+	}
 
 	private val _revision = mutableIntStateOf(0)
 	private val _textRevision = mutableIntStateOf(0)
@@ -289,7 +318,7 @@ class TextEditorState(
 			// transaction that mutated nothing skips the scan and the republish.
 			draft?.let {
 				if (it !== content) {
-					val normalized = normalizeLineBlocks(it, markdownConfiguration)
+					val normalized = normalized(it)
 					// Normalization can rewrite lines no operation declared dirty,
 					// so a rewrite invalidates any deferred partial relayout.
 					if (normalized !== it) invalidateLayoutInputs()
@@ -325,6 +354,9 @@ class TextEditorState(
 			pendingCursorScroll = false
 			pendingCommitActions.clear()
 			if (!committed) {
+				untouchedBefore = Int.MAX_VALUE
+				untouchedAfter = Int.MAX_VALUE
+				spansChanged = false
 				val rollbacks = pendingRollbackActions.asReversed().toList()
 				pendingRollbackActions.clear()
 				rollbacks.forEach { it() }
@@ -391,7 +423,7 @@ class TextEditorState(
 			draft = transform(workingContent)
 		} else {
 			val transformed = transform(content)
-			val normalized = normalizeLineBlocks(transformed, markdownConfiguration)
+			val normalized = normalized(transformed)
 			if (normalized !== transformed) invalidateLayoutInputs()
 			content = normalized
 		}
@@ -789,6 +821,9 @@ class TextEditorState(
 		// An already-clean snapshot is published as is; it is immutable, and sharing
 		// it keeps its memoized indexes.
 		val clean = lines === document.lines && spans == document.richSpans
+		// A load is a change to every line.
+		markChanged(0, 0)
+		spansChanged = true
 		mutateContent { if (clean) document else DocumentSnapshot(lines, spans) }
 		announceReplacement()
 
@@ -1141,6 +1176,8 @@ class TextEditorState(
 	 * would draw over the first character of the line.
 	 */
 	private fun replaceContent(lines: List<AnnotatedString>) {
+		markChanged(0, 0)
+		spansChanged = true
 		mutateContent { DocumentSnapshot(lines, emptySet()) }
 		announceReplacement()
 	}
@@ -1156,6 +1193,7 @@ class TextEditorState(
 	/** Publishes [lines]; [splice] says which lines changed, when the caller knows. */
 	internal fun setLines(lines: List<AnnotatedString>, splice: LineSplice? = null) {
 		if (lines !is LineList) linesWritten += lines.size
+		if (splice != null) markChanged(splice.unchangedBefore, splice.unchangedAfter) else markChanged(0, 0)
 		mutateContent { it.withLines(lines, splice) }
 	}
 
@@ -1165,8 +1203,30 @@ class TextEditorState(
 		replaceLines(index, index, listOf(text))
 	}
 
+	/** Replaces every span, as a document load does. */
 	internal fun setRichSpans(richSpans: Set<RichSpan>) {
+		markChanged(0, 0)
+		spansChanged = true
 		mutateContent { it.withRichSpans(richSpans) }
+	}
+
+	/** Publishes [index], whose spans on [first] through [last] differ from the current one's. */
+	internal fun setSpanIndex(index: SpanIndex, first: Int, last: Int, spansChanged: Boolean = true) {
+		val lines = workingContent.lines.size
+		markChanged(first.coerceAtLeast(0), (lines - 1 - last).coerceAtLeast(0))
+		if (spansChanged) this.spansChanged = true
+		mutateContent { it.withSpanIndex(index) }
+	}
+
+	/** Publishes [index], which differs from the current one by [spans]. */
+	internal fun setSpanIndex(index: SpanIndex, spans: Collection<RichSpan>) {
+		var first = Int.MAX_VALUE
+		var last = -1
+		for (span in spans) {
+			first = minOf(first, span.range.start.line)
+			last = maxOf(last, span.range.end.line)
+		}
+		setSpanIndex(index, first, last)
 	}
 
 	/** True when the document holds a single empty line. */
@@ -1368,7 +1428,7 @@ class TextEditorState(
 
 		val content = content
 		val lines = content.lineList
-		val spans = content.richSpansByLine
+		val spans = content.spanIndex
 		val previous = rows
 
 		// A partial pass is only sound against the exact layout the last pass produced.
@@ -1394,14 +1454,14 @@ class TextEditorState(
 	}
 
 	/** A full pass: every line shaped, every fact derived in line order. */
-	private fun layoutAll(lines: LineList, spans: Map<Int, List<RichSpan>>): RowList {
+	private fun layoutAll(lines: LineList, spans: SpanIndex): RowList {
 		val shaper = LineShaper()
 		val facts = LineFacts(spans)
 		val width = viewportSize.width
 		val layouts = ArrayList<LineLayout>(lines.size)
 		for (line in 0 until lines.size) {
 			facts.next(line)
-			layouts += LineLayout.of(shaper.shape(lines[line]), line, spans[line].orEmpty(), density, width, facts)
+			layouts += LineLayout.of(shaper.shape(lines[line]), line, spans.spansOn(line), density, width, facts)
 		}
 		return RowList.of(layouts, spans)
 	}
@@ -1416,7 +1476,7 @@ class TextEditorState(
 		previous: RowList,
 		update: LayoutUpdate.Partial,
 		lines: LineList,
-		spans: Map<Int, List<RichSpan>>,
+		spans: SpanIndex,
 	): RowList {
 		val lastLine = lines.size - 1
 		val shapeFirst = update.remeasureFirst
@@ -1442,8 +1502,8 @@ class TextEditorState(
 			facts.next(line)
 			val old = if (line in shapeFirst..shapeLast) null else previous.layoutOf(oldIndex(line))
 			val layout = when {
-				old == null -> LineLayout.of(shaper.shape(lines[line]), line, spans[line].orEmpty(), density, width, facts)
-				line in spansFirst..spansLast -> old.withSpans(line, spans[line].orEmpty(), density, width, facts)
+				old == null -> LineLayout.of(shaper.shape(lines[line]), line, spans.spansOn(line), density, width, facts)
+				line in spansFirst..spansLast -> old.withSpans(line, spans.spansOn(line), density, width, facts)
 				else -> old.withFacts(facts)
 			}
 			layouts += layout

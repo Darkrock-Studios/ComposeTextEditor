@@ -1812,11 +1812,11 @@ standard output.
 
 Shaping is one line per keystroke. These still scale with document length:
 
-- [ ] **7.8** [Fable] [Lane N] Per keystroke: the line list is copied, every
+- [x] **7.8** [Fable] [Lane N] Per keystroke: the line list is copied, every
   `LineWrap` is rebuilt, and every rich span is re-anchored. Measured on the
   iOS simulator (4.21): one keyboard edit takes 9.4 ms at 200k characters
   against 0.7 ms at 2k, wherever the caret is. Design in
-  `docs/design/incremental-relayout.md`, section 9. Landed so far: the line
+  `docs/design/incremental-relayout.md`, section 9. Done: the line
   list is chunked (`state/LineList.kt`, chunks of 32 to 64 lines), so an
   edit splices the chunk or two it touches and shares the rest, and a line's
   flat character index is a prefix total in place of the per-revision
@@ -1834,7 +1834,14 @@ Shaping is one line per keystroke. These still scale with document length:
   after this: the splice itself measures 22 µs on a snapshot alone, and 48 µs
   after a keystroke with the heap collected, so the difference is the young
   collection the keystroke used to trigger while it rebuilt every row, now
-  landing inside the measured build instead.
+  landing inside the measured build instead. The rich spans are kept by line
+  the same way (`state/SpanIndex.kt`, each line's spans by their columns,
+  with the few crossing a line break loose): an edit re-anchors the spans on
+  its own lines and splices the index, a span batch rewrites the chunks
+  holding its lines, and line-block normalization examines only the lines a
+  revision changed (`SpanIndexCostTest`). Desktop JVM at 200k characters
+  with a highlight span on every line: a keystroke 2,026 µs to 94 µs. The
+  iOS figures need a new simulator run (Mac queue).
 - [x] **7.9** [Opus] [Lane N] `getAllText()` rebuilds the whole document per
   revision when read by semantics, the Android IME, and the desktop adapter.
   214 µs per revision at 200k characters on the desktop JVM (4.21).

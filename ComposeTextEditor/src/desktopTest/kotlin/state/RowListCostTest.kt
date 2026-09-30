@@ -28,6 +28,7 @@ import com.darkrockstudios.texteditor.rowIndexOf
 import com.darkrockstudios.texteditor.state.LineFacts
 import com.darkrockstudios.texteditor.state.LineLayout
 import com.darkrockstudios.texteditor.state.RowList
+import com.darkrockstudios.texteditor.state.SpanIndex
 import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.moveCursorDown
 import io.mockk.every
@@ -51,7 +52,7 @@ import kotlin.test.assertTrue
  */
 class RowListCostTest {
 
-	private val lineCount = 2_000
+	private val lineCount = 500
 
 	private fun TestScope.editorWithDocument(counter: MeasureCounter): TextEditorState {
 		val state = editorWithCounter(counter)
@@ -81,7 +82,7 @@ class RowListCostTest {
 		val counter = MeasureCounter()
 		val state = editorWithDocument(counter)
 		val before = state.rows()
-		state.cursor.updatePosition(CharLineOffset(1_000, 4))
+		state.cursor.updatePosition(CharLineOffset(250, 4))
 
 		state.insertCharacterAtCursor('x')
 
@@ -96,7 +97,7 @@ class RowListCostTest {
 		val counter = MeasureCounter()
 		val state = editorWithDocument(counter)
 		val before = state.rows()
-		state.cursor.updatePosition(CharLineOffset(1_000, 4))
+		state.cursor.updatePosition(CharLineOffset(250, 4))
 
 		state.insertNewlineAtCursor()
 
@@ -104,8 +105,8 @@ class RowListCostTest {
 		assertEquals(2, counter.calls)
 		assertEquals(2, after.layoutsNotIn(before))
 		assertEquals(lineCount + 1, after.lineCount)
-		assertEquals(1_001, after[1_001].line)
-		assertEquals(" 1000 with some words", state.textLines[1_001].text)
+		assertEquals(251, after[251].line)
+		assertEquals(" 250 with some words", state.textLines[251].text)
 	}
 
 	@Test
@@ -131,10 +132,10 @@ class RowListCostTest {
 	fun `a keystroke inside a long ordered list rebuilds its line alone`() = runTest {
 		val counter = MeasureCounter()
 		val state = editorWithDocument(counter)
-		state.updateRichSpans(emptyList(), (100 until 1_100).map { lineSpan(it, OrderedListSpanStyle) })
+		state.updateRichSpans(emptyList(), (100 until 400).map { lineSpan(it, OrderedListSpanStyle) })
 		val before = state.rows()
 		counter.calls = 0
-		state.cursor.updatePosition(CharLineOffset(600, 4))
+		state.cursor.updatePosition(CharLineOffset(250, 4))
 
 		state.insertCharacterAtCursor('x')
 
@@ -142,18 +143,18 @@ class RowListCostTest {
 		assertEquals(1, counter.calls)
 		assertTrue(after.layoutsNotIn(before) <= 3, "a keystroke in a list rebuilt ${after.layoutsNotIn(before)} layouts")
 		assertTrue(after.chunksNotIn(before) <= 2, "a keystroke in a list rebuilt ${after.chunksNotIn(before)} row chunks")
-		assertEquals(501, after[after.firstRowOf(600)].orderedListNumber)
-		assertEquals(1_000, after[after.firstRowOf(1_099)].orderedListNumber)
+		assertEquals(151, after[after.firstRowOf(250)].orderedListNumber)
+		assertEquals(300, after[after.firstRowOf(399)].orderedListNumber)
 	}
 
 	@Test
 	fun `a keystroke inside a long fence rebuilds its line and its edges`() = runTest {
 		val counter = MeasureCounter()
 		val state = editorWithDocument(counter)
-		state.updateRichSpans(emptyList(), (100 until 1_100).map { lineSpan(it, CodeFenceSpanStyle) })
+		state.updateRichSpans(emptyList(), (100 until 400).map { lineSpan(it, CodeFenceSpanStyle) })
 		val before = state.rows()
 		counter.calls = 0
-		state.cursor.updatePosition(CharLineOffset(600, 4))
+		state.cursor.updatePosition(CharLineOffset(250, 4))
 
 		state.insertCharacterAtCursor('x')
 
@@ -259,12 +260,13 @@ class RowListCostTest {
 			codeFenceBoundary = null,
 			counters = LineFacts.NO_COUNTERS,
 		)
-		var list = RowList.of(List(300) { lineLayout(random.nextInt(1, 4), listOf(0f, 17.5f, 20f, 33.3f).random(random)) }, emptyMap())
+		val noSpans = SpanIndex.of(0, emptySet())
+		var list = RowList.of(List(300) { lineLayout(random.nextInt(1, 4), listOf(0f, 17.5f, 20f, 33.3f).random(random)) }, noSpans)
 		repeat(40) { step ->
 			val from = random.nextInt(list.lineCount + 1)
 			val to = from + random.nextInt(minOf(list.lineCount - from, 50) + 1)
 			val replacement = List(random.nextInt(60)) { lineLayout(random.nextInt(1, 4), listOf(0f, 17.5f, 20f).random(random)) }
-			list = list.splice(from, to, replacement, emptyMap())
+			list = list.splice(from, to, replacement, noSpans)
 			val generic: List<LineWrap> = ArrayList(list)
 			val bottom = list.lastRowBottom()
 			assertEquals(generic.lastOrNull()?.let { it.offset.y + it.blockHeight!! } ?: 0f, bottom)

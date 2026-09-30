@@ -18,7 +18,7 @@ import com.darkrockstudios.texteditor.richstyle.isList
 import com.darkrockstudios.texteditor.richstyle.lineBlockSpanStyles
 import com.darkrockstudios.texteditor.richstyle.listBlockAt
 import com.darkrockstudios.texteditor.richstyle.listLevel
-import com.darkrockstudios.texteditor.richstyle.placeholderKinds
+import com.darkrockstudios.texteditor.richstyle.placeholderKindOf
 import com.darkrockstudios.texteditor.richstyle.recordListEdit
 import com.darkrockstudios.texteditor.richstyle.sameListKind
 import com.darkrockstudios.texteditor.richstyle.setLineBlockSpans
@@ -691,7 +691,8 @@ class TextEditManager(private val state: TextEditorState) {
 
 	private fun applyRichSpanOperation(operation: TextEditOperation.RichSpan): OperationMetadata? {
 		if (operation.isAdd) {
-			state.richSpanManager.addRichSpan(operation.range, operation.style)
+			// Coerced onto the document as it stands: a host's range can outrun it.
+			state.richSpanManager.addRichSpanClamped(operation.range, operation.style)
 		} else {
 			state.richSpanManager.removeRichSpan(
 				operation.range.start,
@@ -729,9 +730,8 @@ class TextEditManager(private val state: TextEditorState) {
 	 * a rule inside the selection cannot wedge a list toggle into always-apply.
 	 */
 	internal fun toggleLineBlock(lines: IntRange, block: LineBlockStyle) = state.withAtomicEdit {
-		val kinds = placeholderKinds(state.richSpanManager.getAllRichSpans(), state.textLines)
 		val targets = lines.filter { line ->
-			line in state.textLines.indices && block.allowedOn(kinds[line])
+			line in state.textLines.indices && block.allowedOn(placeholderKindOf(state.workingContent, line))
 		}
 		if (targets.isEmpty()) return@withAtomicEdit
 		// A list toggle asks for a kind at any nesting level: a nested item has

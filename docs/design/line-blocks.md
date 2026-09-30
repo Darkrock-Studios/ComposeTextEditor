@@ -144,9 +144,11 @@ A document is valid when every block span sits on a line that can carry it:
   no serialized form.
 
 Enforcement is `normalizeLineBlocks`, a pure snapshot-to-snapshot repair run on
-every publish at the `withAtomicEdit` commit boundary. It removes disallowed
-block spans from placeholder lines and rebuilds those lines without the
-orphaned indent. Because it runs at the one point every revision passes
+every publish at the `withAtomicEdit` commit boundary, over the lines the
+revision changed since the last publish (the state narrows that range with
+every mutation) and, when a span was added, removed or lost or a line came or
+went, the fence runs those lines touch. It removes disallowed block spans from
+placeholder lines and rebuilds those lines without the orphaned indent. Because it runs at the one point every revision passes
 through, the invariant holds no matter which path attached the span: a toggle,
 either importer, smart Enter, a host app on the public span API, or span
 re-anchoring after an edit. The repair is deterministic and outside undo
