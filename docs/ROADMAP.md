@@ -1008,8 +1008,22 @@ Constraints that shape the order:
   there when the host has no `imePadding`; a window that resizes is still 3.9.
 - [ ] **4.8 Native edit menu. C.** [Fable] [Lane D] [Mac work] A Material
   dropdown is used instead of the platform text toolbar.
-- [ ] **4.9 Rich clipboard. C.** [Opus] [Lane H] [Mac work] Plain text only
+- [x] **4.9 Rich clipboard. C.** [Opus] [Lane H] [Mac work] Plain text only
   (shared with 6.7).
+  Done: a copy puts one `UIPasteboard` item holding the selection's
+  `public.html` beside its `public.utf8-plain-text`, and the copy id in a
+  private type (`com.darkrockstudios.texteditor.copy-id`), so iOS now has copy
+  provenance as Android does and `supportsCopyProvenance` is true. A paste
+  prefers the markup, gives it to the block paste (`readClipboardHtml`), and
+  reads the pasteboard once; this editor's own copy uses its markup only where
+  it re-parses to the characters copied; several items paste one per line.
+  iOS derives `public.rtf` from the markup itself, which is what apps like
+  Notes read. The first iOS tests (`iosTest/.../ClipboardHelperIosTest.kt`,
+  11 cases, run by the `ios` CI job) cover it against a private pasteboard: a
+  test binary is not an app, and the general pasteboard ignores it. Simulator,
+  2026-09-30: Safari to editor keeps bold, a link and a bulleted list; editor
+  to Safari's editable area and editor to editor keep the same. Notes is not
+  in the simulator, so Notes both ways is left to 4.4 on a device.
 - [ ] **4.10 Hardware keyboard shortcuts.** [Human] [Lane E] [Mac work] Mac
   bindings are wired; never verified at runtime.
 
@@ -1509,8 +1523,8 @@ iOS Safari; browser tests run in CI.
   would re-parse to others. Copy ids now start at random, as they leave the
   process. The web carries markup both ways since 4.13. Editor to editor round trips keep
   what the HTML path carries (bold, italic, code, strike, underline, headings,
-  lists, quotes, fences, links), and the body size through 6.18. iOS stays plain
-  until 4.9 (Mac queue).
+  lists, quotes, fences, links), and the body size through 6.18. iOS carries
+  markup both ways since 4.9.
 - [x] **6.8 Line endings. C.** [Opus] [Lane H] No `\r` handling anywhere; a
   CRLF paste leaves stray carriage returns in lines. Done: `\r\n` and a lone
   `\r` become `\n` on every entry path (`setText`, `insertStringAtCursor`,
@@ -2059,6 +2073,4 @@ records results and removes entries that passed.
 | 2.9 | In the iOS sample app with a hardware keyboard: press Tab, Ctrl+Tab, then Escape followed by Tab; then set `state.tabSettings = TabSettings(movesFocus = true)` on the demo editor and press Tab | Tab indents by four spaces; Ctrl+Tab, Escape then Tab, and Tab under `movesFocus` either move focus to another control or do nothing, and never type a tab character (4.28) || Not run: hardware keyboard, left for a person |
 | 3.8 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64`. 3.8 added `internal expect fun hasNativeTextToolbar()` (commonMain `TouchToolbar.kt`) with `iosMain/.../TouchToolbar.ios.kt` answering true. Then in the simulator: long-press a word, double-tap a word, long-press empty space, tap the caret handle, and drag a selection handle | Compiles. UIKit's edit menu appears over the selection or caret with Cut, Copy, Paste and Select all as applicable (Paste and Select all alone at a bare caret), hides while a handle is dragged and returns when it drops, and goes when the caret moves or the text is scrolled. If no menu appears, the input connection has no toolbar: fall back to `false` in `TouchToolbar.ios.kt` so the context menu stands in |  Partial, same run. Compiles. The UIKit menu works over a selection: double-tap or long-press a word shows Cut, Copy, Paste, Select All, and each works. **Fails:** long-press in an empty document calls `show()` with a zero-width caret rect and only Paste, and UIKit shows nothing (the toolbar reports Hidden right after `showMenu`); a tap on the caret handle never calls `show()`. Native reference: a tap in Safari's focused empty field shows Paste. Also: a long-press past a line's end selects the line's last word instead of placing the caret; with a selection ending at the document end, a long-press below the text counts as on the selection. When the screen was shifted by 4.24 the selection menu did not appear either. Did not fall back to `false`, since the menu works for selections |
 | 4.13 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64`. `clipboard/ClipboardEvents.kt` adds `internal expect fun ClipboardEventsEffect`; the iOS actual (`iosMain/.../clipboard/ClipboardEvents.ios.kt`) is a no-op. Then the web demo in Safari on macOS: Cmd+C a bold word, Cmd+V it back, and paste a bulleted list from another page; also the context menu's Paste | Compiles. Safari pastes the bold word bold and the list as a list; the context menu's Paste either pastes or logs a `ComposeTextEditor:` warning in the console, never fails silently || Compile part passed 2026-09-30 at `f3b8d8f`. The Safari part is not run: it needs Safari on macOS with a person at the keyboard, since the clipboard events only fire for real key presses and driving Safari needs its Remote Automation setting turned on |
-| 4.20, 4.30, 3.10 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64`. 4.20 added `internal expect fun deadChar` (commonMain `input/DeadKeys.kt`) with its `actual` in `skikoMain/.../input/DeadKeys.skiko.kt`, which composes nothing. 4.30 moved the skiko request's caret measure into `measureCursorMetrics` (commonMain `input/ImeCaret.kt`), called from `focusedRectInRoot`; 3.10 builds that rectangle from `imeCaretInRoot` in the same file | Compiles. Nothing to run for 4.20: iOS never delivers a dead key as a key event; the caret rectangle behaves as in the 4.19 row | |
-| 4.9, 6.7 | Rich clipboard on iOS, the half 6.7 left. In `iosMain/.../clipboard/ClipboardHelper.ios.kt`, write the selection as `public.html` (UTF-8 `NSData` of the `html` argument, or `text.toHtml(configuration)`) beside `public.utf8-plain-text` in one `UIPasteboard.generalPasteboard` item; read `public.html` first (`dataForPasteboardType`, parsed with `toAnnotatedStringFromHtml`), falling back to `string`, and return that markup from `ClipboardHtml.ios.kt` so pasted lists keep their blocks. Compile with `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64`, then in the simulator copy a bold word and a bulleted list between two sample editors, and from Notes and Safari | Bold, lists and links survive editor to editor and from Notes and Safari; pasting into Notes keeps bold | |
-| 6.12 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64`. `dragdrop/PlatformTextDrag.kt` adds four `internal expect` functions; the iOS actuals (`iosMain/.../dragdrop/PlatformTextDrag.ios.kt`) answer null and false. Then on the Mac's desktop sample app: select a word, drag it within the editor, then with Option held, then into TextEdit, and drag text from TextEdit into the editor | Compiles. The word moves (Option copies), arrives in TextEdit styled and leaves the editor, and TextEdit's text drops in at the drop caret | |
+| 6.12 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64`. `dragdrop/PlatformTextDrag.kt` adds four `internal expect` functions; the iOS actuals (`iosMain/.../dragdrop/PlatformTextDrag.ios.kt`) answer null and false. Then on the Mac's desktop sample app: select a word, drag it within the editor, then with Option held, then into TextEdit, and drag text from TextEdit into the editor | Compiles. The word moves (Option copies), arrives in TextEdit styled and leaves the editor, and TextEdit's text drops in at the drop caret || Compile part passed 2026-09-30 at `a53f285`. The drag part is not run: it needs a person driving the desktop sample app and TextEdit, which the tools here cannot |

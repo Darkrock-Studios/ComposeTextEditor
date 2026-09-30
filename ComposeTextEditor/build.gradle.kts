@@ -78,6 +78,14 @@ kotlin {
             dependsOn(skikoMain)
         }
 
+        // Runs on the simulator, for what only the platform can answer (UIPasteboard).
+        val iosTest by getting {
+            dependencies {
+                implementation(libs.jetbrains.kotlin.test)
+                implementation(libs.kotlinx.coroutines.test)
+            }
+        }
+
         val androidHostTest by getting {
             dependencies {
                 implementation(libs.jetbrains.kotlin.test)
