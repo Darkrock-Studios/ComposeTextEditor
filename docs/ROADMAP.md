@@ -2416,6 +2416,13 @@ Shaping is one line per keystroke. These still scale with document length:
   and colour, so an IDE's token colours stay out of a fence; background stays
   ignored (`html/HtmlColorAndSizeTest.kt`). A fragment all at one size pastes
   at the body size. Found: 6.26.
+  Paste keeps every colour the author chose, greys included, except the
+  fragment's most common colour (the source's text colour; a fragment in one
+  hued colour keeps it) and near-black, near-white, and translucent colours.
+  A hued `background-color`, the `background` shorthand, or `<mark>` pastes as
+  the configured highlight, and a highlight copies out as `<mark>`. A pasted
+  heading's `margin-top` and `margin-bottom` are dropped: the heading style
+  owns its spacing (Google Docs writes 20 pt above a Heading 1).
 - [x] **7.47** [Opus] [Lane H] HTML export and import flatten nested lists
   once 5.6 lands: `<li>` inside `<ul>` inside `<li>` imports at level 0, and
   a nested item exports as a sibling. Serialize the level as nested `<ul>`

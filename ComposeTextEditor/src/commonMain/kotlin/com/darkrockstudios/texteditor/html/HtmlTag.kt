@@ -1,5 +1,6 @@
 package com.darkrockstudios.texteditor.html
 
+import androidx.compose.ui.graphics.isSpecified
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
@@ -24,6 +25,7 @@ internal enum class HtmlTag(val tag: String) {
 	EM("em"),
 	STRIKE("s"),
 	UNDERLINE("u"),
+	MARK("mark"),
 	;
 
 	/** Heading elements are block-level, so they replace a line's `<p>` rather than nest inside it. */
@@ -43,6 +45,7 @@ internal fun SpanStyle.htmlTags(config: MarkdownConfiguration): Set<HtmlTag> {
 		if (decoration.contains(TextDecoration.LineThrough)) tags += HtmlTag.STRIKE
 		if (decoration.contains(TextDecoration.Underline)) tags += HtmlTag.UNDERLINE
 	}
+	if (background.isSpecified && background == config.highlightStyle.background) tags += HtmlTag.MARK
 	return tags
 }
 
@@ -86,4 +89,5 @@ internal fun HtmlTag.spanStyle(config: MarkdownConfiguration): SpanStyle = when 
 	HtmlTag.EM -> config.italicStyle
 	HtmlTag.STRIKE -> config.strikethroughStyle
 	HtmlTag.UNDERLINE -> config.underlineStyle
+	HtmlTag.MARK -> config.highlightStyle
 }

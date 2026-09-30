@@ -119,6 +119,11 @@ private const val CONVERTED_SPACE_CLASS = "Apple-converted-space"
 /** Word's mark for the same, as an inline style. */
 private const val SPACERUN_STYLE = "mso-spacerun"
 
+private val HEADING_ELEMENTS = setOf("h1", "h2", "h3", "h4", "h5", "h6")
+
+private fun ParagraphFormatSpanStyle.withoutSpacing(): ParagraphFormatSpanStyle? =
+	copy(spaceBefore = Dp.Unspecified, spaceAfter = Dp.Unspecified).takeIf { it != ParagraphFormatSpanStyle() }
+
 private val TAG_STYLES = mapOf(
 	"b" to HtmlTag.STRONG,
 	"strong" to HtmlTag.STRONG,
@@ -134,6 +139,7 @@ private val TAG_STYLES = mapOf(
 	"del" to HtmlTag.STRIKE,
 	"u" to HtmlTag.UNDERLINE,
 	"ins" to HtmlTag.UNDERLINE,
+	"mark" to HtmlTag.MARK,
 	"h1" to HtmlTag.H1,
 	"h2" to HtmlTag.H2,
 	"h3" to HtmlTag.H3,
@@ -247,7 +253,7 @@ private class HtmlSpanBuilder(
 
 		val text = out.toString()
 		// After the tags' spans, so a colour on or inside a link or a bold run wins over theirs.
-		val clamped = (spans + relativeToBaseSize(cssRuns, ownLookRuns, text)).mapNotNull { span ->
+		val clamped = (spans + relativeToBaseSize(relativeToBaseColor(cssRuns, ownLookRuns, text), ownLookRuns, text)).mapNotNull { span ->
 			val end = span.end.coerceAtMost(text.length)
 			if (span.start >= end) null else AnnotatedString.Range(span.item, span.start, end)
 		}
@@ -434,7 +440,11 @@ private class HtmlSpanBuilder(
 		val spansAtEntry = spans.size
 		val pendingAtEntry = pendingNewlines()
 		// An item is its own line, whatever it holds.
-		val format = if ((occupiesALine || name == "li") && style.isNotEmpty()) paragraphFormatFromCss(style) else null
+		val format = if ((occupiesALine || name == "li") && style.isNotEmpty()) paragraphFormatFromCss(style)?.let {
+			// A heading's space around it is the heading style's; a source writes its own
+			// default there (Google Docs' 20 pt above a Heading 1).
+			if (name in HEADING_ELEMENTS) it.withoutSpacing() else it
+		} else null
 		if (occupiesALine) lineHoldingLineHeights += format?.lineHeight ?: TextUnit.Unspecified
 		visitChildren(element, nested)
 		// Appended on the way out, so a nested block is recorded before the one
@@ -517,16 +527,16 @@ private class HtmlSpanBuilder(
 	/**
 	 * The colour and size [parent] passes down, with the element's own over them: a
 	 * `style` attribute's, or a `<font color>`'s. A link's colour is the link style's,
-	 * whatever the source wrote ([inLink]). A colour without hue (black, white, the
-	 * greys) is the source's text colour, which pasted text leaves to the editor's theme.
-	 * A relative size is resolved against the size around it, or a browser's 16 px.
+	 * whatever the source wrote ([inLink]); which colours pasted text keeps is settled
+	 * after the walk ([relativeToBaseColor]). A relative size is resolved against the
+	 * size around it, or a browser's 16 px.
 	 */
 	private fun resolveCss(name: String, element: Element, style: String, parent: SpanStyle?, inLink: Boolean): SpanStyle? {
 		if (name != "a" && name != "font" && style.isEmpty()) return parent
 		var color = if (inLink) Color.Unspecified else parent?.color ?: Color.Unspecified
 		var size = parent?.fontSize ?: TextUnit.Unspecified
 		fun take(declared: SpanStyle) {
-			if (declared.color.isSpecified && !inLink) color = declared.color.takeIf { it.hasHue() } ?: Color.Unspecified
+			if (declared.color.isSpecified && !inLink) color = declared.color
 			if (declared.fontSize.isEm) {
 				size = ((if (size.isSp) size.value else BROWSER_FONT_SIZE) * declared.fontSize.value).hundredths().sp
 			} else if (declared.fontSize.isSp) {
@@ -536,6 +546,43 @@ private class HtmlSpanBuilder(
 		if (name == "font") parseCssColor(element.attr("color"))?.let { take(SpanStyle(color = it)) }
 		if (style.isNotEmpty()) cssColorAndSize(style)?.let(::take)
 		return SpanStyle(color = color, fontSize = size).takeIf { color.isSpecified || size.isSpecified }
+	}
+
+	/**
+	 * [runs] without the colours pasted text leaves to the editor's theme: the colour
+	 * most of the text carries, the source's text colour (Google Docs writes its black on
+	 * every run), and near-black, near-white, and translucent colours, which would vanish
+	 * on one theme or the other. Every other colour the author chose is kept, greys
+	 * included. A fragment in one hued colour only (a single red word) keeps it: there is
+	 * no other text to tell the source's colour from the author's. Headings and code,
+	 * which set their own look, do not count.
+	 */
+	private fun relativeToBaseColor(
+		runs: List<AnnotatedString.Range<SpanStyle>>,
+		ownLook: List<IntRange>,
+		text: String,
+	): List<AnnotatedString.Range<SpanStyle>> {
+		if (runs.none { it.item.color.isSpecified }) return runs
+		fun weight(range: IntRange) = range.count { it < text.length && text[it] != '\n' }
+		// Unspecified first, so a tie keeps what the runs set.
+		val byColor = linkedMapOf(Color.Unspecified to text.count { it != '\n' } - ownLook.sumOf(::weight))
+		runs.forEach { run ->
+			if (run.item.color.isSpecified) {
+				val weight = weight(run.start until run.end)
+				byColor[run.item.color] = (byColor[run.item.color] ?: 0) + weight
+				byColor[Color.Unspecified] = byColor.getValue(Color.Unspecified) - weight
+			}
+		}
+		val base = byColor.maxBy { it.value }.key
+		val baseIsSourceColor = !base.hasHue() || byColor.keys.count { it.isSpecified } > 1
+		return runs.map { run ->
+			val color = run.item.color
+			if (color.isSpecified && ((color == base && baseIsSourceColor) || !color.isAuthorColor())) {
+				AnnotatedString.Range(run.item.copy(color = Color.Unspecified), run.start, run.end)
+			} else {
+				run
+			}
+		}
 	}
 
 	/**
@@ -643,6 +690,14 @@ private class HtmlSpanBuilder(
 						)
 				) {
 					result += HtmlTag.CODE
+				}
+
+				"background-color", "background" -> {
+					val color = parseCssColor(value) ?: value.split(' ').firstNotNullOfOrNull(::parseCssColor)
+					when {
+						color != null && color.hasHue() -> result += HtmlTag.MARK
+						color != null || value == "none" -> result -= HtmlTag.MARK
+					}
 				}
 
 				"text-decoration", "text-decoration-line" -> {
@@ -774,6 +829,10 @@ private fun Float.hundredths(): Float = (this * 100f).roundToInt() / 100f
 
 /** Whether this colour has hue enough, and is opaque enough, to be formatting rather than a text colour. */
 private fun Color.hasHue(): Boolean = alpha >= 0.5f && maxOf(red, green, blue) - minOf(red, green, blue) > 0.1f
+
+/** Readable on both a light and a dark theme: opaque enough, and neither near-black nor near-white. */
+private fun Color.isAuthorColor(): Boolean =
+	alpha >= 0.5f && (hasHue() || maxOf(red, green, blue) >= 0.2f && minOf(red, green, blue) <= 0.9f)
 
 /** HTML's own whitespace, the only characters it collapses. Other Unicode spaces are content. */
 private fun Char.isCollapsibleSpace(): Boolean =
