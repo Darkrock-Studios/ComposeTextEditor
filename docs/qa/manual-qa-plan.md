@@ -783,6 +783,19 @@ Android unless a step says otherwise.
    the thumb pages toward the pointer (and keeps paging while held), and no thumb
    once the document fits (delete most of it).
 
+## 8b2. Saved state (Android)
+
+Markdown Editor (Blank) demo, which uses `rememberSaveableTextEditorState`. Enable
+Developer options > Don't keep activities.
+
+1. Type a few paragraphs; make a heading, a bullet list, a quote, a code fence, bold,
+   italic, underline and a link; add an image if the toolbar offers one. Scroll so the
+   top line is mid-document, place the caret, and select a word.
+2. Rotate the device, then switch to another app and back (the activity is destroyed).
+   **Expect:** after each, the text, every style and block, the link, the image, the
+   caret, the selection and the top line come back. Undo does nothing: the history
+   starts afresh.
+
 ## 8c. Accessibility
 
 Screen readers: TalkBack on Android, VoiceOver on iOS and macOS, NVDA on Windows,

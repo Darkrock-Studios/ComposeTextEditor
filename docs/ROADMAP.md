@@ -1796,8 +1796,28 @@ Shaping is one line per keystroke. These still scale with document length:
 
 ### Host API
 
-- [ ] **7.23** [Opus] [Lane M] No `Saver`, so state is lost where
+- [x] **7.23** [Opus] [Lane M] No `Saver`, so state is lost where
   `rememberSaveable` would keep it.
+  Done: `rememberSaveableTextEditorState(initialText, richSpanStyleSaver)`. The
+  state cannot be built outside composition (7.24), so there is no standalone
+  `Saver` for hosts; its saver is internal and captures the composition's scope
+  and measurer. It saves nested lists of strings and numbers (Bundle-safe, and
+  tested through Java serialization): the lines; character styles' plain values
+  (colour, size, weight, style, decoration, background, letter spacing,
+  baseline shift, feature settings, a generic font family); the built-in rich
+  spans (lists, quotes, fences, rules, headings, links); each line's paragraph
+  styles in order, a block's by name so it stays equal to the one the block
+  strips, and stacked blocks nest as before; other paragraph styles' indent,
+  line height, alignment, direction, line breaking and hyphenation; the caret,
+  the selection, and the line at the top of the viewport, scrolled back to on
+  first layout, since a pixel offset means nothing after a rotation. Not
+  saved: loaded fonts, brushes, shadows and other values that are not plain;
+  undo history (a restored editor starts without, as after `setDocument`;
+  serializing operations and their span metadata is large and would crowd the
+  Bundle), decorations (their owners recompute them), and other rich span
+  styles unless the host's `richSpanStyleSaver` keeps them (the sample keeps
+  images this way). Markdown was not used: it loses underline, colour and size
+  (7.16) and needs the extension attached.
 - [ ] **7.24** [Fable] [Lane M] The state needs a `TextMeasurer` and a scope,
   so it cannot be created outside composition.
 - [x] **7.25** [Opus] [Lane M] No word count, no programmatic focus beyond

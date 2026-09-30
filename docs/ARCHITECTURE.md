@@ -27,8 +27,10 @@ output (`LineWrap`, below); the document model never sees them.
 ### `TextEditorState`: the beating heart
 
 The single source of truth for one editor: document content, cursor, selection,
-scroll, undo history. Apps hoist one via `rememberTextEditorState` and drive
-the editor through it; everything else in the system either feeds it or reads
+scroll, undo history. Apps hoist one via `rememberTextEditorState` (or
+`rememberSaveableTextEditorState`, which saves the text, styles, built-in rich
+spans, caret, selection and top line, but not the undo history) and drive the
+editor through it; everything else in the system either feeds it or reads
 it. It is deliberately a facade: related concerns are delegated to focused
 sub-objects (`cursor`, `selector`, `scrollManager`, `editManager`,
 `richSpanManager`), and the state's own job is to hold the document, run the

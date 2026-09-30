@@ -499,6 +499,9 @@ class TextEditorState(
 			CursorData(position = position, styles = styles, selection = selectionRange)
 		}
 
+	/** The line a restored state scrolls to the top once it is laid out; see [rememberSaveableTextEditorState]. */
+	internal var restoredFirstVisible: CharLineOffset? = null
+
 	internal val wordCounter = WordCounter(this)
 
 	/**

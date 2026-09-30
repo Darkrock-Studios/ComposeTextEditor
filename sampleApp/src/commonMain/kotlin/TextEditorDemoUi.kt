@@ -11,6 +11,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
@@ -22,9 +23,12 @@ import com.darkrockstudios.texteditor.TextEditor
 import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
 import com.darkrockstudios.texteditor.markdown.withMarkdown
 import com.darkrockstudios.texteditor.rememberTextEditorStyle
+import com.darkrockstudios.texteditor.richstyle.ImageBlockSpanStyle
+import com.darkrockstudios.texteditor.richstyle.RichSpanStyle
 import com.darkrockstudios.texteditor.richstyle.SpellCheckStyle
 import com.darkrockstudios.texteditor.state.SpanClickType
 import com.darkrockstudios.texteditor.state.TextEditorState
+import com.darkrockstudios.texteditor.state.rememberSaveableTextEditorState
 import com.darkrockstudios.texteditor.state.rememberTextEditorState
 
 enum class DemoContent {
@@ -52,8 +56,20 @@ fun TextEditorDemoUi(
 			rememberTextEditorState()
 		}
 
+		// Survives rotation and process death, images included through the saver.
 		DemoContent.Empty -> {
-			rememberTextEditorState()
+			val imageSaver = remember(imageProvider) {
+				Saver<RichSpanStyle, Any>(
+					save = { style ->
+						(style as? ImageBlockSpanStyle)?.let { arrayListOf(it.source, it.alt, it.placeholderHeightDp) }
+					},
+					restore = { saved ->
+						val (source, alt, height) = saved as List<*>
+						ImageBlockSpanStyle(source as String, alt as String, imageProvider, height as Float)
+					},
+				)
+			}
+			rememberSaveableTextEditorState(richSpanStyleSaver = imageSaver)
 		}
 	}
 	val markdownExtension = remember(state, configuration, imageProvider) {

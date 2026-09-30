@@ -64,6 +64,8 @@ the [API reference & recipes](https://darkrock-studios.github.io/ComposeTextEdit
 - Screen reader support: the editor and `RichTextView` publish their text, selection,
   links and clipboard actions as `BasicTextField` does.
 - Word count, by the same word segmentation as word motion and spell check.
+- `rememberSaveableTextEditorState`: the document, caret, selection and scroll survive
+  configuration changes and process death (the undo history does not).
 
 #### Platforms
 
