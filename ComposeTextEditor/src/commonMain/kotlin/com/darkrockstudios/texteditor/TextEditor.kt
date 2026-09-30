@@ -25,6 +25,8 @@ private val DefaultContentPadding = PaddingValues(16.dp)
  * [RichTextView].
  *
  * @param state Holds the document, cursor, selection, and undo history.
+ * @param modifier Applied to the surface. A `Modifier.focusRequester` here focuses the
+ *   editor from code.
  * @param contentPadding Padding between the surface edge and the text.
  * @param enabled When `false`, the editor is disabled: it takes no input, shows no
  *   caret, and reports itself disabled, with no edit actions, to accessibility

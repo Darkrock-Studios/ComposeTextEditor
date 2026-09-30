@@ -61,6 +61,9 @@ the [API reference & recipes](https://darkrock-studios.github.io/ComposeTextEdit
   what change was made. This makes managing Spell Check much more efficient as you can just
   respell-check the single word that was changed, rather than everything. (_BTF2 now finally offers this!_)
 - Find & Replace UI: Works exactly as you'd expect.
+- Screen reader support: the editor and `RichTextView` publish their text, selection,
+  links and clipboard actions as `BasicTextField` does.
+- Word count, by the same word segmentation as word motion and spell check.
 
 #### Platforms
 

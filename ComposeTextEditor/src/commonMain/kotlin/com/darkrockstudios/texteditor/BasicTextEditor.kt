@@ -80,11 +80,15 @@ private const val CURSOR_BLINK_SPEED_MS = 500L
  * control, a custom context menu, or per-line decoration.
  *
  * @param state Holds the document, cursor, selection, and undo history.
+ * @param modifier Applied to the editor's outer bounds. To focus the editor from code,
+ *   add a [androidx.compose.ui.focus.FocusRequester] here with
+ *   `Modifier.focusRequester` and call `requestFocus()`, as with any focusable.
  * @param contentPadding Padding between the editor bounds and the text.
  * @param enabled When `false`, the editor is disabled: it takes no input, shows no
  *   caret, and reports itself disabled, with no edit actions, to accessibility
  *   services. It still takes focus, so its text can be selected and copied.
- * @param autoFocus Requests focus once when first composed, if [enabled].
+ * @param autoFocus Requests focus once when first composed, if [enabled]. For focus at
+ *   any other time, see [modifier].
  * @param style Colors and text style for the editor and its gutter markers.
  * @param contextMenuStrings Localized labels for the built-in context menu.
  * @param contextMenuState Drives context-menu visibility; pass your own to add

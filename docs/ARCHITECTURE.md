@@ -188,14 +188,18 @@ in the text as URL links. `getTextLayoutResult` is a whole-document layout
 measured on request, because the editor has no single one. `RichTextView`
 publishes the same text and layout as a read-only text (and, when selectable,
 the selection and copy). The
-document is not snapshot state, so the semantics block reads `lineOffsets`,
-which every edit republishes, to stay current.
+document is not snapshot state, so the semantics block reads the state's
+`revision`, a snapshot-state counter every published revision advances, to stay
+current; the word count does the same.
 
 ### Observation and extensions
 
 The state exposes a small reactive surface: `editOperations` streams applied
 operations, `cursorDataFlow` snapshots caret position, styles, and selection
-for toolbars, and `snapshot()` hands any thread a coherent document revision.
+for toolbars (starting with the current one), `wordCount` counts words through
+the same ICU segmentation as word motion and spell check, recounting only the
+lines an edit replaced, and `snapshot()` hands any thread a coherent document
+revision.
 Extensions build on exactly this surface plus the public span API: the markdown
 module converts to and from markdown text, and the spell-check and find modules
 (separate artifacts) watch `editOperations` and paint their results as

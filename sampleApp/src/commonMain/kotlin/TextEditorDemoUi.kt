@@ -94,6 +94,7 @@ fun TextEditorDemoUi(
 				maxLines = 1,
 				overflow = TextOverflow.Ellipsis,
 			)
+			Text("${state.wordCount} words", style = MaterialTheme.typography.labelMedium)
 			// The editor's enabled flag gates user input only; the toolbar and Roundtrip
 			// act on the state directly, so they hide with it.
 			Row(

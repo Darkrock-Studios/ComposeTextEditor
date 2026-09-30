@@ -50,6 +50,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.onSubscription
 import kotlin.concurrent.Volatile
 import kotlin.math.ceil
 import kotlin.math.min
@@ -173,7 +174,19 @@ class TextEditorState(
 	 */
 	@Volatile
 	internal var content = DocumentSnapshot(emptyList(), emptySet())
-		private set
+		private set(value) {
+			field = value
+			_revision.intValue++
+		}
+
+	private val _revision = mutableIntStateOf(0)
+
+	/**
+	 * Advances with every published [content], as snapshot state: the document itself
+	 * is not, so a derived value (semantics, the word count) reads this to be recomputed
+	 * after an edit.
+	 */
+	internal val revision: Int get() = _revision.intValue
 
 	/**
 	 * Content staged by an open [withAtomicEdit] transaction, or null when none is
@@ -466,25 +479,35 @@ class TextEditorState(
 	 */
 	val lineOffsets: List<LineWrap> get() = _lineOffsets
 
+	/** The caret's position, its typing styles, and the selection, as they are now. */
+	val cursorData: CursorData
+		get() = CursorData(position = cursor.position, styles = cursor.styles, selection = selector.selection)
+
 	/**
-	 * Emits a [CursorData] snapshot (active styles, position, selection) whenever the
-	 * caret moves, the typing style changes, or the selection changes. Collect this to
-	 * keep a toolbar or status display in sync with the editor.
+	 * Emits a [CursorData] snapshot (active styles, position, selection) at once on
+	 * collection, then whenever the caret moves, the typing style changes, or the
+	 * selection changes. Collect this to keep a toolbar or status display in sync with
+	 * the editor.
 	 */
 	val cursorDataFlow: Flow<CursorData>
-		get() {
-			return cursor.stylesFlow
-				.combine(cursor.positionFlow) { styles, position ->
-					Pair(styles, position)
-				}
-				.combine(selector.selectionRangeFlow) { (styles, position), selectionRange ->
-					CursorData(
-						styles = styles,
-						position = position,
-						selection = selectionRange,
-					)
-				}
+		get() = combine(
+			// On subscription, not on start: a change between the two would be lost.
+			cursor.stylesFlow.onSubscription { emit(cursor.styles) },
+			cursor.positionFlow.onSubscription { emit(cursor.position) },
+			selector.selectionRangeFlow.onSubscription { emit(selector.selection) },
+		) { styles, position, selectionRange ->
+			CursorData(position = position, styles = styles, selection = selectionRange)
 		}
+
+	internal val wordCounter = WordCounter(this)
+
+	/**
+	 * The number of words in the document, as word motion and spell check segment them
+	 * (the platform's ICU word breaks; a word holds a letter or digit). Observable in
+	 * composition, and cheap to read after an edit: only the lines that changed are
+	 * segmented again. [wordCount] with a range counts part of the document.
+	 */
+	val wordCount: Int get() = wordCounter.count
 
 	private var _canUndo by mutableStateOf(false)
 	private var _canRedo by mutableStateOf(false)

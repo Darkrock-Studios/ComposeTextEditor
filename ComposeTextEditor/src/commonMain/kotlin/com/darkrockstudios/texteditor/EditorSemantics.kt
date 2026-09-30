@@ -168,13 +168,12 @@ internal class SemanticsDocument(
 
 	/**
 	 * The text, with each link as a [LinkAnnotation.Url] that TalkBack lists and opens
-	 * through the host's link handler. Reads [TextEditorState.lineOffsets] as well: the
-	 * document is not snapshot state, but every edit publishes a new layout, which is,
-	 * so a semantics block calling this re-runs after an edit that leaves the caret in
+	 * through the host's link handler. Reads [TextEditorState.revision], so a semantics
+	 * block calling this re-runs after every edit, even one that leaves the caret in
 	 * place.
 	 */
 	fun text(): AnnotatedString {
-		state.lineOffsets
+		state.revision
 		val content = state.snapshot()
 		if (content !== textContent) {
 			text = content.textWithLinks()

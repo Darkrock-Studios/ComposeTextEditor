@@ -1601,7 +1601,8 @@ iOS Safari; browser tests run in CI.
   the copy and select-all shortcuts to it. The KDoc now says so. Also fixed:
   the published text went stale after an edit that left the caret in place
   (a forward delete), since the document is not snapshot state; the semantics
-  block now reads `lineOffsets`, which every edit republishes.
+  block now reads `lineOffsets`, which every edit republishes (since 7.25, the
+  state's `revision`).
 - [x] **7.3** [Opus] [Lane M] The semantics `setText` calls `state.setText`,
   wiping rich spans and undo history.
   Done: it replaces only the part that differs (the text between the common
@@ -1799,8 +1800,21 @@ Shaping is one line per keystroke. These still scale with document length:
   `rememberSaveable` would keep it.
 - [ ] **7.24** [Fable] [Lane M] The state needs a `TextMeasurer` and a scope,
   so it cannot be created outside composition.
-- [ ] **7.25** [Opus] [Lane M] No word count, no programmatic focus beyond
+- [x] **7.25** [Opus] [Lane M] No word count, no programmatic focus beyond
   `autoFocus`, `cursorDataFlow` has no initial value.
+  Done: `TextEditorState.wordCount` counts the word segments holding a letter
+  or digit in the ICU word breaks that word motion and spell check use, so
+  "don't" is one word, "self-aware" two, emoji and punctuation none, and CJK
+  counts dictionary words (a word processor counts by spaces instead). It is
+  observable in composition and kept per line: a recount segments only the
+  lines that changed, found by identity from both ends. `wordCount(range)`
+  counts the words a range touches. Focus from code is the Compose convention:
+  a `FocusRequester` on the editor's `modifier` (both composables), now
+  documented and tested; no state method, since focus belongs to the
+  composable. `cursorDataFlow` emits the current `CursorData` on collection,
+  and `cursorData` reads it directly. The document gained an internal
+  snapshot-state `revision`, advanced by every published revision, which the
+  word count and the semantics read to recompute.
 
 ## Housekeeping
 
@@ -1832,7 +1846,9 @@ Shaping is one line per keystroke. These still scale with document length:
   revision advanced from `TextEditorState.onCommit` would land in the same
   apply batch as the caret, give every snapshot observer the same signal,
   and need no collectors; do it when `state/TextEditorState.kt` is next open
-  (lane N).
+  (lane N). Half done in 7.25: `TextEditorState.revision` is that counter,
+  advanced wherever `content` is published; the skiko session (lane E) still
+  collects its own.
 
 ## User reports mapped to this roadmap
 

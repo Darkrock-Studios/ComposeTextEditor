@@ -866,6 +866,9 @@ tagging, since these change what downstream code compiles against.
    `resumeSpellChecking` (#90). None of it shipped in a release, so no migration note
    is needed, but confirm nothing in the sample app or docs still references them.
 5. Run `./gradlew updateDocs` and confirm Dokka generates cleanly with the new symbols.
+6. Rich Text Editor demo: the header's word count follows typing, paste, cut and undo
+   at once, and typing in a pasted document of a few thousand lines stays as smooth
+   with the count showing as without (7.25).
 
 ## Sign-off
 
