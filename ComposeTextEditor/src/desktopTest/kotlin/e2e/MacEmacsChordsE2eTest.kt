@@ -100,16 +100,4 @@ class MacEmacsChordsE2eTest {
 		assertEquals("abef", text)
 		assertEquals(2, cursorIndex)
 	}
-
-	@Test
-	fun `ctrl+y is unbound and types nothing`() = editorUiTest(
-		initialText = AnnotatedString("abc"),
-		keyBindings = MacKeyBindings,
-	) {
-		clickAtCharacter(1)
-		press(Key.K, ctrl = true)
-		assertEquals("a", text)
-		press(Key.Y, ctrl = true)
-		assertEquals("a", text)
-	}
 }

@@ -99,6 +99,13 @@ sealed interface EditorCommand {
 			 * deletes the line break instead, joining the next line, like Cocoa's Ctrl+K.
 			 */
 			val DeleteToParagraphEnd = Action("editor.deleteToParagraphEnd", isEdit = true)
+
+			/**
+			 * Inserts what the last kill deleted, over any selection: Cocoa's Ctrl+Y. Deleting
+			 * to the line's start or end or the paragraph's end is a kill, which keeps what it
+			 * deletes in the editor's own kill buffer, never the clipboard.
+			 */
+			val Yank = Action("editor.yank", isEdit = true)
 			val Indent = Action("editor.indent", isEdit = true)
 			val Outdent = Action("editor.outdent", isEdit = true)
 			val NewLine = Action("editor.newLine", isEdit = true)
@@ -141,6 +148,7 @@ sealed interface EditorCommand {
 				DeleteToLineStart,
 				DeleteToLineEnd,
 				DeleteToParagraphEnd,
+				Yank,
 				Indent,
 				Outdent,
 				NewLine,

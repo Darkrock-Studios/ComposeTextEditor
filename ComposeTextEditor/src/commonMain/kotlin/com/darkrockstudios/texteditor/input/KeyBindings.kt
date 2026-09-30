@@ -165,8 +165,8 @@ object WindowsKeyBindings : KeyBindings {
  * end of the word), Option+Up/Down for paragraph jumps, Cmd+Arrow for line and document
  * bounds, and the Emacs-style Ctrl chords of every Cocoa text view: A and E for the
  * paragraph's start and end, F, B, N and P for a character or a row, D and H to delete
- * forward and backward, K to delete to the paragraph end. Ctrl+Y needs a kill ring and is
- * unbound. Every other Ctrl chord selects the same command as the unmodified key, since on
+ * forward and backward, K to delete to the paragraph end, keeping it for Y to yank. Every
+ * other Ctrl chord selects the same command as the unmodified key, since on
  * macOS Ctrl belongs to the system; Enter with Ctrl, Cmd or Option is left for the host.
  *
  * Option is also the macOS compose modifier (Option+8 types '{'), so only the chords claimed here
@@ -283,7 +283,7 @@ private val KeyEvent.isEmacsChord: Boolean
 /**
  * Cocoa's Emacs-style Ctrl chords. A and E are `moveToBeginningOfParagraph:` and
  * `moveToEndOfParagraph:`; the motions extend the selection with Shift, the deletions
- * take none.
+ * and the yank take none.
  */
 private fun emacsCommandFor(event: KeyEvent): EditorCommand? = when (event.key) {
 	Key.A -> Motion.ParagraphStart
@@ -295,6 +295,7 @@ private fun emacsCommandFor(event: KeyEvent): EditorCommand? = when (event.key) 
 	Key.D -> if (event.isShiftPressed) null else Action.DeleteForward
 	Key.H -> if (event.isShiftPressed) null else Action.DeleteBackward
 	Key.K -> if (event.isShiftPressed) null else Action.DeleteToParagraphEnd
+	Key.Y -> if (event.isShiftPressed) null else Action.Yank
 	else -> null
 }
 

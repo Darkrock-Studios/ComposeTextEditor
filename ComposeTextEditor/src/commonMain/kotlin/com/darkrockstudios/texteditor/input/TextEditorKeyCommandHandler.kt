@@ -73,6 +73,7 @@ internal class TextEditorKeyCommandHandler(
 			bound
 		}
 		if (command !is Motion || !command.isVertical) state.cursor.forgetVerticalGoal()
+		if (command !is Action || !state.killRing.isKill(command)) state.killRing.interrupt()
 
 		return when (command) {
 			is Motion -> {

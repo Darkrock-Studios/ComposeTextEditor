@@ -173,7 +173,7 @@ On macOS, verify each:
 | Ctrl+F / Ctrl+B | One character forward / back; with a selection, collapses it |
 | Ctrl+N / Ctrl+P | One row down / up, keeping the column through a short line |
 | Ctrl+D / Ctrl+H | Delete forward / backward |
-| Ctrl+Y | Nothing (no kill ring yet, 2.11) |
+| Ctrl+Y | Yank: puts back what Ctrl+K, Cmd+Backspace or Cmd+Fn+Delete last deleted, over any selection; Ctrl+K pressed several times in a row yanks back as one piece; Cmd+V still pastes the clipboard, which the kills leave alone |
 | Option+8 | Types `{` (unclaimed Option chords must fall through to text) |
 | Cmd+Shift+V / Cmd+Option+Shift+V | Paste as plain text: no copied formatting, takes the style where it lands |
 | Shift+Return | New line |

@@ -80,12 +80,19 @@ internal fun EditorActionRegistry.registerBuiltinActions() {
 		ctx.state.deleteByMotion { ctx.state.moveToPreviousWordStart() }
 	})
 	register(EditorActionSpec(Action.DeleteToLineStart) { ctx ->
-		ctx.state.deleteByMotion { ctx.state.cursor.moveToLineStart() }
+		ctx.state.deleteByMotion(kill = Kill.Backward) { ctx.state.cursor.moveToLineStart() }
 	})
 	register(EditorActionSpec(Action.DeleteToLineEnd) { ctx ->
-		ctx.state.deleteByMotion { ctx.state.moveCursorToVisualRowEnd() }
+		ctx.state.deleteByMotion(kill = Kill.Forward) { ctx.state.moveCursorToVisualRowEnd() }
 	})
 	register(EditorActionSpec(Action.DeleteToParagraphEnd) { it.state.deleteToParagraphEnd() })
+	register(
+		EditorActionSpec(
+			action = Action.Yank,
+			isEnabled = { it.state.killRing.text != null },
+			perform = { it.state.yank() },
+		)
+	)
 
 	register(EditorActionSpec(Action.Indent) { it.state.handleIndent() })
 	register(EditorActionSpec(Action.Outdent) { it.state.handleOutdent() })
@@ -196,15 +203,22 @@ private fun TextEditorState.handleBackspace() {
 	}
 }
 
+private enum class Kill { Forward, Backward }
+
 /**
  * Deletes between the caret and wherever [locateRangeEdge] moves it, or the selection when
- * there is one. The caret the user had is handed to [TextEditorState.delete] explicitly:
- * [locateRangeEdge] has already moved it off that position, and delete otherwise records
- * wherever the caret currently sits as the position undo returns to.
+ * there is one, keeping what goes in the kill ring when this is a [kill]. The caret the
+ * user had is handed to [TextEditorState.delete] explicitly: [locateRangeEdge] has already
+ * moved it off that position, and delete otherwise records wherever the caret currently
+ * sits as the position undo returns to.
  */
-private fun TextEditorState.deleteByMotion(locateRangeEdge: () -> Unit) {
-	if (selector.selection != null) {
+private fun TextEditorState.deleteByMotion(kill: Kill? = null, locateRangeEdge: () -> Unit) {
+	val continuesKill = kill != null && killRing.continuesAt(this)
+	selector.selection?.let { selection ->
+		val killed = kill?.let { getTextInRange(selection) }
 		selector.deleteSelection()
+		// Selecting came between, so a selection starts a kill of its own.
+		if (killed != null) killRing.add(this, killed, kill == Kill.Backward, continues = false)
 		return
 	}
 	val origin = cursorPosition
@@ -217,8 +231,24 @@ private fun TextEditorState.deleteByMotion(locateRangeEdge: () -> Unit) {
 	} else {
 		TextEditorRange(origin, edge)
 	}
+	val killed = kill?.let { getTextInRange(range) }
 	// Never typing, even over one character: a backspace after it is its own step.
 	editManager.recordingAsTyping(false) { delete(range, cursorBefore = origin) }
+	if (killed != null) killRing.add(this, killed, kill == Kill.Backward, continuesKill)
+}
+
+/** Inserts the kill ring's text over the selection, or at the caret, as one step. */
+private fun TextEditorState.yank() {
+	val text = killRing.text ?: return
+	editManager.recordingAsTyping(false) {
+		val selection = selector.selection
+		if (selection != null) {
+			replace(selection, applyStyleForEditAt(selection.start, text))
+		} else {
+			insertStringAtCursor(text)
+		}
+	}
+	selector.clearSelection()
 }
 
 /**
@@ -242,9 +272,15 @@ private fun TextEditorState.deleteToParagraphEnd() {
 	val position = cursorPosition
 	val lineLength = textLines[position.line].length
 	if (selector.selection == null && position.char == lineLength) {
+		val continuesKill = killRing.continuesAt(this)
+		val lineCount = textLines.size
 		deleteAtCursor()
+		// A behavior may claim the delete and keep the line break.
+		if (textLines.size < lineCount) {
+			killRing.add(this, AnnotatedString("\n"), backward = false, continues = continuesKill)
+		}
 	} else {
-		deleteByMotion { cursor.updatePosition(position.copy(char = lineLength)) }
+		deleteByMotion(kill = Kill.Forward) { cursor.updatePosition(position.copy(char = lineLength)) }
 	}
 }
 

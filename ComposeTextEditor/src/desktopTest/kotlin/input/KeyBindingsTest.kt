@@ -345,7 +345,8 @@ class KeyBindingsTest {
 		assertEquals(Action.ToggleInlineCode, MacKeyBindings.commandFor(chord(Key.E, meta = true)))
 		assertNull(MacKeyBindings.commandFor(chord(Key.F)))
 		assertNull(MacKeyBindings.commandFor(chord(Key.D, meta = true)))
-		assertNull(MacKeyBindings.commandFor(chord(Key.Y, ctrl = true)), "no kill ring to yank from")
+		assertEquals(Action.Yank, MacKeyBindings.commandFor(chord(Key.Y, ctrl = true)), "Cocoa's yank:")
+		assertNull(MacKeyBindings.commandFor(chord(Key.Y, ctrl = true, shift = true)))
 	}
 
 	@Test
@@ -354,7 +355,6 @@ class KeyBindingsTest {
 		assertNull(MacKeyBindings.commandFor(chord(Key.X, ctrl = true)))
 		assertNull(MacKeyBindings.commandFor(chord(Key.V, ctrl = true)))
 		assertNull(MacKeyBindings.commandFor(chord(Key.Z, ctrl = true)))
-		assertNull(MacKeyBindings.commandFor(chord(Key.Y, ctrl = true)))
 	}
 
 	@Test

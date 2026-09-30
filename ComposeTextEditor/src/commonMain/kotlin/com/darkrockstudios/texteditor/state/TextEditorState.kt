@@ -31,6 +31,7 @@ import com.darkrockstudios.texteditor.cursor.getWrapForDrawing
 import com.darkrockstudios.texteditor.cursor.getWrappedLineIndex
 import com.darkrockstudios.texteditor.effectiveHeight
 import com.darkrockstudios.texteditor.input.EditorActionRegistry
+import com.darkrockstudios.texteditor.input.KillRing
 import com.darkrockstudios.texteditor.input.TabSettings
 import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
 import com.darkrockstudios.texteditor.richstyle.BlockSpanStyle
@@ -626,6 +627,9 @@ class TextEditorState(
 	 */
 	val actions: EditorActionRegistry = EditorActionRegistry()
 
+	/** What the kill actions deleted, for a yank. */
+	internal val killRing = KillRing()
+
 	/** What Tab and Shift+Tab do: the indent size and character, or moving focus. */
 	var tabSettings: TabSettings by mutableStateOf(TabSettings())
 
@@ -721,7 +725,9 @@ class TextEditorState(
 	 * Cleared immediately rather than at commit, so an edit later in the same
 	 * transaction cannot coalesce into an entry from the old document.
 	 */
+	/** A replaced document starts afresh: no history, and nothing killed from the old one to yank. */
 	private fun clearHistory() {
+		killRing.clear()
 		val restore = editManager.history.clearRestorably()
 		refreshHistoryFlags()
 		onRollback {

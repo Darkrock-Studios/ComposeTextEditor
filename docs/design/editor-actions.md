@@ -81,7 +81,7 @@ host:
 | --- | --- | --- |
 | `CtrlKeyBindings` | Linux, Android, and any other Ctrl host | The base: Ctrl for shortcuts and jumps; going forward stops at ends (GTK, `EditText`) |
 | `WindowsKeyBindings` | Windows desktop, browsers on Windows | Going forward runs on to the next start: Ctrl+Right and Ctrl+Delete to the next word's (`WordRight`, `DeleteWordForward`), Ctrl+Down to the next paragraph's. Word motion stops at line breaks both ways: Ctrl+Left and Ctrl+Backspace from a line start go to the previous line's end (`PreviousWordStart`, `DeleteToPreviousWordStart`) |
-| `MacKeyBindings` | macOS, iPadOS, browsers on macOS | Cmd for shortcuts, Option for word and paragraph jumps; Option+Right and Option+Delete stop at the word end; Cocoa's Emacs-style Ctrl+A, E, F, B, N, P, D, H and K |
+| `MacKeyBindings` | macOS, iPadOS, browsers on macOS | Cmd for shortcuts, Option for word and paragraph jumps; Option+Right and Option+Delete stop at the word end; Cocoa's Emacs-style Ctrl+A, E, F, B, N, P, D, H, K and Y |
 
 Windows and Linux are the same desktop JVM target, so the choice is made at
 runtime from `os.name` (desktop) or the browser's platform and user agent
@@ -185,6 +185,21 @@ exist (roadmap 5.6), and leading spaces in one do not survive a markdown round
 trip, so Tab at the start of a list item does nothing, and Tab over several
 lines indents all but the list items. Shift+Tab still strips leading spaces
 from any line, list items included.
+
+### The kill ring
+
+`editor.deleteToLineStart`, `editor.deleteToLineEnd` and
+`editor.deleteToParagraphEnd` are kills, as Cocoa's `deleteToBeginningOfLine:`,
+`deleteToEndOfLine:` and `deleteToEndOfParagraph:` are: what they delete goes
+in the editor's own kill buffer (`KillRing` on the state), never the clipboard.
+A kill made with the text and the caret as the last kill left them, and no other
+key command between, joins it, after it going forward and in front of it going
+back, so Ctrl+K pressed down a run of lines kills them as one piece; a kill of a
+selection starts afresh. `editor.yank` (Ctrl+Y on macOS) inserts it over any
+selection, as one undo step, keeping its character styling but not its rich
+spans (links, images, list markers), which only Cut and Paste carry. Like
+Cocoa's default the buffer holds one entry, and loading a document empties it.
+The yank is bound on macOS only; elsewhere Ctrl+Y is Redo.
 
 ### The context menu
 

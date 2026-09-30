@@ -640,10 +640,16 @@ fixes what users feel every minute.
   `absoluteOffset`, so a right-to-left layout does not mirror it. The menu was
   already keyboard-navigable (Material's skiko dropdown). See
   `docs/design/editor-actions.md`, "The context menu".
-- [ ] **2.11 Kill ring.** [Opus] [Lane D] Ctrl+K on macOS deletes to the
+- [x] **2.11 Kill ring.** [Opus] [Lane D] Ctrl+K on macOS deletes to the
   paragraph end but keeps nothing. Cocoa saves killed text to a kill ring,
   consecutive kills append to it, and Ctrl+Y yanks it back. Separate from the
   clipboard.
+  Done: Ctrl+K, Cmd+Backspace and Cmd+Fn+Delete (the three Cocoa kill
+  commands) keep what they delete in a one-entry, per-editor `KillRing`, a
+  kill straight after another joins it (after it forward, before it
+  backward), and `Action.Yank` on Ctrl+Y inserts it over any selection as one
+  undo step, with its character styling. See
+  `docs/design/editor-actions.md`, "The kill ring".
 - [x] **2.12 Windows Ctrl+Left stops at the previous line's end.** [Opus]
   [Lane D] Since 1.5 Windows' Ctrl+Right stops at the line end before the next
   line's first word, but `WordLeft` is one motion for every platform, so
