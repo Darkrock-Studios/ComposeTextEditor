@@ -56,8 +56,11 @@ class RangedRelayoutParityTest {
 			assertEquals(expected.wrapStartsAtIndex, actual.wrapStartsAtIndex, "$at: wrapStartsAtIndex")
 			assertEquals(expected.virtualLength, actual.virtualLength, "$at: virtualLength")
 			assertEquals(expected.virtualLineIndex, actual.virtualLineIndex, "$at: virtualLineIndex")
-			assertEquals(expected.offset, actual.offset, "$at: offset")
-			assertEquals(expected.paragraphTop, actual.paragraphTop, "$at: paragraphTop")
+			// The rows' tops are running totals over chunks the two passes cut differently,
+			// so they can differ by a rounding of the last bit, never by a pixel.
+			assertEquals(expected.offset.x, actual.offset.x, "$at: offset.x")
+			assertEquals(expected.offset.y, actual.offset.y, 1e-3f, "$at: offset.y")
+			assertEquals(expected.paragraphTop, actual.paragraphTop, 1e-3f, "$at: paragraphTop")
 			assertEquals(expected.richSpans, actual.richSpans, "$at: richSpans")
 			assertEquals(expected.blockHeight, actual.blockHeight, "$at: blockHeight")
 			assertEquals(expected.orderedListNumber, actual.orderedListNumber, "$at: orderedListNumber")

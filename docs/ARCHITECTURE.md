@@ -174,10 +174,15 @@ The layout pass (`updateBookKeeping`, see below) turns the document into
 paragraph's shaping result, its resolved rich spans, and precomputed draw facts
 (ordered-list numeral, code-fence edge, block height). `LineWrap` is the
 contract between state and view: drawing, hit testing, cursor placement, and
-scrolling consume it and never re-measure text themselves. The rows run line
-by line, each line's by wrap start, and top to bottom with no gaps, so finding
-the row that holds a position or sits at a height is a binary search
-(`RowSearch.kt`), and a frame reads only the rows in view.
+scrolling consume it and never re-measure text themselves. Behind the list is
+a `RowList`: one `LineLayout` per logical line (the shaping result and the
+facts derived for it), chunked like the line list with running row counts and
+heights, so an edit splices the layouts of the lines it touched and every
+other line moves with its chunk; a `LineWrap` is built when it is read. The
+rows run line by line, each line's by wrap start, and top to bottom with no
+gaps, so finding the row that holds a position or sits at a height is a binary
+search (`RowSearch.kt`, answered from the `RowList`'s directory without
+building a row), and a frame reads only the rows in view.
 
 ### The view layer
 
@@ -351,10 +356,13 @@ Text shaping is by far the most expensive work per edit, so the layout pass
 
 - **Shape only the lines whose content changed.** A `LayoutUpdate` describes
   each pass's dirty range, derived centrally from the edit operation itself;
-  unchanged lines reuse their previous shaping result and only their offsets,
-  spans, and numbering are recomputed. Span overlays (spell-check underlines,
-  find highlights) shape nothing at all, and neither does a viewport that
-  changes only its height (a soft keyboard): rows depend on the width alone.
+  unchanged lines keep their layouts in place, and only the lines whose
+  neighbour-derived facts (list numbering, fence edges) change are touched,
+  the walk stopping at the first line that keeps both its facts and its list
+  counters. Span overlays (spell-check underlines, find highlights) shape
+  nothing at all and re-resolve only their lines, and neither does a viewport
+  that changes only its height (a soft keyboard): rows depend on the width
+  alone.
 - **One pass per logical operation.** Relayouts requested inside a transaction
   merge and flush as a single pass at commit, in a fixed order: publish the
   revision, flush the layout, scroll the cursor against the fresh offsets,

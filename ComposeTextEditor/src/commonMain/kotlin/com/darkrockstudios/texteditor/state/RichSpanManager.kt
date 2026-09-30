@@ -63,14 +63,17 @@ class RichSpanManager(
 
 	/**
 	 * Adds every span in [newSpans] in one publish, each coerced onto the current
-	 * document like [clampAllToDocument] does after an edit. Batched overlay callers
+	 * document like [clampAllToDocument] does after an edit, and returns the spans as
+	 * they landed. Batched overlay callers
 	 * (spell check, find) compute ranges asynchronously, so a range can arrive
 	 * pointing past a document that shrank in the meantime; unclamped, such a span is
 	 * invisible, uncollectable by range queries, and still counted by span scans.
 	 */
-	internal fun addRichSpansClamped(newSpans: Collection<RichSpan>) {
+	internal fun addRichSpansClamped(newSpans: Collection<RichSpan>): List<RichSpan> {
 		val lines = state.textLines
-		addRichSpans(newSpans.mapNotNull { clampSpanToLines(it, lines) })
+		val clamped = newSpans.mapNotNull { clampSpanToLines(it, lines) }
+		addRichSpans(clamped)
+		return clamped
 	}
 
 	internal fun removeRichSpan(start: CharLineOffset, end: CharLineOffset, style: RichSpanStyle) {

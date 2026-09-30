@@ -37,23 +37,30 @@ the pass must do:
   runs no pass when the rows are current (the last pass laid out the same
   lines at the same width, with no transaction open): it only moves the
   scroll range.
-- `Partial(remeasureFirst, remeasureLast, lineDelta)`: re-shape only that
-  range, expressed in **post-edit** line indices. `lineDelta` is the post-edit
-  line count minus the pre-edit count. A line after the range reuses its
-  previous `TextLayoutResult`, looked up by its pre-edit index
-  (`index - lineDelta`); a line before the range reuses by its own index.
-- `SpansOnly`: the empty `Partial`. Span overlays changed but no text moved,
-  so nothing re-shapes at all.
+- `Partial(remeasureFirst, remeasureLast, lineDelta, spansFirst, spansLast)`:
+  re-shape only the first range, expressed in **post-edit** line indices.
+  `lineDelta` is the post-edit line count minus the pre-edit count. A line
+  after the range keeps its previous `LineLayout`, found by its pre-edit index
+  (`index - lineDelta`); a line before the range keeps it by its own index.
+  The second range names lines whose spans changed but not their text: they
+  are resolved again (block heights, facts) without shaping.
+- `Spans(first, last)`: the empty shaping range with a spans range. Span
+  overlays changed on those lines but no text moved, so nothing re-shapes.
+  `SpansOnly` is `Spans` over every line, for a caller that cannot name them
+  (a block image finishing its load).
 
-Reused lines still get fresh offsets, freshly resolved spans, and fresh
-ordered-list numbers and code-fence boundaries. The last two are derived from
-whole-document hash sets built each pass, which is what keeps them correct for
-lines outside the dirty range: attaching an ordered-list span to one line can
-renumber a run of lines that were never edited.
+A kept line keeps its layout object; its offset follows from the running
+heights of the row list (section 9.3). The ordered-list numbers and code-fence
+boundaries are derived in line order, and a line records the list counters
+after it, so a partial pass resumes the walk from the line before its range
+and continues past it only while a line's facts or counters change:
+attaching an ordered-list span to one line renumbers the rest of its run and
+stops at the first line it leaves as it was.
 
-Cached span lists are never reused. Edits re-anchor spans into new `RichSpan`
-instances, so a cached list on a shifted line would carry pre-edit ranges into
-drawing and hit testing.
+A row's spans are read from the revision's per-line index when the row is
+built, never cached on a layout: edits re-anchor spans into new `RichSpan`
+instances, and a cached list on a shifted line would carry pre-edit ranges
+into drawing and hit testing.
 
 ### The single producer
 
@@ -66,7 +73,7 @@ producer of operation dirt. It derives the range from the operation itself:
 | Delete | `Partial(start.line, start.line, -(end.line - start.line))` |
 | Replace | `Partial(start.line, start.line + newlines, newlines - deletedLines)` |
 | StyleSpan | `Partial(start.line, end.line, 0)` |
-| RichSpan | `SpansOnly` |
+| RichSpan | `Spans(start.line, end.line)` |
 | LineBlock | `Partial(min touched line, max touched line, 0)` |
 
 The declared `lineDelta` is cross-checked against the line counts the edit
@@ -114,6 +121,8 @@ the other's line coordinates (`LayoutUpdate.mergedWith`):
 - One structural, one stable: union only if the stable range lies entirely
   above the shift point (`stable.last < structural.first`), where no
   coordinate can have moved. Anything else is `Full`.
+- Spans ranges union by the same rule; one over every line names no
+  coordinate, so it survives any shift and covers every line still.
 
 `Full` is always sound, so the merge errs toward it. A partial pass is an
 opportunistic optimization, never a requirement; correctness never depends on
@@ -132,7 +141,7 @@ degrades the update to `Full` when:
   sentinel; a pass the sentinel skips is itself an invalidator, since it
   leaves the rows behind the text), or
 - the previous pass's line count does not equal the current count minus the
-  update's declared delta.
+  update's declared delta, or a structural update names no line to shape.
 
 Because the guards run inside the pass rather than at the call sites, a stale
 or mis-declared `Partial` arriving from anywhere produces a correct (merely
@@ -286,15 +295,19 @@ stands, with nothing to cache).
 A partial pass shapes its lines into new `LineLayout`s and splices them over
 the old ones; the lines after the edit keep their layouts and move with their
 chunk, their tops following from the running heights. The derived facts that
-depend on neighbours are recomputed for the lines whose facts can have
-changed: the list run and the fence run the edit touches (walked up and down
-through the per-line span index, O(run)), plus one line each side for the
-fence edges. A span-only pass (`LayoutUpdate.Spans(first, last)`, which
-replaces the unbounded `SpansOnly` wherever the caller knows its lines)
-rebuilds the `LineLayout`s of those lines without shaping, for their block
-height and facts, and splices them in the same way; the callers that cannot
-say (a block image finishing its load) still pass the whole document, which
-is a pass without shaping, as before.
+depend on neighbours are recomputed from one line above the edit (a fence edge
+depends on its neighbours) with the list counters resumed from that line's
+layout, and the walk continues below the edit only while a line's facts or
+counters differ from what it had: a keystroke inside a long list or fence
+touches its line and its two neighbours, and a span change that renumbers a
+list touches the items it renumbers. A span-only pass
+(`LayoutUpdate.Spans(first, last)`, which replaces the unbounded `SpansOnly`
+wherever the caller knows its lines) resolves the `LineLayout`s of those
+lines again without shaping, for their block heights and facts, and splices
+them the same way; the callers that cannot say (a block image finishing its
+load) still pass the whole document, which is a pass without shaping, as
+before. The `lineOffsets` state is compared by reference, since comparing two
+row lists by content would build every row of both.
 
 The invariants `RowSearch.kt` relies on hold: rows ordered by line, a line's
 rows by wrap start, tops non-decreasing. Section 11 loosens "each row starts

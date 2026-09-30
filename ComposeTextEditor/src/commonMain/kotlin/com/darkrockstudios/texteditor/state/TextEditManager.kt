@@ -100,7 +100,11 @@ class TextEditManager(private val state: TextEditorState) {
 				lineDelta = 0,
 			)
 
-			is TextEditOperation.RichSpan -> LayoutUpdate.SpansOnly
+			// The span is clamped onto the document by updateSpans, so its lines are too.
+			is TextEditOperation.RichSpan -> LayoutUpdate.Spans(
+				operation.range.start.line.coerceIn(0, newLineCount - 1),
+				operation.range.end.line.coerceIn(0, newLineCount - 1),
+			)
 
 			is TextEditOperation.LineBlock -> lineBlockLayoutUpdate(operation.lines)
 		}
@@ -117,7 +121,7 @@ class TextEditManager(private val state: TextEditorState) {
 	 */
 	private fun lineBlockLayoutUpdate(changes: List<LineBlockChange>): LayoutUpdate.Partial {
 		val lines = changes.map { it.lineIndex }
-		return if (lines.isEmpty()) LayoutUpdate.SpansOnly
+		return if (lines.isEmpty()) LayoutUpdate.Spans(0, -1)
 		else LayoutUpdate.Partial(lines.min(), lines.max(), 0)
 	}
 

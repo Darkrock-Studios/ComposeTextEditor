@@ -28,19 +28,20 @@ internal fun DrawScope.DrawEditorText(
 	val rows = state.lineOffsets
 	val firstVisible = rows.firstRowEndingAtOrBelow(minY)
 	val lastVisible = rows.lastRowAtOrAbove(maxY)
+	// Read once: the editor's rows are built on read.
+	val visible = List(maxOf(0, lastVisible - firstVisible + 1)) { rows[firstVisible + it] }
 
 	// Pass 1: paint backgrounds for every visible virtual line BEFORE any text
 	// is drawn. Opaque fills (e.g. a code-fence card) need to land here so the
 	// text painted in pass 2 sits on top instead of being covered. Foreground
 	// rich-span decorations (bullets, borders, underlines) still run in pass 2
 	// after the text so they overlay correctly.
-	for (index in firstVisible..lastVisible) {
-		drawRichSpans(rows[index], state, phase = RichSpanDrawPhase.Background)
+	for (virtualLine in visible) {
+		drawRichSpans(virtualLine, state, phase = RichSpanDrawPhase.Background)
 	}
 
 	var lastLine = -1
-	for (index in firstVisible..lastVisible) {
-		val virtualLine = rows[index]
+	for (virtualLine in visible) {
 		if (lastLine != virtualLine.line && state.textLines.size > virtualLine.line) {
 			// drawText paints from sub-line 0 down; anchor at the paragraph top so a
 			// mid-paragraph entry (earlier sub-lines culled above the viewport) doesn't

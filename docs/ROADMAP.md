@@ -1821,7 +1821,20 @@ Shaping is one line per keystroke. These still scale with document length:
   edit splices the chunk or two it touches and shares the rest, and a line's
   flat character index is a prefix total in place of the per-revision
   `lineStartOffsets` table (`LineListCostTest`; `DocumentTextCostTest` now
-  counts through the readers themselves).
+  counts through the readers themselves). The rows are chunked the same way
+  (`state/RowList.kt`, one `LineLayout` per line with its rows' bounds and
+  tops, block heights, facts and list counters): a keystroke splices its
+  line's layout and walks its neighbours only while their facts change, a
+  span change resolves its lines without shaping (`LayoutUpdate.Spans`), and
+  a `LineWrap` is built when read, with the four row searches answered from
+  the directory (`RowListCostTest`). Desktop JVM at 200k characters: a
+  keystroke with relayout 837 µs to 174 µs (971 µs to 174 µs run to run),
+  the typing frame 725 µs to 708 µs (the frame is the drawing). The
+  benchmark's "whole text per revision" reads 141 µs against 7.9's 25 µs
+  after this: the splice itself measures 22 µs on a snapshot alone, and 48 µs
+  after a keystroke with the heap collected, so the difference is the young
+  collection the keystroke used to trigger while it rebuilt every row, now
+  landing inside the measured build instead.
 - [x] **7.9** [Opus] [Lane N] `getAllText()` rebuilds the whole document per
   revision when read by semantics, the Android IME, and the desktop adapter.
   214 µs per revision at 200k characters on the desktop JVM (4.21).

@@ -2,12 +2,6 @@ package com.darkrockstudios.texteditor.state
 
 import androidx.compose.ui.text.AnnotatedString
 
-/** The most lines a chunk holds; a splice re-chunks its region to at most this. */
-internal const val MAX_CHUNK_SIZE = 64
-
-/** The fewest lines a chunk holds, unless the whole document is smaller. */
-internal const val MIN_CHUNK_SIZE = 32
-
 /**
  * The document's lines, chunked: an immutable, random-access `List<AnnotatedString>`
  * whose [splice] shares every chunk it does not touch with this list, so an edit
@@ -38,11 +32,7 @@ internal class LineList private constructor(
 		val size: Int get() = lines.size
 	}
 
-	/**
-	 * The chunk the last read hit. Sequential reads and the edits at the caret keep
-	 * hitting it. A plain field: a stale or torn read only costs the binary search.
-	 */
-	private var hint = 0
+	private val hint = ChunkHint()
 
 	/** How many lines [get] has handed out, for the cost tests; a torn increment loses a count and nothing else. */
 	var reads = 0
@@ -92,89 +82,41 @@ internal class LineList private constructor(
 		if (from < 0 || from > to || to > size) throw IndexOutOfBoundsException("lines $from until $to of $size")
 		if (from == to && replacement.isEmpty()) return this
 		if (chunks.isEmpty()) return of(replacement)
-		var first = chunkOfLine(minOf(from, size - 1))
-		var last = if (to > from) chunkOfLine(to - 1) else first
-		// Absorb a neighbour rather than leave a chunk under the minimum.
-		if ((from - firstLine[first]) + replacement.size + (firstLine[last + 1] - to) < MIN_CHUNK_SIZE) {
-			if (last + 1 < chunks.size) last++ else if (first > 0) first--
-		}
-		// The touched chunks' lines outside [from, to), with the replacement at from.
-		val region = arrayOfNulls<AnnotatedString>(firstLine[last + 1] - firstLine[first] - (to - from) + replacement.size)
-		var filled = 0
-		for (chunk in first..last) {
-			val base = firstLine[chunk]
-			val lines = chunks[chunk].lines
-			for (index in lines.indices) {
-				val line = base + index
-				if (line == from) for (added in replacement) region[filled++] = added
-				if (line < from || line >= to) region[filled++] = lines[index]
-			}
-		}
-		if (from == size) for (added in replacement) region[filled++] = added
-
+		val touched = touchedChunks(firstLine, chunks.size, from, to, replacement.size)
+		val region = spliceRegion(firstLine, touched, from, to, replacement) { chunks[it].lines }
+		val rechunked = chunk(region)
+		val result = arrayOfNulls<Chunk>(touched.first + rechunked.size + (chunks.size - touched.last - 1))
+		chunks.copyInto(result, 0, 0, touched.first)
+		rechunked.copyInto(result, touched.first)
+		chunks.copyInto(result, touched.first + rechunked.size, touched.last + 1, chunks.size)
 		@Suppress("UNCHECKED_CAST")
-		val rechunked = chunk(region as Array<AnnotatedString>)
-		val newChunks = arrayOfNulls<Chunk>(first + rechunked.size + (chunks.size - last - 1))
-		chunks.copyInto(newChunks, 0, 0, first)
-		rechunked.copyInto(newChunks, first)
-		chunks.copyInto(newChunks, first + rechunked.size, last + 1, chunks.size)
-		@Suppress("UNCHECKED_CAST")
-		val result = newChunks as Array<Chunk>
-		val newFirstLine = IntArray(result.size + 1)
-		val newFirstChar = IntArray(result.size + 1)
-		firstLine.copyInto(newFirstLine, 0, 0, first + 1)
-		firstChar.copyInto(newFirstChar, 0, 0, first + 1)
-		for (index in first until result.size) {
-			newFirstLine[index + 1] = newFirstLine[index] + result[index].size
-			newFirstChar[index + 1] = newFirstChar[index] + result[index].starts[result[index].size]
+		return of(result as Array<Chunk>, touched.first, firstLine, firstChar).also {
+			it.hint.chunk = minOf(touched.first, result.size - 1).coerceAtLeast(0)
 		}
-		return LineList(result, newFirstLine, newFirstChar).also { it.hint = minOf(first, result.size - 1).coerceAtLeast(0) }
 	}
 
-	private fun chunkOfLine(line: Int): Int {
-		val hinted = hint
-		if (hinted < chunks.size && line >= firstLine[hinted] && line < firstLine[hinted + 1]) return hinted
-		val found = lastAtOrBefore(firstLine, chunks.size, line)
-		hint = found
-		return found
-	}
+	private fun chunkOfLine(line: Int): Int = hint.find(firstLine, chunks.size, line)
 
 	companion object {
 		/** [lines] as a chunked list, or [lines] itself when it already is one. */
-		fun of(lines: List<AnnotatedString>): LineList {
-			if (lines is LineList) return lines
-			val chunks = chunk(lines.toTypedArray())
-			val firstLine = IntArray(chunks.size + 1)
-			val firstChar = IntArray(chunks.size + 1)
-			for (index in chunks.indices) {
-				firstLine[index + 1] = firstLine[index] + chunks[index].size
-				firstChar[index + 1] = firstChar[index] + chunks[index].starts[chunks[index].size]
+		fun of(lines: List<AnnotatedString>): LineList = lines as? LineList ?: of(chunk(lines.toTypedArray()), 0, IntArray(1), IntArray(1))
+
+		/** A list of [chunks] whose directory matches [firstLine] and [firstChar] up to chunk [unchangedBefore]. */
+		private fun of(chunks: Array<Chunk>, unchangedBefore: Int, firstLine: IntArray, firstChar: IntArray): LineList {
+			val newFirstLine = IntArray(chunks.size + 1)
+			val newFirstChar = IntArray(chunks.size + 1)
+			firstLine.copyInto(newFirstLine, 0, 0, unchangedBefore + 1)
+			firstChar.copyInto(newFirstChar, 0, 0, unchangedBefore + 1)
+			for (index in unchangedBefore until chunks.size) {
+				newFirstLine[index + 1] = newFirstLine[index] + chunks[index].size
+				newFirstChar[index + 1] = newFirstChar[index] + chunks[index].starts[chunks[index].size]
 			}
-			return LineList(chunks, firstLine, firstChar)
+			return LineList(chunks, newFirstLine, newFirstChar)
 		}
 
-		/** [lines] cut into chunks of at most [MAX_CHUNK_SIZE], as even as they can be. */
 		private fun chunk(lines: Array<AnnotatedString>): Array<Chunk> {
-			if (lines.isEmpty()) return emptyArray()
-			val count = (lines.size + MAX_CHUNK_SIZE - 1) / MAX_CHUNK_SIZE
-			val base = lines.size / count
-			val extra = lines.size % count
 			var from = 0
-			return Array(count) { index ->
-				val size = base + if (index < extra) 1 else 0
-				Chunk(lines.copyOfRange(from, from + size)).also { from += size }
-			}
-		}
-
-		/** The last index in `0 until count` whose [starts] entry is at or before [value]; 0 when none is. */
-		private fun lastAtOrBefore(starts: IntArray, count: Int, value: Int): Int {
-			var low = 0
-			var high = count - 1
-			while (low < high) {
-				val mid = (low + high + 1) ushr 1
-				if (starts[mid] <= value) low = mid else high = mid - 1
-			}
-			return low
+			return chunkSizes(lines.size).map { size -> Chunk(lines.copyOfRange(from, from + size)).also { from += size } }.toTypedArray()
 		}
 	}
 }

@@ -3,6 +3,7 @@ package com.darkrockstudios.texteditor.state
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.referentialEqualityPolicy
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -21,7 +22,6 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
 import com.darkrockstudios.texteditor.CharLineOffset
-import com.darkrockstudios.texteditor.CodeFenceBoundary
 import com.darkrockstudios.texteditor.LineWrap
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.annotatedstring.normalizeLineEndings
@@ -42,12 +42,7 @@ import com.darkrockstudios.texteditor.input.KillRing
 import com.darkrockstudios.texteditor.input.TabSettings
 import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
 import com.darkrockstudios.texteditor.richstyle.BlockSpanStyle
-import com.darkrockstudios.texteditor.richstyle.CodeFenceSpanStyle
 import com.darkrockstudios.texteditor.richstyle.LineBlockEditBehavior
-import com.darkrockstudios.texteditor.richstyle.MAX_LIST_LEVEL
-import com.darkrockstudios.texteditor.richstyle.OrderedListSpanStyle
-import com.darkrockstudios.texteditor.richstyle.listBlock
-import com.darkrockstudios.texteditor.richstyle.listLevel
 import com.darkrockstudios.texteditor.richstyle.RichSpan
 import com.darkrockstudios.texteditor.richstyle.RichSpanStyle
 import com.darkrockstudios.texteditor.richstyle.normalizeLineBlocks
@@ -473,7 +468,12 @@ class TextEditorState(
 	 */
 	internal var canvasPositionInRoot by mutableStateOf(Offset.Unspecified)
 
-	private var _lineOffsets by mutableStateOf(emptyList<LineWrap>())
+	// Referential: every pass publishes a new list, and comparing two by content would
+	// build every row of both.
+	private var _lineOffsets by mutableStateOf<List<LineWrap>>(emptyList(), referentialEqualityPolicy())
+
+	/** The laid-out rows, the same object [_lineOffsets] holds once a pass has run. */
+	private var rows: RowList? = null
 
 	/**
 	 * Guards partial relayout. [layoutInputGeneration] advances whenever an input that
@@ -483,7 +483,6 @@ class TextEditorState(
 	 */
 	private var layoutInputGeneration = 0
 	private var lastLayoutGeneration = -1
-	private var lastLayoutLineCount = -1
 
 	/** The viewport width the last completed pass shaped to; rows depend on no other viewport dimension. */
 	private var lastLayoutWidth = -1f
@@ -1367,57 +1366,107 @@ class TextEditorState(
 			return
 		}
 
+		val content = content
+		val lines = content.lineList
+		val spans = content.richSpansByLine
+		val previous = rows
+
 		// A partial pass is only sound against the exact layout the last pass produced.
 		// Degrade to full when the cache is missing, a full invalidator (style, measurer,
 		// density, viewport, normalization) fired since, or the line count disagrees
 		// with the update's own delta; reusing stale layouts corrupts every consumer.
 		val partial = (update as? LayoutUpdate.Partial)?.takeIf {
-			_lineOffsets.isNotEmpty() &&
+			previous != null &&
 					lastLayoutGeneration == layoutInputGeneration &&
-					lastLayoutLineCount == textLines.size - it.lineDelta
+					previous.lineCount == lines.size - it.lineDelta &&
+					(it.lineDelta == 0 || it.remeasureFirst <= it.remeasureLast)
 		}
 
-		val previousLayouts: Map<Int, TextLayoutResult>? = if (partial != null) {
-			HashMap<Int, TextLayoutResult>(lastLayoutLineCount * 2).also { map ->
-				for (wrap in _lineOffsets) {
-					if (!map.containsKey(wrap.line)) map[wrap.line] = wrap.textLayoutResult
-				}
+		val laidOut = if (partial == null) layoutAll(lines, spans) else layoutPartial(previous!!, partial, lines, spans)
+		if (laidOut === previous) return
+		rows = laidOut
+		_lineOffsets = laidOut
+		// Rounded up so the last row's fraction of a pixel is still in reach.
+		scrollManager.updateContentHeight(ceil(laidOut.lastRowBottom()).toInt())
+		lastLayoutGeneration = layoutInputGeneration
+		lastLayoutWidth = viewportSize.width
+		lastLayoutLines = lines
+	}
+
+	/** A full pass: every line shaped, every fact derived in line order. */
+	private fun layoutAll(lines: LineList, spans: Map<Int, List<RichSpan>>): RowList {
+		val shaper = LineShaper()
+		val facts = LineFacts(spans)
+		val width = viewportSize.width
+		val layouts = ArrayList<LineLayout>(lines.size)
+		for (line in 0 until lines.size) {
+			facts.next(line)
+			layouts += LineLayout.of(shaper.shape(lines[line]), line, spans[line].orEmpty(), density, width, facts)
+		}
+		return RowList.of(layouts, spans)
+	}
+
+	/**
+	 * A partial pass: [update]'s lines shaped or re-resolved, with a line each side for
+	 * the fence edges, then the lines after them walked until one keeps its layout and
+	 * its list counters, past which nothing can change; the result is spliced over
+	 * [previous]. Every other line keeps its layout and moves with its chunk.
+	 */
+	private fun layoutPartial(
+		previous: RowList,
+		update: LayoutUpdate.Partial,
+		lines: LineList,
+		spans: Map<Int, List<RichSpan>>,
+	): RowList {
+		val lastLine = lines.size - 1
+		val shapeFirst = update.remeasureFirst
+		val shapeLast = minOf(update.remeasureLast, lastLine)
+		val spansFirst = update.spansFirst.coerceAtLeast(0)
+		val spansLast = minOf(update.spansLast, lastLine)
+		val shapes = shapeFirst <= shapeLast
+		val respans = spansFirst <= spansLast
+		if (!shapes && !respans) return previous.withSpans(spans)
+
+		val first = (minOf(if (shapes) shapeFirst else Int.MAX_VALUE, if (respans) spansFirst else Int.MAX_VALUE) - 1).coerceAtLeast(0)
+		val end = (maxOf(if (shapes) shapeLast else -1, if (respans) spansLast else -1) + 1).coerceAtMost(lastLine)
+		// A line after the shaped range had its layout at its pre-edit index.
+		fun oldIndex(line: Int) = if (shapes && line > shapeLast) line - update.lineDelta else line
+
+		val facts = LineFacts(spans)
+		if (first > 0) facts.resume(previous.layoutOf(oldIndex(first - 1)).counters)
+		val shaper = LineShaper()
+		val width = viewportSize.width
+		val layouts = ArrayList<LineLayout>(end - first + 2)
+		var line = first
+		while (line <= lastLine) {
+			facts.next(line)
+			val old = if (line in shapeFirst..shapeLast) null else previous.layoutOf(oldIndex(line))
+			val layout = when {
+				old == null -> LineLayout.of(shaper.shape(lines[line]), line, spans[line].orEmpty(), density, width, facts)
+				line in spansFirst..spansLast -> old.withSpans(line, spans[line].orEmpty(), density, width, facts)
+				else -> old.withFacts(facts)
 			}
-		} else null
-
-		val offsets = mutableListOf<LineWrap>()
-		var yOffset = 0f
-
-		// Pre-collect the list lines with their kind and level, so each ordered
-		// item is numbered by its position in its level's run without re-scanning
-		// the span set per line. Counters per level: a level-k item continues its
-		// level's run and restarts every deeper level; a bullet at a level or any
-		// non-list line ends the run at and below it.
-		val listLines = HashMap<Int, Pair<Boolean, Int>>()
-		richSpanManager.getAllRichSpans().forEach { span ->
-			val list = span.style.listBlock() ?: return@forEach
-			listLines[span.range.start.line] = (list.spanStyle is OrderedListSpanStyle) to list.listLevel!!
+			layouts += layout
+			if (line >= end && layout === old) break
+			line++
 		}
-		val orderedCounters = IntArray(MAX_LIST_LEVEL + 1)
+		// The walk never stops inside the shaped range, whose old lines end at its last line's pre-edit index.
+		val stop = minOf(line, lastLine)
+		val oldEnd = if (shapes && stop >= shapeLast) stop - update.lineDelta + 1 else stop + 1
+		return previous.splice(first, oldEnd, layouts, spans)
+	}
 
-		// Pre-collect code-fence line indices so each line can compute its boundary
-		// (top/middle/bottom/only) by checking neighbors — driving which edges of
-		// the card border `CodeFenceSpanStyle` paints.
-		val codeFenceLines = richSpanManager.getAllRichSpans()
-			.asSequence()
-			.filter { it.style === CodeFenceSpanStyle }
-			.map { it.range.start.line }
-			.toHashSet()
-
+	/** Shapes lines with the style, indent baking and width of one layout pass. */
+	private inner class LineShaper {
 		// Compose Android doesn't reliably honor per-paragraph ParagraphStyle
 		// .textIndent overriding an editor-wide TextStyle.textIndent, so we
 		// sidestep the merge: strip the indent from the outer style and bake it
-		// into plain lines as their own ParagraphStyle below. Block lines
+		// into plain lines as their own ParagraphStyle. Block lines
 		// already carry a ParagraphStyle from `applyLineBlock`.
-		val outerIndent = textStyle.textIndent
-		val needsIndentBaking = outerIndent != null && outerIndent != TextIndent.None
-		val measureStyle = if (needsIndentBaking) textStyle.copy(textIndent = TextIndent.None) else textStyle
-		val bakedIndentStyle = if (needsIndentBaking) ParagraphStyle(textIndent = outerIndent) else null
+		private val outerIndent = textStyle.textIndent
+		private val needsIndentBaking = outerIndent != null && outerIndent != TextIndent.None
+		private val measureStyle = if (needsIndentBaking) textStyle.copy(textIndent = TextIndent.None) else textStyle
+		private val bakedIndentStyle = if (needsIndentBaking) ParagraphStyle(textIndent = outerIndent) else null
 
 		// Use a tight width constraint (minWidth == maxWidth) so the paragraph lays out
 		// at the full viewport width rather than shrinking to its natural content width.
@@ -1425,124 +1474,28 @@ class TextEditorState(
 		// shrinks to its natural width W and then TextIndent consumes X pixels of
 		// first-line width, the first line has only W-X pixels available instead of
 		// viewportWidth-X, causing wraps that shouldn't happen.
-		val lineConstraints = Constraints(
+		private val constraints = Constraints(
 			minWidth = maxOf(1, viewportSize.width.toInt()),
 			maxWidth = maxOf(1, viewportSize.width.toInt()),
 			minHeight = 0,
 			maxHeight = Constraints.Infinity
 		)
 
-		textLines.forEachIndexed { lineIndex, line ->
-			// Lines outside the dirty range kept their content; only their position
-			// changed, so their previous shaping result is reused as-is.
-			val cachedLayout: TextLayoutResult? = when {
-				partial == null -> null
-				lineIndex < partial.remeasureFirst -> previousLayouts?.get(lineIndex)
-				lineIndex > partial.remeasureLast -> previousLayouts?.get(lineIndex - partial.lineDelta)
-				else -> null
-			}
-
-			val textLayoutResult = cachedLayout ?: run {
-				// Skip if the line already has a ParagraphStyle (block line):
-				// Compose forbids overlapping ParagraphStyle ranges.
-				val measureLine = if (bakedIndentStyle != null && line.paragraphStyles.isEmpty()) {
-					buildAnnotatedString { withStyle(bakedIndentStyle) { append(line) } }
-				} else {
-					line
-				}
-				try {
-					textMeasurer.measure(
-						text = measureLine,
-						style = measureStyle,
-						constraints = lineConstraints
-					)
-				} catch (_: IllegalArgumentException) {
-					// If measurement fails, create an empty layout result
-					textMeasurer.measure(
-						text = AnnotatedString(""),
-						style = measureStyle,
-						constraints = lineConstraints
-					)
-				}
-			}
-
-			val virtualLineCount = textLayoutResult.multiParagraph.lineCount
-			val paragraphTop = yOffset
-
-			val listLine = listLines[lineIndex]
-			val orderedListNumber: Int? = if (listLine == null) {
-				orderedCounters.fill(0)
-				null
+		fun shape(line: AnnotatedString): TextLayoutResult {
+			// Skip if the line already has a ParagraphStyle (block line):
+			// Compose forbids overlapping ParagraphStyle ranges.
+			val measureLine = if (bakedIndentStyle != null && line.paragraphStyles.isEmpty()) {
+				buildAnnotatedString { withStyle(bakedIndentStyle) { append(line) } }
 			} else {
-				val (ordered, level) = listLine
-				for (deeper in level + 1..MAX_LIST_LEVEL) orderedCounters[deeper] = 0
-				if (ordered) {
-					orderedCounters[level] += 1
-					orderedCounters[level]
-				} else {
-					orderedCounters[level] = 0
-					null
-				}
+				line
 			}
-
-			val codeFenceBoundary: CodeFenceBoundary? = if (lineIndex in codeFenceLines) {
-				val prevIn = (lineIndex - 1) in codeFenceLines
-				val nextIn = (lineIndex + 1) in codeFenceLines
-				when {
-					!prevIn && !nextIn -> CodeFenceBoundary.Only
-					!prevIn -> CodeFenceBoundary.First
-					!nextIn -> CodeFenceBoundary.Last
-					else -> CodeFenceBoundary.Middle
-				}
-			} else null
-
-			for (virtualLineIndex in 0 until virtualLineCount) {
-				val lineWrapsAt = textLayoutResult.getLineStart(virtualLineIndex)
-
-				val lineLength =
-					textLayoutResult.getLineEnd(virtualLineIndex) - textLayoutResult.getLineStart(
-						virtualLineIndex
-					)
-
-				val lineWrap = LineWrap(
-					line = lineIndex,
-					wrapStartsAtIndex = lineWrapsAt,
-					virtualLength = lineLength,
-					virtualLineIndex = virtualLineIndex,
-					offset = Offset(0f, yOffset),
-					textLayoutResult = textLayoutResult,
-					paragraphTop = paragraphTop,
-				)
-
-				// Spans are re-resolved even for reused layouts: after a line-shifting
-				// edit the span set holds re-anchored copies, so a cached list would
-				// carry pre-edit ranges into drawing and hit testing.
-				val richSpans = richSpanManager.getSpansForLineWrap(lineWrap)
-
-				val blockHeight = density?.let { d ->
-					richSpans.firstNotNullOfOrNull { span ->
-						(span.style as? BlockSpanStyle)?.blockHeight(d, viewportSize.width)
-					}
-				}
-
-				val resolved = lineWrap.copy(
-					richSpans = richSpans,
-					blockHeight = blockHeight,
-					orderedListNumber = orderedListNumber,
-					codeFenceBoundary = codeFenceBoundary,
-				)
-				offsets.add(resolved)
-				yOffset += resolved.effectiveHeight
+			return try {
+				textMeasurer.measure(text = measureLine, style = measureStyle, constraints = constraints)
+			} catch (_: IllegalArgumentException) {
+				// If measurement fails, create an empty layout result
+				textMeasurer.measure(text = AnnotatedString(""), style = measureStyle, constraints = constraints)
 			}
 		}
-
-		_lineOffsets = offsets
-		// Rounded up so the last row's fraction of a pixel is still in reach.
-		scrollManager.updateContentHeight(ceil(yOffset).toInt())
-		lastLayoutLineCount = textLines.size
-		lastLayoutGeneration = layoutInputGeneration
-		lastLayoutWidth = viewportSize.width
-		lastLayoutLines = textLines
 	}
 
 	/**
@@ -1603,10 +1556,21 @@ class TextEditorState(
 		// the removals and the additions sees the batch half-applied.
 		withAtomicEdit {
 			richSpanManager.removeRichSpans(remove)
-			richSpanManager.addRichSpansClamped(add)
-			// Span overlays don't move text, so the flushed pass re-resolves spans
-			// and offsets without shaping a single line.
-			updateBookKeeping(LayoutUpdate.SpansOnly)
+			val added = richSpanManager.addRichSpansClamped(add)
+			// Span overlays don't move text, so the flushed pass re-resolves the
+			// lines they touch (the added ones where they landed) without shaping a
+			// single line.
+			var first = Int.MAX_VALUE
+			var last = -1
+			for (span in remove) {
+				first = minOf(first, span.range.start.line)
+				last = maxOf(last, span.range.end.line)
+			}
+			for (span in added) {
+				first = minOf(first, span.range.start.line)
+				last = maxOf(last, span.range.end.line)
+			}
+			updateBookKeeping(LayoutUpdate.Spans(first, last))
 		}
 	}
 
