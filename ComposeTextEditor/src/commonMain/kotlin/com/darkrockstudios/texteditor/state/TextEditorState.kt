@@ -41,6 +41,7 @@ import com.darkrockstudios.texteditor.rowIndexOf
 import com.darkrockstudios.texteditor.input.EditorActionRegistry
 import com.darkrockstudios.texteditor.input.KeyboardSettings
 import com.darkrockstudios.texteditor.input.KillRing
+import com.darkrockstudios.texteditor.input.imeActionFor
 import com.darkrockstudios.texteditor.input.TabSettings
 import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
 import com.darkrockstudios.texteditor.richstyle.BlockSpanStyle
@@ -753,7 +754,8 @@ class TextEditorState(
 
 	/**
 	 * Called with the action when the soft keyboard's action key
-	 * ([KeyboardSettings.imeAction]) is pressed. Null leaves the key to the default that
+	 * ([KeyboardSettings.imeAction]) is pressed, or Enter in a single-line editor, where
+	 * the default action is Done. Null leaves the key to the default that
 	 * [KeyboardSettings.imeAction] describes.
 	 */
 	var onImeAction: ((ImeAction) -> Unit)? = null
@@ -764,6 +766,9 @@ class TextEditorState(
 	internal fun performImeAction(action: ImeAction) {
 		(onImeAction ?: defaultImeAction)?.invoke(action)
 	}
+
+	/** The action key the keyboard shows, which a single line's Enter presses too. */
+	internal fun effectiveImeAction(): ImeAction = keyboardSettings.imeActionFor(isSingleLine)
 
 	/**
 	 * Screens every edit that adds text, from the user or the editing functions, but not
@@ -777,9 +782,11 @@ class TextEditorState(
 	 */
 	internal var singleLineEditors by mutableIntStateOf(0)
 
+	internal val isSingleLine: Boolean get() = singleLineEditors > 0
+
 	internal val effectiveInputFilter: EditorInputFilter?
 		get() {
-			if (singleLineEditors == 0) return inputFilter
+			if (!isSingleLine) return inputFilter
 			return inputFilter?.let { EditorInputFilter.SingleLine then it } ?: EditorInputFilter.SingleLine
 		}
 

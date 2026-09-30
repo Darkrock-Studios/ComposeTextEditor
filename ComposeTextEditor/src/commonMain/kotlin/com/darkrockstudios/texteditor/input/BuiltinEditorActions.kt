@@ -420,4 +420,9 @@ private fun leadingOutdentWidth(line: AnnotatedString, tabSize: Int): Int {
 	return count
 }
 
-private fun TextEditorState.handleEnter() = insertTypedNewline()
+// A single line has no line to start: Enter presses the action key, as in a single-line BasicTextField.
+private fun TextEditorState.handleEnter() {
+	if (!isSingleLine) return insertTypedNewline()
+	val action = effectiveImeAction()
+	if (!action.startsLine) performImeAction(action)
+}

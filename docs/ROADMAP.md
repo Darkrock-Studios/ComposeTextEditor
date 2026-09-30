@@ -1393,7 +1393,10 @@ iOS Safari; browser tests run in CI.
   request's `onImeAction` to `TextEditorState.performImeAction`, and
   restart the session when the settings change, as Android does. Web also
   forces `autocapitalize` to `sentences` (4.11), which should follow the
-  settings' capitalisation.
+  settings' capitalisation. Since 7.40 a single-line editor
+  (`TextEditorState.isSingleLine`) asks for `singleLine = true` and its action
+  key from `TextEditorState.effectiveImeAction()` (Done by default); a
+  hardware Enter already presses it on every platform.
 - [x] **4.31 Android's cursor anchor misses a view that moves alone. C.**
   [Opus] [Lane F] The anchor is resent when the caret moves in the view
   (3.10), but a view that moves on screen with nothing in the editor changing
@@ -1881,12 +1884,30 @@ iOS Safari; browser tests run in CI.
   event and `ClipboardEventsEffect` answers nothing: Ctrl+C falls back to
   `navigator.clipboard`, plain text only, and fails where the page may not
   write the clipboard.
-- [ ] **7.40** [Opus] [Lane F] A single-line editor (7.13) still asks the
+- [x] **7.40** [Opus] [Lane F] A single-line editor (7.13) still asks the
   soft keyboard for multi-line text (Android's `TYPE_TEXT_FLAG_MULTI_LINE`;
   iOS the same), so with the default `KeyboardSettings.imeAction` the keyboard
   shows a return key that now does nothing. A single line should ask for
   single-line text and default its action key to Done, and a hardware Enter
   should run `onImeAction` as the keyboard's action key does.
+  Done: on Android a single line drops `TYPE_TEXT_FLAG_MULTI_LINE` and
+  `IME_FLAG_NO_ENTER_ACTION`, and `KeyboardSettings.imeActionFor` makes its
+  default action Done, which the connection's action key presses; the line
+  limit coming or going restarts input as a settings change does
+  (`KeyboardSettingsTest`). Enter (and Shift+Enter) in a single-line editor
+  presses `TextEditorState.effectiveImeAction()` through the host's
+  `onImeAction` or the default, on every platform, as a single-line
+  `BasicTextField` does, and with `ImeAction.None` does nothing
+  (`e2e/SingleLineEnterE2eTest.kt`). Checked on an emulator (API 36, Gboard,
+  the sample's Single line switch): `dumpsys input_method` showed
+  `inputType=0xc001 imeOptions=0x12000006` (no multi-line flag, Done) with
+  a Done key on the keyboard, `adb shell input keyevent 66` hid the keyboard
+  and added no line, and switching back restarted input with the multi-line
+  type while the keyboard was up. Like the single-line filter, the limit is
+  the state's: a multi-line editor sharing a state with a single-line one
+  takes it too. The iOS and web
+  keyboards are 4.32. The semantics' `onImeAction` still reads the setting
+  alone (7.59).
 - [ ] **7.41** [Fable] [Lane C] No soft-wrap toggle: every line wraps at the
   viewport width, so a code editor cannot keep a line whole and scroll
   sideways, and `EditorLineLimits.SingleLine` (7.13) wraps and grows where
@@ -2494,6 +2515,11 @@ Shaping is one line per keystroke. These still scale with document length:
   because leading spaces in an item did not survive a markdown round trip.
   Since 7.45 they do (`- &nbsp;&nbsp;item`), so decide whether Tab there
   should insert the indent text, as it does inside an item's text.
+- [ ] **7.59** [Opus] [Lane M] The semantics offer `onImeAction` from
+  `KeyboardSettings.imeAction` alone, so a single-line editor's default
+  action key, Done since 7.40, is not offered to accessibility services and
+  tests as a single-line `BasicTextField`'s is. Read
+  `TextEditorState.effectiveImeAction()` instead.
 
 ## Housekeeping
 

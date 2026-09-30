@@ -865,7 +865,9 @@ Rich Text Editor demo.
    paste. TalkBack reads the limit ("280 characters maximum" or similar).
 2. Turn on Single line. Press Enter, paste two lines. **Expect:** Enter adds nothing;
    the pasted line break becomes a space; the editor is one line tall and grows as the
-   line wraps.
+   line wraps. On Android the soft keyboard shows a Done key instead of a return key,
+   and Done and a hardware Enter both hide it (7.40); turning Single line off brings
+   the return key back.
 
 ## 8b2. Saved state (Android)
 

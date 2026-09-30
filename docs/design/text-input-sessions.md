@@ -128,7 +128,8 @@ any departure from it.
 `createInputConnection` returns a `TextEditorInputConnection` bound to the
 session's view and populates `EditorInfo`: the input type and action from the
 host's `TextEditorState.keyboardSettings` (by default multi-line text with
-autocorrect and sentence caps, Enter as a new line), no fullscreen extract UI,
+autocorrect and sentence caps, Enter as a new line; single-line text with Done
+for an editor limited to one line), no fullscreen extract UI,
 the initial selection in flat character indices, the caps mode at the caret,
 and, from API 30, the text around the caret. The action key a connection was
 opened with calls the host's `onImeAction`, or the default the modifier node
