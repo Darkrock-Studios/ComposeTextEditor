@@ -4,6 +4,7 @@ import androidx.compose.ui.graphics.Color
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.richstyle.RichSpan
+import com.darkrockstudios.texteditor.spellcheck.utils.replaceFlagged
 import com.darkrockstudios.texteditor.state.TextEditOperation
 import com.darkrockstudios.texteditor.state.TextEditorState
 import kotlinx.coroutines.Dispatchers
@@ -126,11 +127,15 @@ class TextDiagnosticsState(
 		if (doomed.isNotEmpty()) textState.updateRichSpans(remove = doomed, add = emptyList())
 	}
 
-	/** Replaces the text under [span], a diagnostic's underline, with [fix], unless a refresh has since replaced it. */
+	/**
+	 * Replaces the text under [span], a diagnostic's underline, with [fix], unless a refresh has since
+	 * replaced it. The underline goes once [fix] has landed as given, and stays when the input filter
+	 * refuses it, as [com.darkrockstudios.texteditor.spellcheck.SpellCheckState.correctSpelling] keeps a
+	 * flag.
+	 */
 	fun applyFix(span: RichSpan, fix: String) {
 		if (span !in textState.richSpanManager.getAllRichSpans()) return
-		textState.updateRichSpans(remove = listOf(span), add = emptyList())
-		textState.replace(span.range, fix, true)
+		textState.replaceFlagged(span.range, fix) { it.style === span.style }
 	}
 
 	private fun reconcile(textFound: List<List<LineDiagnostic>>?) {

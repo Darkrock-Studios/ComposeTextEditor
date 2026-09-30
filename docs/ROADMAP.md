@@ -2196,11 +2196,19 @@ Shaping is one line per keystroke. These still scale with document length:
   menu for the span at the caret, and the standard one elsewhere. Done through a
   hook instead, `TextEditorContextMenuState.onOpenedAtCaret`, which the editor
   calls once the keyboard's menu is open.
-- [ ] **7.44** [Opus] [Lane K] `correctSpelling`, `applySentenceCorrection` and
+- [x] **7.44** [Opus] [Lane K] `correctSpelling`, `applySentenceCorrection` and
   `applyFix` drop the flag before the replacement, which `TextEditorState.inputFilter`
   or a single-line limit (7.13) may cut short or refuse: the word is left unflagged and
   uncorrected, or partly replaced, until the next re-check. Keep the flag when the
   filter changes the replacement.
+  Done: the three replace first and clear the flags on and touching the text only
+  when it landed as given (`replaceFlagged`). A refused replacement is no edit, so
+  nothing would re-check it: the text and its flag stay as they were. A changed
+  one is an edit like any other, left to the edit's re-check: keeping the flag
+  there was tried and dropped, since the flag describes text that is gone, in
+  `SpellCheckingTextEditor` the edit's invalidation removes it at once, and without
+  that it marks text nothing has checked. A fix removes only its own underline, as
+  before (`SpellCheckStateTest`, `TextDiagnosticsStateTest`).
 
 ### Host API
 
@@ -2269,6 +2277,11 @@ Shaping is one line per keystroke. These still scale with document length:
   through a flagged word leaves one undo step per character, and its undo puts the
   decoration back where its owner no longer tracks it. `withoutErasedRun` already
   ignores decorations; the merge and the restore should too.
+- [ ] **7.55** [Opus] [Lane G] `TextEditorState.replace` and `insertText` return
+  nothing, so a caller cannot tell whether the input filter (7.13) refused or
+  changed its text. Find (7.42) and spell check (7.44) infer it from the line
+  list's identity and the change in length, which a behavior that edits during the
+  same call would throw off. Return what landed, or null when refused.
 
 ## Housekeeping
 
