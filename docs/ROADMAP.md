@@ -1720,11 +1720,18 @@ iOS Safari; browser tests run in CI.
   starting after a replace no longer has its end moved along a later line by the
   replacement's column shift. A line break in the text is 7.43's
   (`state/CollapsedReplaceSpansTest.kt`).
-- [ ] **6.23 Line endings are normalised per entry point. C.** [Opus] [Lane G]
+- [x] **6.23 Line endings are normalised per entry point. C.** [Opus] [Lane G]
   6.8 normalises in `insertStringAtCursor`, `replace`, `setText`, the IME and
   paste; an operation built directly and handed to `applyOperation` (the
   semantics `setText`'s insert, found in 7.3's rebase) skips all of them.
-  Normalise once where `Insert` and `Replace` are applied.
+  Normalise once where `Insert` and `Replace` are applied. Done:
+  `applyOperation` normalises an insert's or replace's text (and a replace's
+  `oldText`) before the input filter sees it and again after, and a caret put
+  after the text lands after what lands; `screenInput` does the same for the
+  paths that screen first, so a filter never lands a carriage return.
+  `insertStringAtCursor` and `replace` no longer normalise for themselves; the
+  IME, typed text, paste and drop still normalise where they need the landed
+  length or spot an Enter (`state/OperationLineEndingsTest.kt`).
 
 ### Clipboard
 

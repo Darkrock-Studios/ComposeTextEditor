@@ -1068,26 +1068,11 @@ class TextEditorState(
 	 * for any embedded line breaks.
 	 */
 	fun insertStringAtCursor(text: AnnotatedString) {
-		@Suppress("NAME_SHADOWING")
-		val text = text.normalizeLineEndings()
-		val styledText = cursor.applyCursorStyle(text)
-
-		// Calculate cursor position after insertion, accounting for newlines
-		val textString = text.text
-		val lastNewlineIndex = textString.lastIndexOf('\n')
-		val cursorAfter = if (lastNewlineIndex >= 0) {
-			val newlineCount = textString.count { it == '\n' }
-			val charsAfterLastNewline = textString.length - lastNewlineIndex - 1
-			CharLineOffset(cursorPosition.line + newlineCount, charsAfterLastNewline)
-		} else {
-			CharLineOffset(cursorPosition.line, cursorPosition.char + text.length)
-		}
-
 		val operation = TextEditOperation.Insert(
 			position = cursorPosition,
-			text = styledText,
+			text = cursor.applyCursorStyle(text),
 			cursorBefore = cursorPosition,
-			cursorAfter = cursorAfter
+			cursorAfter = text.endWhenInsertedAt(cursorPosition),
 		)
 		editManager.applyOperation(operation)
 	}
@@ -1129,8 +1114,6 @@ class TextEditorState(
 	 * [range] is empty) the style an insert at the range's end would take.
 	 */
 	fun replace(range: TextEditorRange, newText: AnnotatedString, inheritStyle: Boolean = false) {
-		@Suppress("NAME_SHADOWING")
-		val newText = newText.normalizeLineEndings()
 		val operation = TextEditOperation.Replace(
 			range = range,
 			newText = newText,
@@ -1153,20 +1136,7 @@ class TextEditorState(
 				}
 			},
 			cursorBefore = cursorPosition,
-			cursorAfter = when {
-				newText.contains('\n') -> {
-					val lines = newText.split('\n')
-					CharLineOffset(
-						range.start.line + lines.size - 1,
-						if (lines.size > 1) lines.last().length else range.start.char + newText.length
-					)
-				}
-
-				else -> CharLineOffset(
-					range.start.line,
-					range.start.char + newText.length
-				)
-			},
+			cursorAfter = newText.endWhenInsertedAt(range.start),
 			inheritStyle = inheritStyle,
 		)
 

@@ -6,6 +6,7 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
+import com.darkrockstudios.texteditor.annotatedstring.normalizeLineEndings
 import com.darkrockstudios.texteditor.annotatedstring.splitAnnotatedString
 import com.darkrockstudios.texteditor.annotatedstring.withInheritedStyles
 import com.darkrockstudios.texteditor.richstyle.LineBlockStyle
@@ -129,8 +130,10 @@ class TextEditManager(private val state: TextEditorState) {
 	}
 
 	fun applyOperation(requested: TextEditOperation, addToHistory: Boolean = true) {
-		// Undo and redo replay edits the filter already let through.
-		val screened = if (addToHistory) screen(requested) ?: return else requested
+		val normalized = requested.withNormalizedLineEndings()
+		// Undo and redo replay edits the filter already let through. What a filter
+		// returns is normalised again.
+		val screened = if (addToHistory) screen(normalized)?.withNormalizedLineEndings() ?: return else normalized
 		// Resolved before anything reads it, so what is applied, recorded, and
 		// announced is one and the same operation.
 		val operation = if (screened is TextEditOperation.Replace) resolveInheritedStyle(screened) else screened
@@ -328,6 +331,38 @@ class TextEditManager(private val state: TextEditorState) {
 		}
 		return metadata
 	}
+
+	/**
+	 * This operation with `\r\n` and lone `\r` in its text turned into `\n`, the one
+	 * place every inserted text passes. A caret its builder put after the text, as
+	 * counted before, goes after what lands; one put anywhere else stays.
+	 */
+	private fun TextEditOperation.withNormalizedLineEndings(): TextEditOperation = when (this) {
+		is TextEditOperation.Insert -> {
+			val normalized = text.normalizeLineEndings()
+			if (normalized === text) this else copy(
+				text = normalized,
+				cursorAfter = endAfterNormalizing(text, normalized, position, cursorAfter),
+			)
+		}
+		is TextEditOperation.Replace -> {
+			val normalized = newText.normalizeLineEndings()
+			val old = oldText.normalizeLineEndings()
+			if (normalized === newText && old === oldText) this else copy(
+				newText = normalized,
+				oldText = old,
+				cursorAfter = endAfterNormalizing(newText, normalized, range.start, cursorAfter),
+			)
+		}
+		else -> this
+	}
+
+	private fun endAfterNormalizing(
+		raw: AnnotatedString,
+		normalized: AnnotatedString,
+		start: CharLineOffset,
+		cursorAfter: CharLineOffset,
+	): CharLineOffset = if (cursorAfter == raw.endWhenInsertedAt(start)) normalized.endWhenInsertedAt(start) else cursorAfter
 
 	private fun TextEditOperation.isNoOp(): Boolean = when (this) {
 		is TextEditOperation.Insert -> text.isEmpty()

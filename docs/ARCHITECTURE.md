@@ -335,10 +335,11 @@ plus a flat set of `RichSpan` decorations. Every mutation publishes a whole new
 snapshot, so a reader on any thread always sees a complete, self-consistent
 revision.
 
-Lines are separated by `\n` alone. Every path text enters by (`setText`, the
-insert and replace calls, typed and IME text, paste, markdown and HTML parsing)
-turns `\r\n` and a lone `\r` into `\n` first, so no line holds a carriage
-return (`setDocument` alone takes its lines as given). Copy writes `\n`; converting to a platform's native line ending is the
+Lines are separated by `\n` alone. `TextEditManager.applyOperation` turns
+`\r\n` and a lone `\r` into `\n` in every insert and replace it applies, whoever
+built it, and the paths that load or parse text (`setText`, markdown and HTML
+parsing) do the same, so no line holds a carriage return (`setDocument` alone
+takes its lines as given). Copy writes `\n`; converting to a platform's native line ending is the
 platform clipboard's job (AWT does it on Windows).
 
 `setDocument` is the inverse of `snapshot()`: it loads a snapshot, rich spans
