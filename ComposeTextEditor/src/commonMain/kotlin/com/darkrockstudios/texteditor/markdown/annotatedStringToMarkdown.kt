@@ -71,14 +71,19 @@ internal fun AnnotatedString.toMarkdown(
 		?: emptyList()
 
 	// Shrinks a run onto its text: CommonMark emphasis cannot open before or close
-	// after whitespace — "**word **" is literal asterisks to any parser, and
-	// re-importing it escalates into escaped garbage. Null once nothing is left.
+	// after whitespace ("**word **" is literal asterisks to any parser, and
+	// re-importing it escalates into escaped garbage), and the importer cannot
+	// read an emphasis delimiter's own character escaped against it
+	// ("**x \***"), so an edge character equal to the delimiter is left outside
+	// the run, unstyled; the highlight pre-pass reads "==\=x==" as meant. Null
+	// once nothing is left.
 	fun trimRun(run: MarkerRun): MarkerRun? {
 		if (!run.marker.trimsWhitespaceEdges) return run
+		val delimiter = run.marker.openMarker[0].takeIf { it != '=' }
 		var start = run.start
 		var end = run.end
-		while (start < end && text[start].isWhitespace()) start++
-		while (end > start && text[end - 1].isWhitespace()) end--
+		while (start < end && (text[start].isWhitespace() || text[start] == delimiter)) start++
+		while (end > start && (text[end - 1].isWhitespace() || text[end - 1] == delimiter)) end--
 		return if (start >= end) null else MarkerRun(start, end, run.marker)
 	}
 
@@ -148,26 +153,35 @@ internal fun AnnotatedString.toMarkdown(
 	var nextRun = 0
 	val open = ArrayDeque<MarkerRun>()
 
-	// [nextMarker] is the marker emitted right after the text up to [target],
-	// if any: a `=` beside a `==` highlight delimiter must be escaped or it
-	// merges with the delimiter and shifts the highlight on re-import.
+	// Prose is escaped only where a character would start markdown syntax in
+	// its position, the emitter's own delimiters counted as neighbours; see
+	// markdownEscapes.
+	val escapes = markdownEscapes(
+		text,
+		linkTexts = links.map { it.first },
+		markerBoundaries = ordered.flatMapTo(HashSet()) { listOf(it.start, it.end) },
+	)
+
+	// A `=` beside a `==` highlight delimiter the emitter writes must be escaped
+	// or it merges with the delimiter and shifts the highlight on re-import:
+	// [afterHighlightMarker] says one was just written, [nextMarker] is the
+	// marker written right after the text up to [target]. A `==` in the text
+	// itself is the positional pass's concern.
+	var afterHighlightMarker = false
 	fun appendTextTo(target: Int, nextMarker: StyleMarkerPair? = null) {
 		// CommonMark code spans take their content literally (backslash escapes do
 		// not apply), so raw characters are emitted inside a code span; escaping
 		// them would double the escapes on each export.
 		while (currentIndex < target) {
 			val ch = text[currentIndex]
-			val besideEquals = ch == '=' && (
-				result.endsWith('=') ||
-					text.getOrNull(currentIndex + 1) == '=' ||
-					(currentIndex + 1 == target && nextMarker == DOUBLE_EQUALS_MARKER)
-				)
+			val besideMarker = ch == '=' &&
+				(afterHighlightMarker || (currentIndex + 1 == target && nextMarker == DOUBLE_EQUALS_MARKER))
 			when {
 				codeSpanDepth > 0 -> result.append(ch)
-				// `==` opens a highlight; a lone `=` is prose.
-				besideEquals -> result.append("\\=")
-				else -> result.append(escapeMarkdownChar(ch))
+				besideMarker || escapes[currentIndex] -> result.append('\\').append(ch)
+				else -> result.append(ch)
 			}
+			afterHighlightMarker = false
 			currentIndex++
 		}
 	}
@@ -183,6 +197,7 @@ internal fun AnnotatedString.toMarkdown(
 			val closing = open.removeLast()
 			if (closing.marker.closeMarker == "`") codeSpanDepth--
 			result.append(closing.marker.closeMarker)
+			afterHighlightMarker = closing.marker == DOUBLE_EQUALS_MARKER
 			if (closing.marker.closeMarker == "\n") {
 				// Avoid duplicate newlines
 				if (currentIndex < text.length && text[currentIndex] == '\n') currentIndex++
@@ -196,6 +211,7 @@ internal fun AnnotatedString.toMarkdown(
 				if (!result.endsWith("\n") && result.isNotEmpty()) result.append("\n")
 			}
 			result.append(opening.marker.openMarker)
+			afterHighlightMarker = opening.marker == DOUBLE_EQUALS_MARKER
 			if (opening.marker.openMarker == "`") codeSpanDepth++
 			open.addLast(opening)
 		}
@@ -203,7 +219,7 @@ internal fun AnnotatedString.toMarkdown(
 
 	appendTextTo(text.length)
 
-	return escapeOrderedListMarkers(result.toString())
+	return result.toString()
 }
 
 private data class MarkerRun(val start: Int, val end: Int, val marker: StyleMarkerPair)

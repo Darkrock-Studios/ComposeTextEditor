@@ -95,8 +95,9 @@ class MarkdownEditRoundTripTest {
 		e.editorState.cursor.moveRight(100)
 		e.editorState.insertCharacterAtCursor('Z')
 		val md = e.exportAsMarkdown()
-		// The "-" between the two bold runs must remain unbolded.
-		assertEquals("**He**\\-**loZ**", md)
+		// The "-" between the two bold runs must remain unbolded; it needs no
+		// escape, since both runs flank it correctly.
+		assertEquals("**He**-**loZ**", md)
 	}
 
 	@Test

@@ -156,8 +156,9 @@ private val INDENTED_CODE_LINE = Regex("""^(?: {4}|\t)""")
  * every marker the line's spans account for, so whatever still looks like one is
  * literal text and must not reach the GFM parser bare, or it parses as markup
  * and the author's characters are consumed. The parser strips the escapes back
- * out via `removeMarkdownEscapes`. Ordered markers go through export's own
- * escape helper so the two sides cannot drift apart.
+ * out via `removeMarkdownEscapes`. This is broader than export's escaping,
+ * which leaves `1.2.3` alone: a peeled body is foreign text, and a marker
+ * shape with nothing after it is still safer escaped.
  */
 private fun String.escapeResidualMarker(): String {
 	escapeOrderedListMarkers(this).let { if (it != this) return it }
@@ -293,11 +294,14 @@ class MarkdownExtension(
 		// one, except that a list's items and a fence's lines stay together, and
 		// an editor's own blank line is written as itself, one more than the
 		// separator before it. See ParagraphSeparator.
+		// A table kept as literal text stays one block for other renderers.
+		val tableRows = tableRowIndices(lines.map { it.text })
 		fun needsSeparator(line: Int): Boolean {
 			if (!separateParagraphs || line + 1 >= lines.size || isBlankLine(line)) return false
 			val next = line + 1
 			if (line in codeFenceLines && next in codeFenceLines) return false
 			if (isList(line) && isList(next)) return false
+			if (line in tableRows && next in tableRows) return false
 			return true
 		}
 

@@ -99,8 +99,16 @@ ever discard is a marker on empty content.
 
 **Export** walks lines from one snapshot, prepending each block's
 `markdownPrefix` in emission order, then converting the body with markdown
-escaping. Escaping is the safety net for plain text: a literal `- ` at the
-start of a plain paragraph exports as `\- ` and survives.
+escaping. Escaping is the safety net for plain text, applied only where a
+character would start or end syntax in its position (`markdownEscapes`): a
+literal `- ` at the start of a plain paragraph exports as `\- ` and survives,
+`*not*` in dialogue is escaped by CommonMark's flanking rules, and an
+apostrophe, a hyphen mid-sentence, an underscore inside a word or an asterisk
+between spaces is written as typed. Line-start rules read the body, so a
+marker shape at the start of a list item's body (`- 1990. plans`) is escaped
+as well, since it would otherwise nest a list. Unsupported syntax kept as
+literal text on import (a table, a task list's `[ ]`) is written back as it
+was, and a table's rows are kept together.
 
 **Import** runs peel-then-classify on each raw line, after fence stripping:
 
@@ -220,6 +228,8 @@ consequences of its own.
 - Toggling a style off after a blanket apply does not restore the styles lines
   carried before the apply; undo does. This matches conventional toolbar
   behavior.
+- A table is literal text: import unescapes a `\|` inside a cell and export
+  writes the pipe bare, so such a cell splits in two for other renderers.
 - A fence language filled in by normalization is outside undo history: joining
   a fence that has a language with one that has none tags the second with the
   first's, and undoing the join leaves that tag in place.

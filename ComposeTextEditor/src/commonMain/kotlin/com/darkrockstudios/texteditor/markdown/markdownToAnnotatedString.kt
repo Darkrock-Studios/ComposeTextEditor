@@ -69,8 +69,8 @@ private fun String.withHighlightTags(): String {
 	if (!contains("==")) return this
 	val lines = lines()
 	val out = StringBuilder(length + 16)
+	val tableRows = tableRowIndices(lines)
 	var fence: String? = null
-	var inTable = false
 	var inIndentedCode = false
 	var previousBlank = true
 	lines.forEachIndexed { index, line ->
@@ -88,10 +88,7 @@ private fun String.withHighlightTags(): String {
 				out.append(line)
 			}
 
-			line.isBlank() -> {
-				inTable = false
-				out.append(line)
-			}
+			line.isBlank() -> out.append(line)
 
 			// An indented code block starts only where a block can start.
 			inIndentedCode && indented || indented && previousBlank -> {
@@ -99,13 +96,10 @@ private fun String.withHighlightTags(): String {
 				out.append(line)
 			}
 
-			inTable || isTableHeader(line, lines.getOrNull(index + 1)) -> {
-				inTable = true
-				out.append(line)
-			}
+			index in tableRows -> out.append(line)
 
 			// A setext heading is not rendered; its node is kept as raw text.
-			lines.getOrNull(index + 1)?.let(SETEXT_UNDERLINE::matches) == true -> out.append(line)
+			lines.getOrNull(index + 1)?.let(SETEXT_UNDERLINE_LINE::matches) == true -> out.append(line)
 
 			else -> out.appendLineWithHighlightTags(line)
 		}
@@ -115,20 +109,6 @@ private fun String.withHighlightTags(): String {
 	return out.toString()
 }
 
-private val TABLE_DELIMITER_ROW = Regex("""^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$""")
-private val SETEXT_UNDERLINE = Regex("""^ {0,3}(=+|-+)\s*$""")
-
-/** A GFM table header: a row followed by a delimiter row with a pipe and the same cell count. */
-private fun isTableHeader(line: String, next: String?): Boolean {
-	if (next == null || !line.contains('|') || !next.contains('|')) return false
-	if (!TABLE_DELIMITER_ROW.matches(next)) return false
-	return tableCellCount(line) == tableCellCount(next)
-}
-
-private fun tableCellCount(row: String): Int {
-	val cells = row.trim().removePrefix("|").removeSuffix("|").split('|')
-	return cells.size
-}
 
 private class HighlightDelimiter(val index: Int, val canOpen: Boolean, val canClose: Boolean)
 

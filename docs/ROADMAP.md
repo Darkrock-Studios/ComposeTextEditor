@@ -1862,9 +1862,18 @@ Shaping is one line per keystroke. These still scale with document length:
 
 ### Markdown export
 
-- [ ] **7.14** [Fable] [Lane I] Every special character in prose is escaped, so
+- [x] **7.14** [Fable] [Lane I] Every special character in prose is escaped, so
   ordinary prose comes out backslash-heavy, and unsupported syntax kept as
-  literal text on import (tables, task lists) is exported escaped.
+  literal text on import (tables, task lists) is exported escaped. Done: a
+  character is escaped only where it would start or end syntax in its
+  position (`markdownEscapes` in `markdown/MarkdownEscaping.kt`): emphasis
+  runs by CommonMark's flanking rules (so `*not*` in dialogue is escaped and
+  `a * b` and `snake_case` are not), `==` pairs likewise, backticks always,
+  `[` only before a `](` or `][` or as `[^`, `<` before a tag or autolink,
+  `&` before an entity, a backslash before punctuation or at a line's end,
+  and at a line's start a heading, quote, list or `1984.` marker, a thematic
+  break or a setext underline. A table's rows are kept together by export.
+  The acceptance corpus is `markdown/ProseEscapingTest.kt`.
 - [x] **7.15** [Fable] [Lane I] Paragraphs are exported with single newlines;
   other CommonMark renderers merge adjacent paragraphs. Done: an editor line
   is a paragraph. Export writes a blank line after every block (not between a
@@ -1879,6 +1888,24 @@ Shaping is one line per keystroke. These still scale with document length:
   paragraph gaps lose those gaps on first import under the new rule (their
   blank line reads as the separator) unless the host imports them with
   `NEWLINE`. See `docs/design/line-blocks.md`, "Paragraphs".
+- [ ] **7.45** [Opus] [Lane I] A line indented by four spaces or a tab (Tab
+  on a plain line, 2.9) is an indented code block to CommonMark, and a
+  paragraph per line (7.15) makes every such line a block start. Export
+  writes the spaces as they are, so other renderers show the line as code
+  and import reads it as literal text with its indentation. Decide the
+  markdown form of a leading indent (`&nbsp;`, a non-breaking space, or no
+  form and a stripped indent) and write it into `docs/design/line-blocks.md`.
+- [ ] **7.46** [Opus] [Lane H] The markdown importer reads `color` and
+  `font-size` out of an inline `style` attribute (7.16,
+  `markdown/InlineHtml.kt`) with its own CSS declaration walk, and the HTML
+  paste importer has another (`forEachDeclaration` in
+  `html/htmlToAnnotatedString.kt`) that ignores both properties. Share one
+  walk and read colour and size on paste too, so paste and import agree.
+- [ ] **7.47** [Opus] [Lane H] HTML export and import flatten nested lists
+  once 5.6 lands: `<li>` inside `<ul>` inside `<li>` imports at level 0, and
+  a nested item exports as a sibling. Serialize the level as nested `<ul>`
+  and `<ol>` elements (`html/HtmlExtension.kt`,
+  `html/htmlToAnnotatedString.kt`).
 - [x] **7.16** [Opus] [Lane I] No markdown form for underline, highlight,
   colour, or size, so they are lost. Code fence language tags are dropped.
   Done. Inline styles: underline is `<u>` (Obsidian and Typora write it,
@@ -2053,6 +2080,10 @@ Shaping is one line per keystroke. These still scale with document length:
 - [x] `docs/design/text-input-sessions.md` describes iOS as routing through
   the shared IME logic; it does not yet (4.2). True since 4.2's Linux part.
 - [ ] `getOffsetAtCharacter` returns a negative char for negative input.
+- [ ] The sample app's toolbar Highlight button attaches a `HighlightSpanStyle`
+  rich span (`sample.HIGHLIGHT`), which markdown export does not serialize;
+  the markdown form of a highlight is the configuration's `highlightStyle`
+  span style (7.16), which the button should toggle instead.
 - [x] `rememberTextEditorStyle` leaves `backgroundColor` out of its `remember`
   keys, so a new background colour is ignored until another key changes.
 - [ ] The document content is not snapshot state, so the skiko input session
