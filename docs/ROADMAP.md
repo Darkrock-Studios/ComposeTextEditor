@@ -302,6 +302,10 @@ editor does rather than what it should do.
   measures `" "` as the editor does. `./gradlew check` is green on macOS.
   Side note for 7.13: an empty document's one row is that half pixel taller
   than a row of text, so typing the first character shrinks it slightly.
+  macOS part done: the `desktop-macos` job in `ci-build.yml` runs the three
+  desktop suites on `macos-26`, beside the Ubuntu `check` and the `ios` job.
+  Still open: Windows, the Android emulator, browser automation, and an iOS
+  simulator smoke test that runs the app rather than only building it.
 - [ ] **0.8 Real OS input, nightly.** [Opus] [Lane L] Drive the sample app on a
   virtual Linux display with a dead-key layout. Most expensive, so last.
 
