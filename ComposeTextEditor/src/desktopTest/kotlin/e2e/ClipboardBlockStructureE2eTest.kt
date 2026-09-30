@@ -30,7 +30,8 @@ import kotlin.test.assertTrue
 @OptIn(ExperimentalComposeUiApi::class)
 class ClipboardBlockStructureE2eTest {
 
-	private val document = "Intro line\n\n- First item\n- Second item\n\n> A quoted line\n\nEnd."
+	// Two blank lines in the file are one in the editor: the first is the block separator.
+	private val document = "Intro line\n\n\n- First item\n- Second item\n\n\n> A quoted line\n\n\nEnd."
 
 	private fun TextEditorState.linesWith(style: RichSpanStyle): List<Int> =
 		richSpanManager.getAllRichSpans()

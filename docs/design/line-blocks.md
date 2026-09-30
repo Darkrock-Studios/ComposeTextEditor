@@ -118,6 +118,36 @@ HTML import and export share the same block attachment path and derive their
 container nesting from the same snapshot walk, so both serializers agree on
 what a line's blocks are.
 
+### Paragraphs
+
+An editor line is a markdown paragraph. CommonMark joins adjacent lines into
+one paragraph and reads a line after a list item or a quote as its
+continuation, so writing lines with single newlines, though the editor's own
+importer reads them back, makes every other renderer merge them. Under
+`MarkdownConfiguration.paragraphSeparator = BLANK_LINE` (the default) export
+puts one blank line after every block (a paragraph, heading, rule, image, or
+the last line of a list or fence) except between the items of one list and
+the lines of one fence, which stay together; inside a quote the blank line is
+a bare `>` so the quote continues. An editor's own blank line is then written
+as itself after that separator, so k blank editor lines between two blocks
+are k + 1 blank lines in the file, and none is one. Import is the inverse:
+after each block (a fenced line, or any line that is not blank; a bare `>`
+line is blank) the one blank line export would have written there is left
+out, and the rest are the editor's. Import reads the same line kinds as
+export, so it leaves out only what export writes: nothing between two fenced
+lines or two list items, a bare `>` only between two quoted lines, an empty
+line otherwise; and it keeps a blank line before a line indented like code,
+which the editor never writes and whose block needs it. The mapping is a
+bijection on the editor's own output, so the round trip is exact; a foreign
+file's single blank line between two fences, list items or quotes stays and
+keeps them apart, its single soft break still imports as two lines and is
+written back as two paragraphs, and its extra blank lines beyond the first
+are kept as editor blank lines. A blank line is a line with blank text and no
+block but a quote: an empty list item, heading or fenced line is a block.
+`NEWLINE` keeps the old rule, a line per source line, for documents that
+must not change on the next save; `importMarkdown` also takes the rule to
+read one file by, for a host opening files written under the other.
+
 ### Fence languages
 
 A fence's info string (` ```kotlin `) is not a line block: it belongs to the

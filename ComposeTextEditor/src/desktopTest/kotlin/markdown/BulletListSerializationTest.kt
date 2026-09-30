@@ -108,7 +108,7 @@ class BulletListSerializationTest {
 	fun `export emits dash prefix for bullet line`() = runTest {
 		val extension = createMarkdownExtension()
 		extension.importMarkdown("before\n- item\nafter")
-		assertEquals("before\n- item\nafter", extension.exportAsMarkdown())
+		assertEquals("before\n\n- item\n\nafter", extension.exportAsMarkdown())
 	}
 
 	@Test
@@ -130,7 +130,7 @@ class BulletListSerializationTest {
 	@Test
 	fun `roundtrip preserves bullet alongside HR`() = runTest {
 		val extension = createMarkdownExtension()
-		val original = "- item\n---\nbody"
+		val original = "- item\n\n---\n\nbody"
 		extension.importMarkdown(original)
 		assertEquals(original, extension.exportAsMarkdown())
 	}
@@ -138,7 +138,7 @@ class BulletListSerializationTest {
 	@Test
 	fun `roundtrip preserves bullet alongside blockquote`() = runTest {
 		val extension = createMarkdownExtension()
-		val original = "> quoted\n- item"
+		val original = "> quoted\n\n- item"
 		extension.importMarkdown(original)
 		assertEquals(original, extension.exportAsMarkdown())
 	}
@@ -418,7 +418,7 @@ class BulletListSerializationTest {
 	@Test
 	fun `backspace at start of empty line below bullet preserves bullet on the merged line`() = runTest {
 		val extension = createMarkdownExtension()
-		extension.importMarkdown("- third item\n\nbody")
+		extension.importMarkdown("- third item\n\n\nbody")
 		val state = extension.editorState
 
 		// Cursor at start of the empty line (line 1) — backspace merges that line

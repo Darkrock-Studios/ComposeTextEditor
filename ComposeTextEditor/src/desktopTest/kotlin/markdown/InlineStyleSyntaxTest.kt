@@ -371,7 +371,7 @@ class InlineStyleSyntaxTest {
 			"- item with <span style=\"color:#00ff00\">green</span> text",
 			"> quoted <span style=\"font-size:24px\">large</span> words",
 			"**bold ==and lit== end**",
-		).joinToString("\n")
+		).joinToString("\n\n")
 		e.importMarkdown(markdown)
 		val first = e.exportAsMarkdown()
 		assertEquals(markdown, first)

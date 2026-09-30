@@ -18,6 +18,19 @@ import androidx.compose.ui.unit.sp
 enum class HighlightSyntax { DOUBLE_EQUALS, MARK_TAG }
 
 /**
+ * What an editor line is in markdown terms.
+ *
+ * [BLANK_LINE]: a line is a paragraph. Export puts a blank line between
+ * blocks (not between the items of one list or the lines of one fence), as
+ * CommonMark needs to keep them apart, and writes an editor's own blank line
+ * as one more; import takes one blank line after each block away again, so
+ * the editor's round trip is exact and other renderers show every line as its
+ * own paragraph. [NEWLINE]: a line is a source line, written and read as is;
+ * other renderers then merge adjacent lines into one paragraph.
+ */
+enum class ParagraphSeparator { BLANK_LINE, NEWLINE }
+
+/**
  * Configurable markdown style settings to customize how markdown elements
  * are rendered and parsed in the text editor.
  *
@@ -46,6 +59,7 @@ data class MarkdownConfiguration(
 	),
 	val highlightStyle: SpanStyle = SpanStyle(background = Color(0xFFFFF176)),
 	val highlightSyntax: HighlightSyntax = HighlightSyntax.DOUBLE_EQUALS,
+	val paragraphSeparator: ParagraphSeparator = ParagraphSeparator.BLANK_LINE,
 	val blockquoteStyle: SpanStyle = SpanStyle(
 		color = Color.Gray,
 		fontStyle = FontStyle.Italic

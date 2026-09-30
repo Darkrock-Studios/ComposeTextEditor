@@ -92,7 +92,7 @@ class BlockquoteSerializationTest {
 	fun `export emits gt prefix for blockquote line`() = runTest {
 		val extension = createMarkdownExtension()
 		extension.importMarkdown("before\n> a quote\nafter")
-		assertEquals("before\n> a quote\nafter", extension.exportAsMarkdown())
+		assertEquals("before\n\n> a quote\n\nafter", extension.exportAsMarkdown())
 	}
 
 	@Test
@@ -106,7 +106,7 @@ class BlockquoteSerializationTest {
 	@Test
 	fun `roundtrip preserves consecutive quote lines`() = runTest {
 		val extension = createMarkdownExtension()
-		val original = "> first\n> second\n> third"
+		val original = "> first\n>\n> second\n>\n> third"
 		extension.importMarkdown(original)
 		assertEquals(original, extension.exportAsMarkdown())
 	}
@@ -114,7 +114,7 @@ class BlockquoteSerializationTest {
 	@Test
 	fun `roundtrip preserves blockquote alongside HR`() = runTest {
 		val extension = createMarkdownExtension()
-		val original = "> quote\n---\nbody"
+		val original = "> quote\n\n---\n\nbody"
 		extension.importMarkdown(original)
 		assertEquals(original, extension.exportAsMarkdown())
 	}
@@ -291,7 +291,7 @@ class BlockquoteSerializationTest {
 	@Test
 	fun `backspace at start of empty line below blockquote preserves quote on the merged line`() = runTest {
 		val extension = createMarkdownExtension()
-		extension.importMarkdown("> a quote\n\nbody")
+		extension.importMarkdown("> a quote\n\n\nbody")
 		val state = extension.editorState
 
 		state.cursor.updatePosition(CharLineOffset(1, 0))
@@ -323,7 +323,7 @@ class BlockquoteSerializationTest {
 	@Test
 	fun `enter on empty blockquote line exits the quote`() = runTest {
 		val extension = createMarkdownExtension()
-		extension.importMarkdown("> first\n> ")
+		extension.importMarkdown("> first\n>\n> ")
 		val state = extension.editorState
 		assertEquals("", state.textLines[1].text)
 

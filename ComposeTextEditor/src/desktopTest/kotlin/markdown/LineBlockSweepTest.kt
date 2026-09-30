@@ -41,7 +41,7 @@ class LineBlockSweepTest {
 	@Test
 	fun `select-all bullet includes blank separator lines as empty items`() = runTest {
 		val extension = createMarkdownExtension()
-		extension.importMarkdown("Chapter One\n\nShe walked in.")
+		extension.importMarkdown("Chapter One\n\n\nShe walked in.")
 
 		extension.toggleBulletList(extension.selectAll())
 
@@ -71,13 +71,13 @@ class LineBlockSweepTest {
 		extension.toggleBulletList(extension.selectAll())
 
 		assertTrue(extension.linesWith(BulletListSpanStyle).isEmpty())
-		assertEquals("one\n\ntwo", extension.exportAsMarkdown())
+		assertEquals("one\n\n\ntwo", extension.exportAsMarkdown())
 	}
 
 	@Test
 	fun `select-all ordered list numbers contiguously across blank lines`() = runTest {
 		val extension = createMarkdownExtension()
-		extension.importMarkdown("First\n\nSecond\n\nThird")
+		extension.importMarkdown("First\n\n\nSecond\n\n\nThird")
 
 		extension.toggleOrderedList(extension.selectAll())
 
@@ -90,7 +90,7 @@ class LineBlockSweepTest {
 	@Test
 	fun `select-all fence keeps a snippet with blank lines as one fence`() = runTest {
 		val extension = createMarkdownExtension()
-		extension.importMarkdown("fun a() {}\n\nfun b() {}")
+		extension.importMarkdown("fun a() {}\n\n\nfun b() {}")
 
 		extension.toggleCodeFence(extension.selectAll())
 
@@ -107,7 +107,7 @@ class LineBlockSweepTest {
 
 		assertEquals(listOf(0, 2), extension.linesWith(BulletListSpanStyle))
 		assertEquals(listOf(1), extension.linesWith(HorizontalRuleSpanStyle))
-		assertEquals("- before\n---\n- after", extension.exportAsMarkdown())
+		assertEquals("- before\n\n---\n\n- after", extension.exportAsMarkdown())
 	}
 
 	@Test
@@ -126,7 +126,7 @@ class LineBlockSweepTest {
 	@Test
 	fun `select-all bullet twice across a rule clears every bullet`() = runTest {
 		val extension = createMarkdownExtension()
-		val original = "before\n---\nafter"
+		val original = "before\n\n---\n\nafter"
 		extension.importMarkdown(original)
 
 		extension.toggleBulletList(extension.selectAll())
@@ -145,7 +145,7 @@ class LineBlockSweepTest {
 
 		assertEquals(listOf(0, 1, 2), extension.linesWith(BlockquoteSpanStyle))
 		assertEquals(listOf(1), extension.linesWith(HorizontalRuleSpanStyle))
-		assertEquals("> before\n> ---\n> after", extension.exportAsMarkdown())
+		assertEquals("> before\n>\n> ---\n>\n> after", extension.exportAsMarkdown())
 	}
 
 	@Test
@@ -165,7 +165,7 @@ class LineBlockSweepTest {
 	@Test
 	fun `bullet sweep over only rule lines is a no-op`() = runTest {
 		val extension = createMarkdownExtension()
-		val original = "before\n---\n---\nafter"
+		val original = "before\n\n---\n\n---\n\nafter"
 		extension.importMarkdown(original)
 
 		extension.toggleBulletList(1..2)

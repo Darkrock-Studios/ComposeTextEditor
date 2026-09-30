@@ -68,7 +68,7 @@ class TabE2eTest {
 		press(Key.Tab)
 		assertEquals(listOf("intro", "item"), lines, "a list item has no indent level to take (5.6)")
 		assertEquals(listOf(1), state.linesWith(BulletListSpanStyle))
-		assertEquals("intro\n- item", markdown.exportAsMarkdown())
+		assertEquals("intro\n\n- item", markdown.exportAsMarkdown())
 
 		state.cursor.updatePosition(CharLineOffset(1, 4))
 		press(Key.Tab)

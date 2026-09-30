@@ -142,6 +142,15 @@ private fun peelLineBlocks(line: String, registry: List<LineBlockStyle>): Peeled
 private val RESIDUAL_BULLET_MARKER = Regex("""^([-*+])(\s)""")
 private val RESIDUAL_QUOTE_MARKER = Regex("""^>""")
 
+/** A quoted line with nothing in it; the marker sits at column 0, as the peel needs it. */
+private val QUOTE_BLANK_LINE = Regex("""^>\s*$""")
+
+/** A list item, quoted or not, as the peel recognises one. */
+private val LIST_ITEM_LINE = Regex("""^(?:>\s?)?(?:[-*+]|\d+\.)\s""")
+
+/** A line CommonMark reads as an indented code block when a block can start there. */
+private val INDENTED_CODE_LINE = Regex("""^(?: {4}|\t)""")
+
 /**
  * Escapes a marker-shaped lead left in a peeled body. The peel already consumed
  * every marker the line's spans account for, so whatever still looks like one is
@@ -188,7 +197,13 @@ class MarkdownExtension(
 			field = value
 			markdownStyles = MarkdownStyles(markdownConfiguration)
 			editorState.markdownConfiguration = value
-			if (previous != value) {
+			// Only a change of styles retires the previous configuration; the
+			// syntax choices touch no span.
+			val stylesChanged = previous.copy(
+				highlightSyntax = value.highlightSyntax,
+				paragraphSeparator = value.paragraphSeparator,
+			) != value
+			if (stylesChanged) {
 				retiredConfigurations += previous
 				rebakeHeaderLines(previous, value)
 			}
@@ -261,8 +276,32 @@ class MarkdownExtension(
 		// empty quote line is `> `, not nothing.
 		if (text.isEmpty() && blocks.isEmpty()) return ""
 
+		val lines = content.lines
+		val separateParagraphs =
+			markdownConfiguration.paragraphSeparator == ParagraphSeparator.BLANK_LINE
+		val headerBlocks = registry.filter { it.spanStyle is HeaderSpanStyle }
+		fun isList(line: Int) = blocks.has(line, BulletList) || blocks.has(line, OrderedList)
+		fun isQuoted(line: Int) = blocks.has(line, Blockquote)
+
+		// A blank editor line, as opposed to a block with empty content: an empty
+		// list item, heading or fenced line is a block of its own.
+		fun isBlankLine(line: Int): Boolean =
+			lines[line].text.isBlank() && !isList(line) && line !in codeFenceLines &&
+				line !in hrLines && line !in imageLines && headerBlocks.none { blocks.has(line, it) }
+
+		// Whether a blank line goes between [line] and the next. Every block gets
+		// one, except that a list's items and a fence's lines stay together, and
+		// an editor's own blank line is written as itself, one more than the
+		// separator before it. See ParagraphSeparator.
+		fun needsSeparator(line: Int): Boolean {
+			if (!separateParagraphs || line + 1 >= lines.size || isBlankLine(line)) return false
+			val next = line + 1
+			if (line in codeFenceLines && next in codeFenceLines) return false
+			if (isList(line) && isList(next)) return false
+			return true
+		}
+
 		val sb = StringBuilder()
-		var lineIndex = 0
 		var cursor = 0
 		// Tracks position-within-run for each block style so the markdown prefix
 		// callback can render position-dependent markers (1., 2., 3. for ordered
@@ -272,21 +311,31 @@ class MarkdownExtension(
 		// Code fences wrap a contiguous run with ` ``` ` markers rather than
 		// per-line prefixes — track open/close state across iterations.
 		var inCodeFence = false
-		while (true) {
-			val nextNewline = text.indexOf('\n', cursor)
-			val end = if (nextNewline == -1) text.length else nextNewline
+		// A legacy font-size heading's markdown ends with its own line break.
+		var previousEndsWithNewline = false
+		for (lineIndex in lines.indices) {
+			val lineLength = lines[lineIndex].length
+			val end = cursor + lineLength
 			val isFenceLine = lineIndex in codeFenceLines
 
-			// Open a fence when entering, close when leaving. Each marker sits on
-			// its own line so it must be followed by a newline.
+			if (lineIndex > 0) {
+				if (!previousEndsWithNewline) sb.append('\n')
+				// Close a fence when leaving; the marker sits on its own line.
+				if (inCodeFence && !isFenceLine) {
+					sb.append("```\n")
+					inCodeFence = false
+				}
+				if (needsSeparator(lineIndex - 1)) {
+					// A separator inside a quote keeps the quote going.
+					if (isQuoted(lineIndex - 1) && isQuoted(lineIndex)) sb.append('>')
+					sb.append('\n')
+				}
+			}
 			if (isFenceLine && !inCodeFence) {
 				sb.append("```")
 				fenceLanguages[lineIndex]?.let { sb.append(it) }
 				sb.append('\n')
 				inCodeFence = true
-			} else if (!isFenceLine && inCodeFence) {
-				sb.append("```\n")
-				inCodeFence = false
 			}
 
 			val lineMarkdown = when {
@@ -311,7 +360,6 @@ class MarkdownExtension(
 					// Link spans live on the state, not in the AnnotatedString, so
 					// the serializer is handed this line's links in line-local
 					// character offsets.
-					val lineLength = end - cursor
 					val links = linkSpansByLine[lineIndex].orEmpty().mapNotNull { span ->
 						val start = span.range.start.char.coerceIn(0, lineLength)
 						val endChar = when (span.range.end.line) {
@@ -347,11 +395,8 @@ class MarkdownExtension(
 				}
 			}
 			sb.append(lineMarkdown)
-			if (nextNewline == -1) break
-			// Header export already ends with \n; don't double it.
-			if (!lineMarkdown.endsWith('\n')) sb.append('\n')
-			cursor = nextNewline + 1
-			lineIndex++
+			previousEndsWithNewline = lineMarkdown.endsWith('\n')
+			cursor = end + 1
 		}
 		// Close an unfinished fence at EOF — the closing marker needs its own line
 		// so insert a separator newline before it.
@@ -361,20 +406,34 @@ class MarkdownExtension(
 		return sb.toString()
 	}
 
-	fun importMarkdown(markdownText: String) {
+	/**
+	 * Replaces the document with [markdownText]. [paragraphSeparator] says how
+	 * the text's blank lines are read (see [ParagraphSeparator]); it defaults to
+	 * the configuration's, and a host opening a file written under the other
+	 * rule passes that rule here.
+	 */
+	fun importMarkdown(
+		markdownText: String,
+		paragraphSeparator: ParagraphSeparator = markdownConfiguration.paragraphSeparator,
+	) {
 		// Stage 1: strip ` ``` ` fence markers and remember which post-strip lines
 		// were inside a fence. Fence content needs to skip the per-line block
 		// detection (it's literal code, not markdown) and its specials need to be
 		// escaped so the parser doesn't reinterpret `*foo*` as italic etc.
 		val fenceStrip = stripCodeFences(markdownText)
-		val codeFenceLineIndices = fenceStrip.fencedLines
+		// Stage 2: take the blank line export puts after each block away again,
+		// so a paragraph per line comes back as a line per paragraph.
+		val imported = withoutParagraphSeparators(fenceStrip, paragraphSeparator)
+		val keptLines = imported.lines
+		val codeFenceLineIndices = imported.fencedLines
+		val fenceInfoStrings = imported.infoStrings
 
 		val hrLineIndices = mutableListOf<Int>()
 		val imageLines = mutableListOf<Pair<Int, ImageBlockSpanStyle>>()
 		val blockHits = mutableMapOf<LineBlockStyle, MutableList<Int>>()
 		val provider = imageProvider
 		val registry = lineBlockStyles(markdownConfiguration)
-		val processedLines = fenceStrip.text.lines().mapIndexed { index, line ->
+		val processedLines = keptLines.mapIndexed { index, line ->
 			if (index in codeFenceLineIndices) {
 				return@mapIndexed line.escapeMarkdownSpecials()
 			}
@@ -431,8 +490,75 @@ class MarkdownExtension(
 				blockLines = blockHits + (CodeFence to codeFenceLineIndices),
 			)
 			attachLinkSpans(parsed.links, annotatedString.text)
-			attachFenceLanguages(fenceStrip.infoStrings)
+			attachFenceLanguages(fenceInfoStrings)
 		}
+	}
+
+	/** The fence-stripped lines that are document lines, with the fence data renumbered onto them. */
+	private class ImportedLines(
+		val lines: List<String>,
+		val fencedLines: Set<Int>,
+		val infoStrings: Map<Int, String>,
+	)
+
+	/**
+	 * Leaves out, under [ParagraphSeparator.BLANK_LINE], the one blank line
+	 * export writes after each block, so k blank lines after a block are the
+	 * editor's k - 1. A block is a fenced line or one that is not blank; a bare
+	 * `>` line is blank, as export has it. Only a blank line export would have
+	 * written there is left out (see [isParagraphSeparator]), so a foreign
+	 * file's blank line between two fences, two list items or two quotes, which
+	 * export never writes, stays and keeps them apart.
+	 */
+	private fun withoutParagraphSeparators(
+		strip: CodeFenceStripResult,
+		separator: ParagraphSeparator,
+	): ImportedLines {
+		val stripped = strip.text.lines()
+		if (separator == ParagraphSeparator.NEWLINE) {
+			return ImportedLines(stripped, strip.fencedLines, strip.infoStrings)
+		}
+		val lines = ArrayList<String>(stripped.size)
+		val fenced = HashSet<Int>()
+		val infoStrings = HashMap<Int, String>()
+		var afterBlock = false
+		stripped.forEachIndexed { index, line ->
+			val isFenced = index in strip.fencedLines
+			val blank = !isFenced && (line.isBlank() || QUOTE_BLANK_LINE.matches(line))
+			if (blank && afterBlock && isParagraphSeparator(stripped, strip.fencedLines, index)) {
+				afterBlock = false
+				return@forEachIndexed
+			}
+			if (isFenced) fenced += lines.size
+			strip.infoStrings[index]?.let { infoStrings[lines.size] = it }
+			lines += line
+			afterBlock = !blank
+		}
+		return ImportedLines(lines, fenced, infoStrings)
+	}
+
+	/**
+	 * Whether the blank line at [index], which follows a block, is the one
+	 * export writes there rather than the editor's own: export writes none
+	 * between two fenced lines or two list items, a bare `>` only between two
+	 * quoted lines and an empty line otherwise, and the editor never writes a
+	 * line indented like code, whose block needs the blank line before it.
+	 */
+	private fun isParagraphSeparator(lines: List<String>, fencedLines: Set<Int>, index: Int): Boolean {
+		val previous = index - 1
+		val next = index + 1
+		val nextLine = lines.getOrNull(next)
+		val nextFenced = next in fencedLines
+		val quotedBlank = lines[index].isNotBlank()
+		if (nextLine != null && !nextFenced && INDENTED_CODE_LINE.containsMatchIn(nextLine)) return false
+		if (previous in fencedLines) return !nextFenced && !quotedBlank
+		val previousLine = lines[previous]
+		val nextQuoted = nextLine != null && !nextFenced && nextLine.startsWith(">")
+		if (quotedBlank != (previousLine.startsWith(">") && nextQuoted)) return false
+		if (LIST_ITEM_LINE.containsMatchIn(previousLine)) {
+			return nextLine == null || nextFenced || !LIST_ITEM_LINE.containsMatchIn(nextLine)
+		}
+		return true
 	}
 
 	/** Attaches a [CodeFenceLanguageSpanStyle] on each fenced line, off the undo history like the blocks. */

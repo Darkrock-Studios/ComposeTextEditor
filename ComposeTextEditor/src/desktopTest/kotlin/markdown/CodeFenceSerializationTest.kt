@@ -118,7 +118,7 @@ class CodeFenceSerializationTest {
 		val extension = createMarkdownExtension()
 		extension.importMarkdown("intro\n```\ncode line\n```\noutro")
 
-		assertEquals("intro\n```\ncode line\n```\noutro", extension.exportAsMarkdown())
+		assertEquals("intro\n\n```\ncode line\n```\n\noutro", extension.exportAsMarkdown())
 	}
 
 	@Test
@@ -132,7 +132,7 @@ class CodeFenceSerializationTest {
 	@Test
 	fun `export emits separate fences for non-contiguous runs`() = runTest {
 		val extension = createMarkdownExtension()
-		val original = "```\nfirst\n```\nbreak\n```\nsecond\n```"
+		val original = "```\nfirst\n```\n\nbreak\n\n```\nsecond\n```"
 		extension.importMarkdown(original)
 
 		assertEquals(original, extension.exportAsMarkdown())
@@ -146,7 +146,7 @@ class CodeFenceSerializationTest {
 		// Roundtrip should produce a properly closed fence even though the input
 		// didn't have one. Lines are: "before", then fenced "code" + "still in fence".
 		assertEquals(
-			"before\n```\ncode\nstill in fence\n```",
+			"before\n\n```\ncode\nstill in fence\n```",
 			extension.exportAsMarkdown(),
 		)
 	}

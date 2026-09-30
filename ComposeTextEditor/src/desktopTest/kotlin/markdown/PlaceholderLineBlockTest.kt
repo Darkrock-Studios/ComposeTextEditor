@@ -55,7 +55,7 @@ class PlaceholderLineBlockTest {
 	@Test
 	fun `roundtrip preserves a rule inside a blockquote`() = runTest {
 		val extension = createMarkdownExtension()
-		val original = "> above\n> ---\n> below"
+		val original = "> above\n>\n> ---\n>\n> below"
 		extension.importMarkdown(original)
 		assertEquals(original, extension.exportAsMarkdown())
 	}
@@ -72,7 +72,7 @@ class PlaceholderLineBlockTest {
 	@Test
 	fun `roundtrip preserves an image inside a blockquote`() = runTest {
 		val extension = createMarkdownExtension(provider = InMemoryImageProvider())
-		val original = "> intro\n> ![alt](img.png)"
+		val original = "> intro\n>\n> ![alt](img.png)"
 		extension.importMarkdown(original)
 		assertEquals(original, extension.exportAsMarkdown())
 	}
@@ -87,7 +87,7 @@ class PlaceholderLineBlockTest {
 
 		assertEquals(listOf(1), extension.linesWith(HorizontalRuleSpanStyle))
 		assertEquals(listOf(0, 2), extension.linesWith(BulletListSpanStyle))
-		assertEquals("- before\n---\n- after", extension.exportAsMarkdown())
+		assertEquals("- before\n\n---\n\n- after", extension.exportAsMarkdown())
 	}
 
 	@Test
@@ -199,6 +199,6 @@ class PlaceholderLineBlockTest {
 			"<blockquote>\n<p>a</p>\n<hr>\n<p>b</p>\n</blockquote>",
 			html.exportAsHtml(),
 		)
-		assertEquals("> a\n> ---\n> b", extension.exportAsMarkdown())
+		assertEquals("> a\n>\n> ---\n>\n> b", extension.exportAsMarkdown())
 	}
 }

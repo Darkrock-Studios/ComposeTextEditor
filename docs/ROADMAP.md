@@ -1865,8 +1865,20 @@ Shaping is one line per keystroke. These still scale with document length:
 - [ ] **7.14** [Fable] [Lane I] Every special character in prose is escaped, so
   ordinary prose comes out backslash-heavy, and unsupported syntax kept as
   literal text on import (tables, task lists) is exported escaped.
-- [ ] **7.15** [Fable] [Lane I] Paragraphs are exported with single newlines;
-  other CommonMark renderers merge adjacent paragraphs.
+- [x] **7.15** [Fable] [Lane I] Paragraphs are exported with single newlines;
+  other CommonMark renderers merge adjacent paragraphs. Done: an editor line
+  is a paragraph. Export writes a blank line after every block (not between a
+  list's items or a fence's lines; a bare `>` inside a quote), an editor's
+  own blank line one more, and import takes one blank line after each block
+  away again, so the round trip is exact and other renderers keep the lines
+  apart; import leaves out only a blank line export would have written, so
+  a foreign file's blank line between two fences, list items or quotes stays.
+  `MarkdownConfiguration.paragraphSeparator = NEWLINE` keeps the old
+  line-per-source-line form, and `importMarkdown(text, separator)` reads one
+  file by either rule. Documents saved by the old exporter with double-Enter
+  paragraph gaps lose those gaps on first import under the new rule (their
+  blank line reads as the separator) unless the host imports them with
+  `NEWLINE`. See `docs/design/line-blocks.md`, "Paragraphs".
 - [x] **7.16** [Opus] [Lane I] No markdown form for underline, highlight,
   colour, or size, so they are lost. Code fence language tags are dropped.
   Done. Inline styles: underline is `<u>` (Obsidian and Typora write it,

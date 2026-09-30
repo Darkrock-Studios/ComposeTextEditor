@@ -62,7 +62,7 @@ class CodeFenceLanguageTest {
 		val e = extension()
 		val markdown = "```kotlin\na\n```\n\ntext\n\n```sh title=run\nb\nc\n```"
 		e.importMarkdown(markdown)
-		assertEquals(listOf(0 to "kotlin", 4 to "sh title=run", 5 to "sh title=run"), e.languageLines())
+		assertEquals(listOf(0 to "kotlin", 2 to "sh title=run", 3 to "sh title=run"), e.languageLines())
 		assertEquals(markdown, e.exportAsMarkdown())
 	}
 
@@ -149,7 +149,7 @@ class CodeFenceLanguageTest {
 		val e = extension()
 		e.importMarkdown("```kotlin\na\nb\nc\n```")
 		e.toggleCodeFence(1..1)
-		assertEquals("```kotlin\na\n```\nb\n```kotlin\nc\n```", e.exportAsMarkdown())
+		assertEquals("```kotlin\na\n```\n\nb\n\n```kotlin\nc\n```", e.exportAsMarkdown())
 	}
 
 	@Test
@@ -180,12 +180,12 @@ class CodeFenceLanguageTest {
 	@Test
 	fun `fencing the line above a run gives it the run's language, and undo takes it back`() = runTest {
 		val e = extension()
-		e.importMarkdown("intro\n\n```kotlin\ncode\n```")
+		e.importMarkdown("intro\n\n\n```kotlin\ncode\n```")
 		e.toggleCodeFence(1..1)
-		assertEquals("intro\n```kotlin\n\ncode\n```", e.exportAsMarkdown())
+		assertEquals("intro\n\n```kotlin\n\ncode\n```", e.exportAsMarkdown())
 		assertEquals(listOf(1 to "kotlin", 2 to "kotlin"), e.languageLines())
 		e.editorState.undo()
-		assertEquals("intro\n\n```kotlin\ncode\n```", e.exportAsMarkdown())
+		assertEquals("intro\n\n\n```kotlin\ncode\n```", e.exportAsMarkdown())
 		assertEquals(listOf(2 to "kotlin"), e.languageLines())
 	}
 
@@ -194,18 +194,18 @@ class CodeFenceLanguageTest {
 		val e = extension()
 		e.importMarkdown("```kotlin\na\nb\n```")
 		e.toggleCodeFence(0..0)
-		assertEquals("a\n```kotlin\nb\n```", e.exportAsMarkdown())
+		assertEquals("a\n\n```kotlin\nb\n```", e.exportAsMarkdown())
 		assertEquals(listOf(1 to "kotlin"), e.languageLines())
 		e.editorState.undo()
 		assertEquals("```kotlin\na\nb\n```", e.exportAsMarkdown())
 		e.editorState.redo()
-		assertEquals("a\n```kotlin\nb\n```", e.exportAsMarkdown())
+		assertEquals("a\n\n```kotlin\nb\n```", e.exportAsMarkdown())
 	}
 
 	@Test
 	fun `joining two runs writes the first run's language, and undo gives the second its own back`() = runTest {
 		val e = extension()
-		e.importMarkdown("```kotlin\na\n```\n\n```java\nb\n```")
+		e.importMarkdown("```kotlin\na\n```\n\n\n```java\nb\n```")
 		assertEquals(listOf(0 to "kotlin", 2 to "java"), e.languageLines())
 		// Delete the blank line between the runs: the caret at its start, forward delete.
 		e.editorState.cursor.updatePosition(CharLineOffset(1, 0))
@@ -214,18 +214,18 @@ class CodeFenceLanguageTest {
 		assertEquals("kotlin", e.codeFenceLanguage(1))
 
 		e.editorState.undo()
-		assertEquals("```kotlin\na\n```\n\n```java\nb\n```", e.exportAsMarkdown())
+		assertEquals("```kotlin\na\n```\n\n\n```java\nb\n```", e.exportAsMarkdown())
 		assertEquals("java", e.codeFenceLanguage(2))
 	}
 
 	@Test
 	fun `un-fencing a joined run's first lines makes the second run's language the run's`() = runTest {
 		val e = extension()
-		e.importMarkdown("```kotlin\na\n```\n\n```java\nb\n```")
+		e.importMarkdown("```kotlin\na\n```\n\n\n```java\nb\n```")
 		e.editorState.cursor.updatePosition(CharLineOffset(1, 0))
 		e.editorState.deleteAtCursor()
 		e.toggleCodeFence(0..0)
-		assertEquals("a\n```java\nb\n```", e.exportAsMarkdown())
+		assertEquals("a\n\n```java\nb\n```", e.exportAsMarkdown())
 	}
 
 	@Test
