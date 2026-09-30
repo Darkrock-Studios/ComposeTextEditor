@@ -976,10 +976,37 @@ Also seen:
   keyboard appears. Resolved by 4.3: the textarea now exists and is focused
   on a tap, which is what raises the keyboard. Tick after a pass on Android
   Chrome and iOS Safari (4.4); a headless browser cannot show one.
+  Gap: Compose sets `autocapitalize="off"` on every backing field, so phone
+  keyboards never capitalise a sentence. The web session sets it to
+  `sentences`, matching the Android and iOS sessions, but only once the
+  field exists, after Compose has focused it; whether a keyboard already up
+  honours the change is for the phone pass, and if not the fix belongs in
+  Compose (its `DomInputStrategy` ignores `ImeOptions.capitalization`,
+  which the session now passes). Verified in Chromium
+  with the pane's Pixel 8 emulation (Android user agent, touch points): a
+  synthetic touch tap on the unfocused Blank editor focuses the textarea
+  (`inputmode="text"`, `enterkeyhint="enter"`, `autocorrect="on"`,
+  `autocapitalize="sentences"`) placed at the caret; a Gboard-shaped
+  sequence (`keydown` 229 "Unidentified", `insertCompositionText` "T", "Te",
+  "Teh", corrected to "The", `compositionend`, `insertText` " ", then "cat"
+  composed and a `deleteContentBackward`) leaves "The ca" with each step
+  applied once; an `insertReplacementText` over "ca" gives "The cat". Still
+  needs a phone: the keyboard rising and staying up, suggestions, a tap on
+  the canvas that Compose does not consume hiding the keyboard, and whether
+  the keyboard covers the caret.
 - [ ] **4.12 Composition on desktop web. C.** [Opus] [Lane E] Dead keys and CJK
   input. Also resolved by 4.3, and the event shape a browser IME sends is
   verified with synthetic events. Tick after a pass with a real IME (fcitx or
   ibus on Linux, the macOS Japanese keyboard) in Chrome, Firefox, and Safari.
+  Rechecked with synthetic events in Chromium against the dev server: a dead
+  key (`keydown` "Dead", `insertCompositionText` "´", then "é",
+  `compositionend`) gives one "é" with no stray "Þ" or "´"; a Romaji
+  composition ("n", "に", "にh", "にほ", Backspace to "に", on to "にほん",
+  converted to "日本") commits "日本" once, and an Enter `keydown` during the
+  composition adds no line; a composition after arrowing into the middle of
+  a line lands at the caret. No code change was needed. Synthetic events
+  leave the textarea's own text alone, which real input does not, so a real
+  IME in Chrome, Firefox and Safari is still what ticks this.
 - [ ] **4.13 Clipboard. C.** [Opus] [Lane H] Plain text only through
   `navigator.clipboard`, failures swallowed silently (shared with 6.7).
 - [x] **4.14 Scrollbar. C.** [Opus] [Lane C] The implementation is commented

@@ -4,6 +4,7 @@ package com.darkrockstudios.texteditor.input
 
 import androidx.compose.ui.platform.PlatformTextInputSession
 import androidx.compose.ui.text.input.ImeOptions
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.TextFieldValue
 import com.darkrockstudios.texteditor.state.TextEditorState
 import kotlinx.coroutines.coroutineScope
@@ -26,34 +27,47 @@ import kotlin.js.ExperimentalWasmJsInterop
  * hands DOM focus straight back. The textarea is also the one platform copy of the text
  * that can go stale without the editor's value changing, so an IME resync rewrites it.
  *
- * `ImeOptions.Default` maps to a multiline textarea with a plain text input mode.
+ * Compose maps the options to a multiline textarea with a plain text input mode, and
+ * ignores the capitalisation; see [BackingField.adopt].
  */
 actual class TextEditorTextInputService actual constructor(
 	private val state: TextEditorState
 ) {
 	actual suspend fun startInput(session: PlatformTextInputSession): Nothing = coroutineScope {
 		val field = BackingField()
-		launch { field.keepFocused() }
-		state.startSkikoInputSession(session, ImeOptions.Default, imeResync = SkikoImeResync.Rewrite(field::rewrite))
+		launch { field.adopt() }
+		state.startSkikoInputSession(session, webImeOptions, imeResync = SkikoImeResync.Rewrite(field::rewrite))
 	}
 }
 
-/**
- * Compose's hidden textarea for one session, found through the viewport's shadow root
- * that holds it. The class is the one Compose's `DomInputStrategy` gives it.
- */
+private val webImeOptions = ImeOptions(capitalization = KeyboardCapitalization.Sentences)
+
+/** The class Compose's `DomInputStrategy` gives the backing textarea. */
+private const val BACKING_FIELD = ".compose-backing-field"
+
+/** Compose's hidden textarea for one session, found through the viewport's shadow root that holds it. */
 private class BackingField {
 	private var root: JsAny? = null
 
-	private fun findRoot(): JsAny? = root ?: backingFieldRoot()?.also { root = it }
+	/**
+	 * The root, looked up on first use. Compose sets `autocapitalize="off"` on every
+	 * backing field whatever the options say, so the field asks for sentence capitals as
+	 * soon as it is found, as the Android and iOS sessions do. The field is already
+	 * focused by then; whether a phone keyboard that is already up honours the change is
+	 * for the phone pass (roadmap 4.11).
+	 */
+	private fun findRoot(): JsAny? = root ?: backingFieldRoot(BACKING_FIELD)?.also {
+		root = it
+		capitalizeSentences(it, BACKING_FIELD)
+	}
 
 	/**
-	 * The session creates the textarea when it starts, which may be a dispatch or two
-	 * after this is launched, so its root is looked for over a few frames. The listener
-	 * is removed as the session is cancelled, not on a later dispatch, so it can never
-	 * move focus for a session that has ended.
+	 * Finds the field, which the session creates when it starts, a dispatch or two after
+	 * this is launched, so it is looked for over a few frames. Then keeps DOM focus on it
+	 * until the session ends; the focus listener is removed as the session is cancelled,
+	 * not on a later dispatch, so it can never move focus for a session that has ended.
 	 */
-	suspend fun keepFocused() {
+	suspend fun adopt() {
 		var found = findRoot()
 		var attempts = 1
 		while (found == null && attempts < ROOT_LOOKUP_ATTEMPTS) {
@@ -61,7 +75,7 @@ private class BackingField {
 			found = findRoot()
 			attempts++
 		}
-		val handle = refocusFromCanvas(found ?: return)
+		val handle = refocusFromCanvas(found ?: return, BACKING_FIELD)
 		suspendCancellableCoroutine<Nothing> { continuation ->
 			continuation.invokeOnCancellation { stopRefocusing(handle) }
 		}
@@ -76,7 +90,8 @@ private class BackingField {
 	 */
 	fun rewrite(value: TextFieldValue) {
 		val root = findRoot() ?: return
-		rewriteBackingField(root, value.text, value.selection.min, value.selection.max, value.selection.reversed)
+		val selection = value.selection
+		rewriteBackingField(root, BACKING_FIELD, value.text, selection.min, selection.max, selection.reversed)
 	}
 }
 
@@ -84,14 +99,13 @@ private const val ROOT_LOOKUP_ATTEMPTS = 10
 private const val ROOT_LOOKUP_INTERVAL_MS = 16L
 
 /**
- * The shadow root holding this session's backing textarea: the innermost one on the
- * active element's path (Compose focuses the textarea as it creates it), else the only
+ * The shadow root holding this session's backing field: the innermost one on the
+ * active element's path (Compose focuses the field as it creates it), else the only
  * open shadow root on the page that holds one. Null while that is not certain, since a
- * second viewport's textarea belongs to another window's session.
+ * second viewport's field belongs to another window's session.
  */
-private fun backingFieldRoot(): JsAny? = js(
+private fun backingFieldRoot(selector: String): JsAny? = js(
 	"""{
-	const selector = '.compose-backing-field';
 	let found = null;
 	let element = document.activeElement;
 	while (element && element.shadowRoot) {
@@ -109,21 +123,21 @@ private fun backingFieldRoot(): JsAny? = js(
 )
 
 /**
- * Moves DOM focus from [root]'s canvas to its textarea whenever the canvas takes it. The
- * listener sits on the shadow root because a focus move inside a shadow tree is not
+ * Moves DOM focus from [root]'s canvas to its backing field whenever the canvas takes it.
+ * The listener sits on the shadow root because a focus move inside a shadow tree is not
  * reported outside it.
  *
  * A touch leaves focus where the browser put it: a tap Compose did not consume blurs the
- * textarea to hide the keyboard, and giving focus back there would raise the keyboard
- * again over whatever the tap was for.
+ * field to hide the keyboard, and giving focus back there would raise the keyboard again
+ * over whatever the tap was for.
  */
-private fun refocusFromCanvas(root: JsAny): JsAny = js(
+private fun refocusFromCanvas(root: JsAny, selector: String): JsAny = js(
 	"""{
 	let lastPointerType = 'mouse';
 	const onPointerDown = (event) => { lastPointerType = event.pointerType; };
 	const onFocusIn = (event) => {
 		if (event.target.tagName !== 'CANVAS' || lastPointerType !== 'mouse') return;
-		const field = root.querySelector('.compose-backing-field');
+		const field = root.querySelector(selector);
 		if (field) field.focus({ preventScroll: true });
 	};
 	root.addEventListener('pointerdown', onPointerDown, true);
@@ -139,9 +153,23 @@ private fun stopRefocusing(handle: JsAny): Unit = js(
 }"""
 )
 
-private fun rewriteBackingField(root: JsAny, text: String, start: Int, end: Int, backward: Boolean): Unit = js(
+private fun capitalizeSentences(root: JsAny, selector: String): Unit = js(
 	"""{
-	const field = root.querySelector('.compose-backing-field');
+	const field = root.querySelector(selector);
+	if (field) field.setAttribute('autocapitalize', 'sentences');
+}"""
+)
+
+private fun rewriteBackingField(
+	root: JsAny,
+	selector: String,
+	text: String,
+	start: Int,
+	end: Int,
+	backward: Boolean,
+): Unit = js(
+	"""{
+	const field = root.querySelector(selector);
 	if (!field) return;
 	if (field.value !== text) field.value = text;
 	field.setSelectionRange(start, end, backward ? 'backward' : 'forward');

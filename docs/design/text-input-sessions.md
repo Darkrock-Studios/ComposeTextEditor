@@ -376,6 +376,10 @@ so refusing it loses nothing. The predicate has no view of the DOM event, so
 ';' and '=' (whose codes equal their characters, and a German dead key sits
 on '=') are refused too, which costs only the no-session canvas path.
 
+Compose sets `autocapitalize="off"` on every backing field whatever the
+`ImeOptions` say, so the web session sets it back to `sentences`, as the
+Android and iOS sessions ask of their keyboards.
+
 `ImeCursorSync` stays a no-op on web; the session's `snapshotFlow` over
 `value()` is the state-out direction, fed by the shared revision described
 above. Composition on desktop browsers and the soft keyboard on mobile

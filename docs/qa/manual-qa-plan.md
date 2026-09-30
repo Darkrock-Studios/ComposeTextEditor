@@ -309,7 +309,8 @@ the platform's double-tap timeout (300 ms on desktop), not the OS mouse setting.
 
 ### 3.8 Web input (built demo)
 
-Run in Chrome, Firefox and Safari on desktop. Roadmap 4.11, 4.12 and 4.22.
+Run 1 to 6 in Chrome, Firefox and Safari on desktop, and 7 on phones.
+Roadmap 4.11, 4.12, 4.22 and 4.25.
 
 1. Markdown Editor (Blank). Click in the editor and type. Right-click in the
    text, press Escape, and type `;` `=` and a letter. **Expect:** all three
@@ -324,6 +325,18 @@ Run in Chrome, Firefox and Safari on desktop. Roadmap 4.11, 4.12 and 4.22.
    word. With a browser IME or a phone keyboard, also leave a list this way
    and accept an autocorrect suggestion right after. **Expect:** the second
    Enter ends the list, and nothing lands one character off.
+6. Composition with a real IME (roadmap 4.12; synthetic events already pass):
+   fcitx5 or ibus with Mozc on Linux, the macOS Japanese keyboard, Microsoft
+   IME on Windows. Type "nihongo", convert, pick a candidate, commit; repeat
+   in the middle of a line and over a selected word; Backspace inside a
+   composition. **Expect:** underlined composing text, the candidate window
+   at the caret, the chosen word committed once where the caret was.
+7. Phones (roadmap 4.11), Android Chrome with Gboard and iOS Safari: tap the
+   editor. **Expect:** the keyboard rises with a capital for the first
+   letter, suggestions work, autocorrect replaces the word once, Backspace
+   deletes one character, and the caret stays visible above the keyboard.
+   Tap an empty part of the page outside the editor: the keyboard may hide;
+   tapping the editor brings it back.
 
 ### 3.9 IME candidate window (desktop)
 
