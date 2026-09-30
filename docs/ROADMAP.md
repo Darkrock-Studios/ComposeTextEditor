@@ -1043,7 +1043,7 @@ Also seen:
   commented-out one (`scrollbar/EditorScrollbarE2eTest.kt`).
 - [ ] **4.15 Browser tests.** [Opus] [Lane L] Automation against the built demo
   (0.7), with composition events.
-- [ ] **4.21 Whole-document mirror per edit. S.** [Opus] [Lane E] Compose's web
+- [x] **4.21 Whole-document mirror per edit. S.** [Opus] [Lane E] Compose's web
   session copies `request.value().text` into the backing `<textarea>` after
   every edit, and iOS snapshots `state.text` the same way, so each keystroke
   builds the whole document as a `String` and hands it to the platform. Same
@@ -1072,6 +1072,20 @@ Also seen:
     1 µs; comparing successive values is under 1 µs when an edit changes
     the length, and a scan to the first difference when it does not (typing
     over a one-character selection).
+  - iOS, 2026-09-30 at `f3b8d8f`, iPhone 17 Pro Max simulator (Debug
+    framework, on an Apple silicon Mac, so a phone is slower), soft
+    keyboard, twelve keys each time, timed with temporary logging. The
+    session's `state.text` read (the mirror): 0 ms at 200k characters,
+    memoized. The keyboard's `editText` block (the edit itself): 0.7 ms
+    median at 2k, 9.4 ms at 200k, the same at the end and near the start of
+    the document. Frames over 20 ms while typing: none at 2k; at 200k about
+    six a keystroke, up to 137 ms. At 200k, even idle, each caret-blink
+    frame takes 33 ms (two vsyncs), where 2k never exceeds one. So on iOS
+    too the mirror is not the cost and needs no window; typing at 200k is
+    slow for the reasons in 7.8 and 7.11, which carry these numbers.
+    Instruments' Time Profiler would not attach from the command line
+    (`xctrace record --attach` stalled with nothing recorded), so the split
+    inside a frame is unmeasured.
 
 Exit criteria: typing, composition, and clipboard work in current Chrome,
 Firefox, and Safari on desktop; the soft keyboard works on Android Chrome and
@@ -1159,7 +1173,9 @@ iOS Safari; browser tests run in CI.
   Enter on an empty bullet in the Markdown demo left a 6243-character
   textarea with the caret at 753; the rewrite restored 6242 and 752. iOS
   keeps the default `None` for now, split out as 4.29. `RestartInput` exists
-  for it and is tested.
+  for it and is tested. iOS compiled and rechecked in the simulator
+  2026-09-30 with 4.19: typing, autocorrect, backspace, a list Return and
+  Japanese candidates behave as in the 4.5 pass.
 - [ ] **4.26 A behavior's edit mid IME batch. C.** [Fable] [Lane E] A
   behavior edits on top of an IME commit (5.1) at once, but a batch (an
   Android `beginBatchEdit`, a web `onEditCommand` list) may hold further
@@ -1382,7 +1398,9 @@ iOS Safari; browser tests run in CI.
   `ClipboardHelper.getPlainText` reads the plain flavor (desktop's string flavor,
   Android's item text, `UIPasteboard.string`, `navigator.clipboard.readText`),
   and on desktop falls back to the parsed markup's text only when there is no
-  plain flavor (`e2e/PlainPasteE2eTest.kt`). The iOS actual is in the Mac queue.
+  plain flavor (`e2e/PlainPasteE2eTest.kt`). The iOS actual compiled and
+  pasted in the simulator 2026-09-30: iOS's edit-menu Paste reads through it,
+  and text on the general pasteboard pasted as is, 200k characters included.
 
 ## Phase 7: reach
 
@@ -1447,7 +1465,9 @@ Hit testing and caret x already delegate to Compose and should be correct.
 Shaping is one line per keystroke. These still scale with document length:
 
 - [ ] **7.8** [Fable] [Lane N] Per keystroke: the line list is copied, every
-  `LineWrap` is rebuilt, and every rich span is re-anchored.
+  `LineWrap` is rebuilt, and every rich span is re-anchored. Measured on the
+  iOS simulator (4.21): one keyboard edit takes 9.4 ms at 200k characters
+  against 0.7 ms at 2k, wherever the caret is.
 - [ ] **7.9** [Opus] [Lane N] `getAllText()` rebuilds the whole document per
   revision when read by semantics, the Android IME, and the desktop adapter.
   214 µs per revision at 200k characters on the desktop JVM (4.21).
@@ -1455,7 +1475,9 @@ Shaping is one line per keystroke. These still scale with document length:
   reshapes the entire document. This is every soft keyboard open and close.
 - [ ] **7.11** [Opus] [Lane N] Linear scans per frame or event: visible-line
   lookup in drawing, unculled selection drawing, `getWrappedLineIndex`,
-  `getOffsetAtPosition` on each drag move.
+  `getOffsetAtPosition` on each drag move. On the iOS simulator at 200k
+  characters (4.21), an idle caret-blink frame takes 33 ms, two vsyncs,
+  where a 2k document stays under one; typing frames reach 137 ms.
 - [ ] **7.12** [Opus] [Lane N] `moveRight` and `moveToNextWord` sum all line
   lengths though `getTextLength()` is constant time.
 
@@ -1608,9 +1630,6 @@ records results and removes entries that passed.
 | 1.5 | The same iOS compile as 1.1 covers `wordCursor`. In the iOS sample app: Option+Left and Option+Right with a hardware keyboard through "don’t stop", "日本語を勉強します" and "a 😀 b"; double-tap "don’t" and an emoji | Option arrows stop at word ends and starts only, keeping "don’t" whole, stepping Japanese by dictionary word and stopping at the emoji; a double-tap selects the whole contraction or the whole emoji |  Partial, same run. Double-tap selects "don’t" whole and 😀 whole. **Fails:** double-tap on 勉 in 日本語を勉強します selects only 強, so iOS word breaks split kanji per character. Desktop, on the same skia `actual`, segments 勉強 (`TextEditorWordSegmentationTest`), so skia's ICU on iOS seems to lack the CJK dictionary; `NSString` word enumeration or `CFStringTokenizer` would have it. Option+Left and Option+Right not run: hardware keyboard, left for a person |
 | 2.6 | In Safari and Chrome on macOS, open the wasm demo and press Ctrl+A, E, F, B, N, P, D, H and K in a paragraph. The page's hidden text area has the same Cocoa Emacs bindings, so a chord could act twice | Each chord moves or deletes once, as in the desktop sample app | Not run: needs a person at a real keyboard. Browser automation injects key events below the Cocoa text system, so it cannot reproduce a chord acting twice |
 | 4.6 | With a hardware keyboard in the iOS sample app (a person: the simulator tools here cannot press arrow keys), press Up and Down through a wrapped paragraph and a heading | Each press moves the caret one drawn row, once. `verticalPositionFromPosition` now answers from the unstyled layout, so a double move or a move by an undrawn row would come from UIKit handling the arrow through `UITextInput` as well | |
-| 2.9 | In the iOS sample app with a hardware keyboard: press Tab, Ctrl+Tab, then Escape followed by Tab; then set `state.tabSettings = TabSettings(movesFocus = true)` on the demo editor and press Tab | Tab indents by four spaces; Ctrl+Tab, Escape then Tab, and Tab under `movesFocus` either move focus to another control or do nothing, and never type a tab character (4.28) | |
+| 2.9 | In the iOS sample app with a hardware keyboard: press Tab, Ctrl+Tab, then Escape followed by Tab; then set `state.tabSettings = TabSettings(movesFocus = true)` on the demo editor and press Tab | Tab indents by four spaces; Ctrl+Tab, Escape then Tab, and Tab under `movesFocus` either move focus to another control or do nothing, and never type a tab character (4.28) || Not run: hardware keyboard, left for a person |
 | 3.8 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64`. 3.8 added `internal expect fun hasNativeTextToolbar()` (commonMain `TouchToolbar.kt`) with `iosMain/.../TouchToolbar.ios.kt` answering true. Then in the simulator: long-press a word, double-tap a word, long-press empty space, tap the caret handle, and drag a selection handle | Compiles. UIKit's edit menu appears over the selection or caret with Cut, Copy, Paste and Select all as applicable (Paste and Select all alone at a bare caret), hides while a handle is dragged and returns when it drops, and goes when the caret moves or the text is scrolled. If no menu appears, the input connection has no toolbar: fall back to `false` in `TouchToolbar.ios.kt` so the context menu stands in |  Partial, same run. Compiles. The UIKit menu works over a selection: double-tap or long-press a word shows Cut, Copy, Paste, Select All, and each works. **Fails:** long-press in an empty document calls `show()` with a zero-width caret rect and only Paste, and UIKit shows nothing (the toolbar reports Hidden right after `showMenu`); a tap on the caret handle never calls `show()`. Native reference: a tap in Safari's focused empty field shows Paste. Also: a long-press past a line's end selects the line's last word instead of placing the caret; with a selection ending at the document end, a long-press below the text counts as on the selection. When the screen was shifted by 4.24 the selection menu did not appear either. Did not fall back to `false`, since the menu works for selections |
-| 4.19, 4.25 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64`. `skikoMain/.../input/SkikoTextEditorInputMethodRequest.kt` gained an `imeResync` parameter (default `SkikoImeResync.None`, which iOS uses); `imeResyncGeneration` in `TextEditorState.kt` is now snapshot state; `focusedRectInRoot` measures the caret with `calculateCursorPosition()` instead of reading `lastCursorMetrics` (same observation triggers: caret moves and resizes). Then the 4.29 comparison | Compiles; iOS typing, backspace, list Return and Japanese candidates behave as in the 4.5 pass | |
-| 4.21 | In the iOS sample app, paste or load a document of about 200,000 characters (2,000 lines of 99 characters), type a sentence at its end and in its middle, and compare with a 2,000-character document; Instruments' Time Profiler if it feels slower | Typing feels the same in both; no frame spent in `getAllText`, `onTextFieldValueUpdated` or UIKit text notifications stands out. Then tick 4.21 | |
-| 4.13 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64`. `clipboard/ClipboardEvents.kt` adds `internal expect fun ClipboardEventsEffect`; the iOS actual (`iosMain/.../clipboard/ClipboardEvents.ios.kt`) is a no-op. Then the web demo in Safari on macOS: Cmd+C a bold word, Cmd+V it back, and paste a bulleted list from another page; also the context menu's Paste | Compiles. Safari pastes the bold word bold and the list as a list; the context menu's Paste either pastes or logs a `ComposeTextEditor:` warning in the console, never fails silently | |
-| 6.13 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64`. `ClipboardHelper` gained the `expect` member `getPlainText`; the iOS actual (`iosMain/.../clipboard/ClipboardHelper.ios.kt`) returns `UIPasteboard.generalPasteboard.string`. Then in the simulator: copy a word in Safari, and in the sample app use the edit menu's Paste and, with a hardware keyboard, Cmd+Shift+V | Compiles. Both paste the word; iOS reads plain text only until 4.9, so this checks the new member, not a difference between the two | |
+| 4.13 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64`. `clipboard/ClipboardEvents.kt` adds `internal expect fun ClipboardEventsEffect`; the iOS actual (`iosMain/.../clipboard/ClipboardEvents.ios.kt`) is a no-op. Then the web demo in Safari on macOS: Cmd+C a bold word, Cmd+V it back, and paste a bulleted list from another page; also the context menu's Paste | Compiles. Safari pastes the bold word bold and the list as a list; the context menu's Paste either pastes or logs a `ComposeTextEditor:` warning in the console, never fails silently || Compile part passed 2026-09-30 at `f3b8d8f`. The Safari part is not run: it needs Safari on macOS with a person at the keyboard, since the clipboard events only fire for real key presses and driving Safari needs its Remote Automation setting turned on |
