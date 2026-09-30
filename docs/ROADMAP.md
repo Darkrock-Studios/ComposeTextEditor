@@ -2110,13 +2110,25 @@ Shaping is one line per keystroke. These still scale with document length:
   paragraph gaps lose those gaps on first import under the new rule (their
   blank line reads as the separator) unless the host imports them with
   `NEWLINE`. See `docs/design/line-blocks.md`, "Paragraphs".
-- [ ] **7.45** [Opus] [Lane I] A line indented by four spaces or a tab (Tab
+- [x] **7.45** [Opus] [Lane I] A line indented by four spaces or a tab (Tab
   on a plain line, 2.9) is an indented code block to CommonMark, and a
   paragraph per line (7.15) makes every such line a block start. Export
   writes the spaces as they are, so other renderers show the line as code
   and import reads it as literal text with its indentation. Decide the
   markdown form of a leading indent (`&nbsp;`, a non-breaking space, or no
   form and a stripped indent) and write it into `docs/design/line-blocks.md`.
+  Done: `&nbsp;` per leading space and `&emsp;` per leading tab (a `&#9;`
+  would collapse in HTML), in a line's body after its prefixes, whenever the
+  line holds more than whitespace (`leadingIndents` in
+  `markdown/MarkdownEscaping.kt`). The rest of the line is then not at a
+  line's start, so it takes no line-start escape, and a delimiter after the
+  indent flanks as after punctuation. Import reads the leading entity run
+  back as the whitespace through punctuation stand-ins the file does not
+  contain, which keep the parse as a renderer's
+  (`markdown/LeadingIndentTest.kt`). The string converters (`toMarkdown`,
+  `toAnnotatedStringFromMarkdown`) agree. A line of 1 to 3 leading spaces,
+  which other renderers dropped, keeps them too. See
+  `docs/design/line-blocks.md`, "Leading indent".
 - [x] **7.46** [Opus] [Lane H] The markdown importer reads `color` and
   `font-size` out of an inline `style` attribute (7.16,
   `markdown/InlineHtml.kt`) with its own CSS declaration walk, and the HTML
@@ -2429,6 +2441,11 @@ Shaping is one line per keystroke. These still scale with document length:
   request, since a `TextLayoutResult` cannot be put together from the editor's
   per-line layouts. Needs a semantics node or a platform accessibility hook that
   answers character bounds from the rows directly.
+- [ ] **7.58** [Opus] [Lane D] Tab at a list item's start where nesting is
+  not allowed does nothing (`handleIndent` in `input/BuiltinEditorActions.kt`),
+  because leading spaces in an item did not survive a markdown round trip.
+  Since 7.45 they do (`- &nbsp;&nbsp;item`), so decide whether Tab there
+  should insert the indent text, as it does inside an item's text.
 
 ## Housekeeping
 

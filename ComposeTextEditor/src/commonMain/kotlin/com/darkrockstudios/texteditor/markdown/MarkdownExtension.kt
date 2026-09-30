@@ -206,6 +206,14 @@ private class ListNesting(private val registry: List<LineBlockStyle>) {
 	}
 }
 
+private val INDENT_ENTITIES_ONLY = Regex("""^(?:&nbsp;|&NonBreakingSpace;|&Tab;|&emsp;|&#0*(?:160|32|9);|&#[xX]0*(?:[aA]0|20|9);)+[ \t]*$""")
+
+/**
+ * Empty for a line of only indent entities (a foreign spacer line): its indent would be
+ * all it held, and a line of only whitespace is a blank line, which export writes as one.
+ */
+private fun String.withoutIndentOnlyText(): String = if (INDENT_ENTITIES_ONLY.matches(this)) "" else this
+
 private val RESIDUAL_BULLET_MARKER = Regex("""^([-*+])(\s)""")
 private val RESIDUAL_QUOTE_MARKER = Regex("""^>""")
 
@@ -564,14 +572,14 @@ class MarkdownExtension(
 
 				peeled.blocks.isNotEmpty() -> {
 					record(peeled.blocks)
-					peeled.body.escapeResidualMarker()
+					peeled.body.withoutIndentOnlyText().escapeResidualMarker()
 				}
 
-				else -> line
+				else -> line.withoutIndentOnlyText()
 			}
 		}
 		val processedMarkdown = processedLines.joinToString("\n")
-		val parsed = processedMarkdown.parseMarkdownWithLinks(markdownConfiguration)
+		val parsed = processedMarkdown.parseMarkdownWithLinks(markdownConfiguration, literalLines = codeFenceLineIndices)
 		val annotatedString = parsed.annotatedString
 		// setText publishes the text with no spans and applyDocumentBlocks attaches them
 		// afterwards. As one revision, so a concurrent export can't catch the document

@@ -43,18 +43,95 @@ fun String.toAnnotatedStringFromMarkdown(
  * link spans the [AnnotatedString] itself cannot carry.
  */
 internal fun String.parseMarkdownWithLinks(
-	configuration: MarkdownConfiguration = MarkdownConfiguration.DEFAULT
+	configuration: MarkdownConfiguration = MarkdownConfiguration.DEFAULT,
+	literalLines: Set<Int>? = null,
 ): MarkdownParseResult {
 	val styles = MarkdownStyles(configuration)
 
-	val source = normalizeLineEndings().withHighlightTags()
+	val normalized = normalizeLineEndings()
+	val standIns = IndentStandIns.forSource(normalized)
+	val source = (standIns?.substitute(normalized) { literalLines ?: normalized.fencedLineIndices() } ?: normalized)
+		.withHighlightTags()
 	val flavour = GFMFlavourDescriptor()
 	val parsedTree = MarkdownParser(flavour).buildMarkdownTreeFromString(source)
 	val context = MarkdownRenderContext(styles)
 	val annotated = buildAnnotatedString {
 		appendMarkdownChildren(source, parsedTree, 0, context)
 	}
-	return MarkdownParseResult(annotated, context.links)
+	return MarkdownParseResult(standIns?.restore(annotated) ?: annotated, context.links)
+}
+
+/**
+ * A line's leading run of space and tab entities (the form export writes an indent in,
+ * see `leadingIndents`), after any block prefixes, stands through the parse as one
+ * [space] or [tab] per entity. Both are punctuation to the parser, as the entity's `;`
+ * is to a renderer, so what follows parses as it does after the entity: not at a line's
+ * start, and after punctuation for a delimiter's flanking. They are chosen from
+ * characters the source does not hold, so [restore] turns only the stand-ins back into
+ * the spaces and tabs, one for one, and no offset moves.
+ */
+private class IndentStandIns private constructor(val space: Char, val tab: Char) {
+
+	/** [source] with the stand-ins in, leaving the lines [literalLines] names as written. */
+	fun substitute(source: String, literalLines: () -> Set<Int>): String {
+		val literal by lazy(literalLines)
+		return source.lines().mapIndexed { index, line ->
+			val match = LEADING_INDENT_ENTITIES.find(line)
+			if (match == null || index in literal) return@mapIndexed line
+			val run = match.groups[2]!!
+			line.substring(0, run.range.first) +
+				INDENT_ENTITY.findAll(run.value).joinToString("") { if (it.value.isTabEntity()) "$tab" else "$space" } +
+				line.substring(run.range.last + 1)
+		}.joinToString("\n")
+	}
+
+	/** [text] with the stand-ins as whitespace; it keeps span and paragraph styles, all a parse makes. */
+	fun restore(text: AnnotatedString): AnnotatedString {
+		if (text.text.none { it == space || it == tab }) return text
+		val restored = text.text.map { if (it == space) ' ' else if (it == tab) '\t' else it }.joinToString("")
+		return AnnotatedString(restored, text.spanStyles, text.paragraphStyles)
+	}
+
+	companion object {
+		/** The Supplemental Punctuation block's punctuation, which markdown gives no meaning. */
+		private val CANDIDATES = ('\u2E00'..'\u2E7F').filter { it.category == CharCategory.OTHER_PUNCTUATION }
+
+		/** Stand-ins for [source], or null when it has no leading indent entity to stand in for. */
+		fun forSource(source: String): IndentStandIns? {
+			if (!source.contains('&') || source.lines().none { LEADING_INDENT_ENTITIES.containsMatchIn(it) }) return null
+			val free = CANDIDATES.filter { it !in source }
+			return if (free.size >= 2) IndentStandIns(free[0], free[1]) else null
+		}
+	}
+}
+
+/** Quote markers, then a list marker at any indent or a heading marker, then a run of indent entities. */
+private val LEADING_INDENT_ENTITIES = Regex(
+	"""^((?: {0,3}>[ ]?)*(?:[ \t]*(?:[-*+]|\d{1,9}[.)])[ \t]+| {0,3}#{1,6}[ \t]+)?)""" +
+		"""((?:&nbsp;|&NonBreakingSpace;|&Tab;|&emsp;|&#0*(?:160|32|9);|&#[xX]0*(?:[aA]0|20|9);)+)"""
+)
+private val INDENT_ENTITY = Regex("""&[^;]+;""")
+
+private val TAB_ENTITY = Regex("""&(?:Tab|emsp|#0*9|#[xX]0*9);""")
+
+private fun String.isTabEntity(): Boolean = TAB_ENTITY.matches(this)
+
+private val QUOTE_MARKERS = Regex("""^(?: {0,3}> ?)*""")
+
+/** The lines inside a fence, a quoted one too, whose text is literal. */
+private fun String.fencedLineIndices(): Set<Int> {
+	val fenced = HashSet<Int>()
+	var fence: String? = null
+	lines().forEachIndexed { index, line ->
+		val marker = codeFenceMarker(line.replaceFirst(QUOTE_MARKERS, ""))
+		val open = fence
+		when {
+			open == null && marker != null -> fence = marker
+			open != null && marker != null && marker[0] == open[0] && marker.length >= open.length -> fence = null
+			open != null -> fenced += index
+		}
+	}
+	return fenced
 }
 
 /**

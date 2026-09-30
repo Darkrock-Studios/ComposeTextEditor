@@ -87,6 +87,19 @@ internal fun AnnotatedString.toMarkdown(
 		return if (start >= end) null else MarkerRun(start, end, run.marker)
 	}
 
+	// An indent is written as entities at the line's very start, where import reads it
+	// (see leadingIndents), so no marker opens or closes inside one: a run starting in
+	// an indent starts after it, and one ending in a later line's indent closes at the
+	// end of the line before. The indent's own styling is not kept.
+	val indents = leadingIndents(text)
+	fun outsideIndents(run: MarkerRun): MarkerRun? {
+		var start = run.start
+		while (start < run.end && indents[start]) start++
+		var end = run.end
+		if (end > start && indents[end - 1]) end = text.lastIndexOf('\n', end - 1).coerceAtLeast(start)
+		return if (start >= end) null else MarkerRun(start, end, run.marker)
+	}
+
 	// The destination is emitted verbatim inside `(...)`; a URL whose characters
 	// would terminate or corrupt the destination gets the CommonMark
 	// angle-bracket form instead.
@@ -94,12 +107,14 @@ internal fun AnnotatedString.toMarkdown(
 		val start = range.first.coerceAtLeast(0)
 		val end = (range.last + 1).coerceAtMost(text.length)
 		if (start >= end) return@mapNotNull null
-		MarkerRun(
-			start, end,
-			StyleMarkerPair(
-				openMarker = "[",
-				closeMarker = "](${markdownLinkDestination(url)})",
-				isLink = true,
+		outsideIndents(
+			MarkerRun(
+				start, end,
+				StyleMarkerPair(
+					openMarker = "[",
+					closeMarker = "](${markdownLinkDestination(url)})",
+					isLink = true,
+				),
 			),
 		)
 	}
@@ -125,7 +140,7 @@ internal fun AnnotatedString.toMarkdown(
 			}
 		}
 		runs.forEach { (start, end) ->
-			trimRun(MarkerRun(start, end, marker))?.let { styleRuns += it }
+			outsideIndents(MarkerRun(start, end, marker))?.let(::trimRun)?.let { styleRuns += it }
 		}
 	}
 
@@ -178,6 +193,7 @@ internal fun AnnotatedString.toMarkdown(
 				(afterHighlightMarker || (currentIndex + 1 == target && nextMarker == DOUBLE_EQUALS_MARKER))
 			when {
 				codeSpanDepth > 0 -> result.append(ch)
+				indents[currentIndex] -> result.append(leadingIndentEntity(ch))
 				besideMarker || escapes[currentIndex] -> result.append('\\').append(ch)
 				else -> result.append(ch)
 			}

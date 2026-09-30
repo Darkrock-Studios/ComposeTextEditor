@@ -56,9 +56,10 @@ internal val SETEXT_UNDERLINE_LINE = Regex("""^ {0,3}(?:=+|-+)[ \t]*$""")
  * or starts a footnote or a reference definition; every bracket inside a
  * link's own text; `!` before a link; `<` before a letter, `/`, `!` or `?`;
  * `&` before an entity; a backslash before punctuation or at a line's end (a
- * hard break); and at a line's start, after up to three spaces, a heading,
- * quote, list or ordered marker, a tilde fence, a thematic break and a setext
- * underline.
+ * hard break); and at the start of a line with no indent, a heading, quote,
+ * list or ordered marker, a tilde fence, a thematic break and a setext
+ * underline. An indented line's indent is written as entities
+ * ([leadingIndents]), after which nothing is at a line's start.
  *
  * [linkTexts] are the ranges written as a link's text, and [markerBoundaries]
  * the indices before which the emitter writes a delimiter of its own (a run's
@@ -77,6 +78,8 @@ internal fun markdownEscapes(
 	fun isLineEnd(index: Int) = index >= text.length || text[index] == '\n'
 	val linkStarts = linkTexts.mapTo(HashSet()) { it.first }
 	val linkOpeners = HashSet<Int>()
+	// An indent is written as entities, whose `;` is what a delimiter after it flanks.
+	val indents = leadingIndents(text)
 
 	var lineStart = 0
 	while (lineStart <= text.length) {
@@ -94,7 +97,7 @@ internal fun markdownEscapes(
 			'*', '_', '~', '=' -> {
 				var runEnd = i
 				while (runEnd < text.length && text[runEnd] == c) runEnd++
-				val before = if (i in markerBoundaries) MARKER_STAND_IN else at(i - 1)
+				val before = if (i in markerBoundaries || (i > 0 && indents[i - 1])) MARKER_STAND_IN else at(i - 1)
 				val after = if (runEnd in markerBoundaries) MARKER_STAND_IN else at(runEnd)
 				// Only a run of exactly two `=` is a highlight delimiter.
 				val canDelimit = (c != '=' || runEnd - i == 2) && delimiterRunCanDelimit(c, before, after)
@@ -139,8 +142,37 @@ private val THEMATIC_BREAK_REGEX = Regex("""^(?:(?:\*[ \t]*){3,}|(?:-[ \t]*){3,}
 private val ORDERED_MARKER_REGEX = Regex("""^[0-9]{1,9}[.)](?:[ \t]|$)""")
 private val REFERENCE_DEFINITION_REGEX = Regex("""^\[[^\]]+\]:""")
 
+/**
+ * Each line's leading spaces and tabs, where the line holds more than them: written as
+ * entities (see [leadingIndentEntity]), since four spaces or a tab would open an
+ * indented code block and a paragraph drops up to three.
+ */
+internal fun leadingIndents(text: CharSequence): BooleanArray {
+	val indent = BooleanArray(text.length)
+	var lineStart = 0
+	while (lineStart < text.length) {
+		var runEnd = lineStart
+		while (runEnd < text.length && (text[runEnd] == ' ' || text[runEnd] == '\t')) runEnd++
+		if (runEnd < text.length && text[runEnd] != '\n') {
+			for (i in lineStart until runEnd) indent[i] = true
+		}
+		val lineEnd = text.indexOf('\n', runEnd).let { if (it == -1) text.length else it }
+		lineStart = lineEnd + 1
+	}
+	return indent
+}
+
+/**
+ * How a leading indent character is written: a space as `&nbsp;`, a tab as `&emsp;`, the
+ * two whitespace entities a renderer shows (a `&#9;` is a tab, which HTML collapses).
+ */
+internal fun leadingIndentEntity(char: Char): String = if (char == '\t') "&emsp;" else "&nbsp;"
+
 /** The line-start rules for the line [start] until [end]. */
 private fun escapeLineStart(text: CharSequence, start: Int, end: Int, escape: BooleanArray) {
+	// An indented line's indent is written as entities ([leadingIndents]), so what
+	// follows it is not at a line's start.
+	if (start < end && (text[start] == ' ' || text[start] == '\t')) return
 	var first = start
 	while (first < end && first - start < 3 && text[first] == ' ') first++
 	if (first >= end) return
