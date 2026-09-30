@@ -1002,6 +1002,28 @@ Also seen:
   as `BasicTextField` on those platforms, so acceptable today; measure on a
   long document (7.8) before deciding whether the request should serve a
   window around the caret instead.
+  Web measured 2026-09-29 on a 200,000-character document (2,000 lines of
+  99 characters): not worth a window there. iOS is left to the Mac queue.
+  - Web, Chromium, sample app dev server (unoptimised wasm, so the editor's
+    own share is larger than in production): main-thread time per
+    keystroke, summed over every animation frame, timer and message task in
+    the 3 s after a real key press, caret blink (about 5 ms per idle 3 s)
+    not subtracted. With the mirror: 13.8, 16.4, 14.1 and 11.6 ms. With
+    `value()` stubbed to a constant (no textarea write, no string handed to
+    JS): 13.5, 12.4, 12.7, 12.5 and 12.7 ms. A 2,000-character document
+    with the mirror: 14.2, 8.1 and 6.4 ms. So the mirror adds about 1 ms a
+    keystroke at 200k characters, with a wider spread (a few samples; a
+    rare copy or GC spike cannot be ruled out). The textarea write with a
+    forced layout took 0.1 to 2.4 ms; loading the 200k document into it
+    once took 17 ms. The stub still builds the document string when
+    semantics reads it (7.9), so this is the mirror's cost beyond that.
+  - The Kotlin side on the desktop JVM (iOS runs the same code on
+    Kotlin/Native, which can be several times slower): building the
+    document string takes 214 µs per revision at 200k characters (5 µs at
+    2k), memoized and shared with semantics (7.9); `value()` over it takes
+    1 µs; comparing successive values is under 1 µs when an edit changes
+    the length, and a scan to the first difference when it does not (typing
+    over a one-character selection).
 
 Exit criteria: typing, composition, and clipboard work in current Chrome,
 Firefox, and Safari on desktop; the soft keyboard works on Android Chrome and
@@ -1314,6 +1336,7 @@ Shaping is one line per keystroke. These still scale with document length:
   `LineWrap` is rebuilt, and every rich span is re-anchored.
 - [ ] **7.9** [Opus] [Lane N] `getAllText()` rebuilds the whole document per
   revision when read by semantics, the Android IME, and the desktop adapter.
+  214 µs per revision at 200k characters on the desktop JVM (4.21).
 - [ ] **7.10** [Opus] [Lane N] Any viewport change, height-only included,
   reshapes the entire document. This is every soft keyboard open and close.
 - [ ] **7.11** [Opus] [Lane N] Linear scans per frame or event: visible-line
@@ -1474,3 +1497,4 @@ records results and removes entries that passed.
 | 2.9 | In the iOS sample app with a hardware keyboard: press Tab, Ctrl+Tab, then Escape followed by Tab; then set `state.tabSettings = TabSettings(movesFocus = true)` on the demo editor and press Tab | Tab indents by four spaces; Ctrl+Tab, Escape then Tab, and Tab under `movesFocus` either move focus to another control or do nothing, and never type a tab character (4.28) | |
 | 3.8 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64`. 3.8 added `internal expect fun hasNativeTextToolbar()` (commonMain `TouchToolbar.kt`) with `iosMain/.../TouchToolbar.ios.kt` answering true. Then in the simulator: long-press a word, double-tap a word, long-press empty space, tap the caret handle, and drag a selection handle | Compiles. UIKit's edit menu appears over the selection or caret with Cut, Copy, Paste and Select all as applicable (Paste and Select all alone at a bare caret), hides while a handle is dragged and returns when it drops, and goes when the caret moves or the text is scrolled. If no menu appears, the input connection has no toolbar: fall back to `false` in `TouchToolbar.ios.kt` so the context menu stands in |  Partial, same run. Compiles. The UIKit menu works over a selection: double-tap or long-press a word shows Cut, Copy, Paste, Select All, and each works. **Fails:** long-press in an empty document calls `show()` with a zero-width caret rect and only Paste, and UIKit shows nothing (the toolbar reports Hidden right after `showMenu`); a tap on the caret handle never calls `show()`. Native reference: a tap in Safari's focused empty field shows Paste. Also: a long-press past a line's end selects the line's last word instead of placing the caret; with a selection ending at the document end, a long-press below the text counts as on the selection. When the screen was shifted by 4.24 the selection menu did not appear either. Did not fall back to `false`, since the menu works for selections |
 | 4.19, 4.25 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64`. `skikoMain/.../input/SkikoTextEditorInputMethodRequest.kt` gained an `imeResync` parameter (default `SkikoImeResync.None`, which iOS uses); `imeResyncGeneration` in `TextEditorState.kt` is now snapshot state; `focusedRectInRoot` measures the caret with `calculateCursorPosition()` instead of reading `lastCursorMetrics` (same observation triggers: caret moves and resizes). Then the 4.29 comparison | Compiles; iOS typing, backspace, list Return and Japanese candidates behave as in the 4.5 pass | |
+| 4.21 | In the iOS sample app, paste or load a document of about 200,000 characters (2,000 lines of 99 characters), type a sentence at its end and in its middle, and compare with a 2,000-character document; Instruments' Time Profiler if it feels slower | Typing feels the same in both; no frame spent in `getAllText`, `onTextFieldValueUpdated` or UIKit text notifications stands out. Then tick 4.21 | |
