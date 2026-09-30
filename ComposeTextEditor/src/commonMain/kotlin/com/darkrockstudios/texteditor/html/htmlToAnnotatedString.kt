@@ -46,7 +46,8 @@ internal fun parseHtmlDocument(
 	includeImages: Boolean = false,
 ): HtmlDocument {
 	val body = Ksoup.parseBodyFragment(unwrapClipboardHtml(html)).body()
-	return HtmlSpanBuilder(configuration, includeImages).build(body)
+	val marksConvertedSpaces = html.contains(CONVERTED_SPACE_CLASS) || html.contains(SPACERUN_STYLE, ignoreCase = true)
+	return HtmlSpanBuilder(configuration, includeImages, marksConvertedSpaces).build(body)
 }
 
 private val START_FRAGMENT = Regex("""<!--\s*StartFragment\s*-->""", RegexOption.IGNORE_CASE)
@@ -92,7 +93,13 @@ private val CELL_TAGS = setOf("td", "th")
 private val SKIPPED_TAGS = setOf("script", "style", "head", "title", "noscript")
 
 /** What `&nbsp;` decodes to. Content rather than layout, so it escapes whitespace collapsing. */
-private const val NO_BREAK_SPACE = '\u00A0'
+internal const val NO_BREAK_SPACE = '\u00A0'
+
+/** WebKit's mark for no-break spaces standing in for ordinary ones. */
+private const val CONVERTED_SPACE_CLASS = "Apple-converted-space"
+
+/** Word's mark for the same, as an inline style. */
+private const val SPACERUN_STYLE = "mso-spacerun"
 
 private val TAG_STYLES = mapOf(
 	"b" to HtmlTag.STRONG,
@@ -120,9 +127,14 @@ private val TAG_STYLES = mapOf(
 /** What is in force over the subtree currently being walked. */
 private data class HtmlScope(
 	val tags: Set<HtmlTag>,
+	/** Whitespace is kept as written, by `<pre>` or by CSS. */
 	val preformatted: Boolean,
 	/** The list style `<li>` children take, set by the nearest `<ul>`/`<ol>` ancestor. */
 	val listBlock: LineBlockStyle?,
+	/** Inside a `<pre>` element, which becomes a code fence. */
+	val inPreElement: Boolean = false,
+	/** Inside an element marking its no-break spaces as ordinary ones. */
+	val convertedSpace: Boolean = false,
 ) {
 	companion object {
 		val ROOT = HtmlScope(emptySet(), preformatted = false, listBlock = null)
@@ -160,6 +172,8 @@ private class BlockRange(
 private class HtmlSpanBuilder(
 	private val config: MarkdownConfiguration,
 	private val includeImages: Boolean,
+	/** The source marks every no-break space that stands for an ordinary one (Safari, Word). */
+	private val marksConvertedSpaces: Boolean,
 ) {
 
 	private val out = StringBuilder()
@@ -288,15 +302,19 @@ private class HtmlSpanBuilder(
 
 		val style = element.attr("style")
 		val nestedPre = scope.preformatted || name == "pre" || isPreformatted(style)
+		val nestedInPreElement = scope.inPreElement || name == "pre"
 		if (name == "pre") dropLeadingNewline = true
 		val nested = HtmlScope(
-			tags = resolveTags(name, style, scope.tags, nestedPre),
+			tags = resolveTags(name, style, scope.tags, nestedInPreElement),
 			preformatted = nestedPre,
 			listBlock = when (name) {
 				"ul" -> BulletList
 				"ol" -> OrderedList
 				else -> scope.listBlock
 			},
+			inPreElement = nestedInPreElement,
+			convertedSpace = scope.convertedSpace || element.hasClass(CONVERTED_SPACE_CLASS) ||
+				style.contains(SPACERUN_STYLE, ignoreCase = true),
 		)
 
 		val block = blockStyleFor(name, scope)
@@ -364,14 +382,14 @@ private class HtmlSpanBuilder(
 		name: String,
 		style: String,
 		active: Set<HtmlTag>,
-		preformatted: Boolean,
+		inPreElement: Boolean,
 	): Set<HtmlTag> {
 		val result = LinkedHashSet(active)
 		TAG_STYLES[name]?.let { result += it }
 		// `<pre><code>` is one code block, not a block containing an inline code
 		// run. The fence bakes in its own monospace, and a span layered on top
 		// would outlive the fence being toggled off.
-		if (preformatted) result -= HtmlTag.CODE
+		if (inPreElement) result -= HtmlTag.CODE
 		if (style.isEmpty()) return result
 
 		// Each directive settles its own tag in both directions, so an inline style
@@ -395,7 +413,7 @@ private class HtmlSpanBuilder(
 				}
 
 				"font-family" -> if (
-					!preformatted && (
+					!inPreElement && (
 						value.contains("monospace") || value.contains("courier") ||
 							value.contains("consolas") || value.contains("menlo")
 						)
@@ -487,9 +505,10 @@ private class HtmlSpanBuilder(
 			// Normalized here rather than in the markup, so an encoded `&#13;` is caught too.
 			val text = raw.normalizeLineEndings()
 			// A newline immediately after `<pre>` is markup formatting, not content.
-			val content = if (dropLeadingNewline) text.removePrefix("\n") else text
+			val kept = if (dropLeadingNewline) text.removePrefix("\n") else text
 			dropLeadingNewline = false
-			if (content.isEmpty()) return
+			if (kept.isEmpty()) return
+			val content = if (scope.convertedSpace) kept.replace(NO_BREAK_SPACE, ' ') else kept
 			flushPendingBreaks()
 			syncActive(scope.tags)
 			out.append(content)
@@ -498,27 +517,32 @@ private class HtmlSpanBuilder(
 			return
 		}
 
-		raw.forEach { ch ->
-			// A no-break space is content rather than layout, so it survives both
-			// collapsing and the trim at line ends. That is what lets a run of spaces
-			// round-trip: the serializer encodes the run's edges as `&nbsp;`, which
-			// arrives back here as U+00A0.
+		raw.forEachIndexed { index, ch ->
+			// A no-break space escapes both collapsing and the trim at line ends. Sources
+			// also write one to keep an ordinary space from collapsing. Unless the source
+			// marks those, one is content only between two characters of its own text:
+			// at a text's edge or beside an ordinary space it stands for an ordinary
+			// space (Chrome's `&nbsp; ` pairs, Google Docs at a span's start).
 			if (ch == NO_BREAK_SPACE) {
+				val converted = scope.convertedSpace || !marksConvertedSpaces && (
+					index == 0 || index == raw.lastIndex ||
+						raw[index - 1].isCollapsibleSpace() || raw[index + 1].isCollapsibleSpace()
+					)
 				flushPendingBreaks()
 				syncActive(scope.tags)
-				out.append(' ')
+				out.append(if (converted) ' ' else NO_BREAK_SPACE)
 				lastWasSpace = false
 				trailingSpaceIsLiteral = true
-				return@forEach
+				return@forEachIndexed
 			}
-			if (ch.isWhitespace()) {
+			if (ch.isCollapsibleSpace()) {
 				if (!lastWasSpace && pendingNewlines() == 0 && !pendingCellBreak && out.isNotEmpty()) {
 					syncActive(scope.tags)
 					out.append(' ')
 					lastWasSpace = true
 					trailingSpaceIsLiteral = false
 				}
-				return@forEach
+				return@forEachIndexed
 			}
 			flushPendingBreaks()
 			syncActive(scope.tags)
@@ -528,3 +552,7 @@ private class HtmlSpanBuilder(
 		}
 	}
 }
+
+/** HTML's own whitespace, the only characters it collapses. Other Unicode spaces are content. */
+private fun Char.isCollapsibleSpace(): Boolean =
+	this == ' ' || this == '\t' || this == '\n' || this == '\r' || this == '\u000C'

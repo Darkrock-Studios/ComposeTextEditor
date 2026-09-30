@@ -196,7 +196,7 @@ private fun lineHtml(
 		image != null -> "<img src=\"${image.source.escapeHtmlAttribute()}\"" +
 			" alt=\"${image.alt.escapeHtmlAttribute()}\">"
 
-		heading != null -> "<${heading.tag}>${line.text.escapeHtmlText()}</${heading.tag}>"
+		heading != null -> "<${heading.tag}>${AnnotatedString(line.text).toHtml(configuration)}</${heading.tag}>"
 		else -> line.toHtml(configuration)
 	}
 

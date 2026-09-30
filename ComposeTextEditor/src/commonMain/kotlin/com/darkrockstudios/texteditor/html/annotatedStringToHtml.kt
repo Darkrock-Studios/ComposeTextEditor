@@ -17,7 +17,10 @@ fun AnnotatedString.toHtml(
 	if (text.isEmpty()) return ""
 
 	val resolved = resolveSpanStyles()
-	val activeTags = Array(text.length) { resolved[it].htmlTags(configuration) }
+	val tagsByStyle = HashMap<SpanStyle, List<HtmlTag>>()
+	val activeTags = Array(text.length) { index ->
+		tagsByStyle.getOrPut(resolved[index]) { resolved[index].htmlTags(configuration).sortedBy { it.ordinal } }
+	}
 
 	val builder = StringBuilder()
 	var open = emptyList<HtmlTag>()
@@ -27,36 +30,61 @@ fun AnnotatedString.toHtml(
 		open = emptyList()
 	}
 
-	for (i in text.indices) {
+	var i = 0
+	while (i < text.length) {
 		val ch = text[i]
 		if (ch == '\n') {
 			// A <br> inside a header or formatting run reopens badly in other apps,
 			// so the break is emitted at the top level between tag runs.
 			closeAll()
 			builder.append("<br>")
+			i++
 			continue
 		}
 
-		val desired = activeTags[i].sortedBy { it.ordinal }
+		val desired = activeTags[i]
 		if (desired != open) {
 			closeAll()
 			desired.forEach { builder.append('<').append(it.tag).append('>') }
 			open = desired
 		}
-		// A space at the edge of a run would be swallowed by HTML whitespace
-		// collapsing on the way back in, so those positions are encoded as a
-		// literal entity instead.
-		val atRunEdge = i == 0 || i == text.length - 1 ||
-			text[i - 1] == ' ' || text[i - 1] == '\n' || text[i + 1] == '\n'
-		if (ch == ' ' && atRunEdge) {
-			builder.append("&nbsp;")
-		} else {
+		if (!ch.isSpace()) {
 			builder.appendEscaped(ch)
+			i++
+			continue
 		}
+
+		var end = i
+		while (end < text.length && text[end].isSpace() && activeTags[end] == desired) end++
+		val protect = !readsBackAsWritten(i, end, activeTags)
+		if (protect) builder.append("<span style=\"white-space:pre-wrap\">")
+		for (k in i until end) builder.appendEscaped(text[k])
+		if (protect) builder.append("</span>")
+		i = end
 	}
 	closeAll()
 
 	return builder.toString()
+}
+
+private fun Char.isSpace(): Boolean = this == ' ' || this == '\t' || this == NO_BREAK_SPACE
+
+/**
+ * Whether the run of spaces over [start] until [end], all under one set of tags,
+ * parses back unchanged when written bare.
+ *
+ * A lone ordinary space between two characters does: HTML collapses only runs and
+ * the spaces at a line's edges. No-break spaces between two characters of the same
+ * text do too, since a reader takes those as content. Anything else (a run, a line
+ * edge, a no-break space against a tag boundary or beside an ordinary space) is
+ * written under `white-space:pre-wrap`, which keeps it as written.
+ */
+private fun AnnotatedString.readsBackAsWritten(start: Int, end: Int, tags: Array<List<HtmlTag>>): Boolean {
+	if (start == 0 || end == text.length) return false
+	if (text[start - 1] == '\n' || text[end] == '\n') return false
+	if (end - start == 1 && text[start] == ' ') return !text[start - 1].isWhitespace() && !text[end].isWhitespace()
+	return (start until end).all { text[it] == NO_BREAK_SPACE } &&
+		tags[start - 1] == tags[start] && tags[end] == tags[start]
 }
 
 /**
@@ -123,6 +151,7 @@ private fun StringBuilder.appendEscaped(ch: Char) {
 		'&' -> append("&amp;")
 		'<' -> append("&lt;")
 		'>' -> append("&gt;")
+		NO_BREAK_SPACE -> append("&nbsp;")
 		else -> append(ch)
 	}
 }

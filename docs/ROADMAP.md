@@ -1292,8 +1292,20 @@ iOS Safari; browser tests run in CI.
   use LF. `setDocument` takes lines as given.
 - [ ] **6.9 Links in HTML. C.** [Opus] [Lane H] No `href` handling on paste or
   copy.
-- [ ] **6.10 Non-breaking spaces** [Opus] [Lane H] become plain spaces on HTML
-  paste.
+- [x] **6.10 Non-breaking spaces** [Opus] [Lane H] become plain spaces on HTML
+  paste. Done: a no-break space between two characters of one text node lands
+  as U+00A0 ("10&nbsp;km"), and copy writes it as `&nbsp;` (plain text keeps
+  U+00A0). Sources also write `&nbsp;` to keep an ordinary space from
+  collapsing. Safari and Word mark those (`Apple-converted-space`,
+  `mso-spacerun`), so markup carrying either mark keeps every unmarked one;
+  otherwise one at a text node's edge or beside an ordinary space (Chrome's
+  `&nbsp; ` pairs, Google Docs at a span's start) is an ordinary space. Only
+  HTML's own whitespace collapses, so U+202F, U+2007 and U+3000 are content. The
+  serializer writes runs of spaces, tabs, line-edge spaces and no-break spaces
+  the parser would misread under `white-space:pre-wrap` rather than as `&nbsp;`,
+  so editor round trips are exact, headings included
+  (`html/NonBreakingSpaceTest.kt`). Inline code is dropped only inside a `<pre>`
+  element, not under that CSS, so monospace text under it now pastes as code.
 - [ ] **6.11 Large paste is quadratic. C.** [Opus] [Lane H] One full line-list
   copy per pasted line.
 - [ ] **6.12 Drag and drop** [Opus] [Lane H] of the selection, and drops of

@@ -160,6 +160,20 @@ this exercises the clipboard's HTML as the block carrier.
    web demo from Notepad and out of it into Notepad (the browser, not the editor,
    supplies CRLF there).
 
+### 2.9 No-break spaces (6.10)
+
+1. Desktop. In a word processor or browser rich-text field, type "10", a no-break
+   space (Ctrl+Shift+Space in Word and LibreOffice, Option+Space on macOS) and "km",
+   copy, and paste into the editor. **Expect:** Ctrl+Right treats "10 km" as it does
+   in the source, and narrowing the window never wraps between "10" and "km".
+2. Copy "10 km" (with the no-break space) and a line with two spaces between words
+   out of the editor into the word processor and a browser rich-text field.
+   **Expect:** the no-break space stays one (Word's formatting marks show a degree
+   sign), and the double space arrives as ordinary spaces, never as degree signs.
+   Note whether Word keeps both spaces (it may ignore `white-space:pre-wrap`).
+3. Copy a paragraph with bold words and double spaces from Google Docs and paste.
+   **Expect:** Find for a phrase typed with ordinary spaces matches it.
+
 ## 3. Key bindings and input
 
 Guards #45, #53, #87.
