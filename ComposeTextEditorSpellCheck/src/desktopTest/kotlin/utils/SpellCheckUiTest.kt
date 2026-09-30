@@ -18,6 +18,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performMouseInput
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.rightClick
 import androidx.compose.ui.test.runSkikoComposeUiTest
 import androidx.compose.ui.text.AnnotatedString
@@ -169,6 +170,16 @@ class SpellCheckUiTestScope(
 		test.onNodeWithTag(EDITOR_TEST_TAG).performTouchInput {
 			advanceEventTime(1_000)
 			click(position)
+		}
+		test.waitForIdle()
+	}
+
+	/** Presses [key], with Shift held when [shift]. */
+	fun press(key: Key, shift: Boolean = false) {
+		test.onRoot().performKeyInput {
+			if (shift) keyDown(Key.ShiftLeft)
+			pressKey(key)
+			if (shift) keyUp(Key.ShiftLeft)
 		}
 		test.waitForIdle()
 	}

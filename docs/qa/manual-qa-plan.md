@@ -740,6 +740,9 @@ Guards #89, #90, #65, #83.
    suggestions; Ignore clears the squiggle and the text is unchanged.
 10. On Android, tap a misspelled word near the start of a line. **Expect:** the menu opens
     just below the word, not shifted left of it by the editor's padding.
+11. Desktop, Windows or Linux key bindings: put the caret in a misspelled word and press
+    Shift+F10, then the Menu key. **Expect:** the word's suggestions and Ignore under the
+    caret. With the caret in a correct word: the standard menu.
 
 ## 8. Performance and smoke pass
 

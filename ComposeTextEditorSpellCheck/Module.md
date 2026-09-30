@@ -35,8 +35,9 @@ fun SpellCheckedEditor(spellChecker: EditorSpellChecker) {
 }
 ```
 
-`SpellCheckingTextEditor` draws the squiggles and wires misspelled-word taps to a
-suggestion menu for you. Toggle checking at runtime with
+`SpellCheckingTextEditor` draws the squiggles and wires misspelled-word taps and
+right-clicks to a suggestion menu for you; Shift+F10 or the Menu key opens the same menu
+for the word at the caret. Toggle checking at runtime with
 `state.setSpellCheckingEnabled(...)`, or fetch suggestions yourself via
 `state.getSuggestions(word)`.
 

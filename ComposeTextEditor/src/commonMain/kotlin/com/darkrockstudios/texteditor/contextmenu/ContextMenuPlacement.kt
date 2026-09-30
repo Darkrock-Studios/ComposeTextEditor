@@ -48,12 +48,12 @@ internal class ContextMenuPlacement(
 	/** Below the caret, kept inside the viewport: where the keyboard opens the menu, as native editors do. */
 	fun showAtCaret() {
 		val caret = state.getPositionForOffset(state.cursorPosition, state.cursor.affinity)
-		showAtContent(
-			Offset(
-				caret.position.x.coerceIn(0f, state.viewportSize.width),
-				(caret.position.y + caret.height).coerceIn(0f, state.viewportSize.height),
-			)
+		val below = Offset(
+			caret.position.x.coerceIn(0f, state.viewportSize.width),
+			(caret.position.y + caret.height).coerceIn(0f, state.viewportSize.height),
 		)
+		menuState.showMenu(toMenu(below), emptyList(), emptyList())
+		menuState.onOpenedAtCaret?.invoke(state)
 	}
 }
 

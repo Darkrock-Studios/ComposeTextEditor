@@ -3,6 +3,7 @@ package com.darkrockstudios.texteditor.contextmenu
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.geometry.Offset
+import com.darkrockstudios.texteditor.state.TextEditorState
 
 /**
  * Represents a custom menu item that can be added to the context menu.
@@ -62,6 +63,14 @@ class TextEditorContextMenuState {
 		this.trailingItems.value = trailingItems
 		menuPosition.value = position
 	}
+
+	/**
+	 * Called when the keyboard (Shift+F10, the Menu key) or an accessibility service opens
+	 * this menu below the caret of the state it is given, once it is open there with no extra
+	 * items. Set it to put items of your own for what is at the caret in the menu, with
+	 * [showMenu] at [menuPosition].
+	 */
+	var onOpenedAtCaret: ((TextEditorState) -> Unit)? = null
 
 	/**
 	 * Convert a point in the text's coordinates to [menuPosition]'s, one for each editor

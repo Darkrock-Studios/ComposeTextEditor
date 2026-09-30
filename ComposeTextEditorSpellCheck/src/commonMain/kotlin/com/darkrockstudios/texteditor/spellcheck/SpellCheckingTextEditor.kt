@@ -3,6 +3,7 @@ package com.darkrockstudios.texteditor.spellcheck
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -52,9 +53,11 @@ private val DefaultContentPadding = PaddingValues(start = 8.dp)
  *
  * Wraps [BasicTextEditor] and overlays spell-check decorations driven by a [SpellCheckState].
  * Edits are observed reactively: affected spans are invalidated immediately and re-checked once
- * typing goes quiet, and replacing the document wholesale re-checks all of it. Secondary clicks and taps on a flagged span open a context menu of
+ * typing goes quiet, and replacing the document wholesale re-checks all of it. Secondary
+ * clicks and taps on a flagged span open a context menu of
  * [Suggestion][com.darkrockstudios.texteditor.spellcheck.api.Suggestion]s for the
- * misspelled word or sentence-level [Correction].
+ * misspelled word or sentence-level [Correction], as do Shift+F10 and the Menu key with the
+ * caret in one.
  *
  * @param spellChecker The [EditorSpellChecker] backing spell checks; used to build a default
  *   [state] when none is provided. May be `null` to disable checking.
@@ -79,10 +82,11 @@ private val DefaultContentPadding = PaddingValues(start = 8.dp)
  * @param spellCheckMenuItems Host items for the context menu opened on a flagged span, rendered
  *   after the built-in "Ignore" and "Add to dictionary" in a group below the suggestions. For a misspelled
  *   word they appear together with the suggestions once those have loaded. Not consulted while
- *   the editor is disabled. Read at click time, so it may close over changing state.
+ *   the editor is disabled. Read when the menu opens, so it may close over changing state.
  * @param diagnostics Underlines from a checker other than spelling, such as grammar, kept up to date
  *   as the text changes. Its [TextDiagnosticsState.textState] must be [state]'s. A secondary click
- *   or tap on one opens a menu of its message and fixes.
+ *   or tap on one, or Shift+F10 or the Menu key with the caret in it, opens a menu of its
+ *   message and fixes.
  * @param onRichSpanClick Optional listener for clicks on other rich spans; spell-check and
  *   diagnostic spans are handled internally.
  * @param onRichSpanClickEvent The same clicks as [onRichSpanClick], with the modifier keys
@@ -167,14 +171,12 @@ fun SpellCheckingTextEditor(
 		}
 	}
 
-	fun showDiagnosticMenu(offset: Offset, span: RichSpan, style: DiagnosticStyle) {
-		suggestionJob.value?.cancel()
-		suggestionJob.value = null
+	fun showDiagnosticMenu(span: RichSpan, style: DiagnosticStyle, show: ShowMenu) {
 		val message = ContextMenuItem(label = style.message, enabled = false, onClick = {})
 		val fixes = if (!editable) emptyList() else style.fixes.map { fix ->
 			ContextMenuItem(label = fix.label, enabled = true, onClick = { if (canEdit) diagnostics?.applyFix(span, fix.replacement) })
 		}
-		contextMenuState.showMenuAtText(below(offset), listOf(message) + fixes)
+		show(listOf(message) + fixes, emptyList())
 	}
 
 	fun createSpellSuggestionItems(
@@ -210,16 +212,7 @@ fun SpellCheckingTextEditor(
 		}
 	}
 
-	fun showContextMenu(offset: Offset, spellCheckItem: SpellCheckItem?) {
-		val menuPos = below(offset)
-		suggestionJob.value?.cancel()
-		suggestionJob.value = null
-
-		if (spellCheckItem == null) {
-			contextMenuState.showMenuAtText(menuPos)
-			return
-		}
-
+	fun showSpellCheckMenu(spellCheckItem: SpellCheckItem, show: ShowMenu) {
 		val flagged = when (spellCheckItem) {
 			is SpellCheckItem.MisspelledWord -> spellCheckItem.segment.text
 			is SpellCheckItem.SentenceIssue -> spellCheckItem.correction.originalText
@@ -238,19 +231,19 @@ fun SpellCheckingTextEditor(
 		}
 		val hostItems = builtInItems + spellCheckMenuItems(spellCheckItem)
 		if (!editable) {
-			contextMenuState.showMenuAtText(menuPos, emptyList(), hostItems)
+			show(emptyList(), hostItems)
 			return
 		}
 		when (spellCheckItem) {
 			is SpellCheckItem.MisspelledWord -> {
 				val placeholder = listOf(ContextMenuItem(label = spellCheckStrings.loading, enabled = false, onClick = {}))
-				contextMenuState.showMenuAtText(menuPos, placeholder)
+				show(placeholder, emptyList())
 				// Host items arrive with the suggestions: shown under the placeholder, they
 				// would move under the pointer when it is replaced.
 				suggestionJob.value = coroutineScope.launch {
 					val suggestions = state.getSuggestions(spellCheckItem.segment.text)
-					// Dismissed, or showing other items, while the lookup ran. The position is no
-					// guide: the editor re-anchors the menu to the pointer after this handler returns.
+					// Dismissed, or showing other items, while the lookup ran. The position is read
+					// back: the editor re-anchors a right-click's menu to the pointer after the click.
 					val position = contextMenuState.menuPosition.value
 					if (position == null || contextMenuState.extraItems.value !== placeholder) return@launch
 					contextMenuState.showMenu(
@@ -263,9 +256,55 @@ fun SpellCheckingTextEditor(
 
 			is SpellCheckItem.SentenceIssue -> {
 				val items = createSpellSuggestionItems(spellCheckItem, spellCheckItem.correction.suggestions)
-				contextMenuState.showMenuAtText(menuPos, items, hostItems)
+				show(items, hostItems)
 			}
 		}
+	}
+
+	fun cancelSuggestions() {
+		suggestionJob.value?.cancel()
+		suggestionJob.value = null
+	}
+
+	/** Opens the menu for [flag], a spell check or diagnostic span; false when it has none. */
+	fun showFlagMenu(flag: RichSpan, show: ShowMenu): Boolean {
+		// A disabled editor offers nothing it cannot apply.
+		if (!enabled) return false
+		val diagnostic = flag.style as? DiagnosticStyle
+		if (diagnostic != null) {
+			if (diagnostics == null) return false
+			cancelSuggestions()
+			showDiagnosticMenu(flag, diagnostic, show)
+			return true
+		}
+		val spellCheckItem = when (val flagged = state.handleSpanClick(flag)) {
+			is WordSegment -> SpellCheckItem.MisspelledWord(flagged)
+			is Correction -> SpellCheckItem.SentenceIssue(flagged)
+			else -> return false
+		}
+		cancelSuggestions()
+		showSpellCheckMenu(spellCheckItem, show)
+		return true
+	}
+
+	// Shift+F10, the Menu key and accessibility services open the menu below the caret; a
+	// flag there fills it with its own items. A selection must lie within the flag.
+	val fillMenuAtCaret by rememberUpdatedState { text: TextEditorState ->
+		val position = contextMenuState.menuPosition.value
+		if (position != null) {
+			cancelSuggestions()
+			val selection = text.selector.selection
+			text.flagsAt(text.cursorPosition)
+				.filter { flag ->
+					selection == null ||
+						(flag.range.start isBeforeOrEqual selection.start && flag.range.end isAfterOrEqual selection.end)
+				}
+				.any { flag -> showFlagMenu(flag) { items, trailing -> contextMenuState.showMenu(position, items, trailing) } }
+		}
+	}
+	DisposableEffect(contextMenuState) {
+		contextMenuState.onOpenedAtCaret = { text -> fillMenuAtCaret(text) }
+		onDispose { contextMenuState.onOpenedAtCaret = null }
 	}
 
 	fun onSpanClick(click: RichSpanClick): Boolean {
@@ -282,29 +321,16 @@ fun SpellCheckingTextEditor(
 		if (type != SpanClickType.SECONDARY_CLICK && type != SpanClickType.TAP) return passOn()
 
 		// A host span, such as a link, wins the hit test over a squiggle under it.
-		val flag = if (hostSpan) state.textState.flagAt(state.textState.getOffsetAtPosition(offset)) else span
-		val diagnostic = flag?.style as? DiagnosticStyle
-		if (diagnostic != null && diagnostics != null && enabled) {
-			showDiagnosticMenu(offset, flag, diagnostic)
-			return true
+		val flags = if (hostSpan) state.textState.flagsAt(state.textState.getOffsetAtPosition(offset)) else listOf(span)
+		val show: ShowMenu = { items, trailing -> contextMenuState.showMenuAtText(below(offset), items, trailing) }
+		if (flags.any { showFlagMenu(it, show) }) return true
+		// A right-click always offers a menu, falling back to the standard one. A tap only
+		// opens one on a flag: tapping a correctly spelled word means "put the caret here",
+		// so declining leaves the tap to focus the editor and raise the keyboard.
+		if (type == SpanClickType.SECONDARY_CLICK) {
+			cancelSuggestions()
+			show(emptyList(), emptyList())
 		}
-
-		// A disabled editor must not offer corrections it cannot apply.
-		val spellCheckItem: SpellCheckItem? = if (!enabled || flag == null) null else when (val clickResult = state.handleSpanClick(flag)) {
-			is WordSegment -> SpellCheckItem.MisspelledWord(clickResult)
-			is Correction -> SpellCheckItem.SentenceIssue(clickResult)
-			else -> null
-		}
-
-		// A right-click always offers a menu, falling back to the standard one. A tap
-		// only opens one on a flag: tapping a correctly spelled word means "put the
-		// caret here", so declining leaves the tap to focus the editor and raise the
-		// keyboard.
-		if (spellCheckItem != null) {
-			showContextMenu(offset, spellCheckItem)
-			return true
-		}
-		if (type == SpanClickType.SECONDARY_CLICK) showContextMenu(offset, null)
 		return passOn()
 	}
 
@@ -328,13 +354,19 @@ fun SpellCheckingTextEditor(
 	}
 }
 
+/** Opens the menu with these items and trailing items, where the gesture asked for it. */
+private typealias ShowMenu = (items: List<ContextMenuItem>, trailingItems: List<ContextMenuItem>) -> Unit
+
 private fun RichSpan.isFlag(): Boolean = style is SpellCheckStyle || style is DiagnosticStyle
 
-/** The flag covering [position], its ends included: a spelling one first, then a diagnostic. */
-private fun TextEditorState.flagAt(position: CharLineOffset): RichSpan? {
-	val spans = richSpanManager.getSpansInRange(TextEditorRange(position, position))
-	return spans.firstOrNull { it.style is SpellCheckStyle } ?: spans.firstOrNull { it.style is DiagnosticStyle }
-}
+/**
+ * The flags covering [position], their ends included: those it lies inside ahead of those
+ * it only touches, and spelling ahead of diagnostics.
+ */
+private fun TextEditorState.flagsAt(position: CharLineOffset): List<RichSpan> =
+	richSpanManager.getSpansInRange(TextEditorRange(position, position))
+		.filter { it.isFlag() }
+		.sortedWith(compareBy({ it.range.start == position || it.range.end == position }, { it.style !is SpellCheckStyle }))
 
 @Composable
 private fun dpToPx(dp: Dp): Float {

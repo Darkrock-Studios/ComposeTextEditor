@@ -1895,11 +1895,13 @@ Shaping is one line per keystroke. These still scale with document length:
   default) left of the word. A right-click is re-anchored by the editor since
   2.10; a tap is not. Convert it through the layout, as `ContextMenuPlacement`
   does.
-- [ ] **7.35** [Opus] [Lane K] Shift+F10 and the Menu key (2.10) open the
+- [x] **7.35** [Opus] [Lane K] Shift+F10 and the Menu key (2.10) open the
   standard menu even with the caret in a flagged word, so a keyboard user never
   reaches its suggestions, Ignore or Add to dictionary. Register over
   `editor.showContextMenu` in `SpellCheckingTextEditor` to open the spell check
-  menu for the span at the caret, and the standard one elsewhere.
+  menu for the span at the caret, and the standard one elsewhere. Done through a
+  hook instead, `TextEditorContextMenuState.onOpenedAtCaret`, which the editor
+  calls once the keyboard's menu is open.
 - [ ] **7.44** [Opus] [Lane K] `correctSpelling`, `applySentenceCorrection` and
   `applyFix` drop the flag before the replacement, which `TextEditorState.inputFilter`
   or a single-line limit (7.13) may cut short or refuse: the word is left unflagged and
