@@ -13,6 +13,9 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.darkrockstudios.texteditor.BasicTextEditor
+import com.darkrockstudios.texteditor.CharLineOffset
+import com.darkrockstudios.texteditor.RichSpanClick
+import com.darkrockstudios.texteditor.RichSpanClickEventListener
 import com.darkrockstudios.texteditor.RichSpanClickListener
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.TextEditorStyle
@@ -22,6 +25,7 @@ import com.darkrockstudios.texteditor.contextmenu.TextEditorContextMenuState
 import com.darkrockstudios.texteditor.focusBorder
 import com.darkrockstudios.texteditor.rememberTextEditorStyle
 import com.darkrockstudios.texteditor.richstyle.RichSpan
+import com.darkrockstudios.texteditor.richstyle.SpellCheckStyle
 import com.darkrockstudios.texteditor.spellcheck.api.Correction
 import com.darkrockstudios.texteditor.spellcheck.api.EditorSpellChecker
 import com.darkrockstudios.texteditor.spellcheck.diagnostics.DiagnosticStyle
@@ -70,6 +74,10 @@ private val DefaultContentPadding = PaddingValues(start = 8.dp)
  *   or tap on one opens a menu of its message and fixes.
  * @param onRichSpanClick Optional listener for clicks on other rich spans; spell-check and
  *   diagnostic spans are handled internally.
+ * @param onRichSpanClickEvent The same clicks as [onRichSpanClick], with the modifier keys
+ *   that were held.
+ * @param onLinkClick Opens a link's URL on Ctrl+click, or Cmd+click under the macOS key
+ *   bindings; see [BasicTextEditor].
  */
 @Composable
 fun SpellCheckingTextEditor(
@@ -86,6 +94,8 @@ fun SpellCheckingTextEditor(
 	spellCheckMenuItems: (SpellCheckItem) -> List<ContextMenuItem> = { emptyList() },
 	diagnostics: TextDiagnosticsState? = null,
 	onRichSpanClick: RichSpanClickListener? = null,
+	onRichSpanClickEvent: RichSpanClickEventListener? = null,
+	onLinkClick: ((url: String) -> Unit)? = null,
 ) {
 	val contextMenuState = remember { TextEditorContextMenuState() }
 	val wordVisibilityBuffer = dpToPx(35.dp)
@@ -228,6 +238,46 @@ fun SpellCheckingTextEditor(
 		}
 	}
 
+	fun onSpanClick(click: RichSpanClick): Boolean {
+		val (span, type, offset) = click
+		val hostSpan = !span.isFlag()
+		// Spell check and diagnostic spans are handled here; the host hears about its own.
+		fun passOn(): Boolean {
+			if (!hostSpan) return false
+			val heard = onRichSpanClick?.invoke(span, type, offset)
+			val heardEvent = onRichSpanClickEvent?.invoke(click)
+			return heard == true || heardEvent == true
+		}
+
+		if (type != SpanClickType.SECONDARY_CLICK && type != SpanClickType.TAP) return passOn()
+
+		// A host span, such as a link, wins the hit test over a squiggle under it.
+		val flag = if (hostSpan) state.textState.flagAt(state.textState.getOffsetAtPosition(offset)) else span
+		val diagnostic = flag?.style as? DiagnosticStyle
+		if (diagnostic != null && diagnostics != null && enabled) {
+			showDiagnosticMenu(offset, flag, diagnostic)
+			return true
+		}
+
+		// A disabled editor must not offer corrections it cannot apply.
+		val spellCheckItem: SpellCheckItem? = if (!enabled || flag == null) null else when (val clickResult = state.handleSpanClick(flag)) {
+			is WordSegment -> SpellCheckItem.MisspelledWord(clickResult)
+			is Correction -> SpellCheckItem.SentenceIssue(clickResult)
+			else -> null
+		}
+
+		// A right-click always offers a menu, falling back to the standard one. A tap
+		// only opens one with a correction to offer: tapping a correctly spelled word
+		// means "put the caret here", so declining leaves the tap to focus the editor
+		// and raise the keyboard.
+		if (spellCheckItem != null) {
+			showContextMenu(offset, spellCheckItem)
+			return true
+		}
+		if (type == SpanClickType.SECONDARY_CLICK) showContextMenu(offset, null)
+		return passOn()
+	}
+
 	Surface(modifier = modifier.focusBorder(state.textState.isFocused && enabled, style)) {
 		BasicTextEditor(
 			state = state.textState,
@@ -238,39 +288,18 @@ fun SpellCheckingTextEditor(
 			style = style,
 			contextMenuStrings = contextMenuStrings,
 			contextMenuState = contextMenuState,
-			onRichSpanClick = { span, type, offset ->
-				val diagnostic = span.style as? DiagnosticStyle
-				if (diagnostic != null && diagnostics != null && enabled &&
-					(type == SpanClickType.SECONDARY_CLICK || type == SpanClickType.TAP)
-				) {
-					showDiagnosticMenu(offset, span, diagnostic)
-					true
-				} else if (type == SpanClickType.SECONDARY_CLICK || type == SpanClickType.TAP) {
-					// A disabled editor must not offer corrections it cannot apply.
-					val spellCheckItem: SpellCheckItem? = if (!enabled) null else when (val clickResult = state.handleSpanClick(span)) {
-						is WordSegment -> SpellCheckItem.MisspelledWord(clickResult)
-						is Correction -> SpellCheckItem.SentenceIssue(clickResult)
-						else -> null
-					}
-
-					// A right-click always offers a menu, falling back to the standard
-					// one. A tap only opens one with a correction to offer: tapping a
-					// correctly spelled word means "put the caret here", so declining
-					// leaves the tap to focus the editor and raise the keyboard.
-					if (type == SpanClickType.SECONDARY_CLICK || spellCheckItem != null) {
-						showContextMenu(offset, spellCheckItem)
-						true
-					} else {
-						// Not ours: a span the host put here. Offer it to their listener
-						// rather than swallowing the tap.
-						onRichSpanClick?.invoke(span, type, offset) ?: false
-					}
-				} else {
-					onRichSpanClick?.invoke(span, type, offset) ?: false
-				}
-			},
+			onRichSpanClickEvent = ::onSpanClick,
+			onLinkClick = onLinkClick,
 		)
 	}
+}
+
+private fun RichSpan.isFlag(): Boolean = style is SpellCheckStyle || style is DiagnosticStyle
+
+/** The flag covering [position], its ends included: a spelling one first, then a diagnostic. */
+private fun TextEditorState.flagAt(position: CharLineOffset): RichSpan? {
+	val spans = richSpanManager.getSpansInRange(TextEditorRange(position, position))
+	return spans.firstOrNull { it.style is SpellCheckStyle } ?: spans.firstOrNull { it.style is DiagnosticStyle }
 }
 
 @Composable

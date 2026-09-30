@@ -732,6 +732,9 @@ Guards #89, #90, #65, #83.
    looked up as "don't".
 7. Scroll a long spell-checked document quickly. **Expect:** smooth scrolling; squiggles
    render correctly deep in the document, not just near the top (#65).
+8. Make a link with the toolbar over a word, then misspell the word. Ctrl+click it
+   (Cmd+click on macOS). **Expect:** the link opens. Right-click it. **Expect:** the
+   word's suggestions, not the standard menu alone.
 
 ## 8. Performance and smoke pass
 

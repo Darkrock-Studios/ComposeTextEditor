@@ -10,6 +10,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextIndent
@@ -88,6 +89,7 @@ fun SpellCheckingTextEditorDemoUi(
 			modifier = Modifier
 				.padding(16.dp)
 				.fillMaxSize(),
+			onLinkClick = LocalUriHandler.current::openUri,
 		)
 	}
 }

@@ -51,6 +51,11 @@ To add your own entries to that menu, pass `spellCheckMenuItems`: it receives th
 [ContextMenuItem][com.darkrockstudios.texteditor.contextmenu.ContextMenuItem]s rendered
 after the built-in ones.
 
+Everything else is passed to the editor it wraps, as on `TextEditor`: `onLinkClick` opens
+a link on Ctrl+click (Cmd+click on macOS), and `onRichSpanClick` and `onRichSpanClickEvent`
+hear clicks on your own spans. Clicks on squiggles are the spell checker's and are not
+passed on.
+
 A checker serves one language. To switch, create a checker for the new language and pass
 it to `rememberSpellCheckState`, which re-checks the document with it; the ignored words
 carry over.
