@@ -8,8 +8,8 @@ import com.darkrockstudios.texteditor.TextEditorRange
 
 /** Every word of the document that holds letters or digits, in order: the spell checker's candidates. */
 fun TextEditorState.wordSegments(): Sequence<WordSegment> = sequence {
-	// A snapshot, so an edit during a scan cannot pull lines out from under it.
-	val lines = textLines.toList()
+	// The line list is immutable, so an edit during a scan cannot pull lines out from under it.
+	val lines = textLines
 	wordCursor("").use { breaks ->
 		lines.forEachIndexed { lineIndex, line ->
 			val text = line.text

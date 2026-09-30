@@ -2166,7 +2166,9 @@ Shaping is one line per keystroke. These still scale with document length:
 
 - [ ] **7.20** [Fable] [Lane K] Sentence mode: sentences run across line
   boundaries, offsets shift on indented lines, and each partial check rescans
-  the whole document. Tested only against fakes.
+  the whole document. Tested only against fakes. Also: each period copies the
+  sentence built so far (`sentenceBuilder.toString()`) to test for an
+  abbreviation, so a long run of periods that end no sentence scans in O(n²).
 - [x] **7.21** [Opus] [Lane K] No ignore list or language API in
   `EditorSpellChecker`; add to dictionary exists only as a host menu extension
   (hammer-editor#861).
@@ -2257,10 +2259,14 @@ Shaping is one line per keystroke. These still scale with document length:
   format (5.7): `text-align`, `margin-top`, `margin-bottom`, `text-indent`,
   `padding-left` and `line-height` on the paragraph would carry it, as the
   clipboard's HTML and a host's export want.
-- [ ] **7.50** [Opus] [Lane K] `wordSegments()` and the sentence segmentation
+- [x] **7.50** [Opus] [Lane K] `wordSegments()` and the sentence segmentation
   copy the whole line list (`textLines.toList()`) for a snapshot before
   scanning, though the list is immutable since 7.8; the spell checker's full
   scan pays an O(lines) copy it no longer needs.
+  Done: both iterate the line list they start on, which an edit replaces rather
+  than changes, so a scan still sees one revision; one that stops early reads
+  only the lines it reached, and a sentence the lines it looks ahead to
+  (`SegmentationCostTest`). Found while there: 7.56.
 - [ ] **7.51** [Opus] [Lane M] The semantics text with links
   (`EditorSemantics.textWithLinks`) walks every rich span per revision to find
   the links, so a spell-checked document pays O(spans) per keystroke while a
@@ -2282,6 +2288,11 @@ Shaping is one line per keystroke. These still scale with document length:
   changed its text. Find (7.42) and spell check (7.44) infer it from the line
   list's identity and the change in length, which a behavior that edits during the
   same call would throw off. Return what landed, or null when refused.
+- [ ] **7.56** [Opus] [Lane K] `wordSegments()` opens its ICU word cursor with
+  `use` inside the sequence builder, so a consumer that stops early (`first`,
+  `find`, an abandoned iterator) never closes it, and the native break iterator
+  waits for the finalizer. The spell checker drains the sequence, so only other
+  callers leak; close the cursor per line or return a closeable scan.
 
 ## Housekeeping
 
