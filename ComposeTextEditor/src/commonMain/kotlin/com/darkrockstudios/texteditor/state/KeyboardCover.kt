@@ -1,9 +1,23 @@
 package com.darkrockstudios.texteditor.state
 
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.runtime.snapshots.Snapshot
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.layout.Measurable
+import androidx.compose.ui.layout.MeasureResult
+import androidx.compose.ui.layout.MeasureScope
 import androidx.compose.ui.layout.findRootCoordinates
+import androidx.compose.ui.node.LayoutModifierNode
+import androidx.compose.ui.node.ModifierNodeElement
+import androidx.compose.ui.node.invalidatePlacement
+import androidx.compose.ui.unit.Constraints
 import kotlin.math.roundToInt
+
+/** The soft keyboard's inset the editor measures its cover by: `WindowInsets.ime`, unless a test stands one in. */
+internal val LocalImeInsets = staticCompositionLocalOf<WindowInsets?> { null }
 
 /**
  * Measures how far a soft keyboard [keyboardHeight] pixels tall, drawn over the bottom of
@@ -29,6 +43,49 @@ internal fun TextEditorState.updateKeyboardCover(keyboardHeight: Int) {
 		0
 	}
 	onObscuredBottomChange(covered)
+}
+
+/**
+ * Measures the cover (see [updateKeyboardCover]) on the canvas whenever the keyboard's
+ * [insets] or the focus change, once the canvas is placed for that change. Both are read
+ * in the placement block, so a change re-places the canvas after its ancestors have been
+ * laid out: under a host's `imePadding` the inset grows before the padding shrinks the
+ * editor, and a measure taken any earlier reads the strip the padding is about to take
+ * away as covered.
+ */
+internal fun Modifier.measuresKeyboardCover(state: TextEditorState, insets: () -> WindowInsets): Modifier =
+	this then KeyboardCoverElement(state, insets)
+
+private data class KeyboardCoverElement(
+	val state: TextEditorState,
+	val insets: () -> WindowInsets,
+) : ModifierNodeElement<KeyboardCoverNode>() {
+	override fun create() = KeyboardCoverNode(state, insets)
+
+	override fun update(node: KeyboardCoverNode) {
+		node.state = state
+		node.insets = insets
+		node.invalidatePlacement()
+	}
+}
+
+private class KeyboardCoverNode(
+	var state: TextEditorState,
+	var insets: () -> WindowInsets,
+) : Modifier.Node(), LayoutModifierNode {
+	override fun MeasureScope.measure(measurable: Measurable, constraints: Constraints): MeasureResult {
+		val placeable = measurable.measure(constraints)
+		return layout(placeable.width, placeable.height) {
+			placeable.place(0, 0)
+			// A lookahead pass places before the canvas has its new bounds.
+			if (isLookingAhead) return@layout
+			val keyboardHeight = insets().getBottom(this@measure)
+			// Read here, so a focus change re-places as an inset change does.
+			val focused = state.isFocused
+			// What the measure itself reads (the scroll, the rows) must not re-place.
+			Snapshot.withoutReadObservation { state.updateKeyboardCover(if (focused) keyboardHeight else 0) }
+		}
+	}
 }
 
 /**

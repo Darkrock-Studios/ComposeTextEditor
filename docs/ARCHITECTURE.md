@@ -169,7 +169,8 @@ on.
   runs from minus the top padding (the first row below the top padding) to the
   last row and bottom padding at the viewport's bottom, and is empty when
   everything fits. A soft keyboard is met two ways: one drawn over the
-  editor is a covered strip the caret is kept above (`KeyboardCover.kt`), and
+  editor is a covered strip the caret is kept above (`KeyboardCover.kt`,
+  measured on the canvas once it is placed for the keyboard's inset), and
   a window that shrinks the editor instead keeps a caret that was in view in
   view (`onViewportSizeChange`).
 - **`PlatformTextEditorExtensions`**: per-platform IME glue (Android cursor

@@ -867,7 +867,7 @@ fixes what users feel every minute.
   `TextEditorSelectionManager.magnifierCenter` in a popup above the finger,
   fed from the `skikoMain` `textMagnifier`. Mobile browsers show none for
   canvas content. Desktop needs none: a mouse does not hide the text.
-- [ ] **3.16 The keyboard cover is measured against the last frame's canvas.
+- [x] **3.16 The keyboard cover is measured against the last frame's canvas.
   C.** [Opus] [Lane C] `BasicTextEditor` measures the cover (4.24) when the
   keyboard's inset changes, from the canvas's bounds as last laid out. Under
   a host's `imePadding` the inset grows a frame before the padding shrinks
@@ -877,6 +877,15 @@ fixes what users feel every minute.
   but a snap measured while the stale strip stands leaves the caret row that
   many pixels higher than it needs to be. Measure the cover after layout
   only, or ignore an inset change the next layout will absorb.
+  Done: reproduced on desktop with a stand-in inset under `windowInsetsPadding`
+  (a keyboard rising 40 px a frame left the caret row 40 px above the shrunk
+  viewport's bottom). The cover is now measured in the placement block of a
+  layout node on the canvas (`measuresKeyboardCover`), which reads the inset
+  and the focus there, so a change re-places the canvas after its ancestors
+  have laid out for it, lookahead passes excepted; `onGloballyPositioned`
+  still measures a canvas that moves (`e2e/KeyboardInsetE2eTest.kt`, with the
+  inset stood in through the internal `LocalImeInsets`). An emulator pass is
+  the QA plan's.
 - [ ] **3.17 Rich content, autofill, and stylus handwriting on Android. C.**
   [Fable] [Lane F] From 3.11: `commitContent` returns false, so a keyboard's
   GIFs and stickers are refused; the editor offers nothing to autofill; and
@@ -2549,3 +2558,4 @@ records results and removes entries that passed.
 | 6.19 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64` and `:ComposeTextEditor:iosSimulatorArm64Test`. `ClipboardHelper.setText` now returns `Boolean` (`iosMain/.../clipboard/ClipboardHelper.ios.kt` answers true after writing). Then in the iOS sample app: select a word and Cut from the edit menu, and paste it elsewhere | Compiles and the tests pass. The word leaves the editor on Cut and pastes back | |
 | 7.10, 7.11 | Re-time the iOS simulator as 4.21 did (iPhone 17 Pro Max simulator, Debug framework, a 200,000-character document of 2,000 lines of 99 characters, temporary logging): the idle caret-blink frame, frames over 20 ms while typing twelve keys with the soft keyboard (count and worst), and the keyboard's `editText` block; also the time to open and close the soft keyboard, which no longer reshapes the document | Before (4.21, `f3b8d8f`): an idle blink frame 33 ms at 200k against under one vsync at 2k; typing frames up to 137 ms, about six over 20 ms a keystroke; `editText` 9.4 ms median. A pass: the blink frame at 200k within a vsync, as at 2k (7.11). Typing frames should drop by the row scans and the whole-text build; `editText` is 7.8's and is not expected to move. Record the numbers here and in 7.11 | |
 | 5.2 | In the iOS sample app with the soft keyboard (Settings > General > Keyboard > Smart Punctuation on), type `"quoted"`, `it's`, and `a--b` into the editor | Record whether curly quotes, the apostrophe, and the dash arrive already converted through the input session; this decides whether 5.2 must stay off on iOS by default | |
+| 3.16 | No `iosMain` change: commonMain now measures the keyboard cover (4.24) in the placement of a layout node on the canvas (`state/KeyboardCover.kt`, `measuresKeyboardCover`) instead of from a flow over `WindowInsets.ime`. Repeat 4.24's simulator check: tap a line the keyboard will cover, type Returns at the bottom, and dismiss and raise the keyboard | Compiles. The tapped line comes above the keyboard at once, Returns keep the caret at the keyboard's top, and the text does not jump while the keyboard slides | |

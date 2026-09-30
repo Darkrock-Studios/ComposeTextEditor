@@ -606,7 +606,10 @@ German, or French).
 4. Keyboard down, tap a word on the editor's last visible row. **Expect:** the
    keyboard rises and the row stays in view just above it; the app's toolbar
    does not slide off the top (3.9). Scroll that caret out of view, hide and
-   raise the keyboard. **Expect:** the scroll stays where it was.
+   raise the keyboard. **Expect:** the scroll stays where it was. In a host
+   that pads the editor with `imePadding` in an edge-to-edge window, the row
+   ends right at the keyboard's top, not a strip above it, and the text does
+   not jump while the keyboard slides (3.16).
 5. Code Editor demo: type a sentence. **Expect:** no capital at its start and no
    autocorrection; the rich text demo still capitalises and corrects (3.11).
    With a host setting `KeyboardSettings(imeAction = ImeAction.Send)` and
