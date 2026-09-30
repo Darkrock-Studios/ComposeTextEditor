@@ -60,7 +60,8 @@ text, all of which fit the line model.
 - The Android `InputConnection`, hardened against misbehaving keyboards.
 - Desktop dead keys, composition, and candidate window placement.
 - Line-block smart editing, markdown round trip for supported syntax, HTML
-  paste sanitising (foreign colour, size, and background are ignored).
+  paste sanitising (a source's text colour and body size and any background
+  are ignored; a hued colour, and a size relative to the body, are kept, 7.46).
 - Undo coalescing by word, a 1000 entry history, public `canUndo`/`canRedo`.
 - About 1240 tests, a seeded fuzzer, and cost regression tests.
 
@@ -1708,6 +1709,14 @@ iOS Safari; browser tests run in CI.
   or HTML import, and one it attaches directly never reaches its `onLinkClick`.
   Let a host extend the allowlist (a set of schemes on the configuration or the
   state), still refusing `javascript:`, `data:`, `vbscript:` and `file:`.
+- [ ] **6.26 Bold text at a heading's size copies out as a heading. S.** [Opus]
+  [Lane H] HTML copy-out (`html/HtmlTag.kt`, `headerTag` and
+  `uniformHeadingTag`) reads a run that is bold at a configured heading size
+  as that heading, so a whole line bold at 24 sp is written as `<h2>` though
+  it has no heading block. Since 7.46 a pasted size lands as sp relative to the
+  body, so a bold word 1.5 times the body size can reach it. Take the heading
+  from the line's heading block, which export already knows, rather than from
+  the size.
 - [ ] **6.20 Drag and drop on Android, iOS and web. S.** [Opus] [Lane H]
   `dragdrop/PlatformTextDrag` has desktop actuals only. Android: build the
   transfer from `ClipData.newHtmlText` with `View.DRAG_FLAG_GLOBAL`, read drops
@@ -2108,12 +2117,31 @@ Shaping is one line per keystroke. These still scale with document length:
   and import reads it as literal text with its indentation. Decide the
   markdown form of a leading indent (`&nbsp;`, a non-breaking space, or no
   form and a stripped indent) and write it into `docs/design/line-blocks.md`.
-- [ ] **7.46** [Opus] [Lane H] The markdown importer reads `color` and
+- [x] **7.46** [Opus] [Lane H] The markdown importer reads `color` and
   `font-size` out of an inline `style` attribute (7.16,
   `markdown/InlineHtml.kt`) with its own CSS declaration walk, and the HTML
   paste importer has another (`forEachDeclaration` in
   `html/htmlToAnnotatedString.kt`) that ignores both properties. Share one
   walk and read colour and size on paste too, so paste and import agree.
+  Done: `html/CssDeclarations.kt` holds the one walk
+  (`forEachCssDeclaration`, which drops `!important`), the colour and size
+  reading (`cssColorAndSize`: hex, comma or space separated `rgb()`/`rgba()`
+  and the basic keywords; px and sp as sp, pt as 4/3 sp, em and % as em), and
+  both importers use it; HTML also reads `<font color>`, as markdown import
+  does. HTML takes a source's look as formatting only where it differs from
+  the source's own text: a colour without hue (black, white, the greys) is
+  the source's text colour and is left to the editor's theme, so a Google
+  Docs paste is not black on a dark theme; a size is taken relative to the
+  size most of the fragment's text carries (none counting as a browser's
+  16 px), onto the configuration's body size (as em when that is not in sp),
+  so pasted text matches the text around it (6.18) and a word 18 pt in 11 pt
+  text lands 26.18 sp in a 16 sp body. A relative size is resolved against
+  the size around it, and a zero size or a mostly transparent colour is no
+  formatting. A link's colour is the link style's; inside a heading or code
+  (a `<pre>`, `<code>` or monospace run) the block's or code style sets size
+  and colour, so an IDE's token colours stay out of a fence; background stays
+  ignored (`html/HtmlColorAndSizeTest.kt`). A fragment all at one size pastes
+  at the body size. Found: 6.26.
 - [ ] **7.47** [Opus] [Lane H] HTML export and import flatten nested lists
   once 5.6 lands: `<li>` inside `<ul>` inside `<li>` imports at level 0, and
   a nested item exports as a sibling. Serialize the level as nested `<ul>`

@@ -99,6 +99,10 @@ this exercises the clipboard's HTML as the block carrier.
    level; no raw HTML markup text. Blocks arriving as flat paragraphs is the
    regression this guards.
 5. Bold body text pasted out must **not** land as an `<h4>` in the target app.
+6. In Google Docs or Word, write a paragraph with one red word and one word at a
+   larger size, copy it and paste into the Markdown demo in a dark theme (7.46).
+   **Expect:** the red word is red and the large word large; the rest takes the
+   editor's own text colour and size, not the source's black and 11 pt.
 
 ### 2.5 Paste font size (#49)
 

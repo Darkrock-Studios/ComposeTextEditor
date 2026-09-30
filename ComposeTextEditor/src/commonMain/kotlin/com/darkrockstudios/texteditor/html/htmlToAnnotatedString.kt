@@ -1,7 +1,15 @@
 package com.darkrockstudios.texteditor.html
 
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.isSpecified
+import androidx.compose.ui.graphics.isUnspecified
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.unit.TextUnit
+import androidx.compose.ui.unit.em
+import androidx.compose.ui.unit.isSpecified
+import androidx.compose.ui.unit.isUnspecified
+import androidx.compose.ui.unit.sp
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.annotatedstring.normalizeLineEndings
@@ -19,6 +27,8 @@ import com.fleeksoft.ksoup.Ksoup
 import com.fleeksoft.ksoup.nodes.Element
 import com.fleeksoft.ksoup.nodes.Node
 import com.fleeksoft.ksoup.nodes.TextNode
+import kotlin.math.abs
+import kotlin.math.roundToInt
 
 /**
  * Parses an HTML fragment (as found on the system clipboard's `text/html`
@@ -139,6 +149,12 @@ private data class HtmlScope(
 	val inPreElement: Boolean = false,
 	/** Inside an element marking its no-break spaces as ordinary ones. */
 	val convertedSpace: Boolean = false,
+	/** The hued colour and the size, in sp, that inline styles set, or null for neither. */
+	val css: SpanStyle? = null,
+	/** Inside a heading or code, whose own style sets the size and colour. */
+	val ownLook: Boolean = false,
+	/** Inside a link, whose colour is the link style's. */
+	val inLink: Boolean = false,
 ) {
 	companion object {
 		val ROOT = HtmlScope(emptySet(), preformatted = false, listBlock = null)
@@ -186,6 +202,13 @@ private class HtmlSpanBuilder(
 	private var currentActive = emptySet<HtmlTag>()
 	private val runStart = HashMap<HtmlTag, Int>()
 
+	private var currentCss: SpanStyle? = null
+	private var cssStart = 0
+	private val cssRuns = mutableListOf<AnnotatedString.Range<SpanStyle>>()
+	private var inOwnLook = false
+	private var ownLookStart = 0
+	private val ownLookRuns = mutableListOf<IntRange>()
+
 	private val blockRanges = mutableListOf<BlockRange>()
 	private val horizontalRuleOffsets = mutableListOf<Int>()
 	private val imageOffsets = mutableListOf<Pair<Int, HtmlImageRef>>()
@@ -202,11 +225,12 @@ private class HtmlSpanBuilder(
 	fun build(body: Element): HtmlDocument {
 		visitChildren(body, HtmlScope.ROOT)
 		trimTrailingLayoutSpace()
-		syncActive(emptySet())
+		sync(HtmlScope.ROOT)
 		repeat(pendingExplicitBreaks) { out.append('\n') }
 
 		val text = out.toString()
-		val clamped = spans.mapNotNull { span ->
+		// After the tags' spans, so a colour on or inside a link or a bold run wins over theirs.
+		val clamped = (spans + relativeToBaseSize(cssRuns, ownLookRuns, text)).mapNotNull { span ->
 			val end = span.end.coerceAtMost(text.length)
 			if (span.start >= end) null else AnnotatedString.Range(span.item, span.start, end)
 		}
@@ -332,8 +356,12 @@ private class HtmlSpanBuilder(
 		val nestedPre = scope.preformatted || name == "pre" || isPreformatted(style)
 		val nestedInPreElement = scope.inPreElement || name == "pre"
 		if (name == "pre") dropLeadingNewline = true
+		val nestedTags = resolveTags(name, style, scope.tags, nestedInPreElement)
+		val nestedOwnLook = scope.ownLook || nestedInPreElement || TAG_STYLES[name]?.isHeading == true ||
+			HtmlTag.CODE in nestedTags
+		val nestedInLink = scope.inLink || name == "a"
 		val nested = HtmlScope(
-			tags = resolveTags(name, style, scope.tags, nestedInPreElement),
+			tags = nestedTags,
 			preformatted = nestedPre,
 			listBlock = when (name) {
 				"ul" -> BulletList
@@ -343,6 +371,9 @@ private class HtmlSpanBuilder(
 			inPreElement = nestedInPreElement,
 			convertedSpace = scope.convertedSpace || element.hasClass(CONVERTED_SPACE_CLASS) ||
 				style.contains(SPACERUN_STYLE, ignoreCase = true),
+			css = if (nestedOwnLook) null else resolveCss(name, element, style, scope.css, nestedInLink),
+			ownLook = nestedOwnLook,
+			inLink = nestedInLink,
 		)
 
 		val block = blockStyleFor(name, scope)
@@ -391,12 +422,92 @@ private class HtmlSpanBuilder(
 	private inline fun appendOwnLine(placeholder: String, record: (Int) -> Unit) {
 		requestBlockBreak()
 		flushPendingBreaks()
-		syncActive(emptySet())
+		sync(HtmlScope.ROOT)
 		record(out.length)
 		out.append(placeholder)
 		lastWasSpace = false
 		trailingSpaceIsLiteral = true
 		requestBlockBreak()
+	}
+
+	private fun sync(scope: HtmlScope) {
+		syncActive(scope.tags)
+		syncCss(scope.css)
+		if (scope.ownLook != inOwnLook) {
+			if (inOwnLook && out.length > ownLookStart) ownLookRuns += ownLookStart until out.length
+			inOwnLook = scope.ownLook
+			ownLookStart = out.length
+		}
+	}
+
+	private fun syncCss(css: SpanStyle?) {
+		if (css == currentCss) return
+		currentCss?.let { if (out.length > cssStart) cssRuns += AnnotatedString.Range(it, cssStart, out.length) }
+		currentCss = css
+		cssStart = out.length
+	}
+
+	/**
+	 * The colour and size [parent] passes down, with the element's own over them: a
+	 * `style` attribute's, or a `<font color>`'s. A link's colour is the link style's,
+	 * whatever the source wrote ([inLink]). A colour without hue (black, white, the
+	 * greys) is the source's text colour, which pasted text leaves to the editor's theme.
+	 * A relative size is resolved against the size around it, or a browser's 16 px.
+	 */
+	private fun resolveCss(name: String, element: Element, style: String, parent: SpanStyle?, inLink: Boolean): SpanStyle? {
+		if (name != "a" && name != "font" && style.isEmpty()) return parent
+		var color = if (inLink) Color.Unspecified else parent?.color ?: Color.Unspecified
+		var size = parent?.fontSize ?: TextUnit.Unspecified
+		fun take(declared: SpanStyle) {
+			if (declared.color.isSpecified && !inLink) color = declared.color.takeIf { it.hasHue() } ?: Color.Unspecified
+			if (declared.fontSize.isEm) {
+				size = ((if (size.isSp) size.value else BROWSER_FONT_SIZE) * declared.fontSize.value).hundredths().sp
+			} else if (declared.fontSize.isSp) {
+				size = declared.fontSize.value.hundredths().sp
+			}
+		}
+		if (name == "font") parseCssColor(element.attr("color"))?.let { take(SpanStyle(color = it)) }
+		if (style.isNotEmpty()) cssColorAndSize(style)?.let(::take)
+		return SpanStyle(color = color, fontSize = size).takeIf { color.isSpecified || size.isSpecified }
+	}
+
+	/**
+	 * [runs] with each size made relative to the size most of the text carries, the
+	 * source's body size (Google Docs writes its 11 pt on every run), and so to the
+	 * configuration's body size: pasted text takes the size of wherever it lands (6.18),
+	 * and a larger word stays as much larger. Headings and code, which set their own
+	 * size, do not count. Text with no size counts as a browser's 16 px.
+	 */
+	private fun relativeToBaseSize(
+		runs: List<AnnotatedString.Range<SpanStyle>>,
+		ownLook: List<IntRange>,
+		text: String,
+	): List<AnnotatedString.Range<SpanStyle>> {
+		if (runs.isEmpty()) return runs
+		fun weight(range: IntRange) = range.count { it < text.length && text[it] != '\n' }
+		// Unspecified first, so a tie keeps what the runs set.
+		val bySize = linkedMapOf(TextUnit.Unspecified to text.count { it != '\n' } - ownLook.sumOf(::weight))
+		runs.forEach { run ->
+			if (run.item.fontSize.isSpecified) {
+				val weight = weight(run.start until run.end)
+				bySize[run.item.fontSize] = (bySize[run.item.fontSize] ?: 0) + weight
+				bySize[TextUnit.Unspecified] = bySize.getValue(TextUnit.Unspecified) - weight
+			}
+		}
+		val base = bySize.maxBy { it.value }.key
+		val baseSize = if (base.isSp) base.value else BROWSER_FONT_SIZE
+		val bodySize = config.defaultTextStyle.fontSize
+		return runs.mapNotNull { run ->
+			val size = run.item.fontSize
+			val ratio = if (size.isSp) size.value / baseSize else 1f
+			val relative = when {
+				abs(ratio - 1f) < 0.005f -> TextUnit.Unspecified
+				bodySize.isSp -> (bodySize.value * ratio).hundredths().sp
+				else -> ratio.hundredths().em
+			}
+			if (run.item.color.isUnspecified && relative.isUnspecified) null
+			else AnnotatedString.Range(SpanStyle(color = run.item.color, fontSize = relative), run.start, run.end)
+		}
 	}
 
 	/**
@@ -439,7 +550,8 @@ private class HtmlSpanBuilder(
 
 		// Each directive settles its own tag in both directions, so an inline style
 		// always beats the meaning the element's tag name carries.
-		forEachDeclaration(style) { property, value ->
+		forEachCssDeclaration(style) { property, declared ->
+			val value = declared.lowercase()
 			when (property) {
 				"font-weight" -> {
 					val weight = value.toIntOrNull()
@@ -481,7 +593,8 @@ private class HtmlSpanBuilder(
 
 	private fun isPreformatted(style: String): Boolean {
 		var preformatted = false
-		forEachDeclaration(style) { property, value ->
+		forEachCssDeclaration(style) { property, declared ->
+			val value = declared.lowercase()
 			if (property == "white-space" &&
 				(value == "pre" || value.startsWith("pre-wrap") || value.startsWith("break-spaces"))
 			) {
@@ -489,17 +602,6 @@ private class HtmlSpanBuilder(
 			}
 		}
 		return preformatted
-	}
-
-	private inline fun forEachDeclaration(style: String, action: (String, String) -> Unit) {
-		style.split(';').forEach { declaration ->
-			val separator = declaration.indexOf(':')
-			if (separator == -1) return@forEach
-			action(
-				declaration.substring(0, separator).trim().lowercase(),
-				declaration.substring(separator + 1).trim().lowercase(),
-			)
-		}
 	}
 
 	private fun requestBlockBreak() {
@@ -555,7 +657,7 @@ private class HtmlSpanBuilder(
 			if (kept.isEmpty()) return
 			val content = if (scope.convertedSpace) kept.replace(NO_BREAK_SPACE, ' ') else kept
 			flushPendingBreaks()
-			syncActive(scope.tags)
+			sync(scope)
 			out.append(content)
 			lastWasSpace = content.last() == ' '
 			trailingSpaceIsLiteral = true
@@ -574,7 +676,7 @@ private class HtmlSpanBuilder(
 						raw[index - 1].isCollapsibleSpace() || raw[index + 1].isCollapsibleSpace()
 					)
 				flushPendingBreaks()
-				syncActive(scope.tags)
+				sync(scope)
 				out.append(if (converted) ' ' else NO_BREAK_SPACE)
 				lastWasSpace = false
 				trailingSpaceIsLiteral = true
@@ -582,7 +684,7 @@ private class HtmlSpanBuilder(
 			}
 			if (ch.isCollapsibleSpace()) {
 				if (!lastWasSpace && pendingNewlines() == 0 && !pendingCellBreak && out.isNotEmpty()) {
-					syncActive(scope.tags)
+					sync(scope)
 					out.append(' ')
 					lastWasSpace = true
 					trailingSpaceIsLiteral = false
@@ -590,13 +692,21 @@ private class HtmlSpanBuilder(
 				return@forEachIndexed
 			}
 			flushPendingBreaks()
-			syncActive(scope.tags)
+			sync(scope)
 			out.append(ch)
 			lastWasSpace = false
 			trailingSpaceIsLiteral = false
 		}
 	}
 }
+
+/** A browser's default font size, in px, which a relative size with nothing above it is relative to. */
+private const val BROWSER_FONT_SIZE = 16f
+
+private fun Float.hundredths(): Float = (this * 100f).roundToInt() / 100f
+
+/** Whether this colour has hue enough, and is opaque enough, to be formatting rather than a text colour. */
+private fun Color.hasHue(): Boolean = alpha >= 0.5f && maxOf(red, green, blue) - minOf(red, green, blue) > 0.1f
 
 /** HTML's own whitespace, the only characters it collapses. Other Unicode spaces are content. */
 private fun Char.isCollapsibleSpace(): Boolean =
