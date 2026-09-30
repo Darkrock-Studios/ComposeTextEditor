@@ -10,7 +10,10 @@ import SampleApp
 
 struct ContentView: View {
     var body: some View {
+        // Compose moves its content for the keyboard itself; letting SwiftUI shrink the
+        // view as well moves it twice, leaving an empty band above the keyboard.
         ComposeView()
+            .ignoresSafeArea(.keyboard)
     }
 }
 

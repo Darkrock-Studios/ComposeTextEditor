@@ -849,7 +849,7 @@ Constraints that shape the order:
 - [x] **4.7 Keyboard options. C.** [Opus] [Lane E] [Mac work] Capitalisation is
   not set. Set to sentences with autocorrect on in 4.2. Confirmed in the
   simulator: the keyboard opens shifted at the start of a line.
-- [ ] **4.24 Caret under the soft keyboard, and a shifted screen. R.** [Opus]
+- [x] **4.24 Caret under the soft keyboard, and a shifted screen. R.** [Opus]
   [Lane E] [Mac work] Seen in the 4.5 pass. Tapping a line that the keyboard
   will cover leaves the caret hidden behind the keyboard until the first edit,
   which does scroll it into view; the iOS twin of 3.9. Separately, when the
@@ -860,6 +860,29 @@ Constraints that shape the order:
   rects, so the rects alone did not fix it. Suspect Compose's keyboard
   avoidance reacting to `focusedRectInRoot` before the editor has scrolled or
   resized.
+  Done. Three causes. The sample's SwiftUI host let SwiftUI shrink the Compose
+  view for the keyboard while Compose also offset its content by the keyboard
+  inset it measured before the shrink, so the keyboard was compensated twice:
+  the band and the hidden toolbar. `ContentView` now has
+  `.ignoresSafeArea(.keyboard)`, as the Compose Multiplatform template does,
+  and the README says so for hosts. Compose's iOS keyboard avoidance
+  (`OffsetToFocusedRect`) keeps the focused node's focus rect above the
+  keyboard, and that was the whole editor, so a tall editor still pushed the
+  screen up; `CaretFocusRect` now reports the caret row, pulled above the
+  keyboard where the editor scrolls it, so the window moves only when the
+  editor cannot show the caret itself. And the editor did not know the keyboard
+  covered it: `state/KeyboardCover.kt` measures the covered bottom of the
+  canvas from `WindowInsets.ime`, the caret scrolls above it when it grows, and
+  the scroll range grows by it so the last line can clear the keyboard, as a
+  native text view's content inset does. Nothing changes where the host
+  already keeps the editor above the keyboard, or for an unfocused editor.
+  Known limit: the keyboard is measured from the root's bottom, so an editor in
+  a dialog or popup that does not reach the window's bottom is mis-measured. `KeyboardCoverE2eTest`, `KeyboardCoverTest` and
+  three `TextEditorScrollManagerTest` cases; checked in the simulator: the
+  toolbar stays, a tapped line under the keyboard comes into view at once, and
+  typing Returns keeps the caret at the keyboard's top. Android reports
+  `WindowInsets.ime` only to edge-to-edge windows, so this also covers 3.9
+  there when the host has no `imePadding`; a window that resizes is still 3.9.
 - [ ] **4.8 Native edit menu. C.** [Fable] [Lane D] [Mac work] A Material
   dropdown is used instead of the platform text toolbar.
 - [ ] **4.9 Rich clipboard. C.** [Opus] [Lane H] [Mac work] Plain text only
@@ -893,7 +916,7 @@ Also seen:
   (1.11).
 - Intermittent: with the soft keyboard up, the whole screen was pushed up by
   about the toolbar's height, hiding it and leaving a gap above the keyboard.
-  Still present after 4.2; now 4.24.
+  Still present after 4.2; fixed by 4.24.
 - After any hardware key event the simulator hides the soft keyboard until the
   device is rebooted. Keep that in mind when testing both paths in one run.
 

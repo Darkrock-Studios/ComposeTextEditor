@@ -11,9 +11,11 @@ import androidx.compose.foundation.gestures.scrollable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -65,6 +67,7 @@ import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.insertTypedNewline
 import com.darkrockstudios.texteditor.state.typedInput
 import com.darkrockstudios.texteditor.state.rememberTextEditorState
+import com.darkrockstudios.texteditor.state.updateKeyboardCover
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -155,6 +158,16 @@ fun BasicTextEditor(
 	LaunchedEffect(density) {
 		state.density = density
 	}
+
+	// A soft keyboard drawn over the window covers the bottom of the viewport. The
+	// canvas's position feeds the same measure when it moves (see onGloballyPositioned).
+	// Focus decides whose keyboard it is, so a focus change measures again too.
+	val imeInsets by rememberUpdatedState(WindowInsets.ime)
+	LaunchedEffect(state, density) {
+		snapshotFlow { imeInsets.getBottom(density) to state.isFocused }
+			.collect { (keyboardHeight, _) -> state.updateKeyboardCover(keyboardHeight) }
+	}
+	val caretFocusRect = remember(state) { CaretFocusRect(state) }
 
 	// Use provided context menu state or create internal one
 	val internalContextMenuState = remember { TextEditorContextMenuState() }
@@ -263,6 +276,7 @@ fun BasicTextEditor(
 						onRequestInput = inputRequester::requestInput,
 					)
 					.then(inputModifierElement)
+					.then(caretFocusRect.modifier)
 					.focusable(enabled = true, interactionSource = interactionSource)
 					// Publish text-editing semantics so the node is recognized as an editable
 					// text field. This drives accessibility services (VoiceOver/TalkBack read and
@@ -352,7 +366,10 @@ fun BasicTextEditor(
 						.onSizeChanged { size -> state.onViewportSizeChange(size.toSize()) }
 						// The content canvas's position, below the padding: the desktop IME places
 						// its candidate window by it, and the touch toolbar its menu.
-						.onGloballyPositioned { state.canvasLayoutCoordinates = it }
+						.onGloballyPositioned {
+							state.canvasLayoutCoordinates = it
+							state.updateKeyboardCover(imeInsets.getBottom(density))
+						}
 						.fillMaxSize()
 						.graphicsLayer {
 							clip = false

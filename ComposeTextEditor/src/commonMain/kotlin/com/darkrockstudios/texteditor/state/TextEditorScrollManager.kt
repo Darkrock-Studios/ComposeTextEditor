@@ -51,12 +51,40 @@ class TextEditorScrollManager(
 		get() = getViewportSize().height.toInt()
 
 	/**
+	 * How much of the viewport's bottom something drawn over the editor covers, in
+	 * pixels: the soft keyboard on iOS, or on an edge-to-edge Android window. The caret
+	 * counts as off screen there, and the scroll range grows by it so the last line can
+	 * still come above it, as a native text view's content inset does.
+	 */
+	var obscuredBottomPx: Int = 0
+		set(value) {
+			val covered = value.coerceAtLeast(0)
+			if (field != covered) {
+				field = covered
+				applyScrollRange()
+			}
+		}
+
+	/**
+	 * The height a caret row of [rowHeight] is kept inside: the viewport above
+	 * [obscuredBottomPx], or the whole viewport when that leaves no room for the row, and
+	 * only the platform moving the editor can show it.
+	 */
+	private fun caretViewportHeight(rowHeight: Int): Int {
+		val uncovered = viewportHeight - obscuredBottomPx
+		return if (uncovered >= rowHeight) uncovered else viewportHeight
+	}
+
+	/**
 	 * The furthest scroll: the last row and the bottom padding at the viewport's bottom,
 	 * or no scrolling at all when the content and its padding fit. Native editors add no
 	 * room past the last line; the bottom content padding is that room when wanted.
 	 */
 	private val maxScroll: Int
-		get() = maxOf(-topContentPaddingPx, contentHeight + bottomContentPaddingPx - viewportHeight)
+		get() = maxOf(
+			-topContentPaddingPx,
+			contentHeight + bottomContentPaddingPx + obscuredBottomPx - viewportHeight,
+		)
 
 	private fun applyScrollRange() {
 		scrollState.viewportHeight = viewportHeight
@@ -152,12 +180,13 @@ class TextEditorScrollManager(
 		val cursorHeight = calculateLineHeight(offset, affinity)
 		val viewportTop = scrollState.value
 		val minScroll = scrollState.minValue
+		val visibleHeight = caretViewportHeight(cursorHeight)
 
 		// Just far enough to show the caret's whole row, as native editors scroll.
 		val targetScroll = if (cursorTop < viewportTop) {
 			cursorTop.coerceIn(minScroll, maxScroll)
-		} else if (cursorTop + cursorHeight > viewportTop + viewportHeight) {
-			(cursorTop + cursorHeight - viewportHeight).coerceIn(minScroll, maxScroll)
+		} else if (cursorTop + cursorHeight > viewportTop + visibleHeight) {
+			(cursorTop + cursorHeight - visibleHeight).coerceIn(minScroll, maxScroll)
 		} else {
 			viewportTop
 		}
@@ -190,7 +219,7 @@ class TextEditorScrollManager(
 		val cursorBottom = cursorTop + cursorHeight
 
 		val viewPortTop = scrollState.value
-		val viewPortBottom = viewPortTop + viewportHeight
+		val viewPortBottom = viewPortTop + caretViewportHeight(cursorHeight)
 
 		// Check if both top and bottom of cursor are within viewport
 		val topVisible = cursorTop in viewPortTop..viewPortBottom
