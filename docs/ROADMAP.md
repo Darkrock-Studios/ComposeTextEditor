@@ -1633,9 +1633,10 @@ iOS Safari; browser tests run in CI.
   revision, width and style) the way the editor measures a line, each line its
   own paragraph, so line navigation matches the editor's rows; its geometry
   leaves out the content
-  padding, the scroll offset and block span heights (7.36). No `onImeAction`:
-  the editor is multi-line, where `BasicTextField`'s default action is a no-op;
-  an explicit IME action belongs to 3.11's keyboard options. Headings and lists
+  padding, the scroll offset and block span heights (7.36). `onImeAction` is
+  offered only for an action key the host chose (3.11's
+  `KeyboardSettings.imeAction`); the default is Enter, where
+  `BasicTextField`'s default action is a no-op. Headings and lists
   stay unexposed: an editable node is one text, and native editors
   (`EditText`, `UITextView`) do not expose them either.
 - [ ] **7.36** [Opus] [Lane M] The semantics text layout (7.4, 7.1) is measured
@@ -1666,10 +1667,11 @@ iOS Safari; browser tests run in CI.
   `navigator.clipboard`, plain text only, and fails where the page may not
   write the clipboard.
 - [ ] **7.40** [Opus] [Lane F] A single-line editor (7.13) still asks the
-  soft keyboard for multi-line text (Android's `TYPE_TEXT_FLAG_MULTI_LINE`
-  with no IME action; iOS the same), so the keyboard shows a return key that
-  now does nothing. With 3.11's keyboard settings, a single line should ask
-  for single-line text and an IME action, and hand Enter to `onImeAction`.
+  soft keyboard for multi-line text (Android's `TYPE_TEXT_FLAG_MULTI_LINE`;
+  iOS the same), so with the default `KeyboardSettings.imeAction` the keyboard
+  shows a return key that now does nothing. A single line should ask for
+  single-line text and default its action key to Done, and a hardware Enter
+  should run `onImeAction` as the keyboard's action key does.
 - [ ] **7.41** [Fable] [Lane C] No soft-wrap toggle: every line wraps at the
   viewport width, so a code editor cannot keep a line whole and scroll
   sideways, and `EditorLineLimits.SingleLine` (7.13) wraps and grows where

@@ -2,6 +2,8 @@ package state
 
 import androidx.compose.ui.text.AnnotatedString
 import com.darkrockstudios.texteditor.CharLineOffset
+import com.darkrockstudios.texteditor.TextEditorRange
+import com.darkrockstudios.texteditor.dragdrop.dropText
 import com.darkrockstudios.texteditor.input.imeCommitText
 import com.darkrockstudios.texteditor.input.imeSetComposingText
 import com.darkrockstudios.texteditor.markdown.withMarkdown
@@ -50,6 +52,36 @@ class InputFilterPathsTest {
 		state.selector.updateSelection(CharLineOffset(0, 2), CharLineOffset(0, 5))
 		state.insertTypedString("x")
 		assertEquals("01x56789", state.getAllText().text)
+	}
+
+	@Test
+	fun `a drop is screened, and a move at the limit still passes`() = runTest {
+		val state = createState("abcde", EditorInputFilter.maxLength(6))
+		state.dropText(AnnotatedString("XYZ"), html = null, at = CharLineOffset(0, 5), moveFrom = null)
+		assertEquals("abcdeX", state.getAllText().text)
+
+		val moved = state.dropText(
+			AnnotatedString("ab"),
+			html = null,
+			at = CharLineOffset(0, 6),
+			moveFrom = TextEditorRange(CharLineOffset(0, 0), CharLineOffset(0, 2)),
+		)
+		assertEquals("cdeXab", state.getAllText().text, "a move does not lengthen the document")
+		assertEquals(TextEditorRange(CharLineOffset(0, 4), CharLineOffset(0, 6)), moved)
+	}
+
+	@Test
+	fun `a moved drop the filter would cut is refused whole`() = runTest {
+		val state = createState("abcde", EditorInputFilter.maxLength(6))
+		assertEquals(null, state.dropText(AnnotatedString("XYZ"), null, CharLineOffset(0, 5), null, whole = true))
+		assertEquals("abcde", state.getAllText().text)
+	}
+
+	@Test
+	fun `a single-line drop becomes one line`() = runTest {
+		val state = createState("ab", EditorInputFilter.SingleLine)
+		state.dropText(AnnotatedString("x\ny"), html = null, at = CharLineOffset(0, 1), moveFrom = null)
+		assertEquals(listOf("ax yb"), state.textLines.map { it.text })
 	}
 
 	@Test

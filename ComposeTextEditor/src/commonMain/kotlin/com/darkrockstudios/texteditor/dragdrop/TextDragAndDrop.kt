@@ -103,13 +103,8 @@ internal class TextDragAndDrop(private val state: TextEditorState) {
 		val ours = outgoing?.takeIf { it.id == event.dragId() }
 		ours?.droppedHere = true
 		val moveFrom = ours?.takeIf { !event.requestsCopy() && state.holds(it.range, it.text) }?.range
-		// A composition's range would address the text as it stood before the drop.
-		if (state.composingRange != null) {
-			state.clearComposingRange()
-			state.requestImeResync()
-		}
-		state.dropText(content.text, content.html, at, moveFrom)
-		return true
+		// Refused, the drop is not taken, so a move leaves its source where it was.
+		return state.dropText(content.text, content.html, at, moveFrom, whole = !event.requestsCopy()) != null
 	}
 
 	private fun offsetAt(positionInRoot: Offset): CharLineOffset? {

@@ -359,7 +359,7 @@ fun BasicTextEditor(
 					LinkClicks.forEditor(keyBindings) { currentOnLinkClick }
 				}
 				val dragAndDrop = remember(state) { TextDragAndDrop(state) }
-				dragAndDrop.enabled = enabled
+				dragAndDrop.enabled = editable
 				Canvas(
 					modifier = Modifier
 						.textDragAndDrop(dragAndDrop)

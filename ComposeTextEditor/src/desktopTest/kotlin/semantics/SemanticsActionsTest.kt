@@ -14,10 +14,12 @@ import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextIndent
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.darkrockstudios.texteditor.contextmenu.TextEditorContextMenuState
+import com.darkrockstudios.texteditor.input.KeyboardSettings
 import com.darkrockstudios.texteditor.richstyle.LinkSpanStyle
 import utils.EditorUiTestScope
 import utils.editorUiTest
@@ -146,6 +148,19 @@ class SemanticsActionsTest {
 		val url = link.item as LinkAnnotation.Url
 		assertEquals("https://example.com", url.url)
 		url.linkInteractionListener!!.onClick(url)
+	}
+
+	@Test
+	fun `the host's action key is offered as the IME action`() = editorUiTest(
+		initialText = AnnotatedString("Hello"),
+	) {
+		editorNode().assert(SemanticsMatcher.keyNotDefined(SemanticsActions.OnImeAction))
+		var performed: ImeAction? = null
+		state.onImeAction = { performed = it }
+		state.keyboardSettings = KeyboardSettings(imeAction = ImeAction.Send)
+		waitForIdle()
+		editorNode().performSemanticsAction(SemanticsActions.OnImeAction)
+		assertEquals(ImeAction.Send, performed)
 	}
 
 	@Test
