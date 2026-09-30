@@ -35,6 +35,7 @@ import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.rememberTextEditorState
 import utils.EditorUiTestScope
 import utils.editorUiTest
+import utils.positionOfCharacter
 import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -121,6 +122,23 @@ class ContextMenuE2eTest {
 			val at = assertNotNull(menu.menuPosition.value)
 			assertTrue(abs(at.x - click.x) < 1f, "menu x ${at.x}, click x ${click.x}")
 			assertTrue(abs(at.y - click.y) < 1f, "menu y ${at.y}, click y ${click.y}")
+		}
+	}
+
+	@Test
+	fun `a point in the text's coordinates opens the menu there, past the padding`() {
+		val menu = TextEditorContextMenuState()
+		editorUiTest(
+			initialText = AnnotatedString("hello world"),
+			contentPadding = PaddingValues(start = 40.dp, top = 10.dp),
+			contextMenuState = menu,
+		) {
+			val inText = state.positionOfCharacter(6)
+			test.runOnUiThread { menu.showMenuAtText(inText) }
+			waitForIdle()
+			val at = assertNotNull(menu.menuPosition.value)
+			val expected = canvasToNode(inText)
+			assertTrue((at - expected).getDistance() < 1f, "menu at $at, character at $expected")
 		}
 	}
 

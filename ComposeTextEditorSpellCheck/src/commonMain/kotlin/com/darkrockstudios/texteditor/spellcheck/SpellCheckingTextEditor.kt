@@ -121,6 +121,10 @@ fun SpellCheckingTextEditor(
 	val canEdit by rememberUpdatedState(editable)
 	val contextMenuState = remember { TextEditorContextMenuState() }
 	val wordVisibilityBuffer = dpToPx(35.dp)
+
+	// Below the click, which is in the text's coordinates, so the menu leaves the word in view.
+	fun below(offset: Offset) = Offset(offset.x, offset.y + wordVisibilityBuffer)
+
 	val coroutineScope = rememberCoroutineScope()
 	val suggestionJob = remember { mutableStateOf<Job?>(null) }
 
@@ -170,7 +174,7 @@ fun SpellCheckingTextEditor(
 		val fixes = if (!editable) emptyList() else style.fixes.map { fix ->
 			ContextMenuItem(label = fix.label, enabled = true, onClick = { if (canEdit) diagnostics?.applyFix(span, fix.replacement) })
 		}
-		contextMenuState.showMenu(Offset(offset.x, offset.y + wordVisibilityBuffer), listOf(message) + fixes)
+		contextMenuState.showMenuAtText(below(offset), listOf(message) + fixes)
 	}
 
 	fun createSpellSuggestionItems(
@@ -207,12 +211,12 @@ fun SpellCheckingTextEditor(
 	}
 
 	fun showContextMenu(offset: Offset, spellCheckItem: SpellCheckItem?) {
-		val menuPos = Offset(offset.x, offset.y + wordVisibilityBuffer)
+		val menuPos = below(offset)
 		suggestionJob.value?.cancel()
 		suggestionJob.value = null
 
 		if (spellCheckItem == null) {
-			contextMenuState.showMenu(menuPos)
+			contextMenuState.showMenuAtText(menuPos)
 			return
 		}
 
@@ -234,13 +238,13 @@ fun SpellCheckingTextEditor(
 		}
 		val hostItems = builtInItems + spellCheckMenuItems(spellCheckItem)
 		if (!editable) {
-			contextMenuState.showMenu(menuPos, emptyList(), hostItems)
+			contextMenuState.showMenuAtText(menuPos, emptyList(), hostItems)
 			return
 		}
 		when (spellCheckItem) {
 			is SpellCheckItem.MisspelledWord -> {
 				val placeholder = listOf(ContextMenuItem(label = spellCheckStrings.loading, enabled = false, onClick = {}))
-				contextMenuState.showMenu(menuPos, placeholder)
+				contextMenuState.showMenuAtText(menuPos, placeholder)
 				// Host items arrive with the suggestions: shown under the placeholder, they
 				// would move under the pointer when it is replaced.
 				suggestionJob.value = coroutineScope.launch {
@@ -259,7 +263,7 @@ fun SpellCheckingTextEditor(
 
 			is SpellCheckItem.SentenceIssue -> {
 				val items = createSpellSuggestionItems(spellCheckItem, spellCheckItem.correction.suggestions)
-				contextMenuState.showMenu(menuPos, items, hostItems)
+				contextMenuState.showMenuAtText(menuPos, items, hostItems)
 			}
 		}
 	}

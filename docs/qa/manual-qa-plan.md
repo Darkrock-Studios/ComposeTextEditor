@@ -738,6 +738,8 @@ Guards #89, #90, #65, #83.
 9. Pass `readOnly = true` to the demo's `SpellCheckingTextEditor` and right-click a
    misspelled word. **Expect:** Ignore (and Add to dictionary where offered), no
    suggestions; Ignore clears the squiggle and the text is unchanged.
+10. On Android, tap a misspelled word near the start of a line. **Expect:** the menu opens
+    just below the word, not shifted left of it by the editor's padding.
 
 ## 8. Performance and smoke pass
 

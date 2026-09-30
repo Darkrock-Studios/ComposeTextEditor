@@ -3,7 +3,9 @@ package utils
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.size
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SkikoComposeUiTest
@@ -72,6 +74,7 @@ fun spellCheckUiTest(
 	readOnly: Boolean = false,
 	lineLimits: EditorLineLimits = EditorLineLimits.Fill,
 	contentDescription: String? = null,
+	contentPadding: PaddingValues = PaddingValues(0.dp),
 	block: SpellCheckUiTestScope.() -> Unit,
 ) = runSkikoComposeUiTest {
 	lateinit var state: SpellCheckState
@@ -88,9 +91,7 @@ fun spellCheckUiTest(
 			spellChecker = spellChecker,
 			state = state,
 			modifier = Modifier.size(width, height).testTag(EDITOR_TEST_TAG),
-			// Pointer input is injected at the tagged node in text-canvas coordinates,
-			// which only line up when nothing pads the canvas.
-			contentPadding = PaddingValues(0.dp),
+			contentPadding = contentPadding,
 			enabled = enabled,
 			autoFocus = true,
 			spellCheckMenuItems = spellCheckMenuItems,
@@ -139,9 +140,19 @@ class SpellCheckUiTestScope(
 	/** Runs frames until recomposition and pending effects have settled. */
 	fun waitForIdle() = test.waitForIdle()
 
+	/**
+	 * The middle of the character at flat index [charIndex] in the tagged node's coordinates,
+	 * where pointer input is injected: the text canvas sits inside the content padding.
+	 */
+	fun nodePositionOfCharacter(charIndex: Int): Offset {
+		val canvas = checkNotNull(state.textState.canvasLayoutCoordinates).positionInRoot()
+		val node = test.onNodeWithTag(EDITOR_TEST_TAG).fetchSemanticsNode().positionInRoot
+		return state.textState.positionOfCharacter(charIndex) + (canvas - node)
+	}
+
 	/** Left-clicks the character at flat index [charIndex], with Ctrl or Meta held as asked. */
 	fun clickAtCharacter(charIndex: Int, ctrl: Boolean = false, meta: Boolean = false) {
-		val position = state.textState.positionOfCharacter(charIndex)
+		val position = nodePositionOfCharacter(charIndex)
 		val held = listOfNotNull(Key.CtrlLeft.takeIf { ctrl }, Key.MetaLeft.takeIf { meta })
 		if (held.isNotEmpty()) test.onRoot().performKeyInput { held.forEach { keyDown(it) } }
 		test.onNodeWithTag(EDITOR_TEST_TAG).performMouseInput {
@@ -154,7 +165,7 @@ class SpellCheckUiTestScope(
 
 	/** Taps the character at flat index [charIndex] with a finger. */
 	fun tapAtCharacter(charIndex: Int) {
-		val position = state.textState.positionOfCharacter(charIndex)
+		val position = nodePositionOfCharacter(charIndex)
 		test.onNodeWithTag(EDITOR_TEST_TAG).performTouchInput {
 			advanceEventTime(1_000)
 			click(position)
@@ -164,7 +175,7 @@ class SpellCheckUiTestScope(
 
 	/** Right-clicks the character at flat index [charIndex], opening the context menu. */
 	fun rightClickAtCharacter(charIndex: Int) {
-		val position = state.textState.positionOfCharacter(charIndex)
+		val position = nodePositionOfCharacter(charIndex)
 		test.onNodeWithTag(EDITOR_TEST_TAG).performMouseInput {
 			defeatMultiClickDetection()
 			rightClick(position)
@@ -185,6 +196,10 @@ class SpellCheckUiTestScope(
 		test.onNodeWithText(label).performClick()
 		test.waitForIdle()
 	}
+
+	/** Left edge of the menu item labelled [label], in the root's coordinates. */
+	fun menuItemLeft(label: String): Float =
+		test.onNodeWithText(label).fetchSemanticsNode().boundsInRoot.left
 
 	/** Top edge of the menu item labelled [label], for ordering assertions. */
 	fun menuItemTop(label: String): Float =

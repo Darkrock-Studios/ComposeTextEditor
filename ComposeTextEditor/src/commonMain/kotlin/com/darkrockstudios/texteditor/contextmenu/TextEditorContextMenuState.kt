@@ -42,7 +42,8 @@ class TextEditorContextMenuState {
 		get() = menuPosition.value != null
 
 	/**
-	 * Show the context menu at the specified position.
+	 * Show the context menu at [position], in the coordinates of the editor's outer bounds. For a
+	 * point in the text, such as a span click's, use [showMenuAtText].
 	 */
 	fun showMenu(position: Offset) {
 		menuPosition.value = position
@@ -60,6 +61,27 @@ class TextEditorContextMenuState {
 		extraItems.value = items
 		this.trailingItems.value = trailingItems
 		menuPosition.value = position
+	}
+
+	/**
+	 * Convert a point in the text's coordinates to [menuPosition]'s, one for each editor
+	 * composed with this menu. The last converts.
+	 */
+	internal val textConversions = mutableListOf<(Offset) -> Offset>()
+
+	/**
+	 * Show the context menu at [offset] in the text's coordinates, those of
+	 * [com.darkrockstudios.texteditor.RichSpanClick.offset] and the state's layout
+	 * queries, with [items] and [trailingItems] replacing any shown before. The content
+	 * padding shifts the text from where the menu is placed; this converts through the
+	 * layout of the editor showing the menu.
+	 */
+	fun showMenuAtText(
+		offset: Offset,
+		items: List<ContextMenuItem> = emptyList(),
+		trailingItems: List<ContextMenuItem> = emptyList(),
+	) {
+		showMenu(textConversions.lastOrNull()?.invoke(offset) ?: offset, items, trailingItems)
 	}
 
 	/**

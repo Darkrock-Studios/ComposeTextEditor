@@ -1889,7 +1889,7 @@ Shaping is one line per keystroke. These still scale with document length:
   letters at a period: "U.S.A." reaches the checker as U, S and A, and the s
   of "U.S.'s" on its own. Skip one-letter segments, or rejoin an abbreviation
   before the lookup, so typeset abbreviations stop drawing squiggles.
-- [ ] **7.34** [Opus] [Lane K] A tap on a flagged word or a diagnostic opens
+- [x] **7.34** [Opus] [Lane K] A tap on a flagged word or a diagnostic opens
   `SpellCheckingTextEditor`'s menu at the span click's offset, which is in the
   text canvas's coordinates, so the menu sits the start padding (16 dp by
   default) left of the word. A right-click is re-anchored by the editor since
