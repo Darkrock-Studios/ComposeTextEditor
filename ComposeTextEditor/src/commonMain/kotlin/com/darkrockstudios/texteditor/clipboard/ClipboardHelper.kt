@@ -54,6 +54,10 @@ expect object ClipboardHelper {
 	 * [html] is the markup to offer, which callers copying out of an editor supply
 	 * so the fragment carries the selection's block structure. Null falls back to
 	 * markup derived from [text] alone, which describes its character styling only.
+	 *
+	 * Answers whether the clipboard took the text: a platform can refuse the write
+	 * (the web without permission or a user gesture, AWT while another application
+	 * holds the clipboard), and Cut deletes only once it has landed.
 	 */
 	suspend fun setText(
 		clipboard: Clipboard,
@@ -61,7 +65,7 @@ expect object ClipboardHelper {
 		configuration: MarkdownConfiguration = MarkdownConfiguration.DEFAULT,
 		copyId: Long? = null,
 		html: String? = null,
-	)
+	): Boolean
 
 	/**
 	 * The [copyId] this editor attached to the current clipboard content, or null

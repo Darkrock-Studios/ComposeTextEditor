@@ -10,6 +10,7 @@ import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
 import java.awt.datatransfer.DataFlavor
 import java.awt.datatransfer.Transferable
 import java.awt.datatransfer.UnsupportedFlavorException
+import kotlin.coroutines.cancellation.CancellationException
 
 @OptIn(ExperimentalComposeUiApi::class)
 actual object ClipboardHelper {
@@ -35,10 +36,15 @@ actual object ClipboardHelper {
 		configuration: MarkdownConfiguration,
 		copyId: Long?,
 		html: String?,
-	) {
-		clipboard.setClipEntry(
-			ClipEntry(AnnotatedStringTransferable(text, configuration, copyId, html))
-		)
+	): Boolean = try {
+		clipboard.setClipEntry(ClipEntry(AnnotatedStringTransferable(text, configuration, copyId, html)))
+		true
+	} catch (e: CancellationException) {
+		throw e
+	} catch (e: Exception) {
+		// AWT cannot open the system clipboard while another application holds it.
+		System.err.println("ComposeTextEditor: could not write the clipboard: $e")
+		false
 	}
 
 	actual suspend fun readCopyId(clipboard: Clipboard): Long? {

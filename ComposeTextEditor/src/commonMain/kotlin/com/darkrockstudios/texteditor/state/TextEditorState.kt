@@ -700,6 +700,13 @@ class TextEditorState(
 	// same text. Null until the first copy/cut.
 	private var copiedRichSpans: CopiedRichSpans? = null
 
+	/** [copiedRichSpans], for a copy whose clipboard write was refused to put back. */
+	internal var richSpanBuffer: CopiedRichSpans?
+		get() = copiedRichSpans
+		set(value) {
+			copiedRichSpans = value
+		}
+
 	// Exempts the next single edit from clearing [copiedRichSpans], so a cut's
 	// delete or a paste's insert/replace doesn't wipe the buffer it depends on.
 	private var richSpanBufferSurvivesNextEdit = false

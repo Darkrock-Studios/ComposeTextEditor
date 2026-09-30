@@ -29,6 +29,7 @@ actual object ClipboardHelper {
 	private const val EVENT_WINDOW_MS = 1_000.0
 
 	private var eventWroteAt = Double.NEGATIVE_INFINITY
+	private var eventWroteText: String? = null
 	private var eventPaste: Flavors? = null
 	private var eventPastedAt = Double.NEGATIVE_INFINITY
 
@@ -38,8 +39,9 @@ actual object ClipboardHelper {
 	 */
 	private var lastReadHtml: String? = null
 
-	internal fun eventWrote() {
+	internal fun eventWrote(text: String) {
 		eventWroteAt = now()
+		eventWroteText = text
 	}
 
 	internal fun eventPasted(html: String?, text: String?) {
@@ -74,17 +76,18 @@ actual object ClipboardHelper {
 		configuration: MarkdownConfiguration,
 		copyId: Long?,
 		html: String?,
-	) {
-		if (now() - eventWroteAt < EVENT_WINDOW_MS) {
-			eventWroteAt = Double.NEGATIVE_INFINITY
-			return
-		}
+	): Boolean {
+		// Only the write the event already made for this text: an event whose own
+		// action never came must not stand in for another write.
+		val eventWrote = now() - eventWroteAt < EVENT_WINDOW_MS && eventWroteText == text.text
+		eventWroteAt = Double.NEGATIVE_INFINITY
+		eventWroteText = null
+		if (eventWrote) return true
 		if (hasRichClipboard()) {
 			val markup = html ?: text.toHtml(configuration)
-			attempt("write HTML to") { writeClipboardHtml(markup, text.text).await<JsAny?>() }
-			return
+			return succeeds("write HTML to") { writeClipboardHtml(markup, text.text).await<JsAny?>() }
 		}
-		attempt("write text to") { writeClipboardText(text.text).await<JsAny?>() }
+		return succeeds("write text to") { writeClipboardText(text.text).await<JsAny?>() }
 	}
 
 	actual suspend fun readCopyId(clipboard: Clipboard): Long? = null
@@ -115,6 +118,10 @@ actual object ClipboardHelper {
 
 	private suspend fun readPlainText(): String? =
 		attempt("read text from") { readClipboardText().await<JsString>().toString() }?.takeIf { it.isNotEmpty() }
+
+	/** Runs [block], logging a refusal and answering whether it completed. */
+	private suspend fun succeeds(what: String, block: suspend () -> Unit): Boolean =
+		attempt(what) { block(); true } == true
 
 	/** Runs [block], logging a refusal and answering null for it. */
 	private suspend fun <T : Any> attempt(what: String, block: suspend () -> T?): T? = try {

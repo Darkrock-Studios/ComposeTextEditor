@@ -29,6 +29,7 @@ import com.darkrockstudios.texteditor.state.moveToPreviousWordStart
 import com.darkrockstudios.texteditor.state.moveToWordEnd
 import com.darkrockstudios.texteditor.state.screenAtSelection
 import com.darkrockstudios.texteditor.state.toggleSpanStyle
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.launch
 
 /**
@@ -138,28 +139,47 @@ private fun EditorActionRegistry.registerFormattingToggle(
 }
 
 private fun EditorActionContext.copySelection() {
-	state.selector.selection?.let { selection ->
-		val selectedText = state.selector.getSelectedText()
-		val html = state.selectionAsHtml(selection)
-		val copyId = state.copyRichSpans(selection)
-		scope.launch {
-			ClipboardHelper.setText(clipboard, selectedText, state.markdownConfiguration, copyId, html)
-		}
+	val selection = state.selector.selection ?: return
+	val write = writeSelection(selection)
+	scope.launch(start = CoroutineStart.UNDISPATCHED) { write() }
+}
+
+/**
+ * Deletes the selection only once the clipboard holds it, so a refused write (the
+ * web's permission, AWT's busy clipboard) leaves the text in place. Undispatched, so
+ * where the write does not suspend the delete lands before the action returns. A
+ * change to the text or the selection while it does suspend makes the cut a copy.
+ */
+private fun EditorActionContext.cutSelection() {
+	val selection = state.selector.selection ?: return
+	val textRevision = state.textRevision
+	val write = writeSelection(selection)
+	scope.launch(start = CoroutineStart.UNDISPATCHED) {
+		if (!write()) return@launch
+		if (state.textRevision != textRevision || state.selector.selection != selection) return@launch
+		state.preserveCopiedRichSpansThroughNextEdit()
+		state.selector.deleteSelection()
 	}
 }
 
-private fun EditorActionContext.cutSelection() {
-	state.selector.selection?.let { selection ->
-		val selectedText = state.selector.getSelectedText()
-		// Both reads describe the document as it stands, so they have to happen
-		// before the delete takes the selection out from under them.
-		val html = state.selectionAsHtml(selection)
-		val copyId = state.copyRichSpans(selection)
-		state.preserveCopiedRichSpansThroughNextEdit()
-		state.selector.deleteSelection()
-		scope.launch {
-			ClipboardHelper.setText(clipboard, selectedText, state.markdownConfiguration, copyId, html)
+/**
+ * Reads [selection] for the clipboard as the document stands, and answers a write of
+ * it that reports whether the clipboard took it. A refused write puts back the
+ * rich-span buffer this copy replaced, which still describes the clipboard's content.
+ */
+private fun EditorActionContext.writeSelection(selection: TextEditorRange): suspend () -> Boolean {
+	val selectedText = state.selector.getSelectedText()
+	val html = state.selectionAsHtml(selection)
+	val previousBuffer = state.richSpanBuffer
+	val copyId = state.copyRichSpans(selection)
+	val buffer = state.richSpanBuffer
+	val textRevision = state.textRevision
+	return {
+		val written = ClipboardHelper.setText(clipboard, selectedText, state.markdownConfiguration, copyId, html)
+		if (!written && state.richSpanBuffer === buffer && state.textRevision == textRevision) {
+			state.richSpanBuffer = previousBuffer
 		}
+		written
 	}
 }
 

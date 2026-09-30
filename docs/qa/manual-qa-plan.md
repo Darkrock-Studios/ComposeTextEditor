@@ -230,8 +230,9 @@ In Chrome, Firefox and Safari, against the built demo:
    shows a Paste button); allowed, the markup pastes; denied, nothing changes and
    the console shows a `ComposeTextEditor: could not read ... the clipboard` warning.
 5. Serve the demo over plain http from another machine (an insecure context) and
-   use the context menu's Copy and Paste. **Expect:** a console warning for each,
-   while the keyboard chords still work.
+   use the context menu's Copy, Cut and Paste. **Expect:** a console warning for
+   each, the text stays where it was after Cut (6.19), and the keyboard chords
+   still work.
 
 ### 2.10 Links (6.9)
 

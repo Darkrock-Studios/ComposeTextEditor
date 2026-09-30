@@ -38,7 +38,7 @@ internal actual fun ClipboardEventsEffect(state: TextEditorState) {
 					val text = state.selector.getSelectedText().text
 					setClipboardData(event, "text/html", state.selectionAsHtml(selection))
 					setClipboardData(event, "text/plain", text)
-					ClipboardHelper.eventWrote()
+					ClipboardHelper.eventWrote(text)
 					true
 				}
 

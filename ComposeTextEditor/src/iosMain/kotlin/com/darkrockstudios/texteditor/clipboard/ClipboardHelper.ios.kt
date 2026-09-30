@@ -47,7 +47,10 @@ actual object ClipboardHelper {
 		configuration: MarkdownConfiguration,
 		copyId: Long?,
 		html: String?,
-	) = UIPasteboard.generalPasteboard.writeStyled(text.text, html ?: text.toHtml(configuration), copyId)
+	): Boolean {
+		UIPasteboard.generalPasteboard.writeStyled(text.text, html ?: text.toHtml(configuration), copyId)
+		return true
+	}
 
 	actual suspend fun readCopyId(clipboard: Clipboard): Long? = lastReadCopyId.also { lastReadCopyId = null }
 

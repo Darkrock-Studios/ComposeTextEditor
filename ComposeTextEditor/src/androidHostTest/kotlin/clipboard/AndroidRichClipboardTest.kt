@@ -24,6 +24,7 @@ import kotlinx.coroutines.test.runTest
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
@@ -123,9 +124,22 @@ class AndroidRichClipboardTest {
 		coEvery { clipboard.setClipEntry(match { it?.clipData === rich }) } throws RuntimeException("too large")
 		coEvery { clipboard.setClipEntry(match { it?.clipData === plain }) } returns Unit
 
-		ClipboardHelper.setText(clipboard, AnnotatedString("big"), config, copyId = null, html = null)
+		assertTrue(ClipboardHelper.setText(clipboard, AnnotatedString("big"), config, copyId = null, html = null))
 
 		coVerify { clipboard.setClipEntry(match { it?.clipData === plain }) }
+	}
+
+	@Test
+	fun `a copy the clipboard refuses reports it`() = runTest {
+		mockkStatic(ClipData::class)
+		mockkStatic(android.util.Log::class)
+		every { android.util.Log.w(any(), any<String>(), any()) } returns 0
+		every { ClipData.newHtmlText(any(), any(), any()) } returns mockk(relaxed = true)
+		every { ClipData.newPlainText(any(), any()) } returns mockk(relaxed = true)
+		val clipboard = mockk<Clipboard>()
+		coEvery { clipboard.setClipEntry(any()) } throws RuntimeException("refused")
+
+		assertFalse(ClipboardHelper.setText(clipboard, AnnotatedString("x"), config, copyId = null, html = null))
 	}
 
 	@Test

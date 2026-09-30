@@ -1637,13 +1637,22 @@ iOS Safari; browser tests run in CI.
   own size) beneath its own spans (`clipboard/PasteStyle.kt`), so it matches the
   text around it and its own sizes still win; `importHtml` puts the body style
   under its text as markdown import does (`clipboard/RichPasteBodyStyleTest.kt`).
-- [ ] **6.19 Cut deletes before the clipboard write can fail. S.** [Opus]
+- [x] **6.19 Cut deletes before the clipboard write can fail. S.** [Opus]
   [Lane H] `cutSelection` deletes the selection and then writes the clipboard in
   a coroutine. On the web the context menu's Cut writes through
   `navigator.clipboard`, which an insecure page, a lapsed user gesture or a
   refused permission turns into a logged warning, and the cut text is gone
   except through undo. Write first and delete on success, or refuse Cut where
-  the write cannot happen.
+  the write cannot happen. Done: `ClipboardHelper.setText` answers whether the
+  clipboard took the text (the web's refusals, AWT's `IllegalStateException`
+  while another application holds the clipboard, Android's refused clip), and
+  Cut deletes only after a write that landed, in an undispatched coroutine so a
+  write that does not suspend deletes before the action returns; a change to the
+  text or the selection while the write is pending makes the cut a copy. A
+  refused copy or cut puts back the rich-span buffer it replaced, which still
+  describes what the clipboard holds, and the web counts a chord's clipboard
+  event as the write only for the text it wrote (`clipboard/CutWriteTest.kt`).
+  The `expect` changed its return type (Mac queue).
 - [x] **6.12 Drag and drop** [Opus] [Lane H] of the selection, and drops of
   external text. Done on desktop: a mouse press inside the selection is held;
   moving past the slop starts a platform drag of it (Compose's
@@ -2413,5 +2422,6 @@ records results and removes entries that passed.
 | 6.12 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64`. `dragdrop/PlatformTextDrag.kt` adds four `internal expect` functions; the iOS actuals (`iosMain/.../dragdrop/PlatformTextDrag.ios.kt`) answer null and false. Then on the Mac's desktop sample app: select a word, drag it within the editor, then with Option held, then into TextEdit, and drag text from TextEdit into the editor | Compiles. The word moves (Option copies), arrives in TextEdit styled and leaves the editor, and TextEdit's text drops in at the drop caret || Compile part passed 2026-09-30 at `a53f285`. The drag part is not run: it needs a person driving the desktop sample app and TextEdit, which the tools here cannot |
 | 7.9, housekeeping | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64` and `:ComposeTextEditor:iosSimulatorArm64Test`. `skikoMain` changed: `SkikoTextEditorInputMethodRequest` folds `TextEditorState.textRevision` into its reads instead of the session collecting edits, and `DocumentTextLayout` keys on the line list and builds from `getAllPlainText()`. Then in the iOS sample app: type, forward delete with a hardware keyboard or the soft keyboard's delete after moving the caret, and use the spacebar trackpad over a long paragraph | Compiles and the tests pass. Typing and deletes reach the keyboard's mirror (autocorrect and suggestions follow the text), and the trackpad moves the caret through the current text | |
 | 7.8, 7.48 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64` and `:ComposeTextEditor:iosSimulatorArm64Test` (commonMain changed how the lines, rows and spans are stored; no `iosMain` or `skikoMain` change). Then re-time the iOS simulator as 4.21 did (iPhone 17 Pro Max simulator, Debug framework, a 200,000-character document of 2,000 lines of 99 characters, temporary logging): the keyboard's `editText` block and the frames over 20 ms while typing twelve keys, then rotate the device and time the frame the rotation costs and how long the rows take to settle | Before (4.21, `f3b8d8f`): `editText` 9.4 ms median at 200k against 0.7 ms at 2k. A pass: `editText` within a few times the 2k figure, wherever the caret is (desktop went 837 µs to 174 µs, and 2,026 µs to 94 µs with a span on every line); a rotation that shapes only the visible lines at once and settles the rest in the background without the scroll jumping. Record the numbers here and in 7.8 and 7.48 | |
+| 6.19 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64` and `:ComposeTextEditor:iosSimulatorArm64Test`. `ClipboardHelper.setText` now returns `Boolean` (`iosMain/.../clipboard/ClipboardHelper.ios.kt` answers true after writing). Then in the iOS sample app: select a word and Cut from the edit menu, and paste it elsewhere | Compiles and the tests pass. The word leaves the editor on Cut and pastes back | |
 | 7.10, 7.11 | Re-time the iOS simulator as 4.21 did (iPhone 17 Pro Max simulator, Debug framework, a 200,000-character document of 2,000 lines of 99 characters, temporary logging): the idle caret-blink frame, frames over 20 ms while typing twelve keys with the soft keyboard (count and worst), and the keyboard's `editText` block; also the time to open and close the soft keyboard, which no longer reshapes the document | Before (4.21, `f3b8d8f`): an idle blink frame 33 ms at 200k against under one vsync at 2k; typing frames up to 137 ms, about six over 20 ms a keystroke; `editText` 9.4 ms median. A pass: the blink frame at 200k within a vsync, as at 2k (7.11). Typing frames should drop by the row scans and the whole-text build; `editText` is 7.8's and is not expected to move. Record the numbers here and in 7.11 | |
 | 5.2 | In the iOS sample app with the soft keyboard (Settings > General > Keyboard > Smart Punctuation on), type `"quoted"`, `it's`, and `a--b` into the editor | Record whether curly quotes, the apostrophe, and the dash arrive already converted through the input session; this decides whether 5.2 must stay off on iOS by default | |

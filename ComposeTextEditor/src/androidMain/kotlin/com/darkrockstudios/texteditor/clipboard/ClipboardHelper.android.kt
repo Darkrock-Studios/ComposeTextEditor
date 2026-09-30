@@ -72,22 +72,25 @@ actual object ClipboardHelper {
 		configuration: MarkdownConfiguration,
 		copyId: Long?,
 		html: String?,
-	) {
+	): Boolean {
 		val clipData = ClipData.newHtmlText("text", text.text, html ?: text.toHtml(configuration))
 		if (copyId != null) {
 			clipData.description.extras = PersistableBundle().apply { putLong(COPY_ID_EXTRA, copyId) }
 		}
 		try {
 			clipboard.setClipEntry(clipData.toClipEntry())
+			return true
 		} catch (e: RuntimeException) {
 			// A clip past the binder transaction limit is refused; the text alone is
 			// half the size, so a large selection still copies.
 			Log.w(TAG, "Could not copy with markup, copying plain text", e)
-			try {
-				clipboard.setClipEntry(ClipData.newPlainText("text", text.text).toClipEntry())
-			} catch (e: RuntimeException) {
-				Log.w(TAG, "Could not copy", e)
-			}
+		}
+		return try {
+			clipboard.setClipEntry(ClipData.newPlainText("text", text.text).toClipEntry())
+			true
+		} catch (e: RuntimeException) {
+			Log.w(TAG, "Could not copy", e)
+			false
 		}
 	}
 
