@@ -57,6 +57,7 @@ actual class ImeCursorSync internal constructor(
 	private var lastAnchor: CursorAnchor? = null
 	private var handledResyncGeneration = 0
 	private var handledDocumentGeneration = 0
+	private var handledKeyboard: KeyboardRequest? = null
 
 	// Weak so a whole superseded document is not kept alive just to compare against. A
 	// cleared reference still means "changed": the current text is strongly reachable.
@@ -74,6 +75,7 @@ actual class ImeCursorSync internal constructor(
 				state.selector.selectionRangeFlow,
 				state.editOperations,
 				state.documentGeneration,
+				snapshotFlow { keyboardRequest() },
 			).collect { requestFlush() }
 		}
 		scope.launch {
@@ -96,6 +98,7 @@ actual class ImeCursorSync internal constructor(
 		attached = true
 		handledResyncGeneration = state.imeResyncGeneration
 		handledDocumentGeneration = state.documentGeneration.value
+		handledKeyboard = keyboardRequest()
 		state.platformExtensions.imeSync = this
 	}
 
@@ -126,13 +129,20 @@ actual class ImeCursorSync internal constructor(
 
 		val resyncGeneration = state.imeResyncGeneration
 		val documentGeneration = state.documentGeneration.value
-		if (resyncGeneration != handledResyncGeneration || documentGeneration != handledDocumentGeneration) {
+		val keyboard = keyboardRequest()
+		if (
+			resyncGeneration != handledResyncGeneration ||
+			documentGeneration != handledDocumentGeneration ||
+			keyboard != handledKeyboard
+		) {
 			handledResyncGeneration = resyncGeneration
 			handledDocumentGeneration = documentGeneration
+			handledKeyboard = keyboard
 			// The keyboard's mirror is wrong in a way no updateSelection can fix: a behavior
 			// answered its request without the edit it expected, or setText/setDocument
 			// swapped the whole document. Only a restart makes it discard the mirror and
-			// re-read the buffer, as EditText restarts input on setText.
+			// re-read the buffer, as EditText restarts input on setText. A restart is also
+			// how a keyboard takes new settings, as EditText's setInputType does.
 			sink.restartInput()
 			lastSelection = null
 		}
@@ -169,6 +179,9 @@ actual class ImeCursorSync internal constructor(
 		lastAnchor = anchor
 		sink.sendCursorAnchorInfo(anchor)
 	}
+
+	private fun keyboardRequest(): KeyboardRequest =
+		state.keyboardSettings.let { KeyboardRequest(it.androidInputType(), it.androidImeOptions()) }
 
 	/** The selection and composing indices as the IME should currently see them. */
 	private data class ImeSelection(
@@ -227,3 +240,6 @@ private class InputMethodManagerSink(private val state: TextEditorState) : ImeUp
 
 	override fun sendCursorAnchorInfo(anchor: CursorAnchor) = state.platformExtensions.sendCursorAnchor(anchor)
 }
+
+/** What the keyboard settings ask of the `EditorInfo`, where a change needs a restart. */
+private data class KeyboardRequest(val inputType: Int, val imeOptions: Int)

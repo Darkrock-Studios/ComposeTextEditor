@@ -182,8 +182,8 @@ review.
 | B | Pointer and touch | `textEditorPointerInputHandling.kt`, `state/TextEditorSelectionManager.kt`, `DrawSelectionHandles.kt` | 1.9, 1.12 to 1.16, 1.21 to 1.24, 3.1, 3.2, 3.4 to 3.8, 3.13, 3.15, 4.23, 6.16 |
 | C | Drawing and geometry | `Draw*.kt`, `cursor/`, `scrollbar/`, `state/TextEditorScrollState.kt`, hit testing | 1.8, 1.10, 1.11, 1.17, 1.18, 3.3, 3.12, 3.16, 4.14, 7.6, 7.7 |
 | D | Bindings, actions, menu | `input/KeyBindings.kt`, `input/EditorCommand.kt`, `input/BuiltinEditorActions.kt`, `contextmenu/` | 2.1, 2.2, 2.4, 2.5, 2.7 to 2.12, 4.8, 5.8 |
-| E | Input sessions on desktop, iOS, web | `desktopMain`, `iosMain`, `wasmJsMain` under `input/` | 4.2 to 4.7, 4.10 to 4.12, 4.19, 4.21, 4.22, 4.24 to 4.26, 4.28, 4.29 |
-| F | Android input | `androidMain` | 0.4, 3.9 to 3.11, 3.14, 4.16, 4.18, 4.20, 4.27, 4.30, 4.31 |
+| E | Input sessions on desktop, iOS, web | `desktopMain`, `iosMain`, `wasmJsMain` under `input/` | 4.2 to 4.7, 4.10 to 4.12, 4.19, 4.21, 4.22, 4.24 to 4.26, 4.28, 4.29, 4.32 |
+| F | Android input | `androidMain` | 0.4, 3.9 to 3.11, 3.14, 3.17, 4.16, 4.18, 4.20, 4.27, 4.30, 4.31 |
 | G | Edit pipeline and undo | `state/TextEditManager.kt`, `state/TextEditHistory.kt`, `state/EditBehavior.kt`, `input/ImeEditLogic.kt` | 1.20, 5.1 to 5.5, 5.9, 6.1 to 6.6, 6.14, 6.15, 6.17 |
 | H | Clipboard and HTML | `clipboard/`, `html/` | 4.9, 4.13, 4.17, 6.7 to 6.13, 6.18, 6.19 |
 | I | Markdown and block model | `markdown/`, `richstyle/` | 5.6, 7.14 to 7.16 |
@@ -766,11 +766,24 @@ fixes what users feel every minute.
   `dumpsys input_method`: a tap at y 700 reported a marker from 663 to 712 with
   the visible flag, and a scroll that took the caret row above the editor
   resent it at 245 to 294, flagged invisible, with the selection unchanged.
-- [ ] **3.11 Keyboard options. C.** [Opus] [Lane F] `inputType` and
+- [x] **3.11 Keyboard options. C.** [Opus] [Lane F] `inputType` and
   `imeOptions` are hard-coded; hosts cannot configure capitalisation,
   autocorrect, or keyboard type. `initialCapsMode` and initial surrounding text
   are not set. `commitContent` returns false. No autofill, no stylus
-  handwriting.
+  handwriting. Done: `TextEditorState.keyboardSettings` (`KeyboardSettings`,
+  commonMain `input/KeyboardSettings.kt`) sets capitalisation, autocorrect,
+  the keyboard's layout, and the action key, in Compose's own types, and
+  `TextEditorState.onImeAction` handles that key. Android maps the settings
+  to `EditorInfo` as Compose does for a multi-line `BasicTextField` (Enter
+  keeps `IME_FLAG_NO_ENTER_ACTION` unless an action is asked for), answers
+  the action its connection was opened with through the handler, or without
+  one as Compose's text fields do (Next and Previous move focus, Done hides
+  the keyboard), and restarts input when the settings change. `initialCapsMode` and, from API 30, the initial
+  surrounding text are set (`KeyboardSettingsTest`). The Code Editor demo
+  turns capitals and autocorrect off; checked on an emulator (API 36, Gboard)
+  through `dumpsys input_method`: its editor reported `inputType=0x20001`
+  (text, multi-line) and the rich text demo's `0x2c001` (with sentence caps
+  and autocorrect). iOS and web adoption is 4.32; the rest moved to 3.17.
 - [x] **3.12 Scrolling. C.** [Opus] [Lane C] No overscroll effect. The mobile
   scroll indicator is non-interactive, always visible, with a fixed 15% thumb.
   A 32 px buffer is always added to max scroll, so a one-line document scrolls.
@@ -823,6 +836,12 @@ fixes what users feel every minute.
   but a snap measured while the stale strip stands leaves the caret row that
   many pixels higher than it needs to be. Measure the cover after layout
   only, or ignore an inset change the next layout will absorb.
+- [ ] **3.17 Rich content, autofill, and stylus handwriting on Android. C.**
+  [Fable] [Lane F] From 3.11: `commitContent` returns false, so a keyboard's
+  GIFs and stickers are refused; the editor offers nothing to autofill; and
+  there is no stylus handwriting (`View.setAutoHandwritingEnabled` and
+  `EditorInfo.setStylusHandwritingEnabled`, API 33 and 35). Each needs a host
+  hook or a design decision about what the editor does with the content.
 
 ## Phase 4: platform parity (parallel track)
 
@@ -1253,6 +1272,15 @@ iOS Safari; browser tests run in CI.
   scroll that follows the caret lands after the send; resending then is 3.10.
   A stylus or floating keyboard pass is a person's (QA plan, "Android
   keyboards").
+- [ ] **4.32 Keyboard settings on iOS and the web. C.** [Opus] [Lane E]
+  [Mac work] 3.11 added `TextEditorState.keyboardSettings`, which only Android
+  honours. `TextEditorTextInputService.ios.kt` passes fixed `ImeOptions` and
+  web passes `ImeOptions.Default`; both should build them from the settings
+  (`singleLine = false` and the four fields map one to one), route the
+  request's `onImeAction` to `TextEditorState.performImeAction`, and
+  restart the session when the settings change, as Android does. Web also
+  forces `autocapitalize` to `sentences` (4.11), which should follow the
+  settings' capitalisation.
 - [ ] **4.31 Android's cursor anchor misses a view that moves alone. C.**
   [Opus] [Lane F] The anchor is resent when the caret moves in the view
   (3.10), but a view that moves on screen with nothing in the editor changing
@@ -1545,9 +1573,8 @@ Shaping is one line per keystroke. These still scale with document length:
 - [ ] **7.13** [Opus] [Lane M] Missing: read-only with a caret, single-line
   mode, min and max lines, auto-grow (the editor forces `fillMaxSize`), max
   length, an input filter, a soft-wrap toggle with horizontal scrolling.
-  Also the soft keyboard options: capitalisation, autocorrect, and keyboard
-  type are fixed per platform (Android's `EditorInfo`, the iOS `ImeOptions`
-  in 4.2), so a host editing code cannot turn sentence caps off.
+  The soft keyboard options are `TextEditorState.keyboardSettings` since
+  3.11, honoured on Android; iOS and web are 4.32.
 
 ### Markdown export
 

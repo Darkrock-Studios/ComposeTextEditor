@@ -9,10 +9,12 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import codeeditor.CodeEditor
 import codeeditor.rememberCodeEditorStyle
 import com.darkrockstudios.texteditor.annotatedstring.toAnnotatedString
+import com.darkrockstudios.texteditor.input.KeyboardSettings
 import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.rememberTextEditorState
 
@@ -26,6 +28,10 @@ fun CodeEditorDemoUi(
 	)
 	val state: TextEditorState =
 		rememberTextEditorState(SAMPLE_CODE.toAnnotatedString(FontFamily.Monospace))
+
+	LaunchedEffect(state) {
+		state.keyboardSettings = KeyboardSettings(capitalization = KeyboardCapitalization.None, autoCorrect = false)
+	}
 
 	LaunchedEffect(Unit) {
 		state.editOperations.collect { operation ->

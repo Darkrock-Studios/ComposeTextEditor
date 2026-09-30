@@ -8,6 +8,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.ParagraphStyle
 import androidx.compose.ui.text.SpanStyle
@@ -33,6 +34,7 @@ import com.darkrockstudios.texteditor.cursor.getWrapForDrawing
 import com.darkrockstudios.texteditor.cursor.getWrappedLineIndex
 import com.darkrockstudios.texteditor.effectiveHeight
 import com.darkrockstudios.texteditor.input.EditorActionRegistry
+import com.darkrockstudios.texteditor.input.KeyboardSettings
 import com.darkrockstudios.texteditor.input.KillRing
 import com.darkrockstudios.texteditor.input.TabSettings
 import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
@@ -635,6 +637,23 @@ class TextEditorState(
 
 	/** What Tab and Shift+Tab do: the indent size and character, or moving focus. */
 	var tabSettings: TabSettings by mutableStateOf(TabSettings())
+
+	/** What the soft keyboard is asked for: capitalisation, autocorrect, layout, and the action key. */
+	var keyboardSettings: KeyboardSettings by mutableStateOf(KeyboardSettings())
+
+	/**
+	 * Called with the action when the soft keyboard's action key
+	 * ([KeyboardSettings.imeAction]) is pressed. Null leaves the key to the default that
+	 * [KeyboardSettings.imeAction] describes.
+	 */
+	var onImeAction: ((ImeAction) -> Unit)? = null
+
+	/** The action key's default, supplied by the composed editor, which can move focus. */
+	internal var defaultImeAction: ((ImeAction) -> Unit)? = null
+
+	internal fun performImeAction(action: ImeAction) {
+		(onImeAction ?: defaultImeAction)?.invoke(action)
+	}
 
 	/**
 	 * How to open the context menu of each composable showing this state, which adds its

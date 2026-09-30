@@ -552,7 +552,13 @@ German, or French).
    keyboard rises and the row stays in view just above it; the app's toolbar
    does not slide off the top (3.9). Scroll that caret out of view, hide and
    raise the keyboard. **Expect:** the scroll stays where it was.
-5. With Gboard's floating keyboard, or a stylus on a device with stylus
+5. Code Editor demo: type a sentence. **Expect:** no capital at its start and no
+   autocorrection; the rich text demo still capitalises and corrects (3.11).
+   With a host setting `KeyboardSettings(imeAction = ImeAction.Send)` and
+   `state.onImeAction`, the keyboard shows a Send key that calls the handler,
+   and a hardware Enter still starts a line. With `ImeAction.Next` and no
+   handler, the key moves focus to the next field.
+6. With Gboard's floating keyboard, or a stylus on a device with stylus
    handwriting (Android 14 or later), move the caret with the arrow keys and
    by tapping, across rows. **Expect:** what follows the caret (the floating
    candidates, the handwriting insertion marker) follows at once, not one move

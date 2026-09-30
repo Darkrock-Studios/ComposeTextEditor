@@ -32,25 +32,33 @@ private class TextEditorInputMethodRequest(
 	private val view: View,
 ) : PlatformTextInputMethodRequest {
 	override fun createInputConnection(outAttributes: EditorInfo): InputConnection {
-		outAttributes.populate(state)
-		return TextEditorInputConnection(state, view)
+		val connection = TextEditorInputConnection(state, view)
+		outAttributes.populate(state, connection)
+		return connection
 	}
 }
 
-private fun EditorInfo.populate(state: TextEditorState) {
-	inputType = InputType.TYPE_CLASS_TEXT or
-			InputType.TYPE_TEXT_VARIATION_NORMAL or
-			InputType.TYPE_TEXT_FLAG_MULTI_LINE or
-			InputType.TYPE_TEXT_FLAG_AUTO_CORRECT or
-			InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
-
-	imeOptions = EditorInfo.IME_FLAG_NO_FULLSCREEN or
-			EditorInfo.IME_FLAG_NO_EXTRACT_UI or
-			EditorInfo.IME_ACTION_UNSPECIFIED
+private fun EditorInfo.populate(state: TextEditorState, connection: TextEditorInputConnection) {
+	val settings = state.keyboardSettings
+	inputType = settings.androidInputType()
+	imeOptions = settings.androidImeOptions()
 
 	val selection = state.selectionAsTextRange()
 	initialSelStart = selection.start
 	initialSelEnd = selection.end
+	// Where the keyboard starts shifted, as EditText reports it. The caps flags mean
+	// something only to the text class; a number class's decimal flag shares a bit.
+	val isText = inputType and InputType.TYPE_MASK_CLASS == InputType.TYPE_CLASS_TEXT
+	val capsModes = InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS or
+			InputType.TYPE_TEXT_FLAG_CAP_WORDS or
+			InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+	initialCapsMode = if (isText) connection.getCursorCapsMode(inputType and capsModes) else 0
+
+	// Saves the keyboard reading the text around the caret back before it can suggest.
+	// The platform trims it around the selection without splitting a surrogate pair.
+	if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+		setInitialSurroundingText(state.getAllText().text)
+	}
 }
 
 /**
@@ -74,6 +82,10 @@ internal class TextEditorInputConnection(
 
 	@Volatile
 	private var isActive: Boolean = true
+
+	/** The settings the keyboard was opened with; a change restarts input with a new connection. */
+	private val keyboardSettings = state.keyboardSettings
+	private val actionKey = keyboardSettings.androidEditorAction()
 
 	/** Batch levels this connection holds open on the state, released when it closes. */
 	private var batchDepth: Int = 0
@@ -234,15 +246,19 @@ internal class TextEditorInputConnection(
 
 	// ============ EDITOR ACTION / CONTEXT MENU ============
 
-	override fun performEditorAction(editorAction: Int): Boolean = edit {
-		// Multi-line field: some IMEs route Enter through here instead of
-		// commitText("\n") or sendKeyEvent(KEYCODE_ENTER).
+	override fun performEditorAction(editorAction: Int): Boolean {
+		if (!isActive) return false
 		when (editorAction) {
+			// Multi-line field: some IMEs route Enter through here instead of
+			// commitText("\n") or sendKeyEvent(KEYCODE_ENTER).
 			EditorInfo.IME_ACTION_UNSPECIFIED,
-			EditorInfo.IME_ACTION_NONE -> state.imePerformNewline()
+			EditorInfo.IME_ACTION_NONE -> return edit { state.imePerformNewline() }
 
-			else -> Unit
+			// Outside a batch of its own: the host's handler may do anything, move focus
+			// included, and an IME batch around this call holds back only notifications.
+			actionKey -> state.performImeAction(keyboardSettings.imeAction)
 		}
+		return true
 	}
 
 	override fun performContextMenuAction(id: Int): Boolean {

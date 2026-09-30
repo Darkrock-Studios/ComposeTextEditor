@@ -125,10 +125,17 @@ any departure from it.
 ### The connection
 
 `startInput` registers a `PlatformTextInputMethodRequest` whose
-`createInputConnection` populates `EditorInfo` (multiline text, autocorrect,
-sentence caps, no fullscreen extract UI, initial selection in flat character
-indices) and returns a `TextEditorInputConnection` bound to the session's
-view. The connection's read side (`getTextBeforeCursor`, `getSurroundingText`,
+`createInputConnection` returns a `TextEditorInputConnection` bound to the
+session's view and populates `EditorInfo`: the input type and action from the
+host's `TextEditorState.keyboardSettings` (by default multi-line text with
+autocorrect and sentence caps, Enter as a new line), no fullscreen extract UI,
+the initial selection in flat character indices, the caps mode at the caret,
+and, from API 30, the text around the caret. The action key a connection was
+opened with calls the host's `onImeAction`, or the default the modifier node
+supplies (Next and Previous move focus, Done hides the keyboard); the
+unspecified and none actions are Enter. A settings change restarts input from
+the next flush, as `EditText.setInputType` does; iOS and web do not read the
+settings yet. The connection's read side (`getTextBeforeCursor`, `getSurroundingText`,
 `getExtractedText`) answers from the state's flat-index conversions, measuring
 from the selection's edges and clamping requested lengths before any
 arithmetic (some IMEs ask for `Int.MAX_VALUE`); its write side applies
