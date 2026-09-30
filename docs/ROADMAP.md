@@ -1878,7 +1878,7 @@ Shaping is one line per keystroke. These still scale with document length:
   height-only resize to no shaping and the same row list. Desktop JVM at 200k
   characters: a height-only change took 101.8 ms, now 8.5 µs. A width change
   still reshapes everything (107 ms); making it lazy is 7.48.
-- [ ] **7.48** [Fable] [Lane N] A width change (a window resize, a rotation, a
+- [x] **7.48** [Fable] [Lane N] A width change (a window resize, a rotation, a
   split screen) reshapes every line at once: 107 ms at 200k characters on the
   desktop JVM, per frame of a window drag. Reshaping the visible rows first
   needs rows that can hold a layout shaped at another width, or an estimated
@@ -1887,7 +1887,17 @@ Shaping is one line per keystroke. These still scale with document length:
   heights settle; and every consumer that reads `lineOffsets` (hit testing,
   caret, selection, scrolling, the scrollbar) tolerating provisional rows or
   forcing the rows it needs. Best designed together with 7.8, which also
-  changes how rows are stored.
+  changes how rows are stored. Done, on 7.8's row list
+  (`docs/design/incremental-relayout.md`, section 10): a width, style,
+  measurer or density change (`LayoutUpdate.Reshape`) shapes the lines with
+  a row in the viewport and a viewport beyond each edge at once, keeps the
+  scroll anchored to the line at the top of the viewport, and shapes the
+  rest between frames in slices of 32 lines, nearest the viewport first,
+  each line at its old shape until then; drawing and a scroll to the caret
+  shape what they need first; an edit during settling shapes its own line
+  (`LazyReshapeCostTest`). Desktop JVM at 200k characters: a width change
+  107 ms to 2.4 ms at once, with 101 ms of settling spread over the frames
+  after it. The iOS rotation needs a simulator run (Mac queue).
 - [x] **7.11** [Opus] [Lane N] Linear scans per frame or event: visible-line
   lookup in drawing, unculled selection drawing, `getWrappedLineIndex`,
   `getOffsetAtPosition` on each drag move. On the iOS simulator at 200k
@@ -2264,4 +2274,5 @@ records results and removes entries that passed.
 | 4.13 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64`. `clipboard/ClipboardEvents.kt` adds `internal expect fun ClipboardEventsEffect`; the iOS actual (`iosMain/.../clipboard/ClipboardEvents.ios.kt`) is a no-op. Then the web demo in Safari on macOS: Cmd+C a bold word, Cmd+V it back, and paste a bulleted list from another page; also the context menu's Paste | Compiles. Safari pastes the bold word bold and the list as a list; the context menu's Paste either pastes or logs a `ComposeTextEditor:` warning in the console, never fails silently || Compile part passed 2026-09-30 at `f3b8d8f`. The Safari part is not run: it needs Safari on macOS with a person at the keyboard, since the clipboard events only fire for real key presses and driving Safari needs its Remote Automation setting turned on |
 | 6.12 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64`. `dragdrop/PlatformTextDrag.kt` adds four `internal expect` functions; the iOS actuals (`iosMain/.../dragdrop/PlatformTextDrag.ios.kt`) answer null and false. Then on the Mac's desktop sample app: select a word, drag it within the editor, then with Option held, then into TextEdit, and drag text from TextEdit into the editor | Compiles. The word moves (Option copies), arrives in TextEdit styled and leaves the editor, and TextEdit's text drops in at the drop caret || Compile part passed 2026-09-30 at `a53f285`. The drag part is not run: it needs a person driving the desktop sample app and TextEdit, which the tools here cannot |
 | 7.9, housekeeping | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64` and `:ComposeTextEditor:iosSimulatorArm64Test`. `skikoMain` changed: `SkikoTextEditorInputMethodRequest` folds `TextEditorState.textRevision` into its reads instead of the session collecting edits, and `DocumentTextLayout` keys on the line list and builds from `getAllPlainText()`. Then in the iOS sample app: type, forward delete with a hardware keyboard or the soft keyboard's delete after moving the caret, and use the spacebar trackpad over a long paragraph | Compiles and the tests pass. Typing and deletes reach the keyboard's mirror (autocorrect and suggestions follow the text), and the trackpad moves the caret through the current text | |
+| 7.8, 7.48 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64` and `:ComposeTextEditor:iosSimulatorArm64Test` (commonMain changed how the lines, rows and spans are stored; no `iosMain` or `skikoMain` change). Then re-time the iOS simulator as 4.21 did (iPhone 17 Pro Max simulator, Debug framework, a 200,000-character document of 2,000 lines of 99 characters, temporary logging): the keyboard's `editText` block and the frames over 20 ms while typing twelve keys, then rotate the device and time the frame the rotation costs and how long the rows take to settle | Before (4.21, `f3b8d8f`): `editText` 9.4 ms median at 200k against 0.7 ms at 2k. A pass: `editText` within a few times the 2k figure, wherever the caret is (desktop went 837 µs to 174 µs, and 2,026 µs to 94 µs with a span on every line); a rotation that shapes only the visible lines at once and settles the rest in the background without the scroll jumping. Record the numbers here and in 7.8 and 7.48 | |
 | 7.10, 7.11 | Re-time the iOS simulator as 4.21 did (iPhone 17 Pro Max simulator, Debug framework, a 200,000-character document of 2,000 lines of 99 characters, temporary logging): the idle caret-blink frame, frames over 20 ms while typing twelve keys with the soft keyboard (count and worst), and the keyboard's `editText` block; also the time to open and close the soft keyboard, which no longer reshapes the document | Before (4.21, `f3b8d8f`): an idle blink frame 33 ms at 200k against under one vsync at 2k; typing frames up to 137 ms, about six over 20 ms a keystroke; `editText` 9.4 ms median. A pass: the blink frame at 200k within a vsync, as at 2k (7.11). Typing frames should drop by the row scans and the whole-text build; `editText` is 7.8's and is not expected to move. Record the numbers here and in 7.11 | |

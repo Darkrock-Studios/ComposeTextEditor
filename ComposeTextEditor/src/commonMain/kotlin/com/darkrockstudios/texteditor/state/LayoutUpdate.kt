@@ -6,8 +6,15 @@ package com.darkrockstudios.texteditor.state
  * the pass can re-measure only those and reuse the previous layout for the rest.
  */
 internal sealed class LayoutUpdate {
-	/** Re-measure every line. Required when the style, measurer, density, or viewport changed. */
+	/** Re-measure every line, now. A document load, and the fallback when a partial pass cannot be trusted. */
 	data object Full : LayoutUpdate()
+
+	/**
+	 * Every line needs shaping again (the style, measurer, density or viewport width
+	 * changed) but the rows can stand in the meantime: the lines in view are shaped at
+	 * once and the rest settle in the background, each kept at its old shape until then.
+	 */
+	data object Reshape : LayoutUpdate()
 
 	/**
 	 * Re-measure only [remeasureFirst]..[remeasureLast], expressed in post-edit line
@@ -48,6 +55,10 @@ internal sealed class LayoutUpdate {
  */
 internal fun LayoutUpdate.mergedWith(other: LayoutUpdate): LayoutUpdate {
 	if (this is LayoutUpdate.Full || other is LayoutUpdate.Full) return LayoutUpdate.Full
+	// A reshape keeps every line's facts and the lines out of view as they are, which
+	// cannot stand in for a partial's walk.
+	if (this is LayoutUpdate.Reshape && other is LayoutUpdate.Reshape) return LayoutUpdate.Reshape
+	if (this is LayoutUpdate.Reshape || other is LayoutUpdate.Reshape) return LayoutUpdate.Full
 	val a = this as LayoutUpdate.Partial
 	val b = other as LayoutUpdate.Partial
 	val structural = when {

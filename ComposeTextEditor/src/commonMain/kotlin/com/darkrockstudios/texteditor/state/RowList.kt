@@ -12,8 +12,10 @@ import com.darkrockstudios.texteditor.richstyle.RichSpan
 /**
  * One logical line's shaping result and what the layout pass derived for it: its rows'
  * character bounds and tops, read from the [layout] once, the block height of each
- * row, the ordered-list numeral, the code-fence edge, and the ordered-list counters
- * as they stand after the line, so a pass can resume the numbering walk from any line.
+ * row, the ordered-list numeral, the code-fence edge, the ordered-list counters as
+ * they stand after the line, so a pass can resume the numbering walk from any line,
+ * and the [generation] of layout inputs it was shaped under: a line shaped under an
+ * older one is provisional until the settling reshape reaches it (7.48).
  * The rows a [RowList] hands out are built from this on read.
  */
 internal class LineLayout(
@@ -30,6 +32,7 @@ internal class LineLayout(
 	val codeFenceBoundary: CodeFenceBoundary?,
 	/** The ordered-list counter of each nesting level after this line; shared and never written. */
 	val counters: IntArray,
+	val generation: Int,
 ) {
 	val rowCount: Int get() = rowStarts.size
 
@@ -40,21 +43,38 @@ internal class LineLayout(
 	/** This layout with the facts a walk derived, itself when they are the same. */
 	fun withFacts(facts: LineFacts): LineLayout =
 		if (facts.orderedListNumber == orderedListNumber && facts.codeFenceBoundary == codeFenceBoundary && facts.counters.contentEquals(counters)) this
-		else LineLayout(layout, rowStarts, rowEnds, rowTops, blockHeights, facts.orderedListNumber, facts.codeFenceBoundary, facts.counters)
+		else LineLayout(layout, rowStarts, rowEnds, rowTops, blockHeights, facts.orderedListNumber, facts.codeFenceBoundary, facts.counters, generation)
 
 	/** This layout resolved again for [spans] on its line, which may have changed its block heights, and [facts]. */
 	fun withSpans(line: Int, spans: List<RichSpan>, density: Density?, width: Float, facts: LineFacts): LineLayout =
-		resolve(layout, line, rowStarts, rowEnds, spans, density, width, facts)
+		resolve(layout, line, rowStarts, rowEnds, spans, density, width, facts.orderedListNumber, facts.codeFenceBoundary, facts.counters, generation)
+
+	/** The line shaped again into [layout] under [generation], keeping the facts, which shaping does not change. */
+	fun reshaped(layout: TextLayoutResult, line: Int, spans: List<RichSpan>, density: Density?, width: Float, generation: Int): LineLayout =
+		of(layout, line, spans, density, width, orderedListNumber, codeFenceBoundary, counters, generation)
 
 	companion object {
-		/** The layout of a line shaped into [layout], with [spans] on it. */
-		fun of(layout: TextLayoutResult, line: Int, spans: List<RichSpan>, density: Density?, width: Float, facts: LineFacts): LineLayout {
+		/** The layout of a line shaped into [layout] under [generation], with [spans] on it. */
+		fun of(layout: TextLayoutResult, line: Int, spans: List<RichSpan>, density: Density?, width: Float, facts: LineFacts, generation: Int): LineLayout =
+			of(layout, line, spans, density, width, facts.orderedListNumber, facts.codeFenceBoundary, facts.counters, generation)
+
+		private fun of(
+			layout: TextLayoutResult,
+			line: Int,
+			spans: List<RichSpan>,
+			density: Density?,
+			width: Float,
+			orderedListNumber: Int?,
+			codeFenceBoundary: CodeFenceBoundary?,
+			counters: IntArray,
+			generation: Int,
+		): LineLayout {
 			val rows = layout.multiParagraph.lineCount
 			return resolve(
 				layout, line,
 				rowStarts = IntArray(rows) { layout.getLineStart(it) },
 				rowEnds = IntArray(rows) { layout.getLineEnd(it) },
-				spans, density, width, facts,
+				spans, density, width, orderedListNumber, codeFenceBoundary, counters, generation,
 			)
 		}
 
@@ -67,7 +87,10 @@ internal class LineLayout(
 			spans: List<RichSpan>,
 			density: Density?,
 			width: Float,
-			facts: LineFacts,
+			orderedListNumber: Int?,
+			codeFenceBoundary: CodeFenceBoundary?,
+			counters: IntArray,
+			generation: Int,
 		): LineLayout {
 			val paragraph = layout.multiParagraph
 			val rows = rowStarts.size
@@ -88,7 +111,7 @@ internal class LineLayout(
 				val block = blockHeights?.get(row)?.takeUnless { it.isNaN() }
 				rowTops[row + 1] = rowTops[row] + (block ?: paragraph.getLineHeight(row))
 			}
-			return LineLayout(layout, rowStarts, rowEnds, rowTops, blockHeights, facts.orderedListNumber, facts.codeFenceBoundary, facts.counters)
+			return LineLayout(layout, rowStarts, rowEnds, rowTops, blockHeights, orderedListNumber, codeFenceBoundary, counters, generation)
 		}
 	}
 }
@@ -155,6 +178,9 @@ internal class RowList private constructor(
 		val chunk = chunkOfLine(line)
 		return top[chunk] + chunks[chunk].top[line - firstLine[chunk]]
 	}
+
+	/** The line holding [row]. */
+	fun lineOfRow(row: Int): Int = at(row) { line, _, _, _ -> line }
 
 	/** The first row of [line], or the row count for the line count. */
 	fun firstRowOf(line: Int): Int {

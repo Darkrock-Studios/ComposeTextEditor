@@ -55,6 +55,12 @@ import kotlinx.coroutines.flow.onSubscription
 import kotlin.concurrent.Volatile
 import kotlin.math.ceil
 import kotlin.math.min
+import kotlin.math.roundToInt
+import androidx.compose.runtime.MonotonicFrameClock
+import androidx.compose.runtime.withFrameNanos
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.yield
 
 /**
  * The single source of truth for a [com.darkrockstudios.texteditor.TextEditor]:
@@ -88,7 +94,7 @@ class TextEditorState(
 		internal set(value) {
 			field = value
 			invalidateLayoutInputs()
-			updateBookKeeping()
+			updateBookKeeping(LayoutUpdate.Reshape)
 		}
 
 	var textStyle: TextStyle = TextStyle.Default
@@ -96,7 +102,7 @@ class TextEditorState(
 			if (field != value) {
 				field = value
 				invalidateLayoutInputs()
-				updateBookKeeping()
+				updateBookKeeping(LayoutUpdate.Reshape)
 			}
 		}
 
@@ -586,7 +592,7 @@ class TextEditorState(
 			if (field != value) {
 				field = value
 				invalidateLayoutInputs()
-				updateBookKeeping()
+				updateBookKeeping(LayoutUpdate.Reshape)
 			}
 		}
 
@@ -599,6 +605,7 @@ class TextEditorState(
 		getCursorPosition = { cursorPosition },
 		getCursorAffinity = { cursor.affinity },
 		getLineOffsets = { _lineOffsets },
+		ensureLineShaped = ::ensureLineShaped,
 	)
 
 	/** The text selection: its [TextEditorRange], gestures, and selected-content queries. */
@@ -1279,7 +1286,7 @@ class TextEditorState(
 		when {
 			!rowsAreCurrent(size.width) -> {
 				invalidateLayoutInputs()
-				updateBookKeeping()
+				updateBookKeeping(LayoutUpdate.Reshape)
 			}
 			// The rows wait, unchanged, for the viewport to open again.
 			collapsed -> Unit
@@ -1442,15 +1449,189 @@ class TextEditorState(
 					(it.lineDelta == 0 || it.remeasureFirst <= it.remeasureLast)
 		}
 
+		// A reshape stands on the rows as they are while the lines settle; rows laid
+		// out for other lines or spans (a pass skipped while the viewport was
+		// collapsed) cannot stand in, so everything shapes now.
+		if (update is LayoutUpdate.Reshape && previous != null && lastLayoutLines === lines && previous.spans === spans) {
+			reshapeLazily(previous)
+			return
+		}
+
 		val laidOut = if (partial == null) layoutAll(lines, spans) else layoutPartial(previous!!, partial, lines, spans)
 		if (laidOut === previous) return
+		if (partial == null) {
+			settleJob?.cancel()
+		} else if (partial.lineDelta != 0) {
+			// The settling walks continue past the edit, whose lines moved.
+			if (settleAbove >= partial.remeasureFirst) settleAbove += partial.lineDelta
+			if (settleBelow > partial.remeasureLast) settleBelow += partial.lineDelta
+		}
+		publishRows(laidOut)
+		lastLayoutGeneration = layoutInputGeneration
+		lastLayoutWidth = viewportSize.width
+		lastLayoutLines = lines
+	}
+
+	private fun publishRows(laidOut: RowList) {
 		rows = laidOut
 		_lineOffsets = laidOut
 		// Rounded up so the last row's fraction of a pixel is still in reach.
 		scrollManager.updateContentHeight(ceil(laidOut.lastRowBottom()).toInt())
+	}
+
+	/** The settling reshape under way, shaping the lines out of view a slice at a time. */
+	private var settleJob: Job? = null
+
+	/** How many lines a settling slice shapes before yielding to the frame. */
+	private val settleSlice = 32
+
+	/** Where the settling walks continue from: the next lines to try above and below the viewport. */
+	private var settleAbove = -1
+	private var settleBelow = Int.MAX_VALUE
+
+	/**
+	 * Reshapes lazily (7.48): the lines with a row in the viewport, and a viewport's
+	 * worth beyond each edge, are shaped now; every other line keeps its layout at the
+	 * old shape until the settling job reaches it. The scroll stays anchored to the
+	 * line at the top of the viewport, at its offset within it.
+	 */
+	private fun reshapeLazily(previous: RowList) {
+		settleJob?.cancel()
+		// An animated scroll's target was measured against rows about to change.
+		scrollManager.stopScrolling()
+		val keepCaret = isFocused && scrollManager.isCursorInViewOrScrolling()
+		val scroll = scrollState.value.toFloat()
+		val viewportHeight = viewportSize.height
+		val anchorLine = previous.lineOfRow(previous.searchLastRowAtOrAbove(scroll).coerceAtLeast(0))
+		val anchorOffset = scroll - previous.lineTop(anchorLine)
+		val first = previous.lineOfRow(previous.searchFirstRowEndingAtOrBelow(scroll - viewportHeight).coerceAtMost(previous.size - 1))
+		val last = previous.lineOfRow(previous.searchLastRowAtOrAbove(scroll + 2 * viewportHeight).coerceAtLeast(0))
 		lastLayoutGeneration = layoutInputGeneration
 		lastLayoutWidth = viewportSize.width
-		lastLayoutLines = lines
+		lastLayoutLines = content.lineList
+		reshapeLines(first, last)
+		val settled = rows ?: return
+		// Kept in the top padding when it was there, else within the anchor line.
+		val within = anchorOffset.toDouble().coerceIn(minOf(anchorOffset.toDouble(), 0.0), (settled.layoutOf(anchorLine).height - 1).coerceAtLeast(0f).toDouble())
+		scrollState.scrollTo((settled.lineTop(anchorLine) + within).roundToInt())
+		settleAbove = first - 1
+		settleBelow = last + 1
+		if (first > 0 || last < previous.lineCount - 1) {
+			// Between slices the frame gets to run: yield alone would not reach it on
+			// Compose's dispatchers, which drain what a task enqueues in the same pass.
+			settleJob = scope.launch {
+				while (settleStep()) if (coroutineContext[MonotonicFrameClock] != null) withFrameNanos {} else yield()
+				// The caret's row was measured against provisional rows; it may have left the view.
+				if (keepCaret && isFocused) scrollManager.ensureCursorVisible()
+			}
+		}
+	}
+
+	/** Whether [line]'s layout was shaped under older inputs than the current ones. */
+	private fun isProvisional(rows: RowList, line: Int): Boolean = rows.layoutOf(line).generation != layoutInputGeneration
+
+	/**
+	 * Shapes lines [first] through [last] at the current inputs, keeping their facts,
+	 * and splices them in. The scroll moves by whatever that moved the top of the line
+	 * at the top of the viewport, so what is on screen stays where it is; an animated
+	 * scroll under way would write over that, so it is stopped.
+	 */
+	private fun reshapeLines(first: Int, last: Int) {
+		val current = rows ?: return
+		val content = content
+		val lines = content.lineList
+		val spans = content.spanIndex
+		val shaper = LineShaper()
+		val width = viewportSize.width
+		val scrollBefore = scrollState.value
+		val topLine = if (current.size == 0) 0 else current.lineOfRow(current.searchLastRowAtOrAbove(scrollBefore.toFloat()).coerceIn(0, current.size - 1))
+		val topBefore = current.lineTop(topLine)
+		val layouts = ArrayList<LineLayout>(last - first + 1)
+		for (line in first..last) {
+			layouts += current.layoutOf(line).reshaped(shaper.shape(lines[line]), line, spans.spansOn(line), density, width, layoutInputGeneration)
+		}
+		val settled = current.splice(first, last + 1, layouts, spans)
+		publishRows(settled)
+		val shift = (settled.lineTop(topLine) - topBefore).roundToInt()
+		if (shift != 0) {
+			scrollManager.stopScrolling()
+			scrollState.scrollTo(scrollBefore + shift)
+		}
+	}
+
+	/**
+	 * Shapes the next slice of provisional lines: those with a row in the viewport
+	 * first, else the nearer of the two walks continuing above and below it. Returns
+	 * whether provisional lines remain.
+	 */
+	private fun settleStep(): Boolean {
+		val current = rows ?: return false
+		if (viewportSize.width <= 1f || viewportSize.height <= 1f || current.size == 0) return false
+		val lineCount = current.lineCount
+		val scroll = scrollState.value.toFloat()
+		val topLine = current.lineOfRow(current.searchLastRowAtOrAbove(scroll).coerceIn(0, current.size - 1))
+		val bottomLine = current.lineOfRow(current.searchLastRowAtOrAbove(scroll + viewportSize.height).coerceIn(0, current.size - 1))
+
+		val inView = (topLine..bottomLine).firstOrNull { isProvisional(current, it) }
+		if (inView != null) {
+			var last = inView
+			while (last < bottomLine && last - inView < settleSlice - 1 && isProvisional(current, last + 1)) last++
+			reshapeLines(inView, last)
+			return true
+		}
+		var above = settleAbove.coerceAtMost(lineCount - 1)
+		while (above >= 0 && !isProvisional(current, above)) above--
+		var below = settleBelow.coerceAtLeast(0)
+		while (below < lineCount && !isProvisional(current, below)) below++
+		if (above < 0 && below >= lineCount) {
+			// A viewport that jumped leaves a band behind the walks: one sweep finds it.
+			below = (0 until lineCount).firstOrNull { isProvisional(current, it) } ?: return false
+		}
+		val takeAbove = below >= lineCount || (above >= 0 && topLine - above <= below - bottomLine)
+		if (takeAbove) {
+			var first = above
+			while (first > 0 && above - first < settleSlice - 1 && isProvisional(current, first - 1)) first--
+			reshapeLines(first, above)
+			settleAbove = first - 1
+		} else {
+			var last = below
+			while (last < lineCount - 1 && last - below < settleSlice - 1 && isProvisional(current, last + 1)) last++
+			reshapeLines(below, last)
+			settleBelow = last + 1
+		}
+		return true
+	}
+
+	/** Finishes a settling reshape now, for tests and benchmarks. */
+	internal fun settleLayout() {
+		settleJob?.cancel()
+		settleJob = null
+		while (settleStep()) Unit
+	}
+
+	/**
+	 * Shapes the provisional lines with a row between content-space [minY] and [maxY],
+	 * before they are drawn, until none is left there: shaping moves the rows after it.
+	 */
+	internal fun shapeRowsInView(minY: Float, maxY: Float) {
+		if (lastLayoutGeneration != layoutInputGeneration) return
+		while (true) {
+			val current = rows ?: return
+			if (current.size == 0) return
+			val first = current.lineOfRow(current.searchFirstRowEndingAtOrBelow(minY).coerceAtMost(current.size - 1))
+			val last = current.lineOfRow(current.searchLastRowAtOrAbove(maxY).coerceAtLeast(0))
+			val line = (first..last).firstOrNull { isProvisional(current, it) } ?: return
+			var end = line
+			while (end < last && isProvisional(current, end + 1)) end++
+			reshapeLines(line, end)
+		}
+	}
+
+	/** Shapes [line] now when it is provisional, so a scroll to it measures the real rows. */
+	private fun ensureLineShaped(line: Int) {
+		val current = rows ?: return
+		if (line !in 0 until current.lineCount || lastLayoutGeneration != layoutInputGeneration) return
+		if (isProvisional(current, line)) reshapeLines(line, line)
 	}
 
 	/** A full pass: every line shaped, every fact derived in line order. */
@@ -1461,7 +1642,7 @@ class TextEditorState(
 		val layouts = ArrayList<LineLayout>(lines.size)
 		for (line in 0 until lines.size) {
 			facts.next(line)
-			layouts += LineLayout.of(shaper.shape(lines[line]), line, spans.spansOn(line), density, width, facts)
+			layouts += LineLayout.of(shaper.shape(lines[line]), line, spans.spansOn(line), density, width, facts, layoutInputGeneration)
 		}
 		return RowList.of(layouts, spans)
 	}
@@ -1502,7 +1683,7 @@ class TextEditorState(
 			facts.next(line)
 			val old = if (line in shapeFirst..shapeLast) null else previous.layoutOf(oldIndex(line))
 			val layout = when {
-				old == null -> LineLayout.of(shaper.shape(lines[line]), line, spans.spansOn(line), density, width, facts)
+				old == null -> LineLayout.of(shaper.shape(lines[line]), line, spans.spansOn(line), density, width, facts, layoutInputGeneration)
 				line in spansFirst..spansLast -> old.withSpans(line, spans.spansOn(line), density, width, facts)
 				else -> old.withFacts(facts)
 			}

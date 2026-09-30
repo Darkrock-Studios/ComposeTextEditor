@@ -367,7 +367,11 @@ Text shaping is by far the most expensive work per edit, so the layout pass
   counters. Span overlays (spell-check underlines, find highlights) shape
   nothing at all and re-resolve only their lines, and neither does a viewport
   that changes only its height (a soft keyboard): rows depend on the width
-  alone.
+  alone. A width change, or a style, measurer or density change, shapes the
+  lines around the viewport at once and the rest in the background between
+  frames, each line keeping its old shape until then, with the scroll
+  anchored to the line at the top of the viewport; drawing and a scroll to
+  the caret shape what they need first.
 - **One pass per logical operation.** Relayouts requested inside a transaction
   merge and flush as a single pass at commit, in a fixed order: publish the
   revision, flush the layout, scroll the cursor against the fresh offsets,

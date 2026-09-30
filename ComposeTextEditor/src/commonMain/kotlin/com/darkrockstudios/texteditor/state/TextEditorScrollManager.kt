@@ -22,7 +22,9 @@ class TextEditorScrollManager(
 	private val getViewportSize: () -> Size,
 	private val getCursorPosition: () -> CharLineOffset,
 	private val getCursorAffinity: () -> CaretAffinity = { CaretAffinity.Downstream },
-	val scrollState: TextEditorScrollState
+	val scrollState: TextEditorScrollState,
+	/** Shapes a line still at an old shape while a reshape settles (7.48), so a scroll to it measures the real rows. */
+	private val ensureLineShaped: (line: Int) -> Unit = {},
 ) {
 	private var scrollJob: Job? = null
 
@@ -174,6 +176,7 @@ class TextEditorScrollManager(
 
 	private fun scrollToPosition(offset: CharLineOffset, affinity: CaretAffinity, top: Boolean, animated: Boolean) {
 		if (offset.line >= getLines().size) return
+		ensureLineShaped(offset.line)
 
 		if (top) {
 			val targetTop = calculateOffsetYPosition(offset, affinity).toInt()
@@ -219,6 +222,7 @@ class TextEditorScrollManager(
 
 	fun ensureCursorVisible() {
 		if (cursorScrollSuppressed) return
+		ensureLineShaped(getCursorPosition().line)
 		if (!isOffsetVisible(getCursorPosition(), getCursorAffinity())) {
 			scrollToCursor()
 		}
@@ -240,6 +244,7 @@ class TextEditorScrollManager(
 		if (cursorScrollSuppressed) return
 		if (scrollJob?.isActive == true && !isScrollingToCursor) return
 		stopScrolling()
+		ensureLineShaped(getCursorPosition().line)
 		if (isOffsetVisible(getCursorPosition(), getCursorAffinity())) return
 		scrollState.scrollTo(scrollShowing(getCursorPosition(), getCursorAffinity()))
 	}

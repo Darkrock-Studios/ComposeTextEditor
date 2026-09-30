@@ -373,32 +373,42 @@ field by field against a full pass.
 A width change (a window drag, a rotation, a split screen) needs every line
 shaped again, and section 9.3 makes that possible without doing it at once.
 `updateBookKeeping(LayoutUpdate.Reshape)`, which the viewport width, the text
-style, the measurer and the density changes post, runs when the row list
-exists for the current lines:
+style, the measurer and the density changes post, runs lazily when the row
+list was laid out for the current lines and spans (rows a collapsed viewport
+left behind cannot stand in, and shape now):
 
 1. Shapes the lines with a row in the viewport, plus one viewport's worth
-   beyond each edge, synchronously, and splices them in. Every other
-   `LineLayout` stays as it is: shaped at the old width, so its rows have the
-   old wrap starts and its height is the old height, marked provisional by
-   the width it records.
-2. Keeps the scroll anchored to a line: the first visible row's line, at its
-   offset within the viewport before the change. After the synchronous part
-   the scroll value is moved so that line's top is where it was on screen.
+   beyond each edge, synchronously, and splices them in, keeping each line's
+   facts (shaping changes none). Every other `LineLayout` stays as it is:
+   shaped under the old inputs, so its rows have the old wrap starts and its
+   height is the old height, marked provisional by the layout input
+   generation it records against the current one.
+2. Keeps the scroll anchored to a line: the line of the row at the top of the
+   viewport, at its offset within that line before the change (a negative
+   offset, in the top padding, is kept). Any animated scroll is stopped
+   first, since its target was measured against rows about to change.
 3. Launches one settling job on the state's scope that shapes the provisional
-   lines outward from the viewport (above and below alternately, so what a
-   scroll reaches next is shaped first), in slices of at most 32 lines,
-   splicing each slice in, re-anchoring the scroll when a slice above the
-   anchor changes height, and yielding to the frame between slices. A new
-   `Reshape` cancels the job and starts over; an edit's partial pass shapes
-   its own lines at the current width and leaves the job running, since the
-   row list it re-reads on every slice carries the edit.
+   lines a slice of at most 32 at a time, between frames (`withFrameNanos`
+   when the scope has a frame clock, else `yield`): lines with a row in the
+   viewport first, else the nearer of two walks continuing above and below
+   it from where they left off; a viewport that jumped past them leaves a
+   band behind, which one sweep finds when both walks run out. Every slice
+   moves the scroll by whatever it moved the top line's top, so what is on
+   screen stays put whichever side the slice was on. When the job finishes
+   it scrolls the caret into view if the editor is focused. A new `Reshape`
+   cancels the job and starts over; an edit's partial pass shapes its own
+   lines at the current inputs and leaves the job running, since the row
+   list it re-reads on every slice carries the edit. A `Reshape` merged with
+   a partial in one transaction degrades to `Full`: the reshape keeps every
+   line's facts, which cannot stand in for the partial's walk.
 
 Consumers tolerate provisional rows: they are rows with a layout, only at
-another width, so geometry off screen is approximate until the job reaches
+other inputs, so geometry off screen is approximate until the job reaches
 it. The text drawing forces the rows it is about to draw before reading them
-(a viewport of lines, bounded), and a scroll to the caret forces the caret's
-line, so what is on screen is always shaped at the current width. Everything
-else (hit tests, which are in the viewport anyway; page moves; the scrollbar,
+(a viewport of lines, bounded) and reads the scroll after, since forcing can
+move the scroll range; a scroll to the caret forces the caret's line first.
+So what is on screen is always shaped at the current inputs. Everything else
+(hit tests, which are in the viewport anyway; page moves; the scrollbar,
 whose range settles as heights do) reads what is there. The total content
 height is provisional the same way, as it is in a browser during a resize.
 
@@ -407,7 +417,9 @@ The first layout of a document (no rows yet), a guard degradation, and a
 everything now", which the parity test and the tests that count a full pass
 depend on, and a document with no old layouts has nothing provisional to
 show. Tests and benchmarks call `settleLayout()` to run the job to the end
-synchronously.
+synchronously. `LazyReshapeCostTest` pins the lines a width change shapes at
+once, the settling, the anchoring, an edit during settling, and the forcing
+from drawing and the caret scroll.
 
 ## 11. Paragraph spacing and formatting (5.7)
 

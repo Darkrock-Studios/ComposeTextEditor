@@ -19,6 +19,14 @@ class LayoutUpdateMergeTest {
 	fun `full absorbs everything`() {
 		assertEquals(LayoutUpdate.Full, LayoutUpdate.Full.mergedWith(partial(1, 2)))
 		assertEquals(LayoutUpdate.Full, partial(1, 2).mergedWith(LayoutUpdate.Full))
+		assertEquals(LayoutUpdate.Full, LayoutUpdate.Full.mergedWith(LayoutUpdate.Reshape))
+	}
+
+	@Test
+	fun `a reshape over a partial degrades to full`() {
+		assertEquals(LayoutUpdate.Reshape, LayoutUpdate.Reshape.mergedWith(LayoutUpdate.Reshape))
+		assertEquals(LayoutUpdate.Full, LayoutUpdate.Reshape.mergedWith(partial(3, 7, 2)))
+		assertEquals(LayoutUpdate.Full, LayoutUpdate.Spans(1, 2).mergedWith(LayoutUpdate.Reshape))
 	}
 
 	@Test

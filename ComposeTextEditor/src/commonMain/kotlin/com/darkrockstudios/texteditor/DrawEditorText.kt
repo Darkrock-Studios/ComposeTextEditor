@@ -16,9 +16,12 @@ internal fun DrawScope.DrawEditorText(
 	style: TextEditorStyle,
 	decorateLine: LineDecorator?,
 ) {
-	// Get current scroll position and viewport height
-	val scrollY = state.scrollState.value
 	val viewportHeight = size.height
+	// A reshape still settling leaves lines out of view at their old shape; the ones
+	// about to be drawn are shaped first, which can move the scroll range, so the
+	// scroll is read after.
+	state.scrollState.value.let { state.shapeRowsInView((it - viewportHeight * 0.1f).coerceAtLeast(0f), it + viewportHeight) }
+	val scrollY = state.scrollState.value
 
 	// Calculate visible range with some padding to ensure smooth scrolling
 	val minY = (scrollY - viewportHeight * 0.1f).coerceAtLeast(0f)

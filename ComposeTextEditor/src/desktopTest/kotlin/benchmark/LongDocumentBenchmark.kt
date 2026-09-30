@@ -182,10 +182,16 @@ class LongDocumentBenchmark {
 			tall = !tall
 			state.onViewportSizeChange(Size(viewport.width, if (tall) viewport.height else viewport.height - 300f))
 		}
+		// The lines around the viewport shape at once; the rest settle in the background.
 		var wide = true
-		measure("width viewport change", warmup = 5, runs = 20) {
+		measure("width viewport change", warmup = 5, runs = 20, setup = { state.settleLayout() }) {
 			wide = !wide
 			state.onViewportSizeChange(Size(if (wide) viewport.width else viewport.width - 100f, viewport.height))
+		}
+		measure("width viewport change, settled", warmup = 5, runs = 20) {
+			wide = !wide
+			state.onViewportSizeChange(Size(if (wide) viewport.width else viewport.width - 100f, viewport.height))
+			state.settleLayout()
 		}
 
 		// A span on every line, as a spell-checked or fully highlighted document has.

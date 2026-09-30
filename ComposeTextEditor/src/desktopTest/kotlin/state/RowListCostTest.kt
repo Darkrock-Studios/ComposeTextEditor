@@ -259,6 +259,7 @@ class RowListCostTest {
 			orderedListNumber = null,
 			codeFenceBoundary = null,
 			counters = LineFacts.NO_COUNTERS,
+			generation = 0,
 		)
 		val noSpans = SpanIndex.of(0, emptySet())
 		var list = RowList.of(List(300) { lineLayout(random.nextInt(1, 4), listOf(0f, 17.5f, 20f, 33.3f).random(random)) }, noSpans)
