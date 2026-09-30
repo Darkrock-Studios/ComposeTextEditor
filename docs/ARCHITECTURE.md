@@ -147,7 +147,10 @@ line-indexed queries layout and drawing rely on.
   is deferred through transactions so it always reads fresh layout. The range
   runs from minus the top padding (the first row below the top padding) to the
   last row and bottom padding at the viewport's bottom, and is empty when
-  everything fits.
+  everything fits. A soft keyboard is met two ways: one drawn over the
+  editor is a covered strip the caret is kept above (`KeyboardCover.kt`), and
+  a window that shrinks the editor instead keeps a caret that was in view in
+  view (`onViewportSizeChange`).
 - **`PlatformTextEditorExtensions`**: per-platform IME glue (Android cursor
   anchor monitoring; empty elsewhere).
 

@@ -98,6 +98,11 @@ On iOS, host the Compose view with `.ignoresSafeArea(.keyboard)` in SwiftUI, as 
 Compose Multiplatform template does. The editor keeps its caret above the keyboard itself;
 letting SwiftUI shrink the view as well moves the content twice.
 
+On Android, declare `android:windowSoftInputMode="adjustResize"` on the activity, as
+Compose apps should; otherwise Android also pans the whole window to the caret. The
+editor keeps its caret in view whether the host pads it by the keyboard's inset
+(`imePadding`) or lets the keyboard cover it.
+
 ## Really?
 
 I don't know. Maybe. It might not a permanent solution.

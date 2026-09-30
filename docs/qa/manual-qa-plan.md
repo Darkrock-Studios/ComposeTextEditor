@@ -548,7 +548,11 @@ German, or French).
    the arrow or Enter acts after it. Dead key then Backspace. **Expect:** the accent
    goes.
 
-4. With Gboard's floating keyboard, or a stylus on a device with stylus
+4. Keyboard down, tap a word on the editor's last visible row. **Expect:** the
+   keyboard rises and the row stays in view just above it; the app's toolbar
+   does not slide off the top (3.9). Scroll that caret out of view, hide and
+   raise the keyboard. **Expect:** the scroll stays where it was.
+5. With Gboard's floating keyboard, or a stylus on a device with stylus
    handwriting (Android 14 or later), move the caret with the arrow keys and
    by tapping, across rows. **Expect:** what follows the caret (the floating
    candidates, the handwriting insertion marker) follows at once, not one move

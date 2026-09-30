@@ -1118,11 +1118,20 @@ class TextEditorState(
 		return _lineOffsets[vLineIndex]
 	}
 
-	/** Records the editor's new viewport [size] and re-wraps the document to fit. */
+	/**
+	 * Records the editor's new viewport [size] and re-wraps the document to fit. When a
+	 * focused editor gets shorter, as when the window shrinks for a soft keyboard, a caret
+	 * in view (or on its way there) stays in view.
+	 */
 	fun onViewportSizeChange(size: Size) {
+		val keepCaret = isFocused && lineOffsets.isNotEmpty() &&
+				size.width == viewportSize.width && size.height < viewportSize.height &&
+				scrollManager.isCursorInViewOrScrolling()
 		viewportSize = size
 		invalidateLayoutInputs()
 		updateBookKeeping()
+		// After the relayout, which an open transaction holds until it commits.
+		if (keepCaret) onCommit { scrollManager.snapCursorVisible() }
 	}
 
 	/**

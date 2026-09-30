@@ -20,7 +20,10 @@ class MainActivity : ComponentActivity() {
 				Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
 					Box(modifier = Modifier
 						.padding(innerPadding)
-						.windowInsetsPadding(WindowInsets.ime)
+						// The scaffold's padding already holds the navigation bar, which the
+						// keyboard's inset includes.
+						.consumeWindowInsets(innerPadding)
+						.imePadding()
 						.background(color = Color.White)) {
 						App()
 					}

@@ -180,7 +180,7 @@ review.
 | --- | --- | --- | --- |
 | A | Caret motion | `state/TextEditorCursorState.kt`, `state/TextEditorStateCursorExt.kt`, `state/WordSegmentationUtils.kt`, `input/TextEditorKeyCommandHandler.kt` | 1.1 to 1.7, 1.19, 2.3, 2.6, 7.5, 7.33 |
 | B | Pointer and touch | `textEditorPointerInputHandling.kt`, `state/TextEditorSelectionManager.kt`, `DrawSelectionHandles.kt` | 1.9, 1.12 to 1.16, 1.21 to 1.24, 3.1, 3.2, 3.4 to 3.8, 3.13, 3.15, 4.23, 6.16 |
-| C | Drawing and geometry | `Draw*.kt`, `cursor/`, `scrollbar/`, `state/TextEditorScrollState.kt`, hit testing | 1.8, 1.10, 1.11, 1.17, 1.18, 3.3, 3.12, 4.14, 7.6, 7.7 |
+| C | Drawing and geometry | `Draw*.kt`, `cursor/`, `scrollbar/`, `state/TextEditorScrollState.kt`, hit testing | 1.8, 1.10, 1.11, 1.17, 1.18, 3.3, 3.12, 3.16, 4.14, 7.6, 7.7 |
 | D | Bindings, actions, menu | `input/KeyBindings.kt`, `input/EditorCommand.kt`, `input/BuiltinEditorActions.kt`, `contextmenu/` | 2.1, 2.2, 2.4, 2.5, 2.7 to 2.12, 4.8, 5.8 |
 | E | Input sessions on desktop, iOS, web | `desktopMain`, `iosMain`, `wasmJsMain` under `input/` | 4.2 to 4.7, 4.10 to 4.12, 4.19, 4.21, 4.22, 4.24 to 4.26, 4.28, 4.29 |
 | F | Android input | `androidMain` | 0.4, 3.9 to 3.11, 3.14, 4.16, 4.18, 4.20, 4.27, 4.30, 4.31 |
@@ -734,9 +734,23 @@ fixes what users feel every minute.
   selection: it is modal and would eat the tap after every selection.
   Right-click keeps the context menu everywhere. A selectable `RichTextView`
   gets the same with Copy and Select all.
-- [ ] **3.9 Caret under the soft keyboard. C, U.** [Opus] [Lane F] A viewport
+- [x] **3.9 Caret under the soft keyboard. C, U.** [Opus] [Lane F] A viewport
   resize relayouts but does not re-run `ensureCursorVisible`, and there is no
-  `BringIntoViewRequester` (hammer-editor#932).
+  `BringIntoViewRequester` (hammer-editor#932). Done: a window that draws the
+  keyboard over the editor (edge-to-edge) was covered by 4.24's keyboard
+  cover, which is common code. A window that shrinks the editor instead
+  (`adjustResize`, or a host's `imePadding`) now keeps a focused editor's caret
+  in view across the resize when it was in view before, snapping each frame
+  so it keeps up with the keyboard's animation; a caret scrolled away stays
+  where it is, and a scroll already taking the caret into view when the
+  keyboard starts is taken over (`ViewportResizeE2eTest`). The sample app
+  (edge-to-edge, padding itself by the keyboard's inset) declared no
+  `windowSoftInputMode`, so Android also panned the window to the caret and
+  the editor floated above a gap; it now declares `adjustResize`, which
+  stops the pan, and no longer pads by the navigation bar twice. The README
+  tells hosts the same. Checked on an emulator (API 36, Gboard): a tap on the
+  last visible row raised the keyboard and the row stayed in view above it,
+  with the toolbar in place.
 - [x] **3.10 Cursor anchor info. C.** [Opus] [Lane F] Translated by the view's
   screen position but built from canvas-local metrics, so it is off by the
   editor's offset inside the view
@@ -799,6 +813,16 @@ fixes what users feel every minute.
   `TextEditorSelectionManager.magnifierCenter` in a popup above the finger,
   fed from the `skikoMain` `textMagnifier`. Mobile browsers show none for
   canvas content. Desktop needs none: a mouse does not hide the text.
+- [ ] **3.16 The keyboard cover is measured against the last frame's canvas.
+  C.** [Opus] [Lane C] `BasicTextEditor` measures the cover (4.24) when the
+  keyboard's inset changes, from the canvas's bounds as last laid out. Under
+  a host's `imePadding` the inset grows a frame before the padding shrinks
+  the editor, so each frame of the keyboard's animation briefly reads a
+  covered strip, starts an animated `ensureCursorVisible`, and the next
+  layout resets the cover to 0. Since 3.9 the resize takes that scroll over,
+  but a snap measured while the stale strip stands leaves the caret row that
+  many pixels higher than it needs to be. Measure the cover after layout
+  only, or ignore an inset change the next layout will absorb.
 
 ## Phase 4: platform parity (parallel track)
 
@@ -1614,6 +1638,9 @@ Shaping is one line per keystroke. These still scale with document length:
   preserves formatting.
 - [ ] `TextEditorScrollManager.scrollToCursor()` is public and bypasses
   `cursorScrollSuppressed` (1.23); only `ensureCursorVisible` honours it.
+- [ ] `TextEditorScrollManager.scrollToPosition(offset, animated = false)`
+  animates anyway unless `top` is set: the path that scrolls just far enough
+  always calls `animateScrollTo` (found in 3.9).
 - [ ] Stray `println` calls in `state/TextEditorState.kt` and
   `SpellCheckState.kt`.
 - [ ] The sample app's toolbar Link button attaches its own
