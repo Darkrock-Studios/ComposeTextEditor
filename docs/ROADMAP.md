@@ -184,14 +184,14 @@ review.
 | C | Drawing and geometry | `Draw*.kt`, `cursor/`, `scrollbar/`, `state/TextEditorScrollState.kt`, hit testing | 1.8, 1.10, 1.11, 1.17, 1.18, 3.3, 3.12, 3.16, 4.14, 7.6, 7.7, 7.41 |
 | D | Bindings, actions, menu | `input/KeyBindings.kt`, `input/EditorCommand.kt`, `input/BuiltinEditorActions.kt`, `contextmenu/` | 2.1, 2.2, 2.4, 2.5, 2.7 to 2.12, 4.8, 5.8, 7.58 |
 | E | Input sessions on desktop, iOS, web | `desktopMain`, `iosMain`, `wasmJsMain` under `input/` | 4.2 to 4.7, 4.10 to 4.12, 4.19, 4.21, 4.22, 4.24 to 4.26, 4.28, 4.29, 4.32, 4.33, 7.37 |
-| F | Android input | `androidMain` | 0.4, 3.9 to 3.11, 3.14, 3.17, 4.16, 4.18, 4.20, 4.27, 4.30, 4.31, 7.40 |
+| F | Android input | `androidMain` | 0.4, 3.9 to 3.11, 3.14, 3.17, 4.16, 4.18, 4.20, 4.27, 4.30, 4.31, 4.34, 7.40 |
 | G | Edit pipeline and undo | `state/TextEditManager.kt`, `state/TextEditHistory.kt`, `state/EditBehavior.kt`, `input/ImeEditLogic.kt` | 1.20, 5.1 to 5.5, 5.9, 6.1 to 6.6, 6.14, 6.15, 6.17, 6.22, 6.23 |
-| H | Clipboard and HTML | `clipboard/`, `html/`, `dragdrop/` | 4.9, 4.13, 4.17, 6.7 to 6.13, 6.18 to 6.21, 6.25, 6.26, 7.39, 7.46, 7.47, 7.49, 7.53 |
+| H | Clipboard and HTML | `clipboard/`, `html/`, `dragdrop/` | 4.9, 4.13, 4.17, 6.7 to 6.13, 6.18 to 6.21, 6.24 to 6.27, 7.39, 7.46, 7.47, 7.49, 7.53 |
 | I | Markdown and block model | `markdown/`, `richstyle/` | 5.6, 7.14 to 7.16, 7.43, 7.45, 7.52 |
 | J | Find addon | `ComposeTextEditorFind/` | 7.17 to 7.19, 7.26, 7.29, 7.42 |
 | K | Spell check addon | `ComposeTextEditorSpellCheck/` | 7.20 to 7.22, 7.28, 7.30, 7.31, 7.34, 7.35, 7.38, 7.44 |
 | L | Tests and CI | test sources, `.github/workflows/` | 0.1 to 0.3, 0.5 to 0.9, 4.1, 4.15 |
-| M | Accessibility and host API | semantics in `BasicTextEditor.kt`, `RichTextView.kt`, `state/rememberTextEditorState.kt` | 7.1 to 7.4, 7.13, 7.23 to 7.25, 7.32, 7.36 |
+| M | Accessibility and host API | semantics in `BasicTextEditor.kt`, `RichTextView.kt`, `state/rememberTextEditorState.kt` | 7.1 to 7.4, 7.13, 7.23 to 7.25, 7.32, 7.36, 7.59 |
 | N | Core layout and performance | `state/TextEditorState.kt` | 5.7, 7.8 to 7.12 |
 
 Housekeeping items are [Opus] and fit any lane that is already in the file.
@@ -1783,7 +1783,7 @@ iOS Safari; browser tests run in CI.
   long press inside the selection (lane B's touch handling). iOS and web: check
   what Compose Multiplatform's `DragAndDropEvent` exposes there (web has a
   `WebDragAndDropManager`) and fill in the same four functions.
-- [ ] **6.25 Cut from a canvas-focused editor on the web. C.** [Opus] [Lane H]
+- [ ] **6.27 Cut from a canvas-focused editor on the web. C.** [Opus] [Lane H]
   An editable editor whose canvas holds DOM focus (after a touch the
   session does not hand focus back from) takes Ctrl/Cmd+X on the canvas, where
   Compose consumes it before the browser fires a `cut` event, so Cut falls back
@@ -1934,7 +1934,7 @@ iOS Safari; browser tests run in CI.
   The chords are the default bindings', not the editor's own `KeyBindings`, and
   which Compose canvas is the editor's is not known, so on a page of several
   viewports the one whose editor holds focus and a selection answers. Cut on a
-  canvas-focused editable editor is 6.25.
+  canvas-focused editable editor is 6.27.
 - [x] **7.40** [Opus] [Lane F] A single-line editor (7.13) still asks the
   soft keyboard for multi-line text (Android's `TYPE_TEXT_FLAG_MULTI_LINE`;
   iOS the same), so with the default `KeyboardSettings.imeAction` the keyboard
@@ -2535,8 +2535,8 @@ Shaping is one line per keystroke. These still scale with document length:
   the clipboard, and a paste lays them over the pasted text, where their owners
   do not expect them (a second find scope, a stale flag). Drop decorations there,
   as the saver does and a drag's carried spans do (6.21): leave `isDecoration`
-  spans out of `preservedRichSpans`. (Also filed as 6.24 on the lane H branch,
-  merged here.)
+  spans out of `preservedRichSpans`. (Filed as 6.24 on the lane H branch before
+  the merge; 6.24 here is the drop caret.)
 - [ ] **7.54** [Opus] [Lane G] A delete whose metadata holds decoration spans (a
   spell-check flag or find highlight on the deleted text) never joins a typing run
   (`TextEditHistory`'s delete merge and `isSingleTypedChar`), so backspacing
