@@ -2,6 +2,7 @@ package com.darkrockstudios.texteditor.html
 
 import androidx.compose.ui.text.AnnotatedString
 import com.darkrockstudios.texteditor.CharLineOffset
+import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.clipboard.withBodyStyleBeneath
 import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
 import com.darkrockstudios.texteditor.richstyle.Blockquote
@@ -13,12 +14,15 @@ import com.darkrockstudios.texteditor.richstyle.ImageBlockSpanStyle
 import com.darkrockstudios.texteditor.richstyle.ImageProvider
 import com.darkrockstudios.texteditor.richstyle.OrderedList
 import com.darkrockstudios.texteditor.richstyle.OrderedListSpanStyle
+import com.darkrockstudios.texteditor.richstyle.ParagraphFormatSpanStyle
 import com.darkrockstudios.texteditor.richstyle.RichSpan
 import com.darkrockstudios.texteditor.richstyle.applyDocumentBlocks
 import com.darkrockstudios.texteditor.richstyle.listLevel
 import com.darkrockstudios.texteditor.richstyle.documentBlocksOf
 import com.darkrockstudios.texteditor.state.LayoutUpdate
+import com.darkrockstudios.texteditor.state.DocumentSnapshot
 import com.darkrockstudios.texteditor.state.TextEditorState
+import com.darkrockstudios.texteditor.state.paragraphFormat
 
 /**
  * An extension to [TextEditorState] that reads and writes the document as HTML.
@@ -61,9 +65,10 @@ class HtmlExtension(
 		val content = editorState.content
 		val blocks = documentBlocksOf(content.richSpans, configuration)
 		val headerLevels = headerLevelsOf(content.richSpans)
+		val formats = content.paragraphFormats(content.lines.indices)
 		val lines = content.lines
 		val links = linksByLine(content.richSpans) { lines.getOrNull(it)?.length ?: 0 }
-		if (lines.size == 1 && lines[0].isEmpty() && blocks.isEmpty() && headerLevels.isEmpty()) {
+		if (lines.size == 1 && lines[0].isEmpty() && blocks.isEmpty() && headerLevels.isEmpty() && formats.isEmpty()) {
 			return ""
 		}
 
@@ -71,6 +76,7 @@ class HtmlExtension(
 			lines = lines.mapIndexed { index, line -> HtmlLine(line, index, links = links[index].orEmpty()) },
 			blocks = blocks,
 			headerLevels = headerLevels,
+			formats = formats,
 			configuration = configuration,
 		)
 	}
@@ -96,6 +102,7 @@ class HtmlExtension(
 				editorState.richSpanManager.addRichSpans(pastedLinkSpans(document.links, CharLineOffset(0, 0)))
 				editorState.updateBookKeeping(LayoutUpdate.SpansOnly)
 			}
+			editorState.addParagraphFormats(document.paragraphFormats)
 			editorState.applyDocumentBlocks(
 				horizontalRuleLines = document.horizontalRuleLines,
 				imageLines = if (provider == null) {
@@ -128,6 +135,31 @@ internal class HtmlLine(
 	val links: List<HtmlLink> = emptyList(),
 )
 
+/** The format of each of [lines] that has one, read as the layout reads it. */
+internal fun DocumentSnapshot.paragraphFormats(lines: IntRange): Map<Int, ParagraphFormatSpanStyle> {
+	if (richSpans.none { it.style is ParagraphFormatSpanStyle }) return emptyMap()
+	return lines.mapNotNull { line -> spansOn(line).paragraphFormat(line)?.let { line to it } }.toMap()
+}
+
+/**
+ * Gives each line in [formats] its paragraph format, in place of any it had (a pasted
+ * paragraph's own replaces the one a paste at a line's start leaves on it), off the undo
+ * history as the blocks are.
+ */
+internal fun TextEditorState.addParagraphFormats(formats: Map<Int, ParagraphFormatSpanStyle>) {
+	val replaced = mutableListOf<RichSpan>()
+	val spans = formats.mapNotNull { (line, format) ->
+		val text = textLines.getOrNull(line) ?: return@mapNotNull null
+		replaced += workingContent.spansOn(line).filter { it.style is ParagraphFormatSpanStyle && it.range.start.line == line }
+		RichSpan(TextEditorRange(CharLineOffset(line, 0), CharLineOffset(line, text.length)), format)
+	}
+	if (spans.isEmpty()) return
+	richSpanManager.removeRichSpans(replaced)
+	richSpanManager.addRichSpans(spans)
+	// The lines' text is shaped by the pass their insert posted, which reads the spans then.
+	updateBookKeeping(LayoutUpdate.SpansOnly)
+}
+
 /** The semantic heading level of each line that carries a [HeaderSpanStyle]. */
 internal fun headerLevelsOf(spans: Set<RichSpan>): Map<Int, Int> =
 	spans
@@ -145,10 +177,11 @@ internal fun renderHtmlFragment(
 	lines: List<HtmlLine>,
 	blocks: DocumentBlocks,
 	headerLevels: Map<Int, Int>,
+	formats: Map<Int, ParagraphFormatSpanStyle>,
 	configuration: MarkdownConfiguration,
 ): String {
 	val writer = HtmlWriter()
-	val containers = HtmlContainers(blocks)
+	val containers = HtmlContainers(blocks, formats)
 	lines.forEach { line ->
 		writer.openContainers(containers.around(line.docLine))
 		writer.appendLine(
@@ -157,6 +190,8 @@ internal fun renderHtmlFragment(
 				line = line.text,
 				blocks = blocks,
 				headerLevel = headerLevels[line.docLine],
+				// An item's format is on its `<li>`.
+				format = formats[line.docLine].takeIf { blocks.listBlockAt(line.docLine) == null },
 				isWholeLine = line.isWholeLine,
 				links = line.links,
 				configuration = configuration,
@@ -167,8 +202,11 @@ internal fun renderHtmlFragment(
 	return writer.finish()
 }
 
-/** An element wrapping lines; an `<li>` is told apart from its siblings by the [item] line it opens on. */
-private data class HtmlContainer(val tag: String, val item: Int = -1)
+/**
+ * An element wrapping lines; an `<li>` is told apart from its siblings by the [item]
+ * line it opens on, and carries that line's paragraph format as its [style].
+ */
+private data class HtmlContainer(val tag: String, val item: Int = -1, val style: String? = null)
 
 /**
  * The elements wrapping each line, asked of in order. A list item is an `<li>` of its
@@ -178,7 +216,10 @@ private data class HtmlContainer(val tag: String, val item: Int = -1)
  * that starts at a nested item keeps its items' nesting. Any other line closes every
  * item, since HTML cannot hold it inside one, and so does a change of quote.
  */
-private class HtmlContainers(private val blocks: DocumentBlocks) {
+private class HtmlContainers(
+	private val blocks: DocumentBlocks,
+	private val formats: Map<Int, ParagraphFormatSpanStyle>,
+) {
 	/** The open items, outermost first: their list, their `<li>`, and their level. */
 	private val openItems = mutableListOf<Triple<HtmlContainer, HtmlContainer, Int>>()
 	private var quoted = false
@@ -199,7 +240,7 @@ private class HtmlContainers(private val blocks: DocumentBlocks) {
 					containers += item
 				}
 				val listContainer = HtmlContainer(if (list.spanStyle is OrderedListSpanStyle) "ol" else "ul")
-				val item = HtmlContainer("li", line)
+				val item = HtmlContainer("li", line, formats[line]?.toCss())
 				containers += listContainer
 				containers += item
 				openItems += Triple(listContainer, item, level)
@@ -222,6 +263,7 @@ private fun lineHtml(
 	line: AnnotatedString,
 	blocks: DocumentBlocks,
 	headerLevel: Int?,
+	format: ParagraphFormatSpanStyle?,
 	isWholeLine: Boolean,
 	links: List<HtmlLink>,
 	configuration: MarkdownConfiguration,
@@ -249,7 +291,8 @@ private fun lineHtml(
 		image != null -> "<img src=\"${image.source.escapeHtmlAttribute()}\"" +
 			" alt=\"${image.alt.escapeHtmlAttribute()}\">"
 
-		heading != null -> "<${heading.tag}>${AnnotatedString(line.text).toHtml(configuration, links)}</${heading.tag}>"
+		heading != null -> "<${heading.tag}${format.styleAttribute()}>" +
+			"${AnnotatedString(line.text).toHtml(configuration, links)}</${heading.tag}>"
 		else -> line.toHtml(configuration, links)
 	}
 
@@ -260,9 +303,12 @@ private fun lineHtml(
 		// wrapping one in `<p>` is invalid and browsers close the paragraph
 		// before it anyway.
 		isRule || image != null || heading != null -> content
-		else -> "<p>$content</p>"
+		else -> "<p${format.styleAttribute()}>$content</p>"
 	}
 }
+
+private fun ParagraphFormatSpanStyle?.styleAttribute(): String =
+	this?.toCss()?.let { " style=\"${it.escapeHtmlAttribute()}\"" } ?: ""
 
 /**
  * Assembles the fragment, keeping container elements open across the lines that
@@ -289,7 +335,9 @@ private class HtmlWriter {
 			// `<pre><code>` is one opening, and a newline after it would render as a
 			// blank first line of the code block.
 			if (container.tag != "code") separate()
-			builder.append('<').append(container.tag).append('>')
+			builder.append('<').append(container.tag)
+			container.style?.let { builder.append(" style=\"").append(it.escapeHtmlAttribute()).append('"') }
+			builder.append('>')
 			open = open + container
 		}
 		// Only the line that opens the fence sits flush against `<code>`; every

@@ -5,7 +5,9 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
+import kotlin.math.abs
 import kotlin.math.roundToInt
+import kotlin.math.roundToLong
 
 private val IMPORTANT = Regex("""\s*!\s*important\s*$""", RegexOption.IGNORE_CASE)
 
@@ -79,17 +81,40 @@ internal fun parseCssColor(value: String): Color? {
 	return Color(red, green, blue, (alpha * 255f).roundToInt())
 }
 
-private val CSS_LENGTH_REGEX = Regex("""^(\d+(?:\.\d+)?|\.\d+)\s*(px|pt|em|%|sp)?$""")
+private val CSS_LENGTH_REGEX = Regex("""^(-?(?:\d+(?:\.\d+)?|\.\d+))\s*(px|pt|in|cm|mm|sp|em|rem|%)?$""")
 
-/** Reads a CSS font size: px and pt become sp, em and percent become em. Zero is no size. */
-internal fun parseCssFontSize(value: String): TextUnit? {
+/**
+ * Reads a signed CSS length: px (a bare number too), pt, in, cm, mm and sp become sp, and
+ * em, rem and percent become em.
+ */
+internal fun parseCssLength(value: String): TextUnit? {
 	val match = CSS_LENGTH_REGEX.matchEntire(value.trim().lowercase()) ?: return null
-	val number = match.groupValues[1].toFloatOrNull()?.takeIf { it > 0f } ?: return null
+	val number = match.groupValues[1].toFloatOrNull() ?: return null
 	return when (match.groupValues[2]) {
 		"", "px", "sp" -> number.sp
 		"pt" -> (number * 4f / 3f).sp
-		"em" -> number.em
+		"in" -> (number * 96f).sp
+		"cm" -> (number * 96f / 2.54f).sp
+		"mm" -> (number * 96f / 25.4f).sp
+		"em", "rem" -> number.em
 		"%" -> (number / 100f).em
 		else -> null
+	}
+}
+
+/** Reads a CSS font size, a [parseCssLength] above zero. */
+internal fun parseCssFontSize(value: String): TextUnit? = parseCssLength(value)?.takeIf { it.value > 0f }
+
+/** [number] for CSS, to two decimals and never in exponent form. */
+internal fun formatCssNumber(number: Float): String {
+	val hundredths = (number * 100f).roundToLong()
+	val magnitude = abs(hundredths)
+	val whole = magnitude / 100
+	val fraction = magnitude % 100
+	val sign = if (hundredths < 0) "-" else ""
+	return when {
+		fraction == 0L -> "$sign$whole"
+		fraction % 10 == 0L -> "$sign$whole.${fraction / 10}"
+		else -> "$sign$whole.${fraction.toString().padStart(2, '0')}"
 	}
 }

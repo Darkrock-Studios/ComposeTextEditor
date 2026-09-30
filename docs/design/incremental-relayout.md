@@ -477,4 +477,5 @@ test read `paragraphTop`; scrolling keeps a row, not its gaps, in view.
 Markdown has no paragraph spacing, alignment, indent or line height: export
 writes the text without them and import reads none, so a document that
 round-trips through markdown loses its paragraph formatting (recorded in
-5.7). HTML could carry all of it as inline styles on the paragraph (7.49).
+5.7). HTML carries all of it as inline styles on the paragraph's element
+(7.49, `html/ParagraphFormatCss.kt`).

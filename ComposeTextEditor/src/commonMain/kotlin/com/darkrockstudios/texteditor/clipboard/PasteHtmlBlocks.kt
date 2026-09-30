@@ -4,6 +4,7 @@ import androidx.compose.ui.platform.Clipboard
 import androidx.compose.ui.text.AnnotatedString
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.html.HtmlDocument
+import com.darkrockstudios.texteditor.html.addParagraphFormats
 import com.darkrockstudios.texteditor.html.parseHtmlDocument
 import com.darkrockstudios.texteditor.html.pastedLinkSpans
 import com.darkrockstudios.texteditor.richstyle.LinkSpanStyle
@@ -84,5 +85,10 @@ internal fun TextEditorState.applyHtmlPasteBlocks(
 	applyDocumentBlocks(
 		horizontalRuleLines = resolve(document.horizontalRuleLines),
 		blockLines = document.blockLines.mapValues { (_, lines) -> resolve(lines) },
+	)
+	addParagraphFormats(
+		document.paragraphFormats
+			.filterKeys { it in firstPastedLine..lastPastedLine }
+			.mapKeys { (line, _) -> insertPosition.line + line },
 	)
 }

@@ -106,6 +106,11 @@ this exercises the clipboard's HTML as the block carrier.
    larger size, copy it and paste into the Markdown demo in a dark theme (7.46).
    **Expect:** the red word is red and the large word large; the rest takes the
    editor's own text colour and size, not the source's black and 11 pt.
+8. Centre a paragraph and give another a first-line indent (from code with
+   `setParagraphFormat`: the sample has no paragraph controls), copy both into a browser
+   rich-text field, and paste a centred paragraph from Google Docs (7.49).
+   **Expect:** the alignment and indent survive both ways; a Docs paste keeps
+   the editor's own line spacing.
 
 ### 2.5 Paste font size (#49)
 

@@ -1479,7 +1479,7 @@ iOS Safari; browser tests run in CI.
   stored line untouched. Enter at a paragraph's start or end carries its
   format, as word processors do (`RichSpanStyle.boundToParagraph`). The saveable state keeps the format; markdown cannot
   and loses it (a markdown round trip drops every paragraph format); HTML
-  export could carry it as inline styles (7.49). `ParagraphFormatTest`.
+  carries it as inline styles (7.49). `ParagraphFormatTest`.
 - [x] **5.8 Clear formatting and unlink** [Opus] [Lane D] actions.
   Done: `Action.ClearFormatting` on Ctrl+\ and Cmd+\ (Google Docs; Word's
   Ctrl+Space switches the input method) and `Action.Unlink`, unbound, through
@@ -2358,10 +2358,28 @@ Shaping is one line per keystroke. These still scale with document length:
   snapshot-state `revision`, advanced by every published revision, which the
   word count and the semantics read to recompute.
 
-- [ ] **7.49** [Opus] [Lane H] HTML export and import ignore a paragraph's
+- [x] **7.49** [Opus] [Lane H] HTML export and import ignore a paragraph's
   format (5.7): `text-align`, `margin-top`, `margin-bottom`, `text-indent`,
   `padding-left` and `line-height` on the paragraph would carry it, as the
-  clipboard's HTML and a host's export want.
+  clipboard's HTML and a host's export want. Done
+  (`html/ParagraphFormatCss.kt`): export and the clipboard's HTML write a
+  line's format as the inline style of its `<p>`, heading or `<li>`:
+  `margin-top` and `margin-bottom` (dp as px), `text-align`, `margin-left`
+  for the indent (the start-side margin Word and Google Docs write; sp as px,
+  em as em), `text-indent` for the first line's, and `line-height` (sp as px,
+  em as a plain multiple). Import and paste read those and the `margin` and
+  `padding` shorthands, `padding-left` and the inline-start forms (a margin
+  and a padding add up), in px, pt, in, cm, mm, em and rem, from the element
+  that holds a line or an `<li>`; a zero margin or indent is the default, so
+  Google Docs' zeroed margins add nothing, and a negative `text-indent` is a
+  hanging first line. A line height every one of two or more paragraphs
+  carries is the source's own spacing (Google Docs writes 1.38 on each) and
+  is left to the editor's, as 7.46 does a base colour and size, so a fragment
+  whose every paragraph has one line height loses it. A paragraph split by
+  `<br>` gives its space before and first-line indent to its first line and
+  its space after to its last. A pasted paragraph's format replaces the one a
+  paste at a line's start leaves there. Code fence lines, rules and images
+  carry none (`html/ParagraphFormatHtmlTest.kt`).
 - [x] **7.50** [Opus] [Lane K] `wordSegments()` and the sentence segmentation
   copy the whole line list (`textLines.toList()`) for a snapshot before
   scanning, though the list is immutable since 7.8; the spell checker's full

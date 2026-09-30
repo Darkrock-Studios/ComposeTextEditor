@@ -5,6 +5,7 @@ import androidx.compose.ui.graphics.isSpecified
 import androidx.compose.ui.graphics.isUnspecified
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.isSpecified
@@ -21,6 +22,7 @@ import com.darkrockstudios.texteditor.richstyle.HR_PLACEHOLDER
 import com.darkrockstudios.texteditor.richstyle.IMAGE_PLACEHOLDER
 import com.darkrockstudios.texteditor.richstyle.LineBlockStyle
 import com.darkrockstudios.texteditor.richstyle.OrderedList
+import com.darkrockstudios.texteditor.richstyle.ParagraphFormatSpanStyle
 import com.darkrockstudios.texteditor.richstyle.atListLevel
 import com.darkrockstudios.texteditor.richstyle.isList
 import com.darkrockstudios.texteditor.richstyle.listLevel
@@ -177,6 +179,16 @@ private class BlockRange(
 	val pendingAtEntry: Int,
 )
 
+/** A paragraph format over a line-occupying element's output, as a [BlockRange] claims a block. */
+private class FormatRange(
+	val format: ParagraphFormatSpanStyle,
+	val start: Int,
+	val end: Int,
+	val pendingAtEntry: Int,
+	/** An item opening with its nested list: only its own first line is its. */
+	val firstLineOnly: Boolean,
+)
+
 /**
  * Walks the parsed document and records which styles are in force over each run
  * of text.
@@ -212,6 +224,9 @@ private class HtmlSpanBuilder(
 	private val ownLookRuns = mutableListOf<IntRange>()
 
 	private val blockRanges = mutableListOf<BlockRange>()
+	private val formatRanges = mutableListOf<FormatRange>()
+	/** The line height of every element that holds a line, unspecified for one that sets none. */
+	private val lineHoldingLineHeights = mutableListOf<TextUnit>()
 	private val horizontalRuleOffsets = mutableListOf<Int>()
 	private val imageOffsets = mutableListOf<Pair<Int, HtmlImageRef>>()
 	/** Each link's output offsets, start inclusive and end exclusive, and destination. */
@@ -257,16 +272,46 @@ private class HtmlSpanBuilder(
 				target += line
 			}
 		}
+		val horizontalRuleLines = horizontalRuleOffsets.mapTo(mutableSetOf()) { lines[it.coerceIn(0, text.length)] }
+		val imageLines = imageOffsets.associate { (offset, image) -> lines[offset.coerceIn(0, text.length)] to image }
 		return HtmlDocument(
 			text = AnnotatedString(text, clamped),
 			blockLines = blockLines,
-			horizontalRuleLines = horizontalRuleOffsets
-				.mapTo(mutableSetOf()) { lines[it.coerceIn(0, text.length)] },
-			imageLines = imageOffsets.associate { (offset, image) ->
-				lines[offset.coerceIn(0, text.length)] to image
-			},
+			horizontalRuleLines = horizontalRuleLines,
+			imageLines = imageLines,
 			links = linksPerLine(text, lines),
+			paragraphFormats = formatsPerLine(text, lines, formatless = horizontalRuleLines + imageLines.keys + blockLines[CodeFence].orEmpty()),
 		)
+	}
+
+	/**
+	 * Each line's format. An element's lines split its format as CSS lays it out: the
+	 * space before and the first-line indent go to its first line, the space after to
+	 * its last, and the rest to all of them. The innermost element's claim wins. Code,
+	 * rule and image lines ([formatless]) take none, as export writes none for them.
+	 *
+	 * A line height every one of two or more line-holding elements carries is the
+	 * source's own line spacing (Google Docs writes its 1.38 on every paragraph), as a
+	 * base colour and size are (7.46), so it is left to the editor's.
+	 */
+	private fun formatsPerLine(text: String, lines: IntArray, formatless: Set<Int>): Map<Int, ParagraphFormatSpanStyle> {
+		val baseLineHeight = lineHoldingLineHeights.takeIf { it.size >= 2 && it.distinct().size == 1 }?.first()
+		val formats = mutableMapOf<Int, ParagraphFormatSpanStyle>()
+		formatRanges.forEach { range ->
+			val first = (range.start + range.pendingAtEntry).coerceIn(0, text.length)
+			val end = range.end.coerceIn(first, text.length)
+			val firstLine = lines[first]
+			val lastLine = if (range.firstLineOnly) firstLine else lines[if (end > first) end - 1 else first]
+			for (line in firstLine..lastLine) {
+				if (line in formats || line in formatless) continue
+				var format = range.format
+				if (format.lineHeight == baseLineHeight) format = format.copy(lineHeight = TextUnit.Unspecified)
+				if (line != firstLine) format = format.copy(spaceBefore = Dp.Unspecified, firstLineIndent = TextUnit.Unspecified)
+				if (line != lastLine) format = format.copy(spaceAfter = Dp.Unspecified)
+				if (format != ParagraphFormatSpanStyle()) formats[line] = format
+			}
+		}
+		return formats
 	}
 
 	/** Each link cut at the line breaks inside it, in line and character coordinates. */
@@ -388,10 +433,16 @@ private class HtmlSpanBuilder(
 		val start = out.length
 		val spansAtEntry = spans.size
 		val pendingAtEntry = pendingNewlines()
+		// An item is its own line, whatever it holds.
+		val format = if ((occupiesALine || name == "li") && style.isNotEmpty()) paragraphFormatFromCss(style) else null
+		if (occupiesALine) lineHoldingLineHeights += format?.lineHeight ?: TextUnit.Unspecified
 		visitChildren(element, nested)
 		// Appended on the way out, so a nested block is recorded before the one
 		// containing it, which is what lets the innermost claim on a line win.
 		if (block != null) blockRanges += BlockRange(block, start, out.length, pendingAtEntry)
+		if (format != null) {
+			formatRanges += FormatRange(format, start, out.length, pendingAtEntry, firstLineOnly = name == "li" && element.holdsList())
+		}
 		if (href != null) {
 			// The separators owed to what came before are written ahead of the
 			// link's first character, and are not part of it.
@@ -413,6 +464,8 @@ private class HtmlSpanBuilder(
 
 		if (isBlock) requestBlockBreak() else if (isCell) requestCellBreak()
 	}
+
+	private fun Element.holdsList(): Boolean = children().any { it.tagName().lowercase().let { tag -> tag == "ul" || tag == "ol" } }
 
 	/** Whether this element's first content, whitespace aside, is a `<ul>` or `<ol>`. */
 	private fun Element.startsWithList(): Boolean {

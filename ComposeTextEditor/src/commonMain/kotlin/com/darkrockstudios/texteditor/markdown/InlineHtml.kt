@@ -5,8 +5,8 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.unit.TextUnit
 import com.darkrockstudios.texteditor.html.cssColorAndSize
+import com.darkrockstudios.texteditor.html.formatCssNumber
 import com.darkrockstudios.texteditor.html.parseCssColor
-import kotlin.math.roundToInt
 
 /**
  * The inline HTML the markdown serializers use for styles CommonMark has no
@@ -75,7 +75,3 @@ private fun TextUnit.toCssFontSize(): String? = when {
 	else -> null
 }
 
-private fun formatCssNumber(number: Float): String {
-	val rounded = number.roundToInt()
-	return if (rounded.toFloat() == number) rounded.toString() else number.toString()
-}

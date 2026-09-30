@@ -54,6 +54,7 @@ internal fun TextEditorState.selectionAsHtml(range: TextEditorRange): String {
 		lines = lines,
 		blocks = documentBlocksOf(spans, markdownConfiguration),
 		headerLevels = headerLevelsOf(spans),
+		formats = content.paragraphFormats(coveredLines),
 		configuration = markdownConfiguration,
 	)
 }
