@@ -184,7 +184,7 @@ review.
 | D | Bindings, actions, menu | `input/KeyBindings.kt`, `input/EditorCommand.kt`, `input/BuiltinEditorActions.kt`, `contextmenu/` | 2.1, 2.2, 2.4, 2.5, 2.7 to 2.12, 4.8, 5.8 |
 | E | Input sessions on desktop, iOS, web | `desktopMain`, `iosMain`, `wasmJsMain` under `input/` | 4.2 to 4.7, 4.10 to 4.12, 4.19, 4.21, 4.22, 4.24 to 4.26, 4.28, 4.29 |
 | F | Android input | `androidMain` | 0.4, 3.9 to 3.11, 3.14, 4.16, 4.18, 4.20, 4.27, 4.30 |
-| G | Edit pipeline and undo | `state/TextEditManager.kt`, `state/TextEditHistory.kt`, `state/EditBehavior.kt`, `input/ImeEditLogic.kt` | 1.20, 5.1 to 5.5, 5.9, 6.1 to 6.6, 6.14, 6.15 |
+| G | Edit pipeline and undo | `state/TextEditManager.kt`, `state/TextEditHistory.kt`, `state/EditBehavior.kt`, `input/ImeEditLogic.kt` | 1.20, 5.1 to 5.5, 5.9, 6.1 to 6.6, 6.14, 6.15, 6.17 |
 | H | Clipboard and HTML | `clipboard/`, `html/` | 4.9, 4.13, 4.17, 6.7 to 6.12 |
 | I | Markdown and block model | `markdown/`, `richstyle/` | 5.6, 7.14 to 7.16 |
 | J | Find addon | `ComposeTextEditorFind/` | 7.17 to 7.19, 7.26, 7.29 |
@@ -1319,8 +1319,23 @@ iOS Safari; browser tests run in CI.
   so editor round trips are exact, headings included
   (`html/NonBreakingSpaceTest.kt`). Inline code is dropped only inside a `<pre>`
   element, not under that CSS, so monospace text under it now pastes as code.
-- [ ] **6.11 Large paste is quadratic. C.** [Opus] [Lane H] One full line-list
-  copy per pasted line.
+- [x] **6.11 Large paste is quadratic. C.** [Opus] [Lane H] One full line-list
+  copy per pasted line. Done: multi-line insert, replace and delete splice the
+  line list once through `TextEditorState.replaceLines`; `splitAnnotatedString`
+  gives each span only the lines it covers instead of checking every span on
+  every line; and an Insert's offset transform and the rich-span pass for a
+  Replace work out where the new text ends once per operation, not once per span
+  they move. Other multi-line edits still copy per line: 6.17.
+- [ ] **6.17 Multi-line style and block edits copy the line list per line. S.**
+  [Opus] [Lane G] `TextEditorState.setLine` copies the whole line list, and the
+  multi-line style path in `TextEditManager.applyStyleOperation` and
+  `applyLineBlockState` call it once per line, so Ctrl+B or a list toggle over a
+  long selection (and their undo and redo) is O(lines x document). Stage the
+  line list once per transaction, or collect the lines and write them with
+  `replaceLines` as 6.11 did for paste.
+  `state/LargePasteCostTest.kt` counts the lines written
+  (`TextEditorState.linesWritten`) and shapes for a 400-line paste at the caret,
+  over a selection, and through undo and redo.
 - [ ] **6.12 Drag and drop** [Opus] [Lane H] of the selection, and drops of
   external text.
 - [ ] **6.13 Plain paste reads the HTML flavor.** [Opus] [Lane H] On desktop,

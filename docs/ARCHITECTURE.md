@@ -315,7 +315,7 @@ Text shaping is by far the most expensive work per edit, so the layout pass
 The incremental path is opportunistic, never load-bearing: guards degrade any
 pass that cannot be proven sound to a full relayout, which is always correct.
 Costs are pinned by counting-measurer regression tests (a keystroke shapes one
-line, a spell-check pass shapes zero) and a parity suite holds incremental
+line, a spell-check pass shapes zero, a paste writes the line list once) and a parity suite holds incremental
 output to field-for-field equality with a full pass.
 
 Details: [design/incremental-relayout.md](design/incremental-relayout.md)

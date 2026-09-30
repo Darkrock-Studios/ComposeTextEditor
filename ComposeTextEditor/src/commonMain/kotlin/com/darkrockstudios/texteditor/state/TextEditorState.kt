@@ -1031,39 +1031,19 @@ class TextEditorState(
 	}
 
 	/**
-	 * Removes [count] lines from [startIndex]. Removing every line leaves one empty
-	 * placeholder line; returns true when that happened, so a caller inserting
-	 * replacement lines overwrites the placeholder rather than a real empty line.
+	 * Replaces lines [first] through [last] with [replacement] in one new list, so a
+	 * splice of many lines copies the document once. [last] of `first - 1` inserts
+	 * before [first]. A document left with no lines gets one empty line.
 	 */
-	internal fun removeLines(startIndex: Int, count: Int): Boolean {
+	internal fun replaceLines(first: Int, last: Int, replacement: List<AnnotatedString>) {
 		val lines = textLines
-		// If there are no lines, or we're trying to remove more lines than exist, abort
-		if (lines.isEmpty() || startIndex >= lines.size) {
-			return false
-		}
-
-		// Ensure we don't remove more lines than available. The floor matters: an
-		// inverted range reaches here with a negative count, which subList would
-		// reject outright.
-		val safeCount = minOf(count, lines.size - startIndex).coerceAtLeast(0)
-
-		// Always keep at least one empty line
-		return if (lines.size <= safeCount) {
-			setLines(listOf(AnnotatedString("")))
-			true
-		} else {
-			setLines(
-				lines.toMutableList().also {
-					it.subList(startIndex, startIndex + safeCount).clear()
-				}
-			)
-			false
-		}
-	}
-
-	internal fun insertLine(index: Int, text: String) = insertLine(index, text.toAnnotatedString())
-	internal fun insertLine(index: Int, text: AnnotatedString) {
-		setLines(textLines.toMutableList().also { it.add(index, text) })
+		val from = first.coerceIn(0, lines.size)
+		val to = last.coerceIn(from - 1, lines.lastIndex)
+		val updated = ArrayList<AnnotatedString>(lines.size - (to - from + 1) + replacement.size)
+		updated.addAll(lines.subList(0, from))
+		updated.addAll(replacement)
+		updated.addAll(lines.subList(to + 1, lines.size))
+		setLines(updated.ifEmpty { listOf(AnnotatedString("")) })
 	}
 
 	/**
@@ -1078,7 +1058,12 @@ class TextEditorState(
 		announceReplacement()
 	}
 
+	/** How many lines [setLines] has been handed; the cost tests read it to catch a list rebuilt per line. */
+	internal var linesWritten = 0L
+		private set
+
 	internal fun setLines(lines: List<AnnotatedString>) {
+		linesWritten += lines.size
 		mutateContent { it.withLines(lines) }
 	}
 

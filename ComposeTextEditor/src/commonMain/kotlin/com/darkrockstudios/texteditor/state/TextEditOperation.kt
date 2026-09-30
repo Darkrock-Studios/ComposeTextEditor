@@ -6,6 +6,13 @@ import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.richstyle.RichSpanStyle
 
+/** Where this text ends once inserted at [start]. */
+internal fun AnnotatedString.endWhenInsertedAt(start: CharLineOffset): CharLineOffset {
+	val lastBreak = text.lastIndexOf('\n')
+	if (lastBreak == -1) return CharLineOffset(start.line, start.char + length)
+	return CharLineOffset(start.line + text.count { it == '\n' }, length - lastBreak - 1)
+}
+
 sealed class TextEditOperation {
 	abstract val cursorBefore: CharLineOffset
 	abstract val cursorAfter: CharLineOffset
@@ -21,6 +28,10 @@ sealed class TextEditOperation {
 		override val cursorBefore: CharLineOffset,
 		override val cursorAfter: CharLineOffset
 	) : TextEditOperation() {
+		// Read for every rich span an edit moves, so worked out once per operation.
+		private val end = text.endWhenInsertedAt(position)
+		private val lineShift = end.line - position.line
+
 		override fun transformOffset(
 			offset: CharLineOffset,
 			state: TextEditorState
@@ -34,18 +45,15 @@ sealed class TextEditOperation {
 
 			// After insertion on later lines
 			if (offset.line > position.line) {
-				val lineShift = text.count { it == '\n' }
 				return offset.copy(line = offset.line + lineShift)
 			}
 
 			// On same line after insertion point
 			if (offset.line == position.line && offset.char >= position.char) {
-				if (text.contains('\n')) {
-					val lineShift = text.count { it == '\n' }
-					val lastLineLength = text.text.substringAfterLast('\n').length
+				if (lineShift > 0) {
 					return CharLineOffset(
 						offset.line + lineShift,
-						offset.char - position.char + lastLineLength
+						offset.char - position.char + end.char
 					)
 				} else {
 					return offset.copy(char = offset.char + text.length)
@@ -108,6 +116,9 @@ sealed class TextEditOperation {
 		override val cursorAfter: CharLineOffset,
 		val inheritStyle: Boolean = false,
 	) : TextEditOperation() {
+		/** Where [newText] ends once it replaces [range], worked out once for every span it moves. */
+		internal val newTextEnd: CharLineOffset = newText.endWhenInsertedAt(range.start)
+
 		override fun transformOffset(
 			offset: CharLineOffset,
 			state: TextEditorState

@@ -225,46 +225,24 @@ class TextEditManager(private val state: TextEditorState) {
 
 	private fun handleMultiLineInsert(operation: TextEditOperation.Insert) {
 		val insertLines = operation.text.splitAnnotatedString()
-		val currentLine = state.textLines[operation.position.line]
+		val lines = state.textLines
+		val lineIndex = operation.position.line
+		val currentLine = lines[lineIndex]
 
-		// Split current line content
 		val prefixEndIndex = operation.position.char.coerceIn(0, currentLine.length)
 		val prefix = currentLine.subSequence(0, prefixEndIndex)
-		state.setLine(
-			operation.position.line,
-			spanManager.mergeAnnotatedStrings(
-				original = prefix,
-				start = prefix.length,
-				newText = insertLines.first()
-			)
+		val suffix = currentLine.subSequence(prefixEndIndex, currentLine.length)
+		val lastInsertedLine = insertLines.last()
+
+		val replacement = ArrayList<AnnotatedString>(insertLines.size)
+		replacement += spanManager.mergeAnnotatedStrings(original = prefix, start = prefix.length, newText = insertLines.first())
+		for (i in 1 until insertLines.lastIndex) replacement += insertLines[i]
+		replacement += spanManager.mergeAnnotatedStrings(
+			original = lastInsertedLine,
+			start = lastInsertedLine.length,
+			newText = suffix,
 		)
-
-		// Insert middle lines (if any)
-		for (i in 1 until insertLines.lastIndex) {
-			state.insertLine(
-				operation.position.line + i,
-				insertLines[i]
-			)
-		}
-
-		// Handle last line with remainder if there are multiple lines
-		if (insertLines.size > 1) {
-			val lastInsertedLine = insertLines.last()
-			val suffix = currentLine.subSequence(
-				startIndex = prefixEndIndex,
-				endIndex = currentLine.length
-			)
-
-			val newLastLine = spanManager.mergeAnnotatedStrings(
-				original = lastInsertedLine,
-				start = lastInsertedLine.length,
-				newText = suffix
-			)
-			state.insertLine(
-				operation.position.line + insertLines.lastIndex,
-				newLastLine
-			)
-		}
+		state.replaceLines(lineIndex, lineIndex, replacement)
 	}
 
 	private fun applyReplace(
@@ -299,17 +277,7 @@ class TextEditManager(private val state: TextEditorState) {
 					operation.newText,
 				)
 
-				val leftPlaceholder = state.removeLines(
-					operation.range.start.line,
-					operation.range.end.line - operation.range.start.line + 1
-				)
-				newLines.forEachIndexed { index, line ->
-					if (leftPlaceholder && index == 0) {
-						state.setLine(0, line)
-					} else {
-						state.insertLine(operation.range.start.line + index, line)
-					}
-				}
+				state.replaceLines(operation.range.start.line, operation.range.end.line, newLines)
 			}
 		}
 
@@ -484,8 +452,6 @@ class TextEditManager(private val state: TextEditorState) {
 			val startText = firstLine.text.substring(0, startChar)
 			val endText = lastLine.text.substring(endChar)
 
-			val leftPlaceholder = state.removeLines(startLine, endLine - startLine + 1)
-
 			val newText = buildAnnotatedStringWithSpans { addSpan ->
 				append(startText)
 				append(endText)
@@ -602,14 +568,7 @@ class TextEditManager(private val state: TextEditorState) {
                     }
 			}
 
-			if (leftPlaceholder) {
-				state.setLine(0, newText)
-			} else {
-				state.insertLine(
-					startLine,
-					newText
-				)
-			}
+			state.replaceLines(startLine, endLine, listOf(newText))
 		}
 	}
 
