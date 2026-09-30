@@ -418,16 +418,16 @@ class TextEditorState(
 
 	/**
 	 * Last calculated cursor pixel metrics.
-	 * Updated during rendering and used by IME for cursor anchor info.
+	 * Updated during rendering and used by Android's IME for cursor anchor info.
 	 */
 	var lastCursorMetrics: CursorMetrics? = null
 		internal set
 
 	/**
 	 * Layout coordinates of the editor's drawing canvas, captured via
-	 * `onGloballyPositioned`. Used by the desktop IME to translate the cursor's
-	 * canvas-local [lastCursorMetrics] into root coordinates for placing the
-	 * input-method candidate window.
+	 * `onGloballyPositioned`. The skiko input request uses them to translate the
+	 * canvas-local caret into root coordinates for placing the input-method
+	 * candidate window and the web backing input.
 	 */
 	var canvasLayoutCoordinates: LayoutCoordinates? = null
 		internal set

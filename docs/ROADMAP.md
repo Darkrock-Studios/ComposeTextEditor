@@ -183,7 +183,7 @@ review.
 | C | Drawing and geometry | `Draw*.kt`, `cursor/`, `scrollbar/`, `state/TextEditorScrollState.kt`, hit testing | 1.8, 1.10, 1.11, 1.17, 1.18, 3.3, 3.12, 4.14, 7.6, 7.7 |
 | D | Bindings, actions, menu | `input/KeyBindings.kt`, `input/EditorCommand.kt`, `input/BuiltinEditorActions.kt`, `contextmenu/` | 2.1, 2.2, 2.4, 2.5, 2.7 to 2.12, 4.8, 5.8 |
 | E | Input sessions on desktop, iOS, web | `desktopMain`, `iosMain`, `wasmJsMain` under `input/` | 4.2 to 4.7, 4.10 to 4.12, 4.19, 4.21, 4.22, 4.24 to 4.26, 4.28, 4.29 |
-| F | Android input | `androidMain` | 0.4, 3.9 to 3.11, 3.14, 4.16, 4.18, 4.20, 4.27 |
+| F | Android input | `androidMain` | 0.4, 3.9 to 3.11, 3.14, 4.16, 4.18, 4.20, 4.27, 4.30 |
 | G | Edit pipeline and undo | `state/TextEditManager.kt`, `state/TextEditHistory.kt`, `state/EditBehavior.kt`, `input/ImeEditLogic.kt` | 1.20, 5.1 to 5.5, 5.9, 6.1 to 6.6, 6.14, 6.15 |
 | H | Clipboard and HTML | `clipboard/`, `html/` | 4.9, 4.13, 4.17, 6.7 to 6.12 |
 | I | Markdown and block model | `markdown/`, `richstyle/` | 5.6, 7.14 to 7.16 |
@@ -1043,8 +1043,17 @@ iOS Safari; browser tests run in CI.
   Wayland with KDE; internal paste works (hammer-editor#921).
 - [ ] **4.18 ANR on Galaxy S21 Ultra. U.** [Fable] [Lane F] hammer-editor#545,
   stale.
-- [ ] **4.19 Desktop candidate window. C.** [Opus] [Lane E] `lastCursorMetrics`
+- [x] **4.19 Desktop candidate window. C.** [Opus] [Lane E] `lastCursorMetrics`
   updates only when the caret is drawn, so it can lag during blink-off.
+  1.8 made the draw record the metrics whatever the blink, but the skiko
+  request's caret rectangle still read them, so a platform asking right after
+  a caret move (AWT's `getTextLocation` after a composing update, web's
+  textarea placement, iOS) got the previous frame's position. Done: the
+  request measures the caret from the layout when asked
+  (`SkikoInputMethodRequestTest`); null before the first layout. Observers
+  still re-run on caret moves only, not on a scroll, left for 4.6 and 4.24 on
+  the Mac. A real IME pass is 4.4. Android's cursor anchor info reads `lastCursorMetrics` the same
+  way (4.30).
 - [ ] **4.20 Hardware keyboard dead keys on Android. S.** [Opus] [Lane F]
   `handleCharacterInput` inserts `utf16CodePoint` directly, with no handling of
   combining accents.
@@ -1102,6 +1111,13 @@ iOS Safari; browser tests run in CI.
   leave a list with Return and demote a bullet with Backspace, then type a
   word that autocorrects; compare with `RestartInput` passed in
   `TextEditorTextInputService.ios.kt`. Needed before 5.2 ships on iOS.
+- [ ] **4.30 Android's insertion marker lags a caret move. C.** [Opus]
+  [Lane F] `PlatformTextEditorExtensions.android.kt` builds
+  `CursorAnchorInfo.setInsertionMarkerLocation` from `lastCursorMetrics`,
+  which the caret's draw writes. The flush that sends it is posted after the
+  change, usually before the next frame, so a stylus handwriting or floating
+  toolbar reading the marker gets the previous caret position. Measure with
+  `calculateCursorPosition()` as the skiko request does since 4.19.
 - [ ] **4.27 Android resyncs by restarting input. C.** [Opus] [Lane F]
   `requestImeResync` becomes `restartInput`, which clears the keyboard's
   suggestions and shift state. That suits a whole-document replace, not a
@@ -1457,4 +1473,4 @@ records results and removes entries that passed.
 | 4.6 | With a hardware keyboard in the iOS sample app (a person: the simulator tools here cannot press arrow keys), press Up and Down through a wrapped paragraph and a heading | Each press moves the caret one drawn row, once. `verticalPositionFromPosition` now answers from the unstyled layout, so a double move or a move by an undrawn row would come from UIKit handling the arrow through `UITextInput` as well | |
 | 2.9 | In the iOS sample app with a hardware keyboard: press Tab, Ctrl+Tab, then Escape followed by Tab; then set `state.tabSettings = TabSettings(movesFocus = true)` on the demo editor and press Tab | Tab indents by four spaces; Ctrl+Tab, Escape then Tab, and Tab under `movesFocus` either move focus to another control or do nothing, and never type a tab character (4.28) | |
 | 3.8 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64`. 3.8 added `internal expect fun hasNativeTextToolbar()` (commonMain `TouchToolbar.kt`) with `iosMain/.../TouchToolbar.ios.kt` answering true. Then in the simulator: long-press a word, double-tap a word, long-press empty space, tap the caret handle, and drag a selection handle | Compiles. UIKit's edit menu appears over the selection or caret with Cut, Copy, Paste and Select all as applicable (Paste and Select all alone at a bare caret), hides while a handle is dragged and returns when it drops, and goes when the caret moves or the text is scrolled. If no menu appears, the input connection has no toolbar: fall back to `false` in `TouchToolbar.ios.kt` so the context menu stands in |  Partial, same run. Compiles. The UIKit menu works over a selection: double-tap or long-press a word shows Cut, Copy, Paste, Select All, and each works. **Fails:** long-press in an empty document calls `show()` with a zero-width caret rect and only Paste, and UIKit shows nothing (the toolbar reports Hidden right after `showMenu`); a tap on the caret handle never calls `show()`. Native reference: a tap in Safari's focused empty field shows Paste. Also: a long-press past a line's end selects the line's last word instead of placing the caret; with a selection ending at the document end, a long-press below the text counts as on the selection. When the screen was shifted by 4.24 the selection menu did not appear either. Did not fall back to `false`, since the menu works for selections |
-| 4.25 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64`. `skikoMain/.../input/SkikoTextEditorInputMethodRequest.kt` gained an `imeResync` parameter (default `SkikoImeResync.None`, which iOS uses) and a `snapshotFlow` collector; `imeResyncGeneration` in `TextEditorState.kt` is now snapshot state. Then the 4.29 comparison | Compiles; iOS typing, backspace and list Return behave as in the 4.5 pass | |
+| 4.19, 4.25 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64`. `skikoMain/.../input/SkikoTextEditorInputMethodRequest.kt` gained an `imeResync` parameter (default `SkikoImeResync.None`, which iOS uses); `imeResyncGeneration` in `TextEditorState.kt` is now snapshot state; `focusedRectInRoot` measures the caret with `calculateCursorPosition()` instead of reading `lastCursorMetrics` (same observation triggers: caret moves and resizes). Then the 4.29 comparison | Compiles; iOS typing, backspace, list Return and Japanese candidates behave as in the 4.5 pass | |

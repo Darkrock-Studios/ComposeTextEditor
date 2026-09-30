@@ -311,9 +311,11 @@ for now: Compose's iOS connection tells UIKit nothing about a change made
 during the keyboard's own edit, and the one tool the session has, restarting
 the input method, resets the keyboard (roadmap 4.29).
 
-The caret rectangle reads the caret position for the same reason, but the
-metrics themselves are written when the caret is drawn, so an observer
-re-running at the edit sees the previous draw's rectangle (roadmap 4.19).
+The caret rectangle is measured from the layout when a platform asks for it,
+so an observer re-running at a caret move gets the new position before the
+next frame draws the caret. Observers re-run on a caret move only (and on a
+resize, through the viewport size); a scroll alone does not move the
+rectangle until the caret moves.
 
 ## WASM
 

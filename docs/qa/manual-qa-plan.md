@@ -325,6 +325,15 @@ Run in Chrome, Firefox and Safari on desktop. Roadmap 4.11, 4.12 and 4.22.
    and accept an autocorrect suggestion right after. **Expect:** the second
    Enter ends the list, and nothing lands one character off.
 
+### 3.9 IME candidate window (desktop)
+
+Roadmap 4.19. With a CJK input method (fcitx5 or ibus with Mozc or Pinyin on
+Linux, the macOS Japanese keyboard, Microsoft IME on Windows):
+
+1. Type a composition at the end of a long line, then on a new line, then
+   after scrolling the document. **Expect:** the candidate window sits at the
+   caret each time, not one keystroke or one line behind.
+
 ## 4. Touch, focus and the soft keyboard (Android)
 
 Guards #88, #91. **Android device or emulator required.** Use the Markdown demo, which

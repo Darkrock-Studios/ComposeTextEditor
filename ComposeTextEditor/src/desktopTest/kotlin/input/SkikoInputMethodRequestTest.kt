@@ -1,4 +1,4 @@
-@file:OptIn(ExperimentalComposeUiApi::class)
+@file:OptIn(ExperimentalComposeUiApi::class, ExperimentalTestApi::class)
 
 package input
 
@@ -8,8 +8,10 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.PlatformTextInputMethodRequest
 import androidx.compose.ui.platform.PlatformTextInputSession
+import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.BackspaceCommand
@@ -27,7 +29,6 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.IntSize
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
-import com.darkrockstudios.texteditor.cursor.CursorMetrics
 import com.darkrockstudios.texteditor.input.SkikoImeResync
 import com.darkrockstudios.texteditor.input.SkikoTextEditorInputMethodRequest
 import com.darkrockstudios.texteditor.input.imeCommitText
@@ -53,6 +54,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import utils.editorUiTest
 
 /**
  * The one input request desktop, iOS, and web share. Desktop and iOS drive it through
@@ -290,9 +292,8 @@ class SkikoInputMethodRequestTest {
 		every { coords.localToRoot(Offset.Zero) } returns Offset(10f, 20f)
 		every { coords.size } returns IntSize(300, 200)
 		state.canvasLayoutCoordinates = coords
-		state.lastCursorMetrics = CursorMetrics(position = Offset(5f, 40f), height = 16f)
 
-		assertEquals(Rect(15f, 60f, 15f, 76f), request.focusedRectInRoot())
+		assertNull(request.focusedRectInRoot(), "no caret before the first layout")
 		assertEquals(Rect(10f, 20f, 310f, 220f), request.textFieldRectInRoot())
 		assertEquals(Rect(10f, 20f, 310f, 220f), request.textClippingRectInRoot())
 		assertEquals(Offset(10f, 20f), request.unclippedTextOffsetInRoot())
@@ -325,6 +326,37 @@ class SkikoInputMethodRequestTest {
 
 		assertEquals(listOf<Rect?>(Rect(10f, 20f, 310f, 220f), Rect(10f, 5f, 310f, 205f)), seen)
 		observer.cancel()
+	}
+
+	/**
+	 * Platforms read the caret rectangle the moment the caret moves (an IME placing its
+	 * candidate window after a composing update, web moving its textarea), before the
+	 * next frame draws the caret.
+	 */
+	@Test
+	fun `the caret rectangle follows a caret move before the next draw`() = editorUiTest(
+		initialText = AnnotatedString("hello world"),
+	) {
+		val request = SkikoTextEditorInputMethodRequest(state, ImeOptions.Default)
+		test.runOnIdle { state.cursor.updatePosition(CharLineOffset(0, 0)) }
+		waitForIdle()
+		val atStart = assertNotNull(request.focusedRectInRoot())
+
+		val beforeDraw = test.runOnIdle {
+			state.cursor.updatePosition(CharLineOffset(0, 11))
+			request.focusedRectInRoot()
+		}
+		waitForIdle()
+		val afterDraw = assertNotNull(request.focusedRectInRoot())
+
+		assertTrue(afterDraw.left > atStart.left)
+		assertEquals(afterDraw, beforeDraw)
+		// The first row, unscrolled, starts at the canvas's top in root coordinates.
+		val origin = assertNotNull(state.canvasLayoutCoordinates).positionInRoot()
+		assertEquals(origin.y, afterDraw.top)
+		assertTrue(afterDraw.bottom > afterDraw.top)
+		assertEquals(afterDraw.left, afterDraw.right)
+		assertEquals(origin.x + assertNotNull(state.lastCursorMetrics).position.x, afterDraw.left)
 	}
 
 	/**

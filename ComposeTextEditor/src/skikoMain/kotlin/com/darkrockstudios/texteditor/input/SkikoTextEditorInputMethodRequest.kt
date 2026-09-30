@@ -6,6 +6,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -20,6 +21,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.ImeOptions
 import androidx.compose.ui.text.input.TextEditingScope
 import androidx.compose.ui.text.input.TextFieldValue
+import com.darkrockstudios.texteditor.cursor.calculateCursorPosition
 import com.darkrockstudios.texteditor.state.TextEditorState
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineStart
@@ -160,11 +162,14 @@ internal class SkikoTextEditorInputMethodRequest(
 
 	/** Caret rectangle in root coordinates; positions candidate windows and the web backing input. */
 	override val focusedRectInRoot: () -> Rect? = {
-		// The metrics are plain fields written at draw time. Reading the caret position
-		// makes a snapshot observer re-run on every caret move and pick up the fresh ones.
+		// Platforms ask as soon as the caret moves, before the next frame draws it, so the
+		// caret is measured here. Observers re-run on a caret move only, as the platforms'
+		// geometry tracking expects; a scroll alone does not move the rectangle.
 		editorState.cursorPosition
 		val coords = attachedCoordinates()
-		val metrics = editorState.lastCursorMetrics
+		val metrics = Snapshot.withoutReadObservation {
+			if (editorState.lineOffsets.isEmpty()) null else editorState.calculateCursorPosition()
+		}
 		if (coords != null && metrics != null) {
 			val origin = coords.positionInRoot()
 			Rect(

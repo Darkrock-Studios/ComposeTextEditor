@@ -9,7 +9,7 @@ import com.darkrockstudios.texteditor.state.TextEditorState
 /**
  * Draws the caret while it is in its blink's visible phase and nothing is selected, as
  * native editors hide it behind a selection. Its metrics are recorded either way, since
- * the IME places its windows by them.
+ * Android's IME places its windows by them.
  */
 internal fun DrawScope.DrawCursor(
 	state: TextEditorState,
