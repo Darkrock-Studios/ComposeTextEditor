@@ -4,6 +4,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
+import com.darkrockstudios.texteditor.html.sanitizeLinkUrl
 import com.darkrockstudios.texteditor.richstyle.Blockquote
 import com.darkrockstudios.texteditor.richstyle.BulletList
 import com.darkrockstudios.texteditor.richstyle.BulletListSpanStyle
@@ -758,12 +759,17 @@ class MarkdownExtension(
 	 * style over the text and attaches the [LinkSpanStyle] that carries the
 	 * destination through serialization. Both go through the undoable edit
 	 * pipeline as one undo step.
+	 *
+	 * A destination the HTML path's allowlist refuses (`javascript:`, `data:`,
+	 * `vbscript:`, `file:`) is not set, and answers false.
 	 */
-	fun setLink(range: TextEditorRange, url: String) {
+	fun setLink(range: TextEditorRange, url: String): Boolean {
+		if (sanitizeLinkUrl(url) == null) return false
 		editorState.editGroup {
 			editorState.addStyleSpan(range, markdownConfiguration.linkStyle)
 			editorState.addRichSpan(range, LinkSpanStyle(url))
 		}
+		return true
 	}
 
 	/**

@@ -1589,11 +1589,23 @@ iOS Safari; browser tests run in CI.
   rest (`javascript:`, `data:`, `vbscript:`, `file:`), after dropping the tabs,
   line breaks and edge controls browsers ignore, in both directions; a refused
   link keeps its text (`html/HtmlLinkTest.kt`). Other sources are 6.16.
-- [ ] **6.16 Link destinations are sanitised only in HTML. S.** [Opus] [Lane B]
+- [x] **6.16 Link destinations are sanitised only in HTML. S.** [Opus] [Lane B]
   Markdown import, `setLink` and the in-editor span buffer keep `javascript:` and
   `data:` destinations, and Ctrl/Cmd+click hands them to `onLinkClick` or the
   `UriHandler` (`textEditorPointerInputHandling.kt`). Refuse them where a link is
   opened, with `html/HtmlLinks.kt`'s `sanitizeLinkUrl`, so every source is covered.
+  Done, with the one allowlist (relative URLs and http, https, mailto, tel and
+  ftp) at import and where a link opens. Markdown import reads a destination
+  as a renderer does (backslash escapes and entities decoded, so
+  `javascript&#58;` is caught) and keeps a refused link's text without the link
+  or its style, as HTML import does; `MarkdownExtension.setLink` refuses one and
+  answers false (it now returns whether it set the link). A link a host attached
+  directly stays in the document, and its copies, paste and markdown export
+  keep it, but the pointer's link lookup gives it no hand cursor and no
+  Ctrl/Cmd+click open, and the semantics text publishes no link annotation for
+  it. `onRichSpanClick` and `MarkdownExtension.linkAt` still hand a host the span
+  as it is (`html/LinkDestinationSafetyTest.kt`). A host's own scheme is refused
+  as well: 6.25.
 - [x] **6.10 Non-breaking spaces** [Opus] [Lane H] become plain spaces on HTML
   paste. Done: a no-break space between two characters of one text node lands
   as U+00A0 ("10&nbsp;km"), and copy writes it as `&nbsp;` (plain text keeps
@@ -1689,6 +1701,13 @@ iOS Safari; browser tests run in CI.
   a paste in the editor adds a copy of a spell-check underline or a find
   highlight that no pass tracks, and it stays after the word is fixed or find
   closes. Leave `isDecoration` spans out of the capture, as a drag does (6.21).
+- [ ] **6.25 A host's own link scheme is refused. S.** [Opus] [Lane H]
+  Since 6.16 one allowlist (relative, http, https, mailto, tel, ftp) decides
+  which links import and open, so a host whose documents link with its own
+  scheme (`myapp://scene/3`, `obsidian:`, `sms:`) loses those links on markdown
+  or HTML import, and one it attaches directly never reaches its `onLinkClick`.
+  Let a host extend the allowlist (a set of schemes on the configuration or the
+  state), still refusing `javascript:`, `data:`, `vbscript:` and `file:`.
 - [ ] **6.20 Drag and drop on Android, iOS and web. S.** [Opus] [Lane H]
   `dragdrop/PlatformTextDrag` has desktop actuals only. Android: build the
   transfer from `ClipData.newHtmlText` with `View.DRAG_FLAG_GLOBAL`, read drops

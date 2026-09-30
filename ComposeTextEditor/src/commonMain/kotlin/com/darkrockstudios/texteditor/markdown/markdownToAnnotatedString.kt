@@ -3,6 +3,8 @@ package com.darkrockstudios.texteditor.markdown
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.buildAnnotatedString
 import com.darkrockstudios.texteditor.annotatedstring.normalizeLineEndings
+import com.darkrockstudios.texteditor.html.sanitizeLinkUrl
+import com.fleeksoft.ksoup.nodes.Entities
 import org.intellij.markdown.MarkdownElementTypes
 import org.intellij.markdown.MarkdownTokenTypes
 import org.intellij.markdown.ast.ASTNode
@@ -392,7 +394,20 @@ private fun AnnotatedString.Builder.appendMarkdownNode(
 		MarkdownElementTypes.ATX_6 -> handleHeader(original, node, startOffset, 6, context)
 
 		MarkdownElementTypes.INLINE_LINK -> {
-			pushStyle(styles.LINK)
+			// A bare destination parses as LINK_DESTINATION; the GFM flavour
+			// reads an angle-bracketed one as an AUTOLINK child instead. Both
+			// carry any angle brackets in the node text; the URL itself is
+			// what round-trips. One the allowlist refuses, read as a renderer reads
+			// it (entities and escapes decoded), keeps its text alone.
+			val url = node.children
+				.firstOrNull {
+					it.type == MarkdownElementTypes.LINK_DESTINATION ||
+						it.type == MarkdownElementTypes.AUTOLINK
+				}
+				?.getTextInNode(original)?.toString()
+				?.removeSurrounding("<", ">")
+				?.takeIf { sanitizeLinkUrl(it.decodedDestination()) != null }
+			if (url != null) pushStyle(styles.LINK)
 			val textStart = length
 			var childOffset = startOffset
 			node.children.forEach { child ->
@@ -412,18 +427,7 @@ private fun AnnotatedString.Builder.appendMarkdownNode(
 				childOffset += child.getTextInNode(original).length
 			}
 			val textEnd = length
-			pop()
-			// A bare destination parses as LINK_DESTINATION; the GFM flavour
-			// reads an angle-bracketed one as an AUTOLINK child instead. Both
-			// carry any angle brackets in the node text; the URL itself is
-			// what round-trips.
-			val url = node.children
-				.firstOrNull {
-					it.type == MarkdownElementTypes.LINK_DESTINATION ||
-						it.type == MarkdownElementTypes.AUTOLINK
-				}
-				?.getTextInNode(original)?.toString()
-				?.removeSurrounding("<", ">")
+			if (url != null) pop()
 			if (url != null && textEnd > textStart) {
 				context.links += ParsedLink(textStart, textEnd, url)
 			}
@@ -568,3 +572,8 @@ private fun AnnotatedString.Builder.handleHeader(
 	// Pop the header style
 	pop()
 }
+
+private val DESTINATION_ESCAPE = Regex("""\\([!-/:-@\[-`{-~])""")
+
+/** A link destination as CommonMark reads it: backslash escapes and entity references decoded. */
+private fun String.decodedDestination(): String = Entities.unescape(replace(DESTINATION_ESCAPE, "$1"))

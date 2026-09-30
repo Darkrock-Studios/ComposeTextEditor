@@ -40,6 +40,7 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.sp
 import com.darkrockstudios.texteditor.annotatedstring.normalizeLineEndings
 import com.darkrockstudios.texteditor.contextmenu.ContextMenuActions
+import com.darkrockstudios.texteditor.html.sanitizeLinkUrl
 import com.darkrockstudios.texteditor.input.EditorCommand.Action
 import com.darkrockstudios.texteditor.input.selectionAsTextRange
 import com.darkrockstudios.texteditor.richstyle.LinkSpanStyle
@@ -274,8 +275,9 @@ internal class SemanticsDocument(
 		chunkLinks = found
 		for (span in spanIndex.loose) {
 			val style = span.style as? LinkSpanStyle ?: continue
+			val url = sanitizeLinkUrl(style.url) ?: continue
 			add(
-				LinkAnnotation.Url(style.url, linkInteractionListener = listener),
+				LinkAnnotation.Url(url, linkInteractionListener = listener),
 				indexOf(span.range.start.line, span.range.start.char),
 				indexOf(span.range.end.line, span.range.end.char),
 			)
@@ -287,11 +289,13 @@ internal class SemanticsDocument(
 		}
 	}
 
+	// A destination the allowlist refuses is not published as a link.
 	private fun SpanIndex.Chunk.links(listener: LinkInteractionListener): List<ChunkLink> = buildList {
 		lines.forEachIndexed { line, spans ->
 			for (span in spans) {
 				val style = span.style as? LinkSpanStyle ?: continue
-				add(ChunkLink(line, span.start, span.end, LinkAnnotation.Url(style.url, linkInteractionListener = listener)))
+				val url = sanitizeLinkUrl(style.url) ?: continue
+				add(ChunkLink(line, span.start, span.end, LinkAnnotation.Url(url, linkInteractionListener = listener)))
 			}
 		}
 	}

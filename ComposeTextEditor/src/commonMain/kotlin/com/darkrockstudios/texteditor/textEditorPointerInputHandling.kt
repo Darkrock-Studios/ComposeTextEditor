@@ -13,6 +13,7 @@ import androidx.compose.ui.input.pointer.*
 import androidx.compose.ui.platform.ViewConfiguration
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
+import com.darkrockstudios.texteditor.html.sanitizeLinkUrl
 import com.darkrockstudios.texteditor.input.CtrlKeyBindings
 import com.darkrockstudios.texteditor.input.KeyBindings
 import com.darkrockstudios.texteditor.input.MacKeyBindings
@@ -424,12 +425,15 @@ private fun TextEditorState.characterAt(offset: Offset): CharLineOffset? {
 	return if (char < length) CharLineOffset(found.line, char) else null
 }
 
-/** The URL of the [LinkSpanStyle] covering [position], if any. */
+/**
+ * The URL of the [LinkSpanStyle] covering [position], if any. A destination the allowlist
+ * refuses, which only a host attaching the span directly can place, is no link to open.
+ */
 private fun TextEditorState.linkAt(position: CharLineOffset): String? =
 	lineOffsets.rowAt(position)
 		?.richSpans
 		?.firstOrNull { it.style is LinkSpanStyle && it.containsPosition(position) }
-		?.let { (it.style as LinkSpanStyle).url }
+		?.let { sanitizeLinkUrl((it.style as LinkSpanStyle).url) }
 
 /**
  * The pointer icon for a mouse hovering at [offset] with [modifiers] held: a hand over a
