@@ -183,15 +183,15 @@ review.
 | B | Pointer and touch | `textEditorPointerInputHandling.kt`, `state/TextEditorSelectionManager.kt`, `DrawSelectionHandles.kt` | 1.9, 1.12 to 1.16, 1.21 to 1.24, 3.1, 3.2, 3.4 to 3.8, 3.13, 3.15, 4.23, 6.16 |
 | C | Drawing and geometry | `Draw*.kt`, `cursor/`, `scrollbar/`, `state/TextEditorScrollState.kt`, hit testing | 1.8, 1.10, 1.11, 1.17, 1.18, 3.3, 3.12, 3.16, 4.14, 7.6, 7.7, 7.41 |
 | D | Bindings, actions, menu | `input/KeyBindings.kt`, `input/EditorCommand.kt`, `input/BuiltinEditorActions.kt`, `contextmenu/` | 2.1, 2.2, 2.4, 2.5, 2.7 to 2.12, 4.8, 5.8, 7.58 |
-| E | Input sessions on desktop, iOS, web | `desktopMain`, `iosMain`, `wasmJsMain` under `input/` | 4.2 to 4.7, 4.10 to 4.12, 4.19, 4.21, 4.22, 4.24 to 4.26, 4.28, 4.29, 4.32, 4.33, 7.37 |
+| E | Input sessions on desktop, iOS, web | `desktopMain`, `iosMain`, `wasmJsMain` under `input/` | 4.2 to 4.7, 4.10 to 4.12, 4.19, 4.21, 4.22, 4.24 to 4.26, 4.28, 4.29, 4.32, 4.33, 4.35, 7.37 |
 | F | Android input | `androidMain` | 0.4, 3.9 to 3.11, 3.14, 3.17, 4.16, 4.18, 4.20, 4.27, 4.30, 4.31, 4.34, 7.40 |
 | G | Edit pipeline and undo | `state/TextEditManager.kt`, `state/TextEditHistory.kt`, `state/EditBehavior.kt`, `input/ImeEditLogic.kt` | 1.20, 5.1 to 5.5, 5.9, 6.1 to 6.6, 6.14, 6.15, 6.17, 6.22, 6.23 |
 | H | Clipboard and HTML | `clipboard/`, `html/`, `dragdrop/` | 4.9, 4.13, 4.17, 6.7 to 6.13, 6.18 to 6.21, 6.24 to 6.27, 7.39, 7.46, 7.47, 7.49, 7.53 |
 | I | Markdown and block model | `markdown/`, `richstyle/` | 5.6, 7.14 to 7.16, 7.43, 7.45, 7.52 |
 | J | Find addon | `ComposeTextEditorFind/` | 7.17 to 7.19, 7.26, 7.29, 7.42 |
 | K | Spell check addon | `ComposeTextEditorSpellCheck/` | 7.20 to 7.22, 7.28, 7.30, 7.31, 7.34, 7.35, 7.38, 7.44 |
-| L | Tests and CI | test sources, `.github/workflows/` | 0.1 to 0.3, 0.5 to 0.9, 4.1, 4.15 |
-| M | Accessibility and host API | semantics in `BasicTextEditor.kt`, `RichTextView.kt`, `state/rememberTextEditorState.kt` | 7.1 to 7.4, 7.13, 7.23 to 7.25, 7.32, 7.36, 7.59 |
+| L | Tests and CI | test sources, `.github/workflows/` | 0.1 to 0.3, 0.5 to 0.10, 4.1, 4.15 |
+| M | Accessibility and host API | semantics in `BasicTextEditor.kt`, `RichTextView.kt`, `state/rememberTextEditorState.kt` | 7.1 to 7.4, 7.13, 7.23 to 7.25, 7.32, 7.36, 7.59, 7.60 |
 | N | Core layout and performance | `state/TextEditorState.kt` | 5.7, 7.8 to 7.12 |
 
 Housekeeping items are [Opus] and fit any lane that is already in the file.
@@ -1225,9 +1225,9 @@ Also seen:
   events: a dead key, a Japanese composition converted and committed once, a
   cancelled composition, typing after a commit. The editor's text is read
   from its node in the accessibility tree Compose mirrors into the page.
-  Found 4.34, marked `test.fixme`. A real IME in each browser (4.12) is still
+  Found 4.35, marked `test.fixme`. A real IME in each browser (4.12) is still
   a person's check.
-- [ ] **4.34 A browser composition can land at a stale offset. R.** [Fable]
+- [ ] **4.35 A browser composition can land at a stale offset. R.** [Fable]
   [Lane E] With Chromium's own input method events (4.15), a composition
   started after moving the caret by key can land away from the caret: in
   "ab" after Left, "か" landed at the line end in three runs of five (one in
@@ -1239,9 +1239,10 @@ Also seen:
   `compositionstart` follows, the commit arrives as `insertText`, and a
   cancelled composition leaves its text; a rewrite of the field during the
   composition would do that. The 4.12 checks used synthetic events, which
-  leave the field alone, so they could not see either. Failing case:
+  leave the field alone, so they could not see either. Failing cases:
   `browserTests/tests/composition.spec.ts`, "a composition lands at the caret
-  in the middle of a line", marked `test.fixme`.
+  in the middle of a line" and "a composition after Home lands at the line
+  start", both `test.fixme`.
 - [x] **4.21 Whole-document mirror per edit. S.** [Opus] [Lane E] Compose's web
   session copies `request.value().text` into the backing `<textarea>` after
   every edit, and iOS snapshots `state.text` the same way, so each keystroke

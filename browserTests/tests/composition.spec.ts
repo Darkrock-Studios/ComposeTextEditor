@@ -50,7 +50,7 @@ test('a Japanese composition shows while composing and commits its conversion on
 });
 
 // Lands at the line end in some runs.
-test.fixme('a composition lands at the caret in the middle of a line (4.34)', async ({ page }) => {
+test.fixme('a composition lands at the caret in the middle of a line (4.35)', async ({ page }) => {
 	const ime = await Ime.attach(page);
 	await page.keyboard.type('ab');
 	await page.keyboard.press('ArrowLeft');
@@ -64,7 +64,7 @@ test.fixme('a composition lands at the caret in the middle of a line (4.34)', as
 });
 
 // Lands at offset 1 in most runs.
-test.fixme('a composition after Home lands at the line start (4.34)', async ({ page }) => {
+test.fixme('a composition after Home lands at the line start (4.35)', async ({ page }) => {
 	const ime = await Ime.attach(page);
 	await page.keyboard.type('ab');
 	await page.keyboard.press('Home');

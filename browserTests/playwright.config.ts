@@ -15,7 +15,7 @@ export default defineConfig({
 	timeout: 60_000,
 	expect: { timeout: 10_000 },
 	// One page at a time, as a person types: with several at once the input session
-	// can end a composition early (4.34), which the fixme cases record.
+	// can end a composition early (4.35), which the fixme cases record.
 	workers: 1,
 	forbidOnly: !!process.env.CI,
 	retries: 0,
