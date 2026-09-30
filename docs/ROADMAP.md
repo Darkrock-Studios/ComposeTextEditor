@@ -186,7 +186,7 @@ review.
 | F | Android input | `androidMain` | 0.4, 3.9 to 3.11, 3.14, 3.17, 4.16, 4.18, 4.20, 4.27, 4.30, 4.31, 7.40 |
 | G | Edit pipeline and undo | `state/TextEditManager.kt`, `state/TextEditHistory.kt`, `state/EditBehavior.kt`, `input/ImeEditLogic.kt` | 1.20, 5.1 to 5.5, 5.9, 6.1 to 6.6, 6.14, 6.15, 6.17, 6.22, 6.23 |
 | H | Clipboard and HTML | `clipboard/`, `html/`, `dragdrop/` | 4.9, 4.13, 4.17, 6.7 to 6.13, 6.18 to 6.21, 7.39 |
-| I | Markdown and block model | `markdown/`, `richstyle/` | 5.6, 7.14 to 7.16, 7.43 |
+| I | Markdown and block model | `markdown/`, `richstyle/` | 5.6, 7.14 to 7.16, 7.43, 7.45, 7.52 |
 | J | Find addon | `ComposeTextEditorFind/` | 7.17 to 7.19, 7.26, 7.29, 7.42 |
 | K | Spell check addon | `ComposeTextEditorSpellCheck/` | 7.20 to 7.22, 7.28, 7.30, 7.31, 7.34, 7.35, 7.38, 7.44 |
 | L | Tests and CI | test sources, `.github/workflows/` | 0.1 to 0.3, 0.5 to 0.9, 4.1, 4.15 |
@@ -1428,8 +1428,8 @@ iOS Safari; browser tests run in CI.
 - [ ] **5.3 Markdown as you type.** [Opus] [Lane G] "- ", "1. ", "# ", "> " at
   line start; inline `**bold**` and friends. Decided: not in core. Markdown
   is a storage detail for a WYSIWYG host like Hammer, which does not want
-  it. Build it as a separate markdown-editing package (as spell check is) or
-  as examples in the sample app's markdown demo.
+  it. It belongs in the markdown module of 7.52, with examples in the
+  sample app's markdown demo.
 - [ ] **5.4 Auto-link** [Opus] [Lane G] typed and pasted URLs. Decided: opt-in,
   off by default. Paste does not go through the 5.1 hook, so the pasted half
   needs its own seam.
@@ -2072,6 +2072,22 @@ Shaping is one line per keystroke. These still scale with document length:
   keeps a run on one language across edits, and joining two runs keeps the
   first run's. `~~~` fences import too. See `docs/design/line-blocks.md`,
   "Fence languages".
+
+- [ ] **7.52 Markdown as a layer, not core. S.** [Fable] [Lane I] This is a
+  rich text editor that can be used as a markdown editor; markdown must not be
+  baked into core. Today core's rich text styling runs through
+  `MarkdownConfiguration` (`TextEditorState.markdownConfiguration`): about 20
+  core files read it for heading, emphasis, link, code, and quote styles (the
+  block model, formatting toggles, HTML copy and paste, clipboard, drag and
+  drop, normalization), and core depends on `org.jetbrains:markdown`. Split:
+  core keeps a plain style configuration (for example `RichTextStyles`), the
+  block model (headings, lists and nesting, quotes, code blocks with a
+  language, rules), and HTML; a new `ComposeTextEditorMarkdown` module, like
+  the spell check addon, takes `MarkdownExtension`, import and export,
+  escaping, tables, inline HTML, the syntax options (highlight syntax,
+  paragraph separator), and the parser dependency, and later 5.3. The sample
+  app's markdown demo uses the module. Keep a deprecated alias for the old
+  names for one release. Touches many files: run it alone.
 
 ### Find and replace addon
 
