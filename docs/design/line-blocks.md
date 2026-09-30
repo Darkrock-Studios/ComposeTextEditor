@@ -308,10 +308,13 @@ conflicting block demoted as a side effect) in one step.
 
 ## Smart editing
 
-- Enter at the end of a block line continues the block onto both halves of the
-  split.
-- Enter on an empty block line exits the block instead, routed through the
-  toggle so the demotion lands in undo history.
+- Enter at the end of a block line continues its blocks onto both halves of the
+  split, except a heading: Enter at a heading's end, empty or not, opens a body
+  line after it. A split inside a heading keeps both halves headings. The
+  markers Enter sets are recorded with the split, so a redo restores them.
+- Enter on an empty block line other than a heading exits the block instead
+  (an empty quoted list item leaves the list and stays quoted), routed through
+  the toggle so the demotion lands in undo history.
 - Backspace at column 0 of a block line demotes first (marker off, content
   kept); a second backspace merges. Exception: when the previous line carries
   the same block, backspace merges directly, so joining two adjacent items is

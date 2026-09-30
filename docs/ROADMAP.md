@@ -1585,9 +1585,19 @@ iOS Safari; browser tests run in CI.
 - [ ] **5.4 Auto-link** [Opus] [Lane G] typed and pasted URLs. Decided: opt-in,
   off by default. Paste does not go through the 5.1 hook, so the pasted half
   needs its own seam.
-- [ ] **5.5 Enter after a heading. S.** [Opus] [Lane G] `LineBlockEditBehavior`
+- [x] **5.5 Enter after a heading. S.** [Opus] [Lane G] `LineBlockEditBehavior`
   continues any line block, headings included, so the line after a chapter
-  title is another heading. It should be body text.
+  title is another heading. It should be body text. Done: Enter at a heading's
+  end, empty heading or not, leaves the heading and opens a body line (Word's
+  and Google Docs' next-paragraph style); a split inside a heading keeps both
+  halves headings; a quote around the heading continues. Text typed at the start
+  of a line takes the text style its own line's block bakes in (a heading's
+  size), not the line above's. Enter also continues every block on the line, not
+  only the first (a quoted list item stays a list item; Enter on an empty one
+  leaves the list and stays quoted), and records the markers it sets as a
+  `LineBlock` operation in the same undo step, so a redo of Enter in a list
+  brings the new item's bullet back, which it did not
+  (`blocks/HeadingEnterTest.kt`).
 - [x] **5.6 Nested lists.** [Fable] [Lane I] Unsupported in the block model and
   the markdown parser (`docs/design/line-blocks.md`, known limitations).
   Tab and Shift+Tab at a list item's start are the chords to nest and un-nest

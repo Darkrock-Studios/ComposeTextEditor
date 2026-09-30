@@ -97,7 +97,7 @@ internal val TextEditorState.bodyStyle: SpanStyle?
 	get() = markdownConfiguration.defaultTextStyle.takeIf { hasMarkdownConfiguration }
 
 /** The styles a heading or code block on [line] gives it. */
-private fun TextEditorState.lineStyles(line: Int): Set<SpanStyle> =
+internal fun TextEditorState.lineStyles(line: Int): Set<SpanStyle> =
 	lineBlocks(line).mapNotNullTo(mutableSetOf()) { it.textStyle }
 
 /** Removes [linkStyle] from the parts of [range] that no link covers. */

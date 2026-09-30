@@ -93,6 +93,10 @@ internal val OrderedList: LineBlockStyle = ORDERED_LISTS[0]
 internal val LineBlockStyle.isList: Boolean
 	get() = spanStyle is BulletListSpanStyle || spanStyle is OrderedListSpanStyle
 
+/** Whether this block is a heading, at any level. */
+internal val LineBlockStyle.isHeading: Boolean
+	get() = spanStyle is HeaderSpanStyle
+
 /** This list block's nesting level, or null for a block that is not a list. */
 internal val LineBlockStyle.listLevel: Int?
 	get() = (spanStyle as? BulletListSpanStyle)?.level ?: (spanStyle as? OrderedListSpanStyle)?.level
