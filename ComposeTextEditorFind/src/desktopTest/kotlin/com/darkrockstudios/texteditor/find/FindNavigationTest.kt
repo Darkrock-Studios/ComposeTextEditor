@@ -159,6 +159,67 @@ class FindInSelectionTest {
 	}
 
 	@Test
+	fun `a query with no results keeps the selection from before the search`() = runTest {
+		val textState = editor("cat\ncat cat\ncat")
+		val find = FindState(textState, backgroundScope)
+		textState.select(CharLineOffset(1, 0), CharLineOffset(1, 7))
+		find.search("cat")
+		find.search("catx")
+		assertEquals(0, find.matchCount)
+		find.search("cat")
+
+		find.toggleInSelection(true)
+
+		assertEquals(listOf(1, 1), find.matchLines)
+	}
+
+	@Test
+	fun `clearing the query keeps the selection from before the search`() = runTest {
+		val textState = editor("cat\ncat cat\ncat")
+		val find = FindState(textState, backgroundScope)
+		textState.select(CharLineOffset(1, 0), CharLineOffset(1, 7))
+		find.search("cat")
+		find.search("")
+		find.search("cat")
+
+		find.toggleInSelection(true)
+
+		assertEquals(listOf(1, 1), find.matchLines)
+	}
+
+	@Test
+	fun `selecting the range of the last match is the user's own selection`() = runTest {
+		val textState = editor("cat\ncat cat\ncat")
+		val find = FindState(textState, backgroundScope)
+		textState.select(CharLineOffset(1, 0), CharLineOffset(1, 7))
+		find.search("cat")
+		val match = find.matches[find.currentMatchIndex]
+		textState.selector.clearSelection()
+		textState.select(match.start, match.end)
+		find.search("ca")
+
+		find.toggleInSelection(true)
+
+		assertEquals(listOf(TextEditorRange(match.start, CharLineOffset(1, 2))), find.matches)
+	}
+
+	@Test
+	fun `a selection from before replace all is not reused`() = runTest {
+		val textState = editor("cat cat\ncat")
+		val find = FindState(textState, backgroundScope)
+		textState.select(CharLineOffset(0, 4), CharLineOffset(0, 7))
+		find.search("cat")
+		find.replaceAll("c")
+
+		find.toggleInSelection(true)
+		assertFalse(find.inSelection)
+
+		find.search("c")
+		find.toggleInSelection(true)
+		assertFalse(find.inSelection)
+	}
+
+	@Test
 	fun `a selection made during the session is the one used`() = runTest {
 		val textState = editor("cat\ncat cat\ncat")
 		val find = FindState(textState, backgroundScope)

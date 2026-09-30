@@ -187,7 +187,7 @@ review.
 | G | Edit pipeline and undo | `state/TextEditManager.kt`, `state/TextEditHistory.kt`, `state/EditBehavior.kt`, `input/ImeEditLogic.kt` | 1.20, 5.1 to 5.5, 5.9, 6.1 to 6.6, 6.14, 6.15, 6.17, 6.22, 6.23 |
 | H | Clipboard and HTML | `clipboard/`, `html/`, `dragdrop/` | 4.9, 4.13, 4.17, 6.7 to 6.13, 6.18 to 6.21, 7.39 |
 | I | Markdown and block model | `markdown/`, `richstyle/` | 5.6, 7.14 to 7.16 |
-| J | Find addon | `ComposeTextEditorFind/` | 7.17 to 7.19, 7.26, 7.29 |
+| J | Find addon | `ComposeTextEditorFind/` | 7.17 to 7.19, 7.26, 7.29, 7.42 |
 | K | Spell check addon | `ComposeTextEditorSpellCheck/` | 7.20 to 7.22, 7.28, 7.30, 7.31, 7.34, 7.35, 7.38 |
 | L | Tests and CI | test sources, `.github/workflows/` | 0.1 to 0.3, 0.5 to 0.9, 4.1, 4.15 |
 | M | Accessibility and host API | semantics in `BasicTextEditor.kt`, `RichTextView.kt`, `state/rememberTextEditorState.kt` | 7.1 to 7.4, 7.13, 7.23 to 7.25, 7.32, 7.36 |
@@ -1838,13 +1838,22 @@ Shaping is one line per keystroke. These still scale with document length:
   diagnostics style) answers clicks with its suggestions
   (`spans/SpanHitTestTest.kt`, find's `FindScopeHitTestTest.kt`).
 
-- [ ] **7.29 Find in selection loses its scope. C.** [Opus] [Lane J]
+- [x] **7.29 Find in selection loses its scope. C.** [Opus] [Lane J]
   `FindState.search` records `selectionBeforeSearch` unless the selection equals
   a current match, and a query with no results empties the match list while the
   selection still sits on the last match. Select a paragraph, type "cat", then
   "catx", then back to "cat": the recorded selection is now the "cat" match, so
   turning on find in selection scopes to that one word. Compare against the
   last range the find session selected instead.
+  Done: `FindState` remembers the selection object it last left (a match, or none
+  after `clearSearch`) and compares by identity, so clearing the query keeps the
+  scope too, and reselecting the match's range yourself counts as your own
+  (`FindInSelectionTest`).
+- [ ] **7.42** [Opus] [Lane J] `FindState.selectionBeforeSearch` is a plain range
+  that does not follow edits. After Replace moves on to the next match, turning on
+  find in selection scopes to the old offsets, which can point at other text or
+  past the end of a line. Keep it as a tracked decoration span, like the scope,
+  or drop it on any edit.
 
 ### Spell check addon
 

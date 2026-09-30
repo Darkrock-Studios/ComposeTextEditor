@@ -73,6 +73,14 @@ class FindState(
 	/** The user's own selection, as it stood before a search moved the selection onto a match. */
 	private var selectionBeforeSearch: TextEditorRange? = null
 
+	/**
+	 * The selection as this session last left it: on a match, or none after [clearSearch]. The
+	 * selector keeps its range object until the selection changes, so an identity check still
+	 * recognises it once a query with no results empties [matches], and a user who selects the
+	 * same range again after selecting something else makes a new object.
+	 */
+	private var sessionSelection: TextEditorRange? = null
+
 	// Job for debounced search on text changes
 	private var searchUpdateJob: Job? = null
 
@@ -107,7 +115,7 @@ class FindState(
 	 */
 	fun search(newQuery: String) {
 		val selection = textState.selector.selection
-		if (selection != _matches.getOrNull(currentMatchIndex)) selectionBeforeSearch = selection
+		if (!isSessionSelection(selection)) selectionBeforeSearch = selection
 		query = newQuery
 
 		if (newQuery.isEmpty()) {
@@ -178,7 +186,7 @@ class FindState(
 		if (inSelection == enabled) return
 		if (enabled) {
 			val selection = textState.selector.selection
-			val scope = if (selection != null && selection == _matches.getOrNull(currentMatchIndex)) {
+			val scope = if (selection != null && isSessionSelection(selection)) {
 				selectionBeforeSearch
 			} else {
 				selection
@@ -270,6 +278,7 @@ class FindState(
 		_matches.clear()
 		currentMatchIndex = -1
 		textState.selector.clearSelection()
+		noteSessionSelection()
 	}
 
 	/**
@@ -281,6 +290,7 @@ class FindState(
 		removeScope()
 		inSelection = false
 		selectionBeforeSearch = null
+		sessionSelection = null
 		clearHighlights()
 		_matches.clear()
 		currentMatchIndex = -1
@@ -382,6 +392,12 @@ class FindState(
 			textState.addRichSpan(scopeStart, scopeEnd, scopeStyle)
 		}
 	}
+
+	private fun noteSessionSelection() {
+		sessionSelection = textState.selector.selection
+	}
+
+	private fun isSessionSelection(selection: TextEditorRange?): Boolean = selection === sessionSelection
 
 	/** [replaceText] styled like the character at the start of [range]. */
 	private fun styledReplacement(range: TextEditorRange, replaceText: String): AnnotatedString {
@@ -487,8 +503,8 @@ class FindState(
 
 		val match = _matches[currentMatchIndex]
 
-		// Select the match
 		textState.selector.updateSelection(match.start, match.end)
+		noteSessionSelection()
 
 		// Scroll to make it visible
 		textState.scrollManager.scrollToPosition(match.start)
