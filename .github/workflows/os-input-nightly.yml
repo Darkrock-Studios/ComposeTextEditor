@@ -1,0 +1,69 @@
+name: Real OS input (nightly)
+
+# Real X key events under a dead-key layout, typed into a desktop editor window on
+# a virtual display (docs/ROADMAP.md 0.8, docs/TESTING.md). A schedule only runs
+# from the default branch, so pushes that change the job run it too.
+on:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+  push:
+    branches: [ "native-parity" ]
+    paths:
+      - '.github/workflows/os-input-nightly.yml'
+      - 'testUtils/osInput/**'
+      - 'ComposeTextEditor/src/desktopTest/kotlin/osinput/**'
+      - 'ComposeTextEditor/build.gradle.kts'
+
+permissions:
+  contents: read
+
+jobs:
+  linux-dead-keys:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      DISPLAY: ':99'
+      # The X input method composes dead keys from the locale's Compose table.
+      LANG: en_US.UTF-8
+      LC_ALL: en_US.UTF-8
+
+    steps:
+      - uses: actions/checkout@v6
+      - name: Validate Gradle Wrapper
+        uses: gradle/wrapper-validation-action@v3
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v5
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+      - name: Install a virtual display, a window manager and xdotool
+        env:
+          LC_ALL: C
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb openbox xdotool x11-xkb-utils imagemagick locales
+          sudo locale-gen en_US.UTF-8
+      - name: Build the probe
+        run: ./gradlew --stacktrace :ComposeTextEditor:desktopTestClasses
+      - name: Start the display with the US International layout
+        run: |
+          Xvfb :99 -screen 0 1280x800x24 &
+          for _ in $(seq 50); do xdotool getdisplaygeometry >/dev/null 2>&1 && break; sleep 0.2; done
+          openbox &
+          setxkbmap -layout us -variant intl
+          setxkbmap -query
+      - name: Open the probe and type into it
+        run: testUtils/osInput/drive.sh "$RUNNER_TEMP/os-input"
+      - name: Keep the results
+        # The results, the probe's log and a screenshot of the display.
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: os-input-results
+          path: ${{ runner.temp }}/os-input/
+          if-no-files-found: ignore

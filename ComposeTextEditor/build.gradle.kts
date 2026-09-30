@@ -140,6 +140,15 @@ tasks.withType<Test>().matching { it.name == "desktopTest" }.configureEach {
 	doFirst { failures.deleteRecursively() }
 }
 
+// The window the nightly real-input job types into (testUtils/osInput/drive.sh).
+tasks.register<JavaExec>("runOsInputProbe") {
+	description = "Opens a focused editor that writes its text to the directory given in --args."
+	group = "verification"
+	val test = kotlin.targets.getByName("desktop").compilations.getByName("test")
+	classpath = files(test.output.allOutputs, test.runtimeDependencyFiles)
+	mainClass.set("osinput.OsInputProbeKt")
+}
+
 dokka {
 	moduleName.set("Editor")
 	dokkaSourceSets.configureEach {

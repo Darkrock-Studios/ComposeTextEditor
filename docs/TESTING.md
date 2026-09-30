@@ -171,4 +171,23 @@ that need load).
 | `browser` | Ubuntu, Chromium | The browser tests, typing and composition, against a production build of the demo |
 | `ios` | macOS | The iOS compile, the iOS tests, and the sample app build |
 
+`.github/workflows/os-input-nightly.yml` runs nightly (and on pushes to
+`native-parity` that change it): real X key events under the US International
+layout, typed with `xdotool` into an editor window on a virtual display.
+
 Each keeps its reports as an artifact when it fails.
+
+## Real OS input
+
+`testUtils/osInput/drive.sh` opens `osinput/OsInputProbe.kt`, a window with one
+focused editor that writes its text to `<dir>/text`, and presses real X key
+events into it with `xdotool`: dead keys and AltGr under the US International
+layout. The nightly job runs it on Xvfb. It needs an X11 session: on Wayland,
+`setxkbmap` does not change the layout and `xdotool` reaches only XWayland
+windows. Keys go to whatever window has focus, so leave the desktop alone while
+it runs. From the repository root:
+
+```bash
+setxkbmap -layout us -variant intl
+testUtils/osInput/drive.sh /tmp/os-input
+```

@@ -360,6 +360,16 @@ editor does rather than what it should do.
   building it (Mac queue).
 - [ ] **0.8 Real OS input, nightly.** [Opus] [Lane L] Drive the sample app on a
   virtual Linux display with a dead-key layout. Most expensive, so last.
+  Written, pending its first run: `.github/workflows/os-input-nightly.yml`
+  starts Xvfb and openbox with the US International layout, and
+  `testUtils/osInput/drive.sh` opens `osinput/OsInputProbe.kt`
+  (`:ComposeTextEditor:runOsInputProbe`, a window with one focused editor that
+  writes its text to a file, since nothing outside the process can read the
+  sample app's editor) and presses keys with `xdotool`: plain typing,
+  Enter and Backspace, dead acute, grave, circumflex, tilde and diaeresis, a
+  capital, a dead key before a space, dead keys inside words, and AltGr. It
+  runs nightly from the default branch and on pushes to `native-parity` that
+  touch it. Nothing here could run it: no Xvfb or xdotool on this machine.
 
 ## Phase 1: native feel
 
