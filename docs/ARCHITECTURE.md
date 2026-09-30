@@ -239,11 +239,14 @@ for toolbars (starting with the current one), `wordCount` counts words through
 the same ICU segmentation as word motion and spell check, recounting only the
 lines an edit replaced, and `snapshot()` hands any thread a coherent document
 revision.
-Extensions build on exactly this surface plus the public span API: the markdown
-module converts to and from markdown text, and the spell-check and find modules
-(separate artifacts) watch `editOperations` and paint their results as
-decoration rich spans through `updateRichSpans`, without ever touching editor
-internals.
+Extensions build on exactly this surface plus the public span API, the block
+API on the state and the style configuration (`RichTextStyles`): the markdown
+module (a separate artifact) converts to and from markdown text through the
+snapshot and `applyDocumentBlocks`, and the spell-check and find modules watch
+`editOperations` and paint their results as decoration rich spans through
+`updateRichSpans`, without ever touching editor internals. What each module
+owns and the seam between core and a format:
+[design/modules.md](design/modules.md).
 
 ## Input: from raw event to operation
 

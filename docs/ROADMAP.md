@@ -2470,8 +2470,18 @@ Shaping is one line per keystroke. These still scale with document length:
   the spell check addon, takes `MarkdownExtension`, import and export,
   escaping, tables, inline HTML, the syntax options (highlight syntax,
   paragraph separator), and the parser dependency, and later 5.3. The sample
-  app's markdown demo uses the module. Keep a deprecated alias for the old
-  names for one release. Touches many files: run it alone.
+  app's markdown demo uses the module. Keep the old names deprecated for one
+  release where a type stays (in the module); core's names that took a
+  markdown type go, since core cannot alias a type in the module. Touches
+  many files: run it alone.
+  Progress, in chunks:
+  - Design: done, `docs/design/modules.md`: the module table and dependency
+    graph, `RichTextStyles` on `TextEditorState.richTextStyles` as the one
+    style owner, the block API on the state, the importer seam
+    (`applyDocumentBlocks` keyed by span style, with rich spans,
+    `LINE_BLOCK_STYLES` for the order), where every public type lands, the
+    test split (a test-only dependency of core's desktop tests on the
+    module, spiked), and the host migration.
 
 ### Find and replace addon
 
