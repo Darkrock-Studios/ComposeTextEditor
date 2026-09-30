@@ -182,11 +182,11 @@ review.
 | A | Caret motion | `state/TextEditorCursorState.kt`, `state/TextEditorStateCursorExt.kt`, `state/WordSegmentationUtils.kt`, `input/TextEditorKeyCommandHandler.kt` | 1.1 to 1.7, 1.19, 2.3, 2.6, 7.5, 7.33 |
 | B | Pointer and touch | `textEditorPointerInputHandling.kt`, `state/TextEditorSelectionManager.kt`, `DrawSelectionHandles.kt` | 1.9, 1.12 to 1.16, 1.21 to 1.24, 3.1, 3.2, 3.4 to 3.8, 3.13, 3.15, 4.23, 6.16 |
 | C | Drawing and geometry | `Draw*.kt`, `cursor/`, `scrollbar/`, `state/TextEditorScrollState.kt`, hit testing | 1.8, 1.10, 1.11, 1.17, 1.18, 3.3, 3.12, 3.16, 4.14, 7.6, 7.7, 7.41 |
-| D | Bindings, actions, menu | `input/KeyBindings.kt`, `input/EditorCommand.kt`, `input/BuiltinEditorActions.kt`, `contextmenu/` | 2.1, 2.2, 2.4, 2.5, 2.7 to 2.12, 4.8, 5.8 |
+| D | Bindings, actions, menu | `input/KeyBindings.kt`, `input/EditorCommand.kt`, `input/BuiltinEditorActions.kt`, `contextmenu/` | 2.1, 2.2, 2.4, 2.5, 2.7 to 2.12, 4.8, 5.8, 7.58 |
 | E | Input sessions on desktop, iOS, web | `desktopMain`, `iosMain`, `wasmJsMain` under `input/` | 4.2 to 4.7, 4.10 to 4.12, 4.19, 4.21, 4.22, 4.24 to 4.26, 4.28, 4.29, 4.32, 4.33, 7.37 |
 | F | Android input | `androidMain` | 0.4, 3.9 to 3.11, 3.14, 3.17, 4.16, 4.18, 4.20, 4.27, 4.30, 4.31, 7.40 |
 | G | Edit pipeline and undo | `state/TextEditManager.kt`, `state/TextEditHistory.kt`, `state/EditBehavior.kt`, `input/ImeEditLogic.kt` | 1.20, 5.1 to 5.5, 5.9, 6.1 to 6.6, 6.14, 6.15, 6.17, 6.22, 6.23 |
-| H | Clipboard and HTML | `clipboard/`, `html/`, `dragdrop/` | 4.9, 4.13, 4.17, 6.7 to 6.13, 6.18 to 6.21, 7.39 |
+| H | Clipboard and HTML | `clipboard/`, `html/`, `dragdrop/` | 4.9, 4.13, 4.17, 6.7 to 6.13, 6.18 to 6.21, 6.25, 6.26, 7.39, 7.46, 7.47, 7.49, 7.53 |
 | I | Markdown and block model | `markdown/`, `richstyle/` | 5.6, 7.14 to 7.16, 7.43, 7.45, 7.52 |
 | J | Find addon | `ComposeTextEditorFind/` | 7.17 to 7.19, 7.26, 7.29, 7.42 |
 | K | Spell check addon | `ComposeTextEditorSpellCheck/` | 7.20 to 7.22, 7.28, 7.30, 7.31, 7.34, 7.35, 7.38, 7.44 |
@@ -1697,11 +1697,6 @@ iOS Safari; browser tests run in CI.
   with paste, leaves out a span whose style already covers its range, since
   inserting beside or inside such a span stretched it. A drop into another
   editor carries only what its markup does (`dragdrop/DraggedRichSpansTest.kt`).
-- [ ] **6.24 A copy carries overlay spans. S.** [Opus] [Lane H]
-  `copyRichSpans` keeps every rich span in the range, decorations included, so
-  a paste in the editor adds a copy of a spell-check underline or a find
-  highlight that no pass tracks, and it stays after the word is fixed or find
-  closes. Leave `isDecoration` spans out of the capture, as a drag does (6.21).
 - [ ] **6.25 A host's own link scheme is refused. S.** [Opus] [Lane H]
   Since 6.16 one allowlist (relative, http, https, mailto, tel, ftp) decides
   which links import and open, so a host whose documents link with its own
@@ -2416,7 +2411,9 @@ Shaping is one line per keystroke. These still scale with document length:
   spans, so a copy carries spell-check flags, find highlights and find's scope to
   the clipboard, and a paste lays them over the pasted text, where their owners
   do not expect them (a second find scope, a stale flag). Drop decorations there,
-  as the saver does.
+  as the saver does and a drag's carried spans do (6.21): leave `isDecoration`
+  spans out of `preservedRichSpans`. (Also filed as 6.24 on the lane H branch,
+  merged here.)
 - [ ] **7.54** [Opus] [Lane G] A delete whose metadata holds decoration spans (a
   spell-check flag or find highlight on the deleted text) never joins a typing run
   (`TextEditHistory`'s delete merge and `isSingleTypedChar`), so backspacing
