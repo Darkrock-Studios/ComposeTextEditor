@@ -23,6 +23,7 @@ import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.CodeFenceBoundary
 import com.darkrockstudios.texteditor.LineWrap
 import com.darkrockstudios.texteditor.TextEditorRange
+import com.darkrockstudios.texteditor.annotatedstring.normalizeLineEndings
 import com.darkrockstudios.texteditor.annotatedstring.splitAnnotatedString
 import com.darkrockstudios.texteditor.annotatedstring.subSequence
 import com.darkrockstudios.texteditor.annotatedstring.toAnnotatedString
@@ -663,7 +664,7 @@ class TextEditorState(
 	 * the cursor operations.
 	 */
 	fun setText(text: String) {
-		replaceContent(text.split("\n").map { it.toAnnotatedString() })
+		replaceContent(text.normalizeLineEndings().split("\n").map { it.toAnnotatedString() })
 		clearHistory()
 		updateBookKeeping()
 		cursor.refreshStyles()
@@ -676,7 +677,7 @@ class TextEditorState(
 	 * document along with its rich spans, use [setDocument].
 	 */
 	fun setText(text: AnnotatedString) {
-		replaceContent(text.splitAnnotatedString())
+		replaceContent(text.normalizeLineEndings().splitAnnotatedString())
 		clearHistory()
 		updateBookKeeping()
 		cursor.refreshStyles()
@@ -884,6 +885,7 @@ class TextEditorState(
 
 	/** Inserts a single [char] at the cursor, applying the active typing style. */
 	fun insertCharacterAtCursor(char: Char) {
+		if (char == '\n' || char == '\r') return insertStringAtCursor("\n")
 		val text = cursor.applyCursorStyle(char.toString())
 		val operation = TextEditOperation.Insert(
 			position = cursorPosition,
@@ -903,6 +905,8 @@ class TextEditorState(
 	 * for any embedded line breaks.
 	 */
 	fun insertStringAtCursor(text: AnnotatedString) {
+		@Suppress("NAME_SHADOWING")
+		val text = text.normalizeLineEndings()
 		val styledText = cursor.applyCursorStyle(text)
 
 		// Calculate cursor position after insertion, accounting for newlines
@@ -960,6 +964,8 @@ class TextEditorState(
 	 * replaced text rather than only its own spans.
 	 */
 	fun replace(range: TextEditorRange, newText: AnnotatedString, inheritStyle: Boolean = false) {
+		@Suppress("NAME_SHADOWING")
+		val newText = newText.normalizeLineEndings()
 		val operation = TextEditOperation.Replace(
 			range = range,
 			newText = newText,

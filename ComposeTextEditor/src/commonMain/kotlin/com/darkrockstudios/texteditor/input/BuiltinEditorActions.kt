@@ -5,6 +5,7 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextDecoration
 import com.darkrockstudios.texteditor.CharLineOffset
+import com.darkrockstudios.texteditor.annotatedstring.normalizeLineEndings
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.clipboard.ClipboardHelper
 import com.darkrockstudios.texteditor.clipboard.applyHtmlPasteBlocks
@@ -169,7 +170,8 @@ private fun EditorActionContext.cutSelection() {
 private fun EditorActionContext.pasteClipboard(plainText: Boolean) {
 	scope.launch {
 		ClipboardHelper.getText(clipboard, state.markdownConfiguration)?.let { clipboardText ->
-			val text = if (plainText) AnnotatedString(clipboardText.text) else clipboardText
+			val normalized = clipboardText.normalizeLineEndings()
+			val text = if (plainText) AnnotatedString(normalized.text) else normalized
 			val curSelection = state.selector.selection
 			val insertPosition = curSelection?.start ?: state.cursorPosition
 			// Read the clipboard's HTML before mutating: the text, the in-editor

@@ -48,6 +48,7 @@ import androidx.compose.ui.semantics.setText
 import androidx.compose.ui.semantics.textSelectionRange
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.toSize
+import com.darkrockstudios.texteditor.annotatedstring.normalizeLineEndings
 import com.darkrockstudios.texteditor.contextmenu.ContextMenuActions
 import com.darkrockstudios.texteditor.contextmenu.ContextMenuOpener
 import com.darkrockstudios.texteditor.contextmenu.ContextMenuPlacement
@@ -294,7 +295,8 @@ fun BasicTextEditor(
 							state.setText(newText)
 							true
 						}
-						insertTextAtCursor { newText ->
+						insertTextAtCursor { inserted ->
+							val newText = inserted.normalizeLineEndings()
 							if (newText.text == "\n") {
 								state.insertTypedNewline()
 							} else {

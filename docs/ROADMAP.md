@@ -1281,8 +1281,15 @@ iOS Safari; browser tests run in CI.
 - [ ] **6.7 Rich clipboard on Android, iOS, and web. C.** [Opus] [Lane H] Plain
   text only in both directions; bold and italic are lost even editor to editor.
   Desktop already writes HTML. The iOS half is 4.9.
-- [ ] **6.8 Line endings. C.** [Opus] [Lane H] No `\r` handling anywhere; a
-  CRLF paste leaves stray carriage returns in lines.
+- [x] **6.8 Line endings. C.** [Opus] [Lane H] No `\r` handling anywhere; a
+  CRLF paste leaves stray carriage returns in lines. Done: `\r\n` and a lone
+  `\r` become `\n` on every entry path (`setText`, `insertStringAtCursor`,
+  `replace`, typed strings, IME commits and compositions, the semantics insert,
+  paste, markdown and HTML parsing), spans kept on their characters
+  (`clipboard/LineEndingsTest.kt`). Copy writes `\n` and leaves native endings to
+  the platform clipboard layer, as native editors get them: AWT's Windows flavor
+  map converts its text flavors to CRLF and back, and macOS, Linux, Android and iOS
+  use LF. `setDocument` takes lines as given.
 - [ ] **6.9 Links in HTML. C.** [Opus] [Lane H] No `href` handling on paste or
   copy.
 - [ ] **6.10 Non-breaking spaces** [Opus] [Lane H] become plain spaces on HTML

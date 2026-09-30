@@ -147,6 +147,19 @@ this exercises the clipboard's HTML as the block carrier.
    the typing burst (or trigger export from another thread if you have a harness).
 2. **Expect:** no `ConcurrentModificationException`, no interleaved/garbled export.
 
+### 2.8 Line endings (6.8)
+
+1. Windows: copy three lines from Notepad (CRLF) and paste. Linux or macOS: copy three
+   lines of a CRLF file from a terminal (`printf 'a\r\nb\r\nc'`) or an editor that
+   keeps CRLF. Android, iOS, web: paste CRLF text from any source that keeps it.
+2. **Expect:** three lines, the caret at the end of the third, and no stray character
+   or extra width at any line end. Arrow Right from a line's end goes straight to the
+   next line.
+3. Copy two lines out of the editor and paste into Notepad (Windows), TextEdit or a
+   terminal. **Expect:** two lines in every target. On Windows, also paste into the
+   web demo from Notepad and out of it into Notepad (the browser, not the editor,
+   supplies CRLF there).
+
 ## 3. Key bindings and input
 
 Guards #45, #53, #87.

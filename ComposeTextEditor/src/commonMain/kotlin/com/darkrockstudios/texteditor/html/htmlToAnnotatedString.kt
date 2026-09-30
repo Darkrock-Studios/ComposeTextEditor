@@ -2,6 +2,7 @@ package com.darkrockstudios.texteditor.html
 
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
+import com.darkrockstudios.texteditor.annotatedstring.normalizeLineEndings
 import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
 import com.darkrockstudios.texteditor.richstyle.Blockquote
 import com.darkrockstudios.texteditor.richstyle.BulletList
@@ -483,8 +484,10 @@ private class HtmlSpanBuilder(
 	private fun appendText(raw: String, scope: HtmlScope) {
 		if (raw.isEmpty()) return
 		if (scope.preformatted) {
+			// Normalized here rather than in the markup, so an encoded `&#13;` is caught too.
+			val text = raw.normalizeLineEndings()
 			// A newline immediately after `<pre>` is markup formatting, not content.
-			val content = if (dropLeadingNewline) raw.removePrefix("\n") else raw
+			val content = if (dropLeadingNewline) text.removePrefix("\n") else text
 			dropLeadingNewline = false
 			if (content.isEmpty()) return
 			flushPendingBreaks()
