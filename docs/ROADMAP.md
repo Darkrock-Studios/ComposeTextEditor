@@ -1460,7 +1460,7 @@ iOS Safari; browser tests run in CI.
   un-nests, a toggle keeps the level when switching kinds and lifts a cleared
   parent's children; each is one undo step (`richstyle/ListNesting.kt`,
   `MarkdownExtension.nestList` and `unnestList`). Tab inside an item's text
-  still inserts, per 2.9. HTML flattens nesting until 7.47. Design in
+  still inserts, per 2.9. HTML nests since 7.47. Design in
   `docs/design/line-blocks.md`, "Nested lists".
 - [x] **5.7 Paragraph formatting.** [Fable] [Lane N] Paragraph spacing does not
   exist; rows stack with no gap. No per-paragraph alignment, indent, or line
@@ -2142,11 +2142,21 @@ Shaping is one line per keystroke. These still scale with document length:
   and colour, so an IDE's token colours stay out of a fence; background stays
   ignored (`html/HtmlColorAndSizeTest.kt`). A fragment all at one size pastes
   at the body size. Found: 6.26.
-- [ ] **7.47** [Opus] [Lane H] HTML export and import flatten nested lists
+- [x] **7.47** [Opus] [Lane H] HTML export and import flatten nested lists
   once 5.6 lands: `<li>` inside `<ul>` inside `<li>` imports at level 0, and
   a nested item exports as a sibling. Serialize the level as nested `<ul>`
   and `<ol>` elements (`html/HtmlExtension.kt`,
-  `html/htmlToAnnotatedString.kt`).
+  `html/htmlToAnnotatedString.kt`). Done: export (and the clipboard's HTML)
+  writes an item's nested list inside its `<li>`, which stays open until its
+  next sibling. An item nests under the nearest item before it at a shallower
+  level, so an orphan is written one below the item before it and a copy that
+  starts at a nested item keeps its items' nesting. Import gives a list the
+  depth of the lists holding it, inside an item or directly inside another
+  list, as browsers render both, and an item that opens with its nested list
+  keeps its own empty line (`html/NestedListHtmlTest.kt`). A line that is not
+  a list item ends every item in HTML, a blank one too, so an item after a
+  blank line that markdown would still nest is written at the top level. See
+  `docs/design/line-blocks.md`, "Nested lists".
 - [x] **7.16** [Opus] [Lane I] No markdown form for underline, highlight,
   colour, or size, so they are lost. Code fence language tags are dropped.
   Done. Inline styles: underline is `<u>` (Obsidian and Typora write it,

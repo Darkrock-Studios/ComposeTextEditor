@@ -114,6 +114,20 @@ than the maximum clamps, and a non-list non-blank line or a change of quote
 status closes every open item. A marker shape at the start of an item's body
 (`- 1990. plans`) stays literal, one marker per line, as before.
 
+**HTML.** Export writes a nested item's list inside its parent's `<li>`
+(`<ul><li>a<ul><li>b</li></ul></li></ul>`): each item is a container that
+stays open while the lists under it are written. An item nests under the
+nearest open item at a shallower level, so an orphan is written one below
+the item before it and a copied selection that starts at a nested item keeps
+its items' nesting. HTML cannot hold another line inside an item, so any
+line that is not a list item, a blank one too, and any change of quote,
+closes every item: unlike markdown, which looks through blank lines, an item
+after a blank line starts a new list at the top level. Import gives a `<ul>`
+or `<ol>` the depth of the lists holding it, whether it sits inside an item
+or directly inside another list, as browsers render both; its `<li>`
+children take that level, and an `<li>` that opens with a nested list is an
+empty item line of its own.
+
 **Editing** (Google Docs, Word, Notion and Apple Notes agree on these): Tab
 at the start of a list item nests it one level, never deeper than one below
 the item above it, and a multi-line selection nests each selected item where
@@ -282,8 +296,6 @@ consequences of its own.
 ## Known limitations
 
 - A nested `> > ` quote collapses one level per import pass; only lists nest.
-- HTML export writes a nested list item as a sibling and HTML import reads a
-  nested `<ul>` at the top level (roadmap 7.47).
 - Exporting a document whose last line is a heading appends a trailing blank
   line that survives re-import (stable at one extra line).
 - Toggling a style off after a blanket apply does not restore the styles lines

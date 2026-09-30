@@ -21,7 +21,9 @@ import com.darkrockstudios.texteditor.richstyle.HR_PLACEHOLDER
 import com.darkrockstudios.texteditor.richstyle.IMAGE_PLACEHOLDER
 import com.darkrockstudios.texteditor.richstyle.LineBlockStyle
 import com.darkrockstudios.texteditor.richstyle.OrderedList
+import com.darkrockstudios.texteditor.richstyle.atListLevel
 import com.darkrockstudios.texteditor.richstyle.isList
+import com.darkrockstudios.texteditor.richstyle.listLevel
 import com.darkrockstudios.texteditor.richstyle.headerBlock
 import com.fleeksoft.ksoup.Ksoup
 import com.fleeksoft.ksoup.nodes.Element
@@ -143,7 +145,7 @@ private data class HtmlScope(
 	val tags: Set<HtmlTag>,
 	/** Whitespace is kept as written, by `<pre>` or by CSS. */
 	val preformatted: Boolean,
-	/** The list style `<li>` children take, set by the nearest `<ul>`/`<ol>` ancestor. */
+	/** The list style `<li>` children take, set by the nearest `<ul>`/`<ol>` ancestor, at its depth. */
 	val listBlock: LineBlockStyle?,
 	/** Inside a `<pre>` element, which becomes a code fence. */
 	val inPreElement: Boolean = false,
@@ -346,10 +348,13 @@ private class HtmlSpanBuilder(
 		// lines rather than being one, and its own separator is the one its first
 		// child asks for. A block that holds only text-level content does occupy a
 		// line, so it settles its separator on the way in rather than waiting for a
-		// character that may never come — that is what keeps an empty `<p>` or
+		// character that may never come, which is what keeps an empty `<p>` or
 		// `<li>` as the blank line it describes instead of dropping it.
+		// An item holding a nested list before any text of its own is still a line: the
+		// item's, empty.
 		val occupiesALine = isBlock &&
-			element.children().none { it.tagName().lowercase() in BLOCK_TAGS }
+			element.children().none { it.tagName().lowercase() in BLOCK_TAGS } ||
+			name == "li" && element.startsWithList()
 		if (occupiesALine) flushPendingBreaks()
 
 		val style = element.attr("style")
@@ -363,9 +368,11 @@ private class HtmlSpanBuilder(
 		val nested = HtmlScope(
 			tags = nestedTags,
 			preformatted = nestedPre,
+			// A list's depth is how many lists hold it, whether inside an item or, as
+			// browsers also render, directly inside another list.
 			listBlock = when (name) {
-				"ul" -> BulletList
-				"ol" -> OrderedList
+				"ul", "ol" -> (if (name == "ol") OrderedList else BulletList)
+					.atListLevel(scope.listBlock?.listLevel?.plus(1) ?: 0)
 				else -> scope.listBlock
 			},
 			inPreElement = nestedInPreElement,
@@ -383,7 +390,7 @@ private class HtmlSpanBuilder(
 		val pendingAtEntry = pendingNewlines()
 		visitChildren(element, nested)
 		// Appended on the way out, so a nested block is recorded before the one
-		// containing it — which is what lets the innermost claim on a line win.
+		// containing it, which is what lets the innermost claim on a line win.
 		if (block != null) blockRanges += BlockRange(block, start, out.length, pendingAtEntry)
 		if (href != null) {
 			// The separators owed to what came before are written ahead of the
@@ -405,6 +412,13 @@ private class HtmlSpanBuilder(
 		if (name == "pre") dropLeadingNewline = false
 
 		if (isBlock) requestBlockBreak() else if (isCell) requestCellBreak()
+	}
+
+	/** Whether this element's first content, whitespace aside, is a `<ul>` or `<ol>`. */
+	private fun Element.startsWithList(): Boolean {
+		val first = childNodes().firstOrNull { it !is TextNode || !it.isBlank() } as? Element ?: return false
+		val tag = first.tagName().lowercase()
+		return tag == "ul" || tag == "ol"
 	}
 
 	private fun blockStyleFor(name: String, scope: HtmlScope): LineBlockStyle? = when (name) {

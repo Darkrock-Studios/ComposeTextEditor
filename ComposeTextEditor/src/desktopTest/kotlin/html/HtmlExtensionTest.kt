@@ -291,9 +291,9 @@ class HtmlExtensionTest {
 		val extension = createHtmlExtension()
 		extension.importHtml("<ul><li>a<ol><li>b</li></ol></li></ul>")
 
-		// Nested lists render flat, but the innermost style is the one that wins.
+		// The innermost list is the item's, one level down.
 		assertEquals(listOf(0), extension.linesWith(BulletListSpanStyle))
-		assertEquals(listOf(1), extension.linesWith(OrderedListSpanStyle))
+		assertEquals(listOf(1), extension.linesWith(OrderedListSpanStyle.of(1)))
 	}
 
 	@Test

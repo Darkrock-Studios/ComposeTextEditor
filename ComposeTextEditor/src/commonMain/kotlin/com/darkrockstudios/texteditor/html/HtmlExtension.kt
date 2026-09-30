@@ -15,6 +15,7 @@ import com.darkrockstudios.texteditor.richstyle.OrderedList
 import com.darkrockstudios.texteditor.richstyle.OrderedListSpanStyle
 import com.darkrockstudios.texteditor.richstyle.RichSpan
 import com.darkrockstudios.texteditor.richstyle.applyDocumentBlocks
+import com.darkrockstudios.texteditor.richstyle.listLevel
 import com.darkrockstudios.texteditor.richstyle.documentBlocksOf
 import com.darkrockstudios.texteditor.state.LayoutUpdate
 import com.darkrockstudios.texteditor.state.TextEditorState
@@ -147,8 +148,9 @@ internal fun renderHtmlFragment(
 	configuration: MarkdownConfiguration,
 ): String {
 	val writer = HtmlWriter()
+	val containers = HtmlContainers(blocks)
 	lines.forEach { line ->
-		writer.openContainers(containersFor(line.docLine, blocks))
+		writer.openContainers(containers.around(line.docLine))
 		writer.appendLine(
 			lineHtml(
 				index = line.docLine,
@@ -165,20 +167,54 @@ internal fun renderHtmlFragment(
 	return writer.finish()
 }
 
-/** The elements wrapping [line], outermost first. */
-private fun containersFor(line: Int, blocks: DocumentBlocks): List<String> {
-	val containers = mutableListOf<String>()
-	if (blocks.has(line, Blockquote)) containers += "blockquote"
-	// A nested item is written as a sibling; nested containers are 7.47.
-	val list = blocks.listBlockAt(line)
-	when {
-		list?.spanStyle is OrderedListSpanStyle -> containers += "ol"
-		list != null -> containers += "ul"
-		// `<code>` nests inside `<pre>` so a reader that only understands one of
-		// the two still sees a code block.
-		blocks.has(line, CodeFence) -> containers += listOf("pre", "code")
+/** An element wrapping lines; an `<li>` is told apart from its siblings by the [item] line it opens on. */
+private data class HtmlContainer(val tag: String, val item: Int = -1)
+
+/**
+ * The elements wrapping each line, asked of in order. A list item is an `<li>` of its
+ * own ([HtmlContainer.item]), so it stays open while the lists nested in it are written
+ * and closes before its next sibling. An item nests under the nearest open item at a
+ * shallower level, so an orphan is written one below the item before it and a copy
+ * that starts at a nested item keeps its items' nesting. Any other line closes every
+ * item, since HTML cannot hold it inside one, and so does a change of quote.
+ */
+private class HtmlContainers(private val blocks: DocumentBlocks) {
+	/** The open items, outermost first: their list, their `<li>`, and their level. */
+	private val openItems = mutableListOf<Triple<HtmlContainer, HtmlContainer, Int>>()
+	private var quoted = false
+
+	fun around(line: Int): List<HtmlContainer> {
+		val containers = mutableListOf<HtmlContainer>()
+		val lineQuoted = blocks.has(line, Blockquote)
+		if (lineQuoted) containers += BLOCKQUOTE
+		val list = blocks.listBlockAt(line)
+		if (list == null || lineQuoted != quoted) openItems.clear()
+		quoted = lineQuoted
+		when {
+			list != null -> {
+				val level = list.listLevel ?: 0
+				while (openItems.isNotEmpty() && openItems.last().third >= level) openItems.removeAt(openItems.lastIndex)
+				openItems.forEach { (listContainer, item) ->
+					containers += listContainer
+					containers += item
+				}
+				val listContainer = HtmlContainer(if (list.spanStyle is OrderedListSpanStyle) "ol" else "ul")
+				val item = HtmlContainer("li", line)
+				containers += listContainer
+				containers += item
+				openItems += Triple(listContainer, item, level)
+			}
+			// `<code>` nests inside `<pre>` so a reader that only understands one of
+			// the two still sees a code block.
+			blocks.has(line, CodeFence) -> containers += CODE_BLOCK
+		}
+		return containers
 	}
-	return containers
+
+	private companion object {
+		val BLOCKQUOTE = HtmlContainer("blockquote")
+		val CODE_BLOCK = listOf(HtmlContainer("pre"), HtmlContainer("code"))
+	}
 }
 
 private fun lineHtml(
@@ -217,9 +253,9 @@ private fun lineHtml(
 		else -> line.toHtml(configuration, links)
 	}
 
-	val inList = blocks.listBlockAt(index) != null
 	return when {
-		inList -> "<li>$content</li>"
+		// A list item's `<li>` is a container (see [HtmlContainers]).
+		blocks.listBlockAt(index) != null -> content
 		// Rules, images and headings are block elements in their own right;
 		// wrapping one in `<p>` is invalid and browsers close the paragraph
 		// before it anyway.
@@ -233,40 +269,43 @@ private fun lineHtml(
  * share them so a run of list items becomes one `<ul>` rather than one per item.
  *
  * Line breaks between elements are cosmetic everywhere except inside `<pre>`,
- * where they are the code's own line separators — hence the care about which
+ * where they are the code's own line separators; hence the care about which
  * boundaries get one.
  */
 private class HtmlWriter {
 	private val builder = StringBuilder()
-	private var open = emptyList<String>()
+	private var open = emptyList<HtmlContainer>()
 	private var atCodeFenceStart = false
+	private var atItemStart = false
 
-	fun openContainers(containers: List<String>) {
+	fun openContainers(containers: List<HtmlContainer>) {
 		var shared = 0
 		while (shared < open.size && shared < containers.size && open[shared] == containers[shared]) {
 			shared++
 		}
 		closeDownTo(shared)
 		val opening = containers.drop(shared)
-		opening.forEach { tag ->
+		opening.forEach { container ->
 			// `<pre><code>` is one opening, and a newline after it would render as a
 			// blank first line of the code block.
-			if (tag != "code") separate()
-			builder.append('<').append(tag).append('>')
-			open = open + tag
+			if (container.tag != "code") separate()
+			builder.append('<').append(container.tag).append('>')
+			open = open + container
 		}
 		// Only the line that opens the fence sits flush against `<code>`; every
 		// line after it is separated by the newline it follows.
-		atCodeFenceStart = opening.isNotEmpty() && open.lastOrNull() == "code"
+		atCodeFenceStart = opening.isNotEmpty() && open.lastOrNull()?.tag == "code"
+		atItemStart = opening.lastOrNull()?.tag == "li"
 	}
 
 	fun appendLine(html: String, inCodeFence: Boolean) {
 		if (inCodeFence) {
 			if (!atCodeFenceStart) builder.append('\n')
 			atCodeFenceStart = false
-		} else {
+		} else if (!atItemStart) {
 			separate()
 		}
+		atItemStart = false
 		builder.append(html)
 	}
 
@@ -277,8 +316,8 @@ private class HtmlWriter {
 
 	private fun closeDownTo(depth: Int) {
 		while (open.size > depth) {
-			val tag = open.last()
-			if (tag != "code" && tag != "pre") separate()
+			val tag = open.last().tag
+			if (tag != "code" && tag != "pre" && tag != "li") separate()
 			builder.append("</").append(tag).append('>')
 			open = open.dropLast(1)
 		}
@@ -287,6 +326,7 @@ private class HtmlWriter {
 	private fun separate() {
 		if (builder.isNotEmpty()) builder.append('\n')
 	}
+
 }
 
 /**
