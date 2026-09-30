@@ -180,7 +180,7 @@ review.
 | --- | --- | --- | --- |
 | A | Caret motion | `state/TextEditorCursorState.kt`, `state/TextEditorStateCursorExt.kt`, `state/WordSegmentationUtils.kt`, `input/TextEditorKeyCommandHandler.kt` | 1.1 to 1.7, 1.19, 2.3, 2.6, 7.5, 7.33 |
 | B | Pointer and touch | `textEditorPointerInputHandling.kt`, `state/TextEditorSelectionManager.kt`, `DrawSelectionHandles.kt` | 1.9, 1.12 to 1.16, 1.21 to 1.24, 3.1, 3.2, 3.4 to 3.8, 3.13, 3.15, 4.23, 6.16 |
-| C | Drawing and geometry | `Draw*.kt`, `cursor/`, `scrollbar/`, `state/TextEditorScrollState.kt`, hit testing | 1.8, 1.10, 1.11, 1.17, 1.18, 3.3, 3.12, 3.16, 4.14, 7.6, 7.7 |
+| C | Drawing and geometry | `Draw*.kt`, `cursor/`, `scrollbar/`, `state/TextEditorScrollState.kt`, hit testing | 1.8, 1.10, 1.11, 1.17, 1.18, 3.3, 3.12, 3.16, 4.14, 7.6, 7.7, 7.41 |
 | D | Bindings, actions, menu | `input/KeyBindings.kt`, `input/EditorCommand.kt`, `input/BuiltinEditorActions.kt`, `contextmenu/` | 2.1, 2.2, 2.4, 2.5, 2.7 to 2.12, 4.8, 5.8 |
 | E | Input sessions on desktop, iOS, web | `desktopMain`, `iosMain`, `wasmJsMain` under `input/` | 4.2 to 4.7, 4.10 to 4.12, 4.19, 4.21, 4.22, 4.24 to 4.26, 4.28, 4.29, 4.32, 4.33, 7.37 |
 | F | Android input | `androidMain` | 0.4, 3.9 to 3.11, 3.14, 3.17, 4.16, 4.18, 4.20, 4.27, 4.30, 4.31, 7.40 |
@@ -1670,6 +1670,20 @@ iOS Safari; browser tests run in CI.
   with no IME action; iOS the same), so the keyboard shows a return key that
   now does nothing. With 3.11's keyboard settings, a single line should ask
   for single-line text and an IME action, and hand Enter to `onImeAction`.
+- [ ] **7.41** [Fable] [Lane C] No soft-wrap toggle: every line wraps at the
+  viewport width, so a code editor cannot keep a line whole and scroll
+  sideways, and `EditorLineLimits.SingleLine` (7.13) wraps and grows where
+  `BasicTextField`'s single line scrolls. Split out of 7.13 because it is not
+  contained: layout would measure lines with an unbounded width (the tight
+  `lineConstraints` in `updateBookKeeping`), and a horizontal scroll offset
+  would have to join the vertical one everywhere that one is applied today
+  (about 14 files: `DrawEditorText`, `DrawSelectionUi`, `DrawRichSpanUi`,
+  `DrawPlaceholderText`, the caret and its `CursorExt`, hit testing in
+  `textEditorPointerInputHandling`, `DragAutoScroll`, `TouchToolbar`, the
+  handles and magnifier, the skiko input method's rectangles), with a
+  horizontal `ensureCursorVisible`, a horizontal scrollbar on desktop and
+  web, and horizontal `scrollable` input. Then `SingleLine` becomes one row
+  that scrolls sideways.
 
 ### Right-to-left and bidirectional text
 
@@ -1739,7 +1753,7 @@ Shaping is one line per keystroke. These still scale with document length:
 
 ### Editor configuration
 
-- [ ] **7.13** [Opus] [Lane M] Missing: read-only with a caret, single-line
+- [x] **7.13** [Opus] [Lane M] Missing: read-only with a caret, single-line
   mode, min and max lines, auto-grow (the editor forces `fillMaxSize`), max
   length, an input filter, a soft-wrap toggle with horizontal scrolling.
   The soft keyboard options are `TextEditorState.keyboardSettings` since
@@ -1786,6 +1800,8 @@ Shaping is one line per keystroke. These still scale with document length:
     the selection it would have replaced, a paste the filter changed lands
     plain, and the behaviors are told what landed. A change that does not
     lengthen the document passes the maximum even over it. Found: 7.40.
+  - Soft wrap off with horizontal scrolling: not contained, so split out as
+    7.41. The item is done apart from it and the keyboard options (3.11).
 
 ### Markdown export
 
