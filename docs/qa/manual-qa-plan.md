@@ -247,6 +247,10 @@ In Chrome, Firefox and Safari, against the built demo:
    use the context menu's Copy, Cut and Paste. **Expect:** a console warning for
    each, the text stays where it was after Cut (6.19), and the keyboard chords
    still work.
+6. Turn on Read only (then, separately, turn off Enabled), select a bold word and
+   press Ctrl/Cmd+C, and do the same in the RichTextView demo; paste into Google
+   Docs. **Expect:** the word stays bold, with no permission prompt and no console
+   warning (7.39). Try Ctrl+Insert on Windows and Linux too.
 
 ### 2.10 Links (6.9)
 

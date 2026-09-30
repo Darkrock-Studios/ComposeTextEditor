@@ -1767,6 +1767,13 @@ iOS Safari; browser tests run in CI.
   long press inside the selection (lane B's touch handling). iOS and web: check
   what Compose Multiplatform's `DragAndDropEvent` exposes there (web has a
   `WebDragAndDropManager`) and fill in the same four functions.
+- [ ] **6.25 Cut from a canvas-focused editor on the web. C.** [Opus] [Lane H]
+  An editable editor whose canvas holds DOM focus (after a touch the
+  session does not hand focus back from) takes Ctrl/Cmd+X on the canvas, where
+  Compose consumes it before the browser fires a `cut` event, so Cut falls back
+  to `navigator.clipboard`, plain text only or nothing on an insecure page. 7.39
+  asks for a `copy` event there with `execCommand('copy')`; `execCommand('cut')`
+  could do the same for Cut.
 - [ ] **6.24 The drop caret past a wrapped row's end. C.** [Opus] [Lane H]
   Since 1.24 a point past a wrapped row's end hits its wrap offset, so a drop
   there inserts at the row's end, but `TextDragAndDrop.offsetAt` keeps only the
@@ -1889,11 +1896,29 @@ iOS Safari; browser tests run in CI.
   or `lineLimits` (7.13), and its corrections are menu items that call
   `correctSpelling` directly, past `ContextMenuActions`' editable gate.
   Forward both, and offer no corrections while read-only.
-- [ ] **7.39** [Opus] [Lane H] On the web a disabled or read-only editor (7.13)
+- [x] **7.39** [Opus] [Lane H] On the web a disabled or read-only editor (7.13)
   has no input session, so no backing text area receives the browser's `copy`
   event and `ClipboardEventsEffect` answers nothing: Ctrl+C falls back to
   `navigator.clipboard`, plain text only, and fails where the page may not
   write the clipboard.
+  Done: with no text area to type into, the key lands on the canvas, and
+  Compose takes it there before the browser would fire a `copy` event. So
+  `ClipboardEventsEffect` listens for copy chords (Ctrl+C and Ctrl+Insert, or
+  Cmd+C on Apple systems, by `code` as Compose maps keys) on a Compose canvas
+  in the capture phase and, while the editor has focus, a selection and a Copy
+  action, calls `document.execCommand('copy')` inside the key press (with a
+  `beforecopy` handler that enables it in WebKit); the `copy` event it fires
+  writes both flavors, as the text area's does, and the Copy action the key
+  then runs takes it as done. A selectable `RichTextView` installs the effect
+  too. Checked in Chromium against the dev server: a read-only and a disabled
+  editor, and a `RichTextView`, each wrote `<strong>`/`<em>` markup and the
+  plain text through one prevented `copy` event and never called
+  `navigator.clipboard`, for the tools' Ctrl+C and for dispatched Ctrl+C and
+  Ctrl+Insert key events carrying a `code`. Safari and Firefox are for QA 2.11.
+  The chords are the default bindings', not the editor's own `KeyBindings`, and
+  which Compose canvas is the editor's is not known, so on a page of several
+  viewports the one whose editor holds focus and a selection answers. Cut on a
+  canvas-focused editable editor is 6.25.
 - [x] **7.40** [Opus] [Lane F] A single-line editor (7.13) still asks the
   soft keyboard for multi-line text (Android's `TYPE_TEXT_FLAG_MULTI_LINE`;
   iOS the same), so with the default `KeyboardSettings.imeAction` the keyboard

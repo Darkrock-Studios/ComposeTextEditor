@@ -439,7 +439,11 @@ bindings a frame later. `ClipboardEventsEffect` (in `clipboard/`) uses the event
 to move the data, since only then may the page use the clipboard without a
 permission prompt, and prevents the textarea's own plain-text copy or paste; the
 Copy, Cut and Paste actions the key then runs do the editing and take the data
-from there rather than from `navigator.clipboard`.
+from there rather than from `navigator.clipboard`. Without a session (a disabled
+or read-only editor, a `RichTextView`) the canvas holds DOM focus, and Compose
+takes a key there before the browser fires any clipboard event, so a copy chord
+pressed on a Compose canvas asks for a `copy` event with `execCommand('copy')`
+first, in the capture phase.
 
 Compose sets `autocapitalize="off"` on every backing field whatever the
 `ImeOptions` say, so the web session sets it back to `sentences`, as the
