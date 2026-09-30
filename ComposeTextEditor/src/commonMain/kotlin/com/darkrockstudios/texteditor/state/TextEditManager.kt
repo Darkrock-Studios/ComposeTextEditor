@@ -10,20 +10,21 @@ import com.darkrockstudios.texteditor.annotatedstring.normalizeLineEndings
 import com.darkrockstudios.texteditor.annotatedstring.splitAnnotatedString
 import com.darkrockstudios.texteditor.annotatedstring.withInheritedStyles
 import com.darkrockstudios.texteditor.richstyle.LineBlockStyle
+import com.darkrockstudios.texteditor.richstyle.LineBlockWrite
 import com.darkrockstudios.texteditor.richstyle.RichSpanStyle
 import com.darkrockstudios.texteditor.richstyle.allowedOn
-import com.darkrockstudios.texteditor.richstyle.applyLineBlock
 import com.darkrockstudios.texteditor.richstyle.atListLevel
-import com.darkrockstudios.texteditor.richstyle.demoteLineBlock
 import com.darkrockstudios.texteditor.richstyle.hasLineBlock
 import com.darkrockstudios.texteditor.richstyle.isList
 import com.darkrockstudios.texteditor.richstyle.lineBlockSpanStyles
 import com.darkrockstudios.texteditor.richstyle.listBlockAt
 import com.darkrockstudios.texteditor.richstyle.listLevel
 import com.darkrockstudios.texteditor.richstyle.placeholderKindOf
+import com.darkrockstudios.texteditor.richstyle.planDemoteLineBlock
+import com.darkrockstudios.texteditor.richstyle.planLineBlock
 import com.darkrockstudios.texteditor.richstyle.recordListEdit
 import com.darkrockstudios.texteditor.richstyle.sameListKind
-import com.darkrockstudios.texteditor.richstyle.setLineBlockSpans
+import com.darkrockstudios.texteditor.richstyle.writeLineBlocks
 import com.darkrockstudios.texteditor.utils.appendAnnotatedStrings
 import com.darkrockstudios.texteditor.utils.buildAnnotatedStringWithSpans
 import com.darkrockstudios.texteditor.utils.mergeAnnotatedStrings
@@ -656,57 +657,36 @@ class TextEditManager(private val state: TextEditorState) {
 		} else {
 			emptyMap()
 		}
-		if (operation.range.isSingleLine()) {
-			if (operation.isAdd) {
-				val updatedLine = spanManager.applySingleLineSpanStyle(
-					line = state.textLines[operation.range.start.line],
-					start = operation.range.start.char,
-					end = operation.range.end.char,
-					spanStyle = operation.style
-				)
-				state.setLine(operation.range.start.line, updatedLine)
-			} else {
-				val updatedLine = spanManager.removeSingleLineSpanStyle(
-					line = state.textLines[operation.range.start.line],
-					start = operation.range.start.char,
-					end = operation.range.end.char,
-					spanStyle = operation.style
-				)
-				state.setLine(operation.range.start.line, updatedLine)
-			}
+		val staged = stagedStyledLines
+		if (staged != null) {
+			styleLines(operation, staged)
 		} else {
-			// Handle multi-line case
-			val startLine = operation.range.start.line
-			val endLine = operation.range.end.line
-
-			for (lineIndex in startLine..endLine) {
-				val lineStart = if (lineIndex == startLine) operation.range.start.char else 0
-				val lineEnd = if (lineIndex == endLine)
-					operation.range.end.char
-				else
-					state.getLine(lineIndex).length
-
-				if (operation.isAdd) {
-					val updatedLine = spanManager.applySingleLineSpanStyle(
-						state.textLines[lineIndex],
-						lineStart,
-						lineEnd,
-						operation.style
-					)
-					state.setLine(lineIndex, updatedLine)
-				} else {
-					val updatedLine = spanManager.removeSingleLineSpanStyle(
-						state.textLines[lineIndex],
-						lineStart,
-						lineEnd,
-						operation.style
-					)
-					state.setLine(lineIndex, updatedLine)
-				}
-			}
+			val styled = HashMap<Int, AnnotatedString>()
+			styleLines(operation, styled)
+			state.writeLines(styled)
 		}
 
 		return OperationMetadata(spanStylesBefore = before)
+	}
+
+	/**
+	 * Adds [operation]'s style to, or removes it from, each line it covers, reading and
+	 * writing [styled]'s copy of a line where it has one, so several operations over
+	 * the same lines compose before anything is written.
+	 */
+	private fun styleLines(operation: TextEditOperation.StyleSpan, styled: MutableMap<Int, AnnotatedString>) {
+		val startLine = operation.range.start.line
+		val endLine = operation.range.end.line
+		for (lineIndex in startLine..endLine) {
+			val line = styled[lineIndex] ?: state.textLines[lineIndex]
+			val start = if (lineIndex == startLine) operation.range.start.char else 0
+			val end = if (lineIndex == endLine) operation.range.end.char else line.length
+			styled[lineIndex] = if (operation.isAdd) {
+				spanManager.applySingleLineSpanStyle(line, start, end, operation.style)
+			} else {
+				spanManager.removeSingleLineSpanStyle(line, start, end, operation.style)
+			}
+		}
 	}
 
 	private fun applyRichSpanOperation(operation: TextEditOperation.RichSpan): OperationMetadata? {
@@ -729,15 +709,19 @@ class TextEditManager(private val state: TextEditorState) {
 	}
 
 	// Restores each affected line's content and its exact block-span set for one
-	// direction of the toggle. The spans go through the direct manager path so the
-	// single LineBlock history entry isn't double-counted.
+	// direction of the toggle, through the direct path so the single LineBlock history
+	// entry isn't double-counted. A line already so (the toggle that recorded the
+	// entry has just left it that way) is not written again.
 	private fun applyLineBlockState(lines: List<LineBlockChange>, undo: Boolean) {
-		lines.forEach { change ->
-			val content = if (undo) change.contentBefore else change.contentAfter
-			val spans = if (undo) change.blockSpansBefore else change.blockSpansAfter
-			state.setLine(change.lineIndex, content)
-			state.setLineBlockSpans(change.lineIndex, spans)
-		}
+		state.writeLineBlocks(
+			lines.mapNotNull { change ->
+				val content = if (undo) change.contentBefore else change.contentAfter
+				val spanStyles = if (undo) change.blockSpansBefore else change.blockSpansAfter
+				val line = change.lineIndex
+				if (state.textLines[line] === content && state.lineBlockSpanStyles(line) == spanStyles) return@mapNotNull null
+				LineBlockWrite(line, content, spanStyles)
+			}
+		)
 	}
 
 	/**
@@ -761,20 +745,21 @@ class TextEditManager(private val state: TextEditorState) {
 		} else {
 			block.takeIf { state.hasLineBlock(line, block) }
 		}
-		val anyOff = targets.any { present(it) == null }
+		val presentOn = targets.associateWith(::present)
+		val anyOff = presentOn.values.any { it == null }
 		// Clearing, demoting or re-quoting a list item changes what the items
 		// after the range may hang from; recordListEdit brings them up with it.
 		state.recordListEdit(targets) {
-			targets.forEach { lineIdx ->
-				if (anyOff) {
-					if (present(lineIdx) == null) {
-						val level = state.listBlockAt(lineIdx)?.listLevel ?: 0
-						state.applyLineBlock(lineIdx, block.atListLevel(level))
-					}
-				} else {
-					state.demoteLineBlock(lineIdx, present(lineIdx)!!)
+			// Every line is planned first and all are written in one go.
+			val writes = targets.mapNotNull { lineIdx ->
+				val on = presentOn.getValue(lineIdx)
+				when {
+					!anyOff -> state.planDemoteLineBlock(lineIdx, on!!)
+					on != null -> null
+					else -> state.planLineBlock(lineIdx, block.atListLevel(state.listBlockAt(lineIdx)?.listLevel ?: 0))
 				}
 			}
+			state.writeLineBlocks(writes)
 		}
 	}
 
@@ -848,8 +833,7 @@ class TextEditManager(private val state: TextEditorState) {
 	}
 
 	private fun undoLineBlock(operation: TextEditOperation.LineBlock) {
-		// Restores line content and block spans per line; without the transaction
-		// each of those is its own publicly visible revision.
+		// The restored lines, the caret and the layout request are one revision.
 		state.withAtomicEdit {
 			applyLineBlockState(operation.lines, undo = true)
 			state.cursor.releaseManualStyles()
@@ -965,16 +949,28 @@ class TextEditManager(private val state: TextEditorState) {
 	 * it, as read from the styles each line carried before. A blind inverse over
 	 * the whole range would strip styling the range already had (bold applied over
 	 * a partly bold selection). Each piece is an ordinary operation through the
-	 * pipeline, so what consumers are told is what changed.
+	 * pipeline, so what consumers are told is what changed; their lines are staged
+	 * and written once.
 	 */
 	private fun undoStyleSpan(operation: TextEditOperation.StyleSpan, metadata: OperationMetadata) {
 		val pieces = exactInverseOf(operation, metadata.spanStylesBefore)
 		state.withAtomicEdit {
-			pieces.forEach { applyOperation(it, addToHistory = false) }
-			// An operation that changed nothing still moved the caret.
+			val staged = HashMap<Int, AnnotatedString>()
+			stagedStyledLines = staged
+			try {
+				pieces.forEach { applyOperation(it, addToHistory = false) }
+			} finally {
+				stagedStyledLines = null
+			}
+			state.writeLines(staged)
+			// An operation that changed nothing still moved the caret, and the typing
+			// style is read from the written lines.
 			state.cursor.updatePosition(operation.cursorBefore)
 		}
 	}
+
+	/** While set, style operations style these copies of their lines instead of writing them. */
+	private var stagedStyledLines: HashMap<Int, AnnotatedString>? = null
 
 	/**
 	 * The inverse of [operation] as the operations that undo exactly what it did,

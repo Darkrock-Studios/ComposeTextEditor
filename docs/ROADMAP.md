@@ -185,7 +185,7 @@ review.
 | D | Bindings, actions, menu | `input/KeyBindings.kt`, `input/EditorCommand.kt`, `input/BuiltinEditorActions.kt`, `contextmenu/` | 2.1, 2.2, 2.4, 2.5, 2.7 to 2.12, 4.8, 5.8, 7.58 |
 | E | Input sessions on desktop, iOS, web | `desktopMain`, `iosMain`, `wasmJsMain` under `input/` | 4.2 to 4.7, 4.10 to 4.12, 4.19, 4.21, 4.22, 4.24 to 4.26, 4.28, 4.29, 4.32, 4.33, 4.35, 7.37 |
 | F | Android input | `androidMain` | 0.4, 3.9 to 3.11, 3.14, 3.17, 4.16, 4.18, 4.20, 4.27, 4.30, 4.31, 4.34, 7.40 |
-| G | Edit pipeline and undo | `state/TextEditManager.kt`, `state/TextEditHistory.kt`, `state/EditBehavior.kt`, `input/ImeEditLogic.kt` | 1.20, 5.1 to 5.5, 5.9, 6.1 to 6.6, 6.14, 6.15, 6.17, 6.22, 6.23 |
+| G | Edit pipeline and undo | `state/TextEditManager.kt`, `state/TextEditHistory.kt`, `state/EditBehavior.kt`, `input/ImeEditLogic.kt` | 1.20, 5.1 to 5.5, 5.9, 6.1 to 6.6, 6.14, 6.15, 6.17, 6.22, 6.23, 6.28, 6.29 |
 | H | Clipboard and HTML | `clipboard/`, `html/`, `dragdrop/` | 4.9, 4.13, 4.17, 6.7 to 6.13, 6.18 to 6.21, 6.24 to 6.27, 7.39, 7.46, 7.47, 7.49, 7.53 |
 | I | Markdown and block model | `markdown/`, `richstyle/` | 5.6, 7.14 to 7.16, 7.43, 7.45, 7.52 |
 | J | Find addon | `ComposeTextEditorFind/` | 7.17 to 7.19, 7.26, 7.29, 7.42 |
@@ -1733,6 +1733,19 @@ iOS Safari; browser tests run in CI.
   IME, typed text, paste and drop still normalise where they need the landed
   length or spot an Enter (`state/OperationLineEndingsTest.kt`).
 
+- [ ] **6.28 Undo to origin fails under fuzz seed 777. R.** [Opus] [Lane G]
+  `FUZZ_SEED=777 ./gradlew :ComposeTextEditor:desktopTest --rerun --tests
+  'e2e.torture.*'` fails `EditorStateFuzzTest` "undo to origin" (the character
+  styles differ) and `EditorFuzzE2eTest` "ui undo to origin" (a blockquote span is
+  left on line 0) at `5bde800` already, so no recent chunk caused it. Shrink the
+  script to the op that breaks the round trip and fix it; add 777 to the fixed
+  seeds.
+- [ ] **6.29 Nesting a long selection writes per line. S.** [Opus] [Lane G]
+  `nestListItems` and `relevelListFollowers` (`richstyle/ListNesting.kt`) move each
+  item with `setListLevelRaw`, a line splice and two span-index publishes per item,
+  so Tab over a 400-item selection costs 400 splices where 6.17's toggle costs two.
+  Collect the moves and write them with `writeLineBlocks`.
+
 ### Clipboard
 
 - [x] **6.7 Rich clipboard on Android, iOS, and web. C.** [Opus] [Lane H] Plain
@@ -1807,7 +1820,7 @@ iOS Safari; browser tests run in CI.
   every line; and an Insert's offset transform and the rich-span pass for a
   Replace work out where the new text ends once per operation, not once per span
   they move. Other multi-line edits still copy per line: 6.17.
-- [ ] **6.17 Multi-line style and block edits copy the line list per line. S.**
+- [x] **6.17 Multi-line style and block edits copy the line list per line. S.**
   [Opus] [Lane G] `TextEditorState.setLine` copies the whole line list, and the
   multi-line style path in `TextEditManager.applyStyleOperation` and
   `applyLineBlockState` call it once per line, so Ctrl+B or a list toggle over a
@@ -1816,7 +1829,18 @@ iOS Safari; browser tests run in CI.
   `replaceLines` as 6.11 did for paste.
   `state/LargePasteCostTest.kt` counts the lines written
   (`TextEditorState.linesWritten`) and shapes for a 400-line paste at the caret,
-  over a selection, and through undo and redo.
+  over a selection, and through undo and redo. Done (since 7.8 a `setLine` copies
+  a chunk and the directory, not the list, but it is still a splice and a publish
+  per line): a style operation styles every line it covers and writes them in one
+  `replaceLines`, and its undo stages the exact inverse's pieces, each still an
+  operation through the pipeline, and writes them once; a line-block toggle plans
+  every line (`planLineBlock`, `planDemoteLineBlock`, which `applyLineBlock` and
+  `demoteLineBlock` share) and writes them with `writeLineBlocks` (a splice per
+  run of lines, one span removal, one addition), as its undo and redo do, and the LineBlock
+  operation it records no longer writes the lines a second time. `state/MultiLineEditCostTest.kt`
+  counts line-list and span-index publishes (`lineListWrites`, `spanIndexWrites`)
+  for bold and a list toggle over 400 of 2,000 lines, and their undo and redo.
+  Nesting (Tab) and re-levelling a list's followers still write per line: 6.29.
 - [x] **6.18 A styled paste from markup drops the body text size. R.** [Opus]
   [Lane H] Pasted text that carries spans keeps only its own, so HTML from
   another application (desktop) or from the editor itself (web, which has no

@@ -7,7 +7,9 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.withStyle
 import com.darkrockstudios.texteditor.CharLineOffset
+import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
+import com.darkrockstudios.texteditor.state.LayoutUpdate
 import com.darkrockstudios.texteditor.state.TextEditorState
 import kotlin.concurrent.Volatile
 
@@ -331,20 +333,30 @@ internal fun resolveLineBlock(
 }
 
 /**
- * Puts [block] on [line] and commits it in a single relayout. The demotions and
- * the rebuilt line come from [resolveLineBlock], which also makes this a no-op
- * when [line] already carries [block].
+ * Puts [block] on [line] and commits it in a single relayout: [planLineBlock]
+ * written with [writeLineBlocks]. A no-op when [line] already carries [block].
  */
-internal fun TextEditorState.applyLineBlock(line: Int, block: LineBlockStyle) = withAtomicEdit {
-	val existing = textLines.getOrNull(line) ?: return@withAtomicEdit
-	val resolved = resolveLineBlock(lineBlocks(line), block, existing)
-		?: return@withAtomicEdit
-	resolved.demoted.forEach { removeLineBlockSpans(line, it) }
-	// Attach the span before rebuilding the line: updateLine triggers the relayout
-	// that resolves each line's gutter marker (bullet/numeral), so the span must be
-	// present first or the marker won't render until the next edit forces another pass.
-	addLineBlockSpan(line, resolved.text.length, block)
-	updateLine(line, resolved.text)
+internal fun TextEditorState.applyLineBlock(line: Int, block: LineBlockStyle) = writeLineBlock(planLineBlock(line, block))
+
+/** Writes [write], when there is one, and asks for its line to be laid out again. */
+private fun TextEditorState.writeLineBlock(write: LineBlockWrite?) {
+	if (write == null) return
+	withAtomicEdit {
+		writeLineBlocks(listOf(write))
+		updateBookKeeping(LayoutUpdate.Partial(write.line, write.line, 0))
+	}
+}
+
+/**
+ * What putting [block] on [line] leaves there, or null when [line] is out of range
+ * or already carries it. The demotions and the rebuilt line come from
+ * [resolveLineBlock].
+ */
+internal fun TextEditorState.planLineBlock(line: Int, block: LineBlockStyle): LineBlockWrite? {
+	val existing = textLines.getOrNull(line) ?: return null
+	val resolved = resolveLineBlock(lineBlocks(line), block, existing) ?: return null
+	val kept = lineBlockSpanStyles(line).filter { style -> resolved.demoted.none { it.spanStyle === style } }
+	return LineBlockWrite(line, resolved.text, kept + block.spanStyle)
 }
 
 /**
@@ -376,14 +388,17 @@ internal fun TextEditorState.lineBlockSpans(line: Int, block: LineBlockStyle): L
 
 /**
  * Drops every span anchored to [line] for [block] and rebuilds the line without
- * its indent paragraph style (and without the baked-in text style, if any).
- * No-op if [line] is out of range or has no such span.
+ * its indent paragraph style (and without the baked-in text style, if any), in a
+ * single relayout. No-op if [line] is out of range or has no such span.
  */
-internal fun TextEditorState.demoteLineBlock(line: Int, block: LineBlockStyle) = withAtomicEdit {
-	val existing = textLines.getOrNull(line) ?: return@withAtomicEdit
-	if (!hasLineBlock(line, block)) return@withAtomicEdit
-	removeLineBlockSpans(line, block)
-	updateLine(line, rebuildWithoutBlock(existing, block))
+internal fun TextEditorState.demoteLineBlock(line: Int, block: LineBlockStyle) =
+	writeLineBlock(planDemoteLineBlock(line, block))
+
+/** What [demoteLineBlock] leaves on [line], or null when it would do nothing. */
+internal fun TextEditorState.planDemoteLineBlock(line: Int, block: LineBlockStyle): LineBlockWrite? {
+	val existing = textLines.getOrNull(line) ?: return null
+	if (!hasLineBlock(line, block)) return null
+	return LineBlockWrite(line, rebuildWithoutBlock(existing, block), lineBlockSpanStyles(line).filter { it !== block.spanStyle })
 }
 
 /** Returns the [LineBlockStyle] currently attached to [line], or null if none. */
@@ -402,24 +417,39 @@ internal fun TextEditorState.lineBlockSpanStyles(line: Int): List<RichSpanStyle>
 	lineBlocks(line).map { it.spanStyle } +
 		richSpanManager.getRichSpansStartingOn(line).map { it.style }.filterIsInstance<CodeFenceLanguageSpanStyle>()
 
+/** A line's content and the line-anchored block span styles it carries, as a whole. */
+internal class LineBlockWrite(
+	val line: Int,
+	val content: AnnotatedString,
+	val spanStyles: List<RichSpanStyle>,
+)
+
 /**
- * Replaces every line-anchored block span on [line] so that exactly [spanStyles]
- * are attached, spanning the full line content. Used to restore the precise span
- * set captured for an atomic line-block undo/redo. A language span already on
- * the line is left alone: normalization moved it there for the run it heads,
- * and an identical one restored on top of it collapses into it.
+ * Sets each line in [writes] (one write a line) to its content and exactly its block
+ * span styles: a block span of a style still wanted stays as it is while the line
+ * keeps its length, any other is removed, and a missing style is added over the
+ * whole line. The lines are
+ * written in a splice per run and the spans in one removal and one addition. Posts no
+ * layout. A language span already on a line is left alone: normalization moved it
+ * there for the run it heads, and an identical one restored on top of it collapses
+ * into it.
  */
-internal fun TextEditorState.setLineBlockSpans(
-	line: Int,
-	spanStyles: List<RichSpanStyle>,
-) = withAtomicEdit {
-	allBlockRegistry.forEach { removeLineBlockSpans(line, it) }
-	val length = textLines.getOrNull(line)?.length ?: return@withAtomicEdit
-	spanStyles.forEach { style ->
-		richSpanManager.addRichSpan(
-			start = CharLineOffset(line, 0),
-			end = CharLineOffset(line, length),
-			style = style,
-		)
+internal fun TextEditorState.writeLineBlocks(writes: List<LineBlockWrite>) = withAtomicEdit {
+	if (writes.isEmpty()) return@withAtomicEdit
+	val lengthKept = writes.associate { it.line to (textLines.getOrNull(it.line)?.length == it.content.length) }
+	writeLines(writes.associate { it.line to it.content })
+	val blockStyles = allBlockRegistry.mapTo(HashSet()) { it.spanStyle }
+	val doomed = ArrayList<RichSpan>()
+	val added = ArrayList<RichSpan>()
+	for (write in writes) {
+		val whole = TextEditorRange(CharLineOffset(write.line, 0), CharLineOffset(write.line, write.content.length))
+		// A kept span stays unless the line's length changed under it.
+		val existing = richSpanManager.getRichSpansStartingOn(write.line).filter { it.style in blockStyles }
+		val kept = if (lengthKept.getValue(write.line)) existing.filter { span -> write.spanStyles.any { it === span.style } } else emptyList()
+		existing.filterTo(doomed) { it !in kept }
+		write.spanStyles.filter { style -> kept.none { it.style === style } }
+			.mapTo(added) { RichSpan(whole, it) }
 	}
+	richSpanManager.removeRichSpans(doomed)
+	richSpanManager.addRichSpans(added)
 }

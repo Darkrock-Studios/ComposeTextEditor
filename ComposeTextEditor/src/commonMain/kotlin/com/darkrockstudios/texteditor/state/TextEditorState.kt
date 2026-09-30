@@ -1202,11 +1202,42 @@ class TextEditorState(
 	internal var linesWritten = 0L
 		private set
 
+	/**
+	 * How many times the line list and the span index have been published. Each costs a
+	 * splice at least; the cost tests read them to catch an edit that writes per line.
+	 */
+	internal var lineListWrites = 0L
+		private set
+	internal var spanIndexWrites = 0L
+		private set
+
 	/** Publishes [lines]; [splice] says which lines changed, when the caller knows. */
 	internal fun setLines(lines: List<AnnotatedString>, splice: LineSplice? = null) {
 		if (lines !is LineList) linesWritten += lines.size
+		lineListWrites++
 		if (splice != null) markChanged(splice.unchangedBefore, splice.unchangedAfter) else markChanged(0, 0)
 		mutateContent { it.withLines(lines, splice) }
+	}
+
+	/**
+	 * Writes each line of [lines], by index: one splice per run of them, a run taking in
+	 * the unchanged lines between two written ones up to a chunk apart. Posts no layout.
+	 */
+	internal fun writeLines(lines: Map<Int, AnnotatedString>) {
+		if (lines.isEmpty()) return
+		val current = textLines
+		val indices = lines.keys.sorted()
+		if (indices.first() < 0 || indices.last() >= current.size) {
+			throw IndexOutOfBoundsException("lines ${indices.first()} to ${indices.last()} of ${current.size}")
+		}
+		var runStart = 0
+		for (i in indices.indices) {
+			if (i < indices.lastIndex && indices[i + 1] - indices[i] <= MAX_CHUNK_SIZE) continue
+			val first = indices[runStart]
+			val last = indices[i]
+			replaceLines(first, last, (first..last).map { lines[it] ?: current[it] })
+			runStart = i + 1
+		}
 	}
 
 	internal fun setLine(index: Int, text: AnnotatedString) {
@@ -1227,6 +1258,7 @@ class TextEditorState(
 		val lines = workingContent.lines.size
 		markChanged(first.coerceAtLeast(0), (lines - 1 - last).coerceAtLeast(0))
 		if (spansChanged) this.spansChanged = true
+		spanIndexWrites++
 		mutateContent { it.withSpanIndex(index) }
 	}
 
