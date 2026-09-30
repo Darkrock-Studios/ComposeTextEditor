@@ -67,6 +67,61 @@ it, then rebuilds the line with the new indent. The per-line toggle and the
 importers both resolve through it, so a stack of blocks produces the same line
 whether the user typed it or an import placed it.
 
+## Nested lists
+
+A list line carries its nesting level in its span style: `BulletListSpanStyle.of(level)`
+and `OrderedListSpanStyle.of(level)` are per-level singletons (identity-compared,
+like heading levels), levels 0 to `MAX_LIST_LEVEL` (7), and the bare names
+`BulletListSpanStyle`, `OrderedListSpanStyle`, `BulletList` and `OrderedList`
+are level 0. The registry holds a `LineBlockStyle` per kind and level; the
+paragraph indent grows by one gutter per level, and the marker anchors to the
+text's left edge as before, so drawing follows the indent. Bullets cycle disc,
+circle, square by level, as browsers and Google Docs draw them; numbers are
+decimal at every level, as CommonMark renderers show them, and count per
+level: a level-k item continues its level's run, restarts every deeper level,
+and a bullet or a non-list line at a level ends the run at and below it.
+
+A line has one list block at one level (the stacking rule "the two list
+styles exclude each other" holds across levels). **Orphans:** markdown can
+place a level-k item only after, skipping blank lines, a list line at level
+k − 1 or deeper with the same quote status; any other line, or a change of
+quote status, ends the nesting. The model does not enforce this, on purpose:
+deleting a parent line leaves its children where they are, as Google Docs and
+Word do, and a normalization clamp would sit outside undo history, so undoing
+that delete could not bring the children's levels back (the one repair that
+was tried and rejected). An orphan is therefore the one state the model
+allows that the text form cannot hold, a deliberate exception to rule 1:
+export writes it at the level its predecessor allows, so it reloads one
+level shallower, a mild and visible change rather than a silent one. The
+edit paths keep followers valid inside their own undo step so the exception
+is rarely reached: nesting a line (Tab) leaves its followers where they are,
+its former children now its siblings, as Google Docs does; un-nesting a line
+(Shift+Tab), making it body text (toggle or Backspace at level 0) or exiting
+the list lifts its subtree (the following deeper items) one level with it,
+as the markdown text would read.
+
+**Markdown.** Export indents a level-k item by the content offset of its
+level-(k − 1) ancestor: two columns after `- `, the marker's width after
+`1. `, tracked down the walk, so a child of `10. ` starts four columns in.
+Import peels the quote, reads the leading spaces (a tab counts four), and
+resolves a marker's level from the open ancestors: the level is the number of
+enclosing items whose content offset the indent reaches, the item's own
+content offset is its indent plus its marker and one space, a deeper indent
+than the maximum clamps, and a non-list non-blank line or a change of quote
+status closes every open item. A marker shape at the start of an item's body
+(`- 1990. plans`) stays literal, one marker per line, as before.
+
+**Editing** (Google Docs, Word, Notion and Apple Notes agree on these): Tab
+at the start of a list item nests it one level, never deeper than one below
+the item above it, and a multi-line selection nests each selected item where
+allowed; Shift+Tab un-nests one level; Enter continues the list at the same
+level; Enter on an empty nested item un-nests it, and on an empty top-level
+item ends the list; Backspace at the start of a nested item un-nests it, and
+at a top-level item makes it body text. Tab inside an item's text keeps lane
+D's rule (2.9) and inserts the indent text, as Word does. Toggling a list
+kind onto a line that is the other kind keeps its level; onto body text
+starts at level 0.
+
 ## Line kinds and validity
 
 Lines come in three kinds: **content**, **blank**, and **placeholder**. A

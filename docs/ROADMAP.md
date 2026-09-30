@@ -1429,7 +1429,14 @@ iOS Safari; browser tests run in CI.
   the markdown parser (`docs/design/line-blocks.md`, known limitations).
   Tab and Shift+Tab at a list item's start are the chords to nest and un-nest
   it; since 2.9 Tab does nothing there (`handleIndent` in
-  `input/BuiltinEditorActions.kt`).
+  `input/BuiltinEditorActions.kt`). Landed (model and markdown): a list
+  line's level lives in its span style (`BulletListSpanStyle.of(level)`,
+  `OrderedListSpanStyle.of(level)`, the bare names level 0), one list block
+  per line, indent and marker glyph per level, numbering per level; import
+  resolves levels from indentation by CommonMark's content offsets and export
+  writes them back, an orphaned deeper item at the level its predecessor
+  allows. Design in `docs/design/line-blocks.md`, "Nested lists". Left: the
+  chords and smart editing (Tab, Shift+Tab, Enter, Backspace, toggles).
 - [ ] **5.7 Paragraph formatting.** [Fable] [Lane N] Paragraph spacing does not
   exist; rows stack with no gap. No per-paragraph alignment, indent, or line
   height. Global `textIndent`, `lineHeight`, and `textAlign` already work

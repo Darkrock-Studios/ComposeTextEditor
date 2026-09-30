@@ -13,9 +13,7 @@ import com.darkrockstudios.texteditor.clipboard.withSizeForPasteAt
 import com.darkrockstudios.texteditor.html.selectionAsHtml
 import com.darkrockstudios.texteditor.input.EditorCommand.Action
 import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
-import com.darkrockstudios.texteditor.richstyle.BulletList
-import com.darkrockstudios.texteditor.richstyle.OrderedList
-import com.darkrockstudios.texteditor.richstyle.hasLineBlock
+import com.darkrockstudios.texteditor.richstyle.listBlockAt
 import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.applyStyleForEditAt
 import com.darkrockstudios.texteditor.state.clearFormatting
@@ -320,8 +318,7 @@ private fun TextEditorState.handleIndent() = editGroup {
 	}
 }
 
-private fun TextEditorState.isListItem(line: Int): Boolean =
-	hasLineBlock(line, BulletList) || hasLineBlock(line, OrderedList)
+private fun TextEditorState.isListItem(line: Int): Boolean = listBlockAt(line) != null
 
 private fun TextEditorState.handleOutdent() {
 	val selection = selector.selection

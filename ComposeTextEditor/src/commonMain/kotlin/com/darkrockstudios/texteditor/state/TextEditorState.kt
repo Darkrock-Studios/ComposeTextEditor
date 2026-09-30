@@ -41,7 +41,10 @@ import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
 import com.darkrockstudios.texteditor.richstyle.BlockSpanStyle
 import com.darkrockstudios.texteditor.richstyle.CodeFenceSpanStyle
 import com.darkrockstudios.texteditor.richstyle.LineBlockEditBehavior
+import com.darkrockstudios.texteditor.richstyle.MAX_LIST_LEVEL
 import com.darkrockstudios.texteditor.richstyle.OrderedListSpanStyle
+import com.darkrockstudios.texteditor.richstyle.listBlock
+import com.darkrockstudios.texteditor.richstyle.listLevel
 import com.darkrockstudios.texteditor.richstyle.RichSpan
 import com.darkrockstudios.texteditor.richstyle.RichSpanStyle
 import com.darkrockstudios.texteditor.richstyle.normalizeLineBlocks
@@ -1378,14 +1381,17 @@ class TextEditorState(
 		val offsets = mutableListOf<LineWrap>()
 		var yOffset = 0f
 
-		// Pre-collect ordered-list line indices so we can number each item by its
-		// position within a contiguous run without re-scanning the span set per line.
-		val orderedListLines = richSpanManager.getAllRichSpans()
-			.asSequence()
-			.filter { it.style === OrderedListSpanStyle }
-			.map { it.range.start.line }
-			.toHashSet()
-		var orderedListRunPosition = 0
+		// Pre-collect the list lines with their kind and level, so each ordered
+		// item is numbered by its position in its level's run without re-scanning
+		// the span set per line. Counters per level: a level-k item continues its
+		// level's run and restarts every deeper level; a bullet at a level or any
+		// non-list line ends the run at and below it.
+		val listLines = HashMap<Int, Pair<Boolean, Int>>()
+		richSpanManager.getAllRichSpans().forEach { span ->
+			val list = span.style.listBlock() ?: return@forEach
+			listLines[span.range.start.line] = (list.spanStyle is OrderedListSpanStyle) to list.listLevel!!
+		}
+		val orderedCounters = IntArray(MAX_LIST_LEVEL + 1)
 
 		// Pre-collect code-fence line indices so each line can compute its boundary
 		// (top/middle/bottom/only) by checking neighbors — driving which edges of
@@ -1457,11 +1463,17 @@ class TextEditorState(
 			val virtualLineCount = textLayoutResult.multiParagraph.lineCount
 			val paragraphTop = yOffset
 
-			val orderedListNumber: Int? = if (lineIndex in orderedListLines) {
-				orderedListRunPosition += 1
-				orderedListRunPosition
-			} else {
-				orderedListRunPosition = 0
+			val orderedListNumber: Int? = listLines[lineIndex]?.let { (ordered, level) ->
+				for (deeper in level + 1..MAX_LIST_LEVEL) orderedCounters[deeper] = 0
+				if (ordered) {
+					orderedCounters[level] += 1
+					orderedCounters[level]
+				} else {
+					orderedCounters[level] = 0
+					null
+				}
+			} ?: run {
+				orderedCounters.fill(0)
 				null
 			}
 

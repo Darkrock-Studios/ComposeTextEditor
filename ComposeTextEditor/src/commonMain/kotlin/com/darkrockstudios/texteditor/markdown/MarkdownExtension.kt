@@ -6,6 +6,7 @@ import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.richstyle.Blockquote
 import com.darkrockstudios.texteditor.richstyle.BulletList
+import com.darkrockstudios.texteditor.richstyle.BulletListSpanStyle
 import com.darkrockstudios.texteditor.richstyle.CodeFence
 import com.darkrockstudios.texteditor.richstyle.CodeFenceLanguageSpanStyle
 import com.darkrockstudios.texteditor.richstyle.HR_PLACEHOLDER
@@ -15,15 +16,21 @@ import com.darkrockstudios.texteditor.richstyle.ImageBlockSpanStyle
 import com.darkrockstudios.texteditor.richstyle.ImageProvider
 import com.darkrockstudios.texteditor.richstyle.LineBlockStyle
 import com.darkrockstudios.texteditor.richstyle.LinkSpanStyle
+import com.darkrockstudios.texteditor.richstyle.MAX_LIST_LEVEL
 import com.darkrockstudios.texteditor.richstyle.OrderedList
+import com.darkrockstudios.texteditor.richstyle.OrderedListSpanStyle
 import com.darkrockstudios.texteditor.richstyle.PlaceholderKind
 import com.darkrockstudios.texteditor.richstyle.allowedOn
 import com.darkrockstudios.texteditor.richstyle.applyDocumentBlocks
+import com.darkrockstudios.texteditor.richstyle.atListLevel
 import com.darkrockstudios.texteditor.richstyle.conflicts
 import com.darkrockstudios.texteditor.richstyle.documentBlocksOf
 import com.darkrockstudios.texteditor.richstyle.hasLineBlock
 import com.darkrockstudios.texteditor.richstyle.headerBlock
+import com.darkrockstudios.texteditor.richstyle.isList
 import com.darkrockstudios.texteditor.richstyle.lineBlockStyles
+import com.darkrockstudios.texteditor.richstyle.listBlockAt
+import com.darkrockstudios.texteditor.richstyle.listLevel
 import com.darkrockstudios.texteditor.richstyle.RichSpan
 import com.darkrockstudios.texteditor.richstyle.rebuildWithBlock
 import com.darkrockstudios.texteditor.richstyle.rebuildWithoutBlock
@@ -139,14 +146,70 @@ private fun peelLineBlocks(line: String, registry: List<LineBlockStyle>): Peeled
 	return PeeledLine(body, peeled)
 }
 
+/**
+ * Resolves nested list levels from indentation across one import, as
+ * CommonMark reads them: an item's level is the number of open ancestors
+ * whose content offset its indent reaches, its own content offset is its
+ * indent plus its marker, and a non-list non-blank line or a change of quote
+ * status closes every open item. See `docs/design/line-blocks.md`, "Nested
+ * lists".
+ */
+private class ListNesting(private val registry: List<LineBlockStyle>) {
+	/** Content offsets of the open ancestor items, indexed by level. */
+	private val contentOffsets = ArrayList<Int>()
+	private var quoted = false
+	private val listBlocks = registry.filter { it.isList }
+
+	/** A line that is not a list item and not blank ends the nesting. */
+	fun close() = contentOffsets.clear()
+
+	fun peel(line: String): PeeledLine {
+		val peeled = peelLineBlocks(line, registry)
+		val isQuoted = peeled.blocks.any { it === Blockquote }
+		if (isQuoted != quoted) {
+			contentOffsets.clear()
+			quoted = isQuoted
+		}
+		val body = if (isQuoted) Blockquote.markdownPattern.matchEntire(line)!!.groupValues[1] else line
+		val indentChars = body.indexOfFirst { it != ' ' && it != '\t' }.let { if (it == -1) body.length else it }
+		val indent = body.take(indentChars).sumOf { if (it == '\t') 4 else 1 }
+
+		var list = peeled.blocks.firstOrNull { it.isList }
+		var result = peeled
+		val level = contentOffsets.count { it <= indent }.coerceAtMost(MAX_LIST_LEVEL)
+		val enclosingOffset = if (level == 0) 0 else contentOffsets[level - 1]
+		if (list == null && indent > 0 && indent - enclosingOffset < 4) {
+			// An indented marker is not peeled by the level-0 patterns. Four or more
+			// columns past the enclosing content is an indented code block, not an item.
+			val inner = peelLineBlocks(body.substring(indentChars), listBlocks)
+			list = inner.blocks.firstOrNull { it.isList }
+			if (list != null) result = PeeledLine(inner.body, peeled.blocks + list)
+		}
+		if (list == null) {
+			if (body.isNotBlank()) contentOffsets.clear()
+			return result
+		}
+
+		// The marker's spaces belong to it up to four; five or more, or none at
+		// all in an empty item, count as one and the rest are the body's.
+		val consumed = (body.length - indentChars) - result.body.length
+		val marker = body.substring(indentChars, indentChars + consumed)
+		val spaces = marker.length - marker.trimEnd().length
+		val markerWidth = if (spaces in 1..4 && result.body.isNotEmpty()) consumed else marker.trimEnd().length + 1
+		while (contentOffsets.size > level) contentOffsets.removeAt(contentOffsets.size - 1)
+		contentOffsets += indent + markerWidth
+		return PeeledLine(result.body, result.blocks.map { if (it.isList) it.atListLevel(level) else it })
+	}
+}
+
 private val RESIDUAL_BULLET_MARKER = Regex("""^([-*+])(\s)""")
 private val RESIDUAL_QUOTE_MARKER = Regex("""^>""")
 
 /** A quoted line with nothing in it; the marker sits at column 0, as the peel needs it. */
 private val QUOTE_BLANK_LINE = Regex("""^>\s*$""")
 
-/** A list item, quoted or not, as the peel recognises one. */
-private val LIST_ITEM_LINE = Regex("""^(?:>\s?)?(?:[-*+]|\d+\.)\s""")
+/** A list item, quoted or not and at any indentation, as the peel recognises one. */
+private val LIST_ITEM_LINE = Regex("""^(?:>\s?)?[ \t]*(?:[-*+]|\d+\.)\s""")
 
 /** A line CommonMark reads as an indented code block when a block can start there. */
 private val INDENTED_CODE_LINE = Regex("""^(?: {4}|\t)""")
@@ -281,7 +344,7 @@ class MarkdownExtension(
 		val separateParagraphs =
 			markdownConfiguration.paragraphSeparator == ParagraphSeparator.BLANK_LINE
 		val headerBlocks = registry.filter { it.spanStyle is HeaderSpanStyle }
-		fun isList(line: Int) = blocks.has(line, BulletList) || blocks.has(line, OrderedList)
+		fun isList(line: Int) = blocks.listBlockAt(line) != null
 		fun isQuoted(line: Int) = blocks.has(line, Blockquote)
 
 		// A blank editor line, as opposed to a block with empty content: an empty
@@ -307,11 +370,15 @@ class MarkdownExtension(
 
 		val sb = StringBuilder()
 		var cursor = 0
-		// Tracks position-within-run for each block style so the markdown prefix
-		// callback can render position-dependent markers (1., 2., 3. for ordered
-		// lists). Resets when a block run ends — a non-block line between two OL
-		// runs restarts numbering.
-		val runPositions = mutableMapOf<LineBlockStyle, Int>()
+		// Ordered items number per level: a level-k item continues its level's
+		// run and restarts every deeper level; a bullet at a level or any
+		// non-list line (a blank one too, as layout has it) ends the run at and
+		// below it. A nested item is indented to its ancestor's content offset,
+		// tracked here per level.
+		val orderedCounters = IntArray(MAX_LIST_LEVEL + 1)
+		val contentOffsets = ArrayList<Int>()
+		var nestingQuoted = false
+		val prefixBlocks = registry.filter { !it.isList }
 		// Code fences wrap a contiguous run with ` ``` ` markers rather than
 		// per-line prefixes — track open/close state across iterations.
 		var inCodeFence = false
@@ -383,20 +450,37 @@ class MarkdownExtension(
 			}
 			// Fenced lines aren't subject to per-line block prefixes — code fences
 			// don't stack with bullet/blockquote/ordered, and the mutual-exclusion
-			// rule in `applyLineBlock` already enforces this. Reset the run
-			// positions so a fence between two OL runs doesn't continue numbering.
-			if (isFenceLine) {
-				registry.forEach { runPositions.remove(it) }
-			} else {
-				registry.forEach { block ->
-					if (blocks.has(lineIndex, block)) {
-						val pos = runPositions[block] ?: 0
-						sb.append(block.markdownPrefix(pos))
-						runPositions[block] = pos + 1
-					} else {
-						runPositions.remove(block)
-					}
+			// rule in `applyLineBlock` already enforces this.
+			val list = if (isFenceLine) null else blocks.listBlockAt(lineIndex)
+			if (!isFenceLine) {
+				prefixBlocks.forEach { block ->
+					if (blocks.has(lineIndex, block)) sb.append(block.markdownPrefix(0))
 				}
+			}
+			// A quote starting or ending closes every open item.
+			if (isQuoted(lineIndex) != nestingQuoted) {
+				contentOffsets.clear()
+				nestingQuoted = isQuoted(lineIndex)
+			}
+			if (list == null) {
+				orderedCounters.fill(0)
+				if (isFenceLine || !isBlankLine(lineIndex)) contentOffsets.clear()
+			} else {
+				// A deeper level than the ancestors allow cannot be written; the
+				// normalization pass keeps the model from holding one.
+				val level = minOf(list.listLevel!!, contentOffsets.size)
+				for (deeper in level + 1..MAX_LIST_LEVEL) orderedCounters[deeper] = 0
+				val prefix = if (list.spanStyle is OrderedListSpanStyle) {
+					list.markdownPrefix(orderedCounters[level]++)
+				} else {
+					orderedCounters[level] = 0
+					list.markdownPrefix(0)
+				}
+				val indent = if (level == 0) 0 else contentOffsets[level - 1]
+				repeat(indent) { sb.append(' ') }
+				sb.append(prefix)
+				while (contentOffsets.size > level) contentOffsets.removeAt(contentOffsets.size - 1)
+				contentOffsets += indent + prefix.length
 			}
 			sb.append(lineMarkdown)
 			previousEndsWithNewline = lineMarkdown.endsWith('\n')
@@ -437,14 +521,16 @@ class MarkdownExtension(
 		val blockHits = mutableMapOf<LineBlockStyle, MutableList<Int>>()
 		val provider = imageProvider
 		val registry = lineBlockStyles(markdownConfiguration)
+		val nesting = ListNesting(registry)
 		val processedLines = keptLines.mapIndexed { index, line ->
 			if (index in codeFenceLineIndices) {
+				nesting.close()
 				return@mapIndexed line.escapeMarkdownSpecials()
 			}
 			// Markers peel before the body is classified, so a rule or image keeps
 			// a stacked blockquote (`> ---`), and a `- ---` line comes back as the
 			// rule it once was rather than a bullet holding literal dashes.
-			val peeled = peelLineBlocks(line, registry)
+			val peeled = nesting.peel(line)
 			val imageMatch = STANDALONE_IMAGE_REGEX.matchEntire(peeled.body)
 			fun record(blocks: List<LineBlockStyle>) = blocks.forEach { block ->
 				blockHits.getOrPut(block) { mutableListOf() } += index
@@ -689,11 +775,14 @@ class MarkdownExtension(
 	/** Returns whether [line] is currently rendered as a blockquote. */
 	fun isBlockquote(line: Int): Boolean = editorState.hasLineBlock(line, Blockquote)
 
-	/** Returns whether [line] is currently rendered as a bullet-list item. */
-	fun isBulletList(line: Int): Boolean = editorState.hasLineBlock(line, BulletList)
+	/** Returns whether [line] is currently rendered as a bullet-list item, at any nesting level. */
+	fun isBulletList(line: Int): Boolean = editorState.listBlockAt(line)?.spanStyle is BulletListSpanStyle
 
-	/** Returns whether [line] is currently rendered as an ordered-list item. */
-	fun isOrderedList(line: Int): Boolean = editorState.hasLineBlock(line, OrderedList)
+	/** Returns whether [line] is currently rendered as an ordered-list item, at any nesting level. */
+	fun isOrderedList(line: Int): Boolean = editorState.listBlockAt(line)?.spanStyle is OrderedListSpanStyle
+
+	/** The nesting level (0 for a top-level item) of the list item on [line], or null when it is not one. */
+	fun listLevel(line: Int): Int? = editorState.listBlockAt(line)?.listLevel
 
 	/** Returns whether [line] is currently rendered as a fenced code line. */
 	fun isCodeFence(line: Int): Boolean = editorState.hasLineBlock(line, CodeFence)
