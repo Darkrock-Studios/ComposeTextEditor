@@ -794,10 +794,12 @@ class TextEditorState(
 	}
 
 	/**
-	 * Advances whenever the editor answered an IME request in a way the IME cannot infer
-	 * from the text or the caret, so its mirror of the buffer has to be discarded and
-	 * re-read. A platform with an IME remembers the generation it last acted on; the
-	 * others ignore it. Snapshot state, so the skiko session can observe it.
+	 * Advances whenever the editor answered an IME request its own way, so the IME's
+	 * mirror of the buffer may no longer match. A platform with an IME remembers the
+	 * generation it last acted on and resyncs the keyboard as it can: Android restarts
+	 * input only when a selection report cannot tell the keyboard, so a substitution that
+	 * keeps the caret where the keyboard expects it leaves the keyboard's copy of the
+	 * text as `EditText` would. Snapshot state, so the skiko session can observe it.
 	 */
 	internal var imeResyncGeneration by mutableIntStateOf(0)
 		private set

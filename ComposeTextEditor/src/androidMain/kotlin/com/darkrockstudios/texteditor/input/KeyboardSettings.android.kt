@@ -32,6 +32,16 @@ internal fun KeyboardSettings.androidInputType(): Int {
 	return type
 }
 
+/**
+ * The caps modes [inputType] asks `getCursorCapsMode` for. They mean something only to the
+ * text class; a number class's decimal flag shares a bit with them.
+ */
+internal fun capsModesOf(inputType: Int): Int {
+	if (inputType and InputType.TYPE_MASK_CLASS != InputType.TYPE_CLASS_TEXT) return 0
+	return inputType and (InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS or InputType.TYPE_TEXT_FLAG_CAP_WORDS or
+			InputType.TYPE_TEXT_FLAG_CAP_SENTENCES)
+}
+
 /** The `EditorInfo` action the keyboard's action key sends: unspecified for Enter. */
 internal fun KeyboardSettings.androidEditorAction(): Int = when (imeAction) {
 	ImeAction.None -> EditorInfo.IME_ACTION_NONE

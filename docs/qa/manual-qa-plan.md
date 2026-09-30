@@ -558,7 +558,13 @@ German, or French).
    `state.onImeAction`, the keyboard shows a Send key that calls the handler,
    and a hardware Enter still starts a line. With `ImeAction.Next` and no
    handler, the key moves focus to the next field.
-6. With Gboard's floating keyboard, or a stylus on a device with stylus
+6. Markdown demo with Gboard: type a word at the end of a bullet and press the
+   keyboard's Enter. **Expect:** a new bullet, the keyboard shifted for it and
+   its suggestion strip not reset (4.27). Enter on the empty bullet, and
+   Backspace at a bullet's start, leave or demote the list; those may reset the
+   keyboard once. Repeat with SwiftKey and Samsung Keyboard: no doubled or lost
+   characters on the next word typed after each.
+7. With Gboard's floating keyboard, or a stylus on a device with stylus
    handwriting (Android 14 or later), move the caret with the arrow keys and
    by tapping, across rows. **Expect:** what follows the caret (the floating
    candidates, the handwriting insertion marker) follows at once, not one move

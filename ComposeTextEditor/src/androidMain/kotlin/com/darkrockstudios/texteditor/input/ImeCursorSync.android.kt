@@ -55,6 +55,9 @@ actual class ImeCursorSync internal constructor(
 
 	private var lastSelection: ImeSelection? = null
 	private var lastAnchor: CursorAnchor? = null
+
+	/** Where the keyboard's own commands since the last flush have left it expecting the selection. */
+	internal val expectation = ImeExpectation()
 	private var handledResyncGeneration = 0
 	private var handledDocumentGeneration = 0
 	private var handledKeyboard: KeyboardRequest? = null
@@ -99,6 +102,7 @@ actual class ImeCursorSync internal constructor(
 		handledResyncGeneration = state.imeResyncGeneration
 		handledDocumentGeneration = state.documentGeneration.value
 		handledKeyboard = keyboardRequest()
+		expectation.reset(state.currentImeSelection())
 		state.platformExtensions.imeSync = this
 	}
 
@@ -130,23 +134,31 @@ actual class ImeCursorSync internal constructor(
 		val resyncGeneration = state.imeResyncGeneration
 		val documentGeneration = state.documentGeneration.value
 		val keyboard = keyboardRequest()
-		if (
-			resyncGeneration != handledResyncGeneration ||
-			documentGeneration != handledDocumentGeneration ||
-			keyboard != handledKeyboard
-		) {
-			handledResyncGeneration = resyncGeneration
-			handledDocumentGeneration = documentGeneration
-			handledKeyboard = keyboard
-			// The keyboard's mirror is wrong in a way no updateSelection can fix: a behavior
-			// answered its request without the edit it expected, or setText/setDocument
-			// swapped the whole document. Only a restart makes it discard the mirror and
-			// re-read the buffer, as EditText restarts input on setText. A restart is also
-			// how a keyboard takes new settings, as EditText's setInputType does.
+		val resync = resyncGeneration != handledResyncGeneration
+		val current = state.currentImeSelection()
+		if (documentGeneration != handledDocumentGeneration || keyboard != handledKeyboard) {
+			// setText/setDocument swapped the whole document, which no report can describe,
+			// or the keyboard needs new settings. A restart makes it discard its mirror and
+			// re-read, as EditText restarts input on setText and setInputType.
+			sink.restartInput()
+			lastSelection = null
+		} else if (resync && (current == lastSelection || lastSelection == null) && !expectation.expects(current)) {
+			// A behavior answered the keyboard's command its own way (a claimed Backspace,
+			// "--" become a dash), leaving the selection where the keyboard last heard it
+			// while its own command has it expecting another. The InputMethodManager drops
+			// a report that repeats the last one, so only a restart reaches it. A selection
+			// that did change is reported below, and the keyboard re-reads the text around
+			// it as it does after a tap. Before the first report nothing says what the
+			// keyboard was last told. (`invalidateInput` would restart anyway: Compose's
+			// connection wrapper does not pass `takeSnapshot` through.)
 			sink.restartInput()
 			lastSelection = null
 		}
+		handledResyncGeneration = resyncGeneration
+		handledDocumentGeneration = documentGeneration
+		handledKeyboard = keyboard
 
+		// Read again: a restart can close the old connection, which ends its composition.
 		val selection = state.currentImeSelection()
 		val selectionChanged = selection != lastSelection
 
@@ -168,7 +180,27 @@ actual class ImeCursorSync internal constructor(
 			val anchor = cursorAnchor()
 			if (anchor != null && (selectionChanged || anchor != lastAnchor)) send(anchor)
 		}
+
+		expectation.reset(selection)
 	}
+
+	/**
+	 * The keyboard sent a key event, which the view handles after this call returns. The
+	 * flush after it compares with the expectation left unknown.
+	 */
+	internal fun keySentFromIme() {
+		expectation.keySent()
+		postToMain {
+			expectation.keyHandled()
+			requestFlush()
+		}
+	}
+
+	private fun ImeExpectation.expects(selection: ImeSelection): Boolean =
+		expects(selection.selStart, selection.selEnd, selection.compStart, selection.compEnd, state.getTextLength())
+
+	private fun ImeExpectation.reset(selection: ImeSelection) =
+		reset(selection.selStart, selection.selEnd, selection.compStart, selection.compEnd, state.getTextLength())
 
 	/** Sends the cursor anchor now, for an IME that asked for it immediately. */
 	internal fun sendCursorAnchor() {

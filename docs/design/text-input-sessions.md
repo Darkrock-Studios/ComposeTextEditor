@@ -202,15 +202,34 @@ own command produces exactly the report it expects, once. Because the
 composing region is part of the comparison, composing-only changes
 (`setComposingRegion`, `finishComposingText`) are reported too.
 
-A behavior that answers an IME request in a way no diff can express (exiting
-a list on backspace leaves text and caret where they were) advances a resync
-generation on the state. A whole-document replacement (`setText`,
-`setDocument`) advances `documentGeneration`, and is no edit the keyboard
-could follow either. The next flush that sees either generation change sends
-`restartInput`, which makes the keyboard discard its mirror, then reports
-afresh, as `EditText` restarts input on `setText`. Reading counters at flush
-time, rather than waiting on a flow, is what guarantees the restart goes out
-when the IME's batch ends.
+A whole-document replacement (`setText`, `setDocument`) advances
+`documentGeneration`, which is no edit the keyboard could follow: the next
+flush sends `restartInput`, which makes the keyboard discard its mirror, then
+reports afresh, as `EditText` restarts input on `setText`.
+
+A behavior that answers an IME request its own way (a claimed Backspace that
+demotes a bullet, "--" become a dash) advances a resync generation on the
+state. A restart clears the keyboard's suggestions and shift state, so it is
+the last resort. `ImeExpectation` follows where the keyboard's own commands
+since the last flush have left it expecting the selection and composing
+region. If the flush finds the selection where the keyboard expects it,
+nothing more is needed (a same-length substitution stays as `EditText` leaves
+it). If it finds a selection the keyboard was not last told, the ordinary
+report reaches it, and keyboards re-read the text around an unexpected
+selection as they do after a tap. Only when the selection is where the
+keyboard last heard it (or nothing has been reported yet) and not where its
+commands left it expecting, or where those commands cannot be followed (a key
+event, a delete counted in code points), does the flush restart: the
+`InputMethodManager` drops a report that repeats the last one. A key event is
+queued rather than applied, so the expectation stays unknown until the flush
+after the key has been handled (a key the view holds behind another pending
+input event can land after that flush; then a claim of it goes unnoticed). A resync the keyboard's commands did not
+cause (a hardware key, a host's edit) leaves the keyboard expecting what it
+was last told, so it restarts nothing. `invalidateInput` (API 34) would not be lighter
+here, since Compose's connection wrapper does not pass `takeSnapshot`
+through, which makes it fall back to a restart. Reading counters at flush
+time, rather than waiting on a flow, is what guarantees the report or restart
+goes out when the IME's batch ends.
 
 Cursor anchor info (`updateCursorAnchorInfo`, used by floating toolbars,
 stylus handwriting, and some candidate windows) is requested by the IME via
@@ -325,7 +344,7 @@ snapshot-backed revision that the request's text reads fold in. Without it an
 edit that moves nothing observable (a forward delete) would never reach the
 platform's mirror.
 
-A resync request (`requestImeResync`, the Android restart) reaches the skiko
+A resync request (`requestImeResync`) reaches the skiko
 platforms through the same session: it watches the generation and hands each
 advance to the platform's `SkikoImeResync`. What a platform needs differs.
 Desktop's AWT input method asks the request for text as it needs it and keeps

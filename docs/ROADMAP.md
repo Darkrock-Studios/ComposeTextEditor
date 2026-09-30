@@ -213,7 +213,7 @@ Limits on parallel work:
 | 4.1 | Trusting any iOS change |
 | 4.2 | 4.3, 4.5 to 4.7, 4.11, 4.12 |
 | 5.1 | 5.2 to 5.4, which can then run in parallel as separate behaviours |
-| 4.25, 4.26, 4.27 | Shipping 5.2 to 5.4 with a behavior that edits on the IME path |
+| 4.25, 4.26, 4.27 | Shipping 5.2 to 5.4 with a behavior that edits on the IME path (4.27 done) |
 | 6.2 | 6.1 |
 
 A first wave that can run in parallel:
@@ -1291,12 +1291,26 @@ iOS Safari; browser tests run in CI.
   which the marker's visibility flags depend on. `TextView` checks its screen
   location in an `OnPreDrawListener` while the IME monitors; watch the view
   the same way, only while monitoring.
-- [ ] **4.27 Android resyncs by restarting input. C.** [Opus] [Lane F]
+- [x] **4.27 Android resyncs by restarting input. C.** [Opus] [Lane F]
   `requestImeResync` becomes `restartInput`, which clears the keyboard's
   suggestions and shift state. That suits a whole-document replace, not a
   smart-punctuation substitution beside the caret (5.2), which native
   `EditText` reports through `updateSelection` and a text-changed notice.
-  Add a lighter resync for a local edit.
+  Add a lighter resync for a local edit. Done: `ImeExpectation` follows where
+  the keyboard's own commands left it expecting the selection. A resync
+  restarts only when the selection is where the keyboard last heard it and
+  not where its commands left it expecting, or where they cannot be followed
+  (a key event, a delete counted in code points): the `InputMethodManager`
+  drops a repeated report. Otherwise the ordinary report is enough
+  (`ImeCursorSyncTest`, `ImeExpectationTest`).
+  `invalidateInput` is no lighter under Compose: its connection wrapper does
+  not forward `takeSnapshot`. Checked on an emulator (API 36, Gboard) through
+  the `dumpsys input_method` start-input history: Enter at the end of a
+  bullet continued the list with no restart and the keyboard shifted for the
+  new item; Enter on the empty bullet and Backspace demoting a bullet each
+  restarted once, as the rule says. So 5.2's "--" to a dash still restarts
+  when the dash leaves the caret where the keyboard last heard it; a
+  substitution of the same length, such as curly quotes, does not.
 - [ ] **4.28 A Tab left to the focus system on iOS and the web. C.** [Opus]
   [Lane E] Since 2.9 the editor leaves some Tabs unconsumed: Ctrl+Tab, a Tab
   after Escape, and every Tab under `TabSettings.movesFocus`. On desktop the
@@ -1668,6 +1682,9 @@ Shaping is one line per keystroke. These still scale with document length:
 - [ ] `TextEditorScrollManager.scrollToPosition(offset, animated = false)`
   animates anyway unless `top` is set: the path that scrolls just far enough
   always calls `animateScrollTo` (found in 3.9).
+- [ ] `imeSetComposingRegion` (`input/ImeEditLogic.kt`) clears the composition
+  when an IME passes the bounds reversed; `BaseInputConnection` orders them.
+  Found in 4.27, whose expectation follows the contract.
 - [ ] Stray `println` calls in `state/TextEditorState.kt` and
   `SpellCheckState.kt`.
 - [ ] The sample app's toolbar Link button attaches its own
