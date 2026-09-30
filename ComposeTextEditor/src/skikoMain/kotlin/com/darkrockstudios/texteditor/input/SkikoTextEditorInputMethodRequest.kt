@@ -2,9 +2,6 @@
 
 package com.darkrockstudios.texteditor.input
 
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.ExperimentalComposeUiApi
@@ -38,9 +35,11 @@ import androidx.compose.ui.text.input.TextEditorState as ComposeTextEditorState
  * [SkikoTextEditorInputMethodRequest].
  *
  * The frameworks watch the request's text through `snapshotFlow`, but the document
- * is deliberately not snapshot state. The session therefore bumps a snapshot-backed
- * revision on every content edit, and the request's text reads fold it in, so an edit
- * that moves no cursor (a forward delete) still reaches the platform's mirror.
+ * is deliberately not snapshot state. The request's text reads fold in
+ * [TextEditorState.textRevision], snapshot state that advances with every text
+ * change, so an edit that moves no cursor (a forward delete) still reaches the
+ * platform's mirror, a keystroke's caret move and edit land in one apply, and a
+ * rich-span change (a spell-check pass) wakes no observer.
  *
  * A resync ([TextEditorState.requestImeResync]) is handed to [imeResync], which says how
  * this platform makes its input method drop what it assumed. It defaults to
@@ -53,8 +52,6 @@ internal suspend fun TextEditorState.startSkikoInputSession(
 	imeResync: SkikoImeResync = SkikoImeResync.None,
 ): Nothing = coroutineScope {
 	val request = SkikoTextEditorInputMethodRequest(this@startSkikoInputSession, imeOptions, exposeTextLayout)
-	launch { editOperations.collect { request.contentRevision++ } }
-	launch { documentGeneration.collect { request.contentRevision++ } }
 	when (imeResync) {
 		SkikoImeResync.None -> Unit
 		is SkikoImeResync.Rewrite -> launch { onImeResync { imeResync.rewrite(request.value()) } }
@@ -130,14 +127,11 @@ internal class SkikoTextEditorInputMethodRequest(
 	exposeTextLayout: Boolean = false,
 ) : PlatformTextInputMethodRequest {
 
-	/** Advanced on every content edit; see [startSkikoInputSession]. */
-	internal var contentRevision by mutableIntStateOf(0)
-
 	/** Live view of the editor as the CharSequence + selection + composition Compose expects. */
 	override val state: ComposeTextEditorState = ImeComposeStateAdapter()
 
 	override val value: () -> TextFieldValue = {
-		contentRevision
+		editorState.textRevision
 		TextFieldValue(
 			text = editorState.getAllPlainText(),
 			selection = editorState.selectionAsTextRange(),
@@ -158,7 +152,10 @@ internal class SkikoTextEditorInputMethodRequest(
 	 * layout built on demand ([DocumentTextLayout]); the others get null, the documented
 	 * "not laid out yet" answer every framework tolerates.
 	 */
-	override val textLayoutResult: () -> TextLayoutResult? = { documentLayout?.get() }
+	override val textLayoutResult: () -> TextLayoutResult? = {
+		editorState.textRevision
+		documentLayout?.get()
+	}
 
 	/** Caret rectangle in root coordinates; positions candidate windows and the web backing input. */
 	override val focusedRectInRoot: () -> Rect? = {
@@ -218,14 +215,25 @@ internal class SkikoTextEditorInputMethodRequest(
 	 * queries stay cheap on large documents.
 	 */
 	private inner class ImeComposeStateAdapter : ComposeTextEditorState {
-		override val length: Int get() = editorState.getTextLength()
-		override fun get(index: Int): Char = editorState.imeCharAt(index)
-		override fun subSequence(startIndex: Int, endIndex: Int): CharSequence =
-			editorState.imeSubSequence(startIndex, endIndex)
+		override val length: Int
+			get() {
+				editorState.textRevision
+				return editorState.getTextLength()
+			}
+
+		override fun get(index: Int): Char {
+			editorState.textRevision
+			return editorState.imeCharAt(index)
+		}
+
+		override fun subSequence(startIndex: Int, endIndex: Int): CharSequence {
+			editorState.textRevision
+			return editorState.imeSubSequence(startIndex, endIndex)
+		}
 
 		override val text: String
 			get() {
-				contentRevision
+				editorState.textRevision
 				return editorState.getAllPlainText()
 			}
 
@@ -235,13 +243,13 @@ internal class SkikoTextEditorInputMethodRequest(
 		// so an edit elsewhere in the document must re-run an observer of these too.
 		override val selection: TextRange
 			get() {
-				contentRevision
+				editorState.textRevision
 				return editorState.selectionAsTextRange()
 			}
 
 		override val composition: TextRange?
 			get() {
-				contentRevision
+				editorState.textRevision
 				return editorState.composingAsTextRange()
 			}
 	}

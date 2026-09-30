@@ -338,9 +338,9 @@ selection and composition (and ends the platform composition when the caret
 leaves it), iOS watches text, selection, and composition, web watches the
 `TextFieldValue`. The cursor, selection, and composing range are snapshot
 state and trigger those flows on their own; the document content is not, by
-design (it is a volatile snapshot readable from any thread). So the shared
-session collects the editor's edit and document-replacement flows and bumps a
-snapshot-backed revision that the request's text reads fold in. Without it an
+design (it is a volatile snapshot readable from any thread). So the request's
+text reads fold in the state's `textRevision`, snapshot state that advances with
+every text change, in the same apply as the caret move. Without it an
 edit that moves nothing observable (a forward delete) would never reach the
 platform's mirror.
 

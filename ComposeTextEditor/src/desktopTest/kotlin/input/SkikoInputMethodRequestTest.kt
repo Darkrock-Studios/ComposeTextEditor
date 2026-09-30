@@ -38,6 +38,8 @@ import com.darkrockstudios.texteditor.input.startSkikoInputSession
 import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
 import com.darkrockstudios.texteditor.markdown.MarkdownExtension
 import com.darkrockstudios.texteditor.richstyle.BulletListSpanStyle
+import com.darkrockstudios.texteditor.richstyle.RichSpan
+import com.darkrockstudios.texteditor.richstyle.SpellCheckStyle
 import com.darkrockstudios.texteditor.state.EditBehavior
 import com.darkrockstudios.texteditor.state.TextEditorState
 import io.mockk.every
@@ -521,6 +523,91 @@ class SkikoInputMethodRequestTest {
 		assertEquals(listOf("abc", "bc"), seen)
 		observer.cancel()
 		sessionJob.cancel()
+	}
+
+	/**
+	 * The request reads the state's own revision, which advances in the same apply as the
+	 * caret, so a keystroke re-runs a session's observer once.
+	 */
+	@Test
+	fun `a keystroke re-evaluates a session's value observer once`() = runTest {
+		val state = TextEditorState(scope = this, measurer = mockk(relaxed = true), initialText = AnnotatedString("abc"))
+		val captured = CompletableDeferred<PlatformTextInputMethodRequest>()
+		val session = object : PlatformTextInputSession {
+			override suspend fun startInputMethod(request: PlatformTextInputMethodRequest): Nothing {
+				captured.complete(request)
+				awaitCancellation()
+			}
+		}
+		val sessionJob = launch { state.startSkikoInputSession(session, ImeOptions.Default) }
+		val request = captured.await()
+		state.cursor.updatePosition(CharLineOffset(0, 3))
+		var evaluations = 0
+		val seen = mutableListOf<String>()
+		val observer = launch {
+			snapshotFlow {
+				evaluations++
+				request.value().text
+			}.collect { seen += it }
+		}
+		Snapshot.sendApplyNotifications()
+		testScheduler.runCurrent()
+		evaluations = 0
+
+		state.insertCharacterAtCursor('d')
+		repeat(3) {
+			Snapshot.sendApplyNotifications()
+			testScheduler.runCurrent()
+		}
+
+		assertEquals(1, evaluations)
+		assertEquals(listOf("abc", "abcd"), seen)
+		observer.cancel()
+		sessionJob.cancel()
+	}
+
+	/** An edit that moves no caret still reaches an observer of a request no session wraps. */
+	@Test
+	fun `a request alone makes an edit without a caret move visible`() = runTest {
+		val state = TextEditorState(scope = this, measurer = mockk(relaxed = true), initialText = AnnotatedString("abc"))
+		val request = SkikoTextEditorInputMethodRequest(state, ImeOptions.Default)
+		val seen = mutableListOf<String>()
+		val observer = launch { snapshotFlow { request.value().text }.collect { seen += it } }
+		state.cursor.updatePosition(CharLineOffset(0, 0))
+		Snapshot.sendApplyNotifications()
+		testScheduler.runCurrent()
+
+		state.deleteAtCursor()
+		Snapshot.sendApplyNotifications()
+		testScheduler.runCurrent()
+
+		assertEquals(listOf("abc", "bc"), seen)
+		observer.cancel()
+	}
+
+	/** An overlay pass (spell check, find) changes no text, so it re-runs no observer. */
+	@Test
+	fun `a rich span change does not re-evaluate a value observer`() = runTest {
+		val state = TextEditorState(scope = this, measurer = mockk(relaxed = true), initialText = AnnotatedString("abc"))
+		val request = SkikoTextEditorInputMethodRequest(state, ImeOptions.Default)
+		var evaluations = 0
+		val observer = launch {
+			snapshotFlow {
+				evaluations++
+				request.value()
+			}.collect {}
+		}
+		Snapshot.sendApplyNotifications()
+		testScheduler.runCurrent()
+		evaluations = 0
+
+		val range = TextEditorRange(CharLineOffset(0, 0), CharLineOffset(0, 2))
+		state.updateRichSpans(remove = emptyList(), add = listOf(RichSpan(range, SpellCheckStyle)))
+		Snapshot.sendApplyNotifications()
+		testScheduler.runCurrent()
+
+		assertEquals(0, evaluations)
+		observer.cancel()
 	}
 
 	// --- resync ---

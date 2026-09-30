@@ -2184,17 +2184,18 @@ Shaping is one line per keystroke. These still scale with document length:
   span style (7.16), which the button should toggle instead.
 - [x] `rememberTextEditorStyle` leaves `backgroundColor` out of its `remember`
   keys, so a new background colour is ignored until another key changes.
-- [ ] The document content is not snapshot state, so the skiko input session
-  (4.2) collects `editOperations` and `documentGeneration` to bump a
-  snapshot-backed revision its text reads fold in. The bump lands one
-  dispatch after the caret move, so a keystroke evaluates the platform's
-  `snapshotFlow` twice, and each evaluation builds the whole text. A
-  revision advanced from `TextEditorState.onCommit` would land in the same
-  apply batch as the caret, give every snapshot observer the same signal,
-  and need no collectors; do it when `state/TextEditorState.kt` is next open
-  (lane N). Half done in 7.25: `TextEditorState.revision` is that counter,
-  advanced wherever `content` is published; the skiko session (lane E) still
-  collects its own.
+- [x] The document content is not snapshot state, so the skiko input session
+  (4.2) collected `editOperations` and `documentGeneration` to bump a
+  snapshot-backed revision its text reads folded in. The bump landed one
+  dispatch after the caret move, so a keystroke evaluated the platform's
+  `snapshotFlow` twice, and each evaluation built the whole text. Now the
+  request's reads (text, length, characters, selection, composition, the iOS
+  layout) fold in `TextEditorState.textRevision`, which advances wherever
+  `content` is published with new lines, in the same apply as the caret, and
+  the session collects nothing: a keystroke re-runs an observer once, a
+  request no session wraps sees a forward delete, and a rich-span pass
+  (spell check, find) re-runs none (`SkikoInputMethodRequestTest`).
+  `skikoMain` is iOS code as well (Mac queue).
 
 ## User reports mapped to this roadmap
 

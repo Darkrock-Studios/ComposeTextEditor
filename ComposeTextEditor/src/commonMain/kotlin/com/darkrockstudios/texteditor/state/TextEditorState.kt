@@ -181,11 +181,14 @@ class TextEditorState(
 	@Volatile
 	internal var content = DocumentSnapshot(emptyList(), emptySet())
 		private set(value) {
+			val textChanged = value.lines !== field.lines
 			field = value
 			_revision.intValue++
+			if (textChanged) _textRevision.intValue++
 		}
 
 	private val _revision = mutableIntStateOf(0)
+	private val _textRevision = mutableIntStateOf(0)
 
 	/**
 	 * Advances with every published [content], as snapshot state: the document itself
@@ -193,6 +196,9 @@ class TextEditorState(
 	 * after an edit.
 	 */
 	internal val revision: Int get() = _revision.intValue
+
+	/** [revision], advancing only when the text changes: a rich-span change leaves it alone. */
+	internal val textRevision: Int get() = _textRevision.intValue
 
 	/**
 	 * Content staged by an open [withAtomicEdit] transaction, or null when none is
