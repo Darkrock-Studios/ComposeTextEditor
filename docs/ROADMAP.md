@@ -1189,8 +1189,33 @@ Also seen:
   Material theme's `onSurface`. It replaces the desktop's hand-drawn 16 dp bar
   (the gutter is now the style's 8 dp, so text wraps 8 dp wider) and the web's
   commented-out one (`scrollbar/EditorScrollbarE2eTest.kt`).
-- [ ] **4.15 Browser tests.** [Opus] [Lane L] Automation against the built demo
+- [x] **4.15 Browser tests.** [Opus] [Lane L] Automation against the built demo
   (0.7), with composition events.
+  Done: `browserTests/` (Playwright, Chromium), run by the `browser` CI job,
+  pending its first run there; it passes here with Playwright's own Chromium
+  download. Key presses (typing, Enter, Backspace, arrows, Shift selection,
+  ';' and '=') and compositions through Chromium's input method over the
+  DevTools protocol, which fires the real `composition*` and `beforeinput`
+  events: a dead key, a Japanese composition converted and committed once, a
+  cancelled composition, typing after a commit. The editor's text is read
+  from its node in the accessibility tree Compose mirrors into the page.
+  Found 4.34, marked `test.fixme`. A real IME in each browser (4.12) is still
+  a person's check.
+- [ ] **4.34 A browser composition can land at a stale offset. R.** [Fable]
+  [Lane E] With Chromium's own input method events (4.15), a composition
+  started after moving the caret by key can land away from the caret: in
+  "ab" after Left, "か" landed at the line end in three runs of five (one in
+  six once the test waits for the field's caret to follow), and after Home
+  (caret 0) at offset 1 in four of five. After Left the textarea shows the
+  composition inserted at the caret, then about 15 ms later rewritten with it
+  at the line end, so the session maps it with a stale selection. Under load
+  (five pages at once) a composition is also sometimes ended early: a second
+  `compositionstart` follows, the commit arrives as `insertText`, and a
+  cancelled composition leaves its text; a rewrite of the field during the
+  composition would do that. The 4.12 checks used synthetic events, which
+  leave the field alone, so they could not see either. Failing case:
+  `browserTests/tests/composition.spec.ts`, "a composition lands at the caret
+  in the middle of a line", marked `test.fixme`.
 - [x] **4.21 Whole-document mirror per edit. S.** [Opus] [Lane E] Compose's web
   session copies `request.value().text` into the backing `<textarea>` after
   every edit, and iOS snapshots `state.text` the same way, so each keystroke

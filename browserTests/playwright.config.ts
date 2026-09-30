@@ -14,7 +14,9 @@ export default defineConfig({
 	testDir: './tests',
 	timeout: 60_000,
 	expect: { timeout: 10_000 },
-	fullyParallel: true,
+	// One page at a time, as a person types: with several at once the input session
+	// can end a composition early (4.34), which the fixme cases record.
+	workers: 1,
 	forbidOnly: !!process.env.CI,
 	retries: 0,
 	reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : 'list',

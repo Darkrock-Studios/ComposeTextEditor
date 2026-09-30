@@ -170,8 +170,8 @@ jobs:
             androidApp/build/outputs/androidTest-results/
             androidApp/build/reports/androidTests/
 
-  # Playwright in Chromium against the built wasm demo: real key presses
-  # (browserTests/).
+  # Playwright in Chromium against the built wasm demo: real key presses and the
+  # browser's own input method events (browserTests/).
   browser:
     runs-on: ubuntu-latest
     timeout-minutes: 45

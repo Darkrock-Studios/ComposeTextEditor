@@ -10,7 +10,7 @@
 | Android host tests | `./gradlew :ComposeTextEditor:testAndroidHostTest` | Android input logic on the JVM |
 | iOS simulator (Mac only) | `./gradlew :ComposeTextEditor:iosSimulatorArm64Test` | What only UIKit can answer |
 | Android emulator smoke | `./gradlew :androidApp:connectedDebugAndroidTest` | Key events and an input method's edits reach the editor on a device |
-| Browser | `cd browserTests && npx playwright test` | Real key presses in Chromium against the built wasm demo |
+| Browser | `cd browserTests && npx playwright test` | Real key presses and input method compositions in Chromium against the built wasm demo |
 | Gradle check | `./gradlew check` | The JVM and host suites and lint, as the Ubuntu `build` job runs it |
 
 Narrow a run while iterating with `--tests`, for example
@@ -133,7 +133,19 @@ npx playwright test
 ```
 
 `playwright.config.ts` serves the demo itself (`serve.mjs`); `DEMO_DIR` points
-it at another build, for example the development one.
+it at another build, for example the development one. The suite runs one page
+at a time.
+
+`tests/composition.spec.ts` composes through Chromium's own input method,
+driven over the DevTools protocol (`tests/ime.ts`): `Input.imeSetComposition`
+and `Input.insertText` make the browser fire `compositionstart`,
+`compositionupdate`, `beforeinput` (`insertCompositionText`), `input` and
+`compositionend` on the focused field and edit it as an operating system input
+method does. It covers a dead key, a Japanese composition with conversion, a
+cancelled composition, and typing after a commit. A case the editor gets wrong
+today is `test.fixme` with its roadmap item; to reproduce one, change it to
+`test` and run it with `--repeat-each=10` (and `--workers=5` for the failures
+that need load).
 
 ## CI
 
@@ -147,7 +159,7 @@ it at another build, for example the development one.
 | `desktop-macos` | macOS | The three desktop suites, Mac key bindings |
 | `desktop-windows` | Windows | The three desktop suites |
 | `android-emulator` | Ubuntu, API 35 emulator | The Android smoke test |
-| `browser` | Ubuntu, Chromium | The browser tests against a production build of the demo |
+| `browser` | Ubuntu, Chromium | The browser tests, typing and composition, against a production build of the demo |
 | `ios` | macOS | The iOS compile, the iOS tests, and the sample app build |
 
 Each keeps its reports as an artifact when it fails.

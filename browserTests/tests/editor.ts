@@ -46,3 +46,18 @@ export function documentText(page: Page): Promise<string> {
 export async function expectText(page: Page, text: string) {
 	await expect.poll(() => documentText(page)).toBe(text);
 }
+
+/**
+ * Waits for the input field's caret to reach [offset], with nothing selected. The
+ * session copies the editor's caret into the field a frame after a key moves it, and a
+ * browser input method composes at the field's caret, so a composition started sooner
+ * lands where the caret was. A person cannot start one that fast.
+ */
+export async function awaitFieldCaret(page: Page, offset: number) {
+	await expect
+		.poll(() => inputField(page).evaluate(field => {
+			const textArea = field as HTMLTextAreaElement;
+			return [textArea.selectionStart, textArea.selectionEnd];
+		}))
+		.toEqual([offset, offset]);
+}
