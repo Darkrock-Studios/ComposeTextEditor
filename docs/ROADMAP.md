@@ -189,7 +189,7 @@ review.
 | H | Clipboard and HTML | `clipboard/`, `html/`, `dragdrop/` | 4.9, 4.13, 4.17, 6.7 to 6.13, 6.18 to 6.21, 6.24 to 6.27, 7.39, 7.46, 7.47, 7.49, 7.53 |
 | I | Markdown and block model | `markdown/`, `richstyle/` | 5.6, 7.14 to 7.16, 7.43, 7.45, 7.52 |
 | J | Find addon | `ComposeTextEditorFind/` | 7.17 to 7.19, 7.26, 7.29, 7.42 |
-| K | Spell check addon | `ComposeTextEditorSpellCheck/` | 7.20 to 7.22, 7.28, 7.30, 7.31, 7.34, 7.35, 7.38, 7.44 |
+| K | Spell check addon | `ComposeTextEditorSpellCheck/` | 7.20 to 7.22, 7.28, 7.30, 7.31, 7.34, 7.35, 7.38, 7.44, 7.61 |
 | L | Tests and CI | test sources, `.github/workflows/` | 0.1 to 0.3, 0.5 to 0.10, 4.1, 4.15 |
 | M | Accessibility and host API | semantics in `BasicTextEditor.kt`, `RichTextView.kt`, `state/rememberTextEditorState.kt` | 7.1 to 7.4, 7.13, 7.23 to 7.25, 7.32, 7.36, 7.59, 7.60 |
 | N | Core layout and performance | `state/TextEditorState.kt` | 5.7, 7.8 to 7.12 |
@@ -2608,6 +2608,12 @@ Shaping is one line per keystroke. These still scale with document length:
   `SpellCheckingTextEditor` the edit's invalidation removes it at once, and without
   that it marks text nothing has checked. A fix removes only its own underline, as
   before (`SpellCheckStateTest`, `TextDiagnosticsStateTest`).
+- [ ] **7.61 `TextDiagnosticsE2eTest` is flaky. R.** [Opus] [Lane K] Rerun alone
+  at `ec0f83f`, "spelling and diagnostics underline side by side" failed once in
+  three (`expected:<1> but was:<0>`), and in a full `./gradlew check` "a fix
+  shows its label, and applies its replacement" timed out waiting for its
+  condition (2000 ms). Both look like waits on the asynchronous check that are
+  too short or too early under load. Find what they wait on and wait for it.
 
 ### Host API
 
