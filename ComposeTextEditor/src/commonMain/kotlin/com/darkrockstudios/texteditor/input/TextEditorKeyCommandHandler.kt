@@ -28,6 +28,7 @@ import com.darkrockstudios.texteditor.state.moveToNextWord
 import com.darkrockstudios.texteditor.state.moveToParagraphEnd
 import com.darkrockstudios.texteditor.state.moveToParagraphStart
 import com.darkrockstudios.texteditor.state.moveToPreviousWord
+import com.darkrockstudios.texteditor.state.moveToPreviousWordStart
 import com.darkrockstudios.texteditor.state.moveToWordEnd
 import kotlinx.coroutines.CoroutineScope
 
@@ -160,6 +161,7 @@ internal class TextEditorKeyCommandHandler(
 			Motion.Down -> state.moveCursorDown()
 			Motion.WordLeft -> state.moveToPreviousWord()
 			Motion.WordRight -> state.moveToNextWord()
+			Motion.PreviousWordStart -> state.moveToPreviousWordStart()
 			Motion.WordEnd -> state.moveToWordEnd()
 			Motion.LineStart -> state.cursor.moveToLineStart()
 			Motion.LineEnd -> state.moveCursorToLineEnd()
@@ -189,8 +191,8 @@ internal class TextEditorKeyCommandHandler(
 	private fun Motion.mirrored(bindings: KeyBindings): Motion = when (this) {
 		Motion.Left -> Motion.Right
 		Motion.Right -> Motion.Left
-		Motion.WordLeft -> bindings.wordForward
-		Motion.WordRight, Motion.WordEnd -> Motion.WordLeft
+		Motion.WordLeft, Motion.PreviousWordStart -> bindings.wordForward
+		Motion.WordRight, Motion.WordEnd -> bindings.wordBackward
 		Motion.LineStart -> Motion.LineEnd
 		Motion.LineEnd -> Motion.LineStart
 		else -> this

@@ -97,10 +97,25 @@ class KeyBindingsTest {
 		)
 		assertEquals(Action.DeleteWordForward, WindowsKeyBindings.commandFor(chord(Key.Delete, ctrl = true)))
 		assertEquals(Action.DeleteWordForward, WindowsKeyBindings.commandFor(chord(Key.NumPadDelete, ctrl = true)))
-		assertEquals(Motion.WordLeft, WindowsKeyBindings.commandFor(chord(Key.DirectionLeft, ctrl = true)))
-		assertEquals(Action.DeleteWordBackward, WindowsKeyBindings.commandFor(chord(Key.Backspace, ctrl = true)))
 		assertEquals(Motion.Right, WindowsKeyBindings.commandFor(chord(Key.DirectionRight, ctrl = true, alt = true)))
 		assertEquals(Action.Cut, WindowsKeyBindings.commandFor(chord(Key.Delete, shift = true)))
+	}
+
+	@Test
+	fun `windows ctrl left and ctrl backspace stop at line breaks`() {
+		assertEquals(Motion.PreviousWordStart, WindowsKeyBindings.commandFor(chord(Key.DirectionLeft, ctrl = true)))
+		assertEquals(
+			Motion.PreviousWordStart,
+			WindowsKeyBindings.commandFor(chord(Key.NumPadDirectionLeft, ctrl = true, shift = true)),
+		)
+		assertEquals(
+			Action.DeleteToPreviousWordStart,
+			WindowsKeyBindings.commandFor(chord(Key.Backspace, ctrl = true)),
+		)
+		assertEquals(Motion.PreviousWordStart, WindowsKeyBindings.wordBackward)
+		assertEquals(Motion.WordLeft, CtrlKeyBindings.wordBackward)
+		assertEquals(Motion.WordLeft, MacKeyBindings.wordBackward)
+		assertEquals(Motion.Left, WindowsKeyBindings.commandFor(chord(Key.DirectionLeft, ctrl = true, alt = true)))
 	}
 
 	@Test
@@ -122,11 +137,11 @@ class KeyBindingsTest {
 	fun `the windows table agrees with the ctrl table away from its own chords`() {
 		val ownKeys = setOf(
 			Key.DirectionRight, Key.NumPadDirectionRight, Key.DirectionDown, Key.NumPadDirectionDown,
-			Key.Delete, Key.NumPadDelete,
+			Key.Delete, Key.NumPadDelete, Key.DirectionLeft, Key.NumPadDirectionLeft, Key.Backspace,
 		)
 		val keys = ownKeys + listOf(
 			Key.A, Key.C, Key.V, Key.X, Key.Y, Key.Z, Key.B, Key.K, Key.Enter, Key.Tab, Key.Insert,
-			Key.DirectionLeft, Key.DirectionUp, Key.MoveHome, Key.MoveEnd, Key.PageUp, Key.PageDown, Key.Backspace,
+			Key.DirectionUp, Key.MoveHome, Key.MoveEnd, Key.PageUp, Key.PageDown,
 		)
 		val flags = listOf(false, true)
 		for (key in keys) for (ctrl in flags) for (shift in flags) for (alt in flags) {

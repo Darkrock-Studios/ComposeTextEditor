@@ -244,6 +244,7 @@ On every desktop platform unless a row names one; the macOS chords are in 3.1.
 | The same arrows in an English paragraph followed by a Hebrew one | Each paragraph follows its own direction |
 | Ctrl+Right / Ctrl+Delete on Linux | To / delete to the end of the word, or of the next one |
 | Ctrl+Right / Ctrl+Delete on Windows | To / delete to the start of the next word; from a line's last word, the line end first, and an empty line is a stop (hammer-editor#852) |
+| Ctrl+Left / Ctrl+Backspace on Windows | To / delete to the start of the word, or of the previous one on the line, else the line start; from a line start, the previous line's end (only the line break goes), and an empty line is a stop |
 | Ctrl+Left / Ctrl+Right through "hello, world... (again)" | Word starts and ends only; punctuation is skipped |
 | Ctrl+Left / Ctrl+Right through "don’t", "naïve" typed with a combining mark, "日本語を勉強します", and "a 😀 b" | The contraction and the accented word are one stop each, Japanese steps by dictionary word, the emoji is a stop of its own |
 | Double-click on "don’t", on an emoji, on a comma, on a space after a word | Selects the whole contraction; the whole emoji; nothing; the word before the space |

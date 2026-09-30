@@ -80,7 +80,7 @@ host:
 | Table | Used on | Differs in |
 | --- | --- | --- |
 | `CtrlKeyBindings` | Linux, Android, and any other Ctrl host | The base: Ctrl for shortcuts and jumps; going forward stops at ends (GTK, `EditText`) |
-| `WindowsKeyBindings` | Windows desktop, browsers on Windows | Going forward runs on to the next start: Ctrl+Right and Ctrl+Delete to the next word's (`WordRight`, `DeleteWordForward`), Ctrl+Down to the next paragraph's |
+| `WindowsKeyBindings` | Windows desktop, browsers on Windows | Going forward runs on to the next start: Ctrl+Right and Ctrl+Delete to the next word's (`WordRight`, `DeleteWordForward`), Ctrl+Down to the next paragraph's. Word motion stops at line breaks both ways: Ctrl+Left and Ctrl+Backspace from a line start go to the previous line's end (`PreviousWordStart`, `DeleteToPreviousWordStart`) |
 | `MacKeyBindings` | macOS, iPadOS, browsers on macOS | Cmd for shortcuts, Option for word and paragraph jumps; Option+Right and Option+Delete stop at the word end; Cocoa's Emacs-style Ctrl+A, E, F, B, N, P, D, H and K |
 
 Windows and Linux are the same desktop JVM target, so the choice is made at

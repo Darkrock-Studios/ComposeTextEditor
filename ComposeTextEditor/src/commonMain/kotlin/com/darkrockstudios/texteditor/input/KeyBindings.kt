@@ -46,11 +46,18 @@ fun interface KeyBindings {
 	/**
 	 * The motion the forward word chord (Ctrl+Right, Option+Right) performs. In a
 	 * right-to-left paragraph the arrow keys mirror, so Ctrl+Left performs this and
-	 * Ctrl+Right the word start. [WindowsKeyBindings] returns [Motion.WordRight]. A
+	 * Ctrl+Right [wordBackward]. [WindowsKeyBindings] returns [Motion.WordRight]. A
 	 * lambda cannot override it, so bindings that wrap the platform's on Windows keep
 	 * it by delegating: `object Mine : KeyBindings by platformKeyBindings() { ... }`.
 	 */
 	val wordForward: Motion get() = Motion.WordEnd
+
+	/**
+	 * The motion the backward word chord (Ctrl+Left, Option+Left) performs, which Ctrl+Right
+	 * performs in a right-to-left paragraph. [WindowsKeyBindings] returns
+	 * [Motion.PreviousWordStart]. Delegate to keep it, as for [wordForward].
+	 */
+	val wordBackward: Motion get() = Motion.WordLeft
 }
 
 /** The bindings of the host platform. */
@@ -124,23 +131,28 @@ object CtrlKeyBindings : KeyBindings {
 /**
  * Windows conventions: [CtrlKeyBindings], except that going forward runs on to the next
  * start, as Windows edit controls, Word and WordPad do: Ctrl+Right and Ctrl+Delete to the
- * start of the next word, Ctrl+Down to the start of the next paragraph.
+ * start of the next word, Ctrl+Down to the start of the next paragraph. Word motion and
+ * deletion also stop at every line break: Ctrl+Left and Ctrl+Backspace from a line start go
+ * to the previous line's end, not its last word.
  */
 object WindowsKeyBindings : KeyBindings {
 	override val wordForward: Motion get() = Motion.WordRight
+	override val wordBackward: Motion get() = Motion.PreviousWordStart
 
 	override fun commandFor(event: KeyEvent): EditorCommand? {
-		val forward = if (event.isCtrlShortcut) {
+		val own = if (event.isCtrlShortcut) {
 			when (event.navigationKey) {
 				Key.DirectionRight -> Motion.WordRight
+				Key.DirectionLeft -> Motion.PreviousWordStart
 				Key.DirectionDown -> Motion.NextParagraphStart
 				Key.Delete -> Action.DeleteWordForward
+				Key.Backspace -> Action.DeleteToPreviousWordStart
 				else -> null
 			}
 		} else {
 			null
 		}
-		return forward ?: CtrlKeyBindings.commandFor(event)
+		return own ?: CtrlKeyBindings.commandFor(event)
 	}
 }
 

@@ -200,7 +200,7 @@ translation paths:
   motion is not something a host can register. The arrow keys are visual:
   in a paragraph the layout resolves as right-to-left, the handler mirrors
   the bound motion (Left and Right, the word motions through
-  `KeyBindings.wordForward`, line start and end) before running it; Home,
+  `KeyBindings.wordForward` and `wordBackward`, line start and end) before running it; Home,
   End, deletes and the Emacs chords stay logical. Windows/Linux and macOS
   conventions ship as two `KeyBindings` values; hosts can substitute their
   own and register actions for their own chords to bind.

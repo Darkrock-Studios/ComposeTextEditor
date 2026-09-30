@@ -623,13 +623,18 @@ fixes what users feel every minute.
   paragraph end but keeps nothing. Cocoa saves killed text to a kill ring,
   consecutive kills append to it, and Ctrl+Y yanks it back. Separate from the
   clipboard.
-- [ ] **2.12 Windows Ctrl+Left stops at the previous line's end.** [Opus]
+- [x] **2.12 Windows Ctrl+Left stops at the previous line's end.** [Opus]
   [Lane D] Since 1.5 Windows' Ctrl+Right stops at the line end before the next
   line's first word, but `WordLeft` is one motion for every platform, so
   Ctrl+Left and Ctrl+Backspace from a line start still reach the previous
   line's last word in one step. Windows edit controls stop at the previous
   line's end first; GTK and Cocoa do not. Needs a Windows-only motion beside
   `WordRight` in the binding tables.
+  Done: `Motion.PreviousWordStart` and `Action.DeleteToPreviousWordStart` on
+  `WindowsKeyBindings`' Ctrl+Left and Ctrl+Backspace, the mirror of
+  `WordRight`: the start of the word on this line, else the line start, and
+  from a line start the previous line's end. `KeyBindings.wordBackward` names
+  it for the mirrored arrows of a right-to-left paragraph.
 
 ## Phase 3: touch polish (Android first)
 

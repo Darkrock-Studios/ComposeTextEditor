@@ -20,6 +20,12 @@ sealed interface EditorCommand {
 
 		/** To the start of the next word: Ctrl+Right on Windows. */
 		WordRight,
+
+		/**
+		 * To the start of the previous word on this line, else the line start; from a line
+		 * start, to the previous line's end: Ctrl+Left on Windows, the mirror of [WordRight].
+		 */
+		PreviousWordStart,
 		LineStart,
 		LineEnd,
 		DocumentStart,
@@ -82,6 +88,9 @@ sealed interface EditorCommand {
 
 			/** Deletes to where [Motion.WordEnd] goes, the end of the word. */
 			val DeleteToWordEnd = Action("editor.deleteToWordEnd", isEdit = true)
+
+			/** Deletes back to where [Motion.PreviousWordStart] goes, stopping at line breaks. */
+			val DeleteToPreviousWordStart = Action("editor.deleteToPreviousWordStart", isEdit = true)
 			val DeleteToLineStart = Action("editor.deleteToLineStart", isEdit = true)
 			val DeleteToLineEnd = Action("editor.deleteToLineEnd", isEdit = true)
 
@@ -125,6 +134,7 @@ sealed interface EditorCommand {
 				DeleteWordBackward,
 				DeleteWordForward,
 				DeleteToWordEnd,
+				DeleteToPreviousWordStart,
 				DeleteToLineStart,
 				DeleteToLineEnd,
 				DeleteToParagraphEnd,
