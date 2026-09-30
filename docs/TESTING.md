@@ -16,6 +16,15 @@
 Narrow a run while iterating with `--tests`, for example
 `./gradlew :ComposeTextEditor:desktopTest --tests 'e2e.NavigationE2eTest'`.
 
+Each desktop suite runs in one JVM with a 1 GB heap (the root
+`build.gradle.kts`); the core suite's heap stays under 200 MB after a
+collection. MockK keeps every mock, child mocks included, and every call
+recorded on one with its arguments and a stack trace, until the JVM exits.
+`countingMeasurer`, whose mocks the editor calls per line, does not record
+`measure` and drops every mock's recorded calls when it makes a measurer. A
+new mock that is called per line should not record those calls
+(`excludeRecords`).
+
 ## The test font
 
 The UI test harnesses (`editorUiTest`, `differentialUiTest`, `findUiTest`,

@@ -293,11 +293,27 @@ editor does rather than what it should do.
   (`e2e/TestFontTest.kt` and one test per addon fail if a harness falls back to
   the system font). The three desktop suites pass with the machine's fonts and
   with fontconfig restricted to DejaVu; `docs/TESTING.md` has the recipe.
-- [ ] **0.10 The core test JVM's heap. R.** [Opus] [Lane L] `:ComposeTextEditor:desktopTest`
+- [x] **0.10 The core test JVM's heap. R.** [Opus] [Lane L] `:ComposeTextEditor:desktopTest`
   runs in one JVM with Gradle's default 512 MB heap, and the suite sits near it:
   adding one class of five 500-line editors on the mocked counting measurer
   (MockK records every call) ran later classes out of memory (seen in 7.51, whose
   test was cut to 200 lines). Set `maxHeapSize`, or fork every so many classes.
+  Done: the root build gives every `desktopTest` a 1 GB heap, and
+  `countingMeasurer` no longer lets MockK keep what it records: MockK keeps
+  every mock, child mocks included, and every call on one with its arguments
+  and a stack trace, for the life of the JVM, and the editor calls the
+  measurer's mocks per line. Its `measure` is not recorded, and making a
+  measurer drops every mock's recorded calls, answers and exclusions kept.
+  Measured with GC
+  logs over the three suites, with the bundled font: the core suite's live
+  heap is 60 to 70 MB through the UI tests, then climbs in the `state` cost
+  tests on the mocked measurer, where a heap histogram showed about 118,000
+  retained MockK invocations. Before, at 512 MB: the heap full at 510 MB, 46
+  full collections that freed almost nothing, 4.7 s of pauses. A 2 GB heap
+  alone: 548 MB live at the peak, no full collection. Both changes: at most
+  200 MB after a collection, falling to 80 MB once the old regions are
+  collected, no full collection, 0.2 s of pauses. The addon suites stay under
+  30 MB. Forking was not needed.
 - [x] **0.6 Golden screenshots.** [Opus] [Lane L] A small set of scenes with a
   bundled font on one CI machine: caret, selection across wrapped and empty
   lines, squiggles, list markers, composing underline.
