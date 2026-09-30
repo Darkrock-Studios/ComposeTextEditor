@@ -156,10 +156,10 @@ internal fun TextEditorState.imeDeleteSurroundingText(beforeLength: Int, afterLe
 /** `deleteSurroundingTextInCodePoints`: same as [imeDeleteSurroundingText] but counted in code points. */
 internal fun TextEditorState.imeDeleteSurroundingTextInCodePoints(beforeLength: Int, afterLength: Int) {
 	val selection = selectionAsTextRange()
-	val fullText = getAllText()
+	val text = documentChars
 	// Both counts stop at the document edge, so they are already bounded.
-	val charsBefore = codePointsToChars(fullText, selection.min, beforeLength, backwards = true)
-	val charsAfter = codePointsToChars(fullText, selection.max, afterLength, backwards = false)
+	val charsBefore = codePointsToChars(text, selection.min, beforeLength, backwards = true)
+	val charsAfter = codePointsToChars(text, selection.max, afterLength, backwards = false)
 	if (!selection.collapsed) {
 		deleteAroundSelection(selection, charsBefore, charsAfter)
 		return
@@ -386,6 +386,10 @@ private fun codePointsToChars(
 	backwards: Boolean
 ): Int {
 	if (codePointCount <= 0) return 0
+	// Every code point is at least one char, so a count reaching the edge takes all of it
+	// without reading it: IMEs pass Int.MAX_VALUE for "everything".
+	val available = if (backwards) fromIndex else text.length - fromIndex
+	if (codePointCount >= available) return available
 	var charCount = 0
 	var codePointsRemaining = codePointCount
 	if (backwards) {

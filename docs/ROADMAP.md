@@ -1816,9 +1816,33 @@ Shaping is one line per keystroke. These still scale with document length:
   `LineWrap` is rebuilt, and every rich span is re-anchored. Measured on the
   iOS simulator (4.21): one keyboard edit takes 9.4 ms at 200k characters
   against 0.7 ms at 2k, wherever the caret is.
-- [ ] **7.9** [Opus] [Lane N] `getAllText()` rebuilds the whole document per
+- [x] **7.9** [Opus] [Lane N] `getAllText()` rebuilds the whole document per
   revision when read by semantics, the Android IME, and the desktop adapter.
   214 µs per revision at 200k characters on the desktop JVM (4.21).
+  The readers that need a few characters now read them in place through
+  `DocumentSnapshot.chars`, a `CharSequence` over the lines and their
+  starts: Android's text before and after the caret, surrounding text,
+  caps mode and composing text, the initial surrounding text (now a window
+  of 2048 characters each side, which the platform trims), `imeSubSequence`,
+  `imeCharAt`, and the code point deletes. The desktop
+  adapter already read only windows. The iOS document layout keys on the
+  line list instead of the text. What truly needs the whole text is
+  semantics, the skiko request's `value()` and `text` (iOS and web), and
+  Android's `ExtractedText`; the last three take a plain `String`
+  (`plainText`, the styled text's own string when that is built). Both
+  whole texts are memoized per text revision and, after an edit, spliced
+  from the last revision whose text of that kind was built: its unchanged
+  first and last lines are copied as two ranges, and only the changed lines
+  and the two at the edges (whose empty annotations a copied range would
+  drop) are read. `setLine` and `replaceLines` say which lines changed
+  (`LineSplice`); any other writer's are found by identity. A base that
+  shares no line with the revision is dropped, so an unread revision keeps
+  at most one old text of each kind, and a read one none. `DocumentTextCostTest` and the Android
+  host's `InputConnectionReadCostTest` pin the reads. Desktop JVM at 200k
+  characters: the styled text per revision 59.5 µs to 24.6 µs, the plain
+  text 24.6 µs (62 µs built from the lines). Still O(document) in
+  characters copied; a reader that never asks, which is now every reader
+  but those three, costs nothing.
 - [x] **7.10** [Opus] [Lane N] Any viewport change, height-only included,
   reshapes the entire document. This is every soft keyboard open and close.
   Rows are shaped to the width alone, so a change of height now only moves

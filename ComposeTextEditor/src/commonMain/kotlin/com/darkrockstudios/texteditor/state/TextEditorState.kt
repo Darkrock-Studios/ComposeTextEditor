@@ -1126,7 +1126,8 @@ class TextEditorState(
 		updated.addAll(lines.subList(0, from))
 		updated.addAll(replacement)
 		updated.addAll(lines.subList(to + 1, lines.size))
-		setLines(updated.ifEmpty { listOf(AnnotatedString("")) })
+		if (updated.isEmpty()) return setLines(listOf(AnnotatedString("")))
+		setLines(updated, LineSplice(unchangedBefore = from, unchangedAfter = lines.size - (to + 1)))
 	}
 
 	/**
@@ -1145,13 +1146,16 @@ class TextEditorState(
 	internal var linesWritten = 0L
 		private set
 
-	internal fun setLines(lines: List<AnnotatedString>) {
+	/** Publishes [lines]; [splice] says which lines changed, when the caller knows. */
+	internal fun setLines(lines: List<AnnotatedString>, splice: LineSplice? = null) {
 		linesWritten += lines.size
-		mutateContent { it.withLines(lines) }
+		mutateContent { it.withLines(lines, splice) }
 	}
 
 	internal fun setLine(index: Int, text: AnnotatedString) {
-		setLines(workingContent.lines.toMutableList().also { it[index] = text })
+		val lineCount = workingContent.lines.size
+		if (index !in 0 until lineCount) throw IndexOutOfBoundsException("line $index of $lineCount")
+		replaceLines(index, index, listOf(text))
 	}
 
 	internal fun setRichSpans(richSpans: Set<RichSpan>) {
@@ -1306,20 +1310,6 @@ class TextEditorState(
 
 		val line = lineOfCharacter(starts, lineCount, index)
 		return CharLineOffset(line, index - starts[line])
-	}
-
-	/**
-	 * Index of the line containing flat character [index], by binary search over the
-	 * snapshot's line starts. [index] must be within the document.
-	 */
-	private fun lineOfCharacter(starts: IntArray, lineCount: Int, index: Int): Int {
-		var low = 0
-		var high = lineCount - 1
-		while (low < high) {
-			val mid = (low + high + 1) ushr 1
-			if (starts[mid] <= index) low = mid else high = mid - 1
-		}
-		return low
 	}
 
 	/**
@@ -1884,6 +1874,15 @@ class TextEditorState(
 	 * with newlines and preserving character-level spans.
 	 */
 	fun getAllText(): AnnotatedString = workingContent.getAllText()
+
+	/** [getAllText] without its styles, for a reader that needs the whole text as a string. */
+	internal fun getAllPlainText(): String = workingContent.plainText
+
+	/**
+	 * The document's characters read in place, for a reader that needs a few of them (an
+	 * input method looking around the caret) and must not build the whole text.
+	 */
+	internal val documentChars: CharSequence get() = workingContent.chars
 
 	/** Returns the total character count of the document, counting newlines between lines. */
 	fun getTextLength(): Int {

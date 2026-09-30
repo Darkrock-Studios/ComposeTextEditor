@@ -43,7 +43,10 @@ a flat set of `RichSpan`s, published wholesale on every mutation (see
 "Document model and transactions" below). The snapshot also memoizes the
 indices derived from it (line-start offsets, spans grouped by start line), so
 hot queries stay cheap and survive across revisions that did not invalidate
-them.
+them. The whole text as one string is built only for the readers that need
+it (semantics, the skiko input request, Android's extracted text), spliced
+from the last built revision; everything else reads characters in place
+through `chars`.
 
 ### Two span systems
 

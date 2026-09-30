@@ -139,7 +139,7 @@ internal class SkikoTextEditorInputMethodRequest(
 	override val value: () -> TextFieldValue = {
 		contentRevision
 		TextFieldValue(
-			text = editorState.getAllText().text,
+			text = editorState.getAllPlainText(),
 			selection = editorState.selectionAsTextRange(),
 		)
 	}
@@ -226,7 +226,7 @@ internal class SkikoTextEditorInputMethodRequest(
 		override val text: String
 			get() {
 				contentRevision
-				return editorState.getAllText().text
+				return editorState.getAllPlainText()
 			}
 
 		override fun toString(): String = text

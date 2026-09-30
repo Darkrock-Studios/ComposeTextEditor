@@ -4,6 +4,7 @@ import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
 import com.darkrockstudios.texteditor.state.DocumentSnapshot
+import com.darkrockstudios.texteditor.state.LineSplice
 
 /**
  * Repairs line-block invariant violations in a revision about to be published.
@@ -49,7 +50,9 @@ private fun repairPlaceholders(
 		val line = span.range.start.line
 		lines.getOrNull(line)?.let { lines[line] = rebuildWithoutBlock(it, block) }
 	}
-	return DocumentSnapshot(lines, snapshot.richSpans - violations.map { it.first }.toSet())
+	val rebuilt = violations.map { it.first.range.start.line }.filter { it in lines.indices }
+	val splice = if (rebuilt.isEmpty()) null else LineSplice(rebuilt.min(), lines.size - 1 - rebuilt.max())
+	return snapshot.withLines(lines, splice).withRichSpans(snapshot.richSpans - violations.map { it.first }.toSet())
 }
 
 /**
@@ -122,5 +125,5 @@ private fun repairFenceLanguages(snapshot: DocumentSnapshot): DocumentSnapshot {
 		}
 	}
 	if (removed.isEmpty() && added.isEmpty()) return snapshot
-	return DocumentSnapshot(snapshot.lines, spans - removed + added)
+	return snapshot.withRichSpans(spans - removed + added)
 }

@@ -18,6 +18,7 @@ import com.darkrockstudios.texteditor.DrawEditorText
 import com.darkrockstudios.texteditor.DrawSelection
 import com.darkrockstudios.texteditor.TextEditorStyle
 import com.darkrockstudios.texteditor.cursor.DrawCursor
+import com.darkrockstudios.texteditor.state.DocumentSnapshot
 import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.moveToNextWord
 import kotlinx.coroutines.test.TestScope
@@ -159,6 +160,18 @@ class LongDocumentBenchmark {
 			state.insertCharacterAtCursor('z')
 		}) {
 			state.getAllText()
+		}
+		measure("whole plain text per revision", warmup = 100, runs = 300, setup = {
+			toNextLine()
+			state.insertCharacterAtCursor('z')
+		}) {
+			state.getAllPlainText()
+		}
+		measure("whole text, built from the lines", warmup = 100, runs = 300) {
+			DocumentSnapshot(state.textLines).getAllText()
+		}
+		measure("whole plain text, built from the lines", warmup = 100, runs = 300) {
+			DocumentSnapshot(state.textLines).plainText
 		}
 
 		var tall = true

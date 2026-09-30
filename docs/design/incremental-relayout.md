@@ -186,10 +186,22 @@ per-line query the layout pass runs costs the spans on that line, not the
 spans in the document. `SpanScanCostTest` pins a relayout to a constant number
 of flat span-set iterations.
 
-## 8. Semantics text
+## 8. Whole-document text
 
-`DocumentSnapshot.getAllText()` (the whole document as one string, read by the
-semantics block on every rebuild) is memoized per text revision: built on
-first read and shared across span-only revisions, the same pattern as the
-line-start and span indices. With this, every follow-up from issue #36 has
-landed.
+`DocumentSnapshot.getAllText()` (the whole document as one styled string, read
+by semantics) and `plainText` (the same without styles, read by the skiko
+input request and Android's extracted text) are memoized per text revision:
+built on first read and shared across span-only revisions, the same pattern as
+the line-start and span indices. After an edit, a revision's text is spliced
+from the last revision whose text was built: that one's unchanged first and
+last lines are copied as two ranges of its text, and only the changed lines
+are read, with the line at each end of a copied range, whose empty
+annotations (an empty block line's styles) a copied range would drop. The
+edit says which lines changed (`LineSplice`, from `setLine` and
+`replaceLines`); any other writer's lines are compared by identity. An unread
+revision keeps at most one earlier text of each kind alive, never a chain,
+and drops it once its own text is built.
+
+Readers that need a few characters read `DocumentSnapshot.chars` instead, a
+`CharSequence` over the lines and their starts, so an input method's reads
+around the caret never build the whole text.

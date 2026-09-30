@@ -292,7 +292,7 @@ private const val ZERO_WIDTH_SPACE = '​'
  */
 internal fun TextEditorState.replaceAllAsEdit(text: AnnotatedString) {
 	val newText = text.normalizeLineEndings()
-	val old = getAllText().text
+	val old = getAllPlainText()
 	val new = newText.text
 	val shorter = minOf(old.length, new.length)
 	var prefix = 0
