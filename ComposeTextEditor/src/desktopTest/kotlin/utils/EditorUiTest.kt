@@ -83,6 +83,7 @@ internal fun editorUiTest(
 	textStyle: TextStyle = TextStyle.Default,
 	trailingFocusable: Boolean = false,
 	contentDescription: String? = null,
+	readOnly: Boolean = false,
 	block: EditorUiTestScope.() -> Unit,
 ) = runSkikoComposeUiTest(density = Density(density)) {
 	val clipboard = InMemoryClipboard()
@@ -113,6 +114,7 @@ internal fun editorUiTest(
 					onLinkClick = onLinkClick,
 					keyBindings = keyBindings,
 					contentDescription = contentDescription,
+					readOnly = readOnly,
 				)
 				if (trailingFocusable) {
 					Box(Modifier.size(20.dp).onFocusChanged { trailing.focused = it.isFocused }.focusable())
@@ -126,7 +128,7 @@ internal fun editorUiTest(
 	// which are then silently dropped. Don't hand control to the test until the
 	// editor actually holds focus.
 	if (enabled && autoFocus) {
-		waitUntil(timeoutMillis = 5_000) { state.isFocused }
+		waitUntil(timeoutMillis = 5_000) { state.hasFocus }
 	}
 	EditorUiTestScope(this, state, clipboard, trailing).block()
 }

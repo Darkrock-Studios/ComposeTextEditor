@@ -99,6 +99,8 @@ fun TextEditorDemoUi(
 	}
 
 	var enabled by remember { mutableStateOf(true) }
+	var readOnly by remember { mutableStateOf(false) }
+	val editable = enabled && !readOnly
 
 	Column(modifier = modifier) {
 		Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
@@ -111,18 +113,11 @@ fun TextEditorDemoUi(
 				overflow = TextOverflow.Ellipsis,
 			)
 			Text("${state.wordCount} words", style = MaterialTheme.typography.labelMedium)
-			// The editor's enabled flag gates user input only; the toolbar and Roundtrip
-			// act on the state directly, so they hide with it.
-			Row(
-				modifier = Modifier
-					.toggleable(value = enabled, role = Role.Switch, onValueChange = { enabled = it })
-					.padding(horizontal = 8.dp),
-				verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-			) {
-				Text("Enabled", modifier = Modifier.padding(end = 4.dp))
-				Switch(checked = enabled, onCheckedChange = null)
-			}
-			if (enabled && demoContent != DemoContent.Rich) {
+			// The editor's enabled and read-only flags gate user input only; the toolbar and
+			// Roundtrip act on the state directly, so they hide with them.
+			LabeledSwitch("Enabled", enabled) { enabled = it }
+			if (enabled) LabeledSwitch("Read only", readOnly) { readOnly = it }
+			if (editable && demoContent != DemoContent.Rich) {
 				Button(
 					onClick = {
 						val markdown = markdownExtension.exportAsMarkdown()
@@ -137,7 +132,7 @@ fun TextEditorDemoUi(
 			}
 		}
 
-		if (enabled) {
+		if (editable) {
 			TextEditorToolbar(
 				mardkown = markdownExtension,
 				markdownControls = (demoContent != DemoContent.Rich)
@@ -157,6 +152,7 @@ fun TextEditorDemoUi(
 				.fillMaxSize(),
 			style = style,
 			enabled = enabled,
+			readOnly = readOnly,
 			contentDescription = "Document",
 			onRichSpanClick = { span, clickType, _ ->
 				when (clickType) {
@@ -168,5 +164,18 @@ fun TextEditorDemoUi(
 			},
 			onLinkClick = uriHandler::openUri,
 		)
+	}
+}
+
+@Composable
+private fun LabeledSwitch(label: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+	Row(
+		modifier = Modifier
+			.toggleable(value = checked, role = Role.Switch, onValueChange = onCheckedChange)
+			.padding(horizontal = 8.dp),
+		verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+	) {
+		Text(label, modifier = Modifier.padding(end = 4.dp))
+		Switch(checked = checked, onCheckedChange = null)
 	}
 }

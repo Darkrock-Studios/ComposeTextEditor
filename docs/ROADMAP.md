@@ -182,13 +182,13 @@ review.
 | B | Pointer and touch | `textEditorPointerInputHandling.kt`, `state/TextEditorSelectionManager.kt`, `DrawSelectionHandles.kt` | 1.9, 1.12 to 1.16, 1.21 to 1.24, 3.1, 3.2, 3.4 to 3.8, 3.13, 3.15, 4.23, 6.16 |
 | C | Drawing and geometry | `Draw*.kt`, `cursor/`, `scrollbar/`, `state/TextEditorScrollState.kt`, hit testing | 1.8, 1.10, 1.11, 1.17, 1.18, 3.3, 3.12, 3.16, 4.14, 7.6, 7.7 |
 | D | Bindings, actions, menu | `input/KeyBindings.kt`, `input/EditorCommand.kt`, `input/BuiltinEditorActions.kt`, `contextmenu/` | 2.1, 2.2, 2.4, 2.5, 2.7 to 2.12, 4.8, 5.8 |
-| E | Input sessions on desktop, iOS, web | `desktopMain`, `iosMain`, `wasmJsMain` under `input/` | 4.2 to 4.7, 4.10 to 4.12, 4.19, 4.21, 4.22, 4.24 to 4.26, 4.28, 4.29, 4.32, 4.33 |
+| E | Input sessions on desktop, iOS, web | `desktopMain`, `iosMain`, `wasmJsMain` under `input/` | 4.2 to 4.7, 4.10 to 4.12, 4.19, 4.21, 4.22, 4.24 to 4.26, 4.28, 4.29, 4.32, 4.33, 7.37 |
 | F | Android input | `androidMain` | 0.4, 3.9 to 3.11, 3.14, 3.17, 4.16, 4.18, 4.20, 4.27, 4.30, 4.31 |
-| G | Edit pipeline and undo | `state/TextEditManager.kt`, `state/TextEditHistory.kt`, `state/EditBehavior.kt`, `input/ImeEditLogic.kt` | 1.20, 5.1 to 5.5, 5.9, 6.1 to 6.6, 6.14, 6.15, 6.17, 6.22 |
-| H | Clipboard and HTML | `clipboard/`, `html/`, `dragdrop/` | 4.9, 4.13, 4.17, 6.7 to 6.13, 6.18 to 6.21 |
+| G | Edit pipeline and undo | `state/TextEditManager.kt`, `state/TextEditHistory.kt`, `state/EditBehavior.kt`, `input/ImeEditLogic.kt` | 1.20, 5.1 to 5.5, 5.9, 6.1 to 6.6, 6.14, 6.15, 6.17, 6.22, 6.23 |
+| H | Clipboard and HTML | `clipboard/`, `html/`, `dragdrop/` | 4.9, 4.13, 4.17, 6.7 to 6.13, 6.18 to 6.21, 7.39 |
 | I | Markdown and block model | `markdown/`, `richstyle/` | 5.6, 7.14 to 7.16 |
 | J | Find addon | `ComposeTextEditorFind/` | 7.17 to 7.19, 7.26, 7.29 |
-| K | Spell check addon | `ComposeTextEditorSpellCheck/` | 7.20 to 7.22, 7.28, 7.30, 7.31, 7.34, 7.35 |
+| K | Spell check addon | `ComposeTextEditorSpellCheck/` | 7.20 to 7.22, 7.28, 7.30, 7.31, 7.34, 7.35, 7.38 |
 | L | Tests and CI | test sources, `.github/workflows/` | 0.1 to 0.3, 0.5 to 0.9, 4.1, 4.15 |
 | M | Accessibility and host API | semantics in `BasicTextEditor.kt`, `RichTextView.kt`, `state/rememberTextEditorState.kt` | 7.1 to 7.4, 7.13, 7.23 to 7.25, 7.32, 7.36 |
 | N | Core layout and performance | `state/TextEditorState.kt` | 5.7, 7.8 to 7.12 |
@@ -1650,6 +1650,21 @@ iOS Safari; browser tests run in CI.
   reader that asks for caret bounds after every keystroke (NVDA through the
   Java Access Bridge) pays a whole-document shape per keystroke on a long
   document.
+- [ ] **7.37** [Opus] [Lane E] Turning input back on while the editor keeps
+  focus (`enabled` or, since 7.13, `readOnly` switched off) marks it focused
+  but starts no input session until the next tap, by design, so the soft
+  keyboard does not rise unasked. Desktop dead keys and IME composition, and
+  Android and iOS IME text, do nothing until then. Start a session that shows
+  no keyboard, or document the host's `requestFocus` after the toggle.
+- [ ] **7.38** [Opus] [Lane K] `SpellCheckingTextEditor` has no `readOnly`
+  (7.13), and its corrections are menu items that call `correctSpelling`
+  directly, past `ContextMenuActions`' editable gate. Forward `readOnly` and
+  offer no corrections while it is set.
+- [ ] **7.39** [Opus] [Lane H] On the web a disabled or read-only editor (7.13)
+  has no input session, so no backing text area receives the browser's `copy`
+  event and `ClipboardEventsEffect` answers nothing: Ctrl+C falls back to
+  `navigator.clipboard`, plain text only, and fails where the page may not
+  write the clipboard.
 
 ### Right-to-left and bidirectional text
 
@@ -1724,6 +1739,15 @@ Shaping is one line per keystroke. These still scale with document length:
   length, an input filter, a soft-wrap toggle with horizontal scrolling.
   The soft keyboard options are `TextEditorState.keyboardSettings` since
   3.11, honoured on Android; iOS and web are 4.32.
+  Progress, in chunks:
+  - Read-only with a caret: done. `readOnly` on both editor composables: the
+    caret shows and blinks, and moves and selects from the keyboard, pointer
+    and screen readers; no edit reaches the document by any path (keys,
+    menu, touch toolbar, semantics, IME), no input session starts, so no
+    soft keyboard; copy stays; a tap shows the caret handle. Semantics say
+    editable false, not disabled. `TextEditorState.hasFocus` is now public
+    (focus whether or not the editor takes input), and the focus border
+    follows it. Found: 7.37, 7.38, 7.39.
 
 ### Markdown export
 

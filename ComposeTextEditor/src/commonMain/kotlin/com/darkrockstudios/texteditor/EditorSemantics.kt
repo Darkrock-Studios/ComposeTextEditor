@@ -56,6 +56,7 @@ import com.darkrockstudios.texteditor.state.typedInput
 internal fun Modifier.editorSemantics(
 	state: TextEditorState,
 	enabled: Boolean,
+	editable: Boolean,
 	focusRequester: FocusRequester,
 	actions: ContextMenuActions,
 	contentDescription: String?,
@@ -68,21 +69,21 @@ internal fun Modifier.editorSemantics(
 		state.composingRange?.let {
 			textCompositionRange = TextRange(state.getCharacterIndex(it.start), state.getCharacterIndex(it.end))
 		}
-		isEditable = enabled
+		isEditable = editable
 		contentDescription?.let { this.contentDescription = it }
 		getTextLayoutResult { results -> document.addLayoutTo(results) }
 		clipboardActions(actions)
 		longPressOpensMenu(focusRequester, actions)
-		editorSemanticsEdits(state, enabled)
+		editorSemanticsEdits(state, enabled, editable)
 		selectionSemantics(state)
 		onClick { focusRequester.requestFocus(); true }
 	}
 }
 
-private fun SemanticsPropertyReceiver.editorSemanticsEdits(state: TextEditorState, enabled: Boolean) {
+private fun SemanticsPropertyReceiver.editorSemanticsEdits(state: TextEditorState, enabled: Boolean, editable: Boolean) {
 	if (!enabled) {
 		disabled()
-	} else {
+	} else if (editable) {
 		setText { newText ->
 			state.replaceAllAsEdit(newText)
 			true

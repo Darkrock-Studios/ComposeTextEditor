@@ -181,7 +181,11 @@ anywhere in the padding reaches the nearest row.
 Accessibility services see the editor through its semantics
 (`EditorSemantics.kt`), modelled on `BasicTextField`'s: the whole text as an
 editable field, the selection, and the actions a screen reader or test drives.
-A disabled editor reports itself disabled and offers no edit actions. Its
+A disabled editor reports itself disabled and offers no edit actions; a
+read-only one (`readOnly`) shows and moves its caret but is gated exactly as a
+disabled one is for input, menus and edit semantics, and reports itself not
+editable rather than disabled. `isFocused` means focused and taking input;
+`hasFocus` means focused. Its
 `setText` is an edit, not a document load: it replaces only the part of the
 text that differs, as one undo step, so the rest keeps its spans. Copy, cut,
 paste and the long-press menu run through the action registry, as the keyboard

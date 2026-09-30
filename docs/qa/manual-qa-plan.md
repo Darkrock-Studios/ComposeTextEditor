@@ -783,6 +783,21 @@ Android unless a step says otherwise.
    the thumb pages toward the pointer (and keeps paging while held), and no thumb
    once the document fits (delete most of it).
 
+## 8b1. Read-only with a caret (7.13)
+
+Rich Text Editor demo, turn the header's Read only switch on.
+
+1. Desktop and web: click in the text. **Expect:** the caret shows and blinks; the
+   arrows, Home, End, word and page motions move it; Shift with them selects; Ctrl+A
+   (Cmd+A) and Ctrl+C (Cmd+C) work. Typing, Enter, Backspace, Delete, Tab, paste, cut
+   and the formatting chords change nothing; Tab moves focus on. The context menu
+   offers Copy and Select All only.
+2. Android and iOS: tap in the text. **Expect:** the caret shows, no soft keyboard
+   rises, and a hardware keyboard moves the caret. Long-press selects a word; the
+   toolbar offers Copy and Select All only.
+3. TalkBack and VoiceOver: the editor is announced as a text field that cannot be
+   edited, not as disabled, and its actions offer no paste, cut or set text.
+
 ## 8b2. Saved state (Android)
 
 Markdown Editor (Blank) demo, which uses `rememberSaveableTextEditorState`. Enable

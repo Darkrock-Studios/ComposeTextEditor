@@ -406,14 +406,19 @@ class TextEditorState(
 	val cursorPosition: CharLineOffset
 		get() = cursor.position
 
-	/** Whether the editor currently holds keyboard focus. */
+	/**
+	 * Whether the editor holds focus and takes input. False while it is disabled or
+	 * read-only even when focused; [hasFocus] says whether it holds focus at all.
+	 */
 	var isFocused by mutableStateOf(false)
 
 	/**
-	 * Whether the editor holds focus, enabled or not. [isFocused] also requires it
-	 * enabled, as it means the editor takes input; a read-only view is never that.
+	 * Whether the editor holds focus, whether or not it takes input: a disabled or
+	 * read-only editor, or a selectable `RichTextView`, still takes focus to select and
+	 * copy. Use this for focus chrome such as a border.
 	 */
-	internal var hasFocus by mutableStateOf(false)
+	var hasFocus by mutableStateOf(false)
+		internal set
 
 	/**
 	 * The current IME composing region (for autocomplete preview).

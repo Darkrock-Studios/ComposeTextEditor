@@ -87,6 +87,10 @@ private const val CURSOR_BLINK_SPEED_MS = 500L
  * @param enabled When `false`, the editor is disabled: it takes no input, shows no
  *   caret, and reports itself disabled, with no edit actions, to accessibility
  *   services. It still takes focus, so its text can be selected and copied.
+ * @param readOnly When `true`, the editor shows its caret, which moves and selects from
+ *   the keyboard, pointer and screen readers, but takes no edits and raises no soft
+ *   keyboard; copy stays available. Accessibility services hear a read-only field
+ *   rather than a disabled one. Ignored when not [enabled].
  * @param autoFocus Requests focus once when first composed, if [enabled]. For focus at
  *   any other time, see [modifier].
  * @param style Colors and text style for the editor and its gutter markers.
@@ -127,7 +131,11 @@ fun BasicTextEditor(
 	onRichSpanClickEvent: RichSpanClickEventListener? = null,
 	onLinkClick: ((url: String) -> Unit)? = null,
 	contentDescription: String? = null,
+	readOnly: Boolean = false,
 ) {
+	// Input, edits and the edit semantics follow this; the caret and navigation follow enabled.
+	val editable = enabled && !readOnly
+
 	// Capture platform view for IME cursor synchronization (Android only)
 	CaptureViewForIme(state)
 	ClipboardEventsEffect(state)
@@ -142,8 +150,8 @@ fun BasicTextEditor(
 	val overscrollEffect = rememberOverscrollEffect()
 
 	val inputRequester = remember { TextInputRequester() }
-	val inputModifierElement = remember(state, clipboard, enabled, keyBindings) {
-		TextEditorInputModifierElement(state, clipboard, enabled, keyBindings, inputRequester)
+	val inputModifierElement = remember(state, clipboard, editable, keyBindings) {
+		TextEditorInputModifierElement(state, clipboard, editable, keyBindings, inputRequester)
 	}
 
 	val horizontalPadding = remember(contentPadding, layoutDirection) {
@@ -180,14 +188,14 @@ fun BasicTextEditor(
 	val internalContextMenuState = remember { TextEditorContextMenuState() }
 	val effectiveContextMenuState = contextMenuState ?: internalContextMenuState
 
-	val contextMenuActions = remember(state, clipboard, enabled) {
-		ContextMenuActions(state, clipboard, state.scope, enabled)
+	val contextMenuActions = remember(state, clipboard, editable) {
+		ContextMenuActions(state, clipboard, state.scope, editable)
 	}
 	val latestOnLinkClick by rememberUpdatedState(onLinkClick)
 	val hasLinkClick = onLinkClick != null
-	val semanticsModifier = remember(state, enabled, focusRequester, contextMenuActions, contentDescription, hasLinkClick) {
+	val semanticsModifier = remember(state, enabled, editable, focusRequester, contextMenuActions, contentDescription, hasLinkClick) {
 		val openLink: ((String) -> Unit)? = if (hasLinkClick) { url -> latestOnLinkClick?.invoke(url) } else null
-		Modifier.editorSemantics(state, enabled, focusRequester, contextMenuActions, contentDescription, openLink)
+		Modifier.editorSemantics(state, enabled, editable, focusRequester, contextMenuActions, contentDescription, openLink)
 	}
 	val menuPlacement = remember(state, effectiveContextMenuState) {
 		ContextMenuPlacement(state, effectiveContextMenuState)
@@ -213,10 +221,10 @@ fun BasicTextEditor(
 	LaunchedEffect(state, enabled) {
 		if (!enabled) return@LaunchedEffect
 		merge(
-			snapshotFlow { Triple(state.isFocused, state.cursorPosition, state.selector.hasSelection()) },
+			snapshotFlow { Triple(state.hasFocus, state.cursorPosition, state.selector.hasSelection()) },
 			state.editOperations,
 		).collectLatest {
-			if (!state.isFocused) return@collectLatest
+			if (!state.hasFocus) return@collectLatest
 			state.cursor.setVisible()
 			while (true) {
 				delay(CURSOR_BLINK_SPEED_MS.milliseconds)
@@ -273,7 +281,7 @@ fun BasicTextEditor(
 		menuState = effectiveContextMenuState,
 		actions = contextMenuActions,
 		strings = contextMenuStrings,
-		enabled = enabled,
+		enabled = editable,
 	) {
 		TextEditorScrollbar(
 			modifier = menuPlacement.modifier.then(modifier),
@@ -365,7 +373,8 @@ fun BasicTextEditor(
 					// Like native editors, an editor without focus shows no touch handles.
 					if (state.hasFocus) DrawSelectionHandles(state, style.effectiveHandleColor)
 
-					if (enabled && state.isFocused) {
+					// A read-only editor holds focus without taking input, and still shows its caret.
+					if (enabled && state.hasFocus) {
 						DrawCursor(state, style.cursorColor, style.cursorWidth)
 					}
 

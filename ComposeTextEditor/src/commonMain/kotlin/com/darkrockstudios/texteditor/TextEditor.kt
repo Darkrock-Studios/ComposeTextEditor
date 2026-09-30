@@ -31,6 +31,8 @@ private val DefaultContentPadding = PaddingValues(16.dp)
  * @param enabled When `false`, the editor is disabled: it takes no input, shows no
  *   caret, and reports itself disabled, with no edit actions, to accessibility
  *   services. It still takes focus, so its text can be selected and copied.
+ * @param readOnly Shows the caret for navigation and selection but takes no edits; see
+ *   [BasicTextEditor].
  * @param autoFocus Requests focus once when first composed, if [enabled].
  * @param style Colors and text style for the editor and its gutter markers.
  * @param onRichSpanClick Invoked when a rich span (link, list, blockquote, code
@@ -64,8 +66,9 @@ fun TextEditor(
 	contextMenuStrings: ContextMenuStrings = ContextMenuStrings.Default,
 	contextMenuState: TextEditorContextMenuState? = null,
 	contentDescription: String? = null,
+	readOnly: Boolean = false,
 ) {
-	Surface(modifier = modifier.focusBorder(state.isFocused && enabled, style)) {
+	Surface(modifier = modifier.focusBorder(state.hasFocus && enabled, style)) {
 		BasicTextEditor(
 			state = state,
 			modifier = Modifier,
@@ -80,6 +83,7 @@ fun TextEditor(
 			contextMenuStrings = contextMenuStrings,
 			contextMenuState = contextMenuState,
 			contentDescription = contentDescription,
+			readOnly = readOnly,
 		)
 	}
 }
