@@ -117,6 +117,29 @@ kotlin {
 // There are no wasmJs tests; this Compose check trips on the Skiko that main pulls in.
 tasks.matching { it.name == "checkComposeUiTestConfigurationForWasmJs" }.configureEach { enabled = false }
 
+// Golden screenshots (docs/TESTING.md); -PupdateGoldens rewrites them.
+class GoldenScreenshotArguments(
+	@get:InputFiles @get:PathSensitive(PathSensitivity.RELATIVE) val goldens: File,
+	@get:Internal val failures: File,
+	@get:Input val update: Boolean,
+) : CommandLineArgumentProvider {
+	override fun asArguments() = listOf(
+		"-Dgoldens.dir=${goldens.absolutePath}",
+		"-Dgoldens.failures=${failures.absolutePath}",
+		"-Dgoldens.update=$update",
+	)
+}
+
+tasks.withType<Test>().matching { it.name == "desktopTest" }.configureEach {
+	val failures = layout.buildDirectory.dir("golden-failures").get().asFile
+	jvmArgumentProviders += GoldenScreenshotArguments(
+		goldens = layout.projectDirectory.dir("src/desktopTest/goldens").asFile,
+		failures = failures,
+		update = providers.gradleProperty("updateGoldens").map { it != "false" }.getOrElse(false),
+	)
+	doFirst { failures.deleteRecursively() }
+}
+
 dokka {
 	moduleName.set("Editor")
 	dokkaSourceSets.configureEach {

@@ -298,9 +298,17 @@ editor does rather than what it should do.
   adding one class of five 500-line editors on the mocked counting measurer
   (MockK records every call) ran later classes out of memory (seen in 7.51, whose
   test was cut to 200 lines). Set `maxHeapSize`, or fork every so many classes.
-- [ ] **0.6 Golden screenshots.** [Opus] [Lane L] A small set of scenes with a
+- [x] **0.6 Golden screenshots.** [Opus] [Lane L] A small set of scenes with a
   bundled font on one CI machine: caret, selection across wrapped and empty
   lines, squiggles, list markers, composing underline.
+  Done: `golden/GoldenScreenshotTest.kt`, those scenes plus nested list
+  markers and paragraph spacing, against PNGs in
+  `ComposeTextEditor/src/desktopTest/goldens/` with a small tolerance; a
+  failure writes the actual, expected and diff images, which the Ubuntu CI job
+  uploads. Linux only (glyph rasterisation differs by OS even with the font
+  pinned); `-PupdateGoldens` rewrites them (`docs/TESTING.md`). Passes here
+  with the machine's fonts and with only DejaVu; the first CI run is the check
+  that another Linux machine renders the same.
 - [ ] **0.7 CI breadth.** [Opus] [Lane L] [Mac work] Desktop suite on macOS and
   Windows runners. An Android emulator smoke job. Browser automation against
   the built wasm demo for real key and composition events. An iOS simulator

@@ -74,3 +74,30 @@ half a pixel. `drawing/GeometryTest.kt` is the suite. A case the editor gets
 wrong today goes inside `failsUntil("<item>")`, which fails once the case
 passes, so the fix removes the marker; keep an assertion outside the block that
 holds both before and after the fix, so a different breakage still fails.
+
+## Golden screenshots
+
+`golden/GoldenScreenshotTest.kt` captures a few small scenes in the test font
+(the caret, a selection across wrapped and empty lines, spell check squiggles,
+nested list markers, the composing underline, paragraph spacing) and compares
+each with a PNG in `ComposeTextEditor/src/desktopTest/goldens/`. A pixel counts
+as changed when a channel differs by more than 32 of 255, and a scene fails when
+more than 0.1% of its pixels change. A failure writes `<name>-actual.png`,
+`<name>-expected.png` and `<name>-diff.png` (changed pixels in red) to
+`ComposeTextEditor/build/golden-failures/`; CI keeps them as the
+`golden-failures-check` artifact.
+
+They run on Linux only and are skipped elsewhere. The font is pinned, but Skia
+rasterises glyphs with FreeType on Linux, Core Text on macOS and DirectWrite on
+Windows, so antialiasing differs by OS; one set of goldens, rendered where the
+Ubuntu CI job runs, keeps them meaningful. Geometry assertions cover the other
+platforms.
+
+To update the goldens after an intended visual change, on Linux:
+
+```bash
+./gradlew :ComposeTextEditor:desktopTest --tests 'golden.*' -PupdateGoldens
+```
+
+Look at every changed PNG before committing it. A new Compose or Material
+version can change the default colours or antialiasing and needs the same.
