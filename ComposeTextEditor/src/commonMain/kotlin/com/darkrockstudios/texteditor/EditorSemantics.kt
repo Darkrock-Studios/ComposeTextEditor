@@ -40,6 +40,7 @@ import com.darkrockstudios.texteditor.input.EditorCommand.Action
 import com.darkrockstudios.texteditor.input.selectionAsTextRange
 import com.darkrockstudios.texteditor.richstyle.LinkSpanStyle
 import com.darkrockstudios.texteditor.state.DocumentSnapshot
+import com.darkrockstudios.texteditor.state.SpanIndex
 import com.darkrockstudios.texteditor.state.TextEditOperation
 import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.applyStyleForEditAt
@@ -177,6 +178,19 @@ internal class SemanticsDocument(
 	private var textContent: DocumentSnapshot? = null
 	private var text = AnnotatedString("")
 
+	/**
+	 * The links found in each span chunk of the last revision read, by chunk identity:
+	 * a revision shares every chunk an edit did not rewrite, so only the rewritten ones
+	 * are scanned again.
+	 */
+	private var chunkLinks: Map<SpanIndex.Chunk, List<ChunkLink>> = emptyMap()
+
+	/** How many span chunks [text] has scanned for links, for the cost tests. */
+	internal var chunksScanned = 0
+
+	/** A link on line [line] of its chunk, over columns [start] to [end]. */
+	private class ChunkLink(val line: Int, val start: Int, val end: Int, val link: LinkAnnotation.Url)
+
 	private var layoutContent: DocumentSnapshot? = null
 	private var layoutWidth = 0
 	private var layoutStyle: TextStyle? = null
@@ -202,20 +216,49 @@ internal class SemanticsDocument(
 	private fun DocumentSnapshot.textWithLinks(): AnnotatedString {
 		val all = getAllText()
 		val listener = linkListener ?: return all
-		val links = richSpans.filter { it.style is LinkSpanStyle }
-		if (links.isEmpty()) return all
-		fun indexOf(position: CharLineOffset): Int {
-			val lineStart = if (position.line in 0..lines.size) lineStart(position.line) else all.length
-			return (lineStart + position.char).coerceIn(0, all.length)
+		fun indexOf(line: Int, char: Int): Int {
+			val lineStart = if (line in 0..lines.size) lineStart(line) else all.length
+			return (lineStart + char).coerceIn(0, all.length)
 		}
+
+		val links = ArrayList<AnnotatedString.Range<LinkAnnotation.Url>>()
+		fun add(link: LinkAnnotation.Url, start: Int, end: Int) {
+			if (start < end) links += AnnotatedString.Range(link, start, end)
+		}
+
+		val chunks = spanIndex.chunks
+		val found = HashMap<SpanIndex.Chunk, List<ChunkLink>>(chunks.size * 4 / 3 + 1)
+		var chunkStart = 0
+		for (chunk in chunks) {
+			val inChunk = chunkLinks[chunk] ?: chunk.links(listener).also { chunksScanned++ }
+			found[chunk] = inChunk
+			for (link in inChunk) {
+				val line = chunkStart + link.line
+				add(link.link, indexOf(line, link.start), indexOf(line, link.end))
+			}
+			chunkStart += chunk.size
+		}
+		chunkLinks = found
+		for (span in spanIndex.loose) {
+			val style = span.style as? LinkSpanStyle ?: continue
+			add(
+				LinkAnnotation.Url(style.url, linkInteractionListener = listener),
+				indexOf(span.range.start.line, span.range.start.char),
+				indexOf(span.range.end.line, span.range.end.char),
+			)
+		}
+		if (links.isEmpty()) return all
 		return buildAnnotatedString {
 			append(all)
-			for (link in links) {
-				val start = indexOf(link.range.start)
-				val end = indexOf(link.range.end)
-				if (start < end) {
-					addLink(LinkAnnotation.Url((link.style as LinkSpanStyle).url, linkInteractionListener = listener), start, end)
-				}
+			for (link in links) addLink(link.item, link.start, link.end)
+		}
+	}
+
+	private fun SpanIndex.Chunk.links(listener: LinkInteractionListener): List<ChunkLink> = buildList {
+		lines.forEachIndexed { line, spans ->
+			for (span in spans) {
+				val style = span.style as? LinkSpanStyle ?: continue
+				add(ChunkLink(line, span.start, span.end, LinkAnnotation.Url(style.url, linkInteractionListener = listener)))
 			}
 		}
 	}

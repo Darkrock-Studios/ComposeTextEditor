@@ -279,6 +279,11 @@ editor does rather than what it should do.
   wrapping or text width can pass locally and fail on the CI runner. Two did
   (`TouchGesturesTest`, `LineDragAutoScrollE2eTest`), reproduced by making DejaVu
   the only font. Pin a bundled font in `editorUiTest` and `DifferentialHarness`.
+- [ ] **0.10 The core test JVM's heap. R.** [Opus] [Lane L] `:ComposeTextEditor:desktopTest`
+  runs in one JVM with Gradle's default 512 MB heap, and the suite sits near it:
+  adding one class of five 500-line editors on the mocked counting measurer
+  (MockK records every call) ran later classes out of memory (seen in 7.51, whose
+  test was cut to 200 lines). Set `maxHeapSize`, or fork every so many classes.
 - [ ] **0.6 Golden screenshots.** [Opus] [Lane L] A small set of scenes with a
   bundled font on one CI machine: caret, selection across wrapped and empty
   lines, squiggles, list markers, composing underline.
@@ -2267,11 +2272,18 @@ Shaping is one line per keystroke. These still scale with document length:
   than changes, so a scan still sees one revision; one that stops early reads
   only the lines it reached, and a sentence the lines it looks ahead to
   (`SegmentationCostTest`). Found while there: 7.56.
-- [ ] **7.51** [Opus] [Lane M] The semantics text with links
+- [x] **7.51** [Opus] [Lane M] The semantics text with links
   (`EditorSemantics.textWithLinks`) walks every rich span per revision to find
   the links, so a spell-checked document pays O(spans) per keystroke while a
   screen reader is on; the per-line index (7.8) could answer for the lines
   that hold links.
+  Done: `SemanticsDocument` keeps the links it found in each chunk of the span
+  index, by the chunk's identity, and a revision scans only the chunks it does
+  not share with the last one read (a keystroke or a spell-check pass rewrites
+  one or two), plus the loose spans; the text is still cached per revision
+  (`SemanticsLinksCostTest`). Still per revision with a link present: the whole
+  text is copied into the published string with its links, as `getAllText`'s
+  splice copies it, and an undo back to an older revision rescans its chunks.
 - [ ] **7.53** [Opus] [Lane H] `TextEditorState.copyRichSpans` keeps decoration
   spans, so a copy carries spell-check flags, find highlights and find's scope to
   the clipboard, and a paste lays them over the pasted text, where their owners
