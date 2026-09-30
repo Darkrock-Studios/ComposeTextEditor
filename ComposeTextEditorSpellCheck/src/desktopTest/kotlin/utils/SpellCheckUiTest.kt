@@ -22,12 +22,14 @@ import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.rightClick
 import androidx.compose.ui.test.runSkikoComposeUiTest
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.darkrockstudios.texteditor.EditorLineLimits
 import com.darkrockstudios.texteditor.RichSpanClickEventListener
 import com.darkrockstudios.texteditor.RichSpanClickListener
 import com.darkrockstudios.texteditor.TextEditorRange
+import com.darkrockstudios.texteditor.rememberTextEditorStyle
 import com.darkrockstudios.texteditor.contextmenu.ContextMenuItem
 import com.darkrockstudios.texteditor.input.CtrlKeyBindings
 import com.darkrockstudios.texteditor.input.KeyBindings
@@ -53,6 +55,7 @@ import com.darkrockstudios.texteditor.spellcheck.rememberSpellCheckState
  * keyboard and mouse events, and exposes [SpellCheckUiTestScope.state] for data-level
  * assertions. The debounced partial-check pipeline runs on the test's virtual clock; use
  * [SpellCheckUiTestScope.letSpellCheckSettle] to advance past the quiescence window.
+ * Text is laid out in [TestFontFamily] unless [textStyle] names another font family.
  */
 @OptIn(ExperimentalTestApi::class)
 fun spellCheckUiTest(
@@ -76,10 +79,12 @@ fun spellCheckUiTest(
 	lineLimits: EditorLineLimits = EditorLineLimits.Fill,
 	contentDescription: String? = null,
 	contentPadding: PaddingValues = PaddingValues(0.dp),
+	textStyle: TextStyle = TextStyle.Default,
 	block: SpellCheckUiTestScope.() -> Unit,
 ) = runSkikoComposeUiTest {
 	lateinit var state: SpellCheckState
 	var diagnostics: TextDiagnosticsState? = null
+	val editorTextStyle = textStyle.withTestFont()
 	setContent {
 		state = rememberSpellCheckState(
 			spellChecker = spellChecker,
@@ -92,6 +97,7 @@ fun spellCheckUiTest(
 			spellChecker = spellChecker,
 			state = state,
 			modifier = Modifier.size(width, height).testTag(EDITOR_TEST_TAG),
+			style = rememberTextEditorStyle(textStyle = editorTextStyle),
 			contentPadding = contentPadding,
 			enabled = enabled,
 			autoFocus = true,

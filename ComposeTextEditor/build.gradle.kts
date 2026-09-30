@@ -98,6 +98,8 @@ kotlin {
         val desktopTest by getting {
             kotlin.srcDir(rootDir.resolve("testUtils/countingMeasurer"))
             kotlin.srcDir(rootDir.resolve("testUtils/uiTest"))
+            kotlin.srcDir(rootDir.resolve("testUtils/testFont/kotlin"))
+            resources.srcDir(rootDir.resolve("testUtils/testFont/resources"))
             dependencies {
                 implementation(libs.jetbrains.kotlin.test)
                 implementation(libs.jetbrains.kotlin.test.junit)

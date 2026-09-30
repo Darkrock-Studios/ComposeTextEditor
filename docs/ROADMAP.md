@@ -275,11 +275,17 @@ editor does rather than what it should do.
   rectangles from layout. Stable across machines, unlike pixels.
   Started in lane C: `utils/DrawRecorder.kt` runs a draw function on a canvas
   that records each rectangle and line with its colour.
-- [ ] **0.9 A bundled test font. R.** [Opus] [Lane L] The e2e harness lays
+- [x] **0.9 A bundled test font. R.** [Opus] [Lane L] The e2e harness lays
   text out in the machine's default sans-serif font, so any test that depends on
   wrapping or text width can pass locally and fail on the CI runner. Two did
   (`TouchGesturesTest`, `LineDragAutoScrollE2eTest`), reproduced by making DejaVu
   the only font. Pin a bundled font in `editorUiTest` and `DifferentialHarness`.
+  Done: `TestFontFamily` (`testUtils/testFont/`), a subset of Noto Sans Regular
+  under the OFL, is the default in `editorUiTest`, both sides of
+  `differentialUiTest`, `findUiTest` and `spellCheckUiTest`
+  (`e2e/TestFontTest.kt` and one test per addon fail if a harness falls back to
+  the system font). The three desktop suites pass with the machine's fonts and
+  with fontconfig restricted to DejaVu; `docs/TESTING.md` has the recipe.
 - [ ] **0.10 The core test JVM's heap. R.** [Opus] [Lane L] `:ComposeTextEditor:desktopTest`
   runs in one JVM with Gradle's default 512 MB heap, and the suite sits near it:
   adding one class of five 500-line editors on the mocked counting measurer
