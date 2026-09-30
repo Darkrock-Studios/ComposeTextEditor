@@ -1007,7 +1007,7 @@ Exit criteria: typing, composition, and clipboard work in current Chrome,
 Firefox, and Safari on desktop; the soft keyboard works on Android Chrome and
 iOS Safari; browser tests run in CI.
 
-- [ ] **4.22 DOM focus left on the canvas. S.** [Opus] [Lane E] While the
+- [x] **4.22 DOM focus left on the canvas. S.** [Opus] [Lane E] While the
   editor holds Compose focus, the browser's focus can stay on the canvas rather
   than the input session's textarea; a right-click, for one, skips
   `onRequestInput` (`requestFocusOnPress` in `BasicTextEditor.kt`). Typing then
@@ -1016,6 +1016,22 @@ iOS Safari; browser tests run in CI.
   So ';' and '=' are dropped, and AltGr characters are refused, because Windows
   reports AltGr as Ctrl+Alt and a focused textarea commits that keystroke
   itself. Refocus the textarea whenever the editor holds focus.
+  Done: while its session is live, the web input service listens for
+  `focusin` on the viewport's shadow root and moves DOM focus from the canvas
+  back to the textarea (a focus move inside a shadow tree never reaches a
+  document listener). A touch is left alone, so a tap Compose does not consume
+  still hides the phone keyboard. The canvas path now serves only a focused
+  editor with no session (disabled and enabled again, until a tap) and
+  keystrokes after such a touch; the predicate cannot
+  see the DOM event, so it keeps refusing ';', '=' and Ctrl there. Verified
+  in Chromium against the dev server: after a right-click in the text,
+  Escape, and after a click on a toolbar button, DOM focus is back on the
+  textarea and real ';' and '=' key presses insert at the caret; focus still
+  moves to and from the Find demo's search field; after a synthetic touch
+  `pointerdown` the canvas keeps focus. A phone pass is 4.4. Note for browser
+  automation: CDP `insertText` without a `keydown` lets Compose's textarea
+  `selectionchange` listener move the caret one ahead of each insert, so
+  drive typing with key events.
 
 ### Android and desktop
 

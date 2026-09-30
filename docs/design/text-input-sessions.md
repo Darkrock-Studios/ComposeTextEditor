@@ -47,7 +47,8 @@ What `startInput` actually does is the per-platform fork:
   `PlatformTextInputMethodRequest` shared by the three
   (`SkikoTextEditorInputMethodRequest` in `skikoMain`), which adapts the
   editor state and routes every edit into `ImeEditLogic`. Each platform file
-  contributes only its `ImeOptions`.
+  contributes its `ImeOptions`; web also keeps DOM focus on its textarea
+  (below).
 
 ## The contract has two directions
 
@@ -333,18 +334,32 @@ What the browser delivers, and when (`DomInputStrategy` and
 
 Which path owns plain typing therefore follows DOM focus, and the browser
 gives a keystroke to one element only. With the textarea focused, typing is
-`commitText` and the character-input predicate never sees it. After a mouse
-click on the canvas, DOM focus sits on the canvas until the input is
-refocused (the tap's `requestInput` and the session's next state mirror both
-do that), and a keystroke in that window arrives as a canvas `keydown`
-carrying the character, which the predicate (`KeyDown`) accepts. The same
-keystroke cannot reach both elements, but two shapes the textarea forwards
-would insert on their own and the predicate refuses them: a named key
-(F2, Insert, a dead key), whose Compose event carries the key code as its
-code point and would type a letter, and a Ctrl chord, because Windows
-browsers report AltGr as Ctrl+Alt and the textarea commits that character
-itself. Ctrl is never a typing modifier in a browser, so refusing it loses
-nothing.
+`commitText` and the character-input predicate never sees it. A mouse press
+on the canvas moves DOM focus there even when Compose focus stays on the
+editor: a right-click (which skips `requestInput`, so a menu is not covered
+by a phone keyboard), a toolbar button that takes no focus, a context menu
+item. Canvas key events cannot tell some typed characters from named keys,
+so while its session is live the web input service listens for `focusin` on
+the viewport's shadow root and hands DOM focus from the canvas straight back
+to the textarea. The listener sits on the shadow root because a focus move
+inside a shadow tree is not reported outside it, and it is removed as the
+session is cancelled. A touch is left alone: a tap Compose did not consume
+blurs the textarea to hide the soft keyboard, and refocusing would raise it
+again.
+
+The canvas keeps DOM focus only while the editor has no session (a focused
+editor disabled and enabled again waits for a tap) or after such a touch,
+and a keystroke then
+arrives as a canvas `keydown` carrying the character, which the predicate
+(`KeyDown`) accepts. The same keystroke cannot reach both elements, but two
+shapes the textarea forwards would insert on their own and the predicate
+refuses them: a named key (F2, Insert, a dead key), whose Compose event
+carries the key code as its code point and would type a letter, and a Ctrl
+chord, because Windows browsers report AltGr as Ctrl+Alt and the textarea
+commits that character itself. Ctrl is never a typing modifier in a browser,
+so refusing it loses nothing. The predicate has no view of the DOM event, so
+';' and '=' (whose codes equal their characters, and a German dead key sits
+on '=') are refused too, which costs only the no-session canvas path.
 
 `ImeCursorSync` stays a no-op on web; the session's `snapshotFlow` over
 `value()` is the state-out direction, fed by the shared revision described

@@ -307,6 +307,20 @@ the platform's double-tap timeout (300 ms on desktop), not the OS mouse setting.
    release. **Expect:** the view then scrolls to show the caret at the end of the
    last selected paragraph.
 
+### 3.8 Web input (built demo)
+
+Run in Chrome, Firefox and Safari on desktop. Roadmap 4.11, 4.12 and 4.22.
+
+1. Markdown Editor (Blank). Click in the editor and type. Right-click in the
+   text, press Escape, and type `;` `=` and a letter. **Expect:** all three
+   insert at the right-click position.
+2. Click the toolbar's Bold button, then type `;=a`. **Expect:** typed at the
+   caret, in bold.
+3. Windows with a Polish or German layout: after a right-click and Escape,
+   type an AltGr character (AltGr+Z, AltGr+Q). **Expect:** it is typed once.
+4. German layout: the dead key on the `´` key, then `e`. **Expect:** `é`, no
+   stray `=` or `´`.
+
 ## 4. Touch, focus and the soft keyboard (Android)
 
 Guards #88, #91. **Android device or emulator required.** Use the Markdown demo, which
