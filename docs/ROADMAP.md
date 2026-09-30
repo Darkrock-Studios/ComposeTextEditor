@@ -2128,11 +2128,21 @@ Shaping is one line per keystroke. These still scale with document length:
   after `clearSearch`) and compares by identity, so clearing the query keeps the
   scope too, and reselecting the match's range yourself counts as your own
   (`FindInSelectionTest`).
-- [ ] **7.42** [Opus] [Lane J] `FindState.selectionBeforeSearch` is a plain range
+- [x] **7.42** [Opus] [Lane J] `FindState.selectionBeforeSearch` is a plain range
   that does not follow edits. After Replace moves on to the next match, turning on
   find in selection scopes to the old offsets, which can point at other text or
   past the end of a line. Keep it as a tracked decoration span, like the scope,
   or drop it on any edit.
+  Done as both: find's own replacements carry the range along as they do the
+  scope, by the length that landed (after the input filter and line ending
+  normalization); a replacement inside it stays inside, one across its edge is
+  left out. Replace All is included, which 7.29 had to refuse while the range
+  went stale. Any other edit drops it, found by the line list's identity. The
+  range is now the user's last own selection in the session: one made before
+  pressing Replace counts, and clearing the selection keeps it, so find in
+  selection with nothing selected uses it too (`FindInSelectionTest`). Not a
+  decoration span: a span would ride into the clipboard and undo metadata and
+  split on Enter (7.53, 7.54).
 
 - [ ] **7.43 Line breaks inserted into a line block. R.** [Opus] [Lane I]
   Text with a line break inserted into a list item or other line block leaves
@@ -2248,6 +2258,17 @@ Shaping is one line per keystroke. These still scale with document length:
   the links, so a spell-checked document pays O(spans) per keystroke while a
   screen reader is on; the per-line index (7.8) could answer for the lines
   that hold links.
+- [ ] **7.53** [Opus] [Lane H] `TextEditorState.copyRichSpans` keeps decoration
+  spans, so a copy carries spell-check flags, find highlights and find's scope to
+  the clipboard, and a paste lays them over the pasted text, where their owners
+  do not expect them (a second find scope, a stale flag). Drop decorations there,
+  as the saver does.
+- [ ] **7.54** [Opus] [Lane G] A delete whose metadata holds decoration spans (a
+  spell-check flag or find highlight on the deleted text) never joins a typing run
+  (`TextEditHistory`'s delete merge and `isSingleTypedChar`), so backspacing
+  through a flagged word leaves one undo step per character, and its undo puts the
+  decoration back where its owner no longer tracks it. `withoutErasedRun` already
+  ignores decorations; the merge and the restore should too.
 
 ## Housekeeping
 
