@@ -1879,7 +1879,7 @@ Shaping is one line per keystroke. These still scale with document length:
 - [x] **7.22** [Opus] [Lane K] Hard-coded English strings ("Loading...", "No
   suggestions").
 
-- [ ] **7.28** [Opus] [Lane K] Ignore and Add to dictionary match the exact
+- [x] **7.28** [Opus] [Lane K] Ignore and Add to dictionary match the exact
   string, so ignoring "kotlinx" leaves "Kotlinx" at a sentence start flagged.
   Match case-insensitively, or at least across a capitalised first letter.
 - [x] **7.30** [Opus] [Lane K] `SpellCheckingTextEditor` does not forward

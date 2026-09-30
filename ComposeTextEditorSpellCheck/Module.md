@@ -44,7 +44,10 @@ for the word at the caret. Toggle checking at runtime with
 The menu offers "Ignore", which stops flagging the word for the session
 (`state.ignoreWord(word)`, listed in `state.ignoredWords`). Pass `onAddToDictionary` to
 also offer "Add to dictionary"; it receives the word to store in your dictionary, and the
-word stops being flagged at once. With `PlatformEditorSpellChecker`, that can be the
+word stops being flagged at once. Both match across case as a dictionary does: ignoring
+"kotlinx" also clears "Kotlinx" and "KOTLINX", and a word capitalised only at its start is
+taken for a sentence's first word. A word with other capitals, such as "NASA", clears only
+as written, so ignoring it leaves "nasa" flagged. With `PlatformEditorSpellChecker`, that can be the
 platform checker's own `addToDictionary`. Localize the menu with `spellCheckStrings`.
 
 To add your own entries to that menu, pass `spellCheckMenuItems`: it receives the flagged

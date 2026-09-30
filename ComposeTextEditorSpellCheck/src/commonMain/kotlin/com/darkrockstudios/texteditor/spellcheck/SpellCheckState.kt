@@ -76,8 +76,14 @@ class SpellCheckState(
 	var ignoredWords: Set<String> = emptySet()
 		private set
 
-	/** Words treated as correct this session: [ignoredWords] and words added to a dictionary. */
+	/**
+	 * Words treated as correct this session, [ignoredWords] and words added to a dictionary,
+	 * each in its [acceptedForm].
+	 */
 	private var acceptedWords: Set<String> = emptySet()
+
+	/** The same, as flagged: a sentence issue is matched exactly. */
+	private var acceptedTexts: Set<String> = emptySet()
 
 	/** Whether spell checking is currently active. Toggle via [setSpellCheckingEnabled]. */
 	var spellCheckingEnabled: Boolean = enableSpellChecking
@@ -171,8 +177,11 @@ class SpellCheckState(
 
 	/**
 	 * Stop flagging [word] for the rest of this session, whichever checker is in use, and clear
-	 * its current flags. Matches the flagged text exactly: the word, or a sentence issue's
-	 * [Correction.originalText].
+	 * its current flags. [word] is the flagged text: the word, or a sentence issue's
+	 * [Correction.originalText], which is matched exactly. A word in lowercase also clears
+	 * capitalised and in capitals, as a dictionary matches case; one capitalised only at its
+	 * start is taken for a sentence's first word and matched as its lowercase. One with other
+	 * capitals, such as "NASA" or "iPhone", clears only as written.
 	 */
 	fun ignoreWord(word: String) {
 		ignoredWords = ignoredWords + word
@@ -181,20 +190,27 @@ class SpellCheckState(
 
 	/** Treats [word] as correct for the rest of this session and clears its current flags. */
 	internal fun accept(word: String) {
-		acceptedWords = acceptedWords + word
+		acceptedWords = acceptedWords + word.acceptedForm()
+		acceptedTexts = acceptedTexts + word
 		val doomed = textState.richSpanManager.getAllRichSpans().filter { span ->
 			when (val style = span.style) {
-				is MisspelledWordStyle -> textState.getStringInRange(span.range) == word
-				is SentenceIssueStyle -> style.correction.originalText == word
+				is MisspelledWordStyle -> isAcceptedWord(textState.getStringInRange(span.range))
+				is SentenceIssueStyle -> style.correction.originalText in acceptedTexts
 				else -> false
 			}
 		}
 		if (doomed.isNotEmpty()) textState.updateRichSpans(remove = doomed, add = emptyList())
 	}
 
-	private fun isAccepted(segment: WordSegment): Boolean = segment.text in acceptedWords
+	private fun isAcceptedWord(text: String): Boolean {
+		if (acceptedWords.isEmpty()) return false
+		val form = text.acceptedForm()
+		return form in acceptedWords || (form.isAllCapitals() && form.lowercase() in acceptedWords)
+	}
 
-	private fun isAccepted(correction: Correction): Boolean = correction.originalText in acceptedWords
+	private fun isAccepted(segment: WordSegment): Boolean = isAcceptedWord(segment.text)
+
+	private fun isAccepted(correction: Correction): Boolean = correction.originalText in acceptedTexts
 
 	private fun clearSpellCheck() {
 		val doomed = textState.richSpanManager.getAllRichSpans()
@@ -524,6 +540,19 @@ class SpellCheckState(
 		return combined
 	}
 }
+
+/**
+ * How an accepted word is kept: as the dictionary spells it, and lowercased when it is in
+ * lowercase or capitalised only at its start, which may just be a sentence's first word.
+ */
+private fun String.acceptedForm(): String {
+	val word = forLookup()
+	val afterFirstLetter = word.substring(word.indexOfFirst(Char::isLetter) + 1)
+	val lowercaseAfterFirstLetter = afterFirstLetter.any(Char::isLowerCase) && afterFirstLetter.none(Char::isUpperCase)
+	return if (lowercaseAfterFirstLetter) word.lowercase() else word
+}
+
+private fun String.isAllCapitals(): Boolean = any(Char::isLetter) && none(Char::isLowerCase)
 
 /** Marks a span as a misspelled word; the word is whatever text the span covers. */
 internal object MisspelledWordStyle : SpellCheckStyle()

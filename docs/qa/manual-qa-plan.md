@@ -743,6 +743,8 @@ Guards #89, #90, #65, #83.
 11. Desktop, Windows or Linux key bindings: put the caret in a misspelled word and press
     Shift+F10, then the Menu key. **Expect:** the word's suggestions and Ignore under the
     caret. With the caret in a correct word: the standard menu.
+12. Type "kotlinx Kotlinx KOTLINX NASA nasa" and choose Ignore on "kotlinx", then on
+    "NASA". **Expect:** the three kotlinx squiggles clear together; "nasa" stays flagged.
 
 ## 8. Performance and smoke pass
 

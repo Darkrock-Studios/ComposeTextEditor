@@ -20,6 +20,7 @@ import com.darkrockstudios.texteditor.spellcheck.api.EditorSpellChecker
 import com.darkrockstudios.texteditor.spellcheck.api.Suggestion
 import com.darkrockstudios.texteditor.spellcheck.rememberSpellCheckState
 import utils.CountingSpellChecker
+import utils.SpellCheckUiTestScope
 import utils.spellCheckUiTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -124,6 +125,76 @@ class SpellCheckIgnoreE2eTest {
 			awaitMenuItem(ignore)
 
 			assertFalse(hasMenuItem(addToDictionary))
+		}
+	}
+
+	private fun SpellCheckUiTestScope.flagged(): List<String> =
+		state.textState.richSpanManager.getAllRichSpans()
+			.filter { it.style is SpellCheckStyle }
+			.sortedBy { it.range.start }
+			.map { state.textState.getStringInRange(it.range) }
+
+	@Test
+	fun `ignoring a lowercase word clears it capitalised and in capitals`() {
+		spellCheckUiTest(
+			spellChecker = CountingSpellChecker(correctWords = setOf("fine")),
+			initialText = "Kotlinx fine kotlinx fine KOTLINX fine kOtlinx",
+		) {
+			rightClickAtCharacter(15)
+			awaitMenuItem(ignore)
+			clickMenuItem(ignore)
+
+			assertEquals(listOf("kOtlinx"), flagged(), "only a spelling with other capitals stays flagged")
+
+			state.textState.cursor.updatePosition(CharLineOffset(0, 0))
+			typeText("Kotlinx ")
+			letSpellCheckSettle()
+			assertEquals(listOf("kOtlinx"), flagged())
+		}
+	}
+
+	@Test
+	fun `ignoring a word capitalised at a sentence start clears it in lowercase`() {
+		spellCheckUiTest(
+			spellChecker = CountingSpellChecker(correctWords = setOf("fine")),
+			initialText = "Kotlinx fine kotlinx",
+		) {
+			rightClickAtCharacter(2)
+			awaitMenuItem(ignore)
+			clickMenuItem(ignore)
+
+			assertEquals(emptyList(), flagged())
+		}
+	}
+
+	@Test
+	fun `ignoring an acronym keeps its capitals`() {
+		spellCheckUiTest(
+			spellChecker = CountingSpellChecker(correctWords = setOf("fine")),
+			initialText = "NASA fine nasa fine Nasa",
+		) {
+			rightClickAtCharacter(1)
+			awaitMenuItem(ignore)
+			clickMenuItem(ignore)
+
+			assertEquals(listOf("nasa", "Nasa"), flagged())
+		}
+	}
+
+	@Test
+	fun `a dictionary word clears capitalised too, and the host gets it as flagged`() {
+		val added = mutableListOf<String>()
+		spellCheckUiTest(
+			spellChecker = CountingSpellChecker(correctWords = setOf("fine")),
+			initialText = "zorp fine Zorp",
+			onAddToDictionary = { added += it },
+		) {
+			rightClickAtCharacter(1)
+			awaitMenuItem(addToDictionary)
+			clickMenuItem(addToDictionary)
+
+			assertEquals(listOf("zorp"), added)
+			assertEquals(emptyList(), flagged())
 		}
 	}
 

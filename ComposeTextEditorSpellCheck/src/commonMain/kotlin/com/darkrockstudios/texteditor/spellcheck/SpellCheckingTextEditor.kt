@@ -78,7 +78,9 @@ private val DefaultContentPadding = PaddingValues(start = 8.dp)
  * @param spellCheckStrings Localized strings for the spell check menu.
  * @param onAddToDictionary Adds a word to the host's dictionary. When set, the menu on a flagged
  *   word offers "Add to dictionary", which calls this and stops flagging the word for the session,
- *   so it clears at once however the host's dictionary reaches the checker.
+ *   so it clears at once however the host's dictionary reaches the checker. It receives the word
+ *   as flagged, capitals included; the session matches it across case as
+ *   [SpellCheckState.ignoreWord] does.
  * @param spellCheckMenuItems Host items for the context menu opened on a flagged span, rendered
  *   after the built-in "Ignore" and "Add to dictionary" in a group below the suggestions. For a misspelled
  *   word they appear together with the suggestions once those have loaded. Not consulted while
