@@ -293,6 +293,15 @@ editor does rather than what it should do.
   bindings are Cmd; `LineLimitsE2eTest`'s minimum-lines case measures 64 px
   for an expected 66, a font-metric difference. Pin the bindings and derive
   the height from the font before the macOS job goes in.
+  Fixed on the Mac: the Find UI tests press the find chords with a `primary`
+  modifier, Cmd where `usesMacChords` holds and Ctrl elsewhere, so each
+  desktop OS runs its own convention (the AltGr test stays Ctrl+Alt). The
+  line-limits test took its row unit from the empty first line, and an empty
+  line measures without a font: 16.49 px on macOS against 16.0 for every row
+  with text, `" "` included, which is the unit the editor uses; the test now
+  measures `" "` as the editor does. `./gradlew check` is green on macOS.
+  Side note for 7.13: an empty document's one row is that half pixel taller
+  than a row of text, so typing the first character shrinks it slightly.
 - [ ] **0.8 Real OS input, nightly.** [Opus] [Lane L] Drive the sample app on a
   virtual Linux display with a dead-key layout. Most expensive, so last.
 

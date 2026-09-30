@@ -20,7 +20,7 @@ import kotlin.test.assertTrue
 class FindBarNavigationTest {
 
 	@Test
-	fun `F3 and Ctrl+G step through matches from the search field`() = findUiTest("cat cat cat") {
+	fun `F3 and Ctrl or Cmd+G step through matches from the search field`() = findUiTest("cat cat cat") {
 		typeQuery("cat")
 		assertEquals(0, findState.currentMatchIndex)
 
@@ -28,9 +28,9 @@ class FindBarNavigationTest {
 		assertEquals(1, findState.currentMatchIndex)
 		press(Key.F3, shift = true)
 		assertEquals(0, findState.currentMatchIndex)
-		press(Key.G, ctrl = true)
+		press(Key.G, primary = true)
 		assertEquals(1, findState.currentMatchIndex)
-		press(Key.G, ctrl = true, shift = true)
+		press(Key.G, primary = true, shift = true)
 		assertEquals(0, findState.currentMatchIndex)
 	}
 
@@ -49,7 +49,7 @@ class FindBarNavigationTest {
 	fun `opening over a selection searches for it`() = findUiTest("one cat two cat", barInitiallyVisible = false) {
 		selectInEditor(line = 0, start = 12, end = 15)
 
-		press(Key.F, ctrl = true)
+		press(Key.F, primary = true)
 		awaitSearchFieldFocus()
 
 		assertEquals("cat", findState.query)
@@ -60,7 +60,7 @@ class FindBarNavigationTest {
 	@Test
 	fun `typing replaces the prefilled query`() = findUiTest("one cat two dog", barInitiallyVisible = false) {
 		selectInEditor(line = 0, start = 4, end = 7)
-		press(Key.F, ctrl = true)
+		press(Key.F, primary = true)
 		awaitSearchFieldFocus()
 
 		typeQuery("dog")
@@ -74,7 +74,7 @@ class FindBarNavigationTest {
 			test.runOnUiThread { findState.toggleRegex(true) }
 			selectInEditor(line = 0, start = 0, end = 4)
 
-			press(Key.F, ctrl = true)
+			press(Key.F, primary = true)
 			awaitSearchFieldFocus()
 
 			assertEquals(2, findState.matchCount)
@@ -85,7 +85,7 @@ class FindBarNavigationTest {
 		test.runOnUiThread { findState.search("cat") }
 		assertEquals("cat", selectedText)
 
-		press(Key.F, ctrl = true)
+		press(Key.F, primary = true)
 		awaitSearchFieldFocus()
 
 		assertEquals("cat", findState.query)
@@ -96,7 +96,7 @@ class FindBarNavigationTest {
 	fun `a multi-line selection is not a query`() = findUiTest("cat\ncat", barInitiallyVisible = false) {
 		selectInEditor(CharLineOffset(0, 0), CharLineOffset(1, 2))
 
-		press(Key.F, ctrl = true)
+		press(Key.F, primary = true)
 		awaitSearchFieldFocus()
 
 		assertEquals("", findState.query)

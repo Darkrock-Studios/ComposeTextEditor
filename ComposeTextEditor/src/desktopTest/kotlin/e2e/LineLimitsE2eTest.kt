@@ -11,11 +11,11 @@ import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.runComposeUiTest
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.style.TextIndent
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import com.darkrockstudios.texteditor.BasicTextEditor
 import com.darkrockstudios.texteditor.EditorLineLimits
-import com.darkrockstudios.texteditor.effectiveHeight
 import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.rememberTextEditorState
 import kotlin.math.ceil
@@ -53,8 +53,13 @@ class LineLimitsE2eTest {
 		onNodeWithTag("editor").getBoundsInRoot().let { (it.bottom - it.top).toPx().roundToInt() }
 	}
 
-	/** The height of one row of plain text, as the editor lays it out. */
-	private fun TextEditorState.rowHeight(): Float = lineOffsets.first().effectiveHeight
+	/**
+	 * The height of one row of plain text, measured as the editor measures its line-limit
+	 * unit. Not the first row's own height: an empty line measures without a font, and on
+	 * macOS that is half a pixel taller than any row with text.
+	 */
+	private fun TextEditorState.rowHeight(): Float =
+		textMeasurer.measure(" ", textStyle.copy(textIndent = TextIndent.None)).multiParagraph.getLineHeight(0)
 
 	private fun Float.rows(count: Int): Int = ceil(this * count).toInt()
 
