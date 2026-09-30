@@ -195,6 +195,26 @@ this exercises the clipboard's HTML as the block carrier.
 4. Paste as Plain Text from the menu. **Expect:** the source's own plain text,
    styled like the text where it lands.
 
+### 2.13 Drag and drop (6.12, desktop)
+
+1. Select a word and drag it elsewhere in the same paragraph and to another line.
+   **Expect:** a caret shows where it will land; the word moves, stays selected, and
+   one undo puts it back. Hold Ctrl (Option on macOS) while dropping. **Expect:** a
+   copy, the original stays.
+2. Drop the word back inside its own selection. **Expect:** nothing changes.
+3. Click (press and release without moving) inside a selection. **Expect:** the caret
+   lands there and the selection goes, on release.
+4. Drag a bold, bulleted line into a browser rich-text field or word processor.
+   **Expect:** it arrives bold and bulleted, and is gone from the editor; drag with
+   the copy modifier and it stays.
+5. Drag text from a browser or text editor into the editor. **Expect:** it drops at
+   the drop caret with its formatting and is selected.
+6. Right after a drop (inside the editor or into another app), click once in the
+   editor. **Expect:** the click places the caret; it is not swallowed or read as a
+   drag.
+7. An editor with `enabled = false`: drag its selection into another app.
+   **Expect:** a copy; its text never changes. Drop text onto it. **Expect:** refused.
+
 ### 2.11 Web clipboard (4.13)
 
 In Chrome, Firefox and Safari, against the built demo:

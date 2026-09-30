@@ -254,7 +254,10 @@ presses). The load-bearing distinction is *mouse-like versus finger*, detected
 from pointer buttons rather than pointer type because Android reports external
 mice as `Touch`. Mouse-like input places the caret on press, extends with
 shift-click, and counts presses into double and triple clicks (word, then
-line) by the platform's double-tap timeout and touch slop; a drag extends by
+line) by the platform's double-tap timeout and touch slop; a plain press inside
+the selection is held instead, and moving past the slop drags the selection
+out through the platform's drag and drop (`dragdrop/`, desktop so far), which
+also drops text in; a drag extends by
 whatever unit the press selected, and keeps scrolling while it is held above
 or below the viewport. Only the primary button places the caret or selects;
 the secondary button opens the context menu, keeping a selection it lands

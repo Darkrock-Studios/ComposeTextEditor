@@ -185,7 +185,7 @@ review.
 | E | Input sessions on desktop, iOS, web | `desktopMain`, `iosMain`, `wasmJsMain` under `input/` | 4.2 to 4.7, 4.10 to 4.12, 4.19, 4.21, 4.22, 4.24 to 4.26, 4.28, 4.29, 4.32, 4.33 |
 | F | Android input | `androidMain` | 0.4, 3.9 to 3.11, 3.14, 3.17, 4.16, 4.18, 4.20, 4.27, 4.30, 4.31 |
 | G | Edit pipeline and undo | `state/TextEditManager.kt`, `state/TextEditHistory.kt`, `state/EditBehavior.kt`, `input/ImeEditLogic.kt` | 1.20, 5.1 to 5.5, 5.9, 6.1 to 6.6, 6.14, 6.15, 6.17 |
-| H | Clipboard and HTML | `clipboard/`, `html/` | 4.9, 4.13, 4.17, 6.7 to 6.13, 6.18, 6.19 |
+| H | Clipboard and HTML | `clipboard/`, `html/`, `dragdrop/` | 4.9, 4.13, 4.17, 6.7 to 6.13, 6.18 to 6.21 |
 | I | Markdown and block model | `markdown/`, `richstyle/` | 5.6, 7.14 to 7.16 |
 | J | Find addon | `ComposeTextEditorFind/` | 7.17 to 7.19, 7.26, 7.29 |
 | K | Spell check addon | `ComposeTextEditorSpellCheck/` | 7.20 to 7.22, 7.28, 7.30, 7.31, 7.34, 7.35 |
@@ -1533,8 +1533,35 @@ iOS Safari; browser tests run in CI.
   refused permission turns into a logged warning, and the cut text is gone
   except through undo. Write first and delete on success, or refuse Cut where
   the write cannot happen.
-- [ ] **6.12 Drag and drop** [Opus] [Lane H] of the selection, and drops of
-  external text.
+- [x] **6.12 Drag and drop** [Opus] [Lane H] of the selection, and drops of
+  external text. Done on desktop: a mouse press inside the selection is held;
+  moving past the slop starts a platform drag of it (Compose's
+  `DragAndDropSourceModifierNode`), and coming up in place puts the caret there.
+  Only a press over a selected character is held, not one beside the selected
+  lines. The drag offers what a copy offers (HTML and plain text; AWT serializes
+  object flavors even within the process, so the exact `AnnotatedString` does not
+  survive a drop) and a random drag id, as a move or, with the platform's
+  modifier, a copy; a move another application takes removes the text here, if
+  it is still there. The editor accepts drops of text
+  (`DragAndDropTargetModifierNode`), draws a drop caret while one hovers, and
+  inserts and selects the dropped text as one undo step, restoring its blocks
+  from the markup as a paste does; a drop carrying its own drag id moves the
+  selection unless it lands inside it (`dragdrop/`, `dragdrop/*Test.kt`). A
+  read-only editor lets its text be dragged out as a copy only. Where no drag
+  can start, the press selects as before. Android, iOS and web are 6.20; rich
+  spans on a moved range are 6.21.
+- [ ] **6.21 A dragged move drops the text's rich spans. S.** [Opus] [Lane H]
+  `dropText` deletes the source range and inserts the dragged text, so rich
+  spans the HTML cannot carry (highlights, comments, a host's own) are lost
+  where cut and paste keeps them through `copyRichSpans` and `pasteRichSpans`.
+  Carry them the same way, keyed by the drag id.
+- [ ] **6.20 Drag and drop on Android, iOS and web. S.** [Opus] [Lane H]
+  `dragdrop/PlatformTextDrag` has desktop actuals only. Android: build the
+  transfer from `ClipData.newHtmlText` with `View.DRAG_FLAG_GLOBAL`, read drops
+  from `toAndroidDragEvent().clipData` and its `x`/`y`, and start a drag from a
+  long press inside the selection (lane B's touch handling). iOS and web: check
+  what Compose Multiplatform's `DragAndDropEvent` exposes there (web has a
+  `WebDragAndDropManager`) and fill in the same four functions.
 - [x] **6.13 Plain paste reads the HTML flavor.** [Opus] [Lane H] On desktop,
   `Action.PasteAsPlainText` takes `ClipboardHelper.getText(...).text`, so a
   foreign paste that offers HTML yields the text of the parsed markup rather
@@ -1785,3 +1812,4 @@ records results and removes entries that passed.
 | 4.13 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64`. `clipboard/ClipboardEvents.kt` adds `internal expect fun ClipboardEventsEffect`; the iOS actual (`iosMain/.../clipboard/ClipboardEvents.ios.kt`) is a no-op. Then the web demo in Safari on macOS: Cmd+C a bold word, Cmd+V it back, and paste a bulleted list from another page; also the context menu's Paste | Compiles. Safari pastes the bold word bold and the list as a list; the context menu's Paste either pastes or logs a `ComposeTextEditor:` warning in the console, never fails silently || Compile part passed 2026-09-30 at `f3b8d8f`. The Safari part is not run: it needs Safari on macOS with a person at the keyboard, since the clipboard events only fire for real key presses and driving Safari needs its Remote Automation setting turned on |
 | 4.20, 4.30, 3.10 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64`. 4.20 added `internal expect fun deadChar` (commonMain `input/DeadKeys.kt`) with its `actual` in `skikoMain/.../input/DeadKeys.skiko.kt`, which composes nothing. 4.30 moved the skiko request's caret measure into `measureCursorMetrics` (commonMain `input/ImeCaret.kt`), called from `focusedRectInRoot`; 3.10 builds that rectangle from `imeCaretInRoot` in the same file | Compiles. Nothing to run for 4.20: iOS never delivers a dead key as a key event; the caret rectangle behaves as in the 4.19 row | |
 | 4.9, 6.7 | Rich clipboard on iOS, the half 6.7 left. In `iosMain/.../clipboard/ClipboardHelper.ios.kt`, write the selection as `public.html` (UTF-8 `NSData` of the `html` argument, or `text.toHtml(configuration)`) beside `public.utf8-plain-text` in one `UIPasteboard.generalPasteboard` item; read `public.html` first (`dataForPasteboardType`, parsed with `toAnnotatedStringFromHtml`), falling back to `string`, and return that markup from `ClipboardHtml.ios.kt` so pasted lists keep their blocks. Compile with `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64`, then in the simulator copy a bold word and a bulleted list between two sample editors, and from Notes and Safari | Bold, lists and links survive editor to editor and from Notes and Safari; pasting into Notes keeps bold | |
+| 6.12 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64`. `dragdrop/PlatformTextDrag.kt` adds four `internal expect` functions; the iOS actuals (`iosMain/.../dragdrop/PlatformTextDrag.ios.kt`) answer null and false. Then on the Mac's desktop sample app: select a word, drag it within the editor, then with Option held, then into TextEdit, and drag text from TextEdit into the editor | Compiles. The word moves (Option copies), arrives in TextEdit styled and leaves the editor, and TextEdit's text drops in at the drop caret | |

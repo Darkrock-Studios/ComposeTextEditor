@@ -57,6 +57,9 @@ import com.darkrockstudios.texteditor.contextmenu.ContextMenuStrings
 import com.darkrockstudios.texteditor.contextmenu.TextEditorContextMenuProvider
 import com.darkrockstudios.texteditor.contextmenu.TextEditorContextMenuState
 import com.darkrockstudios.texteditor.cursor.DrawCursor
+import com.darkrockstudios.texteditor.dragdrop.DrawDropCaret
+import com.darkrockstudios.texteditor.dragdrop.TextDragAndDrop
+import com.darkrockstudios.texteditor.dragdrop.textDragAndDrop
 import com.darkrockstudios.texteditor.input.CaptureViewForIme
 import com.darkrockstudios.texteditor.input.KeyBindings
 import com.darkrockstudios.texteditor.input.LocalKeyBindings
@@ -357,8 +360,11 @@ fun BasicTextEditor(
 				val linkClicks = remember(keyBindings) {
 					LinkClicks.forEditor(keyBindings) { currentOnLinkClick }
 				}
+				val dragAndDrop = remember(state) { TextDragAndDrop(state) }
+				dragAndDrop.enabled = enabled
 				Canvas(
 					modifier = Modifier
+						.textDragAndDrop(dragAndDrop)
 						.textEditorPointerIcon(state, linkClicks, contentOrigin = { contentOrigin })
 						.textEditorPointerInputHandling(
 							state = state,
@@ -368,6 +374,7 @@ fun BasicTextEditor(
 							caretHandle = enabled,
 							contentOrigin = { contentOrigin },
 							touchToolbar = touchToolbar,
+							selectionDrag = dragAndDrop::startSelectionDrag,
 						)
 						.padding(horizontalPadding)
 						.textMagnifier(state)
@@ -403,6 +410,8 @@ fun BasicTextEditor(
 					if (enabled && state.isFocused) {
 						DrawCursor(state, style.cursorColor, style.cursorWidth)
 					}
+
+					DrawDropCaret(dragAndDrop, state, style.cursorColor, style.cursorWidth)
 				}
 			}
 		}

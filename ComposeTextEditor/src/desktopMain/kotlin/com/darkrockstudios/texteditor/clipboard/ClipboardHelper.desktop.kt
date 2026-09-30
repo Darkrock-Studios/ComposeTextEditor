@@ -13,7 +13,6 @@ import java.awt.datatransfer.UnsupportedFlavorException
 
 @OptIn(ExperimentalComposeUiApi::class)
 actual object ClipboardHelper {
-	private val annotatedStringFlavor = DataFlavor(AnnotatedString::class.java, "AnnotatedString")
 	internal val copyIdFlavor = DataFlavor(java.lang.Long::class.java, "ComposeTextEditorCopyId")
 
 	actual suspend fun getText(
@@ -21,9 +20,7 @@ actual object ClipboardHelper {
 		configuration: MarkdownConfiguration,
 	): AnnotatedString? {
 		val transferable = clipboard.getClipEntry()?.nativeClipEntry as? Transferable ?: return null
-		return transferable.readAnnotatedString()
-			?: transferable.readHtml(configuration)
-			?: transferable.readPlainText()
+		return transferable.readStyledText(configuration)
 	}
 
 	actual suspend fun getPlainText(clipboard: Clipboard): String? {
@@ -53,27 +50,42 @@ actual object ClipboardHelper {
 	}
 
 	actual val supportsCopyProvenance: Boolean get() = true
-
-	private fun Transferable.readAnnotatedString(): AnnotatedString? = runCatching {
-		if (!isDataFlavorSupported(annotatedStringFlavor)) return null
-		getTransferData(annotatedStringFlavor) as? AnnotatedString
-	}.getOrNull()
-
-	private fun Transferable.readHtml(configuration: MarkdownConfiguration): AnnotatedString? =
-		runCatching {
-			val flavor = transferDataFlavors.firstOrNull { it.isHtmlStringFlavor() } ?: return null
-			val html = getTransferData(flavor) as? String ?: return null
-			html.toAnnotatedStringFromHtml(configuration).takeIf { it.text.isNotEmpty() }
-		}.getOrNull()
-
-	private fun Transferable.readPlainText(): AnnotatedString? = runCatching {
-		if (!isDataFlavorSupported(DataFlavor.stringFlavor)) return null
-		(getTransferData(DataFlavor.stringFlavor) as? String)?.let { AnnotatedString(it) }
-	}.getOrNull()
-
-	private fun DataFlavor.isHtmlStringFlavor(): Boolean =
-		mimeType.startsWith("text/html") && representationClass == String::class.java
 }
+
+private val annotatedStringFlavor = DataFlavor(AnnotatedString::class.java, "AnnotatedString")
+
+/**
+ * The styled text on offer: an in-process copy exactly, else the text of the HTML
+ * flavor other applications provide, else the plain text.
+ */
+internal fun Transferable.readStyledText(configuration: MarkdownConfiguration): AnnotatedString? =
+	readAnnotatedString() ?: readHtml(configuration) ?: readPlainText()
+
+/** Whether this offers text in any flavor [readStyledText] takes. */
+internal fun Transferable.offersText(): Boolean =
+	transferDataFlavors.any { it.match(annotatedStringFlavor) || it.isHtmlStringFlavor() || it.match(DataFlavor.stringFlavor) }
+
+/** The markup on the `text/html` flavor, or null when there is none. */
+internal fun Transferable.readHtmlMarkup(): String? = runCatching {
+	val flavor = transferDataFlavors.firstOrNull { it.isHtmlStringFlavor() } ?: return null
+	getTransferData(flavor) as? String
+}.getOrNull()
+
+private fun Transferable.readAnnotatedString(): AnnotatedString? = runCatching {
+	if (!isDataFlavorSupported(annotatedStringFlavor)) return null
+	getTransferData(annotatedStringFlavor) as? AnnotatedString
+}.getOrNull()
+
+private fun Transferable.readHtml(configuration: MarkdownConfiguration): AnnotatedString? =
+	readHtmlMarkup()?.toAnnotatedStringFromHtml(configuration)?.takeIf { it.text.isNotEmpty() }
+
+private fun Transferable.readPlainText(): AnnotatedString? = runCatching {
+	if (!isDataFlavorSupported(DataFlavor.stringFlavor)) return null
+	(getTransferData(DataFlavor.stringFlavor) as? String)?.let { AnnotatedString(it) }
+}.getOrNull()
+
+private fun DataFlavor.isHtmlStringFlavor(): Boolean =
+	mimeType.startsWith("text/html") && representationClass == String::class.java
 
 /**
  * Offers the selection as HTML, as an in-process [AnnotatedString], and as plain
