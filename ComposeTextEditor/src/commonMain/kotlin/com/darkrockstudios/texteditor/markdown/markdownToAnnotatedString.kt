@@ -434,7 +434,7 @@ private fun AnnotatedString.Builder.appendMarkdownNode(
 			// MarkdownExtension's pre-pass strips bullet markers (`-`, `*`, `+`) from
 			// unordered list lines before parsing, so this branch only fires for
 			// ordered lists or list-like markup that bypassed the pre-pass. We just
-			// recurse into children — no glyph injection — so the body text survives
+			// recurse into children (no glyph injection) so the body text survives
 			// without spurious bullet characters leaking into the AnnotatedString.
 			// Ordered list numbering is a follow-up.
 			appendMarkdownChildren(original, node, startOffset, context)
@@ -535,14 +535,14 @@ private fun AnnotatedString.Builder.handleHeader(
 
 				MarkdownTokenTypes.WHITE_SPACE -> {
 					// Direct WHITE_SPACE children of an ATX_n element are the syntactic
-					// separator between `##` markers and content — never content itself.
+					// separator between `##` markers and content, never content itself.
 				}
 
 				MarkdownTokenTypes.ATX_CONTENT -> {
 					// The first child of ATX_CONTENT is typically a WHITE_SPACE token
 					// holding the syntactic space between `##` and the text. Skip leading
 					// whitespace tokens here so the styled header text doesn't accumulate
-					// a leading space on each export round-trip — the serializer already
+					// a leading space on each export round-trip; the serializer already
 					// emits `## ` with its own trailing space.
 					var contentOffset = startOffset
 					var seenContent = false
