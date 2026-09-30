@@ -33,6 +33,14 @@ expect object ClipboardHelper {
 	): AnnotatedString?
 
 	/**
+	 * Reads the clipboard as plain text, for a paste without formatting: the plain
+	 * text the source offered, which is what it means its content to read as
+	 * unformatted. Where the platform exposes one and the source offered no plain
+	 * text, the text of its markup.
+	 */
+	suspend fun getPlainText(clipboard: Clipboard): String?
+
+	/**
 	 * Writes text to the clipboard.
 	 * On Desktop, offers the selection as HTML for other applications and as an
 	 * exact copy within this process; [copyId] rides along so a later paste can

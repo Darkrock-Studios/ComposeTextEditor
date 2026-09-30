@@ -1338,11 +1338,15 @@ iOS Safari; browser tests run in CI.
   over a selection, and through undo and redo.
 - [ ] **6.12 Drag and drop** [Opus] [Lane H] of the selection, and drops of
   external text.
-- [ ] **6.13 Plain paste reads the HTML flavor.** [Opus] [Lane H] On desktop,
+- [x] **6.13 Plain paste reads the HTML flavor.** [Opus] [Lane H] On desktop,
   `Action.PasteAsPlainText` takes `ClipboardHelper.getText(...).text`, so a
   foreign paste that offers HTML yields the text of the parsed markup rather
   than the source's own `text/plain` flavor. Add a plain read to
-  `ClipboardHelper` (an `expect` member, so it joins the Mac queue).
+  `ClipboardHelper` (an `expect` member, so it joins the Mac queue). Done:
+  `ClipboardHelper.getPlainText` reads the plain flavor (desktop's string flavor,
+  Android's item text, `UIPasteboard.string`, `navigator.clipboard.readText`),
+  and on desktop falls back to the parsed markup's text only when there is no
+  plain flavor (`e2e/PlainPasteE2eTest.kt`). The iOS actual is in the Mac queue.
 
 ## Phase 7: reach
 
@@ -1572,3 +1576,4 @@ records results and removes entries that passed.
 | 3.8 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64`. 3.8 added `internal expect fun hasNativeTextToolbar()` (commonMain `TouchToolbar.kt`) with `iosMain/.../TouchToolbar.ios.kt` answering true. Then in the simulator: long-press a word, double-tap a word, long-press empty space, tap the caret handle, and drag a selection handle | Compiles. UIKit's edit menu appears over the selection or caret with Cut, Copy, Paste and Select all as applicable (Paste and Select all alone at a bare caret), hides while a handle is dragged and returns when it drops, and goes when the caret moves or the text is scrolled. If no menu appears, the input connection has no toolbar: fall back to `false` in `TouchToolbar.ios.kt` so the context menu stands in |  Partial, same run. Compiles. The UIKit menu works over a selection: double-tap or long-press a word shows Cut, Copy, Paste, Select All, and each works. **Fails:** long-press in an empty document calls `show()` with a zero-width caret rect and only Paste, and UIKit shows nothing (the toolbar reports Hidden right after `showMenu`); a tap on the caret handle never calls `show()`. Native reference: a tap in Safari's focused empty field shows Paste. Also: a long-press past a line's end selects the line's last word instead of placing the caret; with a selection ending at the document end, a long-press below the text counts as on the selection. When the screen was shifted by 4.24 the selection menu did not appear either. Did not fall back to `false`, since the menu works for selections |
 | 4.19, 4.25 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64`. `skikoMain/.../input/SkikoTextEditorInputMethodRequest.kt` gained an `imeResync` parameter (default `SkikoImeResync.None`, which iOS uses); `imeResyncGeneration` in `TextEditorState.kt` is now snapshot state; `focusedRectInRoot` measures the caret with `calculateCursorPosition()` instead of reading `lastCursorMetrics` (same observation triggers: caret moves and resizes). Then the 4.29 comparison | Compiles; iOS typing, backspace, list Return and Japanese candidates behave as in the 4.5 pass | |
 | 4.21 | In the iOS sample app, paste or load a document of about 200,000 characters (2,000 lines of 99 characters), type a sentence at its end and in its middle, and compare with a 2,000-character document; Instruments' Time Profiler if it feels slower | Typing feels the same in both; no frame spent in `getAllText`, `onTextFieldValueUpdated` or UIKit text notifications stands out. Then tick 4.21 | |
+| 6.13 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64`. `ClipboardHelper` gained the `expect` member `getPlainText`; the iOS actual (`iosMain/.../clipboard/ClipboardHelper.ios.kt`) returns `UIPasteboard.generalPasteboard.string`. Then in the simulator: copy a word in Safari, and in the sample app use the edit menu's Paste and, with a hardware keyboard, Cmd+Shift+V | Compiles. Both paste the word; iOS reads plain text only until 4.9, so this checks the new member, not a difference between the two | |

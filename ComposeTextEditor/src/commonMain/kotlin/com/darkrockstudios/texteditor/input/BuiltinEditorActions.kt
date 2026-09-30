@@ -169,9 +169,13 @@ private fun EditorActionContext.cutSelection() {
  */
 private fun EditorActionContext.pasteClipboard(plainText: Boolean) {
 	scope.launch {
-		ClipboardHelper.getText(clipboard, state.markdownConfiguration)?.let { clipboardText ->
-			val normalized = clipboardText.normalizeLineEndings()
-			val text = if (plainText) AnnotatedString(normalized.text) else normalized
+		val clipboardText = if (plainText) {
+			ClipboardHelper.getPlainText(clipboard)?.let(::AnnotatedString)
+		} else {
+			ClipboardHelper.getText(clipboard, state.markdownConfiguration)
+		}
+		clipboardText?.let {
+			val text = it.normalizeLineEndings()
 			val curSelection = state.selector.selection
 			val insertPosition = curSelection?.start ?: state.cursorPosition
 			// Read the clipboard's HTML before mutating: the text, the in-editor

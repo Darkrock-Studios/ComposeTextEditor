@@ -13,10 +13,11 @@ actual object ClipboardHelper {
 	actual suspend fun getText(
 		clipboard: Clipboard,
 		configuration: MarkdownConfiguration,
-	): AnnotatedString? {
+	): AnnotatedString? = getPlainText(clipboard)?.let(::AnnotatedString)
+
+	actual suspend fun getPlainText(clipboard: Clipboard): String? {
 		return try {
-			val text = readClipboardText().await<JsString>().toString()
-			AnnotatedString(text)
+			readClipboardText().await<JsString>().toString()
 		} catch (e: Exception) {
 			// Clipboard access may be denied or unavailable
 			null

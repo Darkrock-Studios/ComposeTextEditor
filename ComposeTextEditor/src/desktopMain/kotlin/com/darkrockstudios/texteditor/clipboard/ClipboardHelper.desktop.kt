@@ -26,6 +26,12 @@ actual object ClipboardHelper {
 			?: transferable.readPlainText()
 	}
 
+	actual suspend fun getPlainText(clipboard: Clipboard): String? {
+		val transferable = clipboard.getClipEntry()?.nativeClipEntry as? Transferable ?: return null
+		return transferable.readPlainText()?.text?.takeIf { it.isNotEmpty() }
+			?: transferable.readHtml(MarkdownConfiguration.DEFAULT)?.text
+	}
+
 	actual suspend fun setText(
 		clipboard: Clipboard,
 		text: AnnotatedString,

@@ -174,6 +174,15 @@ this exercises the clipboard's HTML as the block carrier.
 3. Copy a paragraph with bold words and double spaces from Google Docs and paste.
    **Expect:** Find for a phrase typed with ordinary spaces matches it.
 
+### 2.9b Plain paste takes the source's plain text (6.13)
+
+1. Desktop (web and Android once 4.13 and 6.7 read markup). Copy a two-cell table
+   row from a spreadsheet or web page, then
+   Paste as Plain Text (Ctrl/Cmd+Shift+V, or the context menu). **Expect:** the text
+   exactly as pasting into a plain text editor gives it (the source's own plain
+   text), not the markup's text. Ctrl/Cmd+V still pastes the table's text from the
+   markup, cells separated by a tab.
+
 ### 2.10 Links (6.9)
 
 1. Copy a sentence with a link from a web page and paste it into the Markdown demo
