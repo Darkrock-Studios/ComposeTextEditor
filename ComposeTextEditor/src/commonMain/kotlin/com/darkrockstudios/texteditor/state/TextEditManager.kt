@@ -7,6 +7,7 @@ import androidx.compose.ui.text.buildAnnotatedString
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.annotatedstring.splitAnnotatedString
+import com.darkrockstudios.texteditor.annotatedstring.withInheritedStyles
 import com.darkrockstudios.texteditor.richstyle.LineBlockStyle
 import com.darkrockstudios.texteditor.richstyle.RichSpanStyle
 import com.darkrockstudios.texteditor.richstyle.allowedOn
@@ -380,27 +381,32 @@ class TextEditManager(private val state: TextEditorState) {
 	/**
 	 * Bakes the styles an `inheritStyle` replace takes from the text it replaces
 	 * into its `newText`, so the operation that is applied, recorded, and announced
-	 * carries exactly the styling that lands in the document. On one line every
-	 * span touching the range is inherited; across lines, every span the range
-	 * overlaps. Inherited styles layer over the replacement's own.
+	 * carries exactly the styling that lands in the document. Each character of the
+	 * replacement takes the styles of the replaced character at its position; the
+	 * characters past the replaced ones, and a replace of nothing, take the styles
+	 * an insert at the range's end would (the caret's typing style when the caret
+	 * is there). A style merely touching the range is not inherited, so a
+	 * composition after bold text with bold toggled off stays plain. Inherited
+	 * styles layer over the replacement's own.
 	 */
 	private fun resolveInheritedStyle(operation: TextEditOperation.Replace): TextEditOperation.Replace {
 		if (!operation.inheritStyle) return operation
 		val newText = operation.newText
-		val inherited = if (operation.range.isSingleLine() && !newText.contains('\n')) {
-			state.textLines[operation.range.start.line].spanStyles.filter { span ->
-				span.start <= operation.range.end.char && span.end >= operation.range.start.char
-			}.map { it.item }.toSet()
-		} else {
-			getStyles(operation.range)
+		val range = operation.range
+		val insertStyles = if (state.cursorPosition == range.end) state.cursor.styles else state.getSpanStylesForEditAt(range.end)
+		if (range.start == range.end) {
+			return operation.copy(newText = newText.withInheritedStyles(insertStyles), inheritStyle = false)
 		}
-		val styled = if (inherited.isEmpty()) {
-			newText
-		} else {
-			buildAnnotatedString {
-				append(newText)
-				inherited.forEach { addStyle(it, 0, newText.length) }
+		val replaced = state.getTextInRange(range)
+		val kept = minOf(replaced.length, newText.length)
+		val styled = buildAnnotatedString {
+			append(newText)
+			for (span in replaced.spanStyles) {
+				val start = span.start.coerceAtMost(kept)
+				val end = span.end.coerceAtMost(kept)
+				if (start < end) addStyle(span.item, start, end)
 			}
+			if (newText.length > kept) insertStyles.forEach { addStyle(it, kept, newText.length) }
 		}
 		return operation.copy(newText = styled, inheritStyle = false)
 	}
@@ -448,29 +454,6 @@ class TextEditManager(private val state: TextEditorState) {
 					append(suffix)
 				}
 			)
-		}
-	}
-
-	private fun getStyles(range: TextEditorRange): Set<SpanStyle> {
-		val firstLine = state.textLines[range.start.line]
-		// Collect styles from all affected lines that overlap with our range
-		return buildSet {
-			// First line styles
-			addAll(firstLine.spanStyles
-				.filter { span -> span.end > range.start.char }
-				.map { it.item })
-
-			// Middle lines styles (if any)
-			(range.start.line + 1 until range.end.line).forEach { lineIndex ->
-				addAll(state.textLines[lineIndex].spanStyles.map { it.item })
-			}
-
-			// Last line styles (if different from first line)
-			if (range.end.line > range.start.line && range.end.line < state.textLines.size) {
-				addAll(state.textLines[range.end.line].spanStyles
-					.filter { span -> span.start < range.end.char }
-					.map { it.item })
-			}
 		}
 	}
 

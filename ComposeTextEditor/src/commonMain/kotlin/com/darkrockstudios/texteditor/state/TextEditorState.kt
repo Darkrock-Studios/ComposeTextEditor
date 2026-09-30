@@ -1114,8 +1114,9 @@ class TextEditorState(
 
 	/**
 	 * Replaces the text in [range] with plain [newText].
-	 * @param inheritStyle when true, the inserted text adopts the style of the
-	 * replaced text rather than carrying none.
+	 * @param inheritStyle when true, each inserted character adopts the style of the
+	 * replaced character at its position, and any beyond them (or all, when [range]
+	 * is empty) the style an insert at the range's end would take.
 	 */
 	fun replace(range: TextEditorRange, newText: String, inheritStyle: Boolean = false) =
 		replace(range, newText.toAnnotatedString(), inheritStyle)
@@ -1123,8 +1124,9 @@ class TextEditorState(
 	/**
 	 * Replaces the text in [range] with [newText], preserving the latter's
 	 * character-level spans and moving the cursor to the end of the inserted text.
-	 * @param inheritStyle when true, the inserted text adopts the style of the
-	 * replaced text rather than only its own spans.
+	 * @param inheritStyle when true, each inserted character also adopts the style of
+	 * the replaced character at its position, and any beyond them (or all, when
+	 * [range] is empty) the style an insert at the range's end would take.
 	 */
 	fun replace(range: TextEditorRange, newText: AnnotatedString, inheritStyle: Boolean = false) {
 		@Suppress("NAME_SHADOWING")
