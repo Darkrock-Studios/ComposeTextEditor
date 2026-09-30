@@ -1418,10 +1418,21 @@ iOS Safari; browser tests run in CI.
   A paste is not offered; 5.4's pasted-URL half needs its own seam.
 - [ ] **5.2 Smart punctuation.** [Opus] [Lane G] Curly quotes, dashes from
   double hyphens, ellipsis. One undo step reverts the substitution, as in
-  native editors.
+  native editors: typing `--` gives an em dash and undo gives back `--`.
+  Decided: an opt-in behaviour in core, off by default, built on the 5.1
+  hook. Natively only iOS applies smart punctuation, in the keyboard (UIKit's
+  smart quotes and dashes); macOS does it in `NSTextView`, which Compose does
+  not use, and Android, Windows, Linux, and the web leave it to the app. So
+  on iOS the behaviour stays off unless the host turns the keyboard's own
+  off, or the text would be converted twice (see the Mac queue).
 - [ ] **5.3 Markdown as you type.** [Opus] [Lane G] "- ", "1. ", "# ", "> " at
-  line start; inline `**bold**` and friends.
-- [ ] **5.4 Auto-link** [Opus] [Lane G] typed and pasted URLs.
+  line start; inline `**bold**` and friends. Decided: not in core. Markdown
+  is a storage detail for a WYSIWYG host like Hammer, which does not want
+  it. Build it as a separate markdown-editing package (as spell check is) or
+  as examples in the sample app's markdown demo.
+- [ ] **5.4 Auto-link** [Opus] [Lane G] typed and pasted URLs. Decided: opt-in,
+  off by default. Paste does not go through the 5.1 hook, so the pasted half
+  needs its own seam.
 - [ ] **5.5 Enter after a heading. S.** [Opus] [Lane G] `LineBlockEditBehavior`
   continues any line block, headings included, so the line after a chapter
   title is another heading. It should be body text.
@@ -2304,3 +2315,4 @@ records results and removes entries that passed.
 | 7.9, housekeeping | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64` and `:ComposeTextEditor:iosSimulatorArm64Test`. `skikoMain` changed: `SkikoTextEditorInputMethodRequest` folds `TextEditorState.textRevision` into its reads instead of the session collecting edits, and `DocumentTextLayout` keys on the line list and builds from `getAllPlainText()`. Then in the iOS sample app: type, forward delete with a hardware keyboard or the soft keyboard's delete after moving the caret, and use the spacebar trackpad over a long paragraph | Compiles and the tests pass. Typing and deletes reach the keyboard's mirror (autocorrect and suggestions follow the text), and the trackpad moves the caret through the current text | |
 | 7.8, 7.48 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64` and `:ComposeTextEditor:iosSimulatorArm64Test` (commonMain changed how the lines, rows and spans are stored; no `iosMain` or `skikoMain` change). Then re-time the iOS simulator as 4.21 did (iPhone 17 Pro Max simulator, Debug framework, a 200,000-character document of 2,000 lines of 99 characters, temporary logging): the keyboard's `editText` block and the frames over 20 ms while typing twelve keys, then rotate the device and time the frame the rotation costs and how long the rows take to settle | Before (4.21, `f3b8d8f`): `editText` 9.4 ms median at 200k against 0.7 ms at 2k. A pass: `editText` within a few times the 2k figure, wherever the caret is (desktop went 837 µs to 174 µs, and 2,026 µs to 94 µs with a span on every line); a rotation that shapes only the visible lines at once and settles the rest in the background without the scroll jumping. Record the numbers here and in 7.8 and 7.48 | |
 | 7.10, 7.11 | Re-time the iOS simulator as 4.21 did (iPhone 17 Pro Max simulator, Debug framework, a 200,000-character document of 2,000 lines of 99 characters, temporary logging): the idle caret-blink frame, frames over 20 ms while typing twelve keys with the soft keyboard (count and worst), and the keyboard's `editText` block; also the time to open and close the soft keyboard, which no longer reshapes the document | Before (4.21, `f3b8d8f`): an idle blink frame 33 ms at 200k against under one vsync at 2k; typing frames up to 137 ms, about six over 20 ms a keystroke; `editText` 9.4 ms median. A pass: the blink frame at 200k within a vsync, as at 2k (7.11). Typing frames should drop by the row scans and the whole-text build; `editText` is 7.8's and is not expected to move. Record the numbers here and in 7.11 | |
+| 5.2 | In the iOS sample app with the soft keyboard (Settings > General > Keyboard > Smart Punctuation on), type `"quoted"`, `it's`, and `a--b` into the editor | Record whether curly quotes, the apostrophe, and the dash arrive already converted through the input session; this decides whether 5.2 must stay off on iOS by default | |
