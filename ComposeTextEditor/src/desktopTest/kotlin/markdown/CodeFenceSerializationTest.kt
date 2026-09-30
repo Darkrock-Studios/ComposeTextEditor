@@ -72,7 +72,7 @@ class CodeFenceSerializationTest {
 	}
 
 	@Test
-	fun `import drops the language tag (v1 lossy)`() = runTest {
+	fun `import keeps the language tag out of the text`() = runTest {
 		val extension = createMarkdownExtension()
 		extension.importMarkdown("```kotlin\nfun foo() {}\n```")
 
@@ -176,11 +176,10 @@ class CodeFenceSerializationTest {
 	}
 
 	@Test
-	fun `roundtrip drops language tag for v1`() = runTest {
+	fun `roundtrip keeps the language tag`() = runTest {
 		val extension = createMarkdownExtension()
 		extension.importMarkdown("```kotlin\nfun greet() {}\n```")
-		// Language tags are intentionally lossy in v1 — bare fence on export.
-		assertEquals("```\nfun greet() {}\n```", extension.exportAsMarkdown())
+		assertEquals("```kotlin\nfun greet() {}\n```", extension.exportAsMarkdown())
 	}
 
 	@Test

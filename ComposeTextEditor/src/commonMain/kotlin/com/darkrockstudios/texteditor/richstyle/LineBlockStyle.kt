@@ -365,14 +365,21 @@ internal fun TextEditorState.detectLineBlock(line: Int): LineBlockStyle? =
 internal fun TextEditorState.lineBlocks(line: Int): List<LineBlockStyle> =
 	allBlockRegistry.filter { hasLineBlock(line, it) }
 
-/** The line-anchored block span styles currently attached to [line]. */
+/**
+ * The line-anchored block span styles currently attached to [line], with a
+ * fence's language span, which a toggle off the whole fence loses to
+ * normalization and an undo must bring back.
+ */
 internal fun TextEditorState.lineBlockSpanStyles(line: Int): List<RichSpanStyle> =
-	lineBlocks(line).map { it.spanStyle }
+	lineBlocks(line).map { it.spanStyle } +
+		richSpanManager.getRichSpansStartingOn(line).map { it.style }.filterIsInstance<CodeFenceLanguageSpanStyle>()
 
 /**
  * Replaces every line-anchored block span on [line] so that exactly [spanStyles]
  * are attached, spanning the full line content. Used to restore the precise span
- * set captured for an atomic line-block undo/redo.
+ * set captured for an atomic line-block undo/redo. A language span already on
+ * the line is left alone: normalization moved it there for the run it heads,
+ * and an identical one restored on top of it collapses into it.
  */
 internal fun TextEditorState.setLineBlockSpans(
 	line: Int,

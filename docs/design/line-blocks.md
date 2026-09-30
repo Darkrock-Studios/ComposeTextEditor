@@ -118,6 +118,28 @@ HTML import and export share the same block attachment path and derive their
 container nesting from the same snapshot walk, so both serializers agree on
 what a line's blocks are.
 
+### Fence languages
+
+A fence's info string (` ```kotlin `) is not a line block: it belongs to the
+run, and the text form holds exactly one per fence. It lives in a
+`CodeFenceLanguageSpanStyle` span on every line of the run, as the fence
+marker itself does, attached by import off the undo history like the blocks,
+written after the opening marker by export from the run's first line, and read
+or set (for the whole run, one undo step) through
+`MarkdownExtension.codeFenceLanguage` and `setCodeFenceLanguage`. One span per
+line is what lets the language survive whatever the fence survives: a split at
+the run's first line, a join with the line above, fencing the line above,
+un-fencing the first line, splitting a run in two. Each leaves some line of
+the run with the language, and normalization gives the run's language (its
+first line's, or the first found down the run) to every line without one and
+drops any span off a fence; undoing the edit leaves it likewise, and a
+toggle's undo snapshot includes the line's language span. A line already
+holding a different language keeps it: the text form holds one info string
+per fence, so joining two runs writes the first run's, but undoing the join
+gives the second run its own back, and un-fencing the first run's lines makes
+the second's the run's. A language holding a backtick or a line break cannot
+be written and is dropped.
+
 ## Toggle semantics
 
 `toggleLineBlock` is the sweep behind every toolbar button. From one span-set
@@ -168,3 +190,6 @@ consequences of its own.
 - Toggling a style off after a blanket apply does not restore the styles lines
   carried before the apply; undo does. This matches conventional toolbar
   behavior.
+- A fence language filled in by normalization is outside undo history: joining
+  a fence that has a language with one that has none tags the second with the
+  first's, and undoing the join leaves that tag in place.

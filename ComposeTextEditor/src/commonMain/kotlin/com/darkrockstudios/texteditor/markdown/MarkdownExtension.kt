@@ -7,6 +7,7 @@ import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.richstyle.Blockquote
 import com.darkrockstudios.texteditor.richstyle.BulletList
 import com.darkrockstudios.texteditor.richstyle.CodeFence
+import com.darkrockstudios.texteditor.richstyle.CodeFenceLanguageSpanStyle
 import com.darkrockstudios.texteditor.richstyle.HR_PLACEHOLDER
 import com.darkrockstudios.texteditor.richstyle.HeaderSpanStyle
 import com.darkrockstudios.texteditor.richstyle.IMAGE_PLACEHOLDER
@@ -64,6 +65,8 @@ private data class CodeFenceStripResult(
 	val text: String,
 	/** Indices into [text]'s lines that came from inside a fenced block. */
 	val fencedLines: Set<Int>,
+	/** The info string of the fence each fenced line belongs to, keyed by its index in [text]. */
+	val infoStrings: Map<Int, String>,
 )
 
 /**
@@ -81,24 +84,31 @@ private data class CodeFenceStripResult(
 private fun stripCodeFences(markdown: String): CodeFenceStripResult {
 	val outputLines = mutableListOf<String>()
 	val fencedLineIndices = mutableSetOf<Int>()
+	val infoStrings = mutableMapOf<Int, String>()
 	var fence: String? = null
+	var pendingInfo: String? = null
 	for (line in markdown.lines()) {
 		val marker = codeFenceMarker(line)
 		val open = fence
 		if (open == null && marker != null) {
 			fence = marker
+			pendingInfo = line.trimStart().substring(marker.length).trim().ifEmpty { null }
 			continue
 		}
 		if (open != null && marker != null && marker[0] == open[0] && marker.length >= open.length) {
 			fence = null
 			continue
 		}
-		if (open != null) fencedLineIndices += outputLines.size
+		if (open != null) {
+			fencedLineIndices += outputLines.size
+			pendingInfo?.let { infoStrings[outputLines.size] = it }
+		}
 		outputLines += line
 	}
 	return CodeFenceStripResult(
 		text = outputLines.joinToString("\n"),
 		fencedLines = fencedLineIndices,
+		infoStrings = infoStrings,
 	)
 }
 
@@ -239,6 +249,11 @@ class MarkdownExtension(
 		val linkSpansByLine = content.richSpans
 			.filter { it.style is LinkSpanStyle }
 			.groupBy { it.range.start.line }
+		val fenceLanguages = content.richSpans
+			.mapNotNull { span ->
+				(span.style as? CodeFenceLanguageSpanStyle)?.let { span.range.start.line to it.language }
+			}
+			.toMap()
 
 		val annotated = content.getAllText()
 		val text = annotated.text
@@ -265,7 +280,9 @@ class MarkdownExtension(
 			// Open a fence when entering, close when leaving. Each marker sits on
 			// its own line so it must be followed by a newline.
 			if (isFenceLine && !inCodeFence) {
-				sb.append("```\n")
+				sb.append("```")
+				fenceLanguages[lineIndex]?.let { sb.append(it) }
+				sb.append('\n')
 				inCodeFence = true
 			} else if (!isFenceLine && inCodeFence) {
 				sb.append("```\n")
@@ -414,7 +431,73 @@ class MarkdownExtension(
 				blockLines = blockHits + (CodeFence to codeFenceLineIndices),
 			)
 			attachLinkSpans(parsed.links, annotatedString.text)
+			attachFenceLanguages(fenceStrip.infoStrings)
 		}
+	}
+
+	/** Attaches a [CodeFenceLanguageSpanStyle] on each fenced line, off the undo history like the blocks. */
+	private fun attachFenceLanguages(infoStrings: Map<Int, String>) {
+		if (infoStrings.isEmpty()) return
+		val spans = infoStrings.mapNotNull { (line, info) ->
+			val length = editorState.textLines.getOrNull(line)?.length ?: return@mapNotNull null
+			RichSpan(
+				range = TextEditorRange(CharLineOffset(line, 0), CharLineOffset(line, length)),
+				style = CodeFenceLanguageSpanStyle(info),
+			)
+		}
+		editorState.richSpanManager.addRichSpans(spans)
+	}
+
+	/**
+	 * The info string (` ```kotlin `) of the fenced code block containing
+	 * [line], or null when the line is not fenced or its fence has none. A
+	 * fence's language is its first line's, the one export writes.
+	 */
+	fun codeFenceLanguage(line: Int): String? {
+		val run = fenceRunContaining(line) ?: return null
+		return editorState.richSpanManager.getRichSpansStartingOn(run.first)
+			.firstNotNullOfOrNull { it.style as? CodeFenceLanguageSpanStyle }
+			?.language
+	}
+
+	/**
+	 * Sets the info string of the fenced code block containing [line], or
+	 * removes it for a null or blank [language]. The value is trimmed; one
+	 * holding a backtick or a line break cannot be written after a fence marker
+	 * and is refused. One undo step; a no-op off a fence.
+	 */
+	fun setCodeFenceLanguage(line: Int, language: String?) {
+		val run = fenceRunContaining(line) ?: return
+		val info = language?.trim()?.ifEmpty { null }
+		if (info != null && !CodeFenceLanguageSpanStyle.isWritable(info)) return
+		fun languageSpansOn(member: Int) = editorState.richSpanManager.getRichSpansStartingOn(member)
+			.filter { it.style is CodeFenceLanguageSpanStyle }
+		fun holdsInfo(member: Int) =
+			languageSpansOn(member).map { (it.style as CodeFenceLanguageSpanStyle).language } == listOfNotNull(info)
+		if (run.all(::holdsInfo)) return
+		editorState.editGroup {
+			run.forEach { member ->
+				if (holdsInfo(member)) return@forEach
+				languageSpansOn(member).forEach { editorState.removeRichSpan(it) }
+				if (info != null) {
+					val length = editorState.textLines[member].length
+					editorState.addRichSpan(
+						TextEditorRange(CharLineOffset(member, 0), CharLineOffset(member, length)),
+						CodeFenceLanguageSpanStyle(info),
+					)
+				}
+			}
+		}
+	}
+
+	/** The lines of the fence run containing [line], or null when [line] is not fenced. */
+	private fun fenceRunContaining(line: Int): IntRange? {
+		if (line !in editorState.textLines.indices || !isCodeFence(line)) return null
+		var first = line
+		while (first > 0 && isCodeFence(first - 1)) first--
+		var last = line
+		while (last + 1 < editorState.textLines.size && isCodeFence(last + 1)) last++
+		return first..last
 	}
 
 	/**

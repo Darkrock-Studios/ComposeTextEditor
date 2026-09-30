@@ -1867,9 +1867,9 @@ Shaping is one line per keystroke. These still scale with document length:
   literal text on import (tables, task lists) is exported escaped.
 - [ ] **7.15** [Fable] [Lane I] Paragraphs are exported with single newlines;
   other CommonMark renderers merge adjacent paragraphs.
-- [ ] **7.16** [Opus] [Lane I] No markdown form for underline, highlight,
+- [x] **7.16** [Opus] [Lane I] No markdown form for underline, highlight,
   colour, or size, so they are lost. Code fence language tags are dropped.
-  Done (inline styles): underline is `<u>` (Obsidian and Typora write it,
+  Done. Inline styles: underline is `<u>` (Obsidian and Typora write it,
   every renderer shows it; `<ins>` also imports), highlight is `==text==`
   (Obsidian, Typora, iA Writer, markdown-it-mark) or `<mark>` by
   `MarkdownConfiguration.highlightSyntax`, both imported, and a colour or a
@@ -1878,8 +1878,13 @@ Shaping is one line per keystroke. These still scale with document length:
   also imports). A configured style writes only its own marker, so a theme's
   bold colour is never the text's. Import reads the parser's inline
   `HTML_TAG` tokens; `==` is rewritten to `<mark>` in a pre-pass that leaves
-  code, tables, link destinations, URLs and tags alone. Left: fence language
-  tags.
+  code, tables, link destinations, URLs and tags alone. Fence language tags:
+  a fence's info string lives in a `CodeFenceLanguageSpanStyle` span on every
+  line of the run (`MarkdownExtension.codeFenceLanguage` and
+  `setCodeFenceLanguage`), written after the opening marker; normalization
+  keeps a run on one language across edits, and joining two runs keeps the
+  first run's. `~~~` fences import too. See `docs/design/line-blocks.md`,
+  "Fence languages".
 
 ### Find and replace addon
 
