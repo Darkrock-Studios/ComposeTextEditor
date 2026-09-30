@@ -1708,12 +1708,18 @@ iOS Safari; browser tests run in CI.
   span still wins (a heading's size over the body size) and the undo gives back
   an equal line. A strike over the head of an italic run now exports the space
   it covers struck (`state/StyleKeepsParagraphStyleTest.kt`).
-- [ ] **6.22 A replace of nothing moves a block marker. C.** [Opus] [Lane G]
+- [x] **6.22 A replace of nothing moves a block marker. C.** [Opus] [Lane G]
   `RichSpanManager.handleReplace` has no `stickyAtStart` case, so a `Replace`
   over an empty range at a line's start shifts that line's list, quote or
   heading marker off column 0, where an `Insert` at the same place keeps it.
   Found in 7.3, whose `setText` sends an insertion as an `Insert` to avoid it;
-  `TextEditorState.replace` with a collapsed range still hits it.
+  `TextEditorState.replace` with a collapsed range still hits it. Done: a replace of nothing
+  without a line break on a line-anchored marker's first line keeps the marker's
+  start at column 0 and takes the text in, at its end too, as an insert does;
+  that also fixes the undo of a replace that emptied an item's head. A span
+  starting after a replace no longer has its end moved along a later line by the
+  replacement's column shift. A line break in the text is 7.43's
+  (`state/CollapsedReplaceSpansTest.kt`).
 - [ ] **6.23 Line endings are normalised per entry point. C.** [Opus] [Lane G]
   6.8 normalises in `insertStringAtCursor`, `replace`, `setText`, the IME and
   paste; an operation built directly and handed to `applyOperation` (the

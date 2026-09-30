@@ -324,6 +324,23 @@ class RichSpanManager(
 		val newEnd = operation.newTextEnd
 
 		when {
+			// A line-anchored marker covers its line whatever a replace of nothing adds
+			// to its first line, as an insert there leaves it: its start stays at
+			// column 0 and an end at the insert point takes the text in. Text holding
+			// a line break takes the branches below.
+			span.style.stickyAtStart && operation.range.start == operation.range.end &&
+					!operation.newText.contains('\n') && operation.range.start.line == span.range.start.line &&
+					operation.range.start.char >= span.range.start.char &&
+					(span.range.end.line > span.range.start.line || operation.range.start.char <= span.range.end.char) -> {
+				val shift = newEnd.char - operation.range.start.char
+				val end = if (span.range.end.line == span.range.start.line) {
+					span.range.end.copy(char = span.range.end.char + shift)
+				} else {
+					span.range.end
+				}
+				updatedSpans.add(span.copy(range = TextEditorRange(span.range.start, end)))
+			}
+
 			// Span ends before replacement - keep as is
 			span.range.end.line < operation.range.start.line ||
 					(span.range.end.line == operation.range.start.line &&
@@ -346,9 +363,10 @@ class RichSpanManager(
 					span.range.start.line + lineDiff,
 					span.range.start.char + charDiff
 				)
+				// A column moves only on the replacement's last line.
 				val newEndPos = CharLineOffset(
 					span.range.end.line + lineDiff,
-					span.range.end.char + charDiff
+					span.range.end.char + if (span.range.end.line == operation.range.end.line) charDiff else 0,
 				)
 				updatedSpans.add(span.copy(range = TextEditorRange(newStart, newEndPos)))
 			}
