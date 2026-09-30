@@ -10,6 +10,7 @@ import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.LineWrap
 import com.darkrockstudios.texteditor.cursor.getWrapForDrawing
 import com.darkrockstudios.texteditor.effectiveHeight
+import com.darkrockstudios.texteditor.lastRowAtOrAbove
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -159,7 +160,7 @@ class TextEditorScrollManager(
 		val lineOffsets = getLineOffsets()
 		if (lineOffsets.isEmpty()) return CharLineOffset(0, 0)
 
-		val wrap = lineOffsets.lastOrNull { it.offset.y <= y } ?: lineOffsets.first()
+		val wrap = lineOffsets[lineOffsets.lastRowAtOrAbove(y).coerceAtLeast(0)]
 		return CharLineOffset(wrap.line, wrap.wrapStartsAtIndex)
 	}
 

@@ -33,6 +33,9 @@ import com.darkrockstudios.texteditor.cursor.CursorMetrics
 import com.darkrockstudios.texteditor.cursor.getWrapForDrawing
 import com.darkrockstudios.texteditor.cursor.getWrappedLineIndex
 import com.darkrockstudios.texteditor.effectiveHeight
+import com.darkrockstudios.texteditor.lastRowAtOrAbove
+import com.darkrockstudios.texteditor.rowAt
+import com.darkrockstudios.texteditor.rowIndexOf
 import com.darkrockstudios.texteditor.input.EditorActionRegistry
 import com.darkrockstudios.texteditor.input.KeyboardSettings
 import com.darkrockstudios.texteditor.input.KillRing
@@ -1172,11 +1175,7 @@ class TextEditorState(
 	 * Returns the index into [lineOffsets] of the wrapped (visual) line containing
 	 * [position], or -1 if none matches.
 	 */
-	fun getWrappedLineIndex(position: CharLineOffset): Int {
-		return _lineOffsets.indexOfLast { lineOffset ->
-			lineOffset.line == position.line && lineOffset.wrapStartsAtIndex <= position.char
-		}
-	}
+	fun getWrappedLineIndex(position: CharLineOffset): Int = _lineOffsets.rowIndexOf(position)
 
 	/**
 	 * The index into [lineOffsets] of the row the caret is drawn on, or -1 if none
@@ -1186,11 +1185,8 @@ class TextEditorState(
 	internal fun cursorRowIndex(): Int = _lineOffsets.getWrappedLineIndex(cursorPosition, cursor.affinity)
 
 	/** Returns the [LineWrap] (visual line) that contains [position]. */
-	fun getWrappedLine(position: CharLineOffset): LineWrap {
-		return _lineOffsets.last { lineOffset ->
-			lineOffset.line == position.line && lineOffset.wrapStartsAtIndex <= position.char
-		}
-	}
+	fun getWrappedLine(position: CharLineOffset): LineWrap =
+		_lineOffsets.rowAt(position) ?: throw NoSuchElementException("No row holds $position")
 
 	/** Returns the [LineWrap] at visual-line index [vLineIndex] in [lineOffsets]. */
 	fun getWrappedLine(vLineIndex: Int): LineWrap {
@@ -1261,10 +1257,11 @@ class TextEditorState(
 	 * that row either way, as native text fields do.
 	 */
 	fun getOffsetAtPosition(offset: Offset): CharLineOffset {
-		if (_lineOffsets.isEmpty()) return CharLineOffset(0, 0)
+		val rows = _lineOffsets
+		if (rows.isEmpty()) return CharLineOffset(0, 0)
 
 		val contentY = offset.y + scrollState.value
-		val row = _lineOffsets[rowIndexAtY(contentY)]
+		val row = rows[rows.lastRowAtOrAbove(contentY).coerceAtLeast(0)]
 		val lineLength = textLines.getOrNull(row.line)?.length
 			?: return CharLineOffset(textLines.lastIndex, textLines.last().length)
 
@@ -1293,17 +1290,6 @@ class TextEditorState(
 		if (contentY < first.offset.y || contentY >= last.offset.y + last.effectiveHeight) return null
 		if (offset.x < 0f || offset.x > viewportSize.width) return null
 		return findSpanAtPosition(getOffsetAtPosition(offset))
-	}
-
-	/** Index of the last row whose top is at or above content-space [y], or 0 above them all. */
-	private fun rowIndexAtY(y: Float): Int {
-		var low = 0
-		var high = _lineOffsets.lastIndex
-		while (low < high) {
-			val mid = (low + high + 1) ushr 1
-			if (_lineOffsets[mid].offset.y <= y) low = mid else high = mid - 1
-		}
-		return low
 	}
 
 	/**
@@ -1646,9 +1632,7 @@ class TextEditorState(
 	 */
 	fun findSpanAtPosition(position: CharLineOffset): RichSpan? {
 		// Find the line wrap that contains our position
-		val lineWrap = _lineOffsets.lastOrNull { wrap ->
-			wrap.line == position.line && position.char >= wrap.wrapStartsAtIndex
-		} ?: return null
+		val lineWrap = _lineOffsets.rowAt(position) ?: return null
 
 		return lineWrap.richSpans
 			.filter { it.style.isHitTestable && it.containsPosition(position) }

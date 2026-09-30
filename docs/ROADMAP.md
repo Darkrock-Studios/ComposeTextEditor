@@ -1838,11 +1838,25 @@ Shaping is one line per keystroke. These still scale with document length:
   caret, selection, scrolling, the scrollbar) tolerating provisional rows or
   forcing the rows it needs. Best designed together with 7.8, which also
   changes how rows are stored.
-- [ ] **7.11** [Opus] [Lane N] Linear scans per frame or event: visible-line
+- [x] **7.11** [Opus] [Lane N] Linear scans per frame or event: visible-line
   lookup in drawing, unculled selection drawing, `getWrappedLineIndex`,
   `getOffsetAtPosition` on each drag move. On the iOS simulator at 200k
   characters (4.21), an idle caret-blink frame takes 33 ms, two vsyncs,
   where a 2k document stays under one; typing frames reach 137 ms.
+  Selection drawing and the drag's hit test were already binary searches.
+  The rest now are too, through `RowSearch.kt` over the row list, which runs
+  line by line and top to bottom: the text drawing's two loops over every
+  row (each reading every row's height from its layout), the row holding a
+  position (`getWrappedLineIndex`, `getWrapForDrawing` and so every caret
+  scroll check, `getWrappedLine`, `findSpanAtPosition`, links and the
+  magnifier), the row at a height (`firstVisibleOffset`, page moves), and
+  the mouse's hover hit test. Selection drawing and the drag auto-scroll use
+  the same helpers in place of their own searches. `RowLookupCostTest` holds each lookup to
+  2 log2(rows) + 2 reads and `FrameCostTest` a frame to the rows in view.
+  Desktop JVM at 200k characters: the blink frame 758 µs to 653 µs, where a
+  2k document's is 632 µs; a row lookup 2.0 µs to 0.1 µs; `moveRight`
+  7.1 µs to 3.0 µs; a drag move 7.1 µs to 3.2 µs; a typing frame 859 µs to
+  724 µs. The iOS figures need a new simulator run (Mac queue).
 - [x] **7.12** [Opus] [Lane N] `moveRight` and `moveToNextWord` sum all line
   lengths though `getTextLength()` is constant time.
   Already gone: 1.1 and 1.5 rewrote both to step through the caret's own

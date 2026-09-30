@@ -168,7 +168,10 @@ The layout pass (`updateBookKeeping`, see below) turns the document into
 paragraph's shaping result, its resolved rich spans, and precomputed draw facts
 (ordered-list numeral, code-fence edge, block height). `LineWrap` is the
 contract between state and view: drawing, hit testing, cursor placement, and
-scrolling consume it and never re-measure text themselves.
+scrolling consume it and never re-measure text themselves. The rows run line
+by line, each line's by wrap start, and top to bottom with no gaps, so finding
+the row that holds a position or sits at a height is a binary search
+(`RowSearch.kt`), and a frame reads only the rows in view.
 
 ### The view layer
 

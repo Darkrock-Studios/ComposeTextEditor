@@ -42,9 +42,9 @@ class LongDocumentBenchmark {
 	private val style = TextEditorStyle(textColor = Color.Black, cursorColor = Color.Black)
 
 	/** Every line differs, so the measurer's layout cache cannot answer for a reshape. */
-	private fun document(): String {
+	private fun document(lines: Int = 2_000): String {
 		val words = listOf("lorem", "ipsum", "dolor", "sit", "amet", "consectetur", "adipiscing", "elit")
-		return List(2_000) { lineIndex ->
+		return List(lines) { lineIndex ->
 			buildString {
 				append(lineIndex)
 				var i = lineIndex
@@ -56,13 +56,13 @@ class LongDocumentBenchmark {
 		}.joinToString("\n")
 	}
 
-	private fun editor(): TextEditorState {
+	private fun editor(lines: Int = 2_000): TextEditorState {
 		val measurer = TextMeasurer(
 			defaultFontFamilyResolver = createFontFamilyResolver(),
 			defaultDensity = Density(1f, 1f),
 			defaultLayoutDirection = LayoutDirection.Ltr,
 		)
-		val state = TextEditorState(scope = scope, measurer = measurer, initialText = AnnotatedString(document()))
+		val state = TextEditorState(scope = scope, measurer = measurer, initialText = AnnotatedString(document(lines)))
 		state.density = Density(1f, 1f)
 		state.onViewportSizeChange(viewport)
 		state.isFocused = true
@@ -117,6 +117,9 @@ class LongDocumentBenchmark {
 		state.scrollManager.scrollState.scrollTo(state.scrollManager.calculateOffsetYPosition(nearStart).toInt())
 
 		measure("idle blink frame (draw)", warmup = 200, runs = 500) { state.drawFrame(canvas) }
+		// The same frame over a 2,000-character document, which fills the viewport too.
+		val short = editor(lines = 20).also { it.cursor.updatePosition(CharLineOffset(10, 40)) }
+		measure("idle blink frame, 2k document", warmup = 200, runs = 500) { short.drawFrame(canvas) }
 
 		measure("caret moveRight", warmup = 2_000, runs = 5_000, setup = { state.cursor.updatePosition(nearStart) }) {
 			state.cursor.moveRight()
