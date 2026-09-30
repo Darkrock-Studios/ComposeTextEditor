@@ -1304,12 +1304,12 @@ class TextEditorState(
 
 	/**
 	 * Converts a flat character [index] into the document to its [CharLineOffset].
-	 * The inverse of [getCharacterIndex]; clamps to the document end when out of range.
+	 * The inverse of [getCharacterIndex]; clamps to the document start or end when out of range.
 	 */
 	fun getOffsetAtCharacter(index: Int): CharLineOffset {
 		val starts = workingContent.lineStartOffsets
 		val lineCount = textLines.size
-		if (index < 0) return CharLineOffset(0, index)
+		if (index < 0 || lineCount == 0) return CharLineOffset(0, 0)
 		if (index >= starts[lineCount]) {
 			return CharLineOffset(textLines.lastIndex, textLines.last().length)
 		}
@@ -1328,15 +1328,10 @@ class TextEditorState(
 		// Belt-and-braces: applyOperation already clears stale selections, but
 		// any future flow-emit-before-coerce path would crash here without this.
 		val safe = offset.coerceInto(textLines)
-		if (safe != offset) {
-			println("TextEditor warning: getCharacterIndex clamped $offset to $safe (textLines.size=${textLines.size})")
-		}
-
 		return workingContent.lineStartOffsets[safe.line] + safe.char
 	}
 
-	fun CharLineOffset.toCharacterIndex(): Int =
-		workingContent.lineStartOffsets[line] + char
+	fun CharLineOffset.toCharacterIndex(): Int = getCharacterIndex(this)
 
 	// Convert character index to CharLineOffset
 	fun Int.toCharLineOffset(): CharLineOffset = getOffsetAtCharacter(this)
@@ -1459,8 +1454,7 @@ class TextEditorState(
 						style = measureStyle,
 						constraints = lineConstraints
 					)
-				} catch (e: IllegalArgumentException) {
-					println(e)
+				} catch (_: IllegalArgumentException) {
 					// If measurement fails, create an empty layout result
 					textMeasurer.measure(
 						text = AnnotatedString(""),

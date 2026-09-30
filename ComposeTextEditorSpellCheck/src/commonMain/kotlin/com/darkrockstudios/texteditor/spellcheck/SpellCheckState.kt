@@ -160,7 +160,6 @@ class SpellCheckState(
 		val doomed = textState.getRichSpansInRange(segment.range)
 			.filter { it.style is SpellCheckStyle }
 		textState.updateRichSpans(remove = doomed, add = emptyList())
-		println("Correcting spelling for $segment, correcting to: $correction")
 		textState.replace(segment.range, correction, true)
 	}
 
@@ -171,7 +170,6 @@ class SpellCheckState(
 		val doomed = textState.getRichSpansInRange(correction.range)
 			.filter { it.style is SpellCheckStyle }
 		textState.updateRichSpans(remove = doomed, add = emptyList())
-		println("Applying sentence correction: ${correction.originalText} -> $selectedSuggestion")
 		textState.replace(correction.range, selectedSuggestion, true)
 	}
 

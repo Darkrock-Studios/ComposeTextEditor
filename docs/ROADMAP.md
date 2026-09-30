@@ -2174,14 +2174,15 @@ Shaping is one line per keystroke. These still scale with document length:
 - [ ] `imeSetComposingRegion` (`input/ImeEditLogic.kt`) clears the composition
   when an IME passes the bounds reversed; `BaseInputConnection` orders them.
   Found in 4.27, whose expectation follows the contract.
-- [ ] Stray `println` calls in `state/TextEditorState.kt` and
-  `SpellCheckState.kt`.
+- [x] Stray `println` calls in `state/TextEditorState.kt` and
+  `SpellCheckState.kt`. Removed.
 - [ ] The sample app's toolbar Link button attaches its own
   `sample.LinkSpanStyle`, not the library's, so those links get no hand icon
   and do not open on Ctrl+click (1.15). Markdown-parsed links do.
 - [x] `docs/design/text-input-sessions.md` describes iOS as routing through
   the shared IME logic; it does not yet (4.2). True since 4.2's Linux part.
-- [ ] `getOffsetAtCharacter` returns a negative char for negative input.
+- [x] `getOffsetAtCharacter` returns a negative char for negative input.
+  It now clamps to the document start (`CharacterIndexConversionTest`).
 - [ ] The sample app's toolbar Highlight button attaches a `HighlightSpanStyle`
   rich span (`sample.HIGHLIGHT`), which markdown export does not serialize;
   the markdown form of a highlight is the configuration's `highlightStyle`
