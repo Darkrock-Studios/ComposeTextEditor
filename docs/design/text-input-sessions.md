@@ -232,6 +232,14 @@ the normal key path. Both are routed into the same
   `onPreKeyEvent` ever fired. It intercepts only chords the handler claims;
   typed characters fall through to the IME, which delivers them as
   `commitText`.
+- A hardware keyboard's dead key reaches the key path too, as a character
+  carrying `KeyCharacterMap.COMBINING_ACCENT`. `DeadKeyComposer` shows the
+  accent as a composition (`imeSetComposingText`) and settles it on the next
+  key: the composed pair committed, or the accent committed and the next
+  character typed after it, as `EditText` does. Any other key (an arrow,
+  Enter, Escape) commits it first. An IME text command lands over the
+  composition, as it would over the accent `EditText` selects. Nothing else
+  on the key path composes.
 - `performContextMenuAction` (the IME's select-all/copy/paste/cut buttons)
   synthesizes the matching Ctrl chords and dispatches them to the view
   directly, so they resolve through the same handler and registry. Unlike

@@ -533,6 +533,26 @@ Soft keyboard only:
 6. Type with a swipe/gesture keyboard across a list item boundary. **Expect:** no
    duplicated text, no caret jumping backwards.
 
+### 4.6 Hardware keyboard on Android
+
+A Bluetooth or USB keyboard, with a layout that has dead keys (Settings >
+System > Keyboard > Physical keyboard: English (US), International style, or
+German, or French).
+
+1. Press the acute dead key (`'` on US International), then `e`. **Expect:** the
+   accent shows underlined after the dead key, and `é` replaces it (4.20). Undo
+   removes the word typed with it.
+2. Dead key then `x`. **Expect:** `´x`. Dead key twice, or dead key then Space.
+   **Expect:** one `´`.
+3. Dead key, then an arrow key or Enter. **Expect:** the accent stays as typed and
+   the arrow or Enter acts after it. Dead key then Backspace. **Expect:** the accent
+   goes.
+
+Checked on an emulator (2026-09-29, API 36, Gboard active) through
+`adb shell input`, whose virtual keyboard has Alt+E as a combining acute:
+Alt+E then E typed `é`, Alt+E then X typed `´x`. A real keyboard's own layout is
+still to check.
+
 ## 5. Line blocks, markdown and HTML semantics
 
 Guards #57, #63, #66–#74, #78, #80.

@@ -46,6 +46,7 @@ import kotlinx.coroutines.CoroutineScope
  */
 internal class TextEditorKeyCommandHandler(
 	var keyBindings: KeyBindings,
+	private val deadKeys: DeadKeyComposer = DeadKeyComposer(),
 ) {
 
 	/**
@@ -61,6 +62,9 @@ internal class TextEditorKeyCommandHandler(
 		enabled: Boolean = true
 	): Boolean {
 		if (keyEvent.type != KeyEventType.KeyDown) return false
+		// A key with no character (Escape, a function key) ends a dead key's accent, as a
+		// command does; a key with one settles it in handleCharacterInput.
+		if (keyEvent.utf16CodePoint == 0 && keyEvent.key !in modifierKeys) deadKeys.commitPending(state)
 		if (yieldsTabToFocus(keyEvent, state)) return false
 
 		val bound = keyBindings.commandFor(keyEvent) ?: return false
@@ -77,6 +81,7 @@ internal class TextEditorKeyCommandHandler(
 
 		return when (command) {
 			is Motion -> {
+				deadKeys.commitPending(state)
 				moveCursor(command, state, extendSelection = keyEvent.isShiftPressed)
 				true
 			}
@@ -87,6 +92,7 @@ internal class TextEditorKeyCommandHandler(
 				val spec = state.actions[command] ?: return false
 				// Selection, copy and navigation stay available in a disabled editor.
 				if (spec.editsDocument && !enabled) return false
+				deadKeys.commitPending(state)
 				spec.perform(EditorActionContext(state, clipboard, scope))
 				true
 			}
@@ -143,6 +149,7 @@ internal class TextEditorKeyCommandHandler(
 		}
 
 		val codePoint = keyEvent.utf16CodePoint
+		if (codePoint and COMBINING_ACCENT != 0) return deadKeys.type(codePoint, state)
 		// Filter out control characters and Unicode non-characters.
 		if (codePoint <= 0 ||
 			codePoint in 0x00..0x1F ||
@@ -152,11 +159,7 @@ internal class TextEditorKeyCommandHandler(
 			return false
 		}
 
-		// Convert code point to string (handles surrogate pairs for supplementary characters)
-		val character = codePointToString(codePoint)
-
-		state.insertTypedString(character)
-
+		if (!deadKeys.type(codePoint, state)) state.insertTypedString(codePointToString(codePoint))
 		return true
 	}
 
@@ -234,22 +237,5 @@ internal class TextEditorKeyCommandHandler(
 		Motion.LineStart -> Motion.LineEnd
 		Motion.LineEnd -> Motion.LineStart
 		else -> this
-	}
-
-	/**
-	 * Converts a Unicode code point to a String.
-	 * Handles supplementary characters (code points > 0xFFFF) by creating surrogate pairs.
-	 */
-	private fun codePointToString(codePoint: Int): String {
-		return if (codePoint <= 0xFFFF) {
-			// Basic Multilingual Plane - single char
-			codePoint.toChar().toString()
-		} else {
-			// Supplementary character - needs surrogate pair
-			val adjusted = codePoint - 0x10000
-			val highSurrogate = ((adjusted shr 10) + 0xD800).toChar()
-			val lowSurrogate = ((adjusted and 0x3FF) + 0xDC00).toChar()
-			"$highSurrogate$lowSurrogate"
-		}
 	}
 }

@@ -1138,9 +1138,18 @@ iOS Safari; browser tests run in CI.
   still re-run on caret moves only, not on a scroll, left for 4.6 and 4.24 on
   the Mac. A real IME pass is 4.4. Android's cursor anchor info reads `lastCursorMetrics` the same
   way (4.30).
-- [ ] **4.20 Hardware keyboard dead keys on Android. S.** [Opus] [Lane F]
+- [x] **4.20 Hardware keyboard dead keys on Android. S.** [Opus] [Lane F]
   `handleCharacterInput` inserts `utf16CodePoint` directly, with no handling of
-  combining accents.
+  combining accents. Done: `DeadKeyComposer` (`input/DeadKeys.kt`) shows a dead
+  key's accent as a composition, as the desktop input methods do, and the next
+  character replaces it with the pair composed through
+  `KeyCharacterMap.getDeadChar`, or, when they do not compose, commits the
+  accent and types after it, as `EditText` does. Any other key commits the
+  accent before it acts. `deadChar` is an `expect` whose skiko `actual` never
+  composes (see the Mac queue). Tested in `DeadKeyTest` and `DeadKeyAndroidTest`;
+  checked on an emulator through the virtual keyboard's Alt+E acute. A
+  physical keyboard's layout is left for a person (QA plan, "Hardware
+  keyboard on Android").
 - [ ] **4.23 Primary selection on Linux. S.** [Fable] [Lane B] Middle-click
   paste of the X11 primary selection. Compose's `Clipboard` covers only the
   system clipboard, but AWT exposes the primary selection as
@@ -1633,3 +1642,4 @@ records results and removes entries that passed.
 | 2.9 | In the iOS sample app with a hardware keyboard: press Tab, Ctrl+Tab, then Escape followed by Tab; then set `state.tabSettings = TabSettings(movesFocus = true)` on the demo editor and press Tab | Tab indents by four spaces; Ctrl+Tab, Escape then Tab, and Tab under `movesFocus` either move focus to another control or do nothing, and never type a tab character (4.28) || Not run: hardware keyboard, left for a person |
 | 3.8 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64`. 3.8 added `internal expect fun hasNativeTextToolbar()` (commonMain `TouchToolbar.kt`) with `iosMain/.../TouchToolbar.ios.kt` answering true. Then in the simulator: long-press a word, double-tap a word, long-press empty space, tap the caret handle, and drag a selection handle | Compiles. UIKit's edit menu appears over the selection or caret with Cut, Copy, Paste and Select all as applicable (Paste and Select all alone at a bare caret), hides while a handle is dragged and returns when it drops, and goes when the caret moves or the text is scrolled. If no menu appears, the input connection has no toolbar: fall back to `false` in `TouchToolbar.ios.kt` so the context menu stands in |  Partial, same run. Compiles. The UIKit menu works over a selection: double-tap or long-press a word shows Cut, Copy, Paste, Select All, and each works. **Fails:** long-press in an empty document calls `show()` with a zero-width caret rect and only Paste, and UIKit shows nothing (the toolbar reports Hidden right after `showMenu`); a tap on the caret handle never calls `show()`. Native reference: a tap in Safari's focused empty field shows Paste. Also: a long-press past a line's end selects the line's last word instead of placing the caret; with a selection ending at the document end, a long-press below the text counts as on the selection. When the screen was shifted by 4.24 the selection menu did not appear either. Did not fall back to `false`, since the menu works for selections |
 | 4.13 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64`. `clipboard/ClipboardEvents.kt` adds `internal expect fun ClipboardEventsEffect`; the iOS actual (`iosMain/.../clipboard/ClipboardEvents.ios.kt`) is a no-op. Then the web demo in Safari on macOS: Cmd+C a bold word, Cmd+V it back, and paste a bulleted list from another page; also the context menu's Paste | Compiles. Safari pastes the bold word bold and the list as a list; the context menu's Paste either pastes or logs a `ComposeTextEditor:` warning in the console, never fails silently || Compile part passed 2026-09-30 at `f3b8d8f`. The Safari part is not run: it needs Safari on macOS with a person at the keyboard, since the clipboard events only fire for real key presses and driving Safari needs its Remote Automation setting turned on |
+| 4.20 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64`. 4.20 added `internal expect fun deadChar` (commonMain `input/DeadKeys.kt`) with its `actual` in `skikoMain/.../input/DeadKeys.skiko.kt`, which composes nothing | Compiles. Nothing to run: iOS never delivers a dead key as a key event | |
