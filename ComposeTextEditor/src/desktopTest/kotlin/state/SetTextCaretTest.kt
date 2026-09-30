@@ -5,15 +5,13 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.text.AnnotatedString
 import com.darkrockstudios.texteditor.CharLineOffset
 import utils.editorUiTest
-import utils.failsUntil
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
 /**
- * `setText` with a shorter text leaves the caret and the selection where they were, past
- * the new text, and the next typed character then throws in `mergeAnnotatedStrings`
- * (7.60).
+ * `setText` with a shorter text keeps the caret inside it and drops the selection, so
+ * the next typed character lands in the new text (7.60).
  */
 @OptIn(ExperimentalTestApi::class)
 class SetTextCaretTest {
@@ -23,9 +21,7 @@ class SetTextCaretTest {
 		test.runOnIdle { state.setText("") }
 		waitForIdle()
 
-		failsUntil("7.60") {
-			assertEquals(CharLineOffset(0, 0), state.cursorPosition)
-		}
+		assertEquals(CharLineOffset(0, 0), state.cursorPosition)
 	}
 
 	@Test
@@ -34,9 +30,7 @@ class SetTextCaretTest {
 		test.runOnIdle { state.setText(AnnotatedString("hi")) }
 		waitForIdle()
 
-		failsUntil("7.60") {
-			assertEquals(CharLineOffset(0, 2), state.cursorPosition)
-		}
+		assertEquals(CharLineOffset(0, 2), state.cursorPosition)
 	}
 
 	@Test
@@ -46,8 +40,40 @@ class SetTextCaretTest {
 		test.runOnIdle { state.setText("") }
 		waitForIdle()
 
-		failsUntil("7.60") {
-			assertNull(state.selector.selection)
+		assertNull(state.selector.selection)
+	}
+
+	@Test
+	fun `typing after setText with a shorter text inserts at the new end`() = editorUiTest {
+		typeText("hello")
+		test.runOnIdle { state.setText("") }
+		waitForIdle()
+
+		typeText("x")
+		assertEquals("x", text)
+	}
+
+	@Test
+	fun `setText drops the composing region`() = editorUiTest {
+		typeText("hello")
+		test.runOnIdle {
+			state.updateComposingRange(1, 4)
+			state.setText("a")
 		}
+		waitForIdle()
+
+		assertNull(state.composingRange)
+	}
+
+	@Test
+	fun `a typing style toggled before setText does not carry into the new text`() = editorUiTest {
+		test.runOnIdle { state.setText("") }
+		waitForIdle()
+		press(Key.B, ctrl = true)
+		test.runOnIdle { state.setText("") }
+		waitForIdle()
+
+		typeText("x")
+		assertEquals(emptyList(), state.getAllText().spanStyles.filter { it.item.fontWeight != null })
 	}
 }

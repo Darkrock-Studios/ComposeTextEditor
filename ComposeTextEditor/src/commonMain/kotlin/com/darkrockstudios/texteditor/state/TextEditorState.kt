@@ -821,15 +821,14 @@ class TextEditorState(
 	}
 
 	/**
-	 * Replaces the entire document with [text], clearing rich spans and undo history
-	 * and resetting book-keeping. To edit existing content instead, use [replace] or
-	 * the cursor operations.
+	 * Replaces the entire document with [text], clearing rich spans and undo history,
+	 * dropping the selection and composing region, and coercing the cursor into the new
+	 * text. To edit existing content instead, use [replace] or the cursor operations.
 	 */
 	fun setText(text: String) {
 		replaceContent(text.normalizeLineEndings().split("\n").map { it.toAnnotatedString() })
 		clearHistory()
-		updateBookKeeping()
-		cursor.refreshStyles()
+		resetAfterLoad()
 	}
 
 	/**
@@ -841,8 +840,7 @@ class TextEditorState(
 	fun setText(text: AnnotatedString) {
 		replaceContent(text.normalizeLineEndings().splitAnnotatedString())
 		clearHistory()
-		updateBookKeeping()
-		cursor.refreshStyles()
+		resetAfterLoad()
 	}
 
 	/**
@@ -872,6 +870,15 @@ class TextEditorState(
 		announceReplacement()
 
 		clearHistory()
+		resetAfterLoad()
+	}
+
+	/**
+	 * After a whole-document load: the selection and composing region addressed the old
+	 * text, so they are dropped (restored if the transaction rolls back), the cursor is
+	 * coerced into the new text, and its typing styles are read afresh.
+	 */
+	private fun resetAfterLoad() {
 		val previousComposing = composingRange
 		val previousComposingTyped = composingIsTyped
 		val previousSelection = selector.selection
@@ -884,6 +891,8 @@ class TextEditorState(
 		}
 		updateBookKeeping()
 		cursor.updatePosition(cursor.position)
+		// A typing style toggled at the caret belonged to the old text.
+		cursor.refreshStyles()
 	}
 
 	/**

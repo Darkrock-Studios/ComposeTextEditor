@@ -2621,6 +2621,9 @@ Shaping is one line per keystroke. These still scale with document length:
   shows its label, and applies its replacement" timed out waiting for its
   condition (2000 ms). Both look like waits on the asynchronous check that are
   too short or too early under load. Find what they wait on and wait for it.
+  `SpellCheckIgnoreE2eTest` "ignore clears every flag of the word and keeps it
+  clear" fails the same way under load ("other words are still checked",
+  expected 1, was 0) and passes alone.
 
 ### Host API
 
@@ -2748,7 +2751,7 @@ Shaping is one line per keystroke. These still scale with document length:
   action key, Done since 7.40, is not offered to accessibility services and
   tests as a single-line `BasicTextField`'s is. Read
   `TextEditorState.effectiveImeAction()` instead.
-- [ ] **7.60 `setText` leaves the caret past the new text. R.** [Opus]
+- [x] **7.60 `setText` leaves the caret past the new text. R.** [Opus]
   [Lane M] `TextEditorState.setText` (both overloads) replaces the lines
   without coercing the caret, unlike `setDocument`: type "hello", call
   `setText("")`, and the caret stays at (0, 5); the next typed character, or
@@ -2756,6 +2759,9 @@ Shaping is one line per keystroke. These still scale with document length:
   `mergeAnnotatedStrings`. The selection and composing region are probably
   stale the same way. Found by the Android emulator smoke test (0.7); the
   failing case is `state/SetTextCaretTest.kt`, marked `failsUntil("7.60")`.
+  Done: both `setText` overloads reset as `setDocument` does (one helper): the
+  selection and composing region are dropped and the cursor is coerced into
+  the new text.
 
 ## Housekeeping
 
