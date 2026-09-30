@@ -72,7 +72,8 @@ val LocalKeyBindings = staticCompositionLocalOf { platformKeyBindings() }
 
 /**
  * Linux conventions, also used on Android: Ctrl for shortcuts, Ctrl+Left/Right for word
- * jumps, Ctrl+Up/Down for paragraph jumps, Home/End for line bounds. Going forward, Ctrl+Right
+ * jumps, Ctrl+Up/Down for paragraph jumps, Home/End for line bounds, Shift+F10 and the Menu
+ * key for the context menu. Going forward, Ctrl+Right
  * and Ctrl+Delete stop at the end of the word and Ctrl+Down at the end of the paragraph, as
  * GTK, `EditText` and `BasicTextField` do. Windows differs only in those, see
  * [WindowsKeyBindings].
@@ -122,6 +123,9 @@ object CtrlKeyBindings : KeyBindings {
 				event.isShiftPressed && !event.isAltPressed -> Action.Paste
 				else -> null
 			}
+
+			Key.F10 -> if (event.isShiftPressed && !event.hasCommandModifier) Action.ShowContextMenu else null
+			Key.Menu, AwtContextMenuKey -> if (event.hasCommandModifier) null else Action.ShowContextMenu
 
 			else -> commonCommandFor(event)
 		}
@@ -293,6 +297,18 @@ private fun emacsCommandFor(event: KeyEvent): EditorCommand? = when (event.key) 
 	Key.K -> if (event.isShiftPressed) null else Action.DeleteToParagraphEnd
 	else -> null
 }
+
+/** Ctrl, Alt or Cmd: a chord a host or the system may claim. */
+private val KeyEvent.hasCommandModifier: Boolean
+	get() = isCtrlPressed || isAltPressed || isMetaPressed
+
+/**
+ * The Menu key on desktop: AWT's `VK_CONTEXT_MENU` at the standard location, which Compose
+ * desktop reports without naming it ([Key.Menu] is the Android key). Desktop packs the
+ * location above the key code, which no other platform's keys carry, so this matches
+ * nothing elsewhere.
+ */
+private val AwtContextMenuKey = Key((1L shl 32) or 525L)
 
 /**
  * Enter with Ctrl, Cmd or Alt is left for the host to claim (send, submit, a page break).

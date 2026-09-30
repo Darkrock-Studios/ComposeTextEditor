@@ -385,6 +385,23 @@ class KeyBindingsTest {
 		}
 	}
 
+	@Test
+	fun `shift+f10 and the menu key open the context menu off macos`() {
+		for (bindings in listOf(CtrlKeyBindings, WindowsKeyBindings)) {
+			assertEquals(Action.ShowContextMenu, bindings.commandFor(chord(Key.F10, shift = true)), "$bindings")
+			assertEquals(Action.ShowContextMenu, bindings.commandFor(chord(Key.Menu)), "$bindings")
+			assertEquals(
+				Action.ShowContextMenu,
+				bindings.commandFor(chord(Key(java.awt.event.KeyEvent.VK_CONTEXT_MENU))),
+				"$bindings, the desktop menu key",
+			)
+			assertNull(bindings.commandFor(chord(Key.F10)), "$bindings plain F10")
+			assertNull(bindings.commandFor(chord(Key.F10, shift = true, ctrl = true)), "$bindings ctrl+shift+F10")
+		}
+		assertNull(MacKeyBindings.commandFor(chord(Key.F10, shift = true)))
+		assertNull(MacKeyBindings.commandFor(chord(Key(java.awt.event.KeyEvent.VK_CONTEXT_MENU))))
+	}
+
 	/** Ctrl+Tab is how GTK, Cocoa and Swing text views let the keyboard out; the focus system takes it. */
 	@Test
 	fun `tab with ctrl or cmd is left for focus traversal`() {
@@ -536,11 +553,11 @@ class KeyBindingsTest {
 
 	@Test
 	fun `only document changing commands are edits`() {
-		val readOnly = listOf<EditorCommand>(Action.SelectAll, Action.Copy) + Motion.entries
-		for (command in readOnly) {
+		val readOnlyActions = listOf(Action.SelectAll, Action.Copy, Action.ShowContextMenu)
+		for (command in readOnlyActions + Motion.entries) {
 			assertEquals(false, command.isEdit, "$command must be allowed in a disabled editor")
 		}
-		for (command in Action.Builtins - Action.SelectAll - Action.Copy) {
+		for (command in Action.Builtins - readOnlyActions.toSet()) {
 			assertEquals(true, command.isEdit, "$command changes the document")
 		}
 	}

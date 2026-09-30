@@ -629,6 +629,12 @@ class TextEditorState(
 	/** What Tab and Shift+Tab do: the indent size and character, or moving focus. */
 	var tabSettings: TabSettings by mutableStateOf(TabSettings())
 
+	/**
+	 * How to open the context menu of each composable showing this state, which adds its
+	 * own while composed. The last opens.
+	 */
+	internal val contextMenuOpeners = mutableListOf<() -> Unit>()
+
 	private val _documentGeneration = MutableStateFlow(0)
 
 	/**

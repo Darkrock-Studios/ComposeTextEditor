@@ -49,6 +49,8 @@ import androidx.compose.ui.semantics.textSelectionRange
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.toSize
 import com.darkrockstudios.texteditor.contextmenu.ContextMenuActions
+import com.darkrockstudios.texteditor.contextmenu.ContextMenuOpener
+import com.darkrockstudios.texteditor.contextmenu.ContextMenuPlacement
 import com.darkrockstudios.texteditor.contextmenu.ContextMenuStrings
 import com.darkrockstudios.texteditor.contextmenu.TextEditorContextMenuProvider
 import com.darkrockstudios.texteditor.contextmenu.TextEditorContextMenuState
@@ -88,7 +90,7 @@ private const val CURSOR_BLINK_SPEED_MS = 500L
  * @param enabled When `false`, the editor is read-only and cannot take focus.
  * @param autoFocus Requests focus once when first composed.
  * @param style Colors and text style for the editor and its gutter markers.
- * @param contextMenuStrings Localized labels for the built-in cut/copy/paste menu.
+ * @param contextMenuStrings Localized labels for the built-in context menu.
  * @param contextMenuState Drives context-menu visibility; pass your own to add
  *   custom items (e.g. spell-check suggestions), or leave `null` for the default.
  * @param onRichSpanClick Invoked when a rich span is clicked or tapped; see
@@ -177,13 +179,15 @@ fun BasicTextEditor(
 	val contextMenuActions = remember(state, clipboard, enabled) {
 		ContextMenuActions(state, clipboard, state.scope, enabled)
 	}
+	val menuPlacement = remember(state, effectiveContextMenuState) {
+		ContextMenuPlacement(state, effectiveContextMenuState)
+	}
+	ContextMenuOpener(state, menuPlacement)
 
 	val textToolbar = LocalTextToolbar.current
 	val nativeTextToolbar = LocalNativeTextToolbar.current
-	val touchToolbar = remember(state, textToolbar, nativeTextToolbar, contextMenuActions, effectiveContextMenuState) {
-		TouchToolbar(state, textToolbar.takeIf { nativeTextToolbar }, contextMenuActions) { offset ->
-			effectiveContextMenuState.showMenu(offset)
-		}
+	val touchToolbar = remember(state, textToolbar, nativeTextToolbar, contextMenuActions, menuPlacement) {
+		TouchToolbar(state, textToolbar.takeIf { nativeTextToolbar }, contextMenuActions, menuPlacement::showAtContent)
 	}
 	LaunchedEffect(touchToolbar) { touchToolbar.watch() }
 	DisposableEffect(touchToolbar) { onDispose { touchToolbar.hide() } }
@@ -262,7 +266,7 @@ fun BasicTextEditor(
 		enabled = enabled,
 	) {
 		TextEditorScrollbar(
-			modifier = modifier,
+			modifier = menuPlacement.modifier.then(modifier),
 			scrollState = state.scrollState,
 		) { editorModifier ->
 			// The horizontal padding is applied inside the canvas, below its pointer input,
@@ -355,7 +359,7 @@ fun BasicTextEditor(
 						.textEditorPointerInputHandling(
 							state = state,
 							onSpanClick = spanClickProxy,
-							onContextMenuRequest = { offset -> effectiveContextMenuState.showMenu(offset) },
+							onContextMenuRequest = menuPlacement::showAtContent,
 							links = linkClicks,
 							caretHandle = enabled,
 							contentOrigin = { contentOrigin },

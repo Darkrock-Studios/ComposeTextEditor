@@ -188,7 +188,7 @@ review.
 | H | Clipboard and HTML | `clipboard/`, `html/` | 4.9, 4.13, 4.17, 6.7 to 6.12 |
 | I | Markdown and block model | `markdown/`, `richstyle/` | 5.6, 7.14 to 7.16 |
 | J | Find addon | `ComposeTextEditorFind/` | 7.17 to 7.19, 7.26, 7.29 |
-| K | Spell check addon | `ComposeTextEditorSpellCheck/` | 7.20 to 7.22, 7.28, 7.30, 7.31 |
+| K | Spell check addon | `ComposeTextEditorSpellCheck/` | 7.20 to 7.22, 7.28, 7.30, 7.31, 7.34, 7.35 |
 | L | Tests and CI | test sources, `.github/workflows/` | 0.1 to 0.3, 0.5 to 0.9, 4.1, 4.15 |
 | M | Accessibility and host API | semantics in `BasicTextEditor.kt`, `RichTextView.kt`, `state/rememberTextEditorState.kt` | 7.1 to 7.4, 7.13, 7.23 to 7.25, 7.32 |
 | N | Core layout and performance | `state/TextEditorState.kt` | 5.7, 7.8 to 7.12 |
@@ -618,7 +618,7 @@ fixes what users feel every minute.
   lists do not exist (5.6), so list-aware means Tab adds no leading spaces to a
   list item: at an item's start it does nothing, and over several lines it
   skips the items. See `docs/design/editor-actions.md`, "Tab".
-- [ ] **2.10 Context menu. C.** [Opus] [Lane D] No Menu key or Shift+F10. No
+- [x] **2.10 Context menu. C.** [Opus] [Lane D] No Menu key or Shift+F10. No
   Undo or Redo. Unavailable items are hidden rather than disabled. The position
   is shifted by the start content padding. `TextEditor` does not expose
   `contextMenuStrings` or `contextMenuState`; `RichTextView` hard-codes
@@ -627,6 +627,19 @@ fixes what users feel every minute.
   position is already in the menu provider's coordinates; the handlers
   translate it to text coordinates before `onContextMenuRequest`, which is the
   shift.
+  Done: `Action.ShowContextMenu` on Shift+F10 and the Menu key off macOS opens
+  the menu under the caret. Undo, Redo and Paste as Plain Text are items, and
+  an item whose action has nothing to do is disabled; one not registered or
+  not allowed (editing in a read-only editor) is hidden. `ContextMenuStrings`
+  gained `undo`, `redo` and `pasteAsPlainText` with English defaults;
+  `TextEditor` takes `contextMenuStrings` and `contextMenuState`, and
+  `RichTextView` `contextMenuStrings`. The composables convert the canvas
+  positions the handlers and the touch toolbar give through the layout
+  (`ContextMenuPlacement`), so content padding and a host modifier's padding
+  both count and the pointer handling is unchanged; the menu is placed with
+  `absoluteOffset`, so a right-to-left layout does not mirror it. The menu was
+  already keyboard-navigable (Material's skiko dropdown). See
+  `docs/design/editor-actions.md`, "The context menu".
 - [ ] **2.11 Kill ring.** [Opus] [Lane D] Ctrl+K on macOS deletes to the
   paragraph end but keeps nothing. Cocoa saves killed text to a kill ring,
   consecutive kills append to it, and Ctrl+Y yanks it back. Separate from the
@@ -1309,6 +1322,17 @@ Shaping is one line per keystroke. These still scale with document length:
   letters at a period: "U.S.A." reaches the checker as U, S and A, and the s
   of "U.S.'s" on its own. Skip one-letter segments, or rejoin an abbreviation
   before the lookup, so typeset abbreviations stop drawing squiggles.
+- [ ] **7.34** [Opus] [Lane K] A tap on a flagged word or a diagnostic opens
+  `SpellCheckingTextEditor`'s menu at the span click's offset, which is in the
+  text canvas's coordinates, so the menu sits the start padding (16 dp by
+  default) left of the word. A right-click is re-anchored by the editor since
+  2.10; a tap is not. Convert it through the layout, as `ContextMenuPlacement`
+  does.
+- [ ] **7.35** [Opus] [Lane K] Shift+F10 and the Menu key (2.10) open the
+  standard menu even with the caret in a flagged word, so a keyboard user never
+  reaches its suggestions, Ignore or Add to dictionary. Register over
+  `editor.showContextMenu` in `SpellCheckingTextEditor` to open the spell check
+  menu for the span at the caret, and the standard one elsewhere.
 
 ### Host API
 

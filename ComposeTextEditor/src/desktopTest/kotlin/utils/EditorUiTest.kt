@@ -41,6 +41,7 @@ import com.darkrockstudios.texteditor.RichSpanClickEventListener
 import com.darkrockstudios.texteditor.handleCenter as drawnHandleCenter
 import com.darkrockstudios.texteditor.RichSpanClickListener
 import com.darkrockstudios.texteditor.rememberTextEditorStyle
+import com.darkrockstudios.texteditor.contextmenu.ContextMenuStrings
 import com.darkrockstudios.texteditor.contextmenu.TextEditorContextMenuState
 import com.darkrockstudios.texteditor.input.CtrlKeyBindings
 import com.darkrockstudios.texteditor.input.KeyBindings
@@ -74,6 +75,7 @@ internal fun editorUiTest(
 	onRichSpanClickEvent: RichSpanClickEventListener? = null,
 	onLinkClick: ((String) -> Unit)? = null,
 	contextMenuState: TextEditorContextMenuState? = null,
+	contextMenuStrings: ContextMenuStrings = ContextMenuStrings.Default,
 	autoFocus: Boolean = enabled,
 	contentPadding: PaddingValues = PaddingValues(0.dp),
 	density: Float = 1f,
@@ -104,6 +106,7 @@ internal fun editorUiTest(
 					autoFocus = autoFocus,
 					style = rememberTextEditorStyle(textStyle = textStyle),
 					contextMenuState = contextMenuState,
+					contextMenuStrings = contextMenuStrings,
 					onRichSpanClick = onRichSpanClick,
 					onRichSpanClickEvent = onRichSpanClickEvent,
 					onLinkClick = onLinkClick,

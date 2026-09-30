@@ -113,13 +113,20 @@ this exercises the clipboard's HTML as the block carrier.
 
 ### 2.6 Context menu parity (#87, #50)
 
-1. Right-click in the editor with a selection: Cut / Copy / Paste / Select All.
+1. Right-click in the editor with a selection: Undo / Redo, Cut / Copy / Paste /
+   Paste as Plain Text, Select All, in three groups.
 2. **Expect:** each does exactly what its keyboard chord does, including keeping list
-   and quote styling on copy.
-3. Right-click with **no** selection. **Expect:** Cut/Copy appear disabled (or hidden)
-   rather than doing something destructive; the menu is never empty.
-4. RichTextView demo (read-only): right-click. **Expect:** Copy and Select All work,
-   editing actions are absent or disabled. Typing changes nothing.
+   and quote styling on copy; Paste as Plain Text drops copied formatting.
+3. Right-click with **no** selection in a fresh document. **Expect:** Undo, Redo, Cut
+   and Copy show disabled; Paste, Paste as Plain Text and Select All are enabled.
+   Type a word and right-click again: Undo is enabled and undoes it.
+4. RichTextView demo (read-only): right-click. **Expect:** only Copy (disabled
+   without a selection) and Select All. Typing changes nothing.
+4a. With the caret in the editor, press Shift+F10, then the Menu key (Windows and
+   Linux; macOS has neither, and in a browser note whether either reaches the page). **Expect:** the menu opens under the caret; Down,
+   Up and Enter pick an item, Escape closes it and typing lands in the editor.
+4b. In an editor with start padding (the sample's `TextEditor` has 16 dp), right-click
+   a word. **Expect:** the menu's corner is at the pointer, not 16 dp to its left.
 5. Select a word, then right-click inside it. **Expect:** the selection stays and the
    menu offers Cut and Copy. Right-click outside it. **Expect:** the caret moves to the
    click and the selection clears before the menu opens (1.9). In the RichTextView demo

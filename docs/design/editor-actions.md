@@ -186,6 +186,31 @@ trip, so Tab at the start of a list item does nothing, and Tab over several
 lines indents all but the list items. Shift+Tab still strips leading spaces
 from any line, list items included.
 
+### The context menu
+
+The built-in menu lists, after any host items, Undo and Redo; Cut, Copy, Paste
+and Paste as Plain Text; and Select All, each group behind a divider. An item
+shows when its action is registered and allowed (a read-only editor or view has
+no editing items, so it offers Copy and Select All) and is disabled while its
+spec's `isEnabled` says it has nothing to act on, as native menus grey items out
+rather than drop them. Paste stays enabled, since the clipboard cannot be read
+synchronously. `ContextMenuStrings` holds every label; `TextEditor`,
+`BasicTextEditor` and `RichTextView` take one, and `TextEditor` takes a
+`TextEditorContextMenuState` too.
+
+`editor.showContextMenu` opens it under the caret. It is bound to Shift+F10 and
+the Menu key in `CtrlKeyBindings` (Windows, Linux and Android), and to nothing
+on macOS, which has no such convention. On the web Compose does not name the
+Menu key, and whether the browser leaves Shift+F10 to the page is unverified.
+The composable showing a state registers how to open its menu, and the action's
+`isEnabled` is false while none does. The menu takes Up, Down, Enter and Escape
+once open. An addon with menu items of its own (spell check) can register over
+the action to open its menu instead.
+
+Pointer and touch-toolbar positions are in the text canvas's coordinates; the
+composable converts them through the layout into the menu provider's, so the
+content padding and any padding in the host's modifier are accounted for.
+
 ### Resolution and consumption
 
 `TextEditorKeyCommandHandler.handleKeyEvent` resolves in three steps:

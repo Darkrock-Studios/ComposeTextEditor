@@ -91,6 +91,14 @@ internal fun EditorActionRegistry.registerBuiltinActions() {
 	register(EditorActionSpec(Action.Outdent) { it.state.handleOutdent() })
 	register(EditorActionSpec(Action.NewLine) { it.state.handleEnter() })
 
+	register(
+		EditorActionSpec(
+			action = Action.ShowContextMenu,
+			isEnabled = { it.state.contextMenuOpeners.isNotEmpty() },
+			perform = { it.state.contextMenuOpeners.lastOrNull()?.invoke() },
+		)
+	)
+
 	registerFormattingToggle(Action.ToggleBold) { it.boldStyle }
 	registerFormattingToggle(Action.ToggleItalic) { it.italicStyle }
 	registerFormattingToggle(Action.ToggleUnderline) { UNDERLINE }

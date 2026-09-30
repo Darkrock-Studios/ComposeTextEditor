@@ -113,6 +113,9 @@ sealed interface EditorCommand {
 			val ToggleStrikethrough = Action("editor.toggleStrikethrough", isEdit = true)
 			val ToggleInlineCode = Action("editor.toggleInlineCode", isEdit = true)
 
+			/** Opens the editor's context menu under the caret: Shift+F10 and the Menu key. */
+			val ShowContextMenu = Action("editor.showContextMenu", isEdit = false)
+
 			/**
 			 * The built-in carrying [id], or null for a host's own action. Identity is
 			 * the id alone, so a built-in's [isEdit] is taken from here, never from
@@ -146,6 +149,7 @@ sealed interface EditorCommand {
 				ToggleUnderline,
 				ToggleStrikethrough,
 				ToggleInlineCode,
+				ShowContextMenu,
 			)
 
 			private val builtinsById: Map<String, Action> = Builtins.associateBy { it.id }
