@@ -217,9 +217,11 @@ internal class TextEditorKeyCommandHandler(
 		}
 	}
 
+	// Modifier, lock and function keys: none disarms Escape's Tab or ends a dead key's accent.
 	private val modifierKeys = setOf(
 		Key.ShiftLeft, Key.ShiftRight, Key.CtrlLeft, Key.CtrlRight,
 		Key.AltLeft, Key.AltRight, Key.MetaLeft, Key.MetaRight,
+		Key.CapsLock, Key.NumLock, Key.ScrollLock, Key.Function, Key.Symbol,
 	)
 
 	private val Motion.isVertical: Boolean

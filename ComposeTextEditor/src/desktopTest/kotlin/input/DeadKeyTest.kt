@@ -232,4 +232,15 @@ class DeadKeyTest {
 
 		assertEquals("e", other.getAllText().text)
 	}
+
+	@Test
+	fun `a lock or modifier key between leaves the accent pending`() {
+		dead(acute)
+
+		press(Key.CapsLock)
+		press(Key.ShiftLeft)
+		type('E')
+
+		assertEquals("É", text)
+	}
 }

@@ -435,8 +435,10 @@ class ImeCursorSyncTest {
 			editor("hello")
 			var top by mutableFloatStateOf(0f)
 			val watching = ImeCursorSync(state, sink, cursorAnchor = { caretAt(top) }) { posted += it }
-			state.platformExtensions.cursorAnchorMonitoringEnabled = true
+			// The keyboard asks to monitor once its connection is open, after the sync started.
 			watching.startSync()
+			state.platformExtensions.cursorAnchorMonitoringEnabled = true
+			Snapshot.sendApplyNotifications()
 			runPosted()
 			sink.events.clear()
 

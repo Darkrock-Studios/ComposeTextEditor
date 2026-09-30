@@ -5,6 +5,9 @@ import android.graphics.Matrix
 import android.view.View
 import android.view.inputmethod.CursorAnchorInfo
 import android.view.inputmethod.InputMethodManager
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import com.darkrockstudios.texteditor.input.ImeCaretGeometry
 import com.darkrockstudios.texteditor.input.ImeCursorSync
 import com.darkrockstudios.texteditor.input.TextEditorInputConnection
@@ -28,9 +31,10 @@ actual class PlatformTextEditorExtensions actual constructor(
 
 	/**
 	 * When true, cursor anchor info should be sent to the IME whenever the cursor moves.
-	 * Set by [requestCursorUpdates] when IME requests CURSOR_UPDATE_MONITOR mode.
+	 * Set by [requestCursorUpdates] when IME requests CURSOR_UPDATE_MONITOR mode. Snapshot
+	 * state, so the sync's watch on the caret's screen position starts when it turns on.
 	 */
-	var cursorAnchorMonitoringEnabled: Boolean = false
+	var cursorAnchorMonitoringEnabled: Boolean by mutableStateOf(false)
 
 	/**
 	 * When true, [InputMethodManager.updateExtractedText] should be sent on every text/selection

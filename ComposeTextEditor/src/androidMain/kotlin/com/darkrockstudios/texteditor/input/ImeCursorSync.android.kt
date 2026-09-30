@@ -84,7 +84,7 @@ actual class ImeCursorSync internal constructor(
 		scope.launch {
 			// The anchor reads the layout and the scroll; the canvas's coordinates are a plain
 			// field, so its position and size are read for their moves and resizes. Nothing is
-			// measured unless the IME monitors, which it asks for with an immediate report.
+			// measured unless the IME monitors; turning monitoring on starts the watch.
 			snapshotFlow {
 				state.canvasPositionInRoot
 				state.viewportSize
