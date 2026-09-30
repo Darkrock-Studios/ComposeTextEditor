@@ -2,18 +2,31 @@ package e2e
 
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.isCtrlPressed
+import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.onNodeWithContentDescription
+import com.darkrockstudios.texteditor.CharLineOffset
+import com.darkrockstudios.texteditor.EditorLineLimits
 import com.darkrockstudios.texteditor.RichSpanClick
+import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.contextmenu.ContextMenuStrings
+import com.darkrockstudios.texteditor.input.MacKeyBindings
 import com.darkrockstudios.texteditor.richstyle.HighlightSpanStyle
 import com.darkrockstudios.texteditor.richstyle.LinkSpanStyle
+import com.darkrockstudios.texteditor.spellcheck.SpellCheckMode
+import com.darkrockstudios.texteditor.spellcheck.api.Correction
+import com.darkrockstudios.texteditor.spellcheck.api.Suggestion
+import com.darkrockstudios.texteditor.spellcheck.diagnostics.LineDiagnostic
+import com.darkrockstudios.texteditor.spellcheck.diagnostics.TextDiagnosticsChecker
 import com.darkrockstudios.texteditor.state.SpanClickType
 import utils.CountingSpellChecker
 import utils.spellCheckUiTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /** The editor parameters [com.darkrockstudios.texteditor.spellcheck.SpellCheckingTextEditor] passes on. */
+@OptIn(ExperimentalTestApi::class)
 class SpellCheckEditorParametersE2eTest {
 
 	private val document = "see the docs here"
@@ -141,5 +154,123 @@ class SpellCheckEditorParametersE2eTest {
 
 			awaitMenuItem("docs")
 		}
+	}
+
+	@Test
+	fun `the key bindings choose the link chord`() {
+		val opened = mutableListOf<String>()
+		spellCheckUiTest(
+			spellChecker = checker,
+			initialText = document,
+			onLinkClick = { opened += it },
+			keyBindings = MacKeyBindings,
+		) {
+			state.textState.addRichSpan(8, 12, LinkSpanStyle(url))
+			waitForIdle()
+
+			clickAtCharacter(9, ctrl = true)
+			assertTrue(opened.isEmpty(), "Ctrl+click is not the macOS chord")
+
+			clickAtCharacter(9, meta = true)
+			assertEquals(listOf(url), opened)
+		}
+	}
+
+	@Test
+	fun `the content description labels the editor`() {
+		spellCheckUiTest(spellChecker = checker, initialText = document, contentDescription = "Notes") {
+			test.onNodeWithContentDescription("Notes").assertExists()
+		}
+	}
+
+	@Test
+	fun `a single-line editor keeps its text to one line`() {
+		spellCheckUiTest(spellChecker = checker, lineLimits = EditorLineLimits.SingleLine) {
+			typeText("see\nthe")
+
+			assertEquals("seethe", state.textState.getAllText().text)
+		}
+	}
+
+	// --- read-only ------------------------------------------------------------
+
+	private val flagging = CountingSpellChecker(correctWords = setOf("fine"), suggestions = listOf("brokenwork"))
+
+	@Test
+	fun `a read-only editor takes no typing`() {
+		spellCheckUiTest(spellChecker = flagging, initialText = "fine brokenword", readOnly = true) {
+			typeText("x")
+
+			assertEquals("fine brokenword", state.textState.getAllText().text)
+		}
+	}
+
+	@Test
+	fun `a read-only editor offers Ignore on a flagged word but no corrections`() {
+		val added = mutableListOf<String>()
+		spellCheckUiTest(
+			spellChecker = flagging,
+			initialText = "fine brokenword",
+			readOnly = true,
+			onAddToDictionary = { added += it },
+		) {
+			rightClickAtCharacter(7)
+			awaitMenuItem("Ignore")
+
+			assertTrue(hasMenuItem("Add to dictionary"))
+			assertFalse(hasMenuItem("brokenwork"))
+			assertFalse(hasMenuItem("Loading..."))
+			assertFalse(hasMenuItem("No suggestions"))
+
+			clickMenuItem("Ignore")
+			assertEquals(0, spellCheckSpanCount)
+			assertEquals("fine brokenword", state.textState.getAllText().text)
+		}
+	}
+
+	private fun sentenceIssueMenu(readOnly: Boolean, block: (offersCorrection: Boolean) -> Unit) {
+		val brokenRange = TextEditorRange(CharLineOffset(0, 5), CharLineOffset(0, 15))
+		spellCheckUiTest(
+			spellChecker = CountingSpellChecker(
+				sentenceCorrections = { _, _ -> listOf(Correction(brokenRange, "brokenword", listOf(Suggestion("broken word")))) },
+			),
+			initialText = "fine brokenword fine",
+			spellCheckMode = SpellCheckMode.Sentence,
+			readOnly = readOnly,
+		) {
+			rightClickAtCharacter(7)
+			awaitMenuItem("Ignore")
+			block(hasMenuItem("broken word"))
+		}
+	}
+
+	@Test
+	fun `a read-only editor offers no correction for a sentence issue`() {
+		sentenceIssueMenu(readOnly = false) { assertTrue(it) }
+		sentenceIssueMenu(readOnly = true) { assertFalse(it) }
+	}
+
+	private fun diagnosticMenu(readOnly: Boolean, block: (offersFix: Boolean) -> Unit) {
+		val repeats = TextDiagnosticsChecker { lines ->
+			lines.map { line ->
+				Regex("the the").findAll(line).map { LineDiagnostic(it.range.first, it.range.last + 1, "Repeated word", listOf("the")) }.toList()
+			}
+		}
+		spellCheckUiTest(
+			spellChecker = CountingSpellChecker(correctWords = setOf("over", "the", "hill")),
+			initialText = "over the the hill",
+			diagnosticsChecker = repeats,
+			readOnly = readOnly,
+		) {
+			rightClickAtCharacter(7)
+			awaitMenuItem("Repeated word")
+			block(hasMenuItem("the"))
+		}
+	}
+
+	@Test
+	fun `a read-only editor shows a diagnostic's message but not its fixes`() {
+		diagnosticMenu(readOnly = false) { assertTrue(it) }
+		diagnosticMenu(readOnly = true) { assertFalse(it) }
 	}
 }

@@ -54,7 +54,9 @@ after the built-in ones.
 Everything else is passed to the editor it wraps, as on `TextEditor`: `onLinkClick` opens
 a link on Ctrl+click (Cmd+click on macOS), and `onRichSpanClick` and `onRichSpanClickEvent`
 hear clicks on your own spans. Clicks on squiggles are the spell checker's and are not
-passed on.
+passed on. `readOnly`, `lineLimits`, `contentDescription` and `keyBindings` work as they do
+on `TextEditor`; in a read-only editor the menu on a flagged word offers Ignore and Add to
+dictionary but no corrections, and a diagnostic's menu shows its message without its fixes.
 
 A checker serves one language. To switch, create a checker for the new language and pass
 it to `rememberSpellCheckState`, which re-checks the document with it; the ignored words

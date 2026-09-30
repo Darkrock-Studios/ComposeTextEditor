@@ -735,6 +735,9 @@ Guards #89, #90, #65, #83.
 8. Make a link with the toolbar over a word, then misspell the word. Ctrl+click it
    (Cmd+click on macOS). **Expect:** the link opens. Right-click it. **Expect:** the
    word's suggestions, not the standard menu alone.
+9. Pass `readOnly = true` to the demo's `SpellCheckingTextEditor` and right-click a
+   misspelled word. **Expect:** Ignore (and Add to dictionary where offered), no
+   suggestions; Ignore clears the squiggle and the text is unchanged.
 
 ## 8. Performance and smoke pass
 

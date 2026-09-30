@@ -4,9 +4,11 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalDensity
@@ -14,6 +16,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.darkrockstudios.texteditor.BasicTextEditor
 import com.darkrockstudios.texteditor.CharLineOffset
+import com.darkrockstudios.texteditor.EditorLineLimits
 import com.darkrockstudios.texteditor.RichSpanClick
 import com.darkrockstudios.texteditor.RichSpanClickEventListener
 import com.darkrockstudios.texteditor.RichSpanClickListener
@@ -23,6 +26,8 @@ import com.darkrockstudios.texteditor.contextmenu.ContextMenuItem
 import com.darkrockstudios.texteditor.contextmenu.ContextMenuStrings
 import com.darkrockstudios.texteditor.contextmenu.TextEditorContextMenuState
 import com.darkrockstudios.texteditor.focusBorder
+import com.darkrockstudios.texteditor.input.KeyBindings
+import com.darkrockstudios.texteditor.input.LocalKeyBindings
 import com.darkrockstudios.texteditor.rememberTextEditorStyle
 import com.darkrockstudios.texteditor.richstyle.RichSpan
 import com.darkrockstudios.texteditor.richstyle.SpellCheckStyle
@@ -57,7 +62,13 @@ private val DefaultContentPadding = PaddingValues(start = 8.dp)
  *   [TextEditorState]. Defaults to a remembered state built from [spellChecker].
  * @param modifier The [Modifier] applied to the editor surface.
  * @param contentPadding Padding applied around the editor content.
- * @param enabled Whether the editor accepts input and focus.
+ * @param enabled Whether the editor accepts input and focus. A disabled editor offers no
+ *   spell check menu.
+ * @param readOnly Shows the caret for navigation and selection but takes no edits; see
+ *   [BasicTextEditor]. The menu on a flagged span offers Ignore, Add to dictionary and
+ *   [spellCheckMenuItems], but no corrections or fixes.
+ * @param lineLimits Fills the height given, or grows with the text between a minimum and
+ *   maximum number of lines; see [BasicTextEditor].
  * @param autoFocus Whether the editor requests focus on first composition.
  * @param style The [TextEditorStyle] controlling appearance.
  * @param contextMenuStrings Localized strings for the built-in context menu.
@@ -76,8 +87,11 @@ private val DefaultContentPadding = PaddingValues(start = 8.dp)
  *   diagnostic spans are handled internally.
  * @param onRichSpanClickEvent The same clicks as [onRichSpanClick], with the modifier keys
  *   that were held.
- * @param onLinkClick Opens a link's URL on Ctrl+click, or Cmd+click under the macOS key
- *   bindings; see [BasicTextEditor].
+ * @param onLinkClick Opens a link's URL on Ctrl+click, or Cmd+click under the macOS
+ *   [keyBindings]; see [BasicTextEditor].
+ * @param keyBindings Chord-to-command mapping, defaulting to [LocalKeyBindings].
+ * @param contentDescription The editor's label for accessibility services; see
+ *   [BasicTextEditor].
  */
 @Composable
 fun SpellCheckingTextEditor(
@@ -96,7 +110,15 @@ fun SpellCheckingTextEditor(
 	onRichSpanClick: RichSpanClickListener? = null,
 	onRichSpanClickEvent: RichSpanClickEventListener? = null,
 	onLinkClick: ((url: String) -> Unit)? = null,
+	keyBindings: KeyBindings = LocalKeyBindings.current,
+	contentDescription: String? = null,
+	readOnly: Boolean = false,
+	lineLimits: EditorLineLimits = EditorLineLimits.Fill,
 ) {
+	// Corrections and fixes edit the text, so they follow this; Ignore does not. Read when
+	// an item is picked too, since a menu can outlive the editability it opened with.
+	val editable = enabled && !readOnly
+	val canEdit by rememberUpdatedState(editable)
 	val contextMenuState = remember { TextEditorContextMenuState() }
 	val wordVisibilityBuffer = dpToPx(35.dp)
 	val coroutineScope = rememberCoroutineScope()
@@ -145,8 +167,8 @@ fun SpellCheckingTextEditor(
 		suggestionJob.value?.cancel()
 		suggestionJob.value = null
 		val message = ContextMenuItem(label = style.message, enabled = false, onClick = {})
-		val fixes = style.fixes.map { fix ->
-			ContextMenuItem(label = fix.label, enabled = true, onClick = { diagnostics?.applyFix(span, fix.replacement) })
+		val fixes = if (!editable) emptyList() else style.fixes.map { fix ->
+			ContextMenuItem(label = fix.label, enabled = true, onClick = { if (canEdit) diagnostics?.applyFix(span, fix.replacement) })
 		}
 		contextMenuState.showMenu(Offset(offset.x, offset.y + wordVisibilityBuffer), listOf(message) + fixes)
 	}
@@ -161,7 +183,7 @@ fun SpellCheckingTextEditor(
 					label = suggestion.term,
 					enabled = true,
 					onClick = {
-						when (item) {
+						if (canEdit) when (item) {
 							is SpellCheckItem.MisspelledWord -> {
 								state.correctSpelling(item.segment, suggestion.term)
 							}
@@ -211,6 +233,10 @@ fun SpellCheckingTextEditor(
 			}
 		}
 		val hostItems = builtInItems + spellCheckMenuItems(spellCheckItem)
+		if (!editable) {
+			contextMenuState.showMenu(menuPos, emptyList(), hostItems)
+			return
+		}
 		when (spellCheckItem) {
 			is SpellCheckItem.MisspelledWord -> {
 				val placeholder = listOf(ContextMenuItem(label = spellCheckStrings.loading, enabled = false, onClick = {}))
@@ -225,7 +251,7 @@ fun SpellCheckingTextEditor(
 					if (position == null || contextMenuState.extraItems.value !== placeholder) return@launch
 					contextMenuState.showMenu(
 						position,
-						createSpellSuggestionItems(spellCheckItem, suggestions),
+						if (canEdit) createSpellSuggestionItems(spellCheckItem, suggestions) else emptyList(),
 						hostItems,
 					)
 				}
@@ -267,9 +293,9 @@ fun SpellCheckingTextEditor(
 		}
 
 		// A right-click always offers a menu, falling back to the standard one. A tap
-		// only opens one with a correction to offer: tapping a correctly spelled word
-		// means "put the caret here", so declining leaves the tap to focus the editor
-		// and raise the keyboard.
+		// only opens one on a flag: tapping a correctly spelled word means "put the
+		// caret here", so declining leaves the tap to focus the editor and raise the
+		// keyboard.
 		if (spellCheckItem != null) {
 			showContextMenu(offset, spellCheckItem)
 			return true
@@ -290,6 +316,10 @@ fun SpellCheckingTextEditor(
 			contextMenuState = contextMenuState,
 			onRichSpanClickEvent = ::onSpanClick,
 			onLinkClick = onLinkClick,
+			keyBindings = keyBindings,
+			contentDescription = contentDescription,
+			readOnly = readOnly,
+			lineLimits = lineLimits,
 		)
 	}
 }

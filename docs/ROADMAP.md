@@ -188,7 +188,7 @@ review.
 | H | Clipboard and HTML | `clipboard/`, `html/`, `dragdrop/` | 4.9, 4.13, 4.17, 6.7 to 6.13, 6.18 to 6.21, 7.39 |
 | I | Markdown and block model | `markdown/`, `richstyle/` | 5.6, 7.14 to 7.16, 7.43 |
 | J | Find addon | `ComposeTextEditorFind/` | 7.17 to 7.19, 7.26, 7.29, 7.42 |
-| K | Spell check addon | `ComposeTextEditorSpellCheck/` | 7.20 to 7.22, 7.28, 7.30, 7.31, 7.34, 7.35, 7.38 |
+| K | Spell check addon | `ComposeTextEditorSpellCheck/` | 7.20 to 7.22, 7.28, 7.30, 7.31, 7.34, 7.35, 7.38, 7.44 |
 | L | Tests and CI | test sources, `.github/workflows/` | 0.1 to 0.3, 0.5 to 0.9, 4.1, 4.15 |
 | M | Accessibility and host API | semantics in `BasicTextEditor.kt`, `RichTextView.kt`, `state/rememberTextEditorState.kt` | 7.1 to 7.4, 7.13, 7.23 to 7.25, 7.32, 7.36 |
 | N | Core layout and performance | `state/TextEditorState.kt` | 5.7, 7.8 to 7.12 |
@@ -1657,7 +1657,7 @@ iOS Safari; browser tests run in CI.
   keyboard does not rise unasked. Desktop dead keys and IME composition, and
   Android and iOS IME text, do nothing until then. Start a session that shows
   no keyboard, or document the host's `requestFocus` after the toggle.
-- [ ] **7.38** [Opus] [Lane K] `SpellCheckingTextEditor` has no `readOnly`
+- [x] **7.38** [Opus] [Lane K] `SpellCheckingTextEditor` has no `readOnly`
   or `lineLimits` (7.13), and its corrections are menu items that call
   `correctSpelling` directly, past `ContextMenuActions`' editable gate.
   Forward both, and offer no corrections while read-only.
@@ -1900,6 +1900,11 @@ Shaping is one line per keystroke. These still scale with document length:
   reaches its suggestions, Ignore or Add to dictionary. Register over
   `editor.showContextMenu` in `SpellCheckingTextEditor` to open the spell check
   menu for the span at the caret, and the standard one elsewhere.
+- [ ] **7.44** [Opus] [Lane K] `correctSpelling`, `applySentenceCorrection` and
+  `applyFix` drop the flag before the replacement, which `TextEditorState.inputFilter`
+  or a single-line limit (7.13) may cut short or refuse: the word is left unflagged and
+  uncorrected, or partly replaced, until the next re-check. Keep the flag when the
+  filter changes the replacement.
 
 ### Host API
 

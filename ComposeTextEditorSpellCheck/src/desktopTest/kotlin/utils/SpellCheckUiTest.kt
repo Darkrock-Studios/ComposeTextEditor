@@ -2,7 +2,6 @@ package utils
 
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.size
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.testTag
@@ -22,12 +21,13 @@ import androidx.compose.ui.test.runSkikoComposeUiTest
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.darkrockstudios.texteditor.EditorLineLimits
 import com.darkrockstudios.texteditor.RichSpanClickEventListener
 import com.darkrockstudios.texteditor.RichSpanClickListener
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.contextmenu.ContextMenuItem
 import com.darkrockstudios.texteditor.input.CtrlKeyBindings
-import com.darkrockstudios.texteditor.input.LocalKeyBindings
+import com.darkrockstudios.texteditor.input.KeyBindings
 import com.darkrockstudios.texteditor.richstyle.RichSpan
 import com.darkrockstudios.texteditor.richstyle.SpellCheckStyle
 import com.darkrockstudios.texteditor.spellcheck.SpellCheckItem
@@ -67,6 +67,11 @@ fun spellCheckUiTest(
 	onRichSpanClick: RichSpanClickListener? = null,
 	onRichSpanClickEvent: RichSpanClickEventListener? = null,
 	onLinkClick: ((String) -> Unit)? = null,
+	// The Windows and Linux bindings on every host, so Ctrl+click is the link chord.
+	keyBindings: KeyBindings = CtrlKeyBindings,
+	readOnly: Boolean = false,
+	lineLimits: EditorLineLimits = EditorLineLimits.Fill,
+	contentDescription: String? = null,
 	block: SpellCheckUiTestScope.() -> Unit,
 ) = runSkikoComposeUiTest {
 	lateinit var state: SpellCheckState
@@ -79,26 +84,27 @@ fun spellCheckUiTest(
 			spellCheckMode = spellCheckMode,
 		)
 		diagnostics = diagnosticsChecker?.let { rememberTextDiagnosticsState(state.textState, it) }
-		// The Windows and Linux bindings on every host, so Ctrl+click is the link chord.
-		CompositionLocalProvider(LocalKeyBindings provides CtrlKeyBindings) {
-			SpellCheckingTextEditor(
-				spellChecker = spellChecker,
-				state = state,
-				modifier = Modifier.size(width, height).testTag(EDITOR_TEST_TAG),
-				// Pointer input is injected at the tagged node in text-canvas coordinates,
-				// which only line up when nothing pads the canvas.
-				contentPadding = PaddingValues(0.dp),
-				enabled = enabled,
-				autoFocus = true,
-				spellCheckMenuItems = spellCheckMenuItems,
-				spellCheckStrings = spellCheckStrings,
-				onAddToDictionary = onAddToDictionary,
-				diagnostics = diagnostics,
-				onRichSpanClick = onRichSpanClick,
-				onRichSpanClickEvent = onRichSpanClickEvent,
-				onLinkClick = onLinkClick,
-			)
-		}
+		SpellCheckingTextEditor(
+			spellChecker = spellChecker,
+			state = state,
+			modifier = Modifier.size(width, height).testTag(EDITOR_TEST_TAG),
+			// Pointer input is injected at the tagged node in text-canvas coordinates,
+			// which only line up when nothing pads the canvas.
+			contentPadding = PaddingValues(0.dp),
+			enabled = enabled,
+			autoFocus = true,
+			spellCheckMenuItems = spellCheckMenuItems,
+			spellCheckStrings = spellCheckStrings,
+			onAddToDictionary = onAddToDictionary,
+			diagnostics = diagnostics,
+			onRichSpanClick = onRichSpanClick,
+			onRichSpanClickEvent = onRichSpanClickEvent,
+			onLinkClick = onLinkClick,
+			keyBindings = keyBindings,
+			readOnly = readOnly,
+			lineLimits = lineLimits,
+			contentDescription = contentDescription,
+		)
 	}
 	waitForIdle()
 	SpellCheckUiTestScope(this, state, diagnostics).block()
@@ -133,15 +139,16 @@ class SpellCheckUiTestScope(
 	/** Runs frames until recomposition and pending effects have settled. */
 	fun waitForIdle() = test.waitForIdle()
 
-	/** Left-clicks the character at flat index [charIndex], with Ctrl held when [ctrl]. */
-	fun clickAtCharacter(charIndex: Int, ctrl: Boolean = false) {
+	/** Left-clicks the character at flat index [charIndex], with Ctrl or Meta held as asked. */
+	fun clickAtCharacter(charIndex: Int, ctrl: Boolean = false, meta: Boolean = false) {
 		val position = state.textState.positionOfCharacter(charIndex)
-		if (ctrl) test.onRoot().performKeyInput { keyDown(Key.CtrlLeft) }
+		val held = listOfNotNull(Key.CtrlLeft.takeIf { ctrl }, Key.MetaLeft.takeIf { meta })
+		if (held.isNotEmpty()) test.onRoot().performKeyInput { held.forEach { keyDown(it) } }
 		test.onNodeWithTag(EDITOR_TEST_TAG).performMouseInput {
 			defeatMultiClickDetection()
 			click(position)
 		}
-		if (ctrl) test.onRoot().performKeyInput { keyUp(Key.CtrlLeft) }
+		if (held.isNotEmpty()) test.onRoot().performKeyInput { held.forEach { keyUp(it) } }
 		test.waitForIdle()
 	}
 
