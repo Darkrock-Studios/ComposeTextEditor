@@ -27,6 +27,9 @@ import com.darkrockstudios.texteditor.richstyle.BLOCKQUOTE_PARAGRAPH_STYLE
 import com.darkrockstudios.texteditor.richstyle.BULLET_LIST_PARAGRAPH_STYLE
 import com.darkrockstudios.texteditor.richstyle.BlockquoteSpanStyle
 import com.darkrockstudios.texteditor.richstyle.BulletListSpanStyle
+import com.darkrockstudios.texteditor.richstyle.CodeFenceLanguageSpanStyle
+import com.darkrockstudios.texteditor.richstyle.MAX_LIST_LEVEL
+import com.darkrockstudios.texteditor.richstyle.listParagraphStyle
 import com.darkrockstudios.texteditor.richstyle.CODE_FENCE_PARAGRAPH_STYLE
 import com.darkrockstudios.texteditor.richstyle.CodeFenceSpanStyle
 import com.darkrockstudios.texteditor.richstyle.HEADER_PARAGRAPH_STYLE
@@ -76,7 +79,8 @@ private val blockParagraphs: Map<String, ParagraphStyle> = mapOf(
 	"quote" to BLOCKQUOTE_PARAGRAPH_STYLE,
 	"fence" to CODE_FENCE_PARAGRAPH_STYLE,
 	"header" to HEADER_PARAGRAPH_STYLE,
-)
+	// A nested item's indent, one name per level; both list kinds share it.
+) + (1..MAX_LIST_LEVEL).associate { level -> "list:$level" to listParagraphStyle(level) }
 
 private val textDirections = listOf(
 	TextDirection.Ltr, TextDirection.Rtl, TextDirection.Content, TextDirection.ContentOrLtr, TextDirection.ContentOrRtl,
@@ -203,6 +207,10 @@ private fun RichSpanStyle.encode(scope: SaverScope, custom: Saver<RichSpanStyle,
 	return when (this) {
 		is HeaderSpanStyle -> "h$level" to ""
 		is LinkSpanStyle -> "link" to url
+		// Level 0 is the plain kind above; a nested item carries its level.
+		is BulletListSpanStyle -> "bullet:$level" to ""
+		is OrderedListSpanStyle -> "ordered:$level" to ""
+		is CodeFenceLanguageSpanStyle -> "fence-language" to language
 		else -> {
 			val saved = custom?.let { saver -> with(saver) { scope.save(this@encode) } } ?: return null
 			require(scope.canBeSaved(saved)) {
@@ -219,6 +227,9 @@ private fun decodeRichSpanStyle(kind: String, argument: Any?, custom: Saver<Rich
 	return when {
 		kind == "link" -> LinkSpanStyle(argument as String)
 		kind.startsWith("h") && kind.length == 2 -> kind[1].digitToIntOrNull()?.let { HeaderSpanStyle.of(it) }
+		kind.startsWith("bullet:") -> kind.substringAfter(':').toIntOrNull()?.let { BulletListSpanStyle.of(it) }
+		kind.startsWith("ordered:") -> kind.substringAfter(':').toIntOrNull()?.let { OrderedListSpanStyle.of(it) }
+		kind == "fence-language" -> (argument as? String)?.let { CodeFenceLanguageSpanStyle(it) }
 		kind == KIND_CUSTOM && argument != null -> custom?.restore(argument)
 		else -> null
 	}

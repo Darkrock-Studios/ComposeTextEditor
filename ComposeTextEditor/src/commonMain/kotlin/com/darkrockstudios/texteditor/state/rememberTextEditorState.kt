@@ -51,8 +51,9 @@ fun rememberTextEditorState(initialText: AnnotatedString? = null): TextEditorSta
  *
  * Kept: the text; its character styles' plain values (colour, size, weight, style,
  * decoration, background, letter spacing, baseline shift, feature settings, and a
- * generic font family); the rich spans of the built-in styles (lists, quotes, code
- * fences, rules, headings, links) and their lines' indents; other paragraph styles'
+ * generic font family); the rich spans of the built-in styles (lists at any nesting
+ * level, quotes, code fences and their language, rules, headings, links) and their
+ * lines' indents; other paragraph styles'
  * indent, line height, alignment, direction, line breaking and hyphenation; the caret;
  * the selection; and the line at the top of the viewport, scrolled back to once laid
  * out. Not kept: the undo history, which a restored editor starts without; a loaded

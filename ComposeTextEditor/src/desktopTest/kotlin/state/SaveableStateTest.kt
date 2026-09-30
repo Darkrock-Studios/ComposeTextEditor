@@ -179,6 +179,31 @@ class SaveableStateTest {
 	}
 
 	@Test
+	fun `nested list levels and a fence language survive a restore`() = runComposeUiTest {
+		val restorer = Restorer(this)
+		lateinit var state: TextEditorState
+		restorer.setContent {
+			state = rememberSaveableTextEditorState()
+			BasicTextEditor(state = state, modifier = Modifier.size(400.dp, 300.dp))
+		}
+		val markdown = "1. a\n   - b\n     1. c\n2. d\n\n```kotlin\nfun f() = 1\n```"
+		lateinit var linesBefore: List<AnnotatedString>
+		lateinit var spansBefore: Set<Any>
+		runOnIdle {
+			state.withMarkdown().importMarkdown(markdown)
+			linesBefore = state.snapshot().lines
+			spansBefore = state.snapshot().richSpans
+		}
+
+		restorer.saveAndRestore()
+
+		assertEquals(spansBefore, state.snapshot().richSpans)
+		// The nested indents come back equal to the ones their levels strip.
+		assertEquals(linesBefore.map { it.paragraphStyles }, state.textLines.map { it.paragraphStyles })
+		assertEquals(markdown, state.withMarkdown().exportAsMarkdown())
+	}
+
+	@Test
 	fun `a saver that saves what cannot be saved says so`() = runComposeUiTest {
 		val restorer = Restorer(this)
 		lateinit var state: TextEditorState

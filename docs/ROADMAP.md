@@ -1991,7 +1991,17 @@ Shaping is one line per keystroke. These still scale with document length:
   (and Word and Google Docs keep both halves in the list). Seen with find's
   regex replace of ", " by `\n` in "- a, b", which exports "- a" then "b".
   Check programmatic `replace` and plain paste too; fix it in the edit
-  pipeline, not in the find addon.
+  pipeline, not in the find addon. Where it lives, from lane I's reading:
+  `RichSpanManager.handleInsert` splits a line-anchored span at the caret
+  only for a lone `"\n"` insert (its cases 1 to 3); text with a line break
+  inside takes the plain path, so the span's end is carried onto the last new
+  line and the span straddles the split. The fix is that split for any
+  inserted text holding a newline, in `handleInsert` and `handleReplace`, then
+  a continuation in `TextEditManager.applyOperation` after `updateSpans`:
+  apply the first line's list (at its level), quote and fence blocks to the
+  new lines with `applyLineBlock`, inside the same atomic edit, as
+  `LineBlockEditBehavior.onNewline` already does for Enter (undo removes the
+  lines, so nothing extra is recorded). Headings do not continue (5.5).
 
 ### Spell check addon
 
@@ -2044,7 +2054,8 @@ Shaping is one line per keystroke. These still scale with document length:
   tested through Java serialization): the lines; character styles' plain values
   (colour, size, weight, style, decoration, background, letter spacing,
   baseline shift, feature settings, a generic font family); the built-in rich
-  spans (lists, quotes, fences, rules, headings, links); each line's paragraph
+  spans (lists at any nesting level, as `bullet:2`, quotes, fences and their
+  language, rules, headings, links); each line's paragraph
   styles in order, a block's by name so it stays equal to the one the block
   strips, and stacked blocks nest as before; other paragraph styles' indent,
   line height, alignment, direction, line breaking and hyphenation; the caret,

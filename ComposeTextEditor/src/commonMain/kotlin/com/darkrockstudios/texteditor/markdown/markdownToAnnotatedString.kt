@@ -77,9 +77,10 @@ private fun String.withHighlightTags(): String {
 		if (index > 0) out.append('\n')
 		val marker = codeFenceMarker(line)
 		val indented = line.startsWith("    ") || line.startsWith("\t")
+		val openFence = fence
 		when {
-			fence != null -> {
-				if (marker != null && marker[0] == fence!![0] && marker.length >= fence!!.length) fence = null
+			openFence != null -> {
+				if (marker != null && marker[0] == openFence[0] && marker.length >= openFence.length) fence = null
 				out.append(line)
 			}
 

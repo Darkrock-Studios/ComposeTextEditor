@@ -96,7 +96,8 @@ class InputFilterPathsTest {
 	fun `a refused Enter in a list marks no other line`() = runTest {
 		val state = createState("", EditorInputFilter.SingleLine)
 		state.inputFilter = null
-		state.withMarkdown().importMarkdown("- item\n\nplain")
+		// Two blank lines in the file are one in the editor (7.15).
+		state.withMarkdown().importMarkdown("- item\n\n\nplain")
 		state.inputFilter = EditorInputFilter.SingleLine
 		val before = state.richSpanManager.getAllRichSpans().filter { it.style == BulletListSpanStyle }
 		state.cursor.updatePosition(CharLineOffset(0, 4))
