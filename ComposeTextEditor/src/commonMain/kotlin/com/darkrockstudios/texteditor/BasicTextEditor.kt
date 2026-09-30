@@ -33,6 +33,7 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.isSecondaryPressed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalDensity
@@ -368,6 +369,7 @@ fun BasicTextEditor(
 						// its candidate window by it, and the touch toolbar its menu.
 						.onGloballyPositioned {
 							state.canvasLayoutCoordinates = it
+							state.canvasPositionInRoot = it.positionInRoot()
 							state.updateKeyboardCover(imeInsets.getBottom(density))
 						}
 						.fillMaxSize()

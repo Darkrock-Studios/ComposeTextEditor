@@ -295,6 +295,35 @@ class SkikoInputMethodRequestTest {
 	}
 
 	/**
+	 * iOS moves its input view with the geometry it observes. The coordinates object is
+	 * the same one when the canvas moves (the window shifting for the keyboard), so the
+	 * observer must see the move through the snapshot-backed position.
+	 */
+	@Test
+	fun `geometry observers follow the canvas moving without a resize`() = runTest {
+		var origin = Offset(10f, 20f)
+		val coords = mockk<LayoutCoordinates>()
+		every { coords.isAttached } returns true
+		every { coords.localToRoot(Offset.Zero) } answers { origin }
+		every { coords.size } returns IntSize(300, 200)
+		state.canvasLayoutCoordinates = coords
+		state.canvasPositionInRoot = origin
+
+		val seen = mutableListOf<Rect?>()
+		val observer = launch { snapshotFlow { request.textFieldRectInRoot() }.collect { seen += it } }
+		Snapshot.sendApplyNotifications()
+		testScheduler.runCurrent()
+
+		origin = Offset(10f, 5f)
+		state.canvasPositionInRoot = origin
+		Snapshot.sendApplyNotifications()
+		testScheduler.runCurrent()
+
+		assertEquals(listOf<Rect?>(Rect(10f, 20f, 310f, 220f), Rect(10f, 5f, 310f, 205f)), seen)
+		observer.cancel()
+	}
+
+	/**
 	 * Web and iOS watch `value()` / `state.text` through `snapshotFlow`. The document is
 	 * not snapshot state, so the session must signal edits that move nothing observable.
 	 */

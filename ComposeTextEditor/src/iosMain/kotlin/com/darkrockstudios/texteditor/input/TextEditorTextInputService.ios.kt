@@ -16,8 +16,9 @@ import com.darkrockstudios.texteditor.state.TextEditorState
 actual class TextEditorTextInputService actual constructor(
 	private val state: TextEditorState
 ) {
+	// UIKit's spacebar trackpad hit-tests the text through the request's layout.
 	actual suspend fun startInput(session: PlatformTextInputSession): Nothing =
-		state.startSkikoInputSession(session, iosImeOptions)
+		state.startSkikoInputSession(session, iosImeOptions, exposeTextLayout = true)
 }
 
 private val iosImeOptions = ImeOptions(

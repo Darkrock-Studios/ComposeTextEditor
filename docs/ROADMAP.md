@@ -837,7 +837,7 @@ Constraints that shape the order:
   replaces the kana once; Return at the end of a bullet item continues the
   list, and bold elsewhere on the line survives. Dictation and a physical
   device are left to 4.4.
-- [ ] **4.6 Layout geometry. C.** [Opus] [Lane E] [Mac work] `textLayoutResult`
+- [x] **4.6 Layout geometry. C.** [Opus] [Lane E] [Mac work] `textLayoutResult`
   and every rect return null, so spacebar trackpad mode and IME positioning
   cannot work. The rects come with 4.2 (done on Linux); `textLayoutResult`
   stays null because the editor lays out its own lines, so the spacebar
@@ -846,6 +846,23 @@ Constraints that shape the order:
   Also: the rectangles read the snapshot-backed viewport size, so a resize
   re-runs iOS's geometry observer, but a move without a resize does not,
   since `canvasLayoutCoordinates` is a plain field.
+  Done. On the input connection the editor uses, Compose's iOS view answers
+  UIKit's caret, selection and hit-test queries with fixed dummies (Compose
+  draws its own caret), so `textLayoutResult` matters only to the spacebar
+  trackpad (`beginFloatingCursor`/`updateFloatingCursor`) and to
+  `verticalPositionFromPosition`. `input/DocumentTextLayout.kt` (skikoMain)
+  builds a whole-document layout when UIKit first asks, as plain text in the
+  base style at the viewport's width, kept until the text, width or style
+  changes and kept out of the measurer's cache; only iOS asks for it
+  (`exposeTextLayout`), so desktop and web pay nothing. The canvas's position
+  is now snapshot state (`canvasPositionInRoot`), so the geometry observer
+  follows moves too. `DocumentTextLayoutE2eTest` and a
+  `SkikoInputMethodRequestTest` case; in the simulator, long-pressing the space
+  bar and dragging moves the caret. Follow-ups: the layout is unstyled, so its
+  rows differ from the drawn ones where headings, code spans or block heights
+  change the wrapping, and a drag can cross more rows than it seems to (build it
+  from the editor's own line layouts instead); and `verticalPositionFromPosition`
+  now answers, so check that a hardware Up/Down on iOS moves once (Mac queue).
 - [x] **4.7 Keyboard options. C.** [Opus] [Lane E] [Mac work] Capitalisation is
   not set. Set to sentences with autocorrect on in 4.2. Confirmed in the
   simulator: the keyboard opens shifted at the start of a line.
@@ -1334,4 +1351,5 @@ records results and removes entries that passed.
 | 1.1 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64`. `skikoMain/.../state/TextBreaks.skiko.kt` is the iOS `actual` for the break cursors (`org.jetbrains.skia.BreakIterator`, `org.jetbrains.skia.icu.CharProperties`); if it does not compile, the fix is in that file. Then in the iOS sample app: type an emoji, a family ZWJ sequence, a flag and a keycap, and backspace through each; type "e" then a combining acute (or Vietnamese "ế") and backspace once; arrow Left and Right across them; type Japanese and step through it | Backspace removes each emoji sequence whole and only the accent off its base; Left and Right never stop inside a sequence; no half character ever shows |  Partial, 2026-09-30 at `78bf021`, iPhone 17 Pro Max simulator, iOS 26.0. Compiles. Soft-keyboard backspace removes 😀, 👨‍👩‍👧, 🇯🇵, 1️⃣, precomposed ế and each kanji in one press each, and no half character ever shows. e + U+0301 goes whole in one press, not accent first; Safari's native address field in the same simulator does the same, so this matches iOS but not the rule written in 1.1. Compose sends that press as `deleteSurroundingTextInCodePoints(1, 0)`. Left and Right not run: they need a hardware keyboard, which the simulator tools here cannot drive. Left for a person |
 | 1.5 | The same iOS compile as 1.1 covers `wordCursor`. In the iOS sample app: Option+Left and Option+Right with a hardware keyboard through "don’t stop", "日本語を勉強します" and "a 😀 b"; double-tap "don’t" and an emoji | Option arrows stop at word ends and starts only, keeping "don’t" whole, stepping Japanese by dictionary word and stopping at the emoji; a double-tap selects the whole contraction or the whole emoji |  Partial, same run. Double-tap selects "don’t" whole and 😀 whole. **Fails:** double-tap on 勉 in 日本語を勉強します selects only 強, so iOS word breaks split kanji per character. Desktop, on the same skia `actual`, segments 勉強 (`TextEditorWordSegmentationTest`), so skia's ICU on iOS seems to lack the CJK dictionary; `NSString` word enumeration or `CFStringTokenizer` would have it. Option+Left and Option+Right not run: hardware keyboard, left for a person |
 | 2.6 | In Safari and Chrome on macOS, open the wasm demo and press Ctrl+A, E, F, B, N, P, D, H and K in a paragraph. The page's hidden text area has the same Cocoa Emacs bindings, so a chord could act twice | Each chord moves or deletes once, as in the desktop sample app | Not run: needs a person at a real keyboard. Browser automation injects key events below the Cocoa text system, so it cannot reproduce a chord acting twice |
+| 4.6 | With a hardware keyboard in the iOS sample app (a person: the simulator tools here cannot press arrow keys), press Up and Down through a wrapped paragraph and a heading | Each press moves the caret one drawn row, once. `verticalPositionFromPosition` now answers from the unstyled layout, so a double move or a move by an undrawn row would come from UIKit handling the arrow through `UITextInput` as well | |
 | 3.8 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64`. 3.8 added `internal expect fun hasNativeTextToolbar()` (commonMain `TouchToolbar.kt`) with `iosMain/.../TouchToolbar.ios.kt` answering true. Then in the simulator: long-press a word, double-tap a word, long-press empty space, tap the caret handle, and drag a selection handle | Compiles. UIKit's edit menu appears over the selection or caret with Cut, Copy, Paste and Select all as applicable (Paste and Select all alone at a bare caret), hides while a handle is dragged and returns when it drops, and goes when the caret moves or the text is scrolled. If no menu appears, the input connection has no toolbar: fall back to `false` in `TouchToolbar.ios.kt` so the context menu stands in |  Partial, same run. Compiles. The UIKit menu works over a selection: double-tap or long-press a word shows Cut, Copy, Paste, Select All, and each works. **Fails:** long-press in an empty document calls `show()` with a zero-width caret rect and only Paste, and UIKit shows nothing (the toolbar reports Hidden right after `showMenu`); a tap on the caret handle never calls `show()`. Native reference: a tap in Safari's focused empty field shows Paste. Also: a long-press past a line's end selects the line's last word instead of placing the caret; with a selection ending at the document end, a long-press below the text counts as on the selection. When the screen was shifted by 4.24 the selection menu did not appear either. Did not fall back to `false`, since the menu works for selections |

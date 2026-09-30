@@ -429,6 +429,13 @@ class TextEditorState(
 	var canvasLayoutCoordinates: LayoutCoordinates? = null
 		internal set
 
+	/**
+	 * Where the canvas sits in the root, as snapshot state. [canvasLayoutCoordinates] is
+	 * a plain field and stays the same object when the canvas moves, so observers of the
+	 * input method's rectangles read this to follow moves as well as resizes.
+	 */
+	internal var canvasPositionInRoot by mutableStateOf(Offset.Unspecified)
+
 	private var _lineOffsets by mutableStateOf(emptyList<LineWrap>())
 
 	/**
