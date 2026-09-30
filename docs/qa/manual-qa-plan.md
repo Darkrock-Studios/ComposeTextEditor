@@ -174,6 +174,14 @@ this exercises the clipboard's HTML as the block carrier.
 3. Copy a paragraph with bold words and double spaces from Google Docs and paste.
    **Expect:** Find for a phrase typed with ordinary spaces matches it.
 
+### 2.10 Links (6.9)
+
+1. Copy a sentence with a link from a web page and paste it into the Markdown demo
+   (desktop; on Android and web once 6.7 lands). **Expect:** the link text shows the
+   link style, and Ctrl/Cmd+click opens the page. Round Trip shows `[text](url)`.
+2. Copy a line with a markdown link out of the editor into a browser rich-text field
+   or word processor. **Expect:** a working link, not underlined text alone.
+
 ## 3. Key bindings and input
 
 Guards #45, #53, #87.

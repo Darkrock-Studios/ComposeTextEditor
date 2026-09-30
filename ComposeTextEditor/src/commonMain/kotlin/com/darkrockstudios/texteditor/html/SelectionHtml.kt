@@ -26,6 +26,10 @@ import com.darkrockstudios.texteditor.state.TextEditorState
 internal fun TextEditorState.selectionAsHtml(range: TextEditorRange): String {
 	val content = content
 	val coveredLines = range.start.line..range.end.line
+	// The span index lists a span on every line it covers, so these are all the spans
+	// that can reach the selection.
+	val spansOnLines = coveredLines.flatMap { content.richSpansByLine[it].orEmpty() }
+	val links = linksByLine(spansOnLines.toSet()) { content.lines.getOrNull(it)?.length ?: 0 }
 	val lines = coveredLines.mapNotNull { docLine ->
 		val line = content.lines.getOrNull(docLine) ?: return@mapNotNull null
 		val from = if (docLine == range.start.line) range.start.char else 0
@@ -36,14 +40,16 @@ internal fun TextEditorState.selectionAsHtml(range: TextEditorRange): String {
 			text = line.subSequence(start, end),
 			docLine = docLine,
 			isWholeLine = start == 0 && end == line.length,
+			links = links[docLine].orEmpty().mapNotNull { link ->
+				val linkStart = maxOf(link.start, start)
+				val linkEnd = minOf(link.end, end)
+				if (linkStart < linkEnd) HtmlLink(linkStart - start, linkEnd - start, link.url) else null
+			},
 		)
 	}
-	// Only the lines being written can contribute a decoration, and a line-anchored
-	// span starts on the line it decorates, so the block scan reads the spans on
-	// those lines rather than every span in the document.
-	val spans = coveredLines
-		.flatMap { content.richSpansByLine[it].orEmpty() }
-		.filterTo(mutableSetOf()) { it.range.start.line in coveredLines }
+	// Only the lines being written can contribute a block, and a line-anchored span
+	// starts on the line it decorates.
+	val spans = spansOnLines.filterTo(mutableSetOf()) { it.range.start.line in coveredLines }
 	return renderHtmlFragment(
 		lines = lines,
 		blocks = documentBlocksOf(spans, markdownConfiguration),

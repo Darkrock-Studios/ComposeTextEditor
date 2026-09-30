@@ -2,6 +2,8 @@ package com.darkrockstudios.texteditor.html
 
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
+import com.darkrockstudios.texteditor.CharLineOffset
+import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.annotatedstring.normalizeLineEndings
 import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
 import com.darkrockstudios.texteditor.richstyle.Blockquote
@@ -25,8 +27,9 @@ import com.fleeksoft.ksoup.nodes.TextNode
  * full HTML5 entity set are handled to spec. What happens here is the mapping
  * from the resulting document onto Compose spans.
  *
- * Block structure — lists, blockquotes, code fences — flattens to line breaks.
- * Use `withHtml().importHtml` to keep it.
+ * Block structure (lists, blockquotes, code fences) flattens to line breaks, and a
+ * link keeps only the configured link style, not its destination. Use
+ * `withHtml().importHtml` to keep both.
  */
 fun String.toAnnotatedStringFromHtml(
 	configuration: MarkdownConfiguration = MarkdownConfiguration.DEFAULT
@@ -185,6 +188,8 @@ private class HtmlSpanBuilder(
 	private val blockRanges = mutableListOf<BlockRange>()
 	private val horizontalRuleOffsets = mutableListOf<Int>()
 	private val imageOffsets = mutableListOf<Pair<Int, HtmlImageRef>>()
+	/** Each link's output offsets, start inclusive and end exclusive, and destination. */
+	private val links = mutableListOf<Triple<Int, Int, String>>()
 
 	private var pendingBlockBreak = false
 	private var pendingExplicitBreaks = 0
@@ -233,7 +238,29 @@ private class HtmlSpanBuilder(
 			imageLines = imageOffsets.associate { (offset, image) ->
 				lines[offset.coerceIn(0, text.length)] to image
 			},
+			links = linksPerLine(text, lines),
 		)
+	}
+
+	/** Each link cut at the line breaks inside it, in line and character coordinates. */
+	private fun linksPerLine(text: String, lines: IntArray): List<Pair<TextEditorRange, String>> {
+		if (links.isEmpty()) return emptyList()
+		val lineStarts = IntArray(lines[text.length] + 1)
+		for (i in text.indices) if (text[i] == '\n') lineStarts[lines[i] + 1] = i + 1
+		fun lineEnd(line: Int) = if (line + 1 < lineStarts.size) lineStarts[line + 1] - 1 else text.length
+		return links.flatMap { (start, rawEnd, url) ->
+			val end = rawEnd.coerceAtMost(text.length)
+			if (start >= end) return@flatMap emptyList()
+			(lines[start]..lines[end - 1]).mapNotNull { line ->
+				val from = maxOf(start, lineStarts[line])
+				val to = minOf(end, lineEnd(line))
+				if (from >= to) null
+				else TextEditorRange(
+					CharLineOffset(line, from - lineStarts[line]),
+					CharLineOffset(line, to - lineStarts[line]),
+				) to url
+			}
+		}
 	}
 
 	/** Line number of every offset in [text], plus one past the end. */
@@ -318,12 +345,29 @@ private class HtmlSpanBuilder(
 		)
 
 		val block = blockStyleFor(name, scope)
+		val href = if (name == "a") sanitizeLinkUrl(element.attr("href")) else null
 		val start = out.length
+		val spansAtEntry = spans.size
 		val pendingAtEntry = pendingNewlines()
 		visitChildren(element, nested)
 		// Appended on the way out, so a nested block is recorded before the one
 		// containing it — which is what lets the innermost claim on a line win.
 		if (block != null) blockRanges += BlockRange(block, start, out.length, pendingAtEntry)
+		if (href != null) {
+			// The separators owed to what came before are written ahead of the
+			// link's first character, and are not part of it.
+			var first = start
+			while (first < out.length && (out[first] == '\n' || out[first] == '\t')) first++
+			// A collapsed space at the end separates the link from what follows, or is
+			// trimmed at a line or cell break; either way it is not the link's.
+			val end = if (out.length > first && out.last() == ' ' && !trailingSpaceIsLiteral) out.length - 1 else out.length
+			if (first < end) {
+				links += Triple(first, end, href)
+				// Ahead of the styles inside the link, so they win where they overlap
+				// it, as they do in markdown's links.
+				spans.add(spansAtEntry, AnnotatedString.Range(config.linkStyle, first, end))
+			}
+		}
 		// A `<pre>` holding no text never consumes the flag, and leaving it armed
 		// would eat a real newline from the next preformatted run.
 		if (name == "pre") dropLeadingNewline = false

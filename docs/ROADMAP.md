@@ -179,7 +179,7 @@ review.
 | Lane | Area | Main files | Items |
 | --- | --- | --- | --- |
 | A | Caret motion | `state/TextEditorCursorState.kt`, `state/TextEditorStateCursorExt.kt`, `state/WordSegmentationUtils.kt`, `input/TextEditorKeyCommandHandler.kt` | 1.1 to 1.7, 1.19, 2.3, 2.6, 7.5, 7.33 |
-| B | Pointer and touch | `textEditorPointerInputHandling.kt`, `state/TextEditorSelectionManager.kt`, `DrawSelectionHandles.kt` | 1.9, 1.12 to 1.16, 1.21 to 1.24, 3.1, 3.2, 3.4 to 3.8, 3.13, 3.15, 4.23 |
+| B | Pointer and touch | `textEditorPointerInputHandling.kt`, `state/TextEditorSelectionManager.kt`, `DrawSelectionHandles.kt` | 1.9, 1.12 to 1.16, 1.21 to 1.24, 3.1, 3.2, 3.4 to 3.8, 3.13, 3.15, 4.23, 6.16 |
 | C | Drawing and geometry | `Draw*.kt`, `cursor/`, `scrollbar/`, `state/TextEditorScrollState.kt`, hit testing | 1.8, 1.10, 1.11, 1.17, 1.18, 3.3, 3.12, 4.14, 7.6, 7.7 |
 | D | Bindings, actions, menu | `input/KeyBindings.kt`, `input/EditorCommand.kt`, `input/BuiltinEditorActions.kt`, `contextmenu/` | 2.1, 2.2, 2.4, 2.5, 2.7 to 2.12, 4.8, 5.8 |
 | E | Input sessions on desktop, iOS, web | `desktopMain`, `iosMain`, `wasmJsMain` under `input/` | 4.2 to 4.7, 4.10 to 4.12, 4.19, 4.21, 4.22, 4.24 to 4.26, 4.28, 4.29 |
@@ -1290,8 +1290,21 @@ iOS Safari; browser tests run in CI.
   the platform clipboard layer, as native editors get them: AWT's Windows flavor
   map converts its text flavors to CRLF and back, and macOS, Linux, Android and iOS
   use LF. `setDocument` takes lines as given.
-- [ ] **6.9 Links in HTML. C.** [Opus] [Lane H] No `href` handling on paste or
-  copy.
+- [x] **6.9 Links in HTML. C.** [Opus] [Lane H] No `href` handling on paste or
+  copy. Done: `<a href>` becomes a `LinkSpanStyle` over its text, with the
+  configured link style, on paste (spliced lines included) and in
+  `HtmlExtension.importHtml`; copy and `exportAsHtml` write `<a href>` for each
+  link, leaving out the tags the link style alone would add. A link across a
+  `<br>` becomes one per line. `html/HtmlLinks.kt` `sanitizeLinkUrl` keeps
+  relative URLs and the http, https, mailto, tel and ftp schemes and refuses the
+  rest (`javascript:`, `data:`, `vbscript:`, `file:`), after dropping the tabs,
+  line breaks and edge controls browsers ignore, in both directions; a refused
+  link keeps its text (`html/HtmlLinkTest.kt`). Other sources are 6.16.
+- [ ] **6.16 Link destinations are sanitised only in HTML. S.** [Opus] [Lane B]
+  Markdown import, `setLink` and the in-editor span buffer keep `javascript:` and
+  `data:` destinations, and Ctrl/Cmd+click hands them to `onLinkClick` or the
+  `UriHandler` (`textEditorPointerInputHandling.kt`). Refuse them where a link is
+  opened, with `html/HtmlLinks.kt`'s `sanitizeLinkUrl`, so every source is covered.
 - [x] **6.10 Non-breaking spaces** [Opus] [Lane H] become plain spaces on HTML
   paste. Done: a no-break space between two characters of one text node lands
   as U+00A0 ("10&nbsp;km"), and copy writes it as `&nbsp;` (plain text keeps
