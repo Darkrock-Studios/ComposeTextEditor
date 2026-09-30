@@ -29,10 +29,14 @@ val TestFontFamily: FontFamily by lazy {
 /** This style in [TestFontFamily], unless it already names a font family. */
 fun TextStyle.withTestFont(): TextStyle = if (fontFamily == null) copy(fontFamily = TestFontFamily) else this
 
-private val sharedFontFamilyResolver by lazy { createFontFamilyResolver() }
+/** One font resolver for measuring outside a composition, so the test font is loaded once. */
+val testFontFamilyResolver: FontFamily.Resolver by lazy { createFontFamilyResolver() }
 
-/** The width of one unwrapped line of [text] in [style] at [density], outside any composition. */
+/**
+ * The advance of one unwrapped left-to-right line of [text] in [style] at [density], trailing
+ * spaces included, outside any composition.
+ */
 fun measureLineWidth(text: String, style: TextStyle, density: Density = Density(1f)): Float =
-	TextMeasurer(sharedFontFamilyResolver, density, LayoutDirection.Ltr, cacheSize = 0)
+	TextMeasurer(testFontFamilyResolver, density, LayoutDirection.Ltr, cacheSize = 0)
 		.measure(text, style)
-		.getLineRight(0)
+		.getHorizontalPosition(text.length, usePrimaryDirection = true)

@@ -271,10 +271,17 @@ editor does rather than what it should do.
   user attaches the trace to a bug report; the trace replays in
   `androidHostTest`. Build a corpus per keyboard (Gboard, Gboard Japanese,
   Samsung, SwiftKey, AnySoftKeyboard). First case: hammer-editor#930.
-- [ ] **0.5 Geometry assertions.** [Opus] [Lane L] Assert caret and selection
+- [x] **0.5 Geometry assertions.** [Opus] [Lane L] Assert caret and selection
   rectangles from layout. Stable across machines, unlike pixels.
   Started in lane C: `utils/DrawRecorder.kt` runs a draw function on a canvas
   that records each rectangle and line with its colour.
+  Done: `utils/Geometry.kt` has `drawnCaret`, `drawnSelection` and
+  `drawnHandleCenters`, compared with Compose's own layout of the same text
+  (`independentLayout`). `drawing/GeometryTest.kt` covers wrapped rows, the
+  caret at a wrap, empty lines, the line-break sliver, right-to-left
+  paragraphs, paragraph spacing (5.7) and the touch handles, and checks that
+  the harness's `handleCenter` grabs the drawn knob. Two right-to-left cases
+  fail today and are marked `failsUntil("7.6")`.
 - [x] **0.9 A bundled test font. R.** [Opus] [Lane L] The e2e harness lays
   text out in the machine's default sans-serif font, so any test that depends on
   wrapping or text width can pass locally and fail on the CI runner. Two did
@@ -2020,6 +2027,11 @@ iOS Safari; browser tests run in CI.
   visual caret position at run boundaries.
 - [ ] **7.6** [Fable] [Lane C] Selection draws one rect per row from x(start)
   to x(end); wrong in right-to-left, and mixed text needs several rects.
+  **R** (0.5, `drawing/GeometryTest.kt`, `failsUntil("7.6")`): in a
+  right-to-left paragraph a selected line break's sliver is added to the
+  right, so it eats a space's width off the selected text instead of lying
+  past the text's left end; in "abc אבג def", selecting "c", the space, א and
+  ב draws one box over "c", the space and the unselected ג, missing א and ב.
 - [ ] **7.7** [Fable] [Lane C] Underline boxes (spell check, composing, links)
   assume no bidi.
 

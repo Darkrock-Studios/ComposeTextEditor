@@ -60,3 +60,17 @@ FONTCONFIG_FILE=/path/to/fonts.conf ./gradlew \
 
 `--rerun` matters: the environment is not a task input, so without it Gradle
 reports the tests up to date from the previous run.
+
+## Geometry assertions
+
+`utils/Geometry.kt` (editor desktop tests) runs the editor's draw functions
+against its current state and records the shapes (`utils/DrawRecorder.kt`)
+instead of reading pixels: `drawnCaret()`, `drawnSelection()` and
+`drawnHandleCenters()` inside `editorUiTest`, in the text canvas's coordinates.
+`independentLayout(text)` lays the same text out with Compose alone at the
+editor's width, the reference to compare against, and `rowBox(row)` is the
+editor's own row. `assertRectEquals` and `assertOffsetEquals` compare within
+half a pixel. `drawing/GeometryTest.kt` is the suite. A case the editor gets
+wrong today goes inside `failsUntil("<item>")`, which fails once the case
+passes, so the fix removes the marker; keep an assertion outside the block that
+holds both before and after the fix, so a different breakage still fails.
