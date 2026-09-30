@@ -49,6 +49,7 @@ import androidx.compose.ui.semantics.textSelectionRange
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.toSize
 import com.darkrockstudios.texteditor.annotatedstring.normalizeLineEndings
+import com.darkrockstudios.texteditor.clipboard.ClipboardEventsEffect
 import com.darkrockstudios.texteditor.contextmenu.ContextMenuActions
 import com.darkrockstudios.texteditor.contextmenu.ContextMenuOpener
 import com.darkrockstudios.texteditor.contextmenu.ContextMenuPlacement
@@ -127,6 +128,7 @@ fun BasicTextEditor(
 ) {
 	// Capture platform view for IME cursor synchronization (Android only)
 	CaptureViewForIme(state)
+	ClipboardEventsEffect(state)
 
 	val focusRequester = remember { FocusRequester() }
 	val interactionSource = remember { MutableInteractionSource() }

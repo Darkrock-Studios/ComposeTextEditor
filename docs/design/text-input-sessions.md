@@ -376,6 +376,14 @@ so refusing it loses nothing. The predicate has no view of the DOM event, so
 ';' and '=' (whose codes equal their characters, and a German dead key sits
 on '=') are refused too, which costs only the no-session canvas path.
 
+A browser answers Ctrl/Cmd+C, X and V in the textarea with a `copy`, `cut` or
+`paste` event while the key is down; Compose forwards the key to the editor's
+bindings a frame later. `ClipboardEventsEffect` (in `clipboard/`) uses the event
+to move the data, since only then may the page use the clipboard without a
+permission prompt, and prevents the textarea's own plain-text copy or paste; the
+Copy, Cut and Paste actions the key then runs do the editing and take the data
+from there rather than from `navigator.clipboard`.
+
 Compose sets `autocapitalize="off"` on every backing field whatever the
 `ImeOptions` say, so the web session sets it back to `sentences`, as the
 Android and iOS sessions ask of their keyboards.

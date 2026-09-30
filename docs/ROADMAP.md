@@ -185,7 +185,7 @@ review.
 | E | Input sessions on desktop, iOS, web | `desktopMain`, `iosMain`, `wasmJsMain` under `input/` | 4.2 to 4.7, 4.10 to 4.12, 4.19, 4.21, 4.22, 4.24 to 4.26, 4.28, 4.29 |
 | F | Android input | `androidMain` | 0.4, 3.9 to 3.11, 3.14, 4.16, 4.18, 4.20, 4.27, 4.30 |
 | G | Edit pipeline and undo | `state/TextEditManager.kt`, `state/TextEditHistory.kt`, `state/EditBehavior.kt`, `input/ImeEditLogic.kt` | 1.20, 5.1 to 5.5, 5.9, 6.1 to 6.6, 6.14, 6.15, 6.17 |
-| H | Clipboard and HTML | `clipboard/`, `html/` | 4.9, 4.13, 4.17, 6.7 to 6.12 |
+| H | Clipboard and HTML | `clipboard/`, `html/` | 4.9, 4.13, 4.17, 6.7 to 6.13, 6.18, 6.19 |
 | I | Markdown and block model | `markdown/`, `richstyle/` | 5.6, 7.14 to 7.16 |
 | J | Find addon | `ComposeTextEditorFind/` | 7.17 to 7.19, 7.26, 7.29 |
 | K | Spell check addon | `ComposeTextEditorSpellCheck/` | 7.20 to 7.22, 7.28, 7.30, 7.31, 7.34, 7.35 |
@@ -1007,8 +1007,29 @@ Also seen:
   a line lands at the caret. No code change was needed. Synthetic events
   leave the textarea's own text alone, which real input does not, so a real
   IME in Chrome, Firefox and Safari is still what ticks this.
-- [ ] **4.13 Clipboard. C.** [Opus] [Lane H] Plain text only through
-  `navigator.clipboard`, failures swallowed silently (shared with 6.7).
+- [x] **4.13 Clipboard. C.** [Opus] [Lane H] Plain text only through
+  `navigator.clipboard`, failures swallowed silently (shared with 6.7). Done: a
+  browser answers Ctrl/Cmd+C, X and V in the backing textarea with a `copy`,
+  `cut` or `paste` event while the key is down, and Compose hands the key to the
+  editor's bindings a frame later. `ClipboardEventsEffect`
+  (`wasmJsMain/.../clipboard/ClipboardEvents.wasmJs.kt`) uses the event, the one
+  moment the page may use the clipboard with no permission prompt, to move the
+  data: copy and cut write the selection's `text/html` and `text/plain` into it,
+  paste keeps its flavors for the Paste action, and the textarea's own plain
+  copy or paste is prevented; the actions still do the editing, so a key press
+  edits once. Only an event aimed at this viewport's input while the editor has
+  focus is taken. The context menu and host calls use `navigator.clipboard`:
+  `write` with a `ClipboardItem` holding both flavors and `read` preferring the
+  markup where the browser has them, else `writeText` and `readText`; a paste
+  reads once, since some browsers ask on every read, and a refused `read` is not
+  retried. Each refusal is logged with `console.warn` and the browser's reason,
+  as Compose's own web clipboard does. Checked in Chromium with synthetic chords
+  (keydown then clipboard event: a bold run copied out as `<strong>` and pasted
+  back bold, once, with no `navigator.clipboard` call) and a refused read; real
+  browsers with clipboard permission granted are still to check (QA 2.11). The
+  event and the action are paired by time (one second): a host that binds the
+  chords to other actions leaves the event's data unclaimed, and a context-menu
+  copy inside that second is dropped. Cut's data loss is 6.19.
 - [x] **4.14 Scrollbar. C.** [Opus] [Lane C] The implementation is commented
   out.
   Done: desktop and web share Compose's own `VerticalScrollbar`
@@ -1336,6 +1357,21 @@ iOS Safari; browser tests run in CI.
   `state/LargePasteCostTest.kt` counts the lines written
   (`TextEditorState.linesWritten`) and shapes for a 400-line paste at the caret,
   over a selection, and through undo and redo.
+- [ ] **6.18 A styled paste from markup drops the body text size. R.** [Opus]
+  [Lane H] Pasted text that carries spans keeps only its own, so HTML from
+  another application (desktop) or from the editor itself (web, which has no
+  in-process flavor) lands without the markdown body style's size and renders
+  smaller than the text around it; plain text inherits it (QA 2.5). Seen in the
+  web demo copying "plain **bold** end" to a new line. Layer the configuration's
+  `defaultTextStyle` beneath styled pasted text when the editor has a markdown
+  configuration, as the markdown parser does.
+- [ ] **6.19 Cut deletes before the clipboard write can fail. S.** [Opus]
+  [Lane H] `cutSelection` deletes the selection and then writes the clipboard in
+  a coroutine. On the web the context menu's Cut writes through
+  `navigator.clipboard`, which an insecure page, a lapsed user gesture or a
+  refused permission turns into a logged warning, and the cut text is gone
+  except through undo. Write first and delete on success, or refuse Cut where
+  the write cannot happen.
 - [ ] **6.12 Drag and drop** [Opus] [Lane H] of the selection, and drops of
   external text.
 - [x] **6.13 Plain paste reads the HTML flavor.** [Opus] [Lane H] On desktop,
@@ -1576,4 +1612,5 @@ records results and removes entries that passed.
 | 3.8 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64`. 3.8 added `internal expect fun hasNativeTextToolbar()` (commonMain `TouchToolbar.kt`) with `iosMain/.../TouchToolbar.ios.kt` answering true. Then in the simulator: long-press a word, double-tap a word, long-press empty space, tap the caret handle, and drag a selection handle | Compiles. UIKit's edit menu appears over the selection or caret with Cut, Copy, Paste and Select all as applicable (Paste and Select all alone at a bare caret), hides while a handle is dragged and returns when it drops, and goes when the caret moves or the text is scrolled. If no menu appears, the input connection has no toolbar: fall back to `false` in `TouchToolbar.ios.kt` so the context menu stands in |  Partial, same run. Compiles. The UIKit menu works over a selection: double-tap or long-press a word shows Cut, Copy, Paste, Select All, and each works. **Fails:** long-press in an empty document calls `show()` with a zero-width caret rect and only Paste, and UIKit shows nothing (the toolbar reports Hidden right after `showMenu`); a tap on the caret handle never calls `show()`. Native reference: a tap in Safari's focused empty field shows Paste. Also: a long-press past a line's end selects the line's last word instead of placing the caret; with a selection ending at the document end, a long-press below the text counts as on the selection. When the screen was shifted by 4.24 the selection menu did not appear either. Did not fall back to `false`, since the menu works for selections |
 | 4.19, 4.25 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64`. `skikoMain/.../input/SkikoTextEditorInputMethodRequest.kt` gained an `imeResync` parameter (default `SkikoImeResync.None`, which iOS uses); `imeResyncGeneration` in `TextEditorState.kt` is now snapshot state; `focusedRectInRoot` measures the caret with `calculateCursorPosition()` instead of reading `lastCursorMetrics` (same observation triggers: caret moves and resizes). Then the 4.29 comparison | Compiles; iOS typing, backspace, list Return and Japanese candidates behave as in the 4.5 pass | |
 | 4.21 | In the iOS sample app, paste or load a document of about 200,000 characters (2,000 lines of 99 characters), type a sentence at its end and in its middle, and compare with a 2,000-character document; Instruments' Time Profiler if it feels slower | Typing feels the same in both; no frame spent in `getAllText`, `onTextFieldValueUpdated` or UIKit text notifications stands out. Then tick 4.21 | |
+| 4.13 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64`. `clipboard/ClipboardEvents.kt` adds `internal expect fun ClipboardEventsEffect`; the iOS actual (`iosMain/.../clipboard/ClipboardEvents.ios.kt`) is a no-op. Then the web demo in Safari on macOS: Cmd+C a bold word, Cmd+V it back, and paste a bulleted list from another page; also the context menu's Paste | Compiles. Safari pastes the bold word bold and the list as a list; the context menu's Paste either pastes or logs a `ComposeTextEditor:` warning in the console, never fails silently | |
 | 6.13 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64`. `ClipboardHelper` gained the `expect` member `getPlainText`; the iOS actual (`iosMain/.../clipboard/ClipboardHelper.ios.kt`) returns `UIPasteboard.generalPasteboard.string`. Then in the simulator: copy a word in Safari, and in the sample app use the edit menu's Paste and, with a hardware keyboard, Cmd+Shift+V | Compiles. Both paste the word; iOS reads plain text only until 4.9, so this checks the new member, not a difference between the two | |

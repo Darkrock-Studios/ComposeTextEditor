@@ -183,6 +183,24 @@ this exercises the clipboard's HTML as the block carrier.
    text), not the markup's text. Ctrl/Cmd+V still pastes the table's text from the
    markup, cells separated by a tab.
 
+### 2.11 Web clipboard (4.13)
+
+In Chrome, Firefox and Safari, against the built demo:
+
+1. Type a line with a bold word, select it, Ctrl/Cmd+C, and paste into Google Docs
+   or a mail composer. **Expect:** the bold word stays bold. Paste it back into the
+   editor with Ctrl/Cmd+V. **Expect:** bold, with no permission prompt.
+2. Copy a bulleted list with a link from a web page and Ctrl/Cmd+V into the
+   Markdown demo. **Expect:** a bulleted list and a working link.
+3. Ctrl/Cmd+X a styled word, then Ctrl/Cmd+V it elsewhere. **Expect:** it moves with
+   its style, and the page's hidden text area never inserts a second copy.
+4. Right-click, Paste. **Expect:** the browser asks for clipboard permission (Firefox
+   shows a Paste button); allowed, the markup pastes; denied, nothing changes and
+   the console shows a `ComposeTextEditor: could not read ... the clipboard` warning.
+5. Serve the demo over plain http from another machine (an insecure context) and
+   use the context menu's Copy and Paste. **Expect:** a console warning for each,
+   while the keyboard chords still work.
+
 ### 2.10 Links (6.9)
 
 1. Copy a sentence with a link from a web page and paste it into the Markdown demo

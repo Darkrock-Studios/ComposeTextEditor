@@ -14,7 +14,7 @@ import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
  * - Desktop: styled, as HTML for other applications and exactly within this process
  * - Android: Plain text only (ClipData limitation)
  * - iOS: Plain text only (UIPasteboard limitation)
- * - WASM: Plain text only (web clipboard limitation)
+ * - Web: styled, as HTML beside plain text, where the browser allows it
  *
  * `configuration` supplies the styling that header levels are matched against
  * when converting to and from HTML, so pass the editor's own or custom header
@@ -24,7 +24,8 @@ expect object ClipboardHelper {
 	/**
 	 * Reads text from the clipboard.
 	 * On Desktop, reads styled text, preferring an in-process copy and falling back
-	 * to the HTML flavor other applications provide.
+	 * to the HTML flavor other applications provide. On the web, reads the HTML
+	 * flavor where the browser offers it.
 	 * On other platforms, returns plain text as AnnotatedString.
 	 */
 	suspend fun getText(
@@ -45,7 +46,8 @@ expect object ClipboardHelper {
 	 * On Desktop, offers the selection as HTML for other applications and as an
 	 * exact copy within this process; [copyId] rides along so a later paste can
 	 * prove the clipboard content is still this copy.
-	 * On other platforms, writes plain text only and [copyId] is ignored.
+	 * On the web, offers HTML beside plain text where the browser allows it.
+	 * On other platforms, writes plain text only. [copyId] is ignored off desktop.
 	 *
 	 * [html] is the markup to offer, which callers copying out of an editor supply
 	 * so the fragment carries the selection's block structure. Null falls back to
