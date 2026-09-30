@@ -629,7 +629,11 @@ German, or French).
    behind (4.30), and sits at the caret, not above and left of it by the
    editor's offset in the window (3.10). Scroll the text under a fixed caret.
    **Expect:** the floating candidates follow it, and hide or move off when
-   the caret row leaves the editor.
+   the caret row leaves the editor. In a host whose window pans for the
+   keyboard (`adjustPan`) or whose editor sits in a scrolling parent, move the
+   view without touching the text. **Expect:** the floating candidates follow
+   at once (4.31); switching Gboard between docked and floating updates them
+   too.
 
 Checked on an emulator (2026-09-29, API 36, Gboard active) through
 `adb shell input`, whose virtual keyboard has Alt+E as a combining acute:

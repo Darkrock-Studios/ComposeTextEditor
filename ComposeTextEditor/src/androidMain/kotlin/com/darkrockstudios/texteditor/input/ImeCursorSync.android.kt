@@ -2,6 +2,8 @@ package com.darkrockstudios.texteditor.input
 
 import android.os.Handler
 import android.os.Looper
+import android.view.View
+import android.view.ViewTreeObserver
 import android.view.inputmethod.InputMethodManager
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.text.AnnotatedString
@@ -26,9 +28,12 @@ import java.lang.ref.WeakReference
  * - when the outermost batch edit ends. Every IME command runs inside one, so an IME hears
  *   about its own edit once, after it is complete;
  * - posted to the main looper after any other change (keys, pointer, undo, programmatic
- *   edits), and, while the IME monitors the cursor anchor, after a scroll, a relayout, or
- *   a move or resize of the editor, which move the caret on screen without changing the
- *   selection.
+ *   edits), and, while the IME monitors the cursor anchor, after a scroll, a relayout, a
+ *   move or resize of the editor, or a change in the strip a keyboard covers, which move
+ *   or hide the caret on screen without changing the selection;
+ * - while the IME monitors the cursor anchor, the anchor alone is resent as a frame draws
+ *   the view somewhere else on screen than the last anchor said (a window panned for the
+ *   keyboard, a scrolling parent), as `TextView` checks its position on each frame.
  *
  * A flush while a batch is open does nothing; the batch's end flushes instead. Reporting a
  * half-applied edit is not harmless: a composing IME told that its composition vanished
@@ -38,6 +43,7 @@ actual class ImeCursorSync internal constructor(
 	private val state: TextEditorState,
 	private val sink: ImeUpdateSink,
 	private val cursorAnchor: () -> CursorAnchor? = { state.platformExtensions.currentCursorAnchor() },
+	private val drawWatch: DrawWatch = ViewDrawWatch,
 	private val postToMain: (Runnable) -> Unit,
 ) {
 	actual constructor(state: TextEditorState) : this(
@@ -56,6 +62,7 @@ actual class ImeCursorSync internal constructor(
 
 	private var lastSelection: ImeSelection? = null
 	private var lastAnchor: CursorAnchor? = null
+	private var stopWatchingDraws: (() -> Unit)? = null
 
 	/** Where the keyboard's own commands since the last flush have left it expecting the selection. */
 	internal val expectation = ImeExpectation()
@@ -94,6 +101,32 @@ actual class ImeCursorSync internal constructor(
 				.filter { it != null }
 				.collect { requestFlush() }
 		}
+		scope.launch {
+			// The view is the live connection's, so a new connection watches its own.
+			snapshotFlow {
+				val extensions = state.platformExtensions
+				if (extensions.cursorAnchorMonitoringEnabled) extensions.imeView else null
+			}.collect { view ->
+				unwatchDraws()
+				if (view != null) stopWatchingDraws = drawWatch.watch(view, viewDrawn)
+			}
+		}
+	}
+
+	private fun unwatchDraws() {
+		stopWatchingDraws?.invoke()
+		stopWatchingDraws = null
+	}
+
+	/**
+	 * Resends the anchor at once when the view draws away from where it was last sent. Only
+	 * the anchor: the other reports keep to their flush.
+	 */
+	private val viewDrawn = ViewDrawn { screenX, screenY ->
+		val last = lastAnchor
+		if (last != null && last.viewX == screenX && last.viewY == screenY) return@ViewDrawn
+		if (state.platformExtensions.isInBatchEdit || !sink.isReady) return@ViewDrawn
+		cursorAnchor()?.takeIf { it != last }?.let(::send)
 	}
 
 	/** Registers for batch-end flushes; [startSync] without the flow observation. */
@@ -111,6 +144,7 @@ actual class ImeCursorSync internal constructor(
 		attached = false
 		scope?.cancel()
 		scope = null
+		unwatchDraws()
 		flushPosted = false
 		if (state.platformExtensions.imeSync === this) {
 			state.platformExtensions.imeSync = null
@@ -237,6 +271,53 @@ actual class ImeCursorSync internal constructor(
 
 	private companion object {
 		val mainHandler by lazy { Handler(Looper.getMainLooper()) }
+	}
+}
+
+/** A view's location on screen as a frame draws it. */
+internal fun interface ViewDrawn {
+	fun drawn(screenX: Int, screenY: Int)
+}
+
+/** Calls [ViewDrawn] for each frame the view's window draws, until the handle it returns is called. */
+internal fun interface DrawWatch {
+	fun watch(view: View, onDraw: ViewDrawn): () -> Unit
+}
+
+/**
+ * [DrawWatch] through the window's [ViewTreeObserver], held only while the view is
+ * attached: a detached view's observer is a stand-in that attaching merges away, and a
+ * listener left on a window's observer would keep the editor alive with the window. It
+ * listens at the draw rather than before it, because a window panned for the keyboard
+ * takes its new offset in the draw.
+ */
+internal object ViewDrawWatch : DrawWatch {
+	override fun watch(view: View, onDraw: ViewDrawn): () -> Unit {
+		val location = IntArray(2)
+		val listener = ViewTreeObserver.OnDrawListener {
+			view.getLocationOnScreen(location)
+			onDraw.drawn(location[0], location[1])
+		}
+		var observer: ViewTreeObserver? = null
+		fun remove() {
+			observer?.takeIf { it.isAlive }?.removeOnDrawListener(listener)
+			observer = null
+		}
+		val attachment = object : View.OnAttachStateChangeListener {
+			override fun onViewAttachedToWindow(v: View) {
+				remove()
+				observer = view.viewTreeObserver.also { it.addOnDrawListener(listener) }
+			}
+
+			// Still attached here, so this is the window's observer.
+			override fun onViewDetachedFromWindow(v: View) = remove()
+		}
+		view.addOnAttachStateChangeListener(attachment)
+		if (view.isAttachedToWindow) attachment.onViewAttachedToWindow(view)
+		return {
+			view.removeOnAttachStateChangeListener(attachment)
+			remove()
+		}
 	}
 }
 

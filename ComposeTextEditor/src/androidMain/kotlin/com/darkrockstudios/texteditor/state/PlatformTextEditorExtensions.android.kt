@@ -26,9 +26,10 @@ actual class PlatformTextEditorExtensions actual constructor(
 	/**
 	 * The Android View associated with this text editor instance.
 	 * Used for IME operations (cursor anchor info, selection updates).
-	 * Set by CaptureViewForIme composable when the editor is composed.
+	 * Set by CaptureViewForIme composable when the editor is composed. Snapshot state, as
+	 * [activeConnection] is.
 	 */
-	internal var view: View? = null
+	internal var view: View? by mutableStateOf(null)
 
 	/**
 	 * When true, cursor anchor info should be sent to the IME whenever the cursor moves.
@@ -54,8 +55,11 @@ actual class PlatformTextEditorExtensions actual constructor(
 	 */
 	internal var imeSync: ImeCursorSync? = null
 
-	/** The most recently opened IME connection, the one the keyboard is talking through. */
-	internal var activeConnection: TextEditorInputConnection? = null
+	/**
+	 * The most recently opened IME connection, the one the keyboard is talking through.
+	 * Snapshot state, so what watches its view moves to a new connection's.
+	 */
+	internal var activeConnection: TextEditorInputConnection? by mutableStateOf(null)
 		private set
 
 	/**

@@ -236,10 +236,14 @@ stylus handwriting, and some candidate windows) is requested by the IME via
 `requestCursorUpdates` and sent by the flush whenever the selection report
 changes, and while it monitors, whenever the caret moves on screen without
 the selection changing (a scroll, a relayout, the editor moving or resizing
-in its window): the flush compares the caret's geometry and the view's screen
-location too, and remembers what any report sent, an immediate one included.
-A view that moves on screen with nothing in the editor changing is not
-noticed until the next flush (roadmap 4.31). The marker is the caret
+in its window, the strip a keyboard covers): the flush compares the caret's
+geometry
+and the view's screen location too, and remembers what any report sent, an
+immediate one included. While it monitors, each frame that draws the view
+somewhere else on screen than the last anchor said resends the anchor alone,
+as `TextView` checks its position on each frame: that catches a view that
+moves with nothing in the editor changing (a window panned for the keyboard,
+a scrolling parent). The marker is the caret
 measured from the layout as it is sent (the last frame's drawn caret is one
 move behind), in the view's coordinates (the canvas's position in the Compose
 root, so content padding and scroll are in it), with flags saying whether its

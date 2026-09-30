@@ -1394,7 +1394,7 @@ iOS Safari; browser tests run in CI.
   restart the session when the settings change, as Android does. Web also
   forces `autocapitalize` to `sentences` (4.11), which should follow the
   settings' capitalisation.
-- [ ] **4.31 Android's cursor anchor misses a view that moves alone. C.**
+- [x] **4.31 Android's cursor anchor misses a view that moves alone. C.**
   [Opus] [Lane F] The anchor is resent when the caret moves in the view
   (3.10), but a view that moves on screen with nothing in the editor changing
   (a window panned by `adjustPan`, a `ComposeView` inside a scrolling Android
@@ -1404,6 +1404,27 @@ iOS Safari; browser tests run in CI.
   which the marker's visibility flags depend on. `TextView` checks its screen
   location in an `OnPreDrawListener` while the IME monitors; watch the view
   the same way, only while monitoring.
+  Done: while the IME monitors, `ImeCursorSync` checks the view's screen
+  location as each frame its window draws (`ViewDrawWatch`, an
+  `OnDrawListener` held while the view is attached, on the live connection's
+  view; at the draw rather than before it, since a panned window takes its
+  offset in the draw), and resends the anchor there when it differs from the
+  last one sent. The covered strip
+  (`TextEditorScrollManager.obscuredBottomPx`) is now snapshot state, so a
+  change in it alone re-measures the anchor as a scroll does
+  (`ImeCursorSyncTest`). A freeform window dragged by the system redraws
+  nothing, so it still waits for the next change, as it does for `TextView`.
+  A floating keyboard or stylus pass is a person's (QA plan, "Android
+  keyboards"). The marker's visibility flags inside a scrolling parent are
+  4.34.
+- [ ] **4.34 The cursor anchor ignores clipping by the views around the
+  editor. C.** [Opus] [Lane F] `imeCaretInRoot` decides the marker's
+  visibility flags from the canvas's `boundsInRoot`, which knows only
+  Compose's own clipping. A `ComposeView` inside an Android `ScrollView` whose
+  parent has scrolled the caret's row out of sight still reports the marker
+  visible, so floating candidates point at a caret no one can see. Clip by
+  the view's `getGlobalVisibleRect` as well, as `TextView` does through
+  `isPositionVisible`.
 - [x] **4.27 Android resyncs by restarting input. C.** [Opus] [Lane F]
   `requestImeResync` becomes `restartInput`, which clears the keyboard's
   suggestions and shift state. That suits a whole-document replace, not a
