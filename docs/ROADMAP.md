@@ -410,9 +410,8 @@ fixes what users feel every minute.
   `getWrapForDrawing(position, affinity)`; and
   `LineWrap.caretX` draws an upstream caret at its row's right edge (left in a
   right-to-left row). Positions elsewhere (selections, spans, hit tests) stay
-  affinity-free, so the blast radius is the caret's own readers. Left, Right
-  and a click still land downstream: a click past a wrapped row's end puts the
-  caret on the next row's start (1.24).
+  affinity-free, so the blast radius is the caret's own readers. Left and
+  Right still land downstream; a pointer past a wrapped row's end is 1.24's.
 - [x] **1.7 PageUp and PageDown. C.** [Opus] [Lane A] Driven by scroll position
   rather than the caret's row; PageDown never reaches the document end. The
   scroll margin is a hard-coded 10 px (`state/TextEditorScrollManager.kt`).
@@ -533,11 +532,27 @@ fixes what users feel every minute.
 
 ### Selection drawing
 
-- [ ] **1.24 Pointer affinity. C.** [Opus] [Lane B] A click or drag past the
+- [x] **1.24 Pointer affinity. C.** [Opus] [Lane B] A click or drag past the
   end of a wrapped row lands on its wrap offset, which `getOffsetAtPosition`
   returns as a bare position, so the caret draws at the start of the next row
   (1.6 gave only the keyboard an upstream caret). Return the affinity from the
   hit test and place the caret with it.
+  Done: it was worse than written: the hit landed on the row's last glyph's
+  start, one short of the row's end (before its trailing space). A wrapped row
+  is now hit as a vertical move to it is (`caretAtX`), so
+  `TextEditorState.pointerHitAt` answers the wrap offset upstream past its end
+  (`PointerHit`); `getOffsetAtPosition` is its position. A click, tap,
+  right-click, drag, shift-click and caret handle drag place the caret with it,
+  so it draws at the row's end and Home, End, Up and Down measure from that
+  row. What wants a character rather than a caret (a double-click's word, a
+  long press, a right-click's selection test, the span under a click) takes the
+  hit's `character`, the row's last. A selection's end at a wrap offset stands
+  on the row it ends on, and its start on the row it starts on, as the
+  highlight does: its touch handles, the touch toolbar, and a caret at that end
+  (`selection/PointerAffinityTest.kt`). A paragraph's last row still hits
+  through the layout directly, so past the end of a row ending in a run of the
+  other direction a click lands inside that run, where a vertical move goes to
+  the row's end. The drop caret of a drag and drop is 6.24.
 - [x] **1.17 Empty lines and newlines. C.** [Opus] [Lane C] Empty lines inside
   a selection draw nothing (`DrawSelectionUi.kt`). Native shows a sliver for
   the newline.
@@ -1719,6 +1734,12 @@ iOS Safari; browser tests run in CI.
   long press inside the selection (lane B's touch handling). iOS and web: check
   what Compose Multiplatform's `DragAndDropEvent` exposes there (web has a
   `WebDragAndDropManager`) and fill in the same four functions.
+- [ ] **6.24 The drop caret past a wrapped row's end. C.** [Opus] [Lane H]
+  Since 1.24 a point past a wrapped row's end hits its wrap offset, so a drop
+  there inserts at the row's end, but `TextDragAndDrop.offsetAt` keeps only the
+  position and `DrawDropCaret` draws it downstream, at the start of the next
+  row. Keep the hit's affinity (`TextEditorState.pointerHitAt`) for the drop
+  caret.
 - [x] **6.13 Plain paste reads the HTML flavor.** [Opus] [Lane H] On desktop,
   `Action.PasteAsPlainText` takes `ClipboardHelper.getText(...).text`, so a
   foreign paste that offers HTML yields the text of the parsed markup rather

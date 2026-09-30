@@ -158,8 +158,8 @@ on.
   through `TextEditorState.cursorRowIndex()`, drawing, handles, the touch
   toolbar and scrolling through the affinity overloads of `getWrapForDrawing`
   and `getPositionForOffset`, and every move resets the caret to downstream
-  unless it deliberately lands at a row's end (End, or a vertical move past
-  the row's end).
+  unless it deliberately lands at a row's end (End, a vertical move past the
+  row's end, or a pointer past it, which `pointerHitAt` reports).
 - **`TextEditorSelectionManager`**: the selection range and the gesture state
   behind it (touch handles, drag). Rule: any content mutation clears the
   selection; only span-level operations keep it.

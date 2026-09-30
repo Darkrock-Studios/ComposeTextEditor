@@ -415,6 +415,14 @@ the platform's double-tap timeout (300 ms on desktop), not the OS mouse setting.
    with no lurching or jumping back (1.23). Move the mouse back inside and
    release. **Expect:** the view then scrolls to show the caret at the end of the
    last selected paragraph.
+10. Click in the blank space right of a wrapped row, one that wraps mid-word and
+    one that wraps after a space (1.24). **Expect:** the caret at that row's right
+    edge (after the space), not at the start of the next row; Home goes to that
+    row's start. Drag from a word to past the row's end. **Expect:** the whole
+    row, trailing space included, is selected. Double-click past the row's end.
+    **Expect:** the row's last word. On Android, tap past the row's end and drag
+    the caret handle there. **Expect:** the same, and a selection handle dragged
+    there stands at the row's end.
 
 ### 3.8 Web input (built demo)
 

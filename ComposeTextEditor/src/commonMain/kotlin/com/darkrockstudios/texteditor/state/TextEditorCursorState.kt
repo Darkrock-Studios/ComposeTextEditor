@@ -20,6 +20,17 @@ import kotlinx.coroutines.flow.SharedFlow
  */
 enum class CaretAffinity { Downstream, Upstream }
 
+/**
+ * Where a pointer lands: the caret [position] and the row it stands on ([affinity]), and
+ * the [character] a word, span or selection test there takes, which past a wrapped row's
+ * end is the row's last rather than the next row's first.
+ */
+internal data class PointerHit(
+	val position: CharLineOffset,
+	val affinity: CaretAffinity,
+	val character: CharLineOffset,
+)
+
 class TextEditorCursorState(
 	private val editorState: TextEditorState
 ) {

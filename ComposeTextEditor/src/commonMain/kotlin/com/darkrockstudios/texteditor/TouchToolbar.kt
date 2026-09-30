@@ -122,8 +122,8 @@ internal class TouchToolbar(
 		val selection = state.selector.selection
 		// A bare caret anchors on the row it is drawn on.
 		val caret = state.getPositionForOffset(state.cursorPosition, state.cursor.affinity)
-		val start = selection?.let { state.getPositionForOffset(it.start) } ?: caret
-		val end = selection?.let { state.getPositionForOffset(it.end) } ?: caret
+		val start = selection?.let { state.getPositionForOffset(it.start, handleAffinity(isStart = true)) } ?: caret
+		val end = selection?.let { state.getPositionForOffset(it.end, handleAffinity(isStart = false)) } ?: caret
 		val sameRow = start.position.y == end.position.y
 		val left = if (sameRow) minOf(start.position.x, end.position.x) else 0f
 		val right = if (sameRow) maxOf(start.position.x, end.position.x) else state.viewportSize.width

@@ -1357,14 +1357,33 @@ class TextEditorState(
 	 * first row and a point below the last row hits the last row; x is hit-tested on
 	 * that row either way, as native text fields do.
 	 */
-	fun getOffsetAtPosition(offset: Offset): CharLineOffset {
+	fun getOffsetAtPosition(offset: Offset): CharLineOffset = pointerHitAt(offset).position
+
+	/**
+	 * [getOffsetAtPosition], with the affinity that keeps a caret placed there on the row
+	 * the point is on: upstream at the wrap that ends a row, which a point past a wrapped
+	 * row's end lands on.
+	 */
+	internal fun pointerHitAt(offset: Offset): PointerHit {
 		val rows = _lineOffsets
-		if (rows.isEmpty()) return CharLineOffset(0, 0)
+		if (rows.isEmpty()) return downstreamHit(CharLineOffset(0, 0))
 
 		val contentY = offset.y + scrollState.value
 		val row = rows[rows.lastRowAtOrAbove(contentY).coerceAtLeast(0)]
 		val lineLength = textLines.getOrNull(row.line)?.length
-			?: return CharLineOffset(textLines.lastIndex, textLines.last().length)
+			?: return downstreamHit(CharLineOffset(textLines.lastIndex, textLines.last().length))
+		val lineText = textLines[row.line].text
+		if (row.wrapsToNextRow) {
+			// Hit as a vertical move to this row is, so the two agree at its end.
+			val (char, affinity) = row.caretAtX(offset.x - row.offset.x)
+			val snapped = lineText.snapToGraphemeBoundary(char.coerceAtMost(lineLength), forward = false)
+			// A row laid out for longer text than the line now has ends past it.
+			if (affinity == CaretAffinity.Downstream || snapped != char) {
+				return downstreamHit(CharLineOffset(row.line, snapped))
+			}
+			val last = lineText.snapToGraphemeBoundary((char - 1).coerceAtLeast(0), forward = false)
+			return PointerHit(CharLineOffset(row.line, char), affinity, CharLineOffset(row.line, last))
+		}
 
 		// Hit-test inside the row itself, so a point above, below, or in a block
 		// line's extra height lands on that row's text line.
@@ -1374,10 +1393,12 @@ class TextEditorState(
 		val charPos = paragraph.getOffsetForPosition(
 			Offset(offset.x - row.offset.x, paragraph.getLineTop(row.virtualLineIndex) + yInLine)
 		)
-		val lineText = textLines[row.line].text
 		// Skia already answers on a cluster boundary; the snap guards the caret invariant.
-		return CharLineOffset(row.line, lineText.snapToGraphemeBoundary(min(charPos, lineLength), forward = false))
+		val char = lineText.snapToGraphemeBoundary(min(charPos, lineLength), forward = false)
+		return downstreamHit(CharLineOffset(row.line, char))
 	}
+
+	private fun downstreamHit(position: CharLineOffset) = PointerHit(position, CaretAffinity.Downstream, position)
 
 	/**
 	 * The [RichSpan] under a pointer at [offset], in the same coordinates as
@@ -1390,7 +1411,7 @@ class TextEditorState(
 		val contentY = offset.y + scrollState.value
 		if (contentY < first.offset.y || contentY >= last.offset.y + last.effectiveHeight) return null
 		if (offset.x < 0f || offset.x > viewportSize.width) return null
-		return findSpanAtPosition(getOffsetAtPosition(offset))
+		return findSpanAtPosition(pointerHitAt(offset).character)
 	}
 
 	/**
