@@ -331,8 +331,17 @@ editor does rather than what it should do.
   than a row of text, so typing the first character shrinks it slightly.
   macOS part done: the `desktop-macos` job in `ci-build.yml` runs the three
   desktop suites on `macos-26`, beside the Ubuntu `check` and the `ios` job.
-  Still open: Windows, the Android emulator, browser automation, and an iOS
-  simulator smoke test that runs the app rather than only building it.
+  Written, pending their first CI run (`docs/TESTING.md`, "CI"): a
+  `desktop-windows` job runs the three desktop suites on `windows-latest`;
+  `android-emulator` runs `androidApp`'s `EditorTypingSmokeTest` (injected key
+  events, and a composition and commit through the editor's
+  `InputConnection`) on an API 35 emulator through
+  `reactivecircus/android-emulator-runner`, and passes here on a local API 36
+  emulator; `browser` builds the wasm demo and runs the Playwright suite in
+  `browserTests/` in Chromium (real key presses, read back from the editor's
+  accessibility node), which passes here. The emulator test found 7.60.
+  Still open: an iOS simulator smoke test that runs the app rather than only
+  building it (Mac queue).
 - [ ] **0.8 Real OS input, nightly.** [Opus] [Lane L] Drive the sample app on a
   virtual Linux display with a dead-key layout. Most expensive, so last.
 
@@ -2597,6 +2606,14 @@ Shaping is one line per keystroke. These still scale with document length:
   action key, Done since 7.40, is not offered to accessibility services and
   tests as a single-line `BasicTextField`'s is. Read
   `TextEditorState.effectiveImeAction()` instead.
+- [ ] **7.60 `setText` leaves the caret past the new text. R.** [Opus]
+  [Lane M] `TextEditorState.setText` (both overloads) replaces the lines
+  without coercing the caret, unlike `setDocument`: type "hello", call
+  `setText("")`, and the caret stays at (0, 5); the next typed character, or
+  an input method's commit, throws `StringIndexOutOfBoundsException` in
+  `mergeAnnotatedStrings`. The selection and composing region are probably
+  stale the same way. Found by the Android emulator smoke test (0.7); the
+  failing case is `state/SetTextCaretTest.kt`, marked `failsUntil("7.60")`.
 
 ## Housekeeping
 
@@ -2684,3 +2701,4 @@ records results and removes entries that passed.
 | 5.2 | In the iOS sample app with the soft keyboard (Settings > General > Keyboard > Smart Punctuation on), type `"quoted"`, `it's`, and `a--b` into the editor | Record whether curly quotes, the apostrophe, and the dash arrive already converted through the input session; this decides whether 5.2 must stay off on iOS by default | |
 | 3.16 | No `iosMain` change: commonMain now measures the keyboard cover (4.24) in the placement of a layout node on the canvas (`state/KeyboardCover.kt`, `measuresKeyboardCover`) instead of from a flow over `WindowInsets.ime`. Repeat 4.24's simulator check: tap a line the keyboard will cover, type Returns at the bottom, and dismiss and raise the keyboard | Compiles. The tapped line comes above the keyboard at once, Returns keep the caret at the keyboard's top, and the text does not jump while the keyboard slides | |
 | 7.37 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64`. commonMain `input/TextEditorTextInputService.kt` adds `internal expect val startsInputQuietly`; the iOS actual (`iosMain/.../input/TextEditorTextInputService.ios.kt`) is `false`. Then in the iOS sample app, with the keyboard up, turn Read only on and off without touching the editor, then type with the soft keyboard; and try the iOS actual as `true` (a session started, then `LocalSoftwareKeyboardController.hide()` after it) | Compiles. With `false`, the keyboard goes with Read only and comes back only on a tap, and typing then works. With `true`, if the keyboard stays down while a hardware keyboard or dictation can type at once, and a tap raises it, keep `true` and record it in 7.37 | |
+| 0.7 | An iOS simulator smoke test that runs the app rather than only building it: an XCUITest target in `sampleAppiOS` that opens the blank editor, taps it and types with `typeText("Hello")`, then reads the editor back through its accessibility value; run it with `xcodebuild test` on an iOS simulator destination and add that step to the `ios` job in `.github/workflows/ci-build.yml`. The Android equivalent is `androidApp/src/androidTest/.../EditorTypingSmokeTest.kt` | The UI test passes locally and in the `ios` job, and fails if typing stops reaching the editor | |

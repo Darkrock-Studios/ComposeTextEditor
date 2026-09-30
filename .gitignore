@@ -19,3 +19,6 @@ captures
 !*.xcworkspace/contents.xcworkspacedata
 **/xcshareddata/WorkspaceSettings.xcsettings
 /kotlin-js-store/yarn.lock
+/browserTests/node_modules/
+/browserTests/test-results/
+/browserTests/playwright-report/

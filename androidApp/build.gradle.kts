@@ -61,6 +61,7 @@ dependencies {
 
 	androidTestImplementation(platform(libs.compose.bom))
 	androidTestImplementation(libs.ui.test.junit4)
+	androidTestImplementation(projects.composeTextEditor)
 	debugImplementation(libs.ui.tooling)
 	debugImplementation(libs.ui.test.manifest)
 }

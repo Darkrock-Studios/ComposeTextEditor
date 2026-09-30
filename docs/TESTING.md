@@ -9,7 +9,9 @@
 | Spell check addon | `./gradlew :ComposeTextEditorSpellCheck:desktopTest` | Spell check and diagnostics |
 | Android host tests | `./gradlew :ComposeTextEditor:testAndroidHostTest` | Android input logic on the JVM |
 | iOS simulator (Mac only) | `./gradlew :ComposeTextEditor:iosSimulatorArm64Test` | What only UIKit can answer |
-| Everything that runs on Linux | `./gradlew check` | The above that Linux can build, as CI runs it |
+| Android emulator smoke | `./gradlew :androidApp:connectedDebugAndroidTest` | Key events and an input method's edits reach the editor on a device |
+| Browser | `cd browserTests && npx playwright test` | Real key presses in Chromium against the built wasm demo |
+| Gradle check | `./gradlew check` | The JVM and host suites and lint, as the Ubuntu `build` job runs it |
 
 Narrow a run while iterating with `--tests`, for example
 `./gradlew :ComposeTextEditor:desktopTest --tests 'e2e.NavigationE2eTest'`.
@@ -101,3 +103,51 @@ To update the goldens after an intended visual change, on Linux:
 
 Look at every changed PNG before committing it. A new Compose or Material
 version can change the default colours or antialiasing and needs the same.
+
+## Android emulator smoke test
+
+`androidApp/src/androidTest/.../EditorTypingSmokeTest.kt` composes an editor in
+a real activity, types with injected key events
+(`Instrumentation.sendStringSync`), and composes and commits through the
+editor's own `InputConnection`. It needs a running emulator or a device; with
+several attached, pick one with `ANDROID_SERIAL`:
+
+```bash
+ANDROID_SERIAL=emulator-5554 ./gradlew :androidApp:connectedDebugAndroidTest
+```
+
+## Browser tests
+
+`browserTests/` is a Playwright project that drives the built wasm demo in
+Chromium. Compose mirrors the semantics tree into the page for accessibility;
+the tests find controls there, click the canvas at their bounds, and read the
+editor's text from its textbox node (the input session's textarea is edited by
+the browser too, so it proves nothing). Build the demo, then run:
+
+```bash
+./gradlew :sampleApp:wasmJsBrowserDistribution
+cd browserTests
+npm ci
+npx playwright install chromium   # once; add --with-deps on a bare machine
+npx playwright test
+```
+
+`playwright.config.ts` serves the demo itself (`serve.mjs`); `DEMO_DIR` points
+it at another build, for example the development one.
+
+## CI
+
+`.github/workflows/ci-build.yml` runs on every push to `main` and
+`native-parity`, on pull requests to `main`, and before a release
+(`deploy.yml` calls it):
+
+| Job | Runner | Runs |
+| --- | --- | --- |
+| `build` | Ubuntu | `./gradlew check`, the goldens included |
+| `desktop-macos` | macOS | The three desktop suites, Mac key bindings |
+| `desktop-windows` | Windows | The three desktop suites |
+| `android-emulator` | Ubuntu, API 35 emulator | The Android smoke test |
+| `browser` | Ubuntu, Chromium | The browser tests against a production build of the demo |
+| `ios` | macOS | The iOS compile, the iOS tests, and the sample app build |
+
+Each keeps its reports as an artifact when it fails.
