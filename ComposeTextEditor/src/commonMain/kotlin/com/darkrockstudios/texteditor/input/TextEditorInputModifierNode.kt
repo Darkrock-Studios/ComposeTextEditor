@@ -65,6 +65,7 @@ internal class TextEditorInputModifierNode(
 		if (focusState.isFocused == isFocused) return
 		isFocused = focusState.isFocused
 		state.hasFocus = isFocused
+		keyCommandHandler.onFocusChanged()
 		syncInputSession(startSession = true)
 	}
 

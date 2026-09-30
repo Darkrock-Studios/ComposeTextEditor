@@ -220,6 +220,19 @@ Ctrl/Cmd+B, I, U, Shift+X and E.
 | Shift+Enter | New line |
 | Ctrl+Enter / Ctrl+Shift+Enter / Alt+Enter | Nothing in the editor (left for the host to claim) |
 
+### 3.5a Tab and focus
+
+On every desktop platform, and in a browser (where Ctrl+Tab switches browser tabs instead).
+
+| Keys | Expected |
+| --- | --- |
+| Tab / Shift+Tab on a body line | Four spaces in / one level of leading spaces or a tab out |
+| Tab over several lines, some of them list items | Every line but the list items is indented; one undo reverts it |
+| Tab at the start of a bullet or numbered item | Nothing; the item keeps its marker and gains no leading spaces |
+| Ctrl+Tab / Ctrl+Shift+Tab (on macOS, Control+Tab) | Focus moves to the next / previous control; the text is unchanged |
+| Escape, then Tab | Focus moves to the next control; any other key between the two cancels this, and so does leaving the editor and coming back |
+| A host with `TabSettings(movesFocus = true)` | Tab and Shift+Tab move focus and never indent |
+
 ### 3.6 Caret motion
 
 On every desktop platform unless a row names one; the macOS chords are in 3.1.

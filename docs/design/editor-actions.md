@@ -158,6 +158,34 @@ Strikethrough follows Google Docs on macOS, Slack and Teams; the other common
 choice, Shift+S, is Save As in most hosts. Inline code follows GitHub and
 Notion.
 
+### Tab
+
+`editor.indent` and `editor.outdent` sit on Tab and Shift+Tab in every table.
+`TextEditorState.tabSettings` (`TabSettings`) configures them:
+
+- `size`, four by default, is how many spaces one indent inserts and one
+  outdent strips. Outdent strips a single leading tab character instead when
+  the line starts with one.
+- `insertTabCharacter` indents with a tab character instead of spaces.
+- `movesFocus` makes Tab and Shift+Tab move focus, as in a form field. The key
+  handler leaves them to the focus system before asking the bindings, so the
+  indent actions stay available to other chords and to host code.
+
+The default keeps Tab indenting, which a writing app wants; `BasicTextField`
+inserts a tab character instead, which a host can choose. Either way the
+keyboard can leave the editor: Tab with Ctrl or Cmd is bound in no table, so
+Ctrl+Tab and Ctrl+Shift+Tab reach the focus system (the GTK, Cocoa and Swing
+convention for a text view that takes Tab), and a Tab after Escape is left to it
+too (CodeMirror's escape, for browsers that keep Ctrl+Tab). Escape arms Tab until
+another key is pressed or focus changes. Alt+Tab still indents where the system
+lets it through, as Option+Tab does in Cocoa.
+
+Tab is list-aware. A list item has no indent level to take until nested lists
+exist (roadmap 5.6), and leading spaces in one do not survive a markdown round
+trip, so Tab at the start of a list item does nothing, and Tab over several
+lines indents all but the list items. Shift+Tab still strips leading spaces
+from any line, list items included.
+
 ### Resolution and consumption
 
 `TextEditorKeyCommandHandler.handleKeyEvent` resolves in three steps:
@@ -391,10 +419,9 @@ primitives stay `internal`.
 
 ## Known limitations and follow-ups
 
-- `Action.Indent` / `Action.Outdent` insert and strip literal spaces against a
-  hard-coded `TAB_SIZE = 4` in `BuiltinEditorActions`. Because actions are
-  open these are overridable, so a list-aware Tab or a code-editor indent is a
-  host concern rather than a library change.
+- Tab cannot nest a list item, since the block model has no nesting (roadmap
+  5.6). A code-editor indent (to the next tab stop, or matching the line above)
+  is a host's own `editor.indent`.
 - Behaviors see typed text, newline, backspace and forward delete. A paste
   is not offered to `onTextInput`; the pasted-URL half of auto-link needs a
   paste seam of its own. Nor is a typed composition the editor ends itself

@@ -385,6 +385,18 @@ class KeyBindingsTest {
 		}
 	}
 
+	/** Ctrl+Tab is how GTK, Cocoa and Swing text views let the keyboard out; the focus system takes it. */
+	@Test
+	fun `tab with ctrl or cmd is left for focus traversal`() {
+		for (bindings in listOf(CtrlKeyBindings, WindowsKeyBindings, MacKeyBindings)) {
+			for (shift in listOf(false, true)) {
+				assertNull(bindings.commandFor(chord(Key.Tab, ctrl = true, shift = shift)), "$bindings ctrl shift=$shift")
+				assertNull(bindings.commandFor(chord(Key.Tab, meta = true, shift = shift)), "$bindings meta shift=$shift")
+			}
+			assertEquals(Action.Indent, bindings.commandFor(chord(Key.Tab, alt = true)), "$bindings alt")
+		}
+	}
+
 	@Test
 	fun `windows and linux honour the cua clipboard chords`() {
 		for (insert in listOf(Key.Insert, Key.NumPadInsert)) {

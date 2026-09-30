@@ -3,8 +3,11 @@ package com.darkrockstudios.texteditor.input
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isAltPressed
+import androidx.compose.ui.input.key.isCtrlPressed
 import androidx.compose.ui.input.key.isMetaPressed
 import androidx.compose.ui.input.key.isShiftPressed
+import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.key.utf16CodePoint
 import androidx.compose.ui.platform.Clipboard
@@ -58,6 +61,7 @@ internal class TextEditorKeyCommandHandler(
 		enabled: Boolean = true
 	): Boolean {
 		if (keyEvent.type != KeyEventType.KeyDown) return false
+		if (yieldsTabToFocus(keyEvent, state)) return false
 
 		val bound = keyBindings.commandFor(keyEvent) ?: return false
 		// The arrow keys are visual: in a right-to-left paragraph Left moves forward
@@ -86,6 +90,34 @@ internal class TextEditorKeyCommandHandler(
 				true
 			}
 		}
+	}
+
+	/**
+	 * Escape arms Tab to move focus until another key is pressed or focus changes. Tab
+	 * leaves it armed, since Android offers one event twice (before the soft keyboard,
+	 * then to the focused node) and the second offer must yield too.
+	 */
+	private var tabArmedByEscape = false
+
+	/** Disarms Escape's Tab: focus has changed, so the Escape belonged to another visit. */
+	fun onFocusChanged() {
+		tabArmedByEscape = false
+	}
+
+	/**
+	 * Whether this Tab or Shift+Tab is left to the focus system, whatever it is bound to:
+	 * always when [TabSettings.movesFocus], and otherwise after Escape, so a keyboard user
+	 * can leave an editor where Tab indents.
+	 */
+	private fun yieldsTabToFocus(event: KeyEvent, state: TextEditorState): Boolean {
+		val key = event.key
+		if (key in modifierKeys) return false
+		if (key != Key.Tab) {
+			tabArmedByEscape = key == Key.Escape
+			return false
+		}
+		val plainTab = !event.isCtrlPressed && !event.isAltPressed && !event.isMetaPressed
+		return plainTab && (tabArmedByEscape || state.tabSettings.movesFocus)
 	}
 
 	/**
@@ -180,6 +212,11 @@ internal class TextEditorKeyCommandHandler(
 			state.selector.extendSelection(initialPosition, state.cursorPosition)
 		}
 	}
+
+	private val modifierKeys = setOf(
+		Key.ShiftLeft, Key.ShiftRight, Key.CtrlLeft, Key.CtrlRight,
+		Key.AltLeft, Key.AltRight, Key.MetaLeft, Key.MetaRight,
+	)
 
 	private val Motion.isVertical: Boolean
 		get() = this == Motion.Up || this == Motion.Down || this == Motion.PageUp || this == Motion.PageDown

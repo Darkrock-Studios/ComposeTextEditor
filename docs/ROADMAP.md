@@ -182,7 +182,7 @@ review.
 | B | Pointer and touch | `textEditorPointerInputHandling.kt`, `state/TextEditorSelectionManager.kt`, `DrawSelectionHandles.kt` | 1.9, 1.12 to 1.16, 1.21 to 1.24, 3.1, 3.2, 3.4 to 3.8, 3.13, 3.15, 4.23 |
 | C | Drawing and geometry | `Draw*.kt`, `cursor/`, `scrollbar/`, `state/TextEditorScrollState.kt`, hit testing | 1.8, 1.10, 1.11, 1.17, 1.18, 3.3, 3.12, 4.14, 7.6, 7.7 |
 | D | Bindings, actions, menu | `input/KeyBindings.kt`, `input/EditorCommand.kt`, `input/BuiltinEditorActions.kt`, `contextmenu/` | 2.1, 2.2, 2.4, 2.5, 2.7 to 2.12, 4.8, 5.8 |
-| E | Input sessions on desktop, iOS, web | `desktopMain`, `iosMain`, `wasmJsMain` under `input/` | 4.2 to 4.7, 4.10 to 4.12, 4.19, 4.21, 4.22, 4.24 to 4.26 |
+| E | Input sessions on desktop, iOS, web | `desktopMain`, `iosMain`, `wasmJsMain` under `input/` | 4.2 to 4.7, 4.10 to 4.12, 4.19, 4.21, 4.22, 4.24 to 4.26, 4.28 |
 | F | Android input | `androidMain` | 0.4, 3.9 to 3.11, 3.14, 4.16, 4.18, 4.20, 4.27 |
 | G | Edit pipeline and undo | `state/TextEditManager.kt`, `state/TextEditHistory.kt`, `state/EditBehavior.kt`, `input/ImeEditLogic.kt` | 1.20, 5.1 to 5.5, 5.9, 6.1 to 6.6, 6.14, 6.15 |
 | H | Clipboard and HTML | `clipboard/`, `html/` | 4.9, 4.13, 4.17, 6.7 to 6.12 |
@@ -606,10 +606,18 @@ fixes what users feel every minute.
   unbound. A deliberate departure from `BasicTextField`, which also breaks the
   line on Ctrl+Enter (Windows, Linux) and Option+Enter (macOS), and from Cocoa,
   which breaks it on Ctrl+Return and Option+Return.
-- [ ] **2.9 Tab. C.** [Opus] [Lane D] Always inserts four spaces and is always
+- [x] **2.9 Tab. C.** [Opus] [Lane D] Always inserts four spaces and is always
   consumed, so there is no keyboard way out of the editor. Make Tab and
   Shift+Tab list-aware, make the tab size and the insert-tab behaviour
   configurable.
+  Done: `TextEditorState.tabSettings` (`TabSettings`: `size`,
+  `insertTabCharacter`, `movesFocus`), defaulting to today's four spaces.
+  Ctrl+Tab and Ctrl+Shift+Tab are unbound everywhere and move focus (GTK,
+  Cocoa, Swing), as does Tab straight after Escape (CodeMirror), and
+  `movesFocus` gives Tab and Shift+Tab to the focus system outright. Nested
+  lists do not exist (5.6), so list-aware means Tab adds no leading spaces to a
+  list item: at an item's start it does nothing, and over several lines it
+  skips the items. See `docs/design/editor-actions.md`, "Tab".
 - [ ] **2.10 Context menu. C.** [Opus] [Lane D] No Menu key or Shift+F10. No
   Undo or Redo. Unavailable items are hidden rather than disabled. The position
   is shifted by the start content padding. `TextEditor` does not expose
@@ -1040,6 +1048,14 @@ iOS Safari; browser tests run in CI.
   smart-punctuation substitution beside the caret (5.2), which native
   `EditText` reports through `updateSelection` and a text-changed notice.
   Add a lighter resync for a local edit.
+- [ ] **4.28 A Tab left to the focus system on iOS and the web. C.** [Opus]
+  [Lane E] Since 2.9 the editor leaves some Tabs unconsumed: Ctrl+Tab, a Tab
+  after Escape, and every Tab under `TabSettings.movesFocus`. On desktop the
+  Compose focus system moves focus. On iOS an unconsumed Tab may reach UIKit's
+  `insertText("\t")` and type a tab character when Compose has nowhere to move
+  focus; on the web the input session's hidden text area may take the browser's
+  default Tab and move DOM focus off the canvas. Confirm on both (the iOS half
+  is in the Mac queue) and consume or drop the Tab in the session if so.
 
 ## Phase 5: writer conveniences
 
@@ -1065,6 +1081,9 @@ iOS Safari; browser tests run in CI.
   title is another heading. It should be body text.
 - [ ] **5.6 Nested lists.** [Fable] [Lane I] Unsupported in the block model and
   the markdown parser (`docs/design/line-blocks.md`, known limitations).
+  Tab and Shift+Tab at a list item's start are the chords to nest and un-nest
+  it; since 2.9 Tab does nothing there (`handleIndent` in
+  `input/BuiltinEditorActions.kt`).
 - [ ] **5.7 Paragraph formatting.** [Fable] [Lane N] Paragraph spacing does not
   exist; rows stack with no gap. No per-paragraph alignment, indent, or line
   height. Global `textIndent`, `lineHeight`, and `textAlign` already work
@@ -1357,4 +1376,5 @@ records results and removes entries that passed.
 | 1.5 | The same iOS compile as 1.1 covers `wordCursor`. In the iOS sample app: Option+Left and Option+Right with a hardware keyboard through "don’t stop", "日本語を勉強します" and "a 😀 b"; double-tap "don’t" and an emoji | Option arrows stop at word ends and starts only, keeping "don’t" whole, stepping Japanese by dictionary word and stopping at the emoji; a double-tap selects the whole contraction or the whole emoji |  Partial, same run. Double-tap selects "don’t" whole and 😀 whole. **Fails:** double-tap on 勉 in 日本語を勉強します selects only 強, so iOS word breaks split kanji per character. Desktop, on the same skia `actual`, segments 勉強 (`TextEditorWordSegmentationTest`), so skia's ICU on iOS seems to lack the CJK dictionary; `NSString` word enumeration or `CFStringTokenizer` would have it. Option+Left and Option+Right not run: hardware keyboard, left for a person |
 | 2.6 | In Safari and Chrome on macOS, open the wasm demo and press Ctrl+A, E, F, B, N, P, D, H and K in a paragraph. The page's hidden text area has the same Cocoa Emacs bindings, so a chord could act twice | Each chord moves or deletes once, as in the desktop sample app | Not run: needs a person at a real keyboard. Browser automation injects key events below the Cocoa text system, so it cannot reproduce a chord acting twice |
 | 4.6 | With a hardware keyboard in the iOS sample app (a person: the simulator tools here cannot press arrow keys), press Up and Down through a wrapped paragraph and a heading | Each press moves the caret one drawn row, once. `verticalPositionFromPosition` now answers from the unstyled layout, so a double move or a move by an undrawn row would come from UIKit handling the arrow through `UITextInput` as well | |
+| 2.9 | In the iOS sample app with a hardware keyboard: press Tab, Ctrl+Tab, then Escape followed by Tab; then set `state.tabSettings = TabSettings(movesFocus = true)` on the demo editor and press Tab | Tab indents by four spaces; Ctrl+Tab, Escape then Tab, and Tab under `movesFocus` either move focus to another control or do nothing, and never type a tab character (4.28) | |
 | 3.8 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64`. 3.8 added `internal expect fun hasNativeTextToolbar()` (commonMain `TouchToolbar.kt`) with `iosMain/.../TouchToolbar.ios.kt` answering true. Then in the simulator: long-press a word, double-tap a word, long-press empty space, tap the caret handle, and drag a selection handle | Compiles. UIKit's edit menu appears over the selection or caret with Cut, Copy, Paste and Select all as applicable (Paste and Select all alone at a bare caret), hides while a handle is dragged and returns when it drops, and goes when the caret moves or the text is scrolled. If no menu appears, the input connection has no toolbar: fall back to `false` in `TouchToolbar.ios.kt` so the context menu stands in |  Partial, same run. Compiles. The UIKit menu works over a selection: double-tap or long-press a word shows Cut, Copy, Paste, Select All, and each works. **Fails:** long-press in an empty document calls `show()` with a zero-width caret rect and only Paste, and UIKit shows nothing (the toolbar reports Hidden right after `showMenu`); a tap on the caret handle never calls `show()`. Native reference: a tap in Safari's focused empty field shows Paste. Also: a long-press past a line's end selects the line's last word instead of placing the caret; with a selection ending at the document end, a long-press below the text counts as on the selection. When the screen was shifted by 4.24 the selection menu did not appear either. Did not fall back to `false`, since the menu works for selections |

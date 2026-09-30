@@ -12,6 +12,9 @@ import com.darkrockstudios.texteditor.clipboard.readHtmlPasteDocument
 import com.darkrockstudios.texteditor.html.selectionAsHtml
 import com.darkrockstudios.texteditor.input.EditorCommand.Action
 import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
+import com.darkrockstudios.texteditor.richstyle.BulletList
+import com.darkrockstudios.texteditor.richstyle.OrderedList
+import com.darkrockstudios.texteditor.richstyle.hasLineBlock
 import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.applyStyleForEditAt
 import com.darkrockstudios.texteditor.state.insertTypedNewline
@@ -21,9 +24,6 @@ import com.darkrockstudios.texteditor.state.moveToPreviousWordStart
 import com.darkrockstudios.texteditor.state.moveToWordEnd
 import com.darkrockstudios.texteditor.state.toggleSpanStyle
 import kotlinx.coroutines.launch
-
-/** One outdent level: a single hard tab, else up to this many spaces. */
-private const val TAB_SIZE = 4
 
 /**
  * Registers the actions the editor ships with. Every one goes through the
@@ -245,12 +245,19 @@ private fun TextEditorState.handleIndent() = editGroup {
 	if (selection != null && selection.start.line != selection.end.line) {
 		indentLineRange(selection.start.line, selection.end.line)
 	} else {
+		val at = selection?.start ?: cursorPosition
+		// A list item has no indent level to take until nested lists exist (roadmap 5.6),
+		// and leading spaces in one do not survive a markdown round trip.
+		if (at.char == 0 && isListItem(at.line)) return@editGroup
 		if (selection != null) {
 			selector.deleteSelection()
 		}
-		insertStringAtCursor(" ".repeat(TAB_SIZE))
+		insertStringAtCursor(tabSettings.indentText)
 	}
 }
+
+private fun TextEditorState.isListItem(line: Int): Boolean =
+	hasLineBlock(line, BulletList) || hasLineBlock(line, OrderedList)
 
 private fun TextEditorState.handleOutdent() {
 	val selection = selector.selection
@@ -261,20 +268,15 @@ private fun TextEditorState.handleOutdent() {
 	}
 }
 
+/** Indents every line in the range but the list items, as Tab at a list item's start does. */
 private fun TextEditorState.indentLineRange(startLine: Int, endLine: Int) {
-	val prefix = " ".repeat(TAB_SIZE)
-	val newText = buildAnnotatedString {
-		for (i in startLine..endLine) {
-			if (i > startLine) append('\n')
-			append(prefix)
-			append(textLines[i])
-		}
+	val lines = (startLine..endLine).filterNot { isListItem(it) }
+	if (lines.isEmpty()) return
+	val prefix = tabSettings.indentText
+	for (line in lines) {
+		val start = CharLineOffset(line, 0)
+		replace(TextEditorRange(start, start), prefix)
 	}
-	val range = TextEditorRange(
-		CharLineOffset(startLine, 0),
-		CharLineOffset(endLine, textLines[endLine].length)
-	)
-	replace(range, newText)
 	selector.updateSelection(
 		CharLineOffset(startLine, 0),
 		CharLineOffset(endLine, textLines[endLine].length)
@@ -287,7 +289,7 @@ private fun TextEditorState.outdentLineRange(startLine: Int, endLine: Int) {
 		for (i in startLine..endLine) {
 			if (i > startLine) append('\n')
 			val line = textLines[i]
-			val remove = leadingOutdentWidth(line)
+			val remove = leadingOutdentWidth(line, tabSettings.size)
 			if (remove > 0) changed = true
 			append(line.subSequence(remove, line.length))
 		}
@@ -307,7 +309,7 @@ private fun TextEditorState.outdentLineRange(startLine: Int, endLine: Int) {
 
 private fun TextEditorState.outdentCurrentLine() {
 	val line = cursorPosition.line
-	val remove = leadingOutdentWidth(textLines[line])
+	val remove = leadingOutdentWidth(textLines[line], tabSettings.size)
 	if (remove == 0) return
 
 	val cursorChar = cursorPosition.char
@@ -315,12 +317,12 @@ private fun TextEditorState.outdentCurrentLine() {
 	cursor.updatePosition(CharLineOffset(line, (cursorChar - remove).coerceAtLeast(0)))
 }
 
-/** Leading indentation to strip for one outdent level: a single hard tab, else up to [TAB_SIZE] spaces. */
-private fun leadingOutdentWidth(line: AnnotatedString): Int {
+/** Leading indentation to strip for one outdent level: a single hard tab, else up to [tabSize] spaces. */
+private fun leadingOutdentWidth(line: AnnotatedString, tabSize: Int): Int {
 	if (line.isEmpty()) return 0
 	if (line[0] == '\t') return 1
 	var count = 0
-	while (count < TAB_SIZE && count < line.length && line[count] == ' ') count++
+	while (count < tabSize && count < line.length && line[count] == ' ') count++
 	return count
 }
 

@@ -258,7 +258,13 @@ private fun formattingToggleFor(key: Key): Action? = when (key) {
 private fun commonCommandFor(event: KeyEvent): EditorCommand? = when (event.navigationKey) {
 	Key.PageUp -> Motion.PageUp
 	Key.PageDown -> Motion.PageDown
-	Key.Tab -> if (event.isShiftPressed) Action.Outdent else Action.Indent
+	// Ctrl+Tab is left to the focus system, the way out of a text view that takes Tab.
+	// Cmd+Tab and Super+Tab belong to the system.
+	Key.Tab -> when {
+		event.isCtrlPressed || event.isMetaPressed -> null
+		event.isShiftPressed -> Action.Outdent
+		else -> Action.Indent
+	}
 	Key.Enter, Key.NumPadEnter -> if (event.isEnterHostChord) null else Action.NewLine
 	Key.Cut -> Action.Cut
 	Key.Copy -> Action.Copy

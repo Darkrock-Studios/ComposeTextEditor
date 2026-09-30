@@ -31,6 +31,7 @@ import com.darkrockstudios.texteditor.cursor.getWrapForDrawing
 import com.darkrockstudios.texteditor.cursor.getWrappedLineIndex
 import com.darkrockstudios.texteditor.effectiveHeight
 import com.darkrockstudios.texteditor.input.EditorActionRegistry
+import com.darkrockstudios.texteditor.input.TabSettings
 import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
 import com.darkrockstudios.texteditor.richstyle.BlockSpanStyle
 import com.darkrockstudios.texteditor.richstyle.CodeFenceSpanStyle
@@ -624,6 +625,9 @@ class TextEditorState(
 	 * a menu can invoke, or to replace a built-in with your own implementation.
 	 */
 	val actions: EditorActionRegistry = EditorActionRegistry()
+
+	/** What Tab and Shift+Tab do: the indent size and character, or moving focus. */
+	var tabSettings: TabSettings by mutableStateOf(TabSettings())
 
 	private val _documentGeneration = MutableStateFlow(0)
 
