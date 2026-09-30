@@ -36,6 +36,7 @@ And now, it's working, and at this point, working pretty well.
 - ☑️ CommonMark Spec (partial)
   - Inline styles (bold, italics, ect)
   - Block styles (code fence, lists, images)
+  - Underline (`<u>`), highlight (`==text==` or `<mark>`), colour and size (`<span style>`)
 
 You can [Give it a try here](https://darkrock-studios.github.io/ComposeTextEditor/), or
 browse

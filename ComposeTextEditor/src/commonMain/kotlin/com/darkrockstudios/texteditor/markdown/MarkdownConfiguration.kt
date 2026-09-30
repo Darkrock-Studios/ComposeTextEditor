@@ -9,8 +9,22 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.sp
 
 /**
+ * The markdown written for a highlight. Both forms are read on import.
+ *
+ * [DOUBLE_EQUALS] is `==text==`, the syntax Obsidian, Typora, iA Writer and
+ * markdown-it's mark plugin share; [MARK_TAG] is the HTML `<mark>` every
+ * CommonMark renderer displays, for documents that leave those editors.
+ */
+enum class HighlightSyntax { DOUBLE_EQUALS, MARK_TAG }
+
+/**
  * Configurable markdown style settings to customize how markdown elements
  * are rendered and parsed in the text editor.
+ *
+ * Styles CommonMark has no syntax for take the de facto forms: underline is
+ * `<u>` (what Obsidian and Typora write, and what every renderer shows),
+ * highlight is [highlightSyntax], and a colour or a font size other than
+ * [defaultTextStyle]'s is an inline `<span style="...">`.
  */
 data class MarkdownConfiguration(
 	val defaultTextStyle: SpanStyle = SpanStyle(fontSize = 16.sp),
@@ -27,6 +41,11 @@ data class MarkdownConfiguration(
 	val strikethroughStyle: SpanStyle = SpanStyle(
 		textDecoration = TextDecoration.LineThrough
 	),
+	val underlineStyle: SpanStyle = SpanStyle(
+		textDecoration = TextDecoration.Underline
+	),
+	val highlightStyle: SpanStyle = SpanStyle(background = Color(0xFFFFF176)),
+	val highlightSyntax: HighlightSyntax = HighlightSyntax.DOUBLE_EQUALS,
 	val blockquoteStyle: SpanStyle = SpanStyle(
 		color = Color.Gray,
 		fontStyle = FontStyle.Italic
@@ -44,6 +63,7 @@ data class MarkdownConfiguration(
 		val DEFAULT_DARK = DEFAULT.copy(
 			//linkStyle = DEFAULT.linkStyle.copy(color = Color.Blue),
 			codeStyle = DEFAULT.codeStyle.copy(background = Color.DarkGray),
+			highlightStyle = DEFAULT.highlightStyle.copy(background = Color(0xFF7A6A00)),
 			//blockquoteStyle = DEFAULT.blockquoteStyle.copy(color = Color.DarkGray)
 		)
 	}

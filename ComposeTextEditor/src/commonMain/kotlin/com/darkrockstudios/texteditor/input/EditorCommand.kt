@@ -111,9 +111,8 @@ sealed interface EditorCommand {
 			val NewLine = Action("editor.newLine", isEdit = true)
 
 			// The formatting toggles apply the styles of the state's markdownConfiguration,
-			// so a markdown editor exports what they apply. Underline has no markdown form
-			// and toggles SpanStyle(textDecoration = TextDecoration.Underline). Each follows
-			// TextEditorState.toggleSpanStyle.
+			// so a markdown editor exports what they apply (underline as `<u>`). Each
+			// follows TextEditorState.toggleSpanStyle.
 			val ToggleBold = Action("editor.toggleBold", isEdit = true)
 			val ToggleItalic = Action("editor.toggleItalic", isEdit = true)
 			val ToggleUnderline = Action("editor.toggleUnderline", isEdit = true)

@@ -1869,6 +1869,17 @@ Shaping is one line per keystroke. These still scale with document length:
   other CommonMark renderers merge adjacent paragraphs.
 - [ ] **7.16** [Opus] [Lane I] No markdown form for underline, highlight,
   colour, or size, so they are lost. Code fence language tags are dropped.
+  Done (inline styles): underline is `<u>` (Obsidian and Typora write it,
+  every renderer shows it; `<ins>` also imports), highlight is `==text==`
+  (Obsidian, Typora, iA Writer, markdown-it-mark) or `<mark>` by
+  `MarkdownConfiguration.highlightSyntax`, both imported, and a colour or a
+  size other than the body's is `<span style="color:#rrggbb">` and
+  `<span style="font-size:20px">` (`px` for sp, `em` for em; `<font color>`
+  also imports). A configured style writes only its own marker, so a theme's
+  bold colour is never the text's. Import reads the parser's inline
+  `HTML_TAG` tokens; `==` is rewritten to `<mark>` in a pre-pass that leaves
+  code, tables, link destinations, URLs and tags alone. Left: fence language
+  tags.
 
 ### Find and replace addon
 

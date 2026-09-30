@@ -47,7 +47,7 @@ private val STANDALONE_IMAGE_REGEX =
  */
 private val MARKDOWN_ESCAPE_CHARS: Set<Char> = setOf(
 	'\\', '`', '*', '_', '{', '}', '[', ']', '(', ')',
-	'#', '+', '-', '.', '!', '|', '>', '~', '<',
+	'#', '+', '-', '.', '!', '|', '>', '~', '<', '=',
 )
 
 private fun String.escapeMarkdownSpecials(): String {
@@ -67,11 +67,12 @@ private data class CodeFenceStripResult(
 )
 
 /**
- * Walks the input top-to-bottom toggling an `inFence` flag at every line whose
- * trimmed content starts with ` ``` ` — those marker lines are dropped from
- * the output. Lines emitted while `inFence` is true have their indices (in the
- * post-strip line numbering) recorded so `importMarkdown` can attach
- * [CodeFence] spans after the parser has built the AnnotatedString.
+ * Walks the input top-to-bottom, opening a fence at a line whose trimmed
+ * content starts with three or more backticks or tildes and closing it at the
+ * next line starting with at least as long a run of the same character; the
+ * marker lines are dropped from the output. Lines emitted inside a fence have
+ * their indices (in the post-strip line numbering) recorded so `importMarkdown`
+ * can attach [CodeFence] spans after the parser has built the AnnotatedString.
  *
  * An unclosed fence at EOF treats the remaining lines as fenced — matches GFM
  * parser behavior and avoids the worst case where a typo silently turns the
@@ -80,13 +81,19 @@ private data class CodeFenceStripResult(
 private fun stripCodeFences(markdown: String): CodeFenceStripResult {
 	val outputLines = mutableListOf<String>()
 	val fencedLineIndices = mutableSetOf<Int>()
-	var inFence = false
+	var fence: String? = null
 	for (line in markdown.lines()) {
-		if (line.trimStart().startsWith("```")) {
-			inFence = !inFence
+		val marker = codeFenceMarker(line)
+		val open = fence
+		if (open == null && marker != null) {
+			fence = marker
 			continue
 		}
-		if (inFence) fencedLineIndices += outputLines.size
+		if (open != null && marker != null && marker[0] == open[0] && marker.length >= open.length) {
+			fence = null
+			continue
+		}
+		if (open != null) fencedLineIndices += outputLines.size
 		outputLines += line
 	}
 	return CodeFenceStripResult(
@@ -171,8 +178,20 @@ class MarkdownExtension(
 			field = value
 			markdownStyles = MarkdownStyles(markdownConfiguration)
 			editorState.markdownConfiguration = value
-			if (previous != value) rebakeHeaderLines(previous, value)
+			if (previous != value) {
+				retiredConfigurations += previous
+				rebakeHeaderLines(previous, value)
+			}
 		}
+
+	/**
+	 * Every configuration this extension has been switched away from. Inline
+	 * spans keep the styles of the configuration they were made under (a
+	 * document is not rewritten on a theme change, so undo keeps matching), and
+	 * the exporter reads a retired configuration's bold, body or link style as
+	 * that marker rather than as the text's own colour.
+	 */
+	private val retiredConfigurations = mutableListOf<MarkdownConfiguration>()
 
 	/**
 	 * Swaps every heading line's baked display style from [previous]'s to
@@ -290,7 +309,7 @@ class MarkdownExtension(
 					}
 					annotated.subSequence(cursor, end)
 						.withoutSpanStyles(baked)
-						.toMarkdown(markdownConfiguration, links)
+						.toMarkdown(markdownConfiguration, links, retiredConfigurations)
 				}
 			}
 			// Fenced lines aren't subject to per-line block prefixes — code fences

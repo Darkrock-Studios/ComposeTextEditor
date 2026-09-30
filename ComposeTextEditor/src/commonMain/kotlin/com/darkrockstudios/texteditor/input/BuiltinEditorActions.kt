@@ -3,7 +3,6 @@ package com.darkrockstudios.texteditor.input
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.style.TextDecoration
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.annotatedstring.normalizeLineEndings
@@ -114,7 +113,7 @@ internal fun EditorActionRegistry.registerBuiltinActions() {
 
 	registerFormattingToggle(Action.ToggleBold) { it.boldStyle }
 	registerFormattingToggle(Action.ToggleItalic) { it.italicStyle }
-	registerFormattingToggle(Action.ToggleUnderline) { UNDERLINE }
+	registerFormattingToggle(Action.ToggleUnderline) { it.underlineStyle }
 	registerFormattingToggle(Action.ToggleStrikethrough) { it.strikethroughStyle }
 	registerFormattingToggle(Action.ToggleInlineCode) { it.codeStyle }
 	register(EditorActionSpec(Action.ClearFormatting) { it.state.clearFormatting() })
@@ -126,8 +125,6 @@ internal fun EditorActionRegistry.registerBuiltinActions() {
 		)
 	)
 }
-
-private val UNDERLINE = SpanStyle(textDecoration = TextDecoration.Underline)
 
 /** Reads the style at invocation, so a later markdown configuration change is honoured. */
 private fun EditorActionRegistry.registerFormattingToggle(

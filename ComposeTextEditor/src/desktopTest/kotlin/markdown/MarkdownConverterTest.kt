@@ -170,12 +170,12 @@ class MarkdownConverterTest {
 	fun `test unsupported style is dropped`() {
 		val input = buildAnnotatedString {
 			append("Hello ")
-			withStyle(SpanStyle(color = androidx.compose.ui.graphics.Color.Red)) {
-				append("red")
+			withStyle(SpanStyle(letterSpacing = 2.sp)) {
+				append("spaced")
 			}
 			append(" world")
 		}
-		assertEquals("Hello red world", input.toMarkdown())
+		assertEquals("Hello spaced world", input.toMarkdown())
 	}
 
 	@Test

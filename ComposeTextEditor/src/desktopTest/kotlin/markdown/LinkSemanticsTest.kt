@@ -107,7 +107,7 @@ class LinkSemanticsTest {
 	}
 
 	@Test
-	fun `underlined text without a link span exports as plain text`() {
+	fun `underlined text without a link span exports as underline, not a link`() {
 		val extension = editor()
 		extension.editorState.setText("plain words")
 		extension.editorState.addStyleSpan(
@@ -115,7 +115,7 @@ class LinkSemanticsTest {
 			SpanStyle(textDecoration = TextDecoration.Underline),
 		)
 
-		assertEquals("plain words", extension.exportAsMarkdown())
+		assertEquals("<u>plain</u> words", extension.exportAsMarkdown())
 	}
 
 	@Test
