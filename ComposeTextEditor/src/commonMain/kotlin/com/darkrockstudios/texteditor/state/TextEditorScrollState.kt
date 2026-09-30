@@ -133,7 +133,8 @@ class TextEditorScrollState(
 					targetValue = targetValue,
 					animationSpec = animationSpec
 				) { value, _ ->
-					_value = value.roundToInt()
+					// The range can shrink mid-animation (an editor growing to its text).
+					_value = value.roundToInt().coerceIn(_minValue, maxValue)
 				}
 			} finally {
 				_isScrollInProgress = false

@@ -33,6 +33,8 @@ private val DefaultContentPadding = PaddingValues(16.dp)
  *   services. It still takes focus, so its text can be selected and copied.
  * @param readOnly Shows the caret for navigation and selection but takes no edits; see
  *   [BasicTextEditor].
+ * @param lineLimits Fills the height given, or grows with the text between a minimum
+ *   and maximum number of lines; see [BasicTextEditor].
  * @param autoFocus Requests focus once when first composed, if [enabled].
  * @param style Colors and text style for the editor and its gutter markers.
  * @param onRichSpanClick Invoked when a rich span (link, list, blockquote, code
@@ -67,6 +69,7 @@ fun TextEditor(
 	contextMenuState: TextEditorContextMenuState? = null,
 	contentDescription: String? = null,
 	readOnly: Boolean = false,
+	lineLimits: EditorLineLimits = EditorLineLimits.Fill,
 ) {
 	Surface(modifier = modifier.focusBorder(state.hasFocus && enabled, style)) {
 		BasicTextEditor(
@@ -84,6 +87,7 @@ fun TextEditor(
 			contextMenuState = contextMenuState,
 			contentDescription = contentDescription,
 			readOnly = readOnly,
+			lineLimits = lineLimits,
 		)
 	}
 }

@@ -1657,9 +1657,9 @@ iOS Safari; browser tests run in CI.
   Android and iOS IME text, do nothing until then. Start a session that shows
   no keyboard, or document the host's `requestFocus` after the toggle.
 - [ ] **7.38** [Opus] [Lane K] `SpellCheckingTextEditor` has no `readOnly`
-  (7.13), and its corrections are menu items that call `correctSpelling`
-  directly, past `ContextMenuActions`' editable gate. Forward `readOnly` and
-  offer no corrections while it is set.
+  or `lineLimits` (7.13), and its corrections are menu items that call
+  `correctSpelling` directly, past `ContextMenuActions`' editable gate.
+  Forward both, and offer no corrections while read-only.
 - [ ] **7.39** [Opus] [Lane H] On the web a disabled or read-only editor (7.13)
   has no input session, so no backing text area receives the browser's `copy`
   event and `ClipboardEventsEffect` answers nothing: Ctrl+C falls back to
@@ -1748,6 +1748,18 @@ Shaping is one line per keystroke. These still scale with document length:
     editable false, not disabled. `TextEditorState.hasFocus` is now public
     (focus whether or not the editor takes input), and the focus border
     follows it. Found: 7.37, 7.38, 7.39.
+  - Sizing: done. `lineLimits: EditorLineLimits` on both editor composables:
+    `Fill`, the default and the old behaviour, or `MultiLine(minLines,
+    maxLines)`, as tall as its laid-out rows between the limits (a row being
+    one line of the text style), plus the vertical content padding, within
+    the host's constraints, then scrolling. A host's `fillMaxSize` still
+    wins, as a fixed height does. The rows follow the width, which only
+    layout settles, so the height follows one pass later on a width change;
+    each row added changes the viewport height, which reshapes the whole
+    document (7.10). Without `maxLines` in a parent that does not bound the
+    height, it takes the whole document, capped at the largest height layout
+    represents. A scroll animation now clamps each frame to the scroll range,
+    which shrinks as the editor grows.
 
 ### Markdown export
 

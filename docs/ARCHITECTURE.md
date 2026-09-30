@@ -176,7 +176,9 @@ selection changes, or `TextEditOperation`s. The view renders what `lineOffsets`
 says and holds no document state of its own. Content padding belongs to the
 editor: the top and bottom padding are scroll range, and the start and end
 padding are applied inside the canvas, below its pointer input, so a press
-anywhere in the padding reaches the nearest row.
+anywhere in the padding reaches the nearest row. The editor fills its height
+unless its `lineLimits` size it to its laid-out rows, read from `lineOffsets`
+in a layout modifier on its outer node.
 
 Accessibility services see the editor through its semantics
 (`EditorSemantics.kt`), modelled on `BasicTextField`'s: the whole text as an

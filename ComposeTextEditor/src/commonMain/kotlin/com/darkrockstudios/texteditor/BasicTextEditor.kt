@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -39,6 +40,7 @@ import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalTextToolbar
+import androidx.compose.ui.text.style.TextIndent
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.toSize
 import com.darkrockstudios.texteditor.clipboard.ClipboardEventsEffect
@@ -69,6 +71,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.merge
+import kotlin.math.ceil
 import kotlin.time.Duration.Companion.milliseconds
 
 private const val CURSOR_BLINK_SPEED_MS = 500L
@@ -91,6 +94,9 @@ private const val CURSOR_BLINK_SPEED_MS = 500L
  *   the keyboard, pointer and screen readers, but takes no edits and raises no soft
  *   keyboard; copy stays available. Accessibility services hear a read-only field
  *   rather than a disabled one. Ignored when not [enabled].
+ * @param lineLimits How tall the editor is: [EditorLineLimits.Fill], the default, takes
+ *   the height it is given; [EditorLineLimits.MultiLine] grows with the text between a
+ *   minimum and maximum number of lines, then scrolls.
  * @param autoFocus Requests focus once when first composed, if [enabled]. For focus at
  *   any other time, see [modifier].
  * @param style Colors and text style for the editor and its gutter markers.
@@ -132,6 +138,7 @@ fun BasicTextEditor(
 	onLinkClick: ((url: String) -> Unit)? = null,
 	contentDescription: String? = null,
 	readOnly: Boolean = false,
+	lineLimits: EditorLineLimits = EditorLineLimits.Fill,
 ) {
 	// Input, edits and the edit semantics follow this; the caret and navigation follow enabled.
 	val editable = enabled && !readOnly
@@ -163,6 +170,23 @@ fun BasicTextEditor(
 	val contentOrigin by rememberUpdatedState(
 		with(density) { Offset(contentPadding.calculateLeftPadding(layoutDirection).roundToPx().toFloat(), 0f) }
 	)
+
+	// One row of the text style, the unit of the line limits; the measurer is not state,
+	// so a new one is picked up when the style or density changes.
+	val rowHeightPx = remember(style.textStyle, density, state.textMeasurer) {
+		state.textMeasurer.measure(" ", style.textStyle.copy(textIndent = TextIndent.None)).multiParagraph.getLineHeight(0)
+	}
+	// Derived, so layout is invalidated only when the height of the rows changes, not on
+	// every edit.
+	val contentHeightPx = remember(state) {
+		derivedStateOf { state.lineOffsets.lastOrNull()?.let { ceil(it.offset.y + it.effectiveHeight).toInt() } ?: 0 }
+	}
+	val verticalPaddingPx = with(density) {
+		contentPadding.calculateTopPadding().roundToPx() + contentPadding.calculateBottomPadding().roundToPx()
+	}
+	val lineLimitsModifier = remember(lineLimits, verticalPaddingPx, rowHeightPx, contentHeightPx) {
+		Modifier.editorLineLimits(lineLimits, verticalPaddingPx, rowHeightPx) { contentHeightPx.value }
+	}
 
 	LaunchedEffect(contentPadding, density) {
 		with(density) {
@@ -284,7 +308,7 @@ fun BasicTextEditor(
 		enabled = editable,
 	) {
 		TextEditorScrollbar(
-			modifier = menuPlacement.modifier.then(modifier),
+			modifier = menuPlacement.modifier.then(modifier).then(lineLimitsModifier),
 			scrollState = state.scrollState,
 		) { editorModifier ->
 			// The horizontal padding is applied inside the canvas, below its pointer input,

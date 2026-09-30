@@ -798,6 +798,17 @@ Rich Text Editor demo, turn the header's Read only switch on.
 3. TalkBack and VoiceOver: the editor is announced as a text field that cannot be
    edited, not as disabled, and its actions offer no paste, cut or set text.
 
+### 8b1a. Growing with the text (7.13)
+
+Rich Text Editor demo, Grow switch on (3 to 8 lines).
+
+1. Empty the document. **Expect:** the editor is three lines tall.
+2. Type line after line. **Expect:** it grows a line at a time from the fourth,
+   stops at eight, then scrolls, with the caret kept in view. Delete lines: it
+   shrinks back to three.
+3. Resize the window narrower (desktop) or rotate (phone). **Expect:** the height
+   follows the new wrapping.
+
 ## 8b2. Saved state (Android)
 
 Markdown Editor (Blank) demo, which uses `rememberSaveableTextEditorState`. Enable

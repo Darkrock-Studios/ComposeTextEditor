@@ -19,6 +19,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.darkrockstudios.texteditor.EditorLineLimits
 import com.darkrockstudios.texteditor.TextEditor
 import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
 import com.darkrockstudios.texteditor.markdown.withMarkdown
@@ -100,6 +101,7 @@ fun TextEditorDemoUi(
 
 	var enabled by remember { mutableStateOf(true) }
 	var readOnly by remember { mutableStateOf(false) }
+	var grow by remember { mutableStateOf(false) }
 	val editable = enabled && !readOnly
 
 	Column(modifier = modifier) {
@@ -117,6 +119,7 @@ fun TextEditorDemoUi(
 			// Roundtrip act on the state directly, so they hide with them.
 			LabeledSwitch("Enabled", enabled) { enabled = it }
 			if (enabled) LabeledSwitch("Read only", readOnly) { readOnly = it }
+			LabeledSwitch("Grow", grow) { grow = it }
 			if (editable && demoContent != DemoContent.Rich) {
 				Button(
 					onClick = {
@@ -149,10 +152,12 @@ fun TextEditorDemoUi(
 			state = state,
 			modifier = Modifier
 				.padding(8.dp)
-				.fillMaxSize(),
+				// A grown editor must not be made to fill the height.
+				.then(if (grow) Modifier.fillMaxWidth() else Modifier.fillMaxSize()),
 			style = style,
 			enabled = enabled,
 			readOnly = readOnly,
+			lineLimits = if (grow) EditorLineLimits.MultiLine(minLines = 3, maxLines = 8) else EditorLineLimits.Fill,
 			contentDescription = "Document",
 			onRichSpanClick = { span, clickType, _ ->
 				when (clickType) {
