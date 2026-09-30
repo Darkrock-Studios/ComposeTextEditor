@@ -1445,10 +1445,24 @@ iOS Safari; browser tests run in CI.
   `MarkdownExtension.nestList` and `unnestList`). Tab inside an item's text
   still inserts, per 2.9. HTML flattens nesting until 7.47. Design in
   `docs/design/line-blocks.md`, "Nested lists".
-- [ ] **5.7 Paragraph formatting.** [Fable] [Lane N] Paragraph spacing does not
+- [x] **5.7 Paragraph formatting.** [Fable] [Lane N] Paragraph spacing does not
   exist; rows stack with no gap. No per-paragraph alignment, indent, or line
   height. Global `textIndent`, `lineHeight`, and `textAlign` already work
-  through `textStyle` (relevant to hammer-editor#927).
+  through `textStyle` (relevant to hammer-editor#927). Done
+  (`docs/design/incremental-relayout.md`, section 11): a paragraph's format
+  is a line-anchored content span, `ParagraphFormatSpanStyle` (space before
+  and after in dp; alignment; an indent and a first-line indent in sp or em,
+  added to a block's own; a line height), set with
+  `TextEditorState.setParagraphFormat` and read with `paragraphFormat`, one
+  undo step; `TextEditorStyle.paragraphSpacing` is the space after every
+  paragraph without one. The spacing lies between a paragraph's last row and
+  the next row, outside every row: the caret, the selection and hit testing
+  stay on rows, and a point in a gap goes to the row above it. Alignment,
+  indents and line height are shaped in, over the block's indent, with the
+  stored line untouched. Enter at a paragraph's start or end carries its
+  format, as word processors do (`RichSpanStyle.boundToParagraph`). The saveable state keeps the format; markdown cannot
+  and loses it (a markdown round trip drops every paragraph format); HTML
+  export could carry it as inline styles (7.49). `ParagraphFormatTest`.
 - [x] **5.8 Clear formatting and unlink** [Opus] [Lane D] actions.
   Done: `Action.ClearFormatting` on Ctrl+\ and Cmd+\ (Google Docs; Word's
   Ctrl+Space switches the input method) and `Action.Unlink`, unbound, through
@@ -2193,6 +2207,20 @@ Shaping is one line per keystroke. These still scale with document length:
   and `cursorData` reads it directly. The document gained an internal
   snapshot-state `revision`, advanced by every published revision, which the
   word count and the semantics read to recompute.
+
+- [ ] **7.49** [Opus] [Lane H] HTML export and import ignore a paragraph's
+  format (5.7): `text-align`, `margin-top`, `margin-bottom`, `text-indent`,
+  `padding-left` and `line-height` on the paragraph would carry it, as the
+  clipboard's HTML and a host's export want.
+- [ ] **7.50** [Opus] [Lane K] `wordSegments()` and the sentence segmentation
+  copy the whole line list (`textLines.toList()`) for a snapshot before
+  scanning, though the list is immutable since 7.8; the spell checker's full
+  scan pays an O(lines) copy it no longer needs.
+- [ ] **7.51** [Opus] [Lane M] The semantics text with links
+  (`EditorSemantics.textWithLinks`) walks every rich span per revision to find
+  the links, so a spell-checked document pays O(spans) per keystroke while a
+  screen reader is on; the per-line index (7.8) could answer for the lines
+  that hold links.
 
 ## Housekeeping
 

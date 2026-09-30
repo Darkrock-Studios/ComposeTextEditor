@@ -65,7 +65,10 @@ Styling lives in two deliberately separate places:
   duplicates, shifting ranges).
 - **Rich spans** (`RichSpan`: a `TextEditorRange` plus a `RichSpanStyle`) are
   decorations Compose's text stack cannot express: list bullets and numbering,
-  blockquote bars, code-fence cards, links, highlights, spell-check underlines.
+  blockquote bars, code-fence cards, links, highlights, spell-check underlines,
+  and a paragraph's own format (`ParagraphFormatSpanStyle`: spacing above and
+  below, alignment, indents, line height), which draws nothing and is shaped
+  into its line's rows and the gaps around them.
   A `RichSpanStyle` paints itself into the canvas (over the text, or under it
   via `drawBackground`) and declares its behavior: `stickyAtStart` for
   line-anchored gutter markers that must track their whole line,
@@ -187,7 +190,9 @@ other line moves with its chunk; a `LineWrap` is built when it is read. The
 rows run line by line, each line's by wrap start, and top to bottom with no
 gaps, so finding the row that holds a position or sits at a height is a binary
 search (`RowSearch.kt`, answered from the `RowList`'s directory without
-building a row), and a frame reads only the rows in view.
+building a row), and a frame reads only the rows in view. A paragraph's
+spacing lies between its last row and the next paragraph's first, outside
+every row, so a point in a gap belongs to the row above it.
 
 ### The view layer
 

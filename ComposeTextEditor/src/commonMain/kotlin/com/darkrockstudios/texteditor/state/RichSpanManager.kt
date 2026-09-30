@@ -230,6 +230,11 @@ class RichSpanManager(
 							)
 						)
 					)
+					// The paragraph left above, now empty, keeps the format it had.
+					if (span.style.boundToParagraph && operation.position.line == start.line) {
+						val above = CharLineOffset(start.line, 0)
+						updatedSpans.add(span.copy(range = TextEditorRange(above, above)))
+					}
 				}
 
 				// Case 2: Newline inserted inside the span
@@ -271,6 +276,12 @@ class RichSpanManager(
 						(operation.position.line == start.line && operation.position.char >= end.char) -> {
 					// Keep span as is
 					updatedSpans.add(span)
+					// A paragraph's format carries to the paragraph Enter makes after it, as
+					// word processors carry it; the new line is empty, so its span starts empty.
+					if (span.style.boundToParagraph && operation.position.line == start.line) {
+						val next = CharLineOffset(start.line + 1, 0)
+						updatedSpans.add(span.copy(range = TextEditorRange(next, next)))
+					}
 				}
 			}
 		} else {
@@ -286,7 +297,14 @@ class RichSpanManager(
 			} else {
 				operation.transformOffset(start, state)
 			}
-			val newEnd = operation.transformOffset(end, state)
+			val transformedEnd = operation.transformOffset(end, state)
+			// A paragraph's format stays on its paragraph when the insert brings more
+			// lines: the clamp trims the end to the line.
+			val newEnd = if (span.style.boundToParagraph && transformedEnd.line > newStart.line) {
+				CharLineOffset(newStart.line, Int.MAX_VALUE)
+			} else {
+				transformedEnd
+			}
 			updatedSpans.add(
 				span.copy(
 					range = span.range.copy(

@@ -100,11 +100,13 @@ class TextEditManager(private val state: TextEditorState) {
 				lineDelta = 0,
 			)
 
-			// The span is clamped onto the document by updateSpans, so its lines are too.
-			is TextEditOperation.RichSpan -> LayoutUpdate.Spans(
-				operation.range.start.line.coerceIn(0, newLineCount - 1),
-				operation.range.end.line.coerceIn(0, newLineCount - 1),
-			)
+			// The span is clamped onto the document as it lands, so its lines are too. A
+			// paragraph format that shapes its text (alignment, indent, line height) shapes.
+			is TextEditOperation.RichSpan -> {
+				val first = operation.range.start.line.coerceIn(0, newLineCount - 1)
+				val last = operation.range.end.line.coerceIn(0, newLineCount - 1)
+				if (operation.style.reshapesLine) LayoutUpdate.Partial(first, last, 0) else LayoutUpdate.Spans(first, last)
+			}
 
 			is TextEditOperation.LineBlock -> lineBlockLayoutUpdate(operation.lines)
 		}

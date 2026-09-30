@@ -427,27 +427,39 @@ Nothing in the model has ever separated paragraphs vertically, and the only
 alignment, indent and line height are the global ones in `textStyle`. The
 block model bakes a `ParagraphStyle` into a block line's text and strips it
 again by equality, so per-paragraph formatting cannot share that slot without
-breaking every block toggle. It is a rich span instead: `ParagraphFormat`, a
-line-anchored (`stickyAtStart`) content style carrying `spaceBefore` and
-`spaceAfter` in dp, and optionally an alignment, a start indent and a first
-line indent in sp, and a line height in sp; each field null means "the
-editor's default". One span per line, ranging over the whole line like a
-block marker, kept by the same edit rules (it survives an edit within its
-line, dies with its line, and an Enter at the line's end continues it onto the
-new line as blocks do, through `LineBlockEditBehavior`). A global default
-comes from `TextEditorStyle.paragraphSpacing` (space after every paragraph,
-zero by default, so existing editors do not move).
+breaking every block toggle. It is a rich span instead:
+`ParagraphFormatSpanStyle`, a line-anchored (`stickyAtStart`) content style
+carrying `spaceBefore` and `spaceAfter` in dp, and optionally an alignment, an
+indent and a first-line indent (sp or em, added to the block's own when the
+units agree), and a line height; each field unspecified means "the editor's
+default". It is not hit-testable, so a click inside the paragraph answers to
+what it covers. One span per line, ranging over the whole line like a block
+marker, kept by the same edit rules (`RichSpanStyle.boundToParagraph`): it
+survives an edit within its line, dies with its line, splits with an Enter
+inside it, an Enter at the line's start or end carries it onto the new
+paragraph (the span re-anchoring adds the copy, so no behavior is involved
+and undoing the Enter takes it away), and a multi-line insert inside it keeps
+it on its own line. A style that changes how its line is shaped says so
+(`reshapesLine`), which makes its span operations shape the line.
+`setParagraphFormat(lines, format)` replaces the format of each line in one
+undo step. A global default comes from `TextEditorStyle.paragraphSpacing`
+(space after every paragraph, zero by default, so existing editors do not
+move), mirrored into `TextEditorState.paragraphSpacing`, whose change is a
+reshape (section 10).
 
-**Layout.** A `LineLayout` carries its space before and after in pixels. Its
-rows' tops start below the space before, and its height includes both, so the
-row list's running heights place the next line below the gap. `LineWrap.offset`
+**Layout.** A `LineLayout` carries its space before and after in pixels,
+resolved with its spans (a span-only pass resolves them again). Its rows'
+tops start below the space before, and its height includes both, so the row
+list's running heights place the next line below the gap. `LineWrap.offset`
 and `paragraphTop` are the text's top, as before, and `effectiveHeight` is
-still the row's text height: the gap is outside every row. Alignment, indent
+still the row's text height: the gap is outside every row. Alignment, indents
 and line height are applied at shaping time by measuring the line with a
-`ParagraphStyle` merged from the block's indent and the format's fields (the
-stored text is untouched, and the merge mirrors the indent baking the pass
-already does for the outer style), so the caret, hit testing and selection
-follow the layout with no further work.
+`ParagraphStyle` merged from the block's indent (or the baked outer indent)
+and the format's fields (the stored text is untouched, and the merge mirrors
+the indent baking the pass already does for the outer style), so the caret,
+hit testing and selection follow the layout with no further work. Adding or
+removing a format that shapes its text is a `Partial` update of its lines, not
+a `Spans` one.
 
 **Geometry with gaps.** The rows stay ordered by line and wrap start and their
 tops non-decreasing, so every binary search in `RowSearch.kt` still holds;
@@ -460,9 +472,9 @@ row; the selection paints its rows only, with the line-break sliver on the
 row's height, leaving the gaps clear; the text drawing and the hover hit
 test read `paragraphTop`; scrolling keeps a row, not its gaps, in view.
 
-**Serialization.** The saver serializes `ParagraphFormat` as a built-in kind
-with its fields as the argument, so a saved state restores it. Markdown has
-no paragraph spacing, alignment, indent or line height: export writes the
-text without them and import reads none, so a document that round-trips
-through markdown loses its paragraph formatting (recorded in 5.7). HTML could
-carry all of it as inline styles on the paragraph; that is a separate item.
+**Serialization.** The saver serializes the format as the built-in kind
+`paragraph` with its fields as the argument, so a saved state restores it.
+Markdown has no paragraph spacing, alignment, indent or line height: export
+writes the text without them and import reads none, so a document that
+round-trips through markdown loses its paragraph formatting (recorded in
+5.7). HTML could carry all of it as inline styles on the paragraph (7.49).

@@ -3,10 +3,12 @@ package com.darkrockstudios.texteditor
 import com.darkrockstudios.texteditor.state.RowList
 
 // Lookups over the laid-out rows ([com.darkrockstudios.texteditor.state.TextEditorState.lineOffsets]).
-// The rows run line by line, a line's rows by wrap start, and top to bottom with each row
-// starting where the one above ends, so every lookup is a binary search. The list is
-// random access: the editor's own rows are a [RowList], which builds each row it hands
-// out and answers the four searches below from its directory without building any.
+// The rows run line by line, a line's rows by wrap start, and top to bottom, each row's
+// top at or below the one above's and each row's bottom likewise, so every lookup is a
+// binary search. A paragraph's spacing (5.7) lies between its last row's bottom and the
+// next row's top, so a height in a gap resolves to the row above it. The list is random
+// access: the editor's own rows are a [RowList], which builds each row it hands out and
+// answers the four searches below from its directory without building any.
 
 /** The first index in `0..size` whose row satisfies [predicate], which must be false and then true across the rows. */
 internal inline fun List<LineWrap>.firstRowWhere(predicate: (LineWrap) -> Boolean): Int {

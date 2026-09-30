@@ -289,6 +289,10 @@ fun BasicTextEditor(
 		state.codeFenceBorderColor = style.codeFenceBorderColor
 	}
 
+	LaunchedEffect(style.paragraphSpacing) {
+		state.paragraphSpacing = style.paragraphSpacing
+	}
+
 	// Re-run layout when an asynchronous block-state change (e.g. an image
 	// finishing its load) changes a [BlockSpanStyle]'s reported height.
 	// `updateBookKeeping` reads block heights but isn't itself snapshot-tracked,

@@ -21,6 +21,8 @@ import androidx.compose.ui.text.style.TextIndent
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.LineWrap
 import com.darkrockstudios.texteditor.TextEditorRange
@@ -43,6 +45,7 @@ import com.darkrockstudios.texteditor.input.TabSettings
 import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
 import com.darkrockstudios.texteditor.richstyle.BlockSpanStyle
 import com.darkrockstudios.texteditor.richstyle.LineBlockEditBehavior
+import com.darkrockstudios.texteditor.richstyle.ParagraphFormatSpanStyle
 import com.darkrockstudios.texteditor.richstyle.RichSpan
 import com.darkrockstudios.texteditor.richstyle.RichSpanStyle
 import com.darkrockstudios.texteditor.richstyle.normalizeLineBlocks
@@ -98,6 +101,19 @@ class TextEditorState(
 		}
 
 	var textStyle: TextStyle = TextStyle.Default
+		internal set(value) {
+			if (field != value) {
+				field = value
+				invalidateLayoutInputs()
+				updateBookKeeping(LayoutUpdate.Reshape)
+			}
+		}
+
+	/**
+	 * The space below every paragraph, unless the paragraph's own format says
+	 * otherwise; mirrored from [com.darkrockstudios.texteditor.TextEditorStyle.paragraphSpacing].
+	 */
+	var paragraphSpacing: Dp = 0.dp
 		internal set(value) {
 			if (field != value) {
 				field = value
@@ -1542,13 +1558,15 @@ class TextEditorState(
 		val lines = content.lineList
 		val spans = content.spanIndex
 		val shaper = LineShaper()
-		val width = viewportSize.width
+		val inputs = lineInputs()
 		val scrollBefore = scrollState.value
 		val topLine = if (current.size == 0) 0 else current.lineOfRow(current.searchLastRowAtOrAbove(scrollBefore.toFloat()).coerceIn(0, current.size - 1))
 		val topBefore = current.lineTop(topLine)
 		val layouts = ArrayList<LineLayout>(last - first + 1)
 		for (line in first..last) {
-			layouts += current.layoutOf(line).reshaped(shaper.shape(lines[line]), line, spans.spansOn(line), density, width, layoutInputGeneration)
+			val onLine = spans.spansOn(line)
+			val format = onLine.paragraphFormat(line)
+			layouts += current.layoutOf(line).reshaped(shaper.shape(lines[line], format), line, onLine, format, inputs, layoutInputGeneration)
 		}
 		val settled = current.splice(first, last + 1, layouts, spans)
 		publishRows(settled)
@@ -1634,15 +1652,20 @@ class TextEditorState(
 		if (isProvisional(current, line)) reshapeLines(line, line)
 	}
 
+	/** The inputs of one pass besides the shaping: density, viewport width and the paragraph spacing in pixels. */
+	private fun lineInputs() = LineInputs(density, viewportSize.width, density?.run { paragraphSpacing.toPx() } ?: 0f)
+
 	/** A full pass: every line shaped, every fact derived in line order. */
 	private fun layoutAll(lines: LineList, spans: SpanIndex): RowList {
 		val shaper = LineShaper()
 		val facts = LineFacts(spans)
-		val width = viewportSize.width
+		val inputs = lineInputs()
 		val layouts = ArrayList<LineLayout>(lines.size)
 		for (line in 0 until lines.size) {
 			facts.next(line)
-			layouts += LineLayout.of(shaper.shape(lines[line]), line, spans.spansOn(line), density, width, facts, layoutInputGeneration)
+			val onLine = spans.spansOn(line)
+			val format = onLine.paragraphFormat(line)
+			layouts += LineLayout.of(shaper.shape(lines[line], format), line, onLine, format, inputs, facts, layoutInputGeneration)
 		}
 		return RowList.of(layouts, spans)
 	}
@@ -1676,15 +1699,19 @@ class TextEditorState(
 		val facts = LineFacts(spans)
 		if (first > 0) facts.resume(previous.layoutOf(oldIndex(first - 1)).counters)
 		val shaper = LineShaper()
-		val width = viewportSize.width
+		val inputs = lineInputs()
 		val layouts = ArrayList<LineLayout>(end - first + 2)
 		var line = first
 		while (line <= lastLine) {
 			facts.next(line)
 			val old = if (line in shapeFirst..shapeLast) null else previous.layoutOf(oldIndex(line))
 			val layout = when {
-				old == null -> LineLayout.of(shaper.shape(lines[line]), line, spans.spansOn(line), density, width, facts, layoutInputGeneration)
-				line in spansFirst..spansLast -> old.withSpans(line, spans.spansOn(line), density, width, facts)
+				old == null -> {
+					val onLine = spans.spansOn(line)
+					val format = onLine.paragraphFormat(line)
+					LineLayout.of(shaper.shape(lines[line], format), line, onLine, format, inputs, facts, layoutInputGeneration)
+				}
+				line in spansFirst..spansLast -> old.withSpans(line, spans.spansOn(line), inputs, facts)
 				else -> old.withFacts(facts)
 			}
 			layouts += layout
@@ -1722,13 +1749,22 @@ class TextEditorState(
 			maxHeight = Constraints.Infinity
 		)
 
-		fun shape(line: AnnotatedString): TextLayoutResult {
-			// Skip if the line already has a ParagraphStyle (block line):
-			// Compose forbids overlapping ParagraphStyle ranges.
-			val measureLine = if (bakedIndentStyle != null && line.paragraphStyles.isEmpty()) {
-				buildAnnotatedString { withStyle(bakedIndentStyle) { append(line) } }
-			} else {
-				line
+		/**
+		 * Shapes [line], with [format]'s alignment, indents and line height over the
+		 * paragraph style the line carries (a block's indent) or the baked one. A line
+		 * holds one paragraph style, so the merged one replaces it for measuring only.
+		 */
+		fun shape(line: AnnotatedString, format: ParagraphFormatSpanStyle? = null): TextLayoutResult {
+			val measureLine = when {
+				format != null && format.shapesText -> {
+					val base = line.paragraphStyles.firstOrNull()?.item ?: bakedIndentStyle
+					AnnotatedString(line.text, line.spanStyles, listOf(AnnotatedString.Range(format.paragraphStyleOver(base), 0, line.length)))
+				}
+				// Skip if the line already has a ParagraphStyle (block line):
+				// Compose forbids overlapping ParagraphStyle ranges.
+				bakedIndentStyle != null && line.paragraphStyles.isEmpty() ->
+					buildAnnotatedString { withStyle(bakedIndentStyle) { append(line) } }
+				else -> line
 			}
 			return try {
 				textMeasurer.measure(text = measureLine, style = measureStyle, constraints = constraints)
@@ -1803,15 +1839,18 @@ class TextEditorState(
 			// single line.
 			var first = Int.MAX_VALUE
 			var last = -1
+			var reshapes = false
 			for (span in remove) {
 				first = minOf(first, span.range.start.line)
 				last = maxOf(last, span.range.end.line)
+				reshapes = reshapes || span.style.reshapesLine
 			}
 			for (span in added) {
 				first = minOf(first, span.range.start.line)
 				last = maxOf(last, span.range.end.line)
+				reshapes = reshapes || span.style.reshapesLine
 			}
-			updateBookKeeping(LayoutUpdate.Spans(first, last))
+			updateBookKeeping(if (reshapes) LayoutUpdate.Partial(first, last, 0) else LayoutUpdate.Spans(first, last))
 		}
 	}
 

@@ -81,6 +81,10 @@ fun RichTextView(
 		state.textStyle = style.textStyle
 	}
 
+	LaunchedEffect(style.paragraphSpacing) {
+		state.paragraphSpacing = style.paragraphSpacing
+	}
+
 	val density = LocalDensity.current
 
 	LaunchedEffect(density) {
