@@ -20,7 +20,6 @@ import com.darkrockstudios.texteditor.spellcheck.api.EditorSpellChecker
 import com.darkrockstudios.texteditor.spellcheck.api.Suggestion
 import com.darkrockstudios.texteditor.spellcheck.rememberSpellCheckState
 import utils.CountingSpellChecker
-import utils.SpellCheckUiTestScope
 import utils.spellCheckUiTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -128,12 +127,6 @@ class SpellCheckIgnoreE2eTest {
 		}
 	}
 
-	private fun SpellCheckUiTestScope.flagged(): List<String> =
-		state.textState.richSpanManager.getAllRichSpans()
-			.filter { it.style is SpellCheckStyle }
-			.sortedBy { it.range.start }
-			.map { state.textState.getStringInRange(it.range) }
-
 	@Test
 	fun `ignoring a lowercase word clears it capitalised and in capitals`() {
 		spellCheckUiTest(
@@ -144,12 +137,12 @@ class SpellCheckIgnoreE2eTest {
 			awaitMenuItem(ignore)
 			clickMenuItem(ignore)
 
-			assertEquals(listOf("kOtlinx"), flagged(), "only a spelling with other capitals stays flagged")
+			assertEquals(listOf("kOtlinx"), flaggedWords, "only a spelling with other capitals stays flagged")
 
 			state.textState.cursor.updatePosition(CharLineOffset(0, 0))
 			typeText("Kotlinx ")
 			letSpellCheckSettle()
-			assertEquals(listOf("kOtlinx"), flagged())
+			assertEquals(listOf("kOtlinx"), flaggedWords)
 		}
 	}
 
@@ -163,7 +156,7 @@ class SpellCheckIgnoreE2eTest {
 			awaitMenuItem(ignore)
 			clickMenuItem(ignore)
 
-			assertEquals(emptyList(), flagged())
+			assertEquals(emptyList(), flaggedWords)
 		}
 	}
 
@@ -177,7 +170,7 @@ class SpellCheckIgnoreE2eTest {
 			awaitMenuItem(ignore)
 			clickMenuItem(ignore)
 
-			assertEquals(listOf("nasa", "Nasa"), flagged())
+			assertEquals(listOf("nasa", "Nasa"), flaggedWords)
 		}
 	}
 
@@ -194,7 +187,7 @@ class SpellCheckIgnoreE2eTest {
 			clickMenuItem(addToDictionary)
 
 			assertEquals(listOf("zorp"), added)
-			assertEquals(emptyList(), flagged())
+			assertEquals(emptyList(), flaggedWords)
 		}
 	}
 

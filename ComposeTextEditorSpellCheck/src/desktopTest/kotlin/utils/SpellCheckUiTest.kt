@@ -129,6 +129,13 @@ class SpellCheckUiTestScope(
 		get() = state.textState.richSpanManager.getAllRichSpans()
 			.count { it.style is SpellCheckStyle }
 
+	/** The words spell check flags, in document order. */
+	val flaggedWords: List<String>
+		get() = state.textState.richSpanManager.getAllRichSpans()
+			.filter { it.style is SpellCheckStyle }
+			.sortedBy { it.range.start }
+			.map { state.textState.getStringInRange(it.range) }
+
 	/** Types printable characters through real desktop key events; `\n` and `\t` become Enter/Tab. */
 	fun typeText(text: String) = test.typeText(text)
 

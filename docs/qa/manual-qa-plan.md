@@ -745,6 +745,8 @@ Guards #89, #90, #65, #83.
     caret. With the caret in a correct word: the standard menu.
 12. Type "kotlinx Kotlinx KOTLINX NASA nasa" and choose Ignore on "kotlinx", then on
     "NASA". **Expect:** the three kotlinx squiggles clear together; "nasa" stays flagged.
+13. Type "the U.S.A. and the U.S.'s, e.g. a Ph.D." **Expect:** no squiggles on any part of
+    the abbreviations.
 
 ## 8. Performance and smoke pass
 

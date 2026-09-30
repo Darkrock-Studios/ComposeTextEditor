@@ -41,6 +41,9 @@ for the word at the caret. Toggle checking at runtime with
 `state.setSpellCheckingEnabled(...)`, or fetch suggestions yourself via
 `state.getSuggestions(word)`.
 
+Numbers and single letters are not checked, nor two letters a period joins to another
+letter, so abbreviations such as "U.S.A.", "e.g." and "Ph.D." draw no squiggles.
+
 The menu offers "Ignore", which stops flagging the word for the session
 (`state.ignoreWord(word)`, listed in `state.ignoredWords`). Pass `onAddToDictionary` to
 also offer "Add to dictionary"; it receives the word to store in your dictionary, and the

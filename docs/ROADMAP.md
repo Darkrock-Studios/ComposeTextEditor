@@ -1885,7 +1885,7 @@ Shaping is one line per keystroke. These still scale with document length:
 - [x] **7.30** [Opus] [Lane K] `SpellCheckingTextEditor` does not forward
   `onLinkClick` or `onRichSpanClickEvent` (1.15) to the editor it wraps, so
   spell-checked editors have no link convention and no modifier state.
-- [ ] **7.31** [Opus] [Lane K] Since 1.5 words come from ICU, which breaks
+- [x] **7.31** [Opus] [Lane K] Since 1.5 words come from ICU, which breaks
   letters at a period: "U.S.A." reaches the checker as U, S and A, and the s
   of "U.S.'s" on its own. Skip one-letter segments, or rejoin an abbreviation
   before the lookup, so typeset abbreviations stop drawing squiggles.

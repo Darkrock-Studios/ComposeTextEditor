@@ -341,7 +341,7 @@ class SpellCheckState(
 	) {
 		val sp = spellChecker ?: return
 		settlePartialCheck(
-			range = range,
+			range = range.acrossDots(computedAgainst),
 			computedAgainst = computedAgainst,
 			scan = { region ->
 				val candidates = textState.wordSegmentsInRange(region).filter(::shouldSpellCheck).filterNot(::isAccepted)
@@ -450,7 +450,8 @@ class SpellCheckState(
 
 			// Resolve the async lookup first; only mutate spans afterward so a
 			// cancellation can't leave the word's span removed-but-not-restored.
-			val isSpelledCorrectly = isAccepted(segment) || sp.isCorrectWord(segment.lookupText)
+			val isSpelledCorrectly = !shouldSpellCheck(segment) || isAccepted(segment) ||
+				sp.isCorrectWord(segment.lookupText)
 
 			if (spellCheckingEnabled) {
 				val diff = LineDiff(computedAgainst, textState.textLines)
@@ -471,9 +472,19 @@ class SpellCheckState(
 		}
 	}
 
+	/**
+	 * Numbers, single letters and two letters a period joins to another letter are not
+	 * checked. Words break at a period, so "U.S.A." arrives as three letters and "Ph.D." as
+	 * "Ph" and "D". Longer words stay checked, so a missing space in "mat.Teh" still flags
+	 * the typo.
+	 */
 	private fun shouldSpellCheck(segment: WordSegment): Boolean {
-		// Skip segments that are purely numeric
-		return !segment.text.all { it.isDigit() }
+		val text = segment.text
+		if (text.all { it.isDigit() } || text.length == 1) return false
+		if (text.length > 2) return true
+		val line = textState.textLines.getOrNull(segment.range.start.line) ?: return true
+		return !line.dotsOnToLetter(segment.range.start.char - 1, -1) &&
+			!line.dotsOnToLetter(segment.range.end.char, 1)
 	}
 
 	/** The segment's text as the dictionary spells it: with a straight apostrophe. */
@@ -540,6 +551,22 @@ class SpellCheckState(
 		return combined
 	}
 }
+
+/**
+ * Reaches over a period at either end into the word beyond, whose check depends on this
+ * range's text: typing the "D" of "Ph.D" clears the flag on "Ph".
+ */
+private fun TextEditorRange.acrossDots(lines: List<AnnotatedString>): TextEditorRange {
+	val startLine = lines.getOrNull(start.line)?.text ?: return this
+	val endLine = lines.getOrNull(end.line)?.text ?: return this
+	val from = if (startLine.dotsOnToLetter(start.char - 1, -1)) start.copy(char = start.char - 2) else start
+	val to = if (endLine.dotsOnToLetter(end.char, 1)) end.copy(char = end.char + 2) else end
+	return TextEditorRange(from, to)
+}
+
+/** Whether a period at [index] leads, one more step in [direction], to a letter. */
+private fun CharSequence.dotsOnToLetter(index: Int, direction: Int): Boolean =
+	getOrNull(index) == '.' && getOrNull(index + direction)?.isLetter() == true
 
 /**
  * How an accepted word is kept: as the dictionary spells it, and lowercased when it is in
