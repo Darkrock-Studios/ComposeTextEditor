@@ -111,10 +111,11 @@ internal fun TextEditorState.regexReplacements(
 /**
  * [replacement] expanded against [match] in the syntax of Kotlin's `Regex.replace`: `$n` and
  * `${name}` insert a group, empty when it took no part in the match, and a backslash makes the
- * next character literal. A group number takes as many digits as still name a group, so `$12`
- * with one group is group 1 then `2`. Where `Regex.replace` would throw, the text is inserted as
- * written instead: a reference to a group the pattern lacks, a `$` that starts no reference, and
- * a trailing backslash.
+ * next character literal. Beyond that syntax, as in most editors' find and replace, `\n` and
+ * `\t` insert a line break and a tab. A group number takes as many digits as still name a
+ * group, so `$12` with one group is group 1 then `2`. Where `Regex.replace` would throw, the
+ * text is inserted as written instead: a reference to a group the pattern lacks, a `$` that
+ * starts no reference, and a trailing backslash.
  */
 internal fun expandReplacement(match: MatchResult, replacement: String): String = buildString {
 	val lastGroup = match.groups.size - 1
@@ -123,7 +124,13 @@ internal fun expandReplacement(match: MatchResult, replacement: String): String 
 		val c = replacement[i]
 		val next = replacement.getOrNull(i + 1)
 		if (c == '\\' && next != null) {
-			append(next)
+			append(
+				when (next) {
+					'n' -> '\n'
+					't' -> '\t'
+					else -> next
+				}
+			)
 			i += 2
 		} else if (c == '$' && next != null && next.isAsciiDigit() && next.digitToInt() <= lastGroup) {
 			var group = next.digitToInt()

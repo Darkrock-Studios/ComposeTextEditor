@@ -186,7 +186,7 @@ review.
 | F | Android input | `androidMain` | 0.4, 3.9 to 3.11, 3.14, 3.17, 4.16, 4.18, 4.20, 4.27, 4.30, 4.31, 7.40 |
 | G | Edit pipeline and undo | `state/TextEditManager.kt`, `state/TextEditHistory.kt`, `state/EditBehavior.kt`, `input/ImeEditLogic.kt` | 1.20, 5.1 to 5.5, 5.9, 6.1 to 6.6, 6.14, 6.15, 6.17, 6.22, 6.23 |
 | H | Clipboard and HTML | `clipboard/`, `html/`, `dragdrop/` | 4.9, 4.13, 4.17, 6.7 to 6.13, 6.18 to 6.21, 7.39 |
-| I | Markdown and block model | `markdown/`, `richstyle/` | 5.6, 7.14 to 7.16 |
+| I | Markdown and block model | `markdown/`, `richstyle/` | 5.6, 7.14 to 7.16, 7.43 |
 | J | Find addon | `ComposeTextEditorFind/` | 7.17 to 7.19, 7.26, 7.29, 7.42 |
 | K | Spell check addon | `ComposeTextEditorSpellCheck/` | 7.20 to 7.22, 7.28, 7.30, 7.31, 7.34, 7.35, 7.38 |
 | L | Tests and CI | test sources, `.github/workflows/` | 0.1 to 0.3, 0.5 to 0.9, 4.1, 4.15 |
@@ -1859,6 +1859,14 @@ Shaping is one line per keystroke. These still scale with document length:
   find in selection scopes to the old offsets, which can point at other text or
   past the end of a line. Keep it as a tracked decoration span, like the scope,
   or drop it on any edit.
+
+- [ ] **7.43 Line breaks inserted into a line block. R.** [Opus] [Lane I]
+  Text with a line break inserted into a list item or other line block leaves
+  the new line as body text, where Enter at the same spot continues the block
+  (and Word and Google Docs keep both halves in the list). Seen with find's
+  regex replace of ", " by `\n` in "- a, b", which exports "- a" then "b".
+  Check programmatic `replace` and plain paste too; fix it in the edit
+  pipeline, not in the find addon.
 
 ### Spell check addon
 

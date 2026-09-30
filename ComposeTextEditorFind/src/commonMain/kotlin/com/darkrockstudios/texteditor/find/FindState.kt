@@ -300,7 +300,8 @@ class FindState(
 	 * Replace the current match with the given text and move to the next match.
 	 * The replacement takes the styling at the start of the text it replaces.
 	 * @param replaceText The text to replace with. With [useRegex], `$1`, `${name}` and the
-	 * other group references of Kotlin's `Regex.replace` are expanded; see the module docs.
+	 * other group references of Kotlin's `Regex.replace` are expanded, and `\n` and `\t`
+	 * insert a line break and a tab; see the module docs.
 	 * @return true if a replacement was made, false if no current match
 	 */
 	fun replaceCurrent(replaceText: String): Boolean {

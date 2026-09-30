@@ -66,6 +66,26 @@ class FindRegexReplaceTest {
 	}
 
 	@Test
+	fun `backslash n inserts a line break`() = runTest {
+		assertEquals("a\nb", replaceAll("a,b", ",", """\n"""))
+	}
+
+	@Test
+	fun `backslash t inserts a tab`() = runTest {
+		assertEquals("a\tb", replaceAll("a,b", ",", """\t"""))
+	}
+
+	@Test
+	fun `an escaped backslash before n stays literal`() = runTest {
+		assertEquals("a\\nb", replaceAll("a,b", ",", """\\n"""))
+	}
+
+	@Test
+	fun `without regex backslash n stays literal`() = runTest {
+		assertEquals("a\\nb", replaceAll("a,b", ",", """\n""", regex = false))
+	}
+
+	@Test
 	fun `a group that did not take part in the match is empty`() = runTest {
 		assertEquals("<> <x>", replaceAll("a ax", """a(x)?""", "<$1>"))
 	}
@@ -150,5 +170,56 @@ class FindRegexReplaceTest {
 
 		find.search("a")
 		assertEquals(4, find.matchCount)
+	}
+
+	@Test
+	fun `replace current with a line break splits the line`() = runTest {
+		val textState = editor("a,b,c")
+		val find = FindState(textState, backgroundScope)
+		find.toggleRegex(true)
+		find.search(",")
+
+		find.replaceCurrent("""\n""")
+
+		assertEquals("a\nb,c", textState.text)
+	}
+
+	@Test
+	fun `a line break replacement keeps the styling on both lines and is one undo step`() = runTest {
+		val bold = SpanStyle(fontWeight = FontWeight.Bold)
+		val textState = editor(buildAnnotatedString { withStyle(bold) { append("cat,dog") } })
+		val find = FindState(textState, backgroundScope)
+		find.toggleRegex(true)
+		find.search(",")
+
+		assertEquals(1, find.replaceAll("""\n"""))
+
+		assertEquals("cat\ndog", textState.text)
+		textState.textLines.forEach { line ->
+			assertEquals(
+				listOf(0 until line.length),
+				line.spanStyles.filter { it.item == bold }.map { it.start until it.end },
+				"bold covers \"${line.text}\"",
+			)
+		}
+		textState.undo()
+		assertEquals("cat,dog", textState.text)
+		assertEquals(false, textState.canUndo)
+	}
+
+	@Test
+	fun `replace all in selection keeps its scope across inserted line breaks`() = runTest {
+		val textState = editor("a,b,c x,y")
+		val find = FindState(textState, backgroundScope)
+		textState.selector.updateSelection(CharLineOffset(0, 0), CharLineOffset(0, 5))
+		find.toggleInSelection(true)
+		find.toggleRegex(true)
+		find.search(",")
+
+		assertEquals(2, find.replaceAll("""\n"""))
+		assertEquals("a\nb\nc x,y", textState.text)
+
+		find.search("[abcxy]")
+		assertEquals(3, find.matchCount)
 	}
 }
