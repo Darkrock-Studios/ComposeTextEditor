@@ -103,6 +103,9 @@ private const val CURSOR_BLINK_SPEED_MS = 500L
  * @param keyBindings Chord-to-command mapping, defaulting to [LocalKeyBindings].
  *   Bind chords to actions registered on [TextEditorState.actions] to add
  *   shortcuts of your own.
+ * @param contentDescription The editor's label for accessibility services, read with
+ *   its text ("Notes, edit box, ..."). Set it here rather than through [modifier]'s
+ *   semantics, which land on a container around the editable node.
  */
 @Composable
 fun BasicTextEditor(
@@ -119,6 +122,7 @@ fun BasicTextEditor(
 	keyBindings: KeyBindings = LocalKeyBindings.current,
 	onRichSpanClickEvent: RichSpanClickEventListener? = null,
 	onLinkClick: ((url: String) -> Unit)? = null,
+	contentDescription: String? = null,
 ) {
 	// Capture platform view for IME cursor synchronization (Android only)
 	CaptureViewForIme(state)
@@ -168,16 +172,18 @@ fun BasicTextEditor(
 			.collect { (keyboardHeight, _) -> state.updateKeyboardCover(keyboardHeight) }
 	}
 	val caretFocusRect = remember(state) { CaretFocusRect(state) }
-	val semanticsModifier = remember(state, enabled, focusRequester) {
-		Modifier.editorSemantics(state, enabled, focusRequester)
-	}
-
 	// Use provided context menu state or create internal one
 	val internalContextMenuState = remember { TextEditorContextMenuState() }
 	val effectiveContextMenuState = contextMenuState ?: internalContextMenuState
 
 	val contextMenuActions = remember(state, clipboard, enabled) {
 		ContextMenuActions(state, clipboard, state.scope, enabled)
+	}
+	val latestOnLinkClick by rememberUpdatedState(onLinkClick)
+	val semanticsModifier = remember(state, enabled, focusRequester, contextMenuActions, contentDescription) {
+		Modifier.editorSemantics(state, enabled, focusRequester, contextMenuActions, contentDescription) { url ->
+			latestOnLinkClick?.invoke(url)
+		}
 	}
 	val menuPlacement = remember(state, effectiveContextMenuState) {
 		ContextMenuPlacement(state, effectiveContextMenuState)

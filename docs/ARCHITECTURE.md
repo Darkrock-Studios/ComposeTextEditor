@@ -181,7 +181,11 @@ Accessibility services see the editor through its semantics
 editable field, the selection, and the actions a screen reader or test drives.
 A disabled editor reports itself disabled and offers no edit actions. Its
 `setText` is an edit, not a document load: it replaces only the part of the
-text that differs, as one undo step, so the rest keeps its spans. The
+text that differs, as one undo step, so the rest keeps its spans. Copy, cut,
+paste and the long-press menu run through the action registry, as the keyboard
+and context menu do, so a read-only editor refuses the same edits; links ride
+in the text as URL links. `getTextLayoutResult` is a whole-document layout
+measured on request, because the editor has no single one. The
 document is not snapshot state, so the semantics block reads `lineOffsets`,
 which every edit republishes, to stay current.
 

@@ -813,6 +813,26 @@ Access Bridge (Windows) or the AT-SPI bridge (Linux), which must be enabled firs
    survive; one undo (Ctrl+Z or the toolbar) reverts the whole replacement, and a
    second undo reaches the edits made before it.
 
+### 8c.3 Reading, selecting and the clipboard
+
+Rich Text Editor demo (its editor is labelled "Document"), with a link added from the
+toolbar's Link button over a word.
+
+1. TalkBack: move accessibility focus to the editor. **Expect:** "Document, edit box",
+   then the text. Swipe with the reading control set to Lines, then Words, then
+   Characters: each step moves by one drawn row, word or character. Double-tap and
+   hold: the context menu opens. With a selection made through TalkBack's text
+   selection mode, the actions menu offers Copy, Cut and Paste, and each works. The
+   Links menu lists the link and opens it.
+2. VoiceOver (iOS): swipe to the editor: "Document, text field", then the text.
+   Rotor set to Lines, Words, Characters: swipe up and down moves by each. Rotor Edit
+   offers Copy, Cut, Paste and Select All, and each works.
+3. VoiceOver (macOS), NVDA, Orca: Tab to the editor. **Expect:** the label and the text
+   are read; arrow keys read the character, word (Ctrl or Option with the arrows) or
+   line the caret moves over; Shift with the arrows reads what is selected.
+4. Turn Enabled off and repeat 1 and 2. **Expect:** Copy only; no Cut, Paste or Set
+   text.
+
 ## 9. Consumer API sanity
 
 Guards #82, #48, #87, #90. Not strictly manual UI testing, but worth one pass before

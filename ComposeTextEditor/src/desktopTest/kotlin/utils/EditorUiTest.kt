@@ -82,6 +82,7 @@ internal fun editorUiTest(
 	textToolbar: TextToolbar? = null,
 	textStyle: TextStyle = TextStyle.Default,
 	trailingFocusable: Boolean = false,
+	contentDescription: String? = null,
 	block: EditorUiTestScope.() -> Unit,
 ) = runSkikoComposeUiTest(density = Density(density)) {
 	val clipboard = InMemoryClipboard()
@@ -111,6 +112,7 @@ internal fun editorUiTest(
 					onRichSpanClickEvent = onRichSpanClickEvent,
 					onLinkClick = onLinkClick,
 					keyBindings = keyBindings,
+					contentDescription = contentDescription,
 				)
 				if (trailingFocusable) {
 					Box(Modifier.size(20.dp).onFocusChanged { trailing.focused = it.isFocused }.focusable())

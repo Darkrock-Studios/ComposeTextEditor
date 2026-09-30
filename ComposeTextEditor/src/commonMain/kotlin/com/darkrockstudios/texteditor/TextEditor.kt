@@ -44,6 +44,8 @@ private val DefaultContentPadding = PaddingValues(16.dp)
  * @param contextMenuStrings Localized labels for the built-in context menu.
  * @param contextMenuState Drives context-menu visibility; pass your own to add
  *   custom items, or leave `null` for the default.
+ * @param contentDescription The editor's label for accessibility services; see
+ *   [BasicTextEditor].
  */
 @Composable
 fun TextEditor(
@@ -59,6 +61,7 @@ fun TextEditor(
 	onLinkClick: ((url: String) -> Unit)? = null,
 	contextMenuStrings: ContextMenuStrings = ContextMenuStrings.Default,
 	contextMenuState: TextEditorContextMenuState? = null,
+	contentDescription: String? = null,
 ) {
 	Surface(modifier = modifier.focusBorder(state.isFocused && enabled, style)) {
 		BasicTextEditor(
@@ -74,6 +77,7 @@ fun TextEditor(
 			onLinkClick = onLinkClick,
 			contextMenuStrings = contextMenuStrings,
 			contextMenuState = contextMenuState,
+			contentDescription = contentDescription,
 		)
 	}
 }

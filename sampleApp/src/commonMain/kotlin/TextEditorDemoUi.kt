@@ -140,6 +140,7 @@ fun TextEditorDemoUi(
 				.fillMaxSize(),
 			style = style,
 			enabled = enabled,
+			contentDescription = "Document",
 			onRichSpanClick = { span, clickType, _ ->
 				when (clickType) {
 					SpanClickType.TAP -> println("Touch tap on span: $span")

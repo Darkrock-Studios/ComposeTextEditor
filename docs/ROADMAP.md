@@ -190,7 +190,7 @@ review.
 | J | Find addon | `ComposeTextEditorFind/` | 7.17 to 7.19, 7.26, 7.29 |
 | K | Spell check addon | `ComposeTextEditorSpellCheck/` | 7.20 to 7.22, 7.28, 7.30, 7.31, 7.34, 7.35 |
 | L | Tests and CI | test sources, `.github/workflows/` | 0.1 to 0.3, 0.5 to 0.9, 4.1, 4.15 |
-| M | Accessibility and host API | semantics in `BasicTextEditor.kt`, `RichTextView.kt`, `state/rememberTextEditorState.kt` | 7.1 to 7.4, 7.13, 7.23 to 7.25, 7.32 |
+| M | Accessibility and host API | semantics in `BasicTextEditor.kt`, `RichTextView.kt`, `state/rememberTextEditorState.kt` | 7.1 to 7.4, 7.13, 7.23 to 7.25, 7.32, 7.36 |
 | N | Core layout and performance | `state/TextEditorState.kt` | 5.7, 7.8 to 7.12 |
 
 Housekeeping items are [Opus] and fit any lane that is already in the file.
@@ -1604,9 +1604,36 @@ iOS Safari; browser tests run in CI.
   ends after it, and the new part is then offered to the edit behaviors as
   `insertTextAtCursor`'s text is (`replaceAllAsEdit` in `EditorSemantics.kt`).
   The incoming text's own formatting is applied only inside the changed part.
-- [ ] **7.4** [Opus] [Lane M] Missing: `getTextLayoutResult`, copy, cut, and
+- [x] **7.4** [Opus] [Lane M] Missing: `getTextLayoutResult`, copy, cut, and
   paste actions, content description, and any structure (headings, links,
   lists).
+  Done, against `BasicTextField`'s semantics: copy while there is a
+  selection, cut while enabled with one, paste while enabled, all through the
+  action registry; `onLongClick` focuses and opens the context menu;
+  `textCompositionRange`; a `contentDescription` parameter on both editor
+  composables, since a host's `Modifier.semantics` lands on a container around
+  the editable node, not on it; links published as `LinkAnnotation.Url` in the
+  text, which TalkBack lists and opens through the host's `onLinkClick`.
+  `getTextLayoutResult` measures the whole document on request (cached per
+  revision, width and style) the way the editor measures a line, each line its
+  own paragraph, so line navigation matches the editor's rows; its geometry
+  leaves out the content
+  padding, the scroll offset and block span heights (7.36). No `onImeAction`:
+  the editor is multi-line, where `BasicTextField`'s default action is a no-op;
+  an explicit IME action belongs to 3.11's keyboard options. Headings and lists
+  stay unexposed: an editable node is one text, and native editors
+  (`EditText`, `UITextView`) do not expose them either.
+- [ ] **7.36** [Opus] [Lane M] The semantics text layout (7.4) is measured apart
+  from the editor's rows, so its character bounds are offset by the start and
+  top content padding and the scroll offset, and rows below an image or rule
+  sit higher than drawn. Screen readers that draw a highlight from character
+  bounds (Select to Speak, braille cursors) place it wrong on a scrolled or
+  padded editor. Compose offers no way to translate a `TextLayoutResult`; a fix
+  needs the semantics node's inner coordinates to follow the content origin.
+  It is also shaped whole on the first request after each edit, so a screen
+  reader that asks for caret bounds after every keystroke (NVDA through the
+  Java Access Bridge) pays a whole-document shape per keystroke on a long
+  document.
 
 ### Right-to-left and bidirectional text
 
