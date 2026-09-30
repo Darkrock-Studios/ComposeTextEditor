@@ -1804,6 +1804,12 @@ Hit testing and caret x already delegate to Compose and should be correct.
 
 ### Performance on long documents
 
+Desktop timings below come from `benchmark/LongDocumentBenchmark` in the
+desktop tests, which is skipped unless `CTE_BENCHMARK` is set:
+`CTE_BENCHMARK=1 ./gradlew :ComposeTextEditor:desktopTest --tests
+'benchmark.LongDocumentBenchmark' --rerun`, results in the test report's
+standard output.
+
 Shaping is one line per keystroke. These still scale with document length:
 
 - [ ] **7.8** [Fable] [Lane N] Per keystroke: the line list is copied, every
@@ -1820,8 +1826,19 @@ Shaping is one line per keystroke. These still scale with document length:
   `getOffsetAtPosition` on each drag move. On the iOS simulator at 200k
   characters (4.21), an idle caret-blink frame takes 33 ms, two vsyncs,
   where a 2k document stays under one; typing frames reach 137 ms.
-- [ ] **7.12** [Opus] [Lane N] `moveRight` and `moveToNextWord` sum all line
+- [x] **7.12** [Opus] [Lane N] `moveRight` and `moveToNextWord` sum all line
   lengths though `getTextLength()` is constant time.
+  Already gone: 1.1 and 1.5 rewrote both to step through the caret's own
+  line, and every flat index reads the snapshot's line starts. Every other
+  caret motion reads the caret's line and its neighbours, except that the
+  word motions walk on to the next line holding a word, as native editors
+  do. `CaretMoveCostTest` pins each motion, and the arrow keys through the
+  key handler, to at most 6 line reads in a 500-line document. What a
+  move still scanned was the layout's rows, in the scroll-into-view check
+  (7.11). Desktop JVM at 200k characters (`LongDocumentBenchmark`, 2,000
+  lines of 99 characters at 400 px, 4,000 rows, caret on line 100):
+  `moveRight` 7.1 µs median, `moveToNextWord` 8.9 µs, of which one row scan
+  is 2.0 µs.
 
 ### Editor configuration
 
