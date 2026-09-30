@@ -785,7 +785,7 @@ Android unless a step says otherwise.
 
 ## 8b1. Read-only with a caret (7.13)
 
-Rich Text Editor demo, turn the header's Read only switch on.
+Rich Text Editor demo, turn the Read only switch (under the title) on.
 
 1. Desktop and web: click in the text. **Expect:** the caret shows and blinks; the
    arrows, Home, End, word and page motions move it; Shift with them selects; Ctrl+A
@@ -809,6 +809,19 @@ Rich Text Editor demo, Grow switch on (3 to 8 lines).
 3. Resize the window narrower (desktop) or rotate (phone). **Expect:** the height
    follows the new wrapping.
 
+### 8b1b. Maximum length and single line (7.13)
+
+Rich Text Editor demo.
+
+1. Turn on 280 max. Type, paste a long text, dictate (Android, iOS), and on Android
+   type with Gboard's suggestions. **Expect:** the document stops at 280 characters; a
+   paste that does not fit is cut to what fits; the keyboard's own view of the text
+   stays right (no doubled or lost letters after the cut); one undo removes a cut
+   paste. TalkBack reads the limit ("280 characters maximum" or similar).
+2. Turn on Single line. Press Enter, paste two lines. **Expect:** Enter adds nothing;
+   the pasted line break becomes a space; the editor is one line tall and grows as the
+   line wraps.
+
 ## 8b2. Saved state (Android)
 
 Markdown Editor (Blank) demo, which uses `rememberSaveableTextEditorState`. Enable
@@ -831,7 +844,7 @@ Access Bridge (Windows) or the AT-SPI bridge (Linux), which must be enabled firs
 
 ### 8c.1 A disabled editor
 
-1. Rich Text Editor demo, turn the header's Enabled switch off (the toolbar hides with it,
+1. Rich Text Editor demo, turn the Enabled switch (under the title) off (the toolbar hides with it,
    since it edits the state directly).
 2. TalkBack and VoiceOver (iOS): move accessibility focus to the editor. **Expect:**
    the text is read, and the editor is announced as disabled (TalkBack: "disabled";

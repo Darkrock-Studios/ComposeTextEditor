@@ -15,6 +15,16 @@ sealed interface EditorLineLimits {
 	data object Fill : EditorLineLimits
 
 	/**
+	 * One paragraph, as tall as its rows: Enter adds no line, and line breaks arriving
+	 * in text (a paste, a dictated phrase) become spaces, by
+	 * [com.darkrockstudios.texteditor.state.EditorInputFilter.SingleLine]. A long line
+	 * wraps and the editor grows with it, since the editor cannot yet scroll sideways as
+	 * `BasicTextField`'s single line does. A document the host loads with line breaks
+	 * keeps them.
+	 */
+	data object SingleLine : EditorLineLimits
+
+	/**
 	 * As tall as its text, never less than [minLines] rows nor more than [maxLines], and
 	 * scrolling past that; the vertical content padding is added on top. A row is one
 	 * line of the editor's text style: a heading counts by the rows it takes. Without a
@@ -44,6 +54,7 @@ internal fun Modifier.editorLineLimits(
 	contentHeightPx: () -> Int,
 ): Modifier = when (limits) {
 	EditorLineLimits.Fill -> this
+	EditorLineLimits.SingleLine -> editorLineLimits(EditorLineLimits.MultiLine(), verticalPaddingPx, rowHeightPx, contentHeightPx)
 	is EditorLineLimits.MultiLine -> layout { measurable, constraints ->
 		val least = rows(rowHeightPx, limits.minLines)
 		val most = if (limits.maxLines == Int.MAX_VALUE) MAX_HEIGHT_PX else rows(rowHeightPx, limits.maxLines)

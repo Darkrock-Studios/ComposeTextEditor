@@ -11,6 +11,7 @@ import androidx.compose.ui.semantics.editableText
 import androidx.compose.ui.semantics.getTextLayoutResult
 import androidx.compose.ui.semantics.insertTextAtCursor
 import androidx.compose.ui.semantics.isEditable
+import androidx.compose.ui.semantics.maxTextLength
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.onLongClick
 import androidx.compose.ui.semantics.pasteText
@@ -41,6 +42,7 @@ import com.darkrockstudios.texteditor.state.TextEditOperation
 import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.applyStyleForEditAt
 import com.darkrockstudios.texteditor.state.insertTypedNewline
+import com.darkrockstudios.texteditor.state.screenAtSelection
 import com.darkrockstudios.texteditor.state.typedInput
 
 /**
@@ -70,6 +72,7 @@ internal fun Modifier.editorSemantics(
 			textCompositionRange = TextRange(state.getCharacterIndex(it.start), state.getCharacterIndex(it.end))
 		}
 		isEditable = editable
+		state.inputFilter?.maxLength?.let { maxTextLength = it }
 		contentDescription?.let { this.contentDescription = it }
 		getTextLayoutResult { results -> document.addLayoutTo(results) }
 		clipboardActions(actions)
@@ -96,11 +99,14 @@ private fun SemanticsPropertyReceiver.editorSemanticsEdits(state: TextEditorStat
 				// Dictated or assistive text: one step that is not typing, since
 				// whole phrases are not something a following keystroke should
 				// join, then told to the behaviors like any typed text.
-				state.typedInput(newText.text) {
+				val admitted = state.screenAtSelection(newText) ?: return@insertTextAtCursor false
+				state.typedInput {
 					state.editGroup {
 						state.selector.deleteSelection()
-						state.editManager.recordingAsTyping(false) {
-							state.insertStringAtCursor(newText)
+						state.editManager.alreadyScreened {
+							state.editManager.recordingAsTyping(false) {
+								state.insertStringAtCursor(admitted)
+							}
 						}
 					}
 				}
@@ -290,6 +296,7 @@ internal fun TextEditorState.replaceAllAsEdit(text: AnnotatedString) {
 	val start = getOffsetAtCharacter(prefix)
 	val range = TextEditorRange(start, getOffsetAtCharacter(old.length - suffix))
 	val middle = applyStyleForEditAt(start, newText.subSequence(prefix, new.length - suffix))
+	val before = revision
 	editManager.recordingAsTyping(false) {
 		when {
 			middle.isEmpty() -> delete(range)
@@ -306,7 +313,11 @@ internal fun TextEditorState.replaceAllAsEdit(text: AnnotatedString) {
 			else -> replace(range, middle)
 		}
 	}
-	if (middle.isNotEmpty()) textInputLanded(middle.text, TextEditorRange(start, start.after(middle.text)))
+	// What landed, which an input filter may have changed; the caret ends after it.
+	if (middle.isNotEmpty() && revision != before) {
+		val landed = TextEditorRange(start, cursorPosition)
+		textInputLanded(getStringInRange(landed), landed)
+	}
 }
 
 /** Where [text] inserted at this position ends. */

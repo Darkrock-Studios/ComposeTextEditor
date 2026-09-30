@@ -116,9 +116,11 @@ class TextEditManager(private val state: TextEditorState) {
 	}
 
 	fun applyOperation(requested: TextEditOperation, addToHistory: Boolean = true) {
+		// Undo and redo replay edits the filter already let through.
+		val screened = if (addToHistory) screen(requested) ?: return else requested
 		// Resolved before anything reads it, so what is applied, recorded, and
 		// announced is one and the same operation.
-		val operation = if (requested is TextEditOperation.Replace) resolveInheritedStyle(requested) else requested
+		val operation = if (screened is TextEditOperation.Replace) resolveInheritedStyle(screened) else screened
 		// An edit of no characters (an IME committing "", an empty selection
 		// deleted) changes nothing, so nothing is applied, recorded, or announced.
 		if (operation.isNoOp()) return
@@ -319,6 +321,48 @@ class TextEditManager(private val state: TextEditorState) {
 		is TextEditOperation.Delete -> range.start == range.end
 		is TextEditOperation.Replace -> range.start == range.end && newText.isEmpty()
 		else -> false
+	}
+
+	private var alreadyScreened = 0
+
+	/**
+	 * Runs [block], whose text the caller screened over the whole range it replaces
+	 * (with [screenInput]), unscreened: the selection it deletes first would otherwise
+	 * leave the insert screened again against a different range.
+	 */
+	internal fun <T> alreadyScreened(block: () -> T): T {
+		alreadyScreened++
+		try {
+			return block()
+		} finally {
+			alreadyScreened--
+		}
+	}
+
+	/**
+	 * Passes an edit that adds text through the state's [EditorInputFilter]: the edit as
+	 * is, one carrying the text the filter chose instead, or null when it refused. The
+	 * IME is told of any change, since what landed is not what it sent.
+	 */
+	private fun screen(operation: TextEditOperation): TextEditOperation? {
+		if (alreadyScreened > 0) return operation
+		val filter = state.effectiveInputFilter ?: return operation
+		val (range, text) = when (operation) {
+			is TextEditOperation.Insert -> TextEditorRange(operation.position, operation.position) to operation.text
+			is TextEditOperation.Replace -> operation.range to operation.newText
+			else -> return operation
+		}
+		val filtered = filter.filter(state, range, text)
+		if (filtered == text) return operation
+		state.requestImeResync()
+		if (filtered == null) return null
+		return when (operation) {
+			is TextEditOperation.Insert ->
+				operation.copy(text = filtered, cursorAfter = filtered.endWhenInsertedAt(operation.position))
+			is TextEditOperation.Replace ->
+				operation.copy(newText = filtered, cursorAfter = filtered.endWhenInsertedAt(operation.range.start))
+			else -> operation
+		}
 	}
 
 	/**

@@ -687,6 +687,24 @@ class TextEditorState(
 	}
 
 	/**
+	 * Screens every edit that adds text, from the user or the editing functions, but not
+	 * undo, redo or a document load; see [EditorInputFilter]. Null lets everything in.
+	 */
+	var inputFilter: EditorInputFilter? by mutableStateOf(null)
+
+	/**
+	 * How many composed editors show this state with a single-line limit; while any does,
+	 * [EditorInputFilter.SingleLine] screens ahead of [inputFilter].
+	 */
+	internal var singleLineEditors by mutableIntStateOf(0)
+
+	internal val effectiveInputFilter: EditorInputFilter?
+		get() {
+			if (singleLineEditors == 0) return inputFilter
+			return inputFilter?.let { EditorInputFilter.SingleLine then it } ?: EditorInputFilter.SingleLine
+		}
+
+	/**
 	 * How to open the context menu of each composable showing this state, which adds its
 	 * own while composed. The last opens.
 	 */
@@ -844,6 +862,10 @@ class TextEditorState(
 	 * [EditBehavior] claims the edit first.
 	 */
 	fun insertNewlineAtCursor() {
+		// Asked before the behaviors, which would otherwise mark a line the split never made.
+		if (screenInput(TextEditorRange(cursorPosition, cursorPosition), AnnotatedString("\n")) == null) {
+			return requestImeResync()
+		}
 		if (claimedByBehavior { it.onNewline(this) }) return
 		insertNewlineRaw()
 	}

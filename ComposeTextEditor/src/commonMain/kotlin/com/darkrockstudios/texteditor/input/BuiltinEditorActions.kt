@@ -27,6 +27,7 @@ import com.darkrockstudios.texteditor.state.moveToNextWord
 import com.darkrockstudios.texteditor.state.moveToPreviousWord
 import com.darkrockstudios.texteditor.state.moveToPreviousWordStart
 import com.darkrockstudios.texteditor.state.moveToWordEnd
+import com.darkrockstudios.texteditor.state.screenAtSelection
 import com.darkrockstudios.texteditor.state.toggleSpanStyle
 import kotlinx.coroutines.launch
 
@@ -178,7 +179,11 @@ private fun EditorActionContext.pasteClipboard(plainText: Boolean) {
 		clipboardText?.let {
 			val curSelection = state.selector.selection
 			val insertPosition = curSelection?.start ?: state.cursorPosition
-			val text = state.withSizeForPasteAt(insertPosition, it.normalizeLineEndings())
+			val sized = state.withSizeForPasteAt(insertPosition, it.normalizeLineEndings())
+			// Screened first: the copied spans and blocks are placed by the text's own
+			// layout, so text the filter changed pastes plain, and refused text not at all.
+			val text = state.screenAtSelection(sized) ?: return@launch
+			val screened = text != sized
 			// Read the clipboard's HTML before mutating: the text, the in-editor
 			// rich spans and the pasted block structure then land as one revision.
 			val htmlDocument = if (plainText) null else state.readHtmlPasteDocument(clipboard, text)
@@ -190,7 +195,7 @@ private fun EditorActionContext.pasteClipboard(plainText: Boolean) {
 				} else {
 					state.insertStringAtCursor(text)
 				}
-				if (!plainText) {
+				if (!plainText && !screened) {
 					state.pasteRichSpans(
 						insertPosition,
 						text,
@@ -198,7 +203,7 @@ private fun EditorActionContext.pasteClipboard(plainText: Boolean) {
 						requireCopyIdMatch = ClipboardHelper.supportsCopyProvenance,
 					)
 				}
-				htmlDocument?.let { state.applyHtmlPasteBlocks(it, insertPosition, text) }
+				if (!screened) htmlDocument?.let { state.applyHtmlPasteBlocks(it, insertPosition, text) }
 			}
 			state.selector.clearSelection()
 		}

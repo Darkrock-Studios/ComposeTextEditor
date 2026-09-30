@@ -183,7 +183,7 @@ review.
 | C | Drawing and geometry | `Draw*.kt`, `cursor/`, `scrollbar/`, `state/TextEditorScrollState.kt`, hit testing | 1.8, 1.10, 1.11, 1.17, 1.18, 3.3, 3.12, 3.16, 4.14, 7.6, 7.7 |
 | D | Bindings, actions, menu | `input/KeyBindings.kt`, `input/EditorCommand.kt`, `input/BuiltinEditorActions.kt`, `contextmenu/` | 2.1, 2.2, 2.4, 2.5, 2.7 to 2.12, 4.8, 5.8 |
 | E | Input sessions on desktop, iOS, web | `desktopMain`, `iosMain`, `wasmJsMain` under `input/` | 4.2 to 4.7, 4.10 to 4.12, 4.19, 4.21, 4.22, 4.24 to 4.26, 4.28, 4.29, 4.32, 4.33, 7.37 |
-| F | Android input | `androidMain` | 0.4, 3.9 to 3.11, 3.14, 3.17, 4.16, 4.18, 4.20, 4.27, 4.30, 4.31 |
+| F | Android input | `androidMain` | 0.4, 3.9 to 3.11, 3.14, 3.17, 4.16, 4.18, 4.20, 4.27, 4.30, 4.31, 7.40 |
 | G | Edit pipeline and undo | `state/TextEditManager.kt`, `state/TextEditHistory.kt`, `state/EditBehavior.kt`, `input/ImeEditLogic.kt` | 1.20, 5.1 to 5.5, 5.9, 6.1 to 6.6, 6.14, 6.15, 6.17, 6.22, 6.23 |
 | H | Clipboard and HTML | `clipboard/`, `html/`, `dragdrop/` | 4.9, 4.13, 4.17, 6.7 to 6.13, 6.18 to 6.21, 7.39 |
 | I | Markdown and block model | `markdown/`, `richstyle/` | 5.6, 7.14 to 7.16 |
@@ -1665,6 +1665,11 @@ iOS Safari; browser tests run in CI.
   event and `ClipboardEventsEffect` answers nothing: Ctrl+C falls back to
   `navigator.clipboard`, plain text only, and fails where the page may not
   write the clipboard.
+- [ ] **7.40** [Opus] [Lane F] A single-line editor (7.13) still asks the
+  soft keyboard for multi-line text (Android's `TYPE_TEXT_FLAG_MULTI_LINE`
+  with no IME action; iOS the same), so the keyboard shows a return key that
+  now does nothing. With 3.11's keyboard settings, a single line should ask
+  for single-line text and an IME action, and hand Enter to `onImeAction`.
 
 ### Right-to-left and bidirectional text
 
@@ -1760,6 +1765,27 @@ Shaping is one line per keystroke. These still scale with document length:
     height, it takes the whole document, capped at the largest height layout
     represents. A scroll animation now clamps each frame to the scroll range,
     which shrinks as the editor grows.
+  - Maximum length, input filter, single line: done.
+    `TextEditorState.inputFilter: EditorInputFilter?` screens every edit
+    that adds text in `TextEditManager.applyOperation`, the one choke point:
+    typing, IME, Enter, paste, drop, semantics, and the host's editing
+    functions, but not undo, redo or document loads; deletions always pass.
+    A filter returns the text to insert, changed, or null to refuse, and a
+    change or refusal asks the IME to resync. `EditorInputFilter.maxLength`
+    cuts to what fits, as Android's `LengthFilter` does (never through a
+    surrogate pair), rather than refusing as `BasicTextField`'s does, and
+    publishes `maxTextLength` to accessibility services; filters chain with
+    `then`. `EditorLineLimits.SingleLine` adds `EditorInputFilter.SingleLine`
+    (Enter refused, line breaks in text become spaces) and sizes like
+    `MultiLine()`; it wraps and grows, since there is no sideways scrolling.
+    Enter is consumed, not handed to the host or the IME action (3.11).
+    Entry points whose caret, composition or styling depend on what lands
+    (typing over a selection, Enter, the IME's commit and composition, paste,
+    the semantics insert and set text) screen first over the whole range
+    they replace, then apply under `alreadyScreened`; a refused edit leaves
+    the selection it would have replaced, a paste the filter changed lands
+    plain, and the behaviors are told what landed. A change that does not
+    lengthen the document passes the maximum even over it. Found: 7.40.
 
 ### Markdown export
 

@@ -1,6 +1,8 @@
 package com.darkrockstudios.texteditor.sample
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
@@ -27,6 +29,7 @@ import com.darkrockstudios.texteditor.rememberTextEditorStyle
 import com.darkrockstudios.texteditor.richstyle.ImageBlockSpanStyle
 import com.darkrockstudios.texteditor.richstyle.RichSpanStyle
 import com.darkrockstudios.texteditor.richstyle.SpellCheckStyle
+import com.darkrockstudios.texteditor.state.EditorInputFilter
 import com.darkrockstudios.texteditor.state.SpanClickType
 import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.rememberSaveableTextEditorState
@@ -102,7 +105,12 @@ fun TextEditorDemoUi(
 	var enabled by remember { mutableStateOf(true) }
 	var readOnly by remember { mutableStateOf(false) }
 	var grow by remember { mutableStateOf(false) }
+	var singleLine by remember { mutableStateOf(false) }
+	var limited by remember { mutableStateOf(false) }
 	val editable = enabled && !readOnly
+	LaunchedEffect(state, limited) {
+		state.inputFilter = if (limited) EditorInputFilter.maxLength(280) else null
+	}
 
 	Column(modifier = modifier) {
 		Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
@@ -115,11 +123,6 @@ fun TextEditorDemoUi(
 				overflow = TextOverflow.Ellipsis,
 			)
 			Text("${state.wordCount} words", style = MaterialTheme.typography.labelMedium)
-			// The editor's enabled and read-only flags gate user input only; the toolbar and
-			// Roundtrip act on the state directly, so they hide with them.
-			LabeledSwitch("Enabled", enabled) { enabled = it }
-			if (enabled) LabeledSwitch("Read only", readOnly) { readOnly = it }
-			LabeledSwitch("Grow", grow) { grow = it }
 			if (editable && demoContent != DemoContent.Rich) {
 				Button(
 					onClick = {
@@ -133,6 +136,19 @@ fun TextEditorDemoUi(
 			Button(onClick = { navigateTo(Destination.Menu) }) {
 				Text("X")
 			}
+		}
+
+		Row(
+			modifier = Modifier.horizontalScroll(rememberScrollState()),
+			verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+		) {
+			// The editor's enabled and read-only flags gate user input only; the toolbar and
+			// Roundtrip act on the state directly, so they hide with them.
+			LabeledSwitch("Enabled", enabled) { enabled = it }
+			if (enabled) LabeledSwitch("Read only", readOnly) { readOnly = it }
+			LabeledSwitch("Grow", grow) { grow = it }
+			LabeledSwitch("Single line", singleLine) { singleLine = it }
+			LabeledSwitch("280 max", limited) { limited = it }
 		}
 
 		if (editable) {
@@ -153,11 +169,15 @@ fun TextEditorDemoUi(
 			modifier = Modifier
 				.padding(8.dp)
 				// A grown editor must not be made to fill the height.
-				.then(if (grow) Modifier.fillMaxWidth() else Modifier.fillMaxSize()),
+				.then(if (grow || singleLine) Modifier.fillMaxWidth() else Modifier.fillMaxSize()),
 			style = style,
 			enabled = enabled,
 			readOnly = readOnly,
-			lineLimits = if (grow) EditorLineLimits.MultiLine(minLines = 3, maxLines = 8) else EditorLineLimits.Fill,
+			lineLimits = when {
+				singleLine -> EditorLineLimits.SingleLine
+				grow -> EditorLineLimits.MultiLine(minLines = 3, maxLines = 8)
+				else -> EditorLineLimits.Fill
+			},
 			contentDescription = "Document",
 			onRichSpanClick = { span, clickType, _ ->
 				when (clickType) {

@@ -84,7 +84,12 @@ redo restore the caret exactly), and knows how to transform any
 survives an edit.
 
 `TextEditManager.applyOperation` is the single choke point through which every
-operation passes, and it owns the invariant sequencing: clear a selection the
+operation passes, and so the one place the state's `inputFilter` screens an
+edit that adds text (a maximum length, a single line, the host's own rules)
+before it is applied; undo and redo, which replay accepted edits, skip it, and
+so does an entry point that screened first over the whole range it replaces
+(typing over a selection, the IME, paste). It also owns the invariant
+sequencing: clear a selection the
 edit would invalidate, apply the text change inside a transaction, move the
 cursor, re-anchor rich spans, record undo history, derive the layout pass, and
 announce the operation on `editOperations`. Code that mutates lines without

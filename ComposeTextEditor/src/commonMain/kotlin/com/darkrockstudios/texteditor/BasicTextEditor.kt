@@ -96,7 +96,9 @@ private const val CURSOR_BLINK_SPEED_MS = 500L
  *   rather than a disabled one. Ignored when not [enabled].
  * @param lineLimits How tall the editor is: [EditorLineLimits.Fill], the default, takes
  *   the height it is given; [EditorLineLimits.MultiLine] grows with the text between a
- *   minimum and maximum number of lines, then scrolls.
+ *   minimum and maximum number of lines, then scrolls; [EditorLineLimits.SingleLine]
+ *   keeps the text to one paragraph. For a maximum length or other rules on what may be
+ *   entered, set [TextEditorState.inputFilter].
  * @param autoFocus Requests focus once when first composed, if [enabled]. For focus at
  *   any other time, see [modifier].
  * @param style Colors and text style for the editor and its gutter markers.
@@ -186,6 +188,12 @@ fun BasicTextEditor(
 	}
 	val lineLimitsModifier = remember(lineLimits, verticalPaddingPx, rowHeightPx, contentHeightPx) {
 		Modifier.editorLineLimits(lineLimits, verticalPaddingPx, rowHeightPx) { contentHeightPx.value }
+	}
+
+	DisposableEffect(state, lineLimits) {
+		val singleLine = lineLimits == EditorLineLimits.SingleLine
+		if (singleLine) state.singleLineEditors++
+		onDispose { if (singleLine) state.singleLineEditors-- }
 	}
 
 	LaunchedEffect(contentPadding, density) {
