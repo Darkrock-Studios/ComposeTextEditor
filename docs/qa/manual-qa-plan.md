@@ -183,6 +183,18 @@ this exercises the clipboard's HTML as the block carrier.
    text), not the markup's text. Ctrl/Cmd+V still pastes the table's text from the
    markup, cells separated by a tab.
 
+### 2.12 Android rich clipboard (6.7, 6.18)
+
+1. Markdown demo. Select a line with a bold word and a bulleted line, copy from the
+   selection toolbar, and paste at the end. **Expect:** bold and the bullet survive,
+   at the same text size as the lines around them.
+2. Paste the same copy into Gmail or Google Docs. **Expect:** the bold word stays bold.
+3. Copy a bold word and a list from Chrome or Google Docs and paste into the editor.
+   **Expect:** bold and the list arrive; Android 12 and later show the "pasted from
+   your clipboard" notice once per paste, not three times.
+4. Paste as Plain Text from the menu. **Expect:** the source's own plain text,
+   styled like the text where it lands.
+
 ### 2.11 Web clipboard (4.13)
 
 In Chrome, Firefox and Safari, against the built demo:

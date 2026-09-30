@@ -5,11 +5,12 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextDecoration
 import com.darkrockstudios.texteditor.CharLineOffset
-import com.darkrockstudios.texteditor.annotatedstring.normalizeLineEndings
 import com.darkrockstudios.texteditor.TextEditorRange
+import com.darkrockstudios.texteditor.annotatedstring.normalizeLineEndings
 import com.darkrockstudios.texteditor.clipboard.ClipboardHelper
 import com.darkrockstudios.texteditor.clipboard.applyHtmlPasteBlocks
 import com.darkrockstudios.texteditor.clipboard.readHtmlPasteDocument
+import com.darkrockstudios.texteditor.clipboard.withSizeForPasteAt
 import com.darkrockstudios.texteditor.html.selectionAsHtml
 import com.darkrockstudios.texteditor.input.EditorCommand.Action
 import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
@@ -175,9 +176,9 @@ private fun EditorActionContext.pasteClipboard(plainText: Boolean) {
 			ClipboardHelper.getText(clipboard, state.markdownConfiguration)
 		}
 		clipboardText?.let {
-			val text = it.normalizeLineEndings()
 			val curSelection = state.selector.selection
 			val insertPosition = curSelection?.start ?: state.cursorPosition
+			val text = state.withSizeForPasteAt(insertPosition, it.normalizeLineEndings())
 			// Read the clipboard's HTML before mutating: the text, the in-editor
 			// rich spans and the pasted block structure then land as one revision.
 			val htmlDocument = if (plainText) null else state.readHtmlPasteDocument(clipboard, text)

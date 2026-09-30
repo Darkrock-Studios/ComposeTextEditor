@@ -93,7 +93,7 @@ fun TextEditorState.clearFormatting() {
 }
 
 /** The markdown body text style, which structure puts on every line of a markdown editor. */
-private val TextEditorState.bodyStyle: SpanStyle?
+internal val TextEditorState.bodyStyle: SpanStyle?
 	get() = markdownConfiguration.defaultTextStyle.takeIf { hasMarkdownConfiguration }
 
 /** The styles a heading or code block on [line] gives it. */

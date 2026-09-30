@@ -2,6 +2,7 @@ package com.darkrockstudios.texteditor.html
 
 import androidx.compose.ui.text.AnnotatedString
 import com.darkrockstudios.texteditor.CharLineOffset
+import com.darkrockstudios.texteditor.clipboard.withBodyStyleBeneath
 import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
 import com.darkrockstudios.texteditor.richstyle.Blockquote
 import com.darkrockstudios.texteditor.richstyle.BulletList
@@ -88,7 +89,7 @@ class HtmlExtension(
 		// One revision, so a concurrent export can't catch the document loaded but
 		// not yet styled.
 		editorState.withAtomicEdit {
-			editorState.setText(document.text)
+			editorState.setText(editorState.withBodyStyleBeneath(document.text))
 			if (document.links.isNotEmpty()) {
 				editorState.richSpanManager.addRichSpans(pastedLinkSpans(document.links, CharLineOffset(0, 0)))
 				editorState.updateBookKeeping(LayoutUpdate.SpansOnly)

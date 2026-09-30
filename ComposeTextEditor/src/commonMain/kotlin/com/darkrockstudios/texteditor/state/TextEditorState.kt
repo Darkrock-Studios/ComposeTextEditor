@@ -1857,4 +1857,6 @@ class TextEditorState(
 
 // Process-wide so two editors in one window can never mint the same id; copies
 // only happen on the UI thread, so a plain increment is race-free in practice.
-private var nextCopyId: Long = 1L
+// Starts at random because an id leaves the process on the clipboard, and another
+// app embedding the editor must not mint the one this copy carries.
+private var nextCopyId: Long = kotlin.random.Random.nextLong()
