@@ -274,6 +274,20 @@ internal fun TextEditorState.imeSetSelection(start: Int, end: Int) {
 	}
 }
 
+/**
+ * A backspace a keyboard spelled as a selection: it selected [range], which ends at the
+ * caret it started from, and committed nothing over it, as iOS's soft keyboard does for
+ * every backspace. Run as [TextEditorState.backspaceAtCursor] from that caret, so an
+ * [EditBehavior][com.darkrockstudios.texteditor.state.EditBehavior] can claim it and it
+ * joins the backspace run in undo; unclaimed, it removes the keyboard's range, the
+ * cluster the platform's native editor would remove.
+ */
+internal fun TextEditorState.imeBackspaceOver(range: TextRange) {
+	selector.clearSelection()
+	cursor.updatePosition(getOffsetAtCharacter(range.max))
+	backspaceAtCursor(from = getOffsetAtCharacter(range.min))
+}
+
 /** Insert a newline, replacing any selection first (used for IME "enter" actions). */
 internal fun TextEditorState.imePerformNewline() = insertTypedNewline()
 

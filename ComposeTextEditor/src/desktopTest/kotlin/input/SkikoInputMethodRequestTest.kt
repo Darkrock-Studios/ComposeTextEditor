@@ -242,6 +242,136 @@ class SkikoInputMethodRequestTest {
 		assertTrue(state.richSpanManager.getAllRichSpans().none { it.style === BulletListSpanStyle })
 	}
 
+	// --- the iOS soft keyboard's backspace (roadmap 4.33) ---
+	// UIKit deletes backward by selecting the composed character before the caret, then
+	// deleting the selection: two edits, a setSelection and a commit of nothing.
+
+	private fun SkikoTextEditorInputMethodRequest.keyboardBackspace(start: Int, end: Int) {
+		editText { setSelection(start, end) }
+		editText { commitText("", 0) }
+	}
+
+	@Test
+	fun `the iOS keyboard backspace at the start of a bullet demotes it`() = runTest {
+		val state = TextEditorState(scope = this, measurer = mockk(relaxed = true))
+		MarkdownExtension(state, MarkdownConfiguration.DEFAULT).importMarkdown("plain\n- item")
+		val request = SkikoTextEditorInputMethodRequest(state, ImeOptions.Default)
+		state.cursor.updatePosition(CharLineOffset(1, 0))
+
+		request.keyboardBackspace(5, 6)
+
+		assertEquals(listOf("plain", "item"), state.textLines.map { it.text })
+		assertTrue(state.richSpanManager.getAllRichSpans().none { it.style === BulletListSpanStyle })
+		assertNull(state.selector.selection)
+		assertEquals(CharLineOffset(1, 0), state.cursorPosition)
+	}
+
+	@Test
+	fun `the iOS keyboard backspace reaches edit behaviors mid-line`() {
+		var offered = 0
+		state.editBehaviors += object : EditBehavior {
+			override fun onBackspace(state: TextEditorState): Boolean {
+				offered++
+				return false
+			}
+		}
+		typeViaCommit("abc")
+
+		request.keyboardBackspace(2, 3)
+
+		assertEquals(1, offered)
+		assertEquals("ab", text())
+		assertEquals(2, cursorCharIndex())
+	}
+
+	/** Native iOS removes the cluster the keyboard selected, a decomposed é included. */
+	@Test
+	fun `the iOS keyboard backspace removes the range the keyboard selected`() {
+		typeViaCommit("xé")
+
+		request.keyboardBackspace(1, 3)
+
+		assertEquals("x", text())
+		assertNull(state.selector.selection)
+	}
+
+	@Test
+	fun `the iOS keyboard backspace at a line start joins the lines`() {
+		typeViaCommit("ab")
+		request.editText { commitText("\n", 1) }
+		typeViaCommit("cd")
+		moveCursorToCharIndex(3)
+
+		request.keyboardBackspace(2, 3)
+
+		assertEquals("abcd", text())
+		assertEquals(2, cursorCharIndex())
+	}
+
+	@Test
+	fun `iOS keyboard backspaces undo as the hardware key's do`() {
+		val hardware = TextEditorState(scope = TestScope(), measurer = mockk(relaxed = true))
+		val hardwareRequest = SkikoTextEditorInputMethodRequest(hardware, ImeOptions.Default)
+		for (s in listOf(state to request, hardware to hardwareRequest)) {
+			s.second.editText { commitText("one two", 1) }
+		}
+		hardware.backspaceAtCursor()
+		hardware.backspaceAtCursor()
+		request.keyboardBackspace(6, 7)
+		request.keyboardBackspace(5, 6)
+		assertEquals(hardware.getAllText().text, text())
+
+		hardware.undo()
+		state.undo()
+		assertEquals(hardware.getAllText().text, text())
+	}
+
+	@Test
+	fun `a selection the keyboard did not take from the caret is deleted as a selection`() {
+		var offered = 0
+		state.editBehaviors += object : EditBehavior {
+			override fun onBackspace(state: TextEditorState): Boolean {
+				offered++
+				return true
+			}
+		}
+		typeViaCommit("abcd")
+
+		// Selected away from the caret, as a keyboard's own selection gesture would.
+		request.keyboardBackspace(0, 2)
+		assertEquals("cd", text())
+
+		// Already selected before the keyboard deleted: the selection is what goes.
+		request.editText { setSelection(0, 1) }
+		request.editText { setSelection(0, 2) }
+		request.editText { commitText("", 0) }
+		assertEquals("", text())
+		assertEquals(0, offered)
+	}
+
+	/** A trackpad or Shift selection back from the caret, then Backspace, deletes the selection. */
+	@Test
+	fun `a wider selection taken back from the caret is deleted as a selection`() = runTest {
+		val state = TextEditorState(scope = this, measurer = mockk(relaxed = true))
+		MarkdownExtension(state, MarkdownConfiguration.DEFAULT).importMarkdown("plain\n- item")
+		val request = SkikoTextEditorInputMethodRequest(state, ImeOptions.Default)
+		state.cursor.updatePosition(CharLineOffset(1, 0))
+
+		request.keyboardBackspace(3, 6)
+
+		assertEquals(listOf("plaitem"), state.textLines.map { it.text })
+	}
+
+	@Test
+	fun `a commit of text over the keyboard's selection still replaces it`() {
+		typeViaCommit("abc")
+
+		request.editText { setSelection(2, 3) }
+		request.editText { commitText("x", 1) }
+
+		assertEquals("abx", text())
+	}
+
 	@Test
 	fun `move cursor and delete all`() {
 		typeViaCommit("abcd")

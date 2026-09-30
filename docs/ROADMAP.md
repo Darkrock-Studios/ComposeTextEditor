@@ -286,6 +286,13 @@ editor does rather than what it should do.
   Windows runners. An Android emulator smoke job. Browser automation against
   the built wasm demo for real key and composition events. An iOS simulator
   smoke test. Mac part: the iOS simulator smoke test.
+  Found on the Mac 2026-09-30 at `ca6aac5`, before a macOS runner exists:
+  `./gradlew check` fails there with or without that day's changes. Eight
+  `ComposeTextEditorFind` tests (`FindBarNavigationTest`, `FindCloseTest`)
+  never open the bar, likely because they press Ctrl+F where the host's
+  bindings are Cmd; `LineLimitsE2eTest`'s minimum-lines case measures 64 px
+  for an expected 66, a font-metric difference. Pin the bindings and derive
+  the height from the font before the macOS job goes in.
 - [ ] **0.8 Real OS input, nightly.** [Opus] [Lane L] Drive the sample app on a
   virtual Linux display with a dead-key layout. Most expensive, so last.
 
@@ -1273,8 +1280,8 @@ iOS Safari; browser tests run in CI.
   the post-edit value before the keyboard's next query. Not compared: the
   bullet demote, since the soft keyboard's Backspace never reaches the
   behavior on iOS (4.33), and 5.2's substitutions, which do not exist yet.
-  Recheck both when they do.
-- [ ] **4.33 Soft-keyboard Backspace at a bullet's start joins lines on iOS.
+  Recheck both when they do. The demote, rechecked after 4.33: `None` holds.
+- [x] **4.33 Soft-keyboard Backspace at a bullet's start joins lines on iOS.
   R.** [Opus] [Lane E] [Mac work] Found in the 4.29 pass. At the start of a
   bullet item the iOS keyboard's Backspace joins the item onto the line
   above (or onto the previous item) instead of demoting it, which the
@@ -1288,6 +1295,27 @@ iOS Safari; browser tests run in CI.
   that the keyboard set immediately before, starting just before the
   previous caret, as a backspace, or catch the line-break selection in
   `imeSetSelection`. Then recheck 4.29's resync with the demote.
+  Done. Wider than the bullet: the log showed every soft-keyboard backspace on
+  iOS arrives this way, mid-line too (`setSelection(750, 751)`, then
+  `commitText("")`), so no iOS backspace reached `backspaceAtCursor`, its
+  behaviors, or its undo run. UIKit selects the composed character before the
+  caret, which is why a decomposed é went whole in 1.1. The skiko editing
+  scope now remembers a selection the keyboard takes back from a collapsed
+  caret and runs the commit of nothing that empties it next as a backspace
+  (`KeyboardBackspace`, `imeBackspaceOver`); any other edit in between forgets
+  it, and a selection that existed before is still deleted as a selection.
+  Only a selection of exactly the one grapheme cluster before the caret (or
+  the line break at a line start) counts, the unit UIKit takes for one press;
+  a wider one, as a trackpad or Shift selection makes, is the user's and is
+  deleted as a selection.
+  `backspaceAtCursor(from)` deletes the keyboard's range when no behavior
+  claims the edit, so iOS keeps removing the cluster its native editor would.
+  `SkikoInputMethodRequestTest` covers the demote, a behavior mid-line, the
+  keyboard's range, a line join, undo matching the hardware key, and the
+  selections that are not a backspace. Simulator: Backspace at a bullet's
+  start demotes it and a second joins the lines; mid-line it removes one
+  character; "teh" then space afterwards still becomes "the", so 4.29's `None`
+  holds with the demote too.
 - [x] **4.30 Android's insertion marker lags a caret move. C.** [Opus]
   [Lane F] `PlatformTextEditorExtensions.android.kt` builds
   `CursorAnchorInfo.setInsertionMarkerLocation` from `lastCursorMetrics`,

@@ -22,6 +22,7 @@ import androidx.compose.ui.text.input.ImeOptions
 import androidx.compose.ui.text.input.TextEditingScope
 import androidx.compose.ui.text.input.TextFieldValue
 import com.darkrockstudios.texteditor.state.TextEditorState
+import com.darkrockstudios.texteditor.state.precedingGraphemeBoundary
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.cancelAndJoin
@@ -183,8 +184,10 @@ internal class SkikoTextEditorInputMethodRequest(
 		}
 	}
 
+	private val keyboardBackspace = KeyboardBackspace()
+
 	override val editText: (TextEditingScope.() -> Unit) -> Unit = { block ->
-		SkikoTextEditingScope(editorState).block()
+		SkikoTextEditingScope(editorState, keyboardBackspace).block()
 	}
 
 	private fun attachedCoordinates(): LayoutCoordinates? {
@@ -244,23 +247,88 @@ internal class SkikoTextEditorInputMethodRequest(
 	}
 }
 
+/**
+ * iOS's soft keyboard deletes backward in two edits: it selects the composed character
+ * before the caret, then deletes the selection, which Compose sends as a commit of
+ * nothing. Seen as edits, that is a selection replaced, which no backspace behavior
+ * hears. This remembers a selection the keyboard took back from a collapsed caret, so
+ * the commit that empties it next can be run as the backspace it is (roadmap 4.33).
+ * Any other edit in between forgets it.
+ */
+private class KeyboardBackspace {
+	private var selected: TextRange? = null
+
+	fun selecting(state: TextEditorState, start: Int, end: Int) {
+		val caret = state.selectionAsTextRange()
+		selected = TextRange(start, end).takeIf {
+			caret.collapsed && end == caret.start && state.composingRange == null &&
+				start == state.clusterStartBefore(end)
+		}
+	}
+
+	/**
+	 * Where the grapheme cluster ending at [index] starts: the unit UIKit selects for one
+	 * backspace. A wider selection is the user's own (a trackpad or Shift selection) and
+	 * is deleted as a selection. At a line start the cluster is the line break.
+	 */
+	private fun TextEditorState.clusterStartBefore(index: Int): Int? {
+		if (index <= 0) return null
+		val at = getOffsetAtCharacter(index)
+		if (at.char == 0) return index - 1
+		return index - at.char + textLines[at.line].text.precedingGraphemeBoundary(at.char)
+	}
+
+	/** The range to backspace over when committing [text] now empties that selection, else null. */
+	fun takeFor(state: TextEditorState, text: CharSequence): TextRange? {
+		val range = selected
+		selected = null
+		return range?.takeIf {
+			text.isEmpty() && state.composingRange == null && state.selectionAsTextRange() == it
+		}
+	}
+
+	fun forget() {
+		selected = null
+	}
+}
+
 /** Bridges Compose's [TextEditingScope] to the shared [ImeEditLogic] operations. */
 private class SkikoTextEditingScope(
 	private val state: TextEditorState,
+	private val keyboardBackspace: KeyboardBackspace,
 ) : TextEditingScope {
 
-	override fun deleteSurroundingTextInCodePoints(lengthBeforeCursor: Int, lengthAfterCursor: Int) =
+	override fun deleteSurroundingTextInCodePoints(lengthBeforeCursor: Int, lengthAfterCursor: Int) {
+		keyboardBackspace.forget()
 		state.imeDeleteSurroundingTextInCodePoints(lengthBeforeCursor, lengthAfterCursor)
+	}
 
-	override fun setSelection(start: Int, end: Int) = state.imeSetSelection(start, end)
+	override fun setSelection(start: Int, end: Int) {
+		keyboardBackspace.selecting(state, start, end)
+		state.imeSetSelection(start, end)
+	}
 
-	override fun commitText(text: CharSequence, newCursorPosition: Int) =
-		state.imeCommitText(text.toString(), newCursorPosition)
+	override fun commitText(text: CharSequence, newCursorPosition: Int) {
+		val backspace = keyboardBackspace.takeFor(state, text)
+		if (backspace != null) {
+			state.imeBackspaceOver(backspace)
+		} else {
+			state.imeCommitText(text.toString(), newCursorPosition)
+		}
+	}
 
-	override fun setComposingRegion(start: Int, end: Int) = state.imeSetComposingRegion(start, end)
+	override fun setComposingRegion(start: Int, end: Int) {
+		keyboardBackspace.forget()
+		state.imeSetComposingRegion(start, end)
+	}
 
-	override fun setComposingText(text: CharSequence, newCursorPosition: Int) =
+	override fun setComposingText(text: CharSequence, newCursorPosition: Int) {
+		keyboardBackspace.forget()
 		state.imeSetComposingText(text.toString(), newCursorPosition)
+	}
 
-	override fun finishComposingText() = state.imeFinishComposing()
+	override fun finishComposingText() {
+		keyboardBackspace.forget()
+		state.imeFinishComposing()
+	}
 }

@@ -889,35 +889,31 @@ class TextEditorState(
 	 * [backspaceStart]), merging with the previous line when at column 0, unless an
 	 * [EditBehavior] claims the edit first.
 	 */
-	fun backspaceAtCursor() {
+	fun backspaceAtCursor() = backspaceAtCursor(from = null)
+
+	/**
+	 * [backspaceAtCursor], deleting back to [from] when an [EditBehavior] leaves the
+	 * edit alone, rather than to the editor's own backspace unit. A platform whose
+	 * keyboard picks the unit itself (iOS's, which takes a whole cluster) passes it.
+	 */
+	internal fun backspaceAtCursor(from: CharLineOffset?) {
 		if (claimedByBehavior { it.onBackspace(this) }) return
 
-		if (cursorPosition.char > 0) {
-			val start = textLines[cursorPosition.line].text.backspaceStart(cursorPosition.char)
-			val deleteRange = TextEditorRange(
-				CharLineOffset(cursorPosition.line, start),
-				cursorPosition
-			)
-
-			val operation = TextEditOperation.Delete(
-				range = deleteRange,
-				cursorBefore = cursorPosition,
-				cursorAfter = CharLineOffset(cursorPosition.line, start)
-			)
+		val caret = cursorPosition
+		val start = from?.takeIf { it isBefore caret } ?: when {
+			caret.char > 0 -> CharLineOffset(caret.line, textLines[caret.line].text.backspaceStart(caret.char))
+			caret.line > 0 -> CharLineOffset(caret.line - 1, textLines[caret.line - 1].length)
+			else -> return
+		}
+		val operation = TextEditOperation.Delete(
+			range = TextEditorRange(start, caret),
+			cursorBefore = caret,
+			cursorAfter = start,
+		)
+		if (start.line == caret.line) {
 			// Typing whatever the cluster's length, so an emoji joins the backspace run.
 			editManager.recordingAsTyping(true) { editManager.applyOperation(operation) }
-		} else if (cursorPosition.line > 0) {
-			val previousLineLength = textLines[cursorPosition.line - 1].length
-			val deleteRange = TextEditorRange(
-				CharLineOffset(cursorPosition.line - 1, previousLineLength),
-				cursorPosition
-			)
-
-			val operation = TextEditOperation.Delete(
-				range = deleteRange,
-				cursorBefore = cursorPosition,
-				cursorAfter = CharLineOffset(cursorPosition.line - 1, previousLineLength)
-			)
+		} else {
 			editManager.applyOperation(operation)
 		}
 	}
