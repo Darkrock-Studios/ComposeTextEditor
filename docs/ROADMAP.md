@@ -1669,12 +1669,26 @@ iOS Safari; browser tests run in CI.
   selection unless it lands inside it (`dragdrop/`, `dragdrop/*Test.kt`). A
   read-only editor lets its text be dragged out as a copy only. Where no drag
   can start, the press selects as before. Android, iOS and web are 6.20; rich
-  spans on a moved range are 6.21.
-- [ ] **6.21 A dragged move drops the text's rich spans. S.** [Opus] [Lane H]
+  spans on a moved range are 6.21 (done).
+- [x] **6.21 A dragged move drops the text's rich spans. S.** [Opus] [Lane H]
   `dropText` deletes the source range and inserts the dragged text, so rich
   spans the HTML cannot carry (highlights, comments, a host's own) are lost
   where cut and paste keeps them through `copyRichSpans` and `pasteRichSpans`.
-  Carry them the same way, keyed by the drag id.
+  Carry them the same way, keyed by the drag id. Done: a drop carrying this
+  editor's own drag id, whose source still holds the dragged text and whose
+  dropped text is that text, takes the source's rich spans at the drop (the
+  same capture a copy makes, `preservedRichSpans`) and adds them over the
+  dropped text inside the drop's undo step, a move or a copy. Overlays (spell
+  check, find) stay with the passes that draw them, and line markers and
+  formats stay with whole lines, which the markup restores. The replay, shared
+  with paste, leaves out a span whose style already covers its range, since
+  inserting beside or inside such a span stretched it. A drop into another
+  editor carries only what its markup does (`dragdrop/DraggedRichSpansTest.kt`).
+- [ ] **6.24 A copy carries overlay spans. S.** [Opus] [Lane H]
+  `copyRichSpans` keeps every rich span in the range, decorations included, so
+  a paste in the editor adds a copy of a spell-check underline or a find
+  highlight that no pass tracks, and it stays after the word is fixed or find
+  closes. Leave `isDecoration` spans out of the capture, as a drag does (6.21).
 - [ ] **6.20 Drag and drop on Android, iOS and web. S.** [Opus] [Lane H]
   `dragdrop/PlatformTextDrag` has desktop actuals only. Android: build the
   transfer from `ClipData.newHtmlText` with `View.DRAG_FLAG_GLOBAL`, read drops

@@ -1960,12 +1960,24 @@ class TextEditorState(
 	 * the clipboard still holds this copy.
 	 */
 	fun copyRichSpans(range: TextEditorRange): Long {
+		val preserved = preservedRichSpans(range)
+		val copyId = nextCopyId++
+		copiedRichSpans = if (preserved.isEmpty()) {
+			null
+		} else {
+			CopiedRichSpans(text = getStringInRange(range), spans = preserved, copyId = copyId)
+		}
+		return copyId
+	}
+
+	/** The rich spans within [range], placed relative to its start, as a copy of it carries them. */
+	internal fun preservedRichSpans(range: TextEditorRange): List<PreservedRichSpan> {
 		// getSpansInRange returns spans that merely OVERLAP the copy range. A span
 		// starting before range.start (partial selection of a list item, or a
 		// multi-line span only partly covered) would yield a negative relative
 		// offset and a corrupt span on paste, so clamp each span to the copy range
 		// and drop any that collapse to empty/inverted.
-		val preserved = richSpanManager.getSpansInRange(range).mapNotNull { span ->
+		return richSpanManager.getSpansInRange(range).mapNotNull { span ->
 			// A line marker or placeholder block belongs to its line, not to the
 			// characters copied out of it: a fragment of an item's text pastes as
 			// plain text, only a copy covering the whole span carries the marker.
@@ -1984,13 +1996,6 @@ class TextEditorState(
 				style = span.style
 			)
 		}
-		val copyId = nextCopyId++
-		copiedRichSpans = if (preserved.isEmpty()) {
-			null
-		} else {
-			CopiedRichSpans(text = getStringInRange(range), spans = preserved, copyId = copyId)
-		}
-		return copyId
 	}
 
 	/**
@@ -2035,7 +2040,16 @@ class TextEditorState(
 		val copied = copiedRichSpans ?: return@withAtomicEdit
 		if (copied.text != pastedText.text) return@withAtomicEdit
 		if (requireCopyIdMatch && clipboardCopyId != copied.copyId) return@withAtomicEdit
-		copied.spans.forEach { preserved ->
+		addPreservedRichSpans(insertPosition, copied.spans)
+	}
+
+	/**
+	 * Adds [spans], captured by [preservedRichSpans], relative to [insertPosition]. One a
+	 * span of the same style already covers is left out: inserting beside or inside that
+	 * span stretched it over the inserted text.
+	 */
+	internal fun addPreservedRichSpans(insertPosition: CharLineOffset, spans: List<PreservedRichSpan>) = withAtomicEdit {
+		spans.forEach { preserved ->
 			val startPos = CharLineOffset(
 				line = insertPosition.line + preserved.relativeStart.lineDiff,
 				char = if (preserved.relativeStart.lineDiff == 0)
@@ -2050,7 +2064,10 @@ class TextEditorState(
 				else
 					preserved.relativeEnd.char
 			)
-			addRichSpan(startPos, endPos, preserved.style)
+			val covered = richSpanManager.getSpansInRange(TextEditorRange(startPos, endPos)).any {
+				it.style == preserved.style && it.range.start <= startPos && it.range.end >= endPos
+			}
+			if (!covered) addRichSpan(startPos, endPos, preserved.style)
 		}
 	}
 

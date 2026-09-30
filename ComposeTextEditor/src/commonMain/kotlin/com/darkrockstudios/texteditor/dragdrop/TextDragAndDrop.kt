@@ -24,6 +24,7 @@ import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.cursor.caretRect
 import com.darkrockstudios.texteditor.html.selectionAsHtml
+import com.darkrockstudios.texteditor.richstyle.BlockSpanStyle
 import com.darkrockstudios.texteditor.state.TextEditorState
 import kotlin.random.Random
 
@@ -100,11 +101,26 @@ internal class TextDragAndDrop(private val state: TextEditorState) {
 		val at = positionInRoot?.let(::offsetAt) ?: dropPosition ?: return false
 		dropPosition = null
 		val content = event.droppedText(state.markdownConfiguration) ?: return false
-		val ours = outgoing?.takeIf { it.id == event.dragId() }
+		return dropAt(at, content, event.dragId(), event.requestsCopy())
+	}
+
+	/**
+	 * Drops [content] at [at]. A drag of this editor's own text ([dragId]) takes the rich
+	 * spans its markup cannot carry from its source, which it still holds, as a paste
+	 * takes them from the copy.
+	 */
+	internal fun dropAt(at: CharLineOffset, content: DroppedText, dragId: Long?, copy: Boolean): Boolean {
+		val ours = outgoing?.takeIf { it.id == dragId }
 		ours?.droppedHere = true
-		val moveFrom = ours?.takeIf { !event.requestsCopy() && state.holds(it.range, it.text) }?.range
+		val source = ours?.takeIf { state.holds(it.range, it.text) }
+		val moveFrom = source?.takeIf { !copy }?.range
+		// Overlays belong to the passes that draw them, and line markers and formats to
+		// whole lines, which the markup restores.
+		val richSpans = source?.takeIf { content.text.text == it.text }
+			?.let { state.preservedRichSpans(it.range) }
+			?.filter { !it.style.isDecoration && !it.style.stickyAtStart && it.style !is BlockSpanStyle }
 		// Refused, the drop is not taken, so a move leaves its source where it was.
-		return state.dropText(content.text, content.html, at, moveFrom, whole = !event.requestsCopy()) != null
+		return state.dropText(content.text, content.html, at, moveFrom, whole = !copy, richSpans) != null
 	}
 
 	private fun offsetAt(positionInRoot: Offset): CharLineOffset? {

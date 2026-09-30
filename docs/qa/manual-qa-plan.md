@@ -202,6 +202,8 @@ this exercises the clipboard's HTML as the block carrier.
    one undo puts it back. Hold Ctrl (Option on macOS) while dropping. **Expect:** a
    copy, the original stays.
 2. Drop the word back inside its own selection. **Expect:** nothing changes.
+   Highlight a word with the demo's Highlight button (a rich span) and drag it
+   elsewhere. **Expect:** it keeps the highlight, moved or copied (6.21).
 3. Click (press and release without moving) inside a selection. **Expect:** the caret
    lands there and the selection goes, on release.
 4. Drag a bold, bulleted line into a browser rich-text field or word processor.
