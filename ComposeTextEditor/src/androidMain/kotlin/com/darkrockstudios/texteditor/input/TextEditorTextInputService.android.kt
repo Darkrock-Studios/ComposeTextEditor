@@ -42,12 +42,14 @@ private class TextEditorInputMethodRequest(
 /** Characters on each side of the selection handed to the keyboard up front, for the platform to trim to its 2048. */
 private const val SURROUNDING_TEXT_WINDOW = 2048
 
-private fun EditorInfo.populate(state: TextEditorState, connection: TextEditorInputConnection) {
+internal fun EditorInfo.populate(state: TextEditorState, connection: TextEditorInputConnection) {
 	val settings = state.keyboardSettings
 	inputType = settings.androidInputType(state.keyboardIsSingleLine)
 	imeOptions = settings.androidImeOptions(state.keyboardIsSingleLine)
 
 	val selection = state.selectionAsTextRange()
+	contentMimeTypes = state.keyboardContentReceiver?.mimeTypes?.toTypedArray()
+
 	initialSelStart = selection.start
 	initialSelEnd = selection.end
 	// Where the keyboard starts shifted, as EditText reports it.
@@ -361,11 +363,12 @@ internal class TextEditorInputConnection(
 
 	override fun reportFullscreenMode(enabled: Boolean): Boolean = false
 
+	// Outside a batch of its own, as the action key is: the host may do anything with it.
 	override fun commitContent(
 		inputContentInfo: InputContentInfo,
 		flags: Int,
 		opts: Bundle?
-	): Boolean = false
+	): Boolean = isActive && state.receiveKeyboardContent(inputContentInfo, flags, opts)
 }
 
 internal data class ImeSurroundingText(val text: String, val selectionStart: Int, val selectionEnd: Int, val offset: Int)

@@ -23,6 +23,24 @@ if (event.key == Key.D && event.isCtrlShortcut) InsertDate else platformKeyBindi
 if (event.layoutKey == Key.D && event.isCtrlShortcut) InsertDate else platformKeyBindings().commandFor(event)
 ```
 
+## Keyboard content on Android
+
+From the first release after 2.8.0, an Android host can take the GIFs,
+stickers and images a keyboard commits by setting
+`TextEditorState.keyboardContentReceiver`
+(`com.darkrockstudios.texteditor.input`). Without one the editor refuses them,
+as before, and keyboards are not offered any. Inserting what arrives is the
+host's work: for an image block, register the bitmap with the
+`ImageProvider` the document uses. The sample app's
+`KeyboardImages.android.kt` does both.
+
+```kotlin
+state.keyboardContentReceiver = KeyboardContentReceiver(listOf("image/gif", "image/png")) { content, _ ->
+	// Read content.contentUri off the main thread, then content.releasePermission().
+	true
+}
+```
+
 ## Markdown as a module
 
 From the first release after 2.8.0, markdown import and export are out of

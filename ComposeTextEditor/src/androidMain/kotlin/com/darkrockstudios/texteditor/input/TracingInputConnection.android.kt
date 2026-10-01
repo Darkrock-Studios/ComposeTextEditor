@@ -138,8 +138,9 @@ internal class TracingInputConnection(
 
 	override fun endBatchEdit(): Boolean = command("endBatchEdit") { inner.endBatchEdit() }
 
-	// A key event, a context menu action and the host's action key change the text through
-	// handlers a replay cannot run, so what they change is written as a change from outside.
+	// A key event, a context menu action, the host's action key and its content receiver
+	// change the text through handlers a replay cannot run, so what they change is written
+	// as a change from outside.
 
 	@Suppress("DEPRECATION")
 	override fun sendKeyEvent(event: KeyEvent?): Boolean {
@@ -192,7 +193,7 @@ internal class TracingInputConnection(
 		command("reportFullscreenMode", { args(enabled) }) { inner.reportFullscreenMode(enabled) }
 
 	override fun commitContent(inputContentInfo: InputContentInfo, flags: Int, opts: Bundle?): Boolean =
-		command("commitContent", { args(flags) }) { inner.commitContent(inputContentInfo, flags, opts) }
+		command("commitContent", { args(flags) }, replayable = false) { inner.commitContent(inputContentInfo, flags, opts) }
 
 	private companion object {
 		val nextId = AtomicInteger()

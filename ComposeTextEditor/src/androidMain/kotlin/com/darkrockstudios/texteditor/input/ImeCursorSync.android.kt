@@ -267,7 +267,11 @@ actual class ImeCursorSync internal constructor(
 	}
 
 	private fun keyboardRequest(): KeyboardRequest = state.keyboardSettings.let {
-		KeyboardRequest(it.androidInputType(state.keyboardIsSingleLine), it.androidImeOptions(state.keyboardIsSingleLine))
+		KeyboardRequest(
+			it.androidInputType(state.keyboardIsSingleLine),
+			it.androidImeOptions(state.keyboardIsSingleLine),
+			state.keyboardContentReceiver?.mimeTypes,
+		)
 	}
 
 	/** The selection and composing indices as the IME should currently see them. */
@@ -375,5 +379,5 @@ private class InputMethodManagerSink(private val state: TextEditorState) : ImeUp
 	override fun sendCursorAnchorInfo(anchor: CursorAnchor) = state.platformExtensions.sendCursorAnchor(anchor)
 }
 
-/** What the keyboard settings ask of the `EditorInfo`, where a change needs a restart. */
-private data class KeyboardRequest(val inputType: Int, val imeOptions: Int)
+/** What the `EditorInfo` asks of the keyboard, where a change needs a restart. */
+private data class KeyboardRequest(val inputType: Int, val imeOptions: Int, val contentMimeTypes: List<String>?)
