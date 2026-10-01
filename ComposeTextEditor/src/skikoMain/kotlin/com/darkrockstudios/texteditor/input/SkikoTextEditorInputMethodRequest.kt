@@ -232,11 +232,11 @@ internal class SkikoTextEditorInputMethodRequest(
 
 	override val textClippingRectInRoot: () -> Rect? = { editorBoundsInRoot() }
 
-	/** Where the document's first line starts, in root coordinates: the viewport origin less the scroll. */
+	/** Where the document's first line starts, in root coordinates: the viewport origin less both scrolls. */
 	override val unclippedTextOffsetInRoot: () -> Offset? = {
 		attachedCoordinates()?.let { coords ->
 			val origin = coords.positionInRoot()
-			Offset(origin.x, origin.y - editorState.scrollState.value)
+			Offset(origin.x - editorState.scrollX, origin.y - editorState.scrollState.value)
 		}
 	}
 

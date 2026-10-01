@@ -3564,7 +3564,13 @@ iOS Safari; browser tests run in CI (met: the `browser` job, 4.15).
     over the bottom of the text while there is a sideways range, through a new
     internal `expect` (`EditorHorizontalScrollbar`; none on Android and iOS)
     (`softwrap/SoftWrapScrollingTest`).
-  - Input method rectangles, handles, toolbar, magnifier, semantics: not started.
+  - Input method rectangles, handles, toolbar, magnifier, semantics: done. The
+    caret rectangle, Android's cursor anchor (whose watch reads the caret, so a
+    sideways scroll resends it), the handles (hidden once their anchor leaves the
+    view sideways) and the magnifier already went through the view conversions;
+    the skiko text origin subtracts the sideways scroll, the touch toolbar moves
+    with it, and the floating cursor's and the semantics' whole-document layouts
+    are measured unwrapped (`softwrap/SoftWrapPlatformTest`, `SemanticsLayoutTest`).
   - `SingleLine` scrolls sideways: not started.
   - The sample app's switch: not started.
 
