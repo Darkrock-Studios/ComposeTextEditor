@@ -192,21 +192,19 @@ private fun EditorActionContext.writeSelection(selection: TextEditorRange): susp
  * block structure, so the text takes the styling of wherever it lands.
  */
 private fun EditorActionContext.pasteClipboard(plainText: Boolean) {
-	// Taken now: the read can suspend while focus moves to another editor on this state.
-	val target = state.answeringEditor
 	scope.launch {
 		// The clipboard is read before the selection is: a read can suspend for a while
 		// (the web's permission prompt), and the user can move the caret or edit
 		// meanwhile. Reading the HTML before mutating also lands the text, the in-editor
 		// rich spans and the pasted block structure as one revision.
 		if (plainText) {
-			ClipboardHelper.getPlainText(clipboard)?.let { state.asEditor(target) { state.pastePlainText(it) } }
+			ClipboardHelper.getPlainText(clipboard)?.let { asTarget { state.pastePlainText(it) } }
 			return@launch
 		}
 		val paste = readClipboardPaste(clipboard, state.richTextStyles, state.allowedLinkSchemes) ?: return@launch
 		val clipboardText = paste.text.normalizeLineEndings()
 		val htmlDocument = state.htmlPasteDocument(paste.html, clipboardText, paste.document)
-		state.asEditor(target) { state.landPaste(clipboardText, htmlDocument, paste.copyId, plainText = false) }
+		asTarget { state.landPaste(clipboardText, htmlDocument, paste.copyId, plainText = false) }
 	}
 }
 

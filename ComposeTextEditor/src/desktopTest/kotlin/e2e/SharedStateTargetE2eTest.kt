@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.ClipEntry
+import androidx.compose.ui.platform.Clipboard
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsActions
@@ -44,7 +46,19 @@ import kotlin.test.assertEquals
  * the focused one's.
  */
 class SharedStateTargetE2eTest {
-	private val clipboard = InMemoryClipboard()
+	/** Holds each read until [gate], when set, completes. */
+	private class GatedClipboard(private val inner: InMemoryClipboard = InMemoryClipboard()) : Clipboard by inner {
+		var gate: CompletableDeferred<Unit>? = null
+
+		override suspend fun getClipEntry(): ClipEntry? {
+			gate?.await()
+			return inner.getClipEntry()
+		}
+
+		fun setPlainText(value: String) = inner.setPlainText(value)
+	}
+
+	private val clipboard = GatedClipboard()
 
 	/** A single-line editor, then a focused multi-line one, then a plain focus target. */
 	private fun sharedTest(block: SkikoComposeUiTest.(TextEditorState) -> Unit) =
@@ -175,6 +189,24 @@ class SharedStateTargetE2eTest {
 		waitForIdle()
 		editors()[0].assertIsFocused()
 		fetched.complete("new\nline ")
+		waitForIdle()
+
+		assertEquals("new\nline hello", state.getAllText().text)
+	}
+
+	@Test
+	fun `the built-in paste whose read waits follows the editor it was run on, not the one focused since`() = sharedTest { state ->
+		clipboard.setPlainText("new\nline ")
+		val gate = CompletableDeferred<Unit>()
+		clipboard.gate = gate
+		state.cursor.updatePosition(CharLineOffset(0, 0))
+
+		editors()[1].performSemanticsAction(SemanticsActions.PasteText)
+		waitForIdle()
+		editors()[0].performSemanticsAction(SemanticsActions.OnClick)
+		waitForIdle()
+		editors()[0].assertIsFocused()
+		gate.complete(Unit)
 		waitForIdle()
 
 		assertEquals("new\nline hello", state.getAllText().text)

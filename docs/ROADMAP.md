@@ -4569,10 +4569,13 @@ Shaping is one line per keystroke. These still scale with document length:
 
 ## Housekeeping
 
-- [ ] The built-in paste (`pasteClipboard` in `input/BuiltinEditorActions.kt`)
+- [x] The built-in paste (`pasteClipboard` in `input/BuiltinEditorActions.kt`)
   captures `answeringEditor` and replays it through `asEditor` by hand, as
   `EditorActionContext.asTarget` (7.82) now does for any action; use it. Found
   in 7.82's review.
+  Now it edits through `asTarget`, a read that waits while focus moves included
+  (`SharedStateTargetE2eTest`). The middle-click primary paste, which has no action
+  context, still takes `inputRequester.editor` by hand.
 - [x] Paste (`landPaste` in `input/BuiltinEditorActions.kt`) and drop
   (`insertAt` in `dragdrop/TextDrop.kt`) each settle the text they land by
   hand: rich spans, `applyHtmlPasteBlocks`, `removeLinkLookOutsideLinks`,
