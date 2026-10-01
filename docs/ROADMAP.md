@@ -190,9 +190,9 @@ review.
 | H | Clipboard and HTML | `clipboard/`, `html/`, `dragdrop/` | 4.9, 4.13, 4.17, 6.7 to 6.13, 6.18 to 6.21, 5.12, 6.24 to 6.27, 6.30 to 6.32, 7.39, 7.46, 7.47, 7.49, 7.53, 7.63 |
 | I | Markdown and block model | `ComposeTextEditorMarkdown/`, `richstyle/`, `state/TextEditorStateBlockExt.kt` | 5.6, 7.14 to 7.16, 7.43, 7.45, 7.52, 7.64, 7.67, 7.70 to 7.72 |
 | J | Find addon | `ComposeTextEditorFind/` | 7.17 to 7.19, 7.26, 7.29, 7.42, 7.68, 7.69 |
-| K | Spell check addon | `ComposeTextEditorSpellCheck/` | 7.20 to 7.22, 7.28, 7.30, 7.31, 7.34, 7.35, 7.38, 7.44, 7.61, 7.71 |
+| K | Spell check addon | `ComposeTextEditorSpellCheck/` | 7.20 to 7.22, 7.28, 7.30, 7.31, 7.34, 7.35, 7.38, 7.44, 7.61, 7.74 |
 | L | Tests and CI | test sources, `.github/workflows/` | 0.1 to 0.3, 0.5 to 0.11, 4.1, 4.15, 7.62, 7.65 |
-| M | Accessibility and host API | semantics in `BasicTextEditor.kt`, `RichTextView.kt`, `state/rememberTextEditorState.kt` | 7.1 to 7.4, 7.13, 7.23 to 7.25, 7.32, 7.36, 7.59, 7.60, 7.66, 7.70 |
+| M | Accessibility and host API | semantics in `BasicTextEditor.kt`, `RichTextView.kt`, `state/rememberTextEditorState.kt` | 7.1 to 7.4, 7.13, 7.23 to 7.25, 7.32, 7.36, 7.59, 7.60, 7.66, 7.73 |
 | N | Core layout and performance | `state/TextEditorState.kt` | 5.7, 7.8 to 7.12 |
 
 Housekeeping items are [Opus] and fit any lane that is already in the file.
@@ -3178,8 +3178,8 @@ Shaping is one line per keystroke. These still scale with document length:
   line. An ellipsis before a capital ends a sentence; its look-ahead started
   two characters late (`SentenceSegmentationTest`, `SegmentationCostTest`,
   `ComputeAffectedRangesTest`, and `SentenceModeSymSpellTest` against a real
-  SymSpell checker). Found 7.71.
-- [ ] **7.71 A batch's earlier ranges are not moved by its later edits. C.**
+  SymSpell checker). Found 7.74.
+- [ ] **7.74 A batch's earlier ranges are not moved by its later edits. C.**
   [Opus] [Lane K] `SpellCheckingTextEditor`'s `computeAffectedRanges` merges
   the ranges of one debounced batch of edits, each in the coordinates the
   text had when its edit ran, and never moves an earlier range by a later
@@ -3450,8 +3450,8 @@ Shaping is one line per keystroke. These still scale with document length:
   single-line one keeps Enter and adds lines, which the single-line editor
   shows as rows. With no editor focused, or a `RichTextView` focused, the
   host's edits are still screened while any single-line editor shows the
-  state (`SingleLineEnterE2eTest`, `KeyboardSettingsTest`). Found 7.70.
-- [ ] **7.70 Edits that reach an unfocused editor follow the focused one. S.**
+  state (`SingleLineEnterE2eTest`, `KeyboardSettingsTest`). Found 7.73.
+- [ ] **7.73 Edits that reach an unfocused editor follow the focused one. S.**
   [Opus] [Lane M] With two editors on one state (7.66), the input filter's
   single-line screen and the action key's default come from the editor
   holding focus. A drop on the other editor, or an accessibility `SetText`,
