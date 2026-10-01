@@ -2640,6 +2640,31 @@ iOS Safari; browser tests run in CI (met: the `browser` job, 4.15).
   long-pressed and dragged along its line moved there, selected, and one undo
   put it back. A drop from another app was not driven: Chrome's first run
   wants its terms accepted. Found: 6.39 to 6.41.
+  Web done: the browser starts the drag itself from a press on Compose's
+  draggable canvas, and the editor gives one only for a mouse press it holds
+  inside the selection (`SelectionDrag.holdPress`), which waits three times
+  the touch slop for it (Firefox's GTK threshold is the slop); that drag then
+  has the press, so the selection stays. The drag offers `text/plain`, `text/html`
+  and the drag id (a custom type) on the `dragstart` event, written again
+  after Compose clears `text/plain`. Compose's web `DragAndDropEvent` carries
+  no position or modifiers, and at a drop it carries the last drag Compose
+  started when that one never landed on the canvas, so a window capture
+  listener records each drag event: the drop reads its `DataTransfer`, its
+  position (from the canvas's client rect) and the copy modifier (Ctrl, or
+  Option on Apple systems). Compose never tells a target that a drag left the
+  canvas or ended, so the listener ends the drop carets then. Only
+  a drop back into the same editor moves: Compose reports every drop on the
+  page as a move, one nothing took included. Compose also ignores the first
+  `dragenter` after any `dragstart`, so after a mouse selection on the canvas
+  (whose `dragstart` it refuses) the next drag from outside was never taken; a
+  refused `dragstart` is now followed by a `dragenter` Compose drops. Touch on
+  the web does not drag (`dragdrop/PlatformStartedDragTest.kt`). Checked in
+  headless Chromium against a development build with synthetic pointer and
+  drag events: a word dragged from its selection offered its text, markup and
+  id, kept its selection while dragged, drew the drop caret, and moved, or with
+  Ctrl copied; an italic `text/html` drop from outside landed italic at the
+  drop point, also after a refused `dragstart`, and plain text dropped after
+  a drag of the selection left and ended elsewhere landed as itself.
 - [ ] **6.39 A finger drag shows no picture of the text. S.** [Opus] [Lane H]
   The drag's decoration is 1 by 1 pixel, which suits desktop, where the
   platform's cursor shows the drag. On Android nothing follows the finger but
@@ -2652,8 +2677,8 @@ iOS Safari; browser tests run in CI (met: the `browser` job, 4.15).
   the first paragraph and pasting it with Ctrl+V a few words on, or dragging
   it there, lands it visibly larger than the text around it, and the line
   grows. The markup round trip (`selectionAsHtml`, then the HTML import's size
-  handling of 7.46 and 6.18) is the likely cause. Check desktop and web, which
-  share it.
+  handling of 7.46 and 6.18) is the likely cause. The web demo does the same
+  for a dragged move; check desktop.
 - [ ] **6.41 Android drops of text a URI carries. S.** [Opus] [Lane H]
   The editor takes any drag whose description has a `text/*` type, but reads
   only an item's text and markup, so a `.txt` file dragged from Files shows
@@ -4070,6 +4095,12 @@ Shaping is one line per keystroke. These still scale with document length:
 
 ## Housekeeping
 
+- [ ] On each Compose Multiplatform upgrade, recheck the web drag workarounds
+  in `dragdrop/PlatformTextDrag.wasmJs.kt` (6.20) against
+  `WebDragAndDropManager`: the `dragenter` sent after a refused `dragstart`
+  (Compose's `previousDragEventIsStart`), and the window listener standing in
+  for the drop's `DataTransfer`, position and modifiers and for `onExited` and
+  `onEnded`. Drop each once Compose covers it.
 - [ ] Android reads a clip's items into styled text twice: `ClipboardHelper.getText`
   and the drop's `droppedText` (`dragdrop/PlatformTextDrag.android.kt`), each
   preferring an item's markup unless it is this app's own and re-parses to

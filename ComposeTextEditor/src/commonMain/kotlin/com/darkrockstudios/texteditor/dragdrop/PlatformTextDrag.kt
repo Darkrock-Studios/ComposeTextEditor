@@ -10,6 +10,26 @@ import com.darkrockstudios.texteditor.RichTextStyles
 /** Text a drag carried: its styled characters and, when it offered them, its markup. */
 internal class DroppedText(val text: AnnotatedString, val html: String?)
 
+/**
+ * The editors drawing a drop caret, for a platform that does not tell a drop target its
+ * drag left or ended (the web) to end them all.
+ */
+internal object DropCarets {
+	private val showing = mutableSetOf<TextDragAndDrop>()
+
+	fun shown(dragAndDrop: TextDragAndDrop) {
+		showing += dragAndDrop
+	}
+
+	fun hidden(dragAndDrop: TextDragAndDrop) {
+		showing -= dragAndDrop
+	}
+
+	fun endAll() {
+		showing.toList().forEach { it.endHover() }
+	}
+}
+
 /** Whether this platform drags text out of the editor and drops it in. */
 internal expect val platformDragsText: Boolean
 

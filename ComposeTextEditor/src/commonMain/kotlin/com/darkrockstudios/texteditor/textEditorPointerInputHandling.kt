@@ -14,6 +14,7 @@ import androidx.compose.ui.platform.ViewConfiguration
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import com.darkrockstudios.texteditor.cursor.getWrappedLineIndex
+import com.darkrockstudios.texteditor.dragdrop.SelectionDrag
 import com.darkrockstudios.texteditor.html.sanitizeLinkUrl
 import com.darkrockstudios.texteditor.input.CtrlKeyBindings
 import com.darkrockstudios.texteditor.input.KeyBindings
@@ -52,7 +53,7 @@ internal fun Modifier.textEditorPointerInputHandling(
 	caretHandle: Boolean = !readOnly,
 	contentOrigin: () -> Offset,
 	touchToolbar: TouchToolbar? = null,
-	selectionDrag: ((Offset) -> Boolean)? = null,
+	selectionDrag: SelectionDrag? = null,
 	primaryPaste: (() -> Unit)? = null,
 ): Modifier {
 	return this
@@ -181,6 +182,13 @@ private class ClickCounter(
 internal val DOUBLE_TAP_SLOP = 100.dp
 
 /**
+ * How much further than the touch slop a press held inside the selection waits where the
+ * platform starts the drag itself, so that a browser whose drag threshold is the slop
+ * (Firefox on GTK) still starts it.
+ */
+private const val PLATFORM_DRAG_SLOP_FACTOR = 3f
+
+/**
  * Every mouse gesture. The primary button places the caret on press (or extends with
  * shift), a second and third press select the word and the line, and a drag extends by
  * whatever unit the press selected. A plain press inside the selection is held instead:
@@ -197,7 +205,7 @@ private fun Modifier.handleMouseInput(
 	links: LinkClicks?,
 	contentOrigin: () -> Offset,
 	touchToolbar: TouchToolbar?,
-	selectionDrag: ((Offset) -> Boolean)?,
+	selectionDrag: SelectionDrag?,
 	primaryPaste: (() -> Unit)?,
 ): Modifier = pointerInput(state, links, touchToolbar, selectionDrag, primaryPaste) {
 	val clickCounter = ClickCounter(viewConfiguration)
@@ -221,8 +229,25 @@ private fun Modifier.handleMouseInput(
 				// press can become a click on what is under it.
 				val pressed = if (clicks == 1 && !isShiftPressed) ClickTarget.at(state, downAt) else null
 				val held = pressed != null && selectionDrag != null && state.selectionContains(downAt)
-				val outcome = if (held) awaitMoveOrRelease(down, touchSlop) ?: return@awaitEachGesture else null
-				if (outcome != null && outcome.pressed && selectionDrag?.invoke(outcome.position) == true) {
+				val outcome = if (held) {
+					selectionDrag.holdPress()
+					var dragged = false
+					val slop = if (selectionDrag.platformStartsDrags) touchSlop * PLATFORM_DRAG_SLOP_FACTOR else touchSlop
+					val change = try {
+						awaitMoveOrRelease(down, slop)
+					} finally {
+						dragged = selectionDrag.releasePress()
+					}
+					// The platform's drag has the press, which it ends as a cancel or a release.
+					if (dragged) {
+						clickCounter.reset()
+						return@awaitEachGesture
+					}
+					change ?: return@awaitEachGesture
+				} else {
+					null
+				}
+				if (outcome != null && outcome.pressed && selectionDrag?.start(outcome.position) == true) {
 					clickCounter.reset()
 					return@awaitEachGesture
 				}
@@ -805,7 +830,7 @@ private fun Modifier.handleTouchInteractions(
 	caretHandle: Boolean,
 	contentOrigin: () -> Offset,
 	touchToolbar: TouchToolbar?,
-	selectionDrag: ((Offset) -> Boolean)?,
+	selectionDrag: SelectionDrag?,
 ): Modifier {
 	return pointerInput(state, links, caretHandle, touchToolbar, selectionDrag) {
 		val touchSlop = viewConfiguration.touchSlop
@@ -855,7 +880,7 @@ private fun Modifier.handleTouchInteractions(
 							touchToolbar == null -> onContextMenuRequest?.invoke(downAt)
 							!touchToolbar.isNative -> touchToolbar.showMenuAt(downAt)
 							touchToolbar.isShown && state.selectionContains(downAt) &&
-									selectionDrag?.invoke(down.position) == true -> touchToolbar.hide()
+									selectionDrag?.start(down.position) == true -> touchToolbar.hide()
 							else -> showToolbarOnRelease = true
 						}
 					} else {

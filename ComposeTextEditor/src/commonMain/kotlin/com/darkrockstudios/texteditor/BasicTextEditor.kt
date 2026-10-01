@@ -420,7 +420,7 @@ fun BasicTextEditor(
 							caretHandle = enabled,
 							contentOrigin = { contentOrigin },
 							touchToolbar = touchToolbar,
-							selectionDrag = dragAndDrop::startSelectionDrag,
+							selectionDrag = dragAndDrop,
 							primaryPaste = primaryPaste,
 						)
 						.padding(horizontalPadding)

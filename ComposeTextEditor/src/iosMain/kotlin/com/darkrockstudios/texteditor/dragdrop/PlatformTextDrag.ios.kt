@@ -7,7 +7,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.Density
 import com.darkrockstudios.texteditor.RichTextStyles
 
-// Text drag and drop is desktop and Android only so far (roadmap 6.20): here the editor neither
+// Text drag and drop is desktop, Android and web only so far (roadmap 6.20): here the editor neither
 // starts a drag nor accepts a drop.
 
 internal actual val platformDragsText: Boolean = false
