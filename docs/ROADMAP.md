@@ -2623,6 +2623,43 @@ iOS Safari; browser tests run in CI (met: the `browser` job, 4.15).
   long press inside the selection (lane B's touch handling). iOS and web: check
   what Compose Multiplatform's `DragAndDropEvent` exposes there (web has a
   `WebDragAndDropManager`) and fill in the same four functions.
+  Android done: a global drag (`View.DRAG_FLAG_GLOBAL`) of
+  `ClipData.newHtmlText`, the drag id as the local state, which only this
+  process sees; a clip too large for the binder with its markup drags its
+  text alone. As in `TextView`, only a drop back into the same editor moves;
+  a drop into another editor or app copies. Drops read each item's markup or
+  text from `toAndroidDragEvent().clipData`, one item per line, at the event's
+  `x`/`y`, through the same drop path as desktop; the editor's own drag takes
+  its markup only when it re-parses to the dragged characters. While the
+  platform toolbar is up over the selection, a long press inside it starts
+  the drag and hides the toolbar, as `EditText` does; with the toolbar gone
+  the long press brings it back, a long press elsewhere still selects the
+  word, and without a platform toolbar (desktop touch) the long press still
+  opens the menu (`dragdrop/TouchSelectionDragTest.kt`, host
+  `dragdrop/AndroidTextDragTest.kt`). Checked on the API 36 emulator: a word
+  long-pressed and dragged along its line moved there, selected, and one undo
+  put it back. A drop from another app was not driven: Chrome's first run
+  wants its terms accepted. Found: 6.39 to 6.41.
+- [ ] **6.39 A finger drag shows no picture of the text. S.** [Opus] [Lane H]
+  The drag's decoration is 1 by 1 pixel, which suits desktop, where the
+  platform's cursor shows the drag. On Android nothing follows the finger but
+  the drop caret under it. `TextView` shows the text (up to 20 characters) in
+  a bubble above the finger; Compose's `ComposeDragShadowBuilder` centres the
+  decoration on the finger, so a picture has to sit within its size to show
+  above it. Draw the dragged text where a finger started the drag.
+- [ ] **6.40 A word pasted or dropped back in lands larger. S.** [Opus]
+  [Lane H] In the Android sample's rich text editor, copying "world" from
+  the first paragraph and pasting it with Ctrl+V a few words on, or dragging
+  it there, lands it visibly larger than the text around it, and the line
+  grows. The markup round trip (`selectionAsHtml`, then the HTML import's size
+  handling of 7.46 and 6.18) is the likely cause. Check desktop and web, which
+  share it.
+- [ ] **6.41 Android drops of text a URI carries. S.** [Opus] [Lane H]
+  The editor takes any drag whose description has a `text/*` type, but reads
+  only an item's text and markup, so a `.txt` file dragged from Files shows
+  the drop caret and then drops nothing. `TextView` reads such items with
+  `coerceToStyledText` under `requestDragAndDropPermissions`, which needs the
+  activity. Read them the same way, or refuse such drags at the start.
 - [x] **6.27 Cut from a canvas-focused editor on the web. C.** [Opus] [Lane H]
   An editable editor whose canvas holds DOM focus (after a touch the
   session does not hand focus back from) takes Ctrl/Cmd+X on the canvas, where
@@ -4033,6 +4070,10 @@ Shaping is one line per keystroke. These still scale with document length:
 
 ## Housekeeping
 
+- [ ] Android reads a clip's items into styled text twice: `ClipboardHelper.getText`
+  and the drop's `droppedText` (`dragdrop/PlatformTextDrag.android.kt`), each
+  preferring an item's markup unless it is this app's own and re-parses to
+  other characters. Share one helper. Found in 6.20.
 - [x] The README's "Work left to do" is stale: desktop copy and paste now
   preserves formatting. Now it lists right-to-left drawing and arrows (7.6,
   7.7, 7.33) beside CommonMark; the rich clipboard (6.7, 4.9) and sentence
@@ -4130,3 +4171,4 @@ records results and removes entries that passed.
 | 4.38 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64`. `skikoMain` gains `input/DomLayoutKey.kt` (`layoutKeyFromCodePoint`, used by the web only; `UNICODE_KEY_CODE_BASE` moved there from desktop). Then the wasm demo in Safari and Chrome on macOS, with the US layout and again with French (AZERTY): Cmd+Z, Cmd+Shift+Z, Cmd+B, Ctrl+A and Ctrl+F (the Emacs chords), and Cmd+Option+Shift+V over copied bold text | Compiles. Under AZERTY, Cmd+Z undoes on the key that types z (QWERTY's W), not on QWERTY's Z; Cmd+B bolds; the Emacs chords move as in TextEdit; Cmd+Option+Shift+V pastes plain. Under US, all as before ||
 | 7.33 | In the iOS sample app with a hardware keyboard (the simulator's, or an iPad's), type `abc אבג def` and press Right from the start, then Left from the end; also Shift+Right. Compare a `UITextView` (Notes) with the same text. Then the same in the macOS desktop sample app against TextEdit. commonMain only, no `iosMain` change | Each press moves the caret one glyph further right (or left) on screen, through the Hebrew word, as Notes and TextEdit do. If iOS turns out logical, set `ARROW_KEYS_MOVE_VISUALLY` per platform in `state/VisualCaretMotion.kt`; if the arrows never reach the key handler on iOS (UIKit moving the caret through the input connection instead), file that ||
 | 6.37 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64`. `clipboard/ClipboardHtml.kt` adds `internal expect suspend fun readClipboardPaste`; the iOS actual (`iosMain/.../clipboard/ClipboardHtml.ios.kt`) goes through `ClipboardHelper.getText`, `readClipboardHtml` and `readCopyId` as the paste did. Then in the iOS sample app: copy a bulleted list in the editor and paste it, and paste a bulleted list copied from Notes | Compiles. Both paste as bulleted lists, with one paste prompt at most ||
+| 6.20 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64`. The `dragdrop/PlatformTextDrag.kt` expects changed: `textDragTransferData` takes a nullable `html`, and `droppedText` an `ownDrag` flag; the iOS actuals (`iosMain/.../dragdrop/PlatformTextDrag.ios.kt`) still answer null and false | Compiles ||

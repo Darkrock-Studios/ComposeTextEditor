@@ -58,7 +58,7 @@ internal fun Modifier.textEditorPointerInputHandling(
 	return this
 		.handleHandleDrag(state, contentOrigin, touchToolbar)
 		.handleTouchInteractions(
-			state, onSpanClick, onContextMenuRequest, readOnly, links, caretHandle, contentOrigin, touchToolbar,
+			state, onSpanClick, onContextMenuRequest, readOnly, links, caretHandle, contentOrigin, touchToolbar, selectionDrag,
 		)
 		.handleMouseInput(
 			state, onSpanClick, onContextMenuRequest, readOnly, links, contentOrigin, touchToolbar, selectionDrag, primaryPaste,
@@ -789,6 +789,8 @@ private fun Density.handleSpanInteraction(
  * Finger taps, double taps, and long presses. A tap places the caret; a second tap
  * within the platform's double-tap timeout selects the word under it; a long press
  * selects the word under it, or brings up the menu when it lands on the selection.
+ * While the platform toolbar is up over the selection, a long press inside the selection
+ * hands it to [selectionDrag] instead, as Android's `EditText` does.
  * Dragging on from a double tap or a long press extends the selection by word, as
  * Android's text fields do, and the moves are consumed so the ancestor scrollable does
  * not pan with them. Once the finger lifts, the [touchToolbar] shows over what was
@@ -803,8 +805,9 @@ private fun Modifier.handleTouchInteractions(
 	caretHandle: Boolean,
 	contentOrigin: () -> Offset,
 	touchToolbar: TouchToolbar?,
+	selectionDrag: ((Offset) -> Boolean)?,
 ): Modifier {
-	return pointerInput(state, links, caretHandle, touchToolbar) {
+	return pointerInput(state, links, caretHandle, touchToolbar, selectionDrag) {
 		val touchSlop = viewConfiguration.touchSlop
 		val longPressTimeout = viewConfiguration.longPressTimeoutMillis
 		val tapCounter = ClickCounter(viewConfiguration, slop = DOUBLE_TAP_SLOP.toPx(), fromRelease = true)
@@ -846,10 +849,14 @@ private fun Modifier.handleTouchInteractions(
 					if (isOnSelection) {
 						// The toolbar waits for the finger to lift, as after every other
 						// gesture; the fallback menu is modal, so it opens now, under the finger.
+						// A drag that starts has the finger, and the toolbar goes, as Android's does;
+						// with the toolbar gone the long press brings it back instead.
 						when {
 							touchToolbar == null -> onContextMenuRequest?.invoke(downAt)
-							touchToolbar.isNative -> showToolbarOnRelease = true
-							else -> touchToolbar.showMenuAt(downAt)
+							!touchToolbar.isNative -> touchToolbar.showMenuAt(downAt)
+							touchToolbar.isShown && state.selectionContains(downAt) &&
+									selectionDrag?.invoke(down.position) == true -> touchToolbar.hide()
+							else -> showToolbarOnRelease = true
 						}
 					} else {
 						// Off any word this selects nothing and leaves the caret at the press. Past

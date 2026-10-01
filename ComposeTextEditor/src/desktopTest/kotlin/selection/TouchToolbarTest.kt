@@ -397,13 +397,15 @@ class TouchToolbarTest {
 		}
 	}
 
+	/** With the toolbar up, the long press drags the selection instead (`TouchSelectionDragTest`). */
 	@Test
 	fun `a long press on the selection shows the toolbar on lift rather than the context menu`() {
 		val toolbar = RecordingTextToolbar()
 		val menuState = TextEditorContextMenuState()
 		editorUiTest(initialText = document, textToolbar = toolbar, contextMenuState = menuState) {
 			longPressAtCharacter(8)
-			toolbar.hide()
+			assertNotNull(toolbar.menu).onCopy!!()
+			assertNull(toolbar.menu)
 
 			longPressAt(positionOfCharacter(7))
 			assertNull(toolbar.menu, "still held")

@@ -36,8 +36,9 @@ import kotlin.random.Random
  * with the platform's modifier), and dropping text in, its own selection included.
  *
  * The pointer handling starts a drag ([startSelectionDrag]) when a mouse press inside
- * the selection moves past the slop, as native editors do. A drop follows the line limit
- * of [editor], the editor it lands on, which need not hold focus.
+ * the selection moves past the slop, or a finger long-presses inside it, as native
+ * editors do. A drop follows the line limit of [editor], the editor it lands on, which
+ * need not hold focus.
  */
 internal class TextDragAndDrop(
 	private val state: TextEditorState,
@@ -60,33 +61,42 @@ internal class TextDragAndDrop(
 
 	private var outgoing: OutgoingDrag? = null
 
+	/** Whether the last [startTransfer] started a drag. */
+	private var started = false
+
 	internal var requestTransfer: ((Offset) -> Unit)? = null
 
 	/**
 	 * Starts a platform drag of the selection, [offset] being where the pointer is in the
-	 * canvas node. False where this platform cannot drag text, so the press selects instead.
+	 * canvas node. False where none started, so the press selects instead.
 	 */
 	fun startSelectionDrag(offset: Offset): Boolean {
 		val request = requestTransfer?.takeIf { platformDragsText } ?: return false
+		// The platforms that take a request (desktop, Android) start the drag inside it.
+		started = false
 		request(offset)
-		return true
+		return started
 	}
 
 	internal fun startTransfer(scope: DragAndDropStartTransferScope) {
 		val selection = state.selector.selection ?: return
 		val text = state.selector.getSelectedText()
 		val id = Random.nextLong()
-		val data = textDragTransferData(
+		fun data(html: String?) = textDragTransferData(
 			text = text,
-			html = state.selectionAsHtml(selection),
+			html = html,
 			dragId = id,
 			styles = state.richTextStyles,
 			allowMove = enabled,
 			onEnded = ::onSourceEnded,
-		) ?: return
+		)
+		val rich = data(state.selectionAsHtml(selection)) ?: return
 		val drag = OutgoingDrag(id, selection, text.text)
 		outgoing = drag
-		val started = scope.startDragAndDropTransfer(data, DECORATION_SIZE) {}
+		// A drag too large to carry its markup to another process (Android's binder
+		// limit) still drags its text.
+		started = scope.startDragAndDropTransfer(rich, DECORATION_SIZE) {} ||
+				data(null)?.let { scope.startDragAndDropTransfer(it, DECORATION_SIZE) {} } == true
 		if (!started && outgoing === drag) outgoing = null
 	}
 
@@ -111,8 +121,13 @@ internal class TextDragAndDrop(
 	internal fun drop(event: DragAndDropEvent, positionInRoot: Offset?): Boolean {
 		val at = positionInRoot?.let(::hitAt)?.position ?: dropHit?.position ?: return false
 		dropHit = null
-		val content = event.droppedText(state.richTextStyles, state.allowedLinkSchemes) ?: return false
-		return dropAt(at, content, event.dragId(), event.requestsCopy())
+		val dragId = event.dragId()
+		val content = event.droppedText(
+			state.richTextStyles,
+			state.allowedLinkSchemes,
+			ownDrag = dragId != null && dragId == outgoing?.id,
+		) ?: return false
+		return dropAt(at, content, dragId, event.requestsCopy())
 	}
 
 	/**
@@ -185,7 +200,7 @@ private class TextDragAndDropNode(dragAndDrop: TextDragAndDrop) : DelegatingNode
 			if (value === field) return
 			field.requestTransfer = null
 			field = value
-			if (isAttached) value.requestTransfer = source::requestDragAndDropTransfer
+			if (isAttached) value.requestTransfer = transferRequest()
 		}
 
 	private val target = object : DragAndDropTarget {
@@ -202,8 +217,12 @@ private class TextDragAndDropNode(dragAndDrop: TextDragAndDrop) : DelegatingNode
 	private val targetNode = delegate(DragAndDropTargetModifierNode({ dragAndDrop.accepts(it) }, target))
 
 	override fun onAttach() {
-		dragAndDrop.requestTransfer = source::requestDragAndDropTransfer
+		dragAndDrop.requestTransfer = transferRequest()
 	}
+
+	/** Null where the platform starts drags itself (web, iOS) and refuses a request. */
+	private fun transferRequest(): ((Offset) -> Unit)? =
+		source.takeIf { it.isRequestDragAndDropTransferRequired }?.let { it::requestDragAndDropTransfer }
 
 	override fun onDetach() {
 		dragAndDrop.requestTransfer = null

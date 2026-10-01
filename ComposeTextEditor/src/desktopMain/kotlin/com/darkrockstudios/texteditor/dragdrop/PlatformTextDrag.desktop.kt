@@ -28,7 +28,7 @@ internal actual val platformDragsText: Boolean = true
 @OptIn(ExperimentalComposeUiApi::class)
 internal actual fun textDragTransferData(
 	text: AnnotatedString,
-	html: String,
+	html: String?,
 	dragId: Long,
 	styles: RichTextStyles,
 	allowMove: Boolean,
@@ -55,7 +55,11 @@ internal actual fun DragAndDropEvent.carriesText(): Boolean =
 	runCatching { awtTransferable.offersText() }.getOrDefault(false)
 
 @OptIn(ExperimentalComposeUiApi::class)
-internal actual fun DragAndDropEvent.droppedText(styles: RichTextStyles, allowedLinkSchemes: Set<String>): DroppedText? {
+internal actual fun DragAndDropEvent.droppedText(
+	styles: RichTextStyles,
+	allowedLinkSchemes: Set<String>,
+	ownDrag: Boolean,
+): DroppedText? {
 	val transferable = runCatching { awtTransferable }.getOrNull() ?: return null
 	val text = transferable.readStyledText(styles, allowedLinkSchemes) ?: return null
 	return DroppedText(text, transferable.readHtmlMarkup())

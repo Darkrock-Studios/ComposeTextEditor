@@ -14,14 +14,15 @@ internal class DroppedText(val text: AnnotatedString, val html: String?)
 internal expect val platformDragsText: Boolean
 
 /**
- * What a drag of [text] out of the editor carries: the text, [html] beside it, [dragId]
+ * What a drag of [text] out of the editor carries: the text, [html] beside it where
+ * given, [dragId]
  * to tell the drag apart at a drop, and the move and copy actions ([allowMove] false
  * offers copy alone). [onEnded] hears whether the drag ended as a move. Null where the
  * platform cannot start one.
  */
 internal expect fun textDragTransferData(
 	text: AnnotatedString,
-	html: String,
+	html: String?,
 	dragId: Long,
 	styles: RichTextStyles,
 	allowMove: Boolean,
@@ -34,8 +35,15 @@ internal expect fun DragAndDropEvent.dragId(): Long?
 /** Whether this drag carries text the editor can take. */
 internal expect fun DragAndDropEvent.carriesText(): Boolean
 
-/** The text this drag carries, read at the drop. */
-internal expect fun DragAndDropEvent.droppedText(styles: RichTextStyles, allowedLinkSchemes: Set<String>): DroppedText?
+/**
+ * The text this drag carries, read at the drop. An [ownDrag], this editor's own, must
+ * drop the characters it dragged, which its source's rich spans are matched against.
+ */
+internal expect fun DragAndDropEvent.droppedText(
+	styles: RichTextStyles,
+	allowedLinkSchemes: Set<String>,
+	ownDrag: Boolean,
+): DroppedText?
 
 /** Where the pointer is, in the root's pixels, or null where the platform does not say. */
 internal expect fun DragAndDropEvent.pointerInRoot(density: Density): Offset?
