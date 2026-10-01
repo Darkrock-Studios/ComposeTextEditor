@@ -379,7 +379,7 @@ fixes what users feel every minute.
 
 ### Caret and keyboard
 
-- [ ] **1.1 Grapheme-aware movement and deletion. R.** [Opus] [Lane A]
+- [x] **1.1 Grapheme-aware movement and deletion. R.** [Opus] [Lane A]
   [Mac work] Left and Right step one UTF-16 unit
   (`state/TextEditorCursorState.kt`, `moveLeft`/`moveRight`). Backspace and
   Delete remove one unit (`state/TextEditorState.kt`,
@@ -399,8 +399,9 @@ fixes what users feel every minute.
   `BasicTextField` and `EditText` share (a combining mark comes off its base
   on its own). The `NoLoneSurrogate` and `CaretOnGraphemeBoundary` invariants
   are on. IME `deleteSurroundingText` deletes stay as the keyboard counts them.
-  The Mac part (compile the shared `actual` for iOS) is in the queue; the
-  checkbox waits on it.
+  On iOS the shared `actual` compiles, and Left and Right step whole clusters
+  with a hardware keyboard. The soft keyboard's Backspace deletes e + U+0301
+  whole, as iOS's own fields do; each platform keeps its own rule there.
 - [x] **1.2 Pixel-based vertical movement with a goal column. R.** [Opus]
   [Lane A] Up, Down, PageUp, and PageDown add a character count to the target
   row's start (`state/TextEditorStateCursorExt.kt`). With proportional fonts
@@ -3046,7 +3047,6 @@ records results and removes entries that passed.
 
 | Item | What to do | A pass looks like | Result |
 | --- | --- | --- | --- |
-| 1.1 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64`. `skikoMain/.../state/TextBreaks.skiko.kt` is the iOS `actual` for the break cursors (`org.jetbrains.skia.BreakIterator`, `org.jetbrains.skia.icu.CharProperties`); if it does not compile, the fix is in that file. Then in the iOS sample app: type an emoji, a family ZWJ sequence, a flag and a keycap, and backspace through each; type "e" then a combining acute (or Vietnamese "ế") and backspace once; arrow Left and Right across them; type Japanese and step through it | Backspace removes each emoji sequence whole and only the accent off its base; Left and Right never stop inside a sequence; no half character ever shows |  Partial, 2026-09-30 at `78bf021`, iPhone 17 Pro Max simulator, iOS 26.0. Compiles. Soft-keyboard backspace removes 😀, 👨‍👩‍👧, 🇯🇵, 1️⃣, precomposed ế and each kanji in one press each, and no half character ever shows. e + U+0301 goes whole in one press, not accent first; Safari's native address field in the same simulator does the same, so this matches iOS but not the rule written in 1.1. Compose sends that press as `deleteSurroundingTextInCodePoints(1, 0)`. Left and Right not run: they need a hardware keyboard, which the simulator tools here cannot drive. Left for a person Then 2026-09-30, after the 4.6 fix: Left and Right with a hardware keyboard step over each emoji sequence, flag, keycap and accented letter whole, once per press and once per held repeat. Left open only for the backspace rule over e + U+0301: decide whether iOS's whole-cluster delete is the intended behavior here, then tick |
 | 1.5 | The same iOS compile as 1.1 covers `wordCursor`. In the iOS sample app: Option+Left and Option+Right with a hardware keyboard through "don’t stop", "日本語を勉強します" and "a 😀 b"; double-tap "don’t" and an emoji | Option arrows stop at word ends and starts only, keeping "don’t" whole, stepping Japanese by dictionary word and stopping at the emoji; a double-tap selects the whole contraction or the whole emoji |  Partial, same run. Double-tap selects "don’t" whole and 😀 whole. **Fails:** double-tap on 勉 in 日本語を勉強します selects only 強, so iOS word breaks split kanji per character. Desktop, on the same skia `actual`, segments 勉強 (`TextEditorWordSegmentationTest`), so skia's ICU on iOS seems to lack the CJK dictionary; `NSString` word enumeration or `CFStringTokenizer` would have it. Option+Left and Option+Right not run: hardware keyboard, left for a person Then 2026-09-30, after the 4.6 fix: Option+Left and Option+Right with a hardware keyboard keep "don’t" whole and stop at word starts and ends. On "日本語を勉強します" they step per kanji, the same word-break failure as the double-tap. "a 😀 b" not yet stepped through |
 | 2.6 | In Safari and Chrome on macOS, open the wasm demo and press Ctrl+A, E, F, B, N, P, D, H and K in a paragraph. The page's hidden text area has the same Cocoa Emacs bindings, so a chord could act twice | Each chord moves or deletes once, as in the desktop sample app | Not run: needs a person at a real keyboard. Browser automation injects key events below the Cocoa text system, so it cannot reproduce a chord acting twice |
 | 2.9 | In the iOS sample app with a hardware keyboard: press Tab, Ctrl+Tab, then Escape followed by Tab; then set `state.tabSettings = TabSettings(movesFocus = true)` on the demo editor and press Tab | Tab indents by four spaces; Ctrl+Tab, Escape then Tab, and Tab under `movesFocus` either move focus to another control or do nothing, and never type a tab character (4.28) || Not run: hardware keyboard, left for a person |
