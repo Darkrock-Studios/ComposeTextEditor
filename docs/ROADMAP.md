@@ -400,7 +400,7 @@ editor does rather than what it should do.
   nothing). The `ios` job now builds the sample app through `xcodebuild test`
   on the newest runtime's first iPhone simulator, with a 60-minute timeout.
   Passes locally on the iPhone 17 Pro Max simulator, iOS 26.0.
-- [ ] **0.8 Real OS input, nightly.** [Opus] [Lane L] Drive the sample app on a
+- [x] **0.8 Real OS input, nightly.** [Opus] [Lane L] Drive the sample app on a
   virtual Linux display with a dead-key layout. Most expensive, so last.
   Written, pending its first run: `.github/workflows/os-input-nightly.yml`
   starts Xvfb and openbox with the US International layout, and
@@ -412,6 +412,12 @@ editor does rather than what it should do.
   capital, a dead key before a space, dead keys inside words, and AltGr. It
   runs nightly from the default branch and on pushes to `native-parity` that
   touch it. Nothing here could run it: no Xvfb or xdotool on this machine.
+  Done: first runs on 2026-10-01. Runs 36786371170 and 36797047104 failed while
+  the job was brought up; 36811528763 and 36822999186 passed every case (plain
+  typing, Enter and Backspace, the five dead keys, a capital, a dead key before
+  a space, dead keys inside words, AltGr), from the `os-input-results`
+  artifact. The schedule only fires from the default branch, so nightly runs
+  start once this work reaches `main`.
 
 ## Phase 1: native feel
 
