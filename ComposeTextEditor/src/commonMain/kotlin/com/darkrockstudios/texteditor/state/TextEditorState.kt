@@ -1156,7 +1156,10 @@ class TextEditorState(
 
 	/** Inserts a single [char] at the cursor, applying the active typing style. */
 	fun insertCharacterAtCursor(char: Char) {
-		if (char == '\n' || char == '\r') return insertStringAtCursor("\n")
+		if (char == '\n' || char == '\r') {
+			insertStringAtCursor("\n")
+			return
+		}
 		val text = cursor.applyCursorStyle(char.toString())
 		val operation = TextEditOperation.Insert(
 			position = cursorPosition,
@@ -1167,22 +1170,30 @@ class TextEditorState(
 		editManager.applyOperation(operation)
 	}
 
-	/** Inserts plain [string] at the cursor, applying the active typing style. */
-	fun insertStringAtCursor(string: String) = insertStringAtCursor(string.toAnnotatedString())
+	/**
+	 * Inserts plain [string] at the cursor, applying the active typing style.
+	 * @return the range the text landed in (collapsed when none did), or null when the
+	 * input filter refused it.
+	 */
+	fun insertStringAtCursor(string: String): TextEditorRange? = insertStringAtCursor(string.toAnnotatedString())
 
 	/**
 	 * Inserts [text] at the cursor, preserving its character-level spans and applying
 	 * the active typing style. Advances the cursor past the inserted text, accounting
 	 * for any embedded line breaks.
+	 * @return the range the text landed in, which the input filter or line ending
+	 * normalization can make differ from [text] (collapsed when none did), or null when
+	 * the filter refused it.
 	 */
-	fun insertStringAtCursor(text: AnnotatedString) {
+	fun insertStringAtCursor(text: AnnotatedString): TextEditorRange? {
 		val operation = TextEditOperation.Insert(
 			position = cursorPosition,
 			text = cursor.applyCursorStyle(text),
 			cursorBefore = cursorPosition,
 			cursorAfter = text.endWhenInsertedAt(cursorPosition),
 		)
-		editManager.applyOperation(operation)
+		val landed = editManager.applyLanded(operation) as TextEditOperation.Insert? ?: return null
+		return TextEditorRange(landed.position, landed.textEnd)
 	}
 
 	/**
@@ -1210,8 +1221,10 @@ class TextEditorState(
 	 * @param inheritStyle when true, each inserted character adopts the style of the
 	 * replaced character at its position, and any beyond them (or all, when [range]
 	 * is empty) the style an insert at the range's end would take.
+	 * @return the range the text landed in (collapsed when none did), or null when the
+	 * input filter refused it.
 	 */
-	fun replace(range: TextEditorRange, newText: String, inheritStyle: Boolean = false) =
+	fun replace(range: TextEditorRange, newText: String, inheritStyle: Boolean = false): TextEditorRange? =
 		replace(range, newText.toAnnotatedString(), inheritStyle)
 
 	/**
@@ -1220,8 +1233,11 @@ class TextEditorState(
 	 * @param inheritStyle when true, each inserted character also adopts the style of
 	 * the replaced character at its position, and any beyond them (or all, when
 	 * [range] is empty) the style an insert at the range's end would take.
+	 * @return the range the text landed in, which the input filter or line ending
+	 * normalization can make differ from [newText] (collapsed when none did), or null
+	 * when the filter refused it.
 	 */
-	fun replace(range: TextEditorRange, newText: AnnotatedString, inheritStyle: Boolean = false) {
+	fun replace(range: TextEditorRange, newText: AnnotatedString, inheritStyle: Boolean = false): TextEditorRange? {
 		val operation = TextEditOperation.Replace(
 			range = range,
 			newText = newText,
@@ -1248,7 +1264,8 @@ class TextEditorState(
 			inheritStyle = inheritStyle,
 		)
 
-		editManager.applyOperation(operation)
+		val landed = editManager.applyLanded(operation) as TextEditOperation.Replace? ?: return null
+		return TextEditorRange(landed.range.start, landed.newTextEnd)
 	}
 
 	internal fun updateLine(index: Int, text: String) =

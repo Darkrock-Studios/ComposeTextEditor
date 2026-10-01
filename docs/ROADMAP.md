@@ -2894,6 +2894,12 @@ Shaping is one line per keystroke. These still scale with document length:
   scope, and find in selection searches the whole document; text restored at
   the scope's start lands outside it. Keep the scope in `FindState` as well and
   draw the span from it, or re-scope on the undo's edit.
+- [ ] **7.66 Find counts a replacement the input filter refused. S.** [Opus]
+  [Lane J] `replaceAll` returns every target and clears every match, and
+  `replaceCurrent` returns true, even when the input filter (a full
+  `maxLength`, `SingleLine` against a replacement with a line break) refused
+  some or all of them, so the refused matches stay in the text unhighlighted.
+  `replace` now returns null for a refused edit (7.55); count and keep those.
 
 ### Spell check addon
 
@@ -3062,11 +3068,16 @@ Shaping is one line per keystroke. These still scale with document length:
   leaves decorations out of the spans it records, so the merge, the typing check,
   the erased-run check and the restore all see content spans only
   (`state/DecorationUndoTest.kt`).
-- [ ] **7.55** [Opus] [Lane G] `TextEditorState.replace` and `insertText` return
+- [x] **7.55** [Opus] [Lane G] `TextEditorState.replace` and `insertText` return
   nothing, so a caller cannot tell whether the input filter (7.13) refused or
   changed its text. Find (7.42) and spell check (7.44) infer it from the line
   list's identity and the change in length, which a behavior that edits during the
-  same call would throw off. Return what landed, or null when refused.
+  same call would throw off. Return what landed, or null when refused. Done:
+  `replace` and `insertStringAtCursor` return the range their text landed in
+  (after the filter and line ending normalization; collapsed when nothing was
+  inserted), or null when the filter refused it. Find's replace
+  (`FindState.replaceInGroup`) and spell check's correction (`replaceFlagged`)
+  read it instead of comparing lengths (`state/EditResultTest.kt`).
 - [x] **7.56** [Opus] [Lane K] `wordSegments()` opens its ICU word cursor with
   `use` inside the sequence builder, so a consumer that stops early (`first`,
   `find`, an abandoned iterator) never closes it, and the native break iterator

@@ -138,16 +138,25 @@ class TextEditManager(private val state: TextEditorState) {
 	}
 
 	fun applyOperation(requested: TextEditOperation, addToHistory: Boolean = true) {
+		applyLanded(requested, addToHistory)
+	}
+
+	/**
+	 * Applies [requested] as [applyOperation] does and returns it as it landed, its text
+	 * as the input filter and line ending normalization left it (one that changes
+	 * nothing is returned unapplied), or null when the filter refused it.
+	 */
+	internal fun applyLanded(requested: TextEditOperation, addToHistory: Boolean = true): TextEditOperation? {
 		val normalized = requested.withNormalizedLineEndings()
 		// Undo and redo replay edits the filter already let through. What a filter
 		// returns is normalised again.
-		val screened = if (addToHistory) screen(normalized)?.withNormalizedLineEndings() ?: return else normalized
+		val screened = if (addToHistory) screen(normalized)?.withNormalizedLineEndings() ?: return null else normalized
 		// Resolved before anything reads it, so what is applied, recorded, and
 		// announced is one and the same operation.
 		val operation = if (screened is TextEditOperation.Replace) resolveInheritedStyle(screened) else screened
 		// An edit of no characters (an IME committing "", an empty selection
 		// deleted) changes nothing, so nothing is applied, recorded, or announced.
-		if (operation.isNoOp()) return
+		if (operation.isNoOp()) return operation
 		// Selection offsets must not outlive a content mutation. Span operations
 		// leave the text untouched, so they keep the selection.
 		val isSpanOperation = operation is TextEditOperation.StyleSpan ||
@@ -207,6 +216,7 @@ class TextEditManager(private val state: TextEditorState) {
 
 			if (addToHistory) continueLineBlocks(operation)
 		}
+		return operation
 	}
 
 	private fun applyInsert(operation: TextEditOperation.Insert): OperationMetadata? {
