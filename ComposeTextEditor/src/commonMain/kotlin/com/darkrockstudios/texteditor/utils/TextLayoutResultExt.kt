@@ -2,6 +2,7 @@ package com.darkrockstudios.texteditor.utils
 
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.PathSegment
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.style.ResolvedTextDirection
 import androidx.compose.ui.unit.Density
@@ -41,6 +42,80 @@ fun TextLayoutResult.lineTextLeft(lineIndex: Int, density: Density?): Float {
 		?: return measured
 	return max(measured, with(density) { indent.toPx() })
 }
+
+/**
+ * The boxes the characters in [start, end) cover on row [lineIndex], left to right, as
+ * Compose's own selection path ([TextLayoutResult.getPathForRange], what `BasicTextField`
+ * draws) has them: a range that crosses between left-to-right and right-to-left text
+ * covers separate stretches of the row, and gets a box for each. Boxes that touch are
+ * merged. The range is clipped to the row, and each box is the row's full height.
+ */
+fun TextLayoutResult.getRunBoxes(lineIndex: Int, start: Int, end: Int): List<Rect> {
+	val rowStart = getLineStart(lineIndex)
+	val rowEnd = getLineEnd(lineIndex)
+	val from = start.coerceIn(rowStart, rowEnd)
+	val to = end.coerceIn(from, rowEnd)
+	if (to <= from) return emptyList()
+
+	val rowTop = getLineTop(lineIndex)
+	val rowBottom = getLineBottom(lineIndex)
+	// Android's path for a range that ends at a soft wrap adds a box from the row's end
+	// to the layout's edge, as if a line break were selected.
+	val toWrap = to == rowEnd && lineIndex < lineCount - 1
+	val rowLeft = getLineLeft(lineIndex)
+	val rowRight = getLineRight(lineIndex)
+
+	val boxes = mutableListOf<Rect>()
+	val points = FloatArray(8)
+	var left = Float.POSITIVE_INFINITY
+	var top = Float.POSITIVE_INFINITY
+	var right = Float.NEGATIVE_INFINITY
+	var bottom = Float.NEGATIVE_INFINITY
+	fun include(x: Float, y: Float) {
+		left = min(left, x)
+		top = min(top, y)
+		right = max(right, x)
+		bottom = max(bottom, y)
+	}
+	fun closeBox() {
+		val onRow = (top + bottom) / 2f in rowTop..rowBottom
+		val pastRow = toWrap && (left >= rowRight - RUN_GAP || right <= rowLeft + RUN_GAP)
+		if (right > left && onRow && !pastRow) boxes += Rect(left, rowTop, right, rowBottom)
+		left = Float.POSITIVE_INFINITY
+		top = Float.POSITIVE_INFINITY
+		right = Float.NEGATIVE_INFINITY
+		bottom = Float.NEGATIVE_INFINITY
+	}
+
+	val iterator = getPathForRange(from, to).iterator()
+	while (iterator.hasNext()) {
+		when (iterator.next(points)) {
+			PathSegment.Type.Move -> {
+				closeBox()
+				include(points[0], points[1])
+			}
+			PathSegment.Type.Line -> include(points[2], points[3])
+			PathSegment.Type.Close, PathSegment.Type.Done -> closeBox()
+			else -> {}
+		}
+	}
+	closeBox()
+
+	boxes.sortBy { it.left }
+	val merged = ArrayList<Rect>(boxes.size)
+	for (box in boxes) {
+		val last = merged.lastOrNull()
+		if (last != null && box.left <= last.right + RUN_GAP) {
+			merged[merged.lastIndex] = Rect(last.left, rowTop, max(last.right, box.right), rowBottom)
+		} else {
+			merged += box
+		}
+	}
+	return merged
+}
+
+/** How far apart two boxes may be and still count as touching: rounding between runs. */
+internal const val RUN_GAP = 0.5f
 
 /**
  * Reads bounds for multiple lines. This can be removed once an

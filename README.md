@@ -92,9 +92,9 @@ See the [roadmap](docs/ROADMAP.md) for what is planned.
 
 ### Work left to do:
 
-- Right-to-left text: the selection and the underlines (spell check, composition,
-  links) are drawn as for left-to-right text, and arrow keys inside a mixed-direction
-  paragraph move logically
+- Right-to-left text: the underlines (spell check, composition) and highlights are
+  drawn as for left-to-right text, and arrow keys inside a mixed-direction paragraph
+  move logically
 - Full CommonMark Spec compliance (_tables, task lists, reference links, setext headings and nested quotes stay literal text_)
 
 ## Want to try it?

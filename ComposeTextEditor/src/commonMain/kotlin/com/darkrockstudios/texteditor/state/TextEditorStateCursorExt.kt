@@ -104,7 +104,7 @@ internal fun LineWrap.caretX(char: Int): Float {
  * The x past this row's last glyph, trailing spaces included: the line's own right
  * edge (left in a right-to-left paragraph) stops before them.
  */
-private fun LineWrap.rowEndX(): Float {
+internal fun LineWrap.rowEndX(): Float {
 	val layout = textLayoutResult
 	val row = virtualLineIndex
 	val last = layout.getLineEnd(row) - 1

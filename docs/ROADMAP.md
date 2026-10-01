@@ -310,7 +310,7 @@ editor does rather than what it should do.
   caret at a wrap, empty lines, the line-break sliver, right-to-left
   paragraphs, paragraph spacing (5.7) and the touch handles, and checks that
   the harness's `handleCenter` grabs the drawn knob. Two right-to-left cases
-  fail today and are marked `failsUntil("7.6")`.
+  were marked `failsUntil("7.6")` until 7.6 fixed them.
 - [x] **0.9 A bundled test font. R.** [Opus] [Lane L] The e2e harness lays
   text out in the machine's default sans-serif font, so any test that depends on
   wrapping or text width can pass locally and fail on the CI runner. Two did
@@ -673,7 +673,7 @@ fixes what users feel every minute.
   style's) after its line's text, trailing spaces included, which are now
   highlighted too; a soft wrap adds none. Only rows in view are drawn, each
   its full height, block rows included (`drawing/SelectionDrawingTest.kt`).
-  The sliver always goes right; right-to-left lines are 7.6's.
+  In a right-to-left paragraph the sliver goes left (7.6).
 - [x] **1.18 Unfocused state. C.** [Opus] [Lane C] No unfocused selection
   colour; selection and touch handles stay drawn unchanged after focus loss.
   Done: `TextEditorStyle.unfocusedSelectionColor`, by default a neutral grey
@@ -2763,13 +2763,26 @@ iOS Safari; browser tests run in CI.
   runs, with the caret carrying a direction at each boundary; `BasicTextField`
   is logical here too. Needs `getBidiRunDirection` and a run-aware step, and a
   visual caret position at run boundaries.
-- [ ] **7.6** [Opus] [Lane C] Selection draws one rect per row from x(start)
+- [x] **7.6** [Opus] [Lane C] Selection draws one rect per row from x(start)
   to x(end); wrong in right-to-left, and mixed text needs several rects.
   **R** (0.5, `drawing/GeometryTest.kt`, `failsUntil("7.6")`): in a
   right-to-left paragraph a selected line break's sliver is added to the
   right, so it eats a space's width off the selected text instead of lying
   past the text's left end; in "abc אבג def", selecting "c", the space, א and
   ב draws one box over "c", the space and the unselected ג, missing א and ב.
+  Done: each row's selection is the boxes of Compose's own selection path
+  (`getPathForRange`, what `BasicTextField` draws), one per stretch of the
+  row, merged where they touch, through the public
+  `TextLayoutResult.getRunBoxes(lineIndex, start, end)` in
+  `utils/TextLayoutResultExt.kt`. Android's path for a range ending at a soft
+  wrap adds a box to the layout's edge; `getRunBoxes` drops it (read from
+  `Layout.getSelectionPath`, not run on a device). The line
+  break's sliver lies past the line's visual end, the same x the caret takes
+  after End (`rowEndX`): right in a left-to-right paragraph (past a trailing
+  right-to-left run too), left in a right-to-left one. `GeometryTest` covers
+  both directions and mixed text. Like the left-to-right sliver at the right
+  edge, a right-to-left line that fills the row puts its sliver past the left
+  edge, where it is clipped.
 - [ ] **7.7** [Opus] [Lane C] Underline boxes (spell check, composing, links)
   assume no bidi.
 
