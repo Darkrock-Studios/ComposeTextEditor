@@ -394,8 +394,12 @@ fun BasicTextEditor(
 				val primaryPaste: (() -> Unit)? = remember(state, editable, primarySelection, primaryPasteScope) {
 					if (editable && primarySelection != null) {
 						{
+							// Taken at the click: focus can move between editors sharing the state
+							// while the read is suspended, and the paste keeps to this one's limit.
+							val target = inputRequester.editor
 							primaryPasteScope.launch {
-								primarySelection.readText()?.takeIf { it.isNotEmpty() }?.let { state.pastePlainText(it) }
+								val text = primarySelection.readText()?.takeIf { it.isNotEmpty() } ?: return@launch
+								state.asEditor(target) { state.pastePlainText(text) }
 							}
 						}
 					} else {

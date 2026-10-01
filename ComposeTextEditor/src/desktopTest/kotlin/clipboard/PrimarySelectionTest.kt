@@ -1,5 +1,7 @@
 package clipboard
 
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
@@ -9,6 +11,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.MouseButton
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performMouseInput
 import androidx.compose.ui.test.runComposeUiTest
@@ -19,6 +22,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import com.darkrockstudios.texteditor.BasicTextEditor
+import com.darkrockstudios.texteditor.EditorLineLimits
 import com.darkrockstudios.texteditor.RichTextView
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.clipboard.AwtPrimarySelection
@@ -281,6 +285,42 @@ class PrimarySelectionTest {
 			assertEquals("alpha beta gamma delta", text)
 			assertEquals(13, cursorIndex)
 		}
+	}
+
+	/** Roadmap 7.73: a paste follows the line limit of the editor it lands in. */
+	@Test
+	fun `middle-click paste into a single-line editor sharing a state keeps to one line`() = runComposeUiTest {
+		val primary = Primary()
+		val selection = AwtPrimarySelection(primary)
+		val state = TextEditorState(AnnotatedString("hello"))
+		setContent {
+			CompositionLocalProvider(LocalPrimarySelection provides selection) {
+				Column {
+					BasicTextEditor(
+						state = state,
+						modifier = Modifier.size(300.dp, 40.dp).testTag("single"),
+						lineLimits = EditorLineLimits.SingleLine,
+					)
+					BasicTextEditor(
+						state = state,
+						modifier = Modifier.size(300.dp, 100.dp),
+						autoFocus = true,
+						lineLimits = EditorLineLimits.MultiLine(),
+					)
+				}
+			}
+		}
+		waitForIdle()
+		primary.selectElsewhere("one\ntwo ")
+
+		onNodeWithTag("single").performMouseInput {
+			moveTo(state.positionOfCharacter(0))
+			press(MouseButton.Tertiary)
+			release(MouseButton.Tertiary)
+		}
+		waitUntil(timeoutMillis = 5_000) { state.getAllText().text != "hello" }
+
+		assertEquals("one two hello", state.getAllText().text)
 	}
 
 	@Test

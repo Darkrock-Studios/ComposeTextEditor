@@ -6,8 +6,8 @@ import com.darkrockstudios.texteditor.state.FocusedEditor
  * Carries "the user wants to type" from the tap handler, which knows a tap happened, to
  * the input node, which owns the input session. Focus alone cannot say it: tapping an
  * editor that already has focus changes no focus state. Also hands the node's [editor]
- * to the drop and semantics code, whose edits are aimed at this editor with or without
- * focus.
+ * to the drop, semantics and middle-click paste code, whose edits are aimed at this
+ * editor with or without focus.
  */
 internal class TextInputRequester {
 	internal var node: TextEditorInputModifierNode? = null
