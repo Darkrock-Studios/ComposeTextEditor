@@ -403,6 +403,11 @@ What the browser delivers, and when (`DomInputStrategy` and
 - Events are batched and replayed on the next animation frame, in timestamp
   order, so a Backspace `keydown` that Compose consumed suppresses the
   textarea's own `deleteContentBackward`.
+- Only the Backspace key does: on macOS the textarea is a Cocoa text view
+  with the Emacs-style Ctrl bindings, so Ctrl+H's own `deleteContentBackward`
+  became a second backspace. The session prevents the default of a Ctrl
+  chord's `keydown` there (not inside a composition, nor with Cmd or Option),
+  leaving the chord to the editor's bindings.
 
 Which path owns plain typing therefore follows DOM focus, and the browser gives
 a keystroke to one element only. With the textarea focused, typing is

@@ -94,8 +94,12 @@ private class BackingField {
 		stopPresetting(preset)
 		setAutocapitalize(root, BACKING_FIELD, autocapitalize)
 		val handle = refocusFromCanvas(root, BACKING_FIELD)
+		val chords = if (platformKeyBindings() === MacKeyBindings) keepCocoaChordsOut(root, BACKING_FIELD) else null
 		suspendCancellableCoroutine<Nothing> { continuation ->
-			continuation.invokeOnCancellation { stopRefocusing(handle) }
+			continuation.invokeOnCancellation {
+				stopRefocusing(handle)
+				chords?.let(::stopKeepingCocoaChordsOut)
+			}
 		}
 	}
 
@@ -196,6 +200,35 @@ private fun stopRefocusing(handle: JsAny): Unit = js(
 		if (canvas) canvas.focus({ preventScroll: true });
 	});
 }"""
+)
+
+/**
+ * Prevents the default of a Ctrl chord in [root]'s backing field on macOS, where the
+ * field is a Cocoa text view with the Emacs-style bindings (Ctrl+H deletes backward,
+ * Ctrl+T transposes). Compose forwards the chord to the editor, whose bindings answer it,
+ * and turns some of the field's own edits into edits too: a `deleteContentBackward` after
+ * any key but Backspace becomes a second backspace, so Ctrl+H deleted twice in Chrome.
+ * Ctrl types nothing on a Mac, so the field's action is never wanted. A chord inside a
+ * composition is the input method's (Ctrl+J, K and L convert Japanese), and Cmd and
+ * Option chords are left alone: Cmd+C, X and V raise the clipboard events.
+ */
+private fun keepCocoaChordsOut(root: JsAny, selector: String): JsAny? = js(
+	"""{
+	const field = root.querySelector(selector);
+	if (!field) return null;
+	const handle = { field };
+	handle.onKeyDown = (event) => {
+		if (!event.ctrlKey || event.metaKey || event.altKey) return;
+		if (event.isComposing || event.keyCode === 229) return;
+		event.preventDefault();
+	};
+	field.addEventListener('keydown', handle.onKeyDown);
+	return handle;
+}"""
+)
+
+private fun stopKeepingCocoaChordsOut(handle: JsAny): Unit = js(
+	"{ handle.field.removeEventListener('keydown', handle.onKeyDown); }"
 )
 
 /** The `autocapitalize` value for a capitalisation; the browser's default, sentences, when unspecified. */
