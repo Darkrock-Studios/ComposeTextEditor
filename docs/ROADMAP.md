@@ -1955,7 +1955,10 @@ iOS Safari; browser tests run in CI.
   `MarkdownFuzzFixpointTest`) ends with a fenced line whose paragraph runs are
   `[0-2, 7-22]`, and an Enter there then throws "Paragraph overlap not
   allowed". A joined line should carry one paragraph style run, the one its
-  kept marker wants.
+  kept marker wants. UI fuzz seed 27 (`FUZZ_SEED=27` on core's
+  `EditorFuzzE2eTest` or the markdown module's `MarkdownUiFuzzFixpointTest`)
+  throws the same from a Backspace's `handleMultiLineDelete` at op 43, after a
+  block toggle and an Enter; found in 7.65's seed sweep, likely the same cause.
 - [ ] **6.34 Undoing a multi-line insert at a paragraph's start drops its
   format. R.** [Opus] [Lane G] A paragraph format (`ParagraphFormatSpanStyle`)
   stays on the first line of a multi-line insert at its paragraph's start
@@ -2861,7 +2864,7 @@ Shaping is one line per keystroke. These still scale with document length:
   through block lines instead of markdown (7.65), and the renumbering tests
   read the layout's numbers, since block lines writes every ordered item `1.`
   (`BlockLinesTest`; `docs/design/modules.md`, "Tests").
-- [ ] **7.65 The UI storms no longer reach a markdown fixpoint. S.** [Opus]
+- [x] **7.65 The UI storms no longer reach a markdown fixpoint. S.** [Opus]
   [Lane L] Since 7.62 the markdown fixpoint runs on the state fuzz alone
   (`MarkdownFuzzFixpointTest`); `EditorFuzzE2eTest` drives key events and the
   clipboard, which build documents the state interpreter does not, and checks
@@ -2869,6 +2872,13 @@ Shaping is one line per keystroke. These still scale with document length:
   no UI harness and core's tests no markdown. Give the markdown module a small
   composed harness on core's public API, or record UI storm documents as
   snapshots core writes and the markdown module replays.
+  Done: the markdown module has a small composed harness (`markdownUiTest`)
+  on core's public API, and `MarkdownUiFuzzFixpointTest` runs the UI storms to
+  a markdown fixpoint. The script driver moved to `testUtils/uiFuzz`
+  (`FuzzUiDriver`, which both harnesses implement) and the typing and
+  clipboard helpers to `testUtils/uiTest`; core still depends on no markdown.
+  A sweep of seeds 1 to 300 found no fixpoint failure and one crash, seed 27
+  (6.33).
 - [x] **7.63 HTML export ignores retired styles. S.** [Opus] [Lane H] The
   markdown exporter writes a span still carrying a retired configuration's
   bold or link style as its marker (`TextEditorState.retiredRichTextStyles`);

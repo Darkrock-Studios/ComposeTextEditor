@@ -59,12 +59,18 @@ kotlin {
 			kotlin.srcDir(rootDir.resolve("testUtils/countingMeasurer"))
 			kotlin.srcDir(rootDir.resolve("testUtils/blockLines"))
 			kotlin.srcDir(rootDir.resolve("testUtils/stateFuzz"))
+			kotlin.srcDir(rootDir.resolve("testUtils/uiTest"))
+			kotlin.srcDir(rootDir.resolve("testUtils/uiFuzz"))
+			kotlin.srcDir(rootDir.resolve("testUtils/testFont/kotlin"))
+			resources.srcDir(rootDir.resolve("testUtils/testFont/resources"))
 			dependencies {
 				implementation(libs.jetbrains.kotlin.test)
 				implementation(libs.jetbrains.kotlin.test.junit)
 				implementation(libs.mockk)
 				implementation(libs.kotlinx.coroutines.test)
 				implementation(libs.kotlinx.coroutines.test.jvm)
+				@OptIn(org.jetbrains.compose.ExperimentalComposeLibrary::class)
+				implementation(compose.uiTest)
 				implementation(compose.desktop.currentOs)
 			}
 		}

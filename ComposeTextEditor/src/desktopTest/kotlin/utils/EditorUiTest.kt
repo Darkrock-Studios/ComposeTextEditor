@@ -142,10 +142,10 @@ class FocusFlag {
 @OptIn(ExperimentalTestApi::class)
 class EditorUiTestScope(
 	val test: SkikoComposeUiTest,
-	val state: TextEditorState,
+	override val state: TextEditorState,
 	val clipboard: InMemoryClipboard,
 	private val trailing: FocusFlag = FocusFlag(),
-) {
+) : FuzzUiDriver {
 	/** Whether the focusable placed after the editor by `trailingFocusable` holds focus. */
 	val trailingFocused: Boolean get() = trailing.focused
 
@@ -166,7 +166,7 @@ class EditorUiTestScope(
 	val cursorIndex: Int get() = state.getCharacterIndex(state.cursorPosition)
 
 	/** Types printable characters through real desktop key events; `\n` and `\t` become Enter/Tab. */
-	fun typeText(text: String) = test.typeText(text)
+	override fun typeText(text: String) = test.typeText(text)
 
 	/** Types [char] as a macOS Option chord over [key], the way Option+8 composes '{'. */
 	fun typeWithOption(key: Key, char: Char) = test.typeWithOption(key, char)
@@ -192,6 +192,8 @@ class EditorUiTestScope(
 		}
 		test.waitForIdle()
 	}
+
+	override fun sendKey(key: Key, ctrl: Boolean) = press(key, ctrl = ctrl)
 
 	/** Taps [position] with a finger: down and up in the same place, no buttons. */
 	fun tapAt(position: Offset) {
@@ -434,7 +436,7 @@ class EditorUiTestScope(
 	 * Seeds the clipboard with unstyled text, as an external application or a
 	 * plain-text-only platform clipboard would leave it.
 	 */
-	fun setPlainClipboardText(value: String) {
+	override fun setPlainClipboardText(value: String) {
 		clipboard.setPlainText(value)
 		test.waitForIdle()
 	}
@@ -445,7 +447,7 @@ class EditorUiTestScope(
 			.filter { charIndex >= it.start && charIndex < it.end }
 			.map { it.item }
 
-	fun waitForIdle() = test.waitForIdle()
+	override fun waitForIdle() = test.waitForIdle()
 }
 
 /** Gap between the presses of a multi-click: well inside any double-click timeout. */

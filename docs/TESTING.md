@@ -5,7 +5,7 @@
 | Suite | Command | What it covers |
 | --- | --- | --- |
 | Editor, desktop JVM | `./gradlew :ComposeTextEditor:desktopTest` | Unit tests and headless end-to-end tests of the real composable |
-| Markdown addon | `./gradlew :ComposeTextEditorMarkdown:desktopTest` | Markdown import and export: round trip, escaping, tables, links, images, nesting; no layout, so no font |
+| Markdown addon | `./gradlew :ComposeTextEditorMarkdown:desktopTest` | Markdown import and export: round trip, escaping, tables, links, images, nesting; layout only in the UI fuzz fixpoint, in the test font |
 | Find addon | `./gradlew :ComposeTextEditorFind:desktopTest` | Find and replace, through the find bar |
 | Spell check addon | `./gradlew :ComposeTextEditorSpellCheck:desktopTest` | Spell check and diagnostics |
 | Android host tests | `./gradlew :ComposeTextEditor:testAndroidHostTest` | Android input logic on the JVM |
@@ -58,7 +58,10 @@ test). `BlockLinesTest` pins the notation.
 
 The state fuzz (`testUtils/stateFuzz`) is shared the same way: core runs its
 storms to the undo-to-origin invariant, the markdown module to a markdown
-fixpoint.
+fixpoint. So is the UI storms' driver (`testUtils/uiFuzz`, with the typing and
+clipboard helpers in `testUtils/uiTest`): core's `EditorFuzzE2eTest` runs them
+through `editorUiTest`, and the markdown module's `MarkdownUiFuzzFixpointTest`
+through its own small composed harness, `markdownUiTest`.
 
 Each desktop suite runs in one JVM with a 1 GB heap (the root
 `build.gradle.kts`); the core suite's heap stays under 200 MB after a
