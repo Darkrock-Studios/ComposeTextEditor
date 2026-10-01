@@ -101,6 +101,8 @@ private val DefaultContentPadding = PaddingValues(start = 8.dp)
  * @param keyBindings Chord-to-command mapping, defaulting to [LocalKeyBindings].
  * @param contentDescription The editor's label for accessibility services; see
  *   [BasicTextEditor].
+ * @param softWrap Whether lines wrap at the editor's width; with `false` a line stays one
+ *   row and the editor scrolls sideways. See [BasicTextEditor].
  */
 @Composable
 fun SpellCheckingTextEditor(
@@ -123,6 +125,7 @@ fun SpellCheckingTextEditor(
 	contentDescription: String? = null,
 	readOnly: Boolean = false,
 	lineLimits: EditorLineLimits = EditorLineLimits.Fill,
+	softWrap: Boolean = true,
 ) {
 	// Corrections and fixes edit the text, so they follow this; Ignore does not. Read when
 	// an item is picked too, since a menu can outlive the editability it opened with.
@@ -360,6 +363,7 @@ fun SpellCheckingTextEditor(
 			contentDescription = contentDescription,
 			readOnly = readOnly,
 			lineLimits = lineLimits,
+			softWrap = softWrap,
 		)
 	}
 }

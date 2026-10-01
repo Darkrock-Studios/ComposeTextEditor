@@ -3547,6 +3547,33 @@ iOS Safari; browser tests run in CI (met: the `browser` job, 4.15).
   horizontal `ensureCursorVisible`, a horizontal scrollbar on desktop and
   web, and horizontal `scrollable` input. Then `SingleLine` becomes one row
   that scrolls sideways.
+  Design (`docs/design/soft-wrap.md`): `softWrap: Boolean = true` on the editor
+  composables, as on `BasicTextField`, off for `SingleLine`, and the state's like
+  the line limit; the offset is `TextEditorState.horizontalScrollState`, a second
+  `TextEditorScrollState`. It is applied in three places rather than at each
+  site: the state's view-coordinate conversions (`getPositionForOffset`,
+  `calculateCursorPosition`, `getOffsetAtPosition`), which the handles, toolbar,
+  menu, magnifier, input method rectangles and cursor anchor already go through;
+  one drawing transform, `inContentSpace`, around the text and selection; and
+  the few sites that pair raw rows with a pointer. With wrapping off a line is
+  shaped unbounded (at least the viewport wide, for alignment), each `LineLayout`
+  records its width, and `RowList` keeps the widest line as a running maximum
+  per chunk in its directory, rebuilt from the touched chunk as the tops are, so
+  no keystroke scans the lines. The caret is kept in view on both axes in one
+  scroll job; a horizontal `scrollable` takes Shift+wheel, trackpad and touch;
+  desktop and web overlay a `HorizontalScrollbar`.
+  Progress, in chunks:
+  - State and layout: done. `softWrap` on `BasicTextEditor`, `TextEditor` and
+    `SpellCheckingTextEditor`, counted on the state as the single-line limit is;
+    unwrapped lines shaped unbounded, `LineLayout.width` and the directory's
+    running maximum, the sideways range on `horizontalScrollState`
+    (`softwrap/SoftWrapLayoutTest`, which checks the widest line against
+    measuring every line through 60 random edits over 400 lines).
+  - Drawing and hit testing through the offset: not started.
+  - Caret visibility, scrolling input, the scrollbar: not started.
+  - Input method rectangles, handles, toolbar, magnifier, semantics: not started.
+  - `SingleLine` scrolls sideways: not started.
+  - The sample app's switch: not started.
 
 ### Right-to-left and bidirectional text
 

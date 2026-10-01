@@ -26,7 +26,7 @@ class EditorScrollbarE2eTest {
 	@Test
 	fun `the adapter measures from the top of the scroll range`() = runBlocking {
 		val state = TextEditorScrollState().apply {
-			viewportHeight = 200
+			viewportLength = 200
 			minValue = -20
 			maxValue = 300
 		}
