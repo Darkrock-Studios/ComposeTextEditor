@@ -46,7 +46,9 @@ class FindState(
 
 	/**
 	 * Whether matches are limited to the selection captured by [toggleInSelection]. The scope
-	 * follows edits; if its text is deleted or the document replaced, this turns off.
+	 * follows edits; if its text is deleted or the document replaced, this turns off. An undo
+	 * that brings back text the scope covered brings the scope back with it, and turns this
+	 * back on if the deletion had turned it off.
 	 */
 	var inSelection: Boolean by mutableStateOf(false)
 		private set
@@ -88,6 +90,21 @@ class FindState(
 	 */
 	private var sessionSelection: TextEditorRange? = null
 
+	/**
+	 * The scope, in flat character indices, as it stood in each document text seen while
+	 * [inSelection] was on, newest last, keyed by the text. Undo restores no decoration, so the
+	 * scope span is gone or moved once an undo brings back text it covered; the text identifies
+	 * the state to restore it from. Edits are not tied to history entries, so the text is the
+	 * one key an undo and the edits it reverts share.
+	 */
+	private val scopeHistory = LinkedHashMap<ScopeKey, Pair<Int, Int>>()
+
+	/** The [TextEditorState.documentGeneration] [scopeHistory] was recorded in. */
+	private var scopeHistoryGeneration = textState.documentGeneration.value
+
+	/** Whether an edit deleted the scope's text while [inSelection] was on. */
+	private var scopeLostToEdit = false
+
 	// Job for debounced search on text changes
 	private var searchUpdateJob: Job? = null
 
@@ -105,6 +122,11 @@ class FindState(
 							refreshSearch()
 						}
 					}
+			}
+			launch {
+				textState.editOperations.collect {
+					if (syncScope()) refreshSearch()
+				}
 			}
 			// A whole-document replacement (setText, setDocument) emits no edit, so
 			// without this the matches would keep describing the old document.
@@ -203,7 +225,9 @@ class FindState(
 		} else {
 			removeScope()
 		}
+		forgetScopeHistory()
 		inSelection = enabled
+		syncScope()
 		rerunSearch()
 	}
 
@@ -245,6 +269,62 @@ class FindState(
 
 	private fun removeScope() {
 		scopeSpans().forEach { textState.removeRichSpan(it) }
+	}
+
+	/**
+	 * Records the scope against the current text or, after an undo, lays it back where this text
+	 * last had it. Returns whether it laid the scope back.
+	 */
+	private fun syncScope(): Boolean {
+		val generation = textState.documentGeneration.value
+		if (generation != scopeHistoryGeneration) {
+			scopeHistoryGeneration = generation
+			forgetScopeHistory()
+		}
+		if (!inSelection && !scopeLostToEdit) return false
+		val key = documentKey()
+		val spans = scopeSpans()
+		val current = spans.firstOrNull()?.range?.let { textState.getCharacterIndex(it.start) to textState.getCharacterIndex(it.end) }
+		val recorded = scopeHistory[key]
+		// Only an undo leaves something to redo; a new edit that happens to bring back an
+		// earlier text is the user's own, and keeps the scope where it now is.
+		if (recorded != null && recorded != current && textState.canRedo && recorded.second <= key.length) {
+			val restored = TextEditorRange(
+				textState.getOffsetAtCharacter(recorded.first),
+				textState.getOffsetAtCharacter(recorded.second),
+			)
+			textState.updateRichSpans(remove = spans, add = listOf(RichSpan(restored, scopeStyle)))
+			inSelection = true
+			scopeLostToEdit = false
+			return true
+		}
+		if (current != null) {
+			scopeHistory.remove(key)
+			scopeHistory[key] = current
+			if (scopeHistory.size > SCOPE_HISTORY_LIMIT) scopeHistory.remove(scopeHistory.keys.first())
+		}
+		return false
+	}
+
+	private fun forgetScopeHistory() {
+		scopeHistory.clear()
+		scopeLostToEdit = false
+	}
+
+	/** The document text's length and 64-bit FNV-1a hash, read off the lines without joining them. */
+	private fun documentKey(): ScopeKey {
+		var hash = FNV_OFFSET_BASIS
+		var length = 0
+		textState.textLines.forEachIndexed { index, line ->
+			if (index > 0) {
+				hash = (hash xor '\n'.code.toLong()) * FNV_PRIME
+				length++
+			}
+			val text = line.text
+			for (char in text) hash = (hash xor char.code.toLong()) * FNV_PRIME
+			length += text.length
+		}
+		return ScopeKey(length, hash)
 	}
 
 	private fun rerunSearch() {
@@ -316,6 +396,7 @@ class FindState(
 		query = ""
 		removeScope()
 		inSelection = false
+		forgetScopeHistory()
 		rememberSelectionBeforeSearch(null)
 		sessionSelection = null
 		clearHighlights()
@@ -488,10 +569,12 @@ class FindState(
 
 	private fun findMatches(): List<TextEditorRange> {
 		val all = textState.findAll(query, caseSensitive, wholeWord, useRegex)
+		syncScope()
 		if (!inSelection) return all
 		val scope = scopeRange()
 		if (scope == null) {
 			inSelection = false
+			scopeLostToEdit = scopeHistory.isNotEmpty()
 			return all
 		}
 		return all.filter { it.start >= scope.start && it.end <= scope.end }
@@ -587,3 +670,15 @@ class FindState(
 }
 
 private val REGEX_METACHARACTER = Regex("""[\\^$.|?*+()\[\]{}]""")
+
+/** A document text's identity for [FindState]'s scope history: its length and hash. */
+private data class ScopeKey(val length: Int, val hash: Long)
+
+/**
+ * Texts the scope history keeps, one per edit seen (a typed character is one): an undo back to
+ * a text older than this does not bring the scope back.
+ */
+private const val SCOPE_HISTORY_LIMIT = 1000
+
+private const val FNV_OFFSET_BASIS = -0x340d631b7bdddcdbL
+private const val FNV_PRIME = 0x100000001b3L

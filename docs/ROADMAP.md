@@ -3038,13 +3038,22 @@ Shaping is one line per keystroke. These still scale with document length:
   (`blocks/LineBreakContinuationTest.kt`). A rich HTML paste lays its own blocks
   over the continued ones afterwards, unrecorded, so a redo of it loses them
   (6.5).
-- [ ] **7.68 Find's scope does not come back on undo. S.** [Opus] [Lane J]
+- [x] **7.68 Find's scope does not come back on undo. S.** [Opus] [Lane J]
   The find in selection scope lives only in its `FindScopeStyle` decoration
   span (`FindState.scopeRange`). Since 7.54 undo restores no decorations, so
   deleting the scoped text and undoing before find re-searches leaves no
   scope, and find in selection searches the whole document; text restored at
   the scope's start lands outside it. Keep the scope in `FindState` as well and
   draw the span from it, or re-scope on the undo's edit.
+  Done: `FindState` records the scope against each document text it sees
+  while find in selection is on (keyed by the text's length and 64-bit hash,
+  the last 1000 edits), and an undo that brings back a recorded text lays the
+  scope back where it was, so text an undo restores at its start is inside it
+  again. An undo is told from a new edit by there being something to redo
+  (core has no undo signal); retyping deleted text keeps the scope where it
+  now is. An undo after the deletion turned find in selection off turns it
+  back on; turning it off yourself, closing, or replacing the document
+  forgets the history (`FindInSelectionTest`).
 - [ ] **7.69 Find counts a replacement the input filter refused. S.** [Opus]
   [Lane J] `replaceAll` returns every target and clears every match, and
   `replaceCurrent` returns true, even when the input filter (a full
