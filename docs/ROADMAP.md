@@ -2202,10 +2202,10 @@ iOS Safari; browser tests run in CI.
   Strip only the configured heading style (current or retired) and write the
   rest, as markdown export keeps a heading's emphasis. Done: a heading line
   writes its own spans inside the heading element, retired styles read as
-  current, leaving out its heading's look and any other level's look that is
-  not also an inline style (text joined from another heading keeps that
-  heading's look, 7.70), under the current and each retired configuration
-  (`RetiredStyles.headingLooks`). So "My *great* title" writes as
+  current, leaving out its heading's look and any heading look, under the
+  current or a retired configuration, that is not also an inline style of that
+  configuration or the current one (text joined from another heading keeps that
+  heading's look, 7.70) (`RetiredStyles.headingLooks`). So "My *great* title" writes as
   `<h2>My <em>great</em> title</h2>` and reads back the same
   (`html/HeadingInlineFormattingHtmlTest.kt`).
   Found: 7.70.
@@ -2891,8 +2891,12 @@ Shaping is one line per keystroke. These still scale with document length:
   leaves "Sub" baked with the h3 look inside the h2 line, so the editor shows it
   at the h3 size and markdown export writes `## Title` and `### Sub` on lines
   of their own. HTML export strips any heading's look from a heading line since
-  6.31. A join, and a paste of heading text into another line, should strip the
-  baked look of a heading the text no longer belongs to. Found in 6.31.
+  6.31; a paragraph that takes in heading text writes it as `<strong>`. A join,
+  and a paste of heading text into another line, should strip the baked look of
+  a heading the text no longer belongs to. Under a configuration whose heading
+  look equals an inline style (`header4Style = boldStyle`), a style swap's
+  rebake strips the user's spans of that style from the heading's line too,
+  since `rebuildWithoutBlock` drops every span equal to the look. Found in 6.31.
 
 ### Find and replace addon
 

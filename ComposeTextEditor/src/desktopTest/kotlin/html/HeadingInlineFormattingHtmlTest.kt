@@ -1,5 +1,6 @@
 package html
 
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.font.FontStyle
@@ -12,6 +13,7 @@ import com.darkrockstudios.texteditor.html.selectionAsHtml
 import com.darkrockstudios.texteditor.html.withHtml
 import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.toggleHeader
+import com.darkrockstudios.texteditor.state.toggleSpanStyle
 import io.mockk.mockk
 import kotlinx.coroutines.test.TestScope
 import kotlin.test.Test
@@ -92,5 +94,30 @@ class HeadingInlineFormattingHtmlTest {
 		state.toggleHeader(0..0, 2)
 
 		assertEquals("<h2>My <strong>great</strong> title</h2>", state.withHtml().exportAsHtml())
+	}
+
+	@Test
+	fun `bold in a heading whose look a retired configuration gave its bold writes as bold`() {
+		val state = state()
+		val redBold = SpanStyle(fontWeight = FontWeight.Bold, color = Color.Red)
+		state.richTextStyles = RichTextStyles(boldStyle = redBold, header4Style = redBold)
+		state.setText(AnnotatedString("My great title", listOf(AnnotatedString.Range(redBold, 3, 8))))
+		state.toggleHeader(0..0, 2)
+		state.richTextStyles = RichTextStyles.DEFAULT
+
+		assertEquals("<h2>My <strong>great</strong> title</h2>", state.withHtml().exportAsHtml())
+	}
+
+	@Test
+	fun `bold in a heading whose retired look was plain bold writes as bold`() {
+		val state = state()
+		state.richTextStyles = RichTextStyles(header4Style = RichTextStyles.DEFAULT.boldStyle)
+		state.setText("a b")
+		state.toggleHeader(0..0, 4)
+		state.richTextStyles = RichTextStyles.DEFAULT
+		state.selector.updateSelection(CharLineOffset(0, 2), CharLineOffset(0, 3))
+		state.toggleSpanStyle(RichTextStyles.DEFAULT.boldStyle)
+
+		assertEquals("<h4>a <strong>b</strong></h4>", state.withHtml().exportAsHtml())
 	}
 }

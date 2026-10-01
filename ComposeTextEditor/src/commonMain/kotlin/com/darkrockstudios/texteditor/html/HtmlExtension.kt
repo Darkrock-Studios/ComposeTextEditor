@@ -4,6 +4,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
+import com.darkrockstudios.texteditor.annotatedstring.withSpanStyles
 import com.darkrockstudios.texteditor.clipboard.withBodyStyleBeneath
 import com.darkrockstudios.texteditor.richstyle.Blockquote
 import com.darkrockstudios.texteditor.richstyle.CodeFence
@@ -300,7 +301,7 @@ private fun lineHtml(
 /** This line with every span whose style is one of [looks] dropped. */
 private fun AnnotatedString.withoutSpanStyles(looks: Set<SpanStyle>): AnnotatedString {
 	if (spanStyles.none { it.item in looks }) return this
-	return AnnotatedString(text, spanStyles.filter { it.item !in looks }, paragraphStyles)
+	return withSpanStyles(spanStyles.filter { it.item !in looks })
 }
 
 private fun ParagraphFormatSpanStyle?.styleAttribute(): String =
