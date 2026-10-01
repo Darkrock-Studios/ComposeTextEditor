@@ -172,6 +172,17 @@ re-anchoring after an edit. The repair is deterministic and outside undo
 history, and since only blank lines classify as placeholders, the most it can
 ever discard is a marker on empty content.
 
+After it, `repairBlockParagraphs` gives each of those lines exactly the
+paragraph styles its markers want, each over the whole line; a paragraph style
+no block uses passes through. A line's text and its markers move separately: a
+join keeps one line's markers while each piece brings its own indent over its
+part, a split carries the indent onto a line the marker stays off, emptying a
+line drops the indent while the marker stays, and a paste lands its pieces'
+indents before their markers. Compose lays out each paragraph style run as a
+paragraph of its own and rejects a line where two overlap, so the markers
+decide. A run of a block's paragraph style no marker asks for goes, a host's
+own `ParagraphStyle()` included, since that is a heading's.
+
 ## Serialization
 
 **Export** walks lines from one snapshot, prepending each block's

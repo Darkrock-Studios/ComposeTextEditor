@@ -1,5 +1,6 @@
 package com.darkrockstudios.texteditor.richstyle
 
+import androidx.compose.ui.text.AnnotatedString
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.RichTextStyles
@@ -148,6 +149,42 @@ private fun repairFenceLanguages(snapshot: DocumentSnapshot, changed: IntRange):
 	}
 	if (removed.isEmpty() && added.isEmpty()) return snapshot
 	return snapshot.withSpanIndex(snapshot.spanIndex.minus(removed).plus(added))
+}
+
+/** A revision whose lines [lines] were rewritten by [repairBlockParagraphs]. */
+internal class RepairedParagraphs(val snapshot: DocumentSnapshot, val lines: IntRange)
+
+/**
+ * Gives each line in [changed] exactly the paragraph styles its blocks want, each over
+ * the whole line (see [blockParagraphsRepair]), or returns null when every one has them.
+ *
+ * A line's text and its markers move separately: a join keeps one line's markers
+ * while each piece brings its own line's indent over its part, a split carries the
+ * indent onto a line the marker stays off, emptying a line drops its indent while
+ * the marker stays, and a paste lands its pieces' indents before their markers.
+ * Compose lays out each paragraph style run as a paragraph of its own and rejects a
+ * line where two overlap, so the markers decide. Runs on every publish, after
+ * [normalizeLineBlocks]; the lines it rewrites need shaping again.
+ */
+internal fun repairBlockParagraphs(
+	snapshot: DocumentSnapshot,
+	config: RichTextStyles,
+	changed: IntRange,
+): RepairedParagraphs? {
+	val lines = snapshot.lineList
+	val repair = blockParagraphsRepair(config)
+	val repaired = HashMap<Int, AnnotatedString>()
+	for (line in changed.first.coerceAtLeast(0)..minOf(changed.last, lines.size - 1)) {
+		val text = lines[line]
+		val onLine = snapshot.spansOn(line)
+		if (onLine.isEmpty() && text.paragraphStyles.isEmpty()) continue
+		repair(text, onLine.filter { it.range.start.line == line })?.let { repaired[line] = it }
+	}
+	if (repaired.isEmpty()) return null
+	val first = repaired.keys.min()
+	val last = repaired.keys.max()
+	val spliced = lines.splice(first, last + 1, (first..last).map { repaired[it] ?: lines[it] })
+	return RepairedParagraphs(snapshot.withLines(spliced, LineSplice(first, lines.size - 1 - last)), first..last)
 }
 
 /**

@@ -59,6 +59,7 @@ import com.darkrockstudios.texteditor.richstyle.headerBlock
 import com.darkrockstudios.texteditor.richstyle.lineBlocksConflict
 import com.darkrockstudios.texteditor.richstyle.lineBlocks
 import com.darkrockstudios.texteditor.richstyle.normalizeLineBlocks
+import com.darkrockstudios.texteditor.richstyle.repairBlockParagraphs
 import com.darkrockstudios.texteditor.richstyle.rebuildWithBlock
 import com.darkrockstudios.texteditor.richstyle.rebuildWithoutBlock
 import kotlinx.coroutines.CoroutineScope
@@ -289,16 +290,55 @@ class TextEditorState(
 		untouchedAfter = minOf(untouchedAfter, unchangedAfter)
 	}
 
-	/** [snapshot] with the line-block invariants repaired over the lines changed since the last publish. */
+	/**
+	 * [snapshot] with the line-block invariants repaired over the lines changed since the
+	 * last publish, and the layout told of the lines the repair rewrote.
+	 */
 	private fun normalized(snapshot: DocumentSnapshot): DocumentSnapshot {
 		val lines = snapshot.lines.size
 		val first = minOf(untouchedBefore, lines)
 		val end = lines - minOf(untouchedAfter, lines)
-		val result = normalizeLineBlocks(snapshot, richTextStyles, first until end, spansChanged)
+		val blocks = normalizeLineBlocks(snapshot, richTextStyles, first until end, spansChanged)
+		val paragraphs = repairBlockParagraphs(blocks, richTextStyles, first until end)
 		untouchedBefore = Int.MAX_VALUE
 		untouchedAfter = Int.MAX_VALUE
 		spansChanged = false
-		return result
+		// Normalization can rewrite lines no operation declared dirty, so a rewrite
+		// invalidates any deferred partial relayout.
+		if (blocks !== snapshot) {
+			invalidateLayoutInputs()
+		} else if (paragraphs != null) {
+			reshapeAtCommit(paragraphs.lines)
+		}
+		return paragraphs?.snapshot ?: blocks
+	}
+
+	/**
+	 * Has the layout pass pending at commit shape [lines] too, lines of the revision it
+	 * commits. Widening a pass's remeasured range over lines it would have reused is
+	 * sound, but a pass that moves lines also moves the settling walks by its range, so
+	 * one that moves lines takes only lines inside that range. Any other case, and a
+	 * publish outside a transaction, invalidates the layout.
+	 */
+	private fun reshapeAtCommit(lines: IntRange) {
+		val pending = pendingLayoutUpdate
+		if (draft != null && pending == null) {
+			pendingLayoutUpdate = LayoutUpdate.Partial(lines.first, lines.last, 0)
+			return
+		}
+		if (draft == null || pending !is LayoutUpdate.Partial) {
+			if (pending !is LayoutUpdate.Full) invalidateLayoutInputs()
+			return
+		}
+		val shapes = pending.remeasureFirst <= pending.remeasureLast
+		when {
+			shapes && lines.first >= pending.remeasureFirst && lines.last <= pending.remeasureLast -> Unit
+			pending.lineDelta != 0 -> invalidateLayoutInputs()
+			else -> pendingLayoutUpdate = pending.copy(
+				remeasureFirst = if (shapes) minOf(pending.remeasureFirst, lines.first) else lines.first,
+				remeasureLast = if (shapes) maxOf(pending.remeasureLast, lines.last) else lines.last,
+			)
+		}
 	}
 
 	private val _revision = mutableIntStateOf(0)
@@ -407,13 +447,7 @@ class TextEditorState(
 			// can commit a revision violating the placeholder-line invariant. A
 			// transaction that mutated nothing skips the scan and the republish.
 			draft?.let {
-				if (it !== content) {
-					val normalized = normalized(it)
-					// Normalization can rewrite lines no operation declared dirty,
-					// so a rewrite invalidates any deferred partial relayout.
-					if (normalized !== it) invalidateLayoutInputs()
-					content = normalized
-				}
+				if (it !== content) content = normalized(it)
 			}
 			draft = null
 			committed = true
@@ -512,10 +546,7 @@ class TextEditorState(
 		if (draft != null) {
 			draft = transform(workingContent)
 		} else {
-			val transformed = transform(content)
-			val normalized = normalized(transformed)
-			if (normalized !== transformed) invalidateLayoutInputs()
-			content = normalized
+			content = normalized(transform(content))
 		}
 	}
 

@@ -167,6 +167,24 @@ private class LineBlockRegistry(styles: RichTextStyles) {
 	/** The blocks whose spans [spans] carry, in [allBlocks] order. */
 	fun blocksOf(spans: List<RichSpan>): List<LineBlockStyle> =
 		spans.mapNotNull { byStyle[it.style] }.distinct().sortedBy { order.getValue(it) }
+
+	/** Every block's paragraph style. A heading's is the default `ParagraphStyle()`. */
+	private val paragraphStyles: Set<ParagraphStyle> = allBlocks.mapTo(HashSet()) { it.paragraphStyle }
+
+	/** See [blockParagraphsRepair]. */
+	fun withBlockParagraphs(text: AnnotatedString, spans: List<RichSpan>): AnnotatedString? {
+		val blocks = blocksOf(spans)
+		val existing = text.paragraphStyles
+		val own = existing.count { it.item in paragraphStyles }
+		val right = own == blocks.size && existing.all { run ->
+			run.item !in paragraphStyles || (run.start == 0 && run.end == text.length &&
+				existing.count { it.item == run.item } == blocks.count { it.paragraphStyle == run.item })
+		}
+		if (right) return null
+		val wanted = blocks.asReversed().map { AnnotatedString.Range(it.paragraphStyle, 0, text.length) } +
+			existing.filter { it.item !in paragraphStyles }
+		return AnnotatedString(text.text, text.spanStyles, wanted)
+	}
 }
 
 private const val REGISTRY_CACHE_LIMIT = 8
@@ -268,6 +286,17 @@ internal fun rebuildWithoutBlock(existing: AnnotatedString, block: LineBlockStyl
 			}
 		}
 	}
+
+/**
+ * Rebuilds a line's paragraph styles under [styles]: given a line's text and the spans
+ * starting on it, returns the text with exactly the paragraph styles its blocks want,
+ * each over the whole line, or null when it has them already. Stacked blocks nest as
+ * [applyDocumentBlocks] leaves them, the first in [allBlockStyles] order innermost.
+ * Any run of a block's paragraph style that no marker asks for goes, a host's own
+ * `ParagraphStyle()` included, since it is a heading's; any other passes through.
+ */
+internal fun blockParagraphsRepair(styles: RichTextStyles): (AnnotatedString, List<RichSpan>) -> AnnotatedString? =
+	registryFor(styles)::withBlockParagraphs
 
 /**
  * What putting one line block on a line comes to: the blocks already there that

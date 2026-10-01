@@ -96,7 +96,8 @@ Commit order matters and is fixed:
 
 1. Publish the revision (after line-block normalization; a normalization
    rewrite bumps the layout generation because it can touch lines no operation
-   declared).
+   declared; a paragraph repair inside a transaction instead widens the pending
+   partial pass over the lines it rewrote when that is sound).
 2. Flush the pending layout.
 3. Scroll the cursor into view. The scroll target is computed from
    `lineOffsets`, so it must read the freshly flushed layout; scrolling

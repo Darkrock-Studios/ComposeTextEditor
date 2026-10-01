@@ -51,6 +51,9 @@ class MarkdownFuzzFixpointTest {
 	fun `markdown fixpoint seed 42`() = markdownFixpoint(42)
 
 	@Test
+	fun `markdown fixpoint seed 246`() = markdownFixpoint(246)
+
+	@Test
 	fun `markdown fixpoint seed 4243`() = markdownFixpoint(4243)
 
 	@Test

@@ -186,7 +186,7 @@ review.
 | D | Bindings, actions, menu | `input/KeyBindings.kt`, `input/EditorCommand.kt`, `input/BuiltinEditorActions.kt`, `contextmenu/` | 2.1, 2.2, 2.4, 2.5, 2.7 to 2.12, 4.8, 5.8, 7.58 |
 | E | Input sessions on desktop, iOS, web | `desktopMain`, `iosMain`, `wasmJsMain` under `input/` | 4.2 to 4.7, 4.10 to 4.12, 4.19, 4.21, 4.22, 4.24 to 4.26, 4.28, 4.29, 4.32, 4.33, 4.35, 7.37 |
 | F | Android input | `androidMain` | 0.4, 3.9 to 3.11, 3.14, 3.17, 4.16, 4.18, 4.20, 4.27, 4.30, 4.31, 4.34, 4.36, 7.40 |
-| G | Edit pipeline and undo | `state/TextEditManager.kt`, `state/TextEditHistory.kt`, `state/EditBehavior.kt`, `input/ImeEditLogic.kt` | 1.20, 5.1 to 5.5, 5.9 to 5.11, 6.1 to 6.6, 6.14, 6.15, 6.17, 6.22, 6.23, 6.28, 6.29, 6.33, 6.34, 7.54, 7.55 |
+| G | Edit pipeline and undo | `state/TextEditManager.kt`, `state/TextEditHistory.kt`, `state/EditBehavior.kt`, `input/ImeEditLogic.kt` | 1.20, 5.1 to 5.5, 5.9 to 5.11, 6.1 to 6.6, 6.14, 6.15, 6.17, 6.22, 6.23, 6.28, 6.29, 6.33 to 6.35, 7.54, 7.55 |
 | H | Clipboard and HTML | `clipboard/`, `html/`, `dragdrop/` | 4.9, 4.13, 4.17, 6.7 to 6.13, 6.18 to 6.21, 5.12, 6.24 to 6.27, 6.30 to 6.32, 7.39, 7.46, 7.47, 7.49, 7.53, 7.63 |
 | I | Markdown and block model | `ComposeTextEditorMarkdown/`, `richstyle/`, `state/TextEditorStateBlockExt.kt` | 5.6, 7.14 to 7.16, 7.43, 7.45, 7.52, 7.64, 7.67, 7.70 to 7.72 |
 | J | Find addon | `ComposeTextEditorFind/` | 7.17 to 7.19, 7.26, 7.29, 7.42, 7.68, 7.69 |
@@ -1955,7 +1955,7 @@ iOS Safari; browser tests run in CI.
   quote of a nested item left the items it lifted past its sibling where they
   were lifted to, since the lines recorded came from a walk that stopped at the
   sibling; they now come from the planned moves (`blocks/NestedListEditingTest.kt`).
-- [ ] **6.33 A join leaves a block's indent over part of a line. R.** [Opus]
+- [x] **6.33 A join leaves a block's indent over part of a line. R.** [Opus]
   [Lane G] Deleting or replacing across a quote line and a plain line keeps one
   line's marker (or none) but carries the other's `ParagraphStyle` over its part
   of the joined line (`handleMultiLineDelete`, `handleMultiLineReplace`), so
@@ -1969,6 +1969,17 @@ iOS Safari; browser tests run in CI.
   `EditorFuzzE2eTest` or the markdown module's `MarkdownUiFuzzFixpointTest`)
   throws the same from a Backspace's `handleMultiLineDelete` at op 43, after a
   block toggle and an Enter; found in 7.65's seed sweep, likely the same cause.
+  Done: every publish now gives each changed line exactly the paragraph styles
+  its markers want, each over the whole line (`repairBlockParagraphs`, after
+  `normalizeLineBlocks`); a paragraph style no block uses passes through, and a
+  rewritten line widens the pending partial relayout. The markers decide
+  whatever moved the text: a join, a split, a paste whose markers land after
+  its text, a host adding or removing a block span on the public span API. Also
+  fixed by it: emptying a quote line dropped its indent while the marker
+  stayed, so text typed there again had none (`state/JoinParagraphStyleTest.kt`;
+  seed 246 is in the markdown fixed seeds; seeds 1 to 1500 of that test keep
+  every paragraph run whole). `RowListCostTest`'s span removal now reshapes the
+  one line that loses its indent.
 - [ ] **6.34 Undoing a multi-line insert at a paragraph's start drops its
   format. R.** [Opus] [Lane G] A paragraph format (`ParagraphFormatSpanStyle`)
   stays on the first line of a multi-line insert at its paragraph's start
@@ -1976,6 +1987,18 @@ iOS Safari; browser tests run in CI.
   at its start, leaves the format on "new" and none on "xtarget"; undo deletes
   the first line with its format and "target" comes back plain. Enter at the
   same place keeps the format on both lines. Found in 6.5.
+- [ ] **6.35 A join leaves a heading's or fence's text style over part of a
+  line. S.** [Opus] [Lane G] A heading or code fence bakes its `textStyle` (the
+  heading's size, the fence's monospace) into the line's text. A join keeps one
+  line's markers but leaves each piece's text styles as they were: deleting from
+  column 4 of "seed" to column 2 of a heading "Heading" leaves a plain line with
+  "eading" at the heading's size, and Delete at the end of a heading joins the
+  body line below at body size. Word and Google Docs give the joined paragraph
+  the first paragraph's style over all of it. Strip an ended block's text style
+  and bake a kept one's over the joined line, as `continueLineBlocks` does for a
+  heading on a split, or derive both the text and paragraph styles from the
+  markers when a line is shaped, as `LineShaper` does for a paragraph format,
+  which retires 6.33's repair too. Found in 6.33's review.
 
 ### Clipboard
 
