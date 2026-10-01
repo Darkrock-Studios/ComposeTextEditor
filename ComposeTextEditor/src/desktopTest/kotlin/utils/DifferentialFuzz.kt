@@ -4,6 +4,7 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.unit.Dp
 import com.darkrockstudios.texteditor.state.CaretAffinity
 import com.darkrockstudios.texteditor.state.wordRuns
+import com.darkrockstudios.texteditor.utils.hasRightToLeft
 import kotlin.math.abs
 import kotlin.random.Random
 import kotlin.test.fail
@@ -112,6 +113,15 @@ fun explainDivergence(
 	}
 }
 
+/** The start and end (exclusive) of the line of this text holding [offset], without its line break. */
+private fun String.lineBounds(offset: Int): IntRange {
+	val start = if (offset <= 0) 0 else lastIndexOf('\n', offset - 1) + 1
+	val end = indexOf('\n', offset).let { if (it < 0) length else it }
+	return start until maxOf(start, end)
+}
+
+private fun String.lineOf(offset: Int): Int = (0 until offset).count { this[it] == '\n' }
+
 private fun DifferentialScope.sameRow(a: EditSnapshot, b: EditSnapshot): Boolean {
 	val rows = editorRows()
 	return rows.indexOfLast { it <= a.caret } == rows.indexOfLast { it <= b.caret }
@@ -157,8 +167,9 @@ private fun String.referenceWordBoundary(offset: Int): Pair<Int, Int> {
 
 private fun String.icuSegment(offset: Int): Pair<Int, Int> {
 	if (this[offset] == '\n') return offset to offset + 1
-	val lineStart = lastIndexOf('\n', offset) + 1
-	val lineEnd = indexOf('\n', offset).let { if (it < 0) length else it }
+	val bounds = lineBounds(offset)
+	val lineStart = bounds.first
+	val lineEnd = bounds.last + 1
 	val run = substring(lineStart, lineEnd).wordRuns().first { offset - lineStart in it.start until it.end }
 	return lineStart + run.start to lineStart + run.end
 }
@@ -184,6 +195,16 @@ fun referenceQuirk(
 		return if (asReference) "reference: Ctrl+Left passes over one-character segments" else null
 	}
 	val text = before.text
+	val arrow = stroke.key == Key.DirectionLeft || stroke.key == Key.DirectionRight
+	val mixed = listOf(before.caret, native.caret, editor.caret).any { offset ->
+		text.lineBounds(offset).let { text.hasRightToLeft(it.first, it.last + 1) }
+	}
+	// Only the caret differs: the anchor stays, and the step reaches no further than a neighbouring line.
+	val caretOnly = editor.text == native.text && (!stroke.shift || editor.anchor == native.anchor) &&
+		abs(text.lineOf(editor.caret) - text.lineOf(before.caret)) <= 1
+	if (arrow && mixed && caretOnly) {
+		return "reference: Left and Right are logical in mixed-direction text"
+	}
 	// The reference has no affinity, so a caret the editor draws at the end of a wrapped
 	// row (upstream, on the wrap offset) is on the lower row to it.
 	val fromWrap = upstream && before.caret in rows && before.caret > 0 && text[before.caret - 1] != '\n'

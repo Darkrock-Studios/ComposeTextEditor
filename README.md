@@ -92,7 +92,6 @@ See the [roadmap](docs/ROADMAP.md) for what is planned.
 
 ### Work left to do:
 
-- Right-to-left text: arrow keys inside a mixed-direction paragraph move logically
 - Full CommonMark Spec compliance (_tables, task lists, reference links, setext headings and nested quotes stay literal text_)
 
 ## Want to try it?

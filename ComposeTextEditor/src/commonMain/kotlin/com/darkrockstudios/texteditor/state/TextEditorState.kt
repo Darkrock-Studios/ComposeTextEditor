@@ -1688,12 +1688,16 @@ class TextEditorState private constructor(
 	fun getPositionForOffset(position: CharLineOffset): CursorMetrics =
 		getPositionForOffset(position, CaretAffinity.Downstream)
 
-	/** [getPositionForOffset] on the row [affinity] picks at a wrap offset. */
+	/**
+	 * [getPositionForOffset] on the row [affinity] picks at a wrap offset. The caret's own
+	 * position is where the caret is drawn, against its [TextEditorCursorState.runSide].
+	 */
 	internal fun getPositionForOffset(position: CharLineOffset, affinity: CaretAffinity): CursorMetrics {
 		val currentWrappedLine = lineOffsets.getWrapForDrawing(position, affinity)
 			?: return CursorMetrics(position = Offset.Zero, height = 0f)
 
-		val cursorX = currentWrappedLine.caretX(position.char)
+		val runSide = if (position == cursorPosition && affinity == cursor.affinity) cursor.runSide else null
+		val cursorX = currentWrappedLine.caretX(position.char, runSide)
 		val cursorY = currentWrappedLine.offset.y - scrollState.value
 
 		val lineHeight = currentWrappedLine.effectiveHeight

@@ -98,7 +98,8 @@ GTK and Cocoa go to the previous word's start; and its paragraph direction is
 the whole text's, from its first strong character, so a right-to-left paragraph
 after a left-to-right one keeps left-to-right arrows, where native editors and
 the editor resolve each paragraph on its own. Its
-arrow keys inside a mixed paragraph are logical, like the editor's (7.33).
+arrow keys inside a mixed paragraph are logical, where native editors and the
+editor move visually (7.33).
 
 ## Workflow
 
@@ -182,7 +183,7 @@ review.
 | --- | --- | --- | --- |
 | A | Caret motion | `state/TextEditorCursorState.kt`, `state/TextEditorStateCursorExt.kt`, `state/WordSegmentationUtils.kt`, `input/TextEditorKeyCommandHandler.kt` | 1.1 to 1.7, 1.19, 2.3, 2.6, 7.5, 7.33 |
 | B | Pointer and touch | `textEditorPointerInputHandling.kt`, `state/TextEditorSelectionManager.kt`, `DrawSelectionHandles.kt` | 1.9, 1.12 to 1.16, 1.21 to 1.24, 3.1, 3.2, 3.4 to 3.8, 3.13, 3.15, 3.18, 4.23, 6.16 |
-| C | Drawing and geometry | `Draw*.kt`, `cursor/`, `scrollbar/`, `state/TextEditorScrollState.kt`, hit testing | 1.8, 1.10, 1.11, 1.17, 1.18, 1.25, 3.3, 3.12, 3.16, 4.14, 7.6, 7.7, 7.27, 7.41 |
+| C | Drawing and geometry | `Draw*.kt`, `cursor/`, `scrollbar/`, `state/TextEditorScrollState.kt`, hit testing | 1.8, 1.10, 1.11, 1.17, 1.18, 1.25, 3.3, 3.12, 3.16, 4.14, 7.6, 7.7, 7.27, 7.41, 7.78 |
 | D | Bindings, actions, menu | `input/KeyBindings.kt`, `input/EditorCommand.kt`, `input/BuiltinEditorActions.kt`, `contextmenu/` | 2.1, 2.2, 2.4, 2.5, 2.7 to 2.12, 4.8, 5.8, 7.58 |
 | E | Input sessions on desktop, iOS, web | `desktopMain`, `iosMain`, `wasmJsMain` under `input/` | 4.2 to 4.7, 4.10 to 4.12, 4.19, 4.21, 4.22, 4.24 to 4.26, 4.28, 4.29, 4.32, 4.33, 4.35, 4.37, 4.38, 7.37 |
 | F | Android input | `androidMain` | 0.4, 0.12, 3.9 to 3.11, 3.14, 3.17, 4.16, 4.18, 4.20, 4.27, 4.30, 4.31, 4.34, 4.36, 7.40 |
@@ -2764,12 +2765,51 @@ iOS Safari; browser tests run in CI.
   direction, as `BasicTextField` does; the `textStyle` KDoc on
   `TextEditorStyle` tells hosts to set `TextDirection.Content` for
   per-paragraph direction.
-- [ ] **7.33** [Opus] [Lane A] Arrow keys inside a mixed paragraph (a Hebrew
+- [x] **7.33** [Opus] [Lane A] Arrow keys inside a mixed paragraph (a Hebrew
   word in English text, or the reverse) move logically, so the caret jumps
   visually at the run boundaries. macOS and Windows move visually through the
   runs, with the caret carrying a direction at each boundary; `BasicTextField`
   is logical here too. Needs `getBidiRunDirection` and a run-aware step, and a
   visual caret position at run boundaries.
+  Decided per platform, from the native fields: all of them move visually.
+  Cocoa binds the arrows to `moveLeft:` and `moveRight:` (visual; `moveForward:`
+  and `moveBackward:` are the logical ones); TextKit's selection navigation
+  on iOS moves `.left` and `.right` visually; Windows' Edit and RichEdit
+  controls move visually; GTK binds them to `GTK_MOVEMENT_VISUAL_POSITIONS`
+  (Qt defaults to logical, but GTK is the Linux reference, as in 1.19);
+  Android's `ArrowKeyMovementMethod` steps with `Layout.getOffsetToLeftOf` and
+  `getOffsetToRightOf`; Chrome and Safari move visually, and Firefox by
+  default (`bidi.edit.caret_movement_style` 2). So one switch,
+  `ARROW_KEYS_MOVE_VISUALLY` in `state/VisualCaretMotion.kt`, documents the
+  sources and covers every platform; a platform that should differ makes it
+  per platform there.
+  Done: Left and Right step to the nearest grapheme boundary on screen in
+  that direction on the caret's row (`moveCaretVisually`), each boundary
+  standing against the glyph before or after it at that glyph's trailing or
+  leading edge by its run's direction (`getBidiRunDirection` and
+  `getBoundingBox`); where two offsets share a place on screen the step takes
+  the one against the glyph it passed. The caret keeps that side
+  (`TextEditorCursorState.runSide`, cleared by every other move) and draws
+  there, and Up and Down measure from it. Past a row's edge the caret goes
+  onto the next row in reading order at its reading start, or the previous
+  row at its reading end, and at the document's first or last row it stays.
+  A line of plain left-to-right text in a left-to-right paragraph keeps the
+  logical step, as does a row whose layout lags the text. Shift extends the
+  selection with the same steps (the selection stays a logical range);
+  collapsing a selection, word moves, Home and End keep 7.5's paragraph
+  rules. An English paragraph in a right-to-left app (7.32) now moves on
+  screen too, where 7.5 mirrored it. `e2e/VisualArrowE2eTest.kt`; the
+  invariant fuzzer's Left-then-Right check compares the drawn caret in a line
+  with right-to-left text, and the differential fuzzer tolerates the
+  reference's logical arrows there. iOS hardware arrows need the Mac (Mac
+  queue).
+- [x] **7.78** [Opus] [Lane C] In a left-to-right paragraph whose row starts
+  with right-to-left text, a caret inside that text is drawn at the run's
+  right end: `lineTextLeft`, the caret's floor, takes the first character's
+  position, which is that run's right end, not the row's left. Found in 7.33.
+  Done: such a row's text left is its leftmost glyph's, the left of
+  Compose's path over the row, which keeps an indent as the first glyph's
+  position does (`GeometryTest`). List markers anchored there move with it.
 - [x] **7.6** [Opus] [Lane C] Selection draws one rect per row from x(start)
   to x(end); wrong in right-to-left, and mixed text needs several rects.
   **R** (0.5, `drawing/GeometryTest.kt`, `failsUntil("7.6")`): in a
@@ -3831,3 +3871,4 @@ records results and removes entries that passed.
 | 4.8 | On an iPad simulator or device with a mouse or trackpad (in the Simulator, I/O > Input > Send Pointer to Device, then Control-click for a right-click): right-click a word in the sample's editor, right-click in an unfocused editor, and right-click a misspelt word in the spell-check demo | Compiles. The system edit menu opens at the pointer with Cut, Copy, Paste and Select All as they apply, also on an editor not yet focused; on a misspelt word the editor's menu with its suggestions opens instead | |
 | 4.23 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64`. `clipboard/PrimarySelection.kt` adds `internal expect fun platformPrimarySelection()`; the iOS actual (`iosMain/.../clipboard/PrimarySelection.ios.kt`) answers null | Compiles. Nothing to run: iOS has no primary selection ||
 | 2.7 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64`. `input/LayoutKey.kt` adds the public `expect val KeyEvent.layoutKey`; the iOS actual (`iosMain/.../input/LayoutKey.ios.kt`) answers `key`. Then in the macOS desktop sample app, with the US layout and again with "Dvorak" and "Dvorak - QWERTY ⌘" input sources: Cmd+Z, Cmd+X, Cmd+B, Ctrl+A and Ctrl+F | Compiles. Record which keys the chords land on under each source, against TextEdit. The desktop `layoutKey` answers `key` on macOS (`hostKeyCodeMayMissLayout`); if Dvorak's chords sit on the QWERTY keys where TextEdit's follow the Dvorak letters, turn it on for macOS and check "Dvorak - QWERTY ⌘" still matches TextEdit ||
+| 7.33 | In the iOS sample app with a hardware keyboard (the simulator's, or an iPad's), type `abc אבג def` and press Right from the start, then Left from the end; also Shift+Right. Compare a `UITextView` (Notes) with the same text. Then the same in the macOS desktop sample app against TextEdit. commonMain only, no `iosMain` change | Each press moves the caret one glyph further right (or left) on screen, through the Hebrew word, as Notes and TextEdit do. If iOS turns out logical, set `ARROW_KEYS_MOVE_VISUALLY` per platform in `state/VisualCaretMotion.kt`; if the arrows never reach the key handler on iOS (UIKit moving the caret through the input connection instead), file that ||

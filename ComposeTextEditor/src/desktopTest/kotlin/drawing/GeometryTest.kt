@@ -222,6 +222,18 @@ class GeometryTest {
 	}
 
 	@Test
+	fun `the caret inside a right-to-left word that starts a left-to-right paragraph is drawn inside it`() = editorUiTest(
+		initialText = AnnotatedString(MIXED_START),
+	) {
+		val reference = independentLayout(MIXED_START)
+		placeCaret(0, 2)
+
+		val caret = drawnCaret()
+		assertTrue(caret != null && caret.left < reference.x(0) - 1f, "precondition and claim: left of the word's right end, at ${reference.x(2)}: $caret")
+		assertRectEquals(caretAt(reference.x(2), reference.rowTop(0), reference.rowBottom(0)), caret)
+	}
+
+	@Test
 	fun `a selection over mixed-direction text covers only the selected glyphs`() = editorUiTest(
 		initialText = AnnotatedString(MIXED),
 	) {
@@ -346,5 +358,6 @@ class GeometryTest {
 		const val MIXED = "abc אבג def"
 		const val MIXED_RTL = "שלום abc עולם"
 		const val MIXED_END = "abc אבג"
+		const val MIXED_START = "שלום abc"
 	}
 }

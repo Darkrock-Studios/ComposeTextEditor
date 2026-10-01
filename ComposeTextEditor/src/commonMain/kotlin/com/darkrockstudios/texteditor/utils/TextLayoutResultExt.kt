@@ -30,6 +30,11 @@ fun TextLayoutResult.lineTextLeft(lineIndex: Int, density: Density?): Float {
 	if (multiParagraph.getParagraphDirection(lineStart) != ResolvedTextDirection.Ltr) {
 		return getLineLeft(lineIndex)
 	}
+	// A row that starts with right-to-left text starts at that run's right end, not its
+	// left: take the row's leftmost glyph, which keeps the indent as the first glyph does.
+	if (lineStart < layoutInput.text.length && getBidiRunDirection(lineStart) == ResolvedTextDirection.Rtl) {
+		return getPathForRange(lineStart, getLineEnd(lineIndex, visibleEnd = true)).getBounds().left
+	}
 
 	val measured = max(
 		getLineLeft(lineIndex),
@@ -50,8 +55,8 @@ fun TextLayoutResult.lineTextLeft(lineIndex: Int, density: Density?): Float {
  * covers separate stretches of the row, and gets a box for each. Boxes that touch are
  * merged. Each box is the row's full height, from [getLineTop] to [getLineBottom] in the
  * layout's coordinates (measured from the paragraph's top, not the row's). The range is
- * clipped to the row's text,
- * which leaves out the spaces a soft wrap hangs past the row's end.
+ * clipped to the row's text, which leaves out the spaces a soft wrap hangs past the
+ * row's end.
  *
  * A row of left-to-right text in a left-to-right paragraph has a single stretch, read
  * from two horizontal positions without building the path.
@@ -138,7 +143,7 @@ internal const val RUN_GAP = 0.5f
  * right-to-left supplementary-plane script (judged by its high surrogate), or a
  * right-to-left mark, embedding, override or isolate (a first strong isolate counts).
  */
-private fun CharSequence.hasRightToLeft(start: Int, end: Int): Boolean {
+internal fun CharSequence.hasRightToLeft(start: Int, end: Int): Boolean {
 	for (i in start until end) {
 		when (this[i].code) {
 			in 0x0590..0x08FF, in 0xFB1D..0xFDFF, in 0xFE70..0xFEFF,
