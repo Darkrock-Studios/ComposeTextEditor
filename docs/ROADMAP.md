@@ -188,8 +188,8 @@ review.
 | E | Input sessions on desktop, iOS, web | `desktopMain`, `iosMain`, `wasmJsMain` under `input/` | 4.2 to 4.7, 4.10 to 4.12, 4.19, 4.21, 4.22, 4.24 to 4.26, 4.28, 4.29, 4.32, 4.33, 4.35, 4.37, 4.38, 7.37 |
 | F | Android input | `androidMain` | 0.4, 0.12, 3.9 to 3.11, 3.14, 3.17, 4.16, 4.18, 4.20, 4.27, 4.30, 4.31, 4.34, 4.36, 7.40 |
 | G | Edit pipeline and undo | `state/TextEditManager.kt`, `state/TextEditHistory.kt`, `state/EditBehavior.kt`, `input/ImeEditLogic.kt` | 1.20, 5.1 to 5.5, 5.9 to 5.11, 5.13 to 5.15, 6.1 to 6.6, 6.14, 6.15, 6.17, 6.22, 6.23, 6.28, 6.29, 6.33 to 6.35, 7.54, 7.55 |
-| H | Clipboard and HTML | `clipboard/`, `html/`, `dragdrop/` | 4.9, 4.13, 4.17, 6.7 to 6.13, 6.18 to 6.21, 5.12, 6.24 to 6.27, 6.30 to 6.32, 6.36, 6.37, 7.39, 7.46, 7.47, 7.49, 7.53, 7.63 |
-| I | Markdown and block model | `ComposeTextEditorMarkdown/`, `richstyle/`, `state/TextEditorStateBlockExt.kt` | 5.6, 7.14 to 7.16, 7.43, 7.45, 7.52, 7.64, 7.67, 7.70 to 7.72, 7.75, 7.76 |
+| H | Clipboard and HTML | `clipboard/`, `html/`, `dragdrop/` | 4.9, 4.13, 4.17, 6.7 to 6.13, 6.18 to 6.21, 5.12, 6.24 to 6.27, 6.30 to 6.32, 6.36 to 6.38, 7.39, 7.46, 7.47, 7.49, 7.53, 7.63 |
+| I | Markdown and block model | `ComposeTextEditorMarkdown/`, `richstyle/`, `state/TextEditorStateBlockExt.kt` | 5.6, 7.14 to 7.16, 7.43, 7.45, 7.52, 7.64, 7.67, 7.70 to 7.72, 7.79, 7.80 |
 | J | Find addon | `ComposeTextEditorFind/` | 7.17 to 7.19, 7.26, 7.29, 7.42, 7.68, 7.69 |
 | K | Spell check addon | `ComposeTextEditorSpellCheck/` | 7.20 to 7.22, 7.28, 7.30, 7.31, 7.34, 7.35, 7.38, 7.44, 7.50, 7.56, 7.61, 7.74, 7.76, 7.77 |
 | L | Tests and CI | test sources, `.github/workflows/` | 0.1 to 0.3, 0.5 to 0.11, 4.1, 4.15, 7.62, 7.65 |
@@ -2289,7 +2289,7 @@ iOS Safari; browser tests run in CI.
   an `inheritStyle` replace across lines or breaking its line inherits) leaves
   its source line's block text styles behind. A text style equal to an inline
   style is neither baked nor left behind. Undo gives both lines back as they
-  were (`state/JoinBlockTextStyleTest.kt`). Found: 6.36, 7.75.
+  were (`state/JoinBlockTextStyleTest.kt`). Found: 6.38, 7.79.
 
 ### Clipboard
 
@@ -2601,7 +2601,7 @@ iOS Safari; browser tests run in CI.
   text without its blocks. Read the content once per paste, off the UI thread
   as the primary selection's read is (4.23), and hand it to the three readers,
   as Android's `pasteClip` does. Found reviewing 6.36.
-- [ ] **6.36 Part of a heading pasted into another line keeps the heading's
+- [ ] **6.38 Part of a heading pasted into another line keeps the heading's
   look. R.** [Opus] [Lane H] Copying "itl" out of an h2 "Title" and pasting it
   into a plain line "hello" leaves "itl" baked with the h2 look (24 sp), though
   the line is no heading (probed through the UI harness's Ctrl+C and Ctrl+V).
@@ -3347,7 +3347,7 @@ Shaping is one line per keystroke. These still scale with document length:
   anywhere else keeps its spaces.
   Done: a `WHITE_SPACE` token that is the file's own (a line of only
   whitespace) is kept at offset 0 too; a first paragraph's leading spaces
-  still drop there (`WhitespaceOnlyBodyTest`). Found: 7.76.
+  still drop there (`WhitespaceOnlyBodyTest`). Found: 7.80.
 - [x] **7.71 A blank line of a tab gains a blank line on import. R.** [Opus]
   [Lane I] A line of only a tab or four spaces after a paragraph (`a`, `\t`)
   or a list item exports as `a`, a blank line, `\t`; import keeps the
@@ -3372,8 +3372,8 @@ Shaping is one line per keystroke. These still scale with document length:
   the kept heading's look is baked over the joined line, so deleting the line
   break between "Title" and "Sub" exports as `## TitleSub`
   (`HeaderSemanticsTest`, `state/JoinBlockTextStyleTest.kt`). The paste is
-  6.36 and the look equal to an inline style 7.75.
-- [ ] **7.75 A heading look equal to an inline style takes the user's spans of
+  6.38 and the look equal to an inline style 7.79.
+- [ ] **7.79 A heading look equal to an inline style takes the user's spans of
   it with the heading. S.** [Opus] [Lane I] Under a configuration whose
   heading look equals an inline style (`header4Style = boldStyle`), demoting
   the heading or a style swap's rebake strips the user's bold inside the line
@@ -3384,7 +3384,7 @@ Shaping is one line per keystroke. These still scale with document length:
   line stays bold. Stripping only a run over the whole line would keep a
   user's partial bold; a bold run over the whole line stays ambiguous. Found
   in 7.72.
-- [ ] **7.76 A foreign paragraph's leading spaces are kept except at the
+- [ ] **7.80 A foreign paragraph's leading spaces are kept except at the
   file's start. R.** [Opus] [Lane I] CommonMark drops up to three leading
   spaces of a paragraph line, and import does for the first paragraph
   (`   text` reads as `text`), but keeps them on any later one (`a`, a blank
