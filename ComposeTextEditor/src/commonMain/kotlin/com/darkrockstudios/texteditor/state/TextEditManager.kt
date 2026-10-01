@@ -218,6 +218,7 @@ class TextEditManager(private val state: TextEditorState) {
 			state.cursor.updatePosition(operation.cursorAfter)
 			state.invalidateCopiedRichSpans()
 			state.richSpanManager.updateSpans(operation, metadata)
+			state.landedInputMoved(operation)
 			if (addToHistory && !isDecoration) {
 				history.recordEdit(
 					operation,

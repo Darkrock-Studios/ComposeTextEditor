@@ -887,12 +887,12 @@ class TextEditorState private constructor(
 		// lands here raw (an IME committing "\n" over its composition) is a
 		// replacement of the composition, not typed text.
 		if (text.isEmpty() || text == "\n") return
-		offerLanded(range) { it.onTextInput(this, text, range) }
+		offerLanded(range) { behavior, at -> behavior.onTextInput(this, text, at) }
 	}
 
 	/** Tells the behaviors that a typed line break has landed at [range], once it has committed. */
 	internal fun newlineLanded(range: TextEditorRange) {
-		offerLanded(range) { it.onNewlineLanded(this, range) }
+		offerLanded(range) { behavior, at -> behavior.onNewlineLanded(this, at) }
 	}
 
 	/**
@@ -906,7 +906,7 @@ class TextEditorState private constructor(
 	fun pasteLanded(text: String, range: TextEditorRange) {
 		require(holdsRange(range)) { "range $range is not in the document" }
 		if (text.isEmpty()) return
-		offerLanded(range) { it.onPaste(this, text, range) }
+		offerLanded(range) { behavior, at -> behavior.onPaste(this, text, at) }
 	}
 
 	private fun holdsRange(range: TextEditorRange): Boolean {
@@ -922,8 +922,23 @@ class TextEditorState private constructor(
 	 * is asked to resync only when a behavior changed the document or moved the
 	 * caret: the edit it expected has already happened, so a claim alone leaves its
 	 * mirror right.
+	 *
+	 * While an IME batch is open ([beginImeBatch]) the offer waits for its end: the
+	 * batch's later commands address the text as the keyboard's mirror holds it, which
+	 * an edit a behavior made would shift under them. [hook] is given the range the
+	 * text stands at when offered.
 	 */
-	private fun offerLanded(range: TextEditorRange, hook: (EditBehavior) -> Boolean) {
+	private fun offerLanded(range: TextEditorRange, hook: (EditBehavior, TextEditorRange) -> Boolean) {
+		// Edits a behavior makes while handling one are never offered, deferred or not.
+		if (behaviorDepth > 0) return
+		if (imeBatchDepth > 0) {
+			landedInBatch += LandedInput(range, getStringInRange(range), hook)
+			return
+		}
+		offerLandedNow(range, hook)
+	}
+
+	private fun offerLandedNow(range: TextEditorRange, hook: (EditBehavior, TextEditorRange) -> Boolean) {
 		// The working content, so an edit inside a host's open transaction counts.
 		val contentBefore = workingContent
 		val caretBefore = cursorPosition
@@ -932,8 +947,118 @@ class TextEditorState private constructor(
 		val textBefore = lines.map { textLines[it].text }
 		fun rangeChanged() =
 			textLines.size != lineCount || lines.any { textLines[it].text != textBefore[it - range.start.line] }
-		runBehaviors { hook(it) || rangeChanged() }
+		runBehaviors { hook(it, range) || rangeChanged() }
 		if (workingContent !== contentBefore || cursorPosition != caretBefore) requestImeResync()
+	}
+
+	/** A range that moves with the edits of the open IME batch, and the text it held when noted. */
+	private open class BatchRange(var range: TextEditorRange, val text: String)
+
+	/** Text that landed while an IME batch was open, to be offered to the behaviors once it ends. */
+	private class LandedInput(
+		range: TextEditorRange,
+		text: String,
+		val hook: (EditBehavior, TextEditorRange) -> Boolean,
+	) : BatchRange(range, text)
+
+	/** A composition open when the batch's landed input is offered, put back after the behaviors' edits. */
+	private class HeldComposition(range: TextEditorRange, text: String, val typed: Boolean) : BatchRange(range, text)
+
+	private val landedInBatch = ArrayDeque<LandedInput>()
+	private var heldComposition: HeldComposition? = null
+
+	/**
+	 * Depth of the IME batches open on this editor: Android's `beginBatchEdit`, a skiko
+	 * edit block, a web command list. Edits apply at once inside one; only what the
+	 * behaviors are offered waits for the outermost batch to end.
+	 */
+	internal var imeBatchDepth: Int = 0
+		private set
+
+	internal fun beginImeBatch() {
+		imeBatchDepth++
+	}
+
+	/**
+	 * Ends the innermost IME batch, offering what landed in it to the behaviors before
+	 * the outermost one is left, so a platform that holds its notifications back for a
+	 * batch reports the behaviors' edits with it. Returns true once no batch is open.
+	 */
+	internal fun endImeBatch(): Boolean {
+		if (imeBatchDepth == 0) return true
+		try {
+			if (imeBatchDepth == 1) offerLandedInBatch()
+		} finally {
+			imeBatchDepth--
+		}
+		return imeBatchDepth == 0
+	}
+
+	/**
+	 * Drops [count] batch levels for a keyboard that went away with a batch open: its
+	 * text is in the document already. What landed in them is dropped unoffered once
+	 * no batch is open; while a successor's batch still is, it is offered at that
+	 * batch's end, where it then stands, since the levels nest and no entry is one
+	 * connection's alone.
+	 */
+	internal fun releaseImeBatches(count: Int) {
+		imeBatchDepth = (imeBatchDepth - count).coerceAtLeast(0)
+		if (imeBatchDepth == 0) landedInBatch.clear()
+	}
+
+	/** Runs [block] as one IME batch. */
+	internal inline fun imeBatch(block: () -> Unit) {
+		beginImeBatch()
+		try {
+			block()
+		} finally {
+			endImeBatch()
+		}
+	}
+
+	/**
+	 * Offers each text that landed in the batch, in order, where it stands now: one the
+	 * batch's later commands (or an earlier offer's behavior) rewrote or removed is no
+	 * longer what the user typed, so it is not offered.
+	 */
+	private fun offerLandedInBatch() {
+		if (landedInBatch.isEmpty()) return
+		// A composition the batch opened after the text landed outlives the behaviors'
+		// edits, which clear it as any edit does: the keyboard goes on composing it.
+		heldComposition = composingRange?.takeIf { holdsRange(it) }
+			?.let { HeldComposition(it, getStringInRange(it), composingIsTyped) }
+		try {
+			while (landedInBatch.isNotEmpty()) {
+				val landed = landedInBatch.removeFirst()
+				if (landed.holds()) offerLandedNow(landed.range, landed.hook)
+			}
+			val held = heldComposition
+			if (held != null && composingRange == null && held.holds()) {
+				updateComposingRange(getCharacterIndex(held.range.start), getCharacterIndex(held.range.end), held.typed)
+			}
+		} finally {
+			heldComposition = null
+		}
+	}
+
+	/** Whether the range still holds the text it was noted with. */
+	private fun BatchRange.holds(): Boolean = holdsRange(range) && getStringInRange(range) == text
+
+	/** Moves the open batch's ranges across [operation], as the rich spans move. */
+	internal fun landedInputMoved(operation: TextEditOperation) {
+		if (landedInBatch.isEmpty() && heldComposition == null) return
+		// Text put in right at a range's end follows it rather than joining it.
+		val editStart = when (operation) {
+			is TextEditOperation.Insert -> operation.position
+			is TextEditOperation.Replace -> operation.range.start
+			else -> null
+		}
+		fun BatchRange.move() {
+			val end = if (range.end == editStart) range.end else operation.transformOffset(range.end, this@TextEditorState)
+			range = TextEditorRange(operation.transformOffset(range.start, this@TextEditorState), end)
+		}
+		landedInBatch.forEach { it.move() }
+		heldComposition?.move()
 	}
 
 	// In-editor rich-span clipboard. The system clipboard only carries the

@@ -1741,7 +1741,7 @@ iOS Safari; browser tests run in CI (met: the `browser` job, 4.15).
   for it and is tested. iOS compiled and rechecked in the simulator
   2026-09-30 with 4.19: typing, autocorrect, backspace, a list Return and
   Japanese candidates behave as in the 4.5 pass.
-- [ ] **4.26 A behavior's edit mid IME batch. C.** [Fable] [Lane E] A
+- [x] **4.26 A behavior's edit mid IME batch. C.** [Fable] [Lane E] A
   behavior edits on top of an IME commit (5.1) at once, but a batch (an
   Android `beginBatchEdit`, a web `onEditCommand` list) may hold further
   commands the IME computed against its own mirror, and the resync only
@@ -1749,6 +1749,33 @@ iOS Safari; browser tests run in CI (met: the `browser` job, 4.15).
   after the commit then addresses the wrong characters. Defer the hook to
   the batch's end, or drop the batch's remaining offsets once a behavior
   has edited.
+  Reproduced on all three paths with smart punctuation on: an Android batch
+  of `commitText("--")` then `deleteSurroundingText(2, 0)` emptied the line
+  (the dash the behavior made was one character, so the delete took the
+  character before it too), and a skiko `editText` block and a web command
+  list did the same. Done by deferring the landed hooks (`onTextInput`,
+  `onNewlineLanded`, `onPaste`) to the end of the outermost batch:
+  `TextEditorState` counts IME batches (`beginImeBatch`/`endImeBatch`, which
+  Android's batch edit, the skiko `editText` block and the web command list
+  all use), queues what landed in one with its text, moves each queued range
+  across the batch's later edits as the rich spans move (text put in right at
+  a range's end follows it), and at the end offers each range that still holds
+  the text that landed there, in order; one a later command rewrote or removed
+  is not offered, since it is no longer what the user typed. Dropping the
+  batch's remaining offsets was rejected: the keyboard's mirror cannot be
+  known, so no remap is right, and dropping commands loses text. The
+  behaviors run before Android leaves the batch, so the one flush after it
+  reports their edits and the resync (4.27) restarts input then; on the skiko
+  platforms the resync (4.25) lands after the block as before. The pre-edit
+  hooks (`onNewline`, `onBackspace`, `onDeleteForward`) still decide their edit
+  at once, as they must. A composition the batch opened after the text landed
+  (`commitText("--")` then `setComposingText("x")`) is put back after the
+  behaviors' edits, moved with them, since every edit clears it and the
+  keyboard goes on composing. A keyboard that never closes its batch keeps its
+  text, gets no substitutions, and its landed input is dropped unoffered when
+  the connection closes with no batch left open.
+  Hooks run outside a batch (hardware keys, a host's `insertTypedString` or
+  `pasteLanded`) are offered at once as before.
 - [x] **4.29 iOS ignores IME resync requests. C.** [Opus] [Lane E] [Mac work]
   Compose's iOS connection absorbs a value change made during the keyboard's
   own edit (`TextInputConnection.edit` stores the post-edit value with
@@ -4344,3 +4371,4 @@ records results and removes entries that passed.
 | 7.33 | In the iOS sample app with a hardware keyboard (the simulator's, or an iPad's), type `abc אבג def` and press Right from the start, then Left from the end; also Shift+Right. Compare a `UITextView` (Notes) with the same text. Then the same in the macOS desktop sample app against TextEdit. commonMain only, no `iosMain` change | Each press moves the caret one glyph further right (or left) on screen, through the Hebrew word, as Notes and TextEdit do. If iOS turns out logical, set `ARROW_KEYS_MOVE_VISUALLY` per platform in `state/VisualCaretMotion.kt`; if the arrows never reach the key handler on iOS (UIKit moving the caret through the input connection instead), file that ||
 | 6.37 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64`. `clipboard/ClipboardHtml.kt` adds `internal expect suspend fun readClipboardPaste`; the iOS actual (`iosMain/.../clipboard/ClipboardHtml.ios.kt`) goes through `ClipboardHelper.getText`, `readClipboardHtml` and `readCopyId` as the paste did. Then in the iOS sample app: copy a bulleted list in the editor and paste it, and paste a bulleted list copied from Notes | Compiles. Both paste as bulleted lists, with one paste prompt at most | Compile part passed 2026-10-01 at `0a4ca7ed`. The rest is for a person |
 | 6.20 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64` and `:ComposeTextEditor:iosSimulatorArm64Test`. The `dragdrop/PlatformTextDrag.kt` expects changed: `textDragTransferData` takes a nullable `html`, and `droppedText` an `ownDrag` flag; the iOS actuals (`iosMain/.../dragdrop/PlatformTextDrag.ios.kt`) still answer null and false, by choice (6.20 says why; 6.46 follows up). Common code changed a long press inside the selection while the platform toolbar is up (it tries to start a drag, which on iOS returns at once since `platformDragsText` is false) and a pointer press inside the selection (held through `holdPress`; the wider slop for a drag the platform starts is the web's only). Then on an iPad simulator in the sample app: select a word with a long press and long-press inside it again; with the pointer (I/O > Input > Send Pointer to Device), click inside the selection, and press inside it and drag; with Notes and then Safari beside the sample app in Split View, drag text from them over the editor and drop it | Compiles and the tests pass. The second long press shows the edit menu on lift and starts no drag; the click places the caret and the pointer drag selects from the press, as before; the drops from Notes and Safari land nothing, show no drop caret, and nothing crashes | Compile part passed 2026-10-01 at `0a4ca7ed`, with the iOS tests passing. The rest is for a person |
+| 4.26 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64` and `:ComposeTextEditor:iosSimulatorArm64Test`. `skikoMain` changed: `SkikoTextEditorInputMethodRequest` runs each `editText` block and each `onEditCommand` list as one IME batch (`TextEditorState.imeBatch`), so the edit behaviors are offered what landed once the block ends. No `iosMain` change. Then in the iOS sample app with `SmartPunctuation` added to the editor's `editBehaviors`: type `a--`, `"hi"`, `it's` and `...` with the soft keyboard, with autocorrect on, and undo once after the dash | Compiles and the tests pass. The dash, the curly quotes, the apostrophe and the ellipsis appear as the character is typed, the keyboard's suggestions follow the substituted text (no stray characters, nothing doubled or lost when autocorrect rewrites the word before), and one undo gives `a--` back | |

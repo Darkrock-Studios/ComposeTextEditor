@@ -190,8 +190,9 @@ internal class SkikoTextEditorInputMethodRequest(
 		)
 	}
 
+	/** One list is one batch: its later commands address the text as the browser holds it. */
 	override val onEditCommand: (List<EditCommand>) -> Unit = { commands ->
-		commands.forEach { editorState.applyImeEditCommand(it) }
+		editorState.imeBatch { commands.forEach { editorState.applyImeEditCommand(it) } }
 	}
 
 	/**
@@ -241,8 +242,9 @@ internal class SkikoTextEditorInputMethodRequest(
 
 	private val keyboardBackspace = KeyboardBackspace()
 
+	/** One block is one batch: its later commands address the text as the platform holds it. */
 	override val editText: (TextEditingScope.() -> Unit) -> Unit = { block ->
-		SkikoTextEditingScope(editorState, keyboardBackspace, echoesKeys).block()
+		editorState.imeBatch { SkikoTextEditingScope(editorState, keyboardBackspace, echoesKeys).block() }
 	}
 
 	private fun attachedCoordinates(): LayoutCoordinates? {

@@ -29,6 +29,12 @@ the line break hook, `onNewlineLanded`, and the paste hook, `onPaste`.
   stays where the input left it, mapped across the rewrite.
 - **The IME is resynced** after an edit on top of its commit (4.25, 4.27), so
   its mirror of the text holds the substituted characters.
+- **Never mid-batch.** Text that lands while an IME batch is open (Android's
+  `beginBatchEdit`, a skiko `editText` block, a web command list) is offered
+  once the outermost batch ends, where it then stands, because the batch's
+  later commands address the text as the keyboard's mirror holds it (4.26). A
+  landed text a later command rewrote or removed is not offered. The pre-edit
+  hooks (`onNewline`, `onBackspace`, `onDeleteForward`) decide at once.
 
 ## Smart punctuation
 

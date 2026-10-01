@@ -96,42 +96,41 @@ actual class PlatformTextEditorExtensions actual constructor(
 		extractedTextMonitorToken = 0
 	}
 
-	private var batchEditDepth: Int = 0
-
 	/**
 	 * Whether a batch edit is in progress. IME notifications wait for the outermost batch
 	 * to end, so the keyboard sees each logical edit once rather than its intermediate states.
 	 */
-	val isInBatchEdit: Boolean get() = batchEditDepth > 0
+	val isInBatchEdit: Boolean get() = state.imeBatchDepth > 0
 
 	/**
 	 * Begins a batch edit; pair every call with [endBatchEdit]. Batches nest. Edits made
-	 * inside one apply immediately; only the IME notifications are held back.
+	 * inside one apply immediately; only the IME notifications, and what the edit
+	 * behaviors are offered, are held back.
 	 */
 	fun beginBatchEdit() {
-		batchEditDepth++
+		state.beginImeBatch()
 	}
 
 	/**
-	 * Ends a batch edit started by [beginBatchEdit]. Ending the outermost one notifies the
-	 * IME of everything the batch changed.
+	 * Ends a batch edit started by [beginBatchEdit]. Ending the outermost one offers the
+	 * batch's text to the edit behaviors, then notifies the IME of everything that changed.
 	 * @return true if all batch edits have ended (depth == 0)
 	 */
 	fun endBatchEdit(): Boolean {
-		if (batchEditDepth == 0) return true
-		batchEditDepth--
-		if (batchEditDepth == 0) imeSync?.flush()
-		return batchEditDepth == 0
+		if (!isInBatchEdit) return true
+		val ended = state.endImeBatch()
+		if (ended) imeSync?.flush()
+		return ended
 	}
 
 	/** Drops [count] batch levels without notifying, for a connection whose IME is gone. */
 	internal fun releaseBatchEdits(count: Int) {
-		batchEditDepth = (batchEditDepth - count).coerceAtLeast(0)
+		state.releaseImeBatches(count)
 	}
 
 	/** Forces batch-edit state back to zero without notifying the IME. */
 	fun resetBatchEdit() {
-		batchEditDepth = 0
+		state.releaseImeBatches(state.imeBatchDepth)
 	}
 
 	/**
