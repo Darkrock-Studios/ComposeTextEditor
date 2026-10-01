@@ -172,6 +172,54 @@ several attached, pick one with `ANDROID_SERIAL`:
 ANDROID_SERIAL=emulator-5554 ./gradlew :androidApp:connectedDebugAndroidTest
 ```
 
+## Keyboard traces
+
+A keyboard trace records what an Android soft keyboard did through the editor's
+`InputConnection`, so a bug a user hits with their keyboard replays as a host
+test. To record one, the host sets a recorder on the editor's state, the user
+reproduces the problem, and the host hands them the text to attach:
+
+```kotlin
+val recorder = KeyboardTraceRecorder()
+state.keyboardTrace = recorder
+// ... the user types ...
+val trace = recorder.trace()
+state.keyboardTrace = null
+```
+
+The trace holds the document's text and everything typed while recording;
+tell the user before they send it.
+
+A trace is UTF-8 text, one event per line. Strings are double quoted with
+`\\`, `\"`, `\n`, `\r`, `\t` and `\uXXXX` escapes; `#` starts a comment.
+
+| Line | Meaning |
+| --- | --- |
+| `keyboard-trace 1` | The format version |
+| `device ...`, `note ...` | Free text, ignored by the replay |
+| `text "..."`, `select a b`, `compose a b` or `compose none` | The editor when recording started (character offsets) |
+| `open id inputType imeOptions "keyboard"` | A connection the keyboard was given, with its `EditorInfo` and the keyboard's id and language |
+| `> id name args = result` | A command from the keyboard and what it returned |
+| `? id name args = result` | A read and what it returned |
+| `< selection s e cs ce`, `< restart`, `< extracted token` | What the editor told the keyboard |
+| `~ replace a b "text"`, `~ select a b`, `~ compose ...` | A change not made by the keyboard: a key event's, a context menu action's or the host action key's effect, a tap, the host's own edit |
+| `~ document "..."` | The host replaced the whole document (`setText`, `setDocument`) |
+| `= text "..."`, `= select a b`, `= compose ...` | The editor's state when the trace was taken |
+
+`KeyboardTraceReplayer` (`androidHostTest`) replays one against a fresh editor
+and lists every place it parts from the trace: a different result, a report
+the editor did or did not make, a checkpoint that does not hold. A host test
+cannot run the key pipeline, so a key event's effect comes from the `~` lines
+after it; `getCursorCapsMode` and the cursor anchor are not compared, and a
+change to the keyboard settings is not replayed.
+
+`KeyboardTraceCorpusTest` replays every `.trace` file in
+`ComposeTextEditor/src/androidHostTest/resources/keyboard-traces/`. To add a
+reported bug, drop its trace there named after the keyboard and the issue. A
+recording of a bug replays the bug, so before it goes in, edit the lines that
+show it (a report, a result, a checkpoint) to what `EditText` does: the replay
+then fails until the fix, which lands with it.
+
 ## Browser tests
 
 `browserTests/` is a Playwright project that drives the built wasm demo in

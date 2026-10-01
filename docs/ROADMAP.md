@@ -185,7 +185,7 @@ review.
 | C | Drawing and geometry | `Draw*.kt`, `cursor/`, `scrollbar/`, `state/TextEditorScrollState.kt`, hit testing | 1.8, 1.10, 1.11, 1.17, 1.18, 3.3, 3.12, 3.16, 4.14, 7.6, 7.7, 7.41 |
 | D | Bindings, actions, menu | `input/KeyBindings.kt`, `input/EditorCommand.kt`, `input/BuiltinEditorActions.kt`, `contextmenu/` | 2.1, 2.2, 2.4, 2.5, 2.7 to 2.12, 4.8, 5.8, 7.58 |
 | E | Input sessions on desktop, iOS, web | `desktopMain`, `iosMain`, `wasmJsMain` under `input/` | 4.2 to 4.7, 4.10 to 4.12, 4.19, 4.21, 4.22, 4.24 to 4.26, 4.28, 4.29, 4.32, 4.33, 4.35, 4.37, 7.37 |
-| F | Android input | `androidMain` | 0.4, 3.9 to 3.11, 3.14, 3.17, 4.16, 4.18, 4.20, 4.27, 4.30, 4.31, 4.34, 4.36, 7.40 |
+| F | Android input | `androidMain` | 0.4, 0.12, 3.9 to 3.11, 3.14, 3.17, 4.16, 4.18, 4.20, 4.27, 4.30, 4.31, 4.34, 4.36, 7.40 |
 | G | Edit pipeline and undo | `state/TextEditManager.kt`, `state/TextEditHistory.kt`, `state/EditBehavior.kt`, `input/ImeEditLogic.kt` | 1.20, 5.1 to 5.5, 5.9 to 5.11, 5.13, 6.1 to 6.6, 6.14, 6.15, 6.17, 6.22, 6.23, 6.28, 6.29, 6.33 to 6.35, 7.54, 7.55 |
 | H | Clipboard and HTML | `clipboard/`, `html/`, `dragdrop/` | 4.9, 4.13, 4.17, 6.7 to 6.13, 6.18 to 6.21, 5.12, 6.24 to 6.27, 6.30 to 6.32, 7.39, 7.46, 7.47, 7.49, 7.53, 7.63 |
 | I | Markdown and block model | `ComposeTextEditorMarkdown/`, `richstyle/`, `state/TextEditorStateBlockExt.kt` | 5.6, 7.14 to 7.16, 7.43, 7.45, 7.52, 7.64, 7.67, 7.70 to 7.72 |
@@ -267,11 +267,39 @@ editor does rather than what it should do.
   names the items it needs (`utils/EditorInvariants.kt`) and stays off while
   any is in `OPEN_PARITY_ITEMS`; today Left then Right, and Down moves one row,
   are on. Set `FUZZ_INVARIANTS=all` to run every one.
-- [ ] **0.4 Keyboard trace record and replay.** [Opus] [Lane F] A debug
+- [x] **0.4 Keyboard trace record and replay.** [Opus] [Lane F] A debug
   recorder on the Android `InputConnection` that logs every command and read. A
   user attaches the trace to a bug report; the trace replays in
   `androidHostTest`. Build a corpus per keyboard (Gboard, Gboard Japanese,
   Samsung, SwiftKey, AnySoftKeyboard). First case: hammer-editor#930.
+  Done: a host sets a `KeyboardTraceRecorder` on the state
+  (`TextEditorState.keyboardTrace`, Android only) and `trace()` returns the
+  text. The keyboard is handed a `TracingInputConnection` around the editor's
+  own, which passes calls straight through while nothing records. A trace
+  holds each command and read with its result, what the editor reported back
+  (selection, restart, extracted text), changes made outside the keyboard (a
+  key event's effect, a tap, a host edit or new document), and the editor's
+  state when it was taken; the format is in `docs/TESTING.md`.
+  `KeyboardTraceReplayer` replays one in a host test and lists where the editor
+  parts from it, and `KeyboardTraceCorpusTest` replays every file in
+  `androidHostTest/resources/keyboard-traces/` (`KeyboardTraceTest`). The
+  first entry, `gboard-japanese-930.trace`, is written by hand from how Gboard's
+  Japanese keyboard drives a connection (a growing romaji reading, conversion,
+  confirm, an emptied composition, Enter as a key) and passes: the composition
+  is reported after each batch and never as gone. [Human] Every corpus entry
+  still needs a recording from a device: Gboard Japanese to replace the
+  hand-written one (and to confirm 4.16), then Gboard, Samsung, SwiftKey and
+  AnySoftKeyboard (0.12).
+- [ ] **0.12 Record the keyboard trace corpus. U.** [Opus] [Human] [Lane F]
+  0.4's recorder has nothing recorded from a real keyboard yet. With a host
+  that exposes it (Hammer needs a debug setting that starts a recorder and
+  shares `trace()`; the sample app has none), type a paragraph with each of
+  Gboard, Gboard Japanese (romaji and 12-key kana, with conversion), Samsung
+  Keyboard, SwiftKey and AnySoftKeyboard on a device, including a correction
+  tapped from the suggestion strip, a delete through a word, and a caret moved
+  by tapping. Replace `gboard-japanese-930.trace` with the Japanese recording,
+  add the others to `androidHostTest/resources/keyboard-traces/`, and turn any
+  divergence into an item.
 - [x] **0.5 Geometry assertions.** [Opus] [Lane L] Assert caret and selection
   rectangles from layout. Stable across machines, unlike pixels.
   Started in lane C: `utils/DrawRecorder.kt` runs a draw function on a canvas

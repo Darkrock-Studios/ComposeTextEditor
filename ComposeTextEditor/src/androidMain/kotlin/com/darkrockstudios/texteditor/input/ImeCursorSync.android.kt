@@ -175,7 +175,7 @@ actual class ImeCursorSync internal constructor(
 			// setText/setDocument swapped the whole document, which no report can describe,
 			// or the keyboard needs new settings. A restart makes it discard its mirror and
 			// re-read, as EditText restarts input on setText and setInputType.
-			sink.restartInput()
+			restartInput()
 			lastSelection = null
 		} else if (resync && (current == lastSelection || lastSelection == null) && !expectation.expects(current)) {
 			// A behavior answered the keyboard's command its own way (a claimed Backspace,
@@ -186,7 +186,7 @@ actual class ImeCursorSync internal constructor(
 			// it as it does after a tap. Before the first report nothing says what the
 			// keyboard was last told. (`invalidateInput` would restart anyway: Compose's
 			// connection wrapper does not pass `takeSnapshot` through.)
-			sink.restartInput()
+			restartInput()
 			lastSelection = null
 		}
 		handledResyncGeneration = resyncGeneration
@@ -202,13 +202,13 @@ actual class ImeCursorSync internal constructor(
 			val lines = state.textLines
 			if (selectionChanged || lastExtractedLines?.get() !== lines) {
 				lastExtractedLines = WeakReference(lines)
-				sink.updateExtractedText(extensions.extractedTextMonitorToken)
+				updateExtractedText(extensions.extractedTextMonitorToken)
 			}
 		}
 
 		if (selectionChanged) {
 			lastSelection = selection
-			sink.updateSelection(selection.selStart, selection.selEnd, selection.compStart, selection.compEnd)
+			updateSelection(selection)
 		}
 
 		if (extensions.cursorAnchorMonitoringEnabled) {
@@ -217,6 +217,25 @@ actual class ImeCursorSync internal constructor(
 		}
 
 		expectation.reset(selection)
+	}
+
+	// Each report to the keyboard is also a line of the trace, when one records.
+
+	private fun restartInput() {
+		state.platformExtensions.keyboardTrace?.reported("restart")
+		sink.restartInput()
+	}
+
+	private fun updateSelection(selection: ImeSelection) {
+		state.platformExtensions.keyboardTrace?.reported(
+			"selection ${selection.selStart} ${selection.selEnd} ${selection.compStart} ${selection.compEnd}"
+		)
+		sink.updateSelection(selection.selStart, selection.selEnd, selection.compStart, selection.compEnd)
+	}
+
+	private fun updateExtractedText(token: Int) {
+		state.platformExtensions.keyboardTrace?.reported("extracted $token")
+		sink.updateExtractedText(token)
 	}
 
 	/**
