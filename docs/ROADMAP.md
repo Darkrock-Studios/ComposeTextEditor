@@ -3569,7 +3569,14 @@ iOS Safari; browser tests run in CI (met: the `browser` job, 4.15).
     running maximum, the sideways range on `horizontalScrollState`
     (`softwrap/SoftWrapLayoutTest`, which checks the widest line against
     measuring every line through 60 random edits over 400 lines).
-  - Drawing and hit testing through the offset: not started.
+  - Drawing and hit testing through the offset: done. `inContentSpace` around the
+    text, rich spans, composing underline and selection; the caret and drop caret
+    from view metrics, not drawn once scrolled out sideways; line decorators get
+    the scrolled offset, drawn unclipped behind every line's text; the pointer
+    hit test, the magnifier's row clamp, the vertical goal x (a content column)
+    and the handwriting gesture layout (commonMain `input/HandwritingGestureLayout.kt`,
+    beside 3.22's previews) add the scroll. The draw recorder follows
+    translations (`softwrap/SoftWrapGeometryTest`).
   - Caret visibility, scrolling input, the scrollbar: not started.
   - Input method rectangles, handles, toolbar, magnifier, semantics: not started.
   - `SingleLine` scrolls sideways: not started.

@@ -127,7 +127,10 @@ private const val CURSOR_BLINK_SPEED_MS = 500L
  *   only places the caret. `null` leaves links to [onRichSpanClick]; pass
  *   `LocalUriHandler.current::openUri` to open them in the browser.
  * @param decorateLine Optional per-line decorator drawn behind each line, keyed by
- *   line index — useful for gutters, current-line highlights, or diff markers.
+ *   line index — useful for gutters, current-line highlights, or diff markers. It
+ *   draws in the text canvas's coordinates, unclipped, and its offset is where the
+ *   line's text is drawn, which with [softWrap] off moves with the sideways scroll: a
+ *   gutter places itself by its own x.
  * @param keyBindings Chord-to-command mapping, defaulting to [LocalKeyBindings].
  *   Bind chords to actions registered on [TextEditorState.actions] to add
  *   shortcuts of your own.

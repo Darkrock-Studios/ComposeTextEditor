@@ -25,6 +25,10 @@ internal fun DrawScope.DrawSelection(
 	selection: TextEditorRange? = state.selector.selection,
 ) {
 	selection ?: return
+	inContentSpace(state) { drawSelectedRows(state, selection, selectionColor) }
+}
+
+private fun DrawScope.drawSelectedRows(state: TextEditorState, selection: TextEditorRange, selectionColor: Color) {
 	val rows = state.lineOffsets
 	val scroll = state.scrollState.value.toFloat()
 
