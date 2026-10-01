@@ -7,7 +7,7 @@ Markdown shortcuts (5.3) follow the same rules but live in the markdown module,
 since markdown is a storage detail core does not know.
 Each builds on the typed-text hook, `EditBehavior.onTextInput`, described in
 [editor-actions.md](editor-actions.md), "Edit behaviors"; auto-link also uses
-`onNewline` and the paste hook, `onPaste`.
+the line break hook, `onNewlineLanded`, and the paste hook, `onPaste`.
 
 ## Shared rules
 
@@ -89,9 +89,8 @@ Whether the keyboard's converted characters reach the editor is the Mac queue's
 ## Auto-link
 
 ```kotlin
-// Ahead of LineBlockEditBehavior, so Enter on a list item or quote links too.
-state.editBehaviors.add(0, AutoLink())
-state.editBehaviors.add(0, AutoLink(pasted = false)) // typed URLs only
+state.editBehaviors.add(AutoLink())
+state.editBehaviors.add(AutoLink(pasted = false)) // typed URLs only
 ```
 
 `typed` links a URL once it is complete: when a space (or any whitespace)
@@ -125,12 +124,12 @@ What counts as a URL, and where it ends:
 - Only a destination `sanitizeLinkUrl` allows is linked (the allowlist every
   importer applies), so extending the allowlist extends auto-link.
 
-The link is `setLink`'s: the state's link style and a `LinkSpanStyle`. A typed
-or pasted link is its own undo step after the text, so one undo takes the link
-off and keeps the text, as in Word. A link made by Enter shares the Enter's
-step, since `onNewline` runs before the line break inside the same undo group:
-one undo takes back both the line break and the link, keeping the URL (roadmap
-5.11). Text already linked (a rich paste's links), inline code and code blocks
+The link is `setLink`'s: the state's link style and a `LinkSpanStyle`. A link
+is its own undo step after the text, paste or line break that completed it, so
+one undo takes the link off and keeps the text, as in Word. Enter's link comes
+from `onNewlineLanded`, told once the line break has landed, so the behavior
+links on Enter wherever it sits in the chain, a list item's or quote's Enter
+included. Text already linked (a rich paste's links), inline code and code blocks
 are left alone; nothing to link makes no undo step.
 
 A link only styles the text, so the behavior never claims the input: the chain

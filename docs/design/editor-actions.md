@@ -279,6 +279,7 @@ built-in.
 ```kotlin
 interface EditBehavior {
     fun onNewline(state: TextEditorState): Boolean = false
+    fun onNewlineLanded(state: TextEditorState, range: TextEditorRange): Boolean = false
     fun onBackspace(state: TextEditorState): Boolean = false
     fun onDeleteForward(state: TextEditorState): Boolean = false
     fun onTextInput(state: TextEditorState, text: String, range: TextEditorRange): Boolean = false
@@ -292,8 +293,9 @@ mutates must route through the edit manager, so its work lands in undo history
 like any other operation (`LineBlockEditBehavior` does this by going through
 `toggleLineBlock` rather than mutating spans directly).
 
-`onTextInput` is the typed-text hook, and unlike the other three it runs
-*after* the edit: it is told where committed text landed. It sees every
+`onTextInput` is the typed-text hook. Like `onNewlineLanded` and `onPaste`,
+and unlike the hooks asked before an edit, it runs *after* the edit: it is told
+where committed text landed. It sees every
 path: a key event's character (`insertTypedString`), an IME commit (the
 whole word a soft keyboard or a candidate window commits, in place of what
 it was composing, or a composition it finishes as it stands), a dictated
@@ -306,9 +308,11 @@ there is a step of its own, as on the typed-text hook. A drop that is not a move
 within the editor is offered the same way. A host that registers its own paste
 action replaces that offer along with the paste, and makes it by calling
 `pasteLanded` once its paste has committed. A lone typed line break is the Enter
-key and goes to `onNewline`, never to `onTextInput`; the one exception is an
-IME committing `"\n"` over its own composition, which is a replacement of
-the composition and reaches neither hook (see `ImeLineBlockParityTest`).
+key and goes to `onNewline` before it lands, never to `onTextInput`; once the
+Enter's own step has put a line break in, `onNewlineLanded` is told where it
+landed, and an edit there is a step of its own. The one exception is an IME
+committing `"\n"` over its own composition, which is a replacement of the
+composition and reaches none of these hooks (see `ImeLineBlockParityTest`).
 
 It runs after rather than before because the default edit is not one thing a
 behavior could reproduce: on the IME path it replaces the composition,

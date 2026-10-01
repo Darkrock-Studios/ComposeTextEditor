@@ -743,13 +743,14 @@ class TextEditorState(
 	/**
 	 * Behaviors consulted before [insertNewlineAtCursor], [backspaceAtCursor] and
 	 * [deleteAtCursor], and told after typed text ([insertTypedString] and the IME's
-	 * commits) or a paste has landed, in order; the first to claim an edit wins. Every
-	 * input path reaches these, hardware keys and IME alike.
+	 * commits), a line break or a paste has landed, in order; the first to claim an
+	 * edit wins. Every input path reaches these, hardware keys and IME alike.
 	 *
 	 * Pre-loaded with [LineBlockEditBehavior] at index 0, which claims every
 	 * newline and column-0 backspace on a block line, so a behavior appended
-	 * after it never sees those edits. Use `add(0, behavior)` to run first, or
-	 * remove it outright for plain line breaks.
+	 * after it is not asked before those edits, though it is told where a line
+	 * break landed. Use `add(0, behavior)` to run first, or remove it outright for
+	 * plain line breaks.
 	 */
 	val editBehaviors: MutableList<EditBehavior> = mutableListOf(LineBlockEditBehavior)
 
@@ -793,6 +794,11 @@ class TextEditorState(
 		// replacement of the composition, not typed text.
 		if (text.isEmpty() || text == "\n") return
 		offerLanded(range) { it.onTextInput(this, text, range) }
+	}
+
+	/** Tells the behaviors that a typed line break has landed at [range], once it has committed. */
+	internal fun newlineLanded(range: TextEditorRange) {
+		offerLanded(range) { it.onNewlineLanded(this, range) }
 	}
 
 	/**
@@ -1116,29 +1122,53 @@ class TextEditorState(
 
 	/**
 	 * Inserts a line break at the cursor, splitting the current line, unless an
-	 * [EditBehavior] claims the edit first.
+	 * [EditBehavior] claims the edit first, then tells the behaviors where a line
+	 * break landed. With a selection active, the behaviors are not told.
 	 */
 	fun insertNewlineAtCursor() {
+		val selected = selector.selection != null
+		val landed = splitAtCursor() ?: return
+		if (!selected) newlineLanded(landed)
+	}
+
+	/**
+	 * [insertNewlineAtCursor] without telling the behaviors where the line break
+	 * landed: returns where it did, from the break to the caret it left, or null when
+	 * no plain line break went in.
+	 */
+	internal fun splitAtCursor(): TextEditorRange? {
 		// Asked before the behaviors, which would otherwise mark a line the split never made.
 		if (screenInput(TextEditorRange(cursorPosition, cursorPosition), AnnotatedString("\n")) == null) {
-			return requestImeResync()
+			requestImeResync()
+			return null
 		}
-		if (claimedByBehavior { it.onNewline(this) }) return
-		insertNewlineRaw()
+		landedBreak = null
+		if (!claimedByBehavior { it.onNewline(this) }) insertNewlineRaw()
+		return landedBreak
 	}
+
+	/** Where the last [insertNewlineRaw], or a split nested in a behavior's claim, broke a line. */
+	private var landedBreak: TextEditorRange? = null
 
 	/**
 	 * Splits the line at the cursor with no [EditBehavior] consulted, for a
 	 * behavior that needs the plain split as part of the edit it is claiming.
 	 */
 	internal fun insertNewlineRaw() {
+		val position = cursorPosition
+		val lineCount = textLines.size
 		val operation = TextEditOperation.Insert(
-			position = cursorPosition,
+			position = position,
 			text = cursor.applyCursorStyle("\n"),
-			cursorBefore = cursorPosition,
-			cursorAfter = CharLineOffset(cursorPosition.line + 1, 0)
+			cursorBefore = position,
+			cursorAfter = CharLineOffset(position.line + 1, 0)
 		)
 		editManager.asEnter { editManager.applyOperation(operation) }
+		// An input filter can turn the line break into something else: only one line
+		// that ends where the break went in is a plain break.
+		if (textLines.size == lineCount + 1 && textLines[position.line].length == position.char) {
+			landedBreak = TextEditorRange(position, CharLineOffset(position.line + 1, 0))
+		}
 	}
 
 	/**

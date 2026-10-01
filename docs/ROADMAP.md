@@ -1802,7 +1802,7 @@ iOS Safari; browser tests run in CI.
   of a delete at a link's end gives the link back whole, and a rich paste of a
   link against a link to the same place joins it rather than leaving two
   (`state/LinkEndTypingTest.kt`, `e2e/AutoLinkE2eTest.kt`).
-- [ ] **5.11 An auto-link made by Enter undoes with the line break. S.** [Opus]
+- [x] **5.11 An auto-link made by Enter undoes with the line break. S.** [Opus]
   [Lane G] `AutoLink` links the URL before the caret in `onNewline`, which runs
   inside `insertTypedNewline`'s undo group, so one undo takes back the line
   break and the link together, keeping the URL; after a space it takes back
@@ -1810,6 +1810,13 @@ iOS Safari; browser tests run in CI.
   has landed (after the group, as `onTextInput` is) would give Enter the same
   shape, and would free the behavior from running ahead of
   `LineBlockEditBehavior`.
+  Done: `EditBehavior.onNewlineLanded(state, range)` is told where a line break
+  `onNewline` was offered has landed (Enter, an IME's lone line break, a host's
+  `insertNewlineAtCursor`, the line block behavior's own split), after the
+  Enter's own step, as typed text is offered; an Enter that makes no plain line
+  break is not offered. `AutoLink` links there instead of in `onNewline`, so one undo
+  takes the link off and keeps the line break, and it links on a list item's or
+  quote's Enter wherever it sits in the chain (`behaviors/AutoLinkTest.kt`).
 - [x] **5.12 A drop is not offered to `onPaste`. S.** [Opus] [Lane H] Text
   dropped into the editor (`dragdrop/TextDragAndDrop.kt`, `dropText`) lands
   without telling the behaviors, so `AutoLink(pasted = true)` leaves a dropped

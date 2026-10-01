@@ -53,15 +53,18 @@ internal fun TextEditorState.insertTypedString(string: String, typing: Boolean) 
 
 /**
  * Inserts a line break as if typed: replaces any active selection, then splits the
- * line at the cursor (through the [EditBehavior] chain), as one undo step.
+ * line at the cursor (through the [EditBehavior] chain), as one undo step, then tells
+ * the chain where the line break landed.
  */
 fun TextEditorState.insertTypedNewline() {
 	// Refused before the selection goes, so a refused Enter changes nothing.
 	if (screenAtSelection(AnnotatedString("\n")) == null) return requestImeResync()
+	var landed: TextEditorRange? = null
 	editGroup {
 		selector.deleteSelection()
-		insertNewlineAtCursor()
+		landed = splitAtCursor()
 	}
+	landed?.let { newlineLanded(it) }
 }
 
 /**
