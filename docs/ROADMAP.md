@@ -1799,7 +1799,16 @@ iOS Safari; browser tests run in CI.
   away. Done: the entry records each touched line's character styles
   (`OperationMetadata.spanStylesBefore`) and undo applies an exact inverse,
   one operation per sub-range the style operation actually changed.
-- [ ] **6.4 Restore the selection,** [Opus] [Lane G] not only the caret.
+- [x] **6.4 Restore the selection,** [Opus] [Lane G] not only the caret. Done,
+  as `BasicTextField`'s undo does: each step records what was selected when its
+  transaction began and when it committed (`HistoryEntry.selectionBefore` and
+  `selectionAfter`); undo selects the first again, with the caret where it was,
+  and redo the second. So undoing typing over a selection, a deleted selection or
+  a paste over one selects the replaced text, undo and redo of a style keep its
+  selection, and a step made with nothing selected leaves nothing selected. A
+  typing run keeps the selection it began from, and an edit that replaces a
+  selection starts a step of its own (`state/UndoSelectionTest.kt`,
+  `e2e/UndoRedoE2eTest.kt`). A touch selection comes back without its handles.
 - [ ] **6.5 Pasted HTML blocks are unrecorded. C.** [Opus] [Lane G] Redo should
   restore the text without its blocks. Inferred; no test covers it.
 - [ ] **6.6 Time-based coalescing breaks,** [Opus] [Lane G] and a configurable

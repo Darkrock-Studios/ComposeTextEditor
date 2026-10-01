@@ -29,6 +29,21 @@ class UndoRedoE2eTest {
 	}
 
 	@Test
+	fun `undoing a paste over a selection selects the replaced text again`() = editorUiTest(
+		initialText = AnnotatedString("The quick brown fox"),
+	) {
+		dragSelect(fromChar = 4, toChar = 9)
+		setPlainClipboardText("slow")
+		press(Key.V, ctrl = true)
+		assertEquals("The slow brown fox", text)
+
+		press(Key.Z, ctrl = true)
+
+		assertEquals("The quick brown fox", text)
+		assertEquals("quick", state.selector.getSelectedText().text)
+	}
+
+	@Test
 	fun `undo reverts a line split and redo reapplies it`() = editorUiTest(
 		initialText = AnnotatedString("HelloWorld"),
 	) {

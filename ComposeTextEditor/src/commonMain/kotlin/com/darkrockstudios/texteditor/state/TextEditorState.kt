@@ -393,12 +393,12 @@ class TextEditorState(
 	internal fun <T> withAtomicEdit(block: () -> T): T {
 		if (draft != null) return block()
 		draft = content
-		editManager.history.beginGroup()
 		// The caret and selection live outside the draft; a rollback puts them back
 		// too, or they would address the revision that was discarded.
 		val cursorBefore = cursor.position
 		val affinityBefore = cursor.affinity
 		val selectionBefore = selector.selection
+		editManager.history.beginGroup(selectionBefore)
 		val touchSelectionBefore = selector.isTouchSelection
 		var committed = false
 		try {
@@ -418,7 +418,7 @@ class TextEditorState(
 			draft = null
 			committed = true
 			pendingRollbackActions.clear()
-			editManager.history.endGroup(commit = true)
+			editManager.history.endGroup(commit = true, selection = selector.selection)
 			refreshHistoryFlags()
 			// Flush the deferred relayout, then the cursor scroll that must read the
 			// fresh offsets, then the commit actions that announce the edit. All of

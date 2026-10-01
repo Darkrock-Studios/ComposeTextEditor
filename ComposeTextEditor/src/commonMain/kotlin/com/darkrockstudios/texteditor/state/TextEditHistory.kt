@@ -3,6 +3,7 @@ package com.darkrockstudios.texteditor.state
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import com.darkrockstudios.texteditor.CharLineOffset
+import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.richstyle.RichSpan
 import com.darkrockstudios.texteditor.richstyle.RichSpanStyle
 
@@ -20,6 +21,7 @@ class TextEditHistory(private val maxHistorySize: Int = 1000) {
 
 	private var groupDepth = 0
 	private val staged = mutableListOf<HistoryEntry.Edit>()
+	private var groupSelectionBefore: TextEditorRange? = null
 
 	fun hasUndoLevels(): Boolean = undoQueue.isNotEmpty()
 	fun hasRedoLevels(): Boolean = redoQueue.isNotEmpty()
@@ -58,32 +60,42 @@ class TextEditHistory(private val maxHistorySize: Int = 1000) {
 		else -> false
 	}
 
-	/** Opens a group; nested calls join the open one. */
-	internal fun beginGroup() {
+	/**
+	 * Opens a group; nested calls join the open one. [selection] is the selection
+	 * the outermost one starts from, which undoing its step gives back.
+	 */
+	internal fun beginGroup(selection: TextEditorRange? = null) {
+		if (groupDepth == 0) groupSelectionBefore = selection
 		groupDepth++
 	}
 
 	/**
 	 * Closes the innermost group. When the outermost closes with [commit], its
-	 * staged edits are recorded as one step; without, they are dropped, because
-	 * they describe a revision that was rolled back.
+	 * staged edits are recorded as one step, which redoing leaves [selection]
+	 * selected; without, they are dropped, because they describe a revision that
+	 * was rolled back.
 	 */
-	internal fun endGroup(commit: Boolean) {
+	internal fun endGroup(commit: Boolean, selection: TextEditorRange? = null) {
 		check(groupDepth > 0) { "endGroup without beginGroup" }
 		groupDepth--
 		if (groupDepth > 0) return
 		val entries = staged.toList()
 		staged.clear()
+		val before = groupSelectionBefore
+		groupSelectionBefore = null
 		if (!commit) return
 		when (entries.size) {
 			0 -> Unit
-			1 -> push(entries.single())
-			else -> push(HistoryEntry.Group(entries))
+			1 -> push(entries.single().copy(selectionBefore = before, selectionAfter = selection))
+			else -> push(HistoryEntry.Group(entries, selectionBefore = before, selectionAfter = selection))
 		}
 	}
 
 	private fun push(entry: HistoryEntry) {
-		val merged = coalesceWithLast(entry)
+		// A run that grows keeps the selection it started from; an edit that replaced a
+		// selection starts a step of its own, which undo selects it again from.
+		val merged = if (entry.selectionBefore != null) null
+		else coalesceWithLast(entry)?.withSelections(undoQueue.last().selectionBefore, entry.selectionAfter)
 		if (merged != null) {
 			undoQueue.removeLast()
 			merged.withoutErasedRun()?.let(undoQueue::addLast)
@@ -112,7 +124,7 @@ class TextEditHistory(private val maxHistorySize: Int = 1000) {
 				val kept = if (entries.last().erased()) entries.dropLast(1) else entries
 				when (kept.size) {
 					0 -> null
-					1 -> kept.single()
+					1 -> kept.single().copy(selectionBefore = selectionBefore, selectionAfter = selectionAfter)
 					else -> copy(entries = kept)
 				}
 			}
@@ -317,6 +329,8 @@ class TextEditHistory(private val maxHistorySize: Int = 1000) {
 		undoQueue.clear()
 		redoQueue.clear()
 		staged.clear()
+		// A document load drops the selection the open group began with.
+		groupSelectionBefore = null
 	}
 
 	/** Empties both queues and the staged edits, returning an action that puts them back. */
@@ -324,6 +338,7 @@ class TextEditHistory(private val maxHistorySize: Int = 1000) {
 		val undo = undoQueue.toList()
 		val redo = redoQueue.toList()
 		val pending = staged.toList()
+		val selectionBefore = groupSelectionBefore
 		clear()
 		return {
 			undoQueue.clear()
@@ -332,6 +347,7 @@ class TextEditHistory(private val maxHistorySize: Int = 1000) {
 			redoQueue.addAll(redo)
 			staged.clear()
 			staged.addAll(pending)
+			groupSelectionBefore = selectionBefore
 		}
 	}
 }
@@ -398,6 +414,17 @@ sealed class HistoryEntry {
 	/** Where the caret was after the step, which redo returns it to. */
 	abstract val cursorAfter: CharLineOffset
 
+	/** What was selected before the step, which undo selects again. */
+	abstract val selectionBefore: TextEditorRange?
+
+	/** What was selected after the step, which redo selects again. */
+	abstract val selectionAfter: TextEditorRange?
+
+	internal fun withSelections(before: TextEditorRange?, after: TextEditorRange?): HistoryEntry = when (this) {
+		is Edit -> copy(selectionBefore = before, selectionAfter = after)
+		is Group -> copy(selectionBefore = before, selectionAfter = after)
+	}
+
 	data class Edit(
 		val operation: TextEditOperation,
 		val metadata: OperationMetadata,
@@ -407,13 +434,19 @@ sealed class HistoryEntry {
 		 * into wordwise runs.
 		 */
 		val typingRun: Boolean = false,
+		override val selectionBefore: TextEditorRange? = null,
+		override val selectionAfter: TextEditorRange? = null,
 	) : HistoryEntry() {
 		override val cursorBefore: CharLineOffset get() = operation.cursorBefore
 		override val cursorAfter: CharLineOffset get() = operation.cursorAfter
 	}
 
 	/** The edits of one group, in the order they were applied. Never empty, never nested. */
-	data class Group(val entries: List<Edit>) : HistoryEntry() {
+	data class Group(
+		val entries: List<Edit>,
+		override val selectionBefore: TextEditorRange? = null,
+		override val selectionAfter: TextEditorRange? = null,
+	) : HistoryEntry() {
 		override val cursorBefore: CharLineOffset get() = entries.first().cursorBefore
 		override val cursorAfter: CharLineOffset get() = entries.last().cursorAfter
 	}

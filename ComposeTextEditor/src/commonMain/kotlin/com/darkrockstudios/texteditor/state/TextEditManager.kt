@@ -10,6 +10,7 @@ import com.darkrockstudios.texteditor.annotatedstring.normalizeLineEndings
 import com.darkrockstudios.texteditor.annotatedstring.splitAnnotatedString
 import com.darkrockstudios.texteditor.annotatedstring.withInheritedStyles
 import com.darkrockstudios.texteditor.annotatedstring.withSpanStyles
+import com.darkrockstudios.texteditor.input.isWithinDocument
 import com.darkrockstudios.texteditor.richstyle.LineBlockEditBehavior
 import com.darkrockstudios.texteditor.richstyle.LineBlockStyle
 import com.darkrockstudios.texteditor.richstyle.LineBlockWrite
@@ -157,14 +158,9 @@ class TextEditManager(private val state: TextEditorState) {
 		// An edit of no characters (an IME committing "", an empty selection
 		// deleted) changes nothing, so nothing is applied, recorded, or announced.
 		if (operation.isNoOp()) return operation
-		// Selection offsets must not outlive a content mutation. Span operations
-		// leave the text untouched, so they keep the selection.
 		val isSpanOperation = operation is TextEditOperation.StyleSpan ||
 				operation is TextEditOperation.RichSpan ||
 				operation is TextEditOperation.LineBlock
-		if (!isSpanOperation && state.selector.selection != null) {
-			state.selector.clearSelection()
-		}
 		// Composing offsets go equally stale when content shifts underneath them.
 		// The IME pipeline re-sets its range after each composition edit, so
 		// clearing here never drops a live composition's freshly set range.
@@ -184,6 +180,12 @@ class TextEditManager(private val state: TextEditorState) {
 		// Published separately they are observable as new text carrying the
 		// previous revision's span line indices.
 		state.withAtomicEdit {
+			// Selection offsets must not outlive a content mutation. Span operations
+			// leave the text untouched, so they keep the selection. Cleared inside the
+			// transaction, which records the selection it began with for undo.
+			if (!isSpanOperation && state.selector.selection != null) {
+				state.selector.clearSelection()
+			}
 			val metadata = when (operation) {
 				is TextEditOperation.Insert -> applyInsert(operation)
 				is TextEditOperation.Delete -> applyDelete(addToHistory, operation)
@@ -968,6 +970,7 @@ class TextEditManager(private val state: TextEditorState) {
 						state.cursor.updatePosition(entry.cursorBefore)
 					}
 				}
+				select(entry.selectionBefore)
 			}
 			done = true
 		} finally {
@@ -1199,10 +1202,20 @@ class TextEditManager(private val state: TextEditorState) {
 						applyOperation(it.operation, addToHistory = false)
 					}
 				}
+				select(entry.selectionAfter)
 			}
 			done = true
 		} finally {
 			if (!done) history.undo()
+		}
+	}
+
+	/** Selects [range], a selection an undone or redone step recorded, or nothing. */
+	private fun select(range: TextEditorRange?) {
+		if (range != null && state.isWithinDocument(range)) {
+			state.selector.updateSelection(range.start, range.end)
+		} else {
+			state.selector.clearSelection()
 		}
 	}
 
