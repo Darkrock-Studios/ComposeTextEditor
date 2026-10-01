@@ -5,6 +5,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextMeasurer
 import com.darkrockstudios.texteditor.state.TextEditorState
+import io.mockk.MockK
 import io.mockk.MockKDsl
 import io.mockk.every
 import io.mockk.excludeRecords
@@ -27,18 +28,21 @@ class MeasureCounter {
  * this verifies a mock's calls across making it.
  */
 fun countingMeasurer(counter: MeasureCounter): TextMeasurer {
-	MockKDsl.internalClearAllMocks(
-		answers = false,
-		recordedCalls = true,
-		childMocks = false,
-		regularMocks = true,
-		objectMocks = false,
-		staticMocks = false,
-		constructorMocks = false,
-		verificationMarks = false,
-		exclusionRules = false,
-		currentThreadOnly = false,
-	)
+	// The DSL call needs MockK started, as its public entry points do first.
+	MockK.useImpl {
+		MockKDsl.internalClearAllMocks(
+			answers = false,
+			recordedCalls = true,
+			childMocks = false,
+			regularMocks = true,
+			objectMocks = false,
+			staticMocks = false,
+			constructorMocks = false,
+			verificationMarks = false,
+			exclusionRules = false,
+			currentThreadOnly = false,
+		)
+	}
 	val layout = mockk<TextLayoutResult>(relaxed = true)
 	every { layout.multiParagraph.lineCount } returns 1
 	return mockk<TextMeasurer>(relaxed = true) {

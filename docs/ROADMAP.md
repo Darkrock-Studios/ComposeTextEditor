@@ -315,6 +315,13 @@ editor does rather than what it should do.
   200 MB after a collection, falling to 80 MB once the old regions are
   collected, no full collection, 0.2 s of pauses. The addon suites stay under
   30 MB. Forking was not needed.
+- [x] **0.11 A cost test fails when it is the first to use MockK. R.** [Opus]
+  [Lane L] `countingMeasurer` (0.10) clears MockK's recorded calls through
+  `MockKDsl.internalClearAllMocks`, which skips the start-up every public MockK
+  call makes, so a narrow run such as `--tests 'state.SegmentationCostTest'`
+  failed every test with `lateinit property implementation has not been
+  initialized`; the full suite passed only because an earlier class made a mock.
+  Done: the clear runs inside `MockK.useImpl`.
 - [x] **0.6 Golden screenshots.** [Opus] [Lane L] A small set of scenes with a
   bundled font on one CI machine: caret, selection across wrapped and empty
   lines, squiggles, list markers, composing underline.
