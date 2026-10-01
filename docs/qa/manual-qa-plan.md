@@ -256,6 +256,10 @@ In Chrome, Firefox and Safari, against the built demo:
    press Ctrl/Cmd+C, and do the same in the RichTextView demo; paste into Google
    Docs. **Expect:** the word stays bold, with no permission prompt and no console
    warning (7.39). Try Ctrl+Insert on Windows and Linux too.
+6b. On a touch screen (or a phone's browser with a hardware keyboard), tap into the
+   editor so the canvas keeps focus, select a bold word and press Ctrl/Cmd+X (and
+   Shift+Delete on Windows and Linux). **Expect:** the word leaves the editor and
+   pastes into Google Docs bold, with no permission prompt (6.27).
 
 7. Web demo: click into the editor, press Escape then Tab, then Shift+Tab (4.28).
    **Expect:** no tab character is typed, focus leaves the editor and comes back

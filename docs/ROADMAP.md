@@ -2016,13 +2016,29 @@ iOS Safari; browser tests run in CI.
   long press inside the selection (lane B's touch handling). iOS and web: check
   what Compose Multiplatform's `DragAndDropEvent` exposes there (web has a
   `WebDragAndDropManager`) and fill in the same four functions.
-- [ ] **6.27 Cut from a canvas-focused editor on the web. C.** [Opus] [Lane H]
+- [x] **6.27 Cut from a canvas-focused editor on the web. C.** [Opus] [Lane H]
   An editable editor whose canvas holds DOM focus (after a touch the
   session does not hand focus back from) takes Ctrl/Cmd+X on the canvas, where
   Compose consumes it before the browser fires a `cut` event, so Cut falls back
   to `navigator.clipboard`, plain text only or nothing on an insecure page. 7.39
   asks for a `copy` event there with `execCommand('copy')`; `execCommand('cut')`
-  could do the same for Cut.
+  could do the same for Cut. Done: `ClipboardEventsEffect` listens for cut
+  chords on a Compose canvas as well (Cmd+X on Apple systems, else Ctrl+X or
+  Shift+Delete; Shift with X is strikethrough) and, while the editor takes input
+  (`isFocused`) with a selection and a Cut action, calls `execCommand('cut')`
+  inside the key press (a `beforecut` handler enables it in WebKit); the `cut`
+  event writes both flavors and the Cut action the key then runs takes it as the
+  write and deletes. The browser's own default for an asked event is always
+  prevented, so one no handler answers cuts nothing of the page's. Checked in
+  Chromium against a development build: with the text area focused, Ctrl+X and
+  Shift+Delete dispatched on the canvas each fired one prevented `cut` event
+  carrying the selection's markup (`<strong>`, `<s>`) and plain text, removed
+  the word, and never called `navigator.clipboard`, which it did before the
+  change; Ctrl+Shift+X struck the word through and fired nothing; a read-only
+  editor's Ctrl+X fired nothing and its Ctrl+C still fired `copy`. A real
+  touch-focused canvas, Safari and Firefox are for QA 2.11. The limits are
+  7.39's: the default bindings' chords, and on a page of several viewports the
+  one whose editor takes input with a selection answers.
 - [ ] **6.24 The drop caret past a wrapped row's end. C.** [Opus] [Lane H]
   Since 1.24 a point past a wrapped row's end hits its wrap offset, so a drop
   there inserts at the row's end, but `TextDragAndDrop.offsetAt` keeps only the
