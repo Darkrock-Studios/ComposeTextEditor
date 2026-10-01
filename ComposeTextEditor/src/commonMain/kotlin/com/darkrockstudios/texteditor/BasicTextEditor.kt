@@ -59,6 +59,7 @@ import com.darkrockstudios.texteditor.dragdrop.DrawDropCaret
 import com.darkrockstudios.texteditor.dragdrop.TextDragAndDrop
 import com.darkrockstudios.texteditor.dragdrop.textDragAndDrop
 import com.darkrockstudios.texteditor.input.CaptureViewForIme
+import com.darkrockstudios.texteditor.input.DrawHandwritingPreview
 import com.darkrockstudios.texteditor.input.KeyBindings
 import com.darkrockstudios.texteditor.input.LocalKeyBindings
 import com.darkrockstudios.texteditor.input.TextEditorInputModifierElement
@@ -484,6 +485,7 @@ private fun DrawScope.drawEditorCanvas(
 	}
 
 	DrawSelection(state, style.selectionColorFor(state.hasFocus))
+	DrawHandwritingPreview(state, style.selectionColorFor(focused = true), style.textColor)
 
 	// A read-only editor holds focus without taking input, and still shows its caret.
 	if (enabled && state.hasFocus) {

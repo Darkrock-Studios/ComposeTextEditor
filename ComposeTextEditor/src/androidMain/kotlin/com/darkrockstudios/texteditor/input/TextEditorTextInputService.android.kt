@@ -4,6 +4,7 @@ import android.graphics.PointF
 import android.graphics.RectF
 import android.os.Build
 import android.os.Bundle
+import android.os.CancellationSignal
 import android.os.Handler
 import android.os.SystemClock
 import android.text.TextUtils
@@ -401,6 +402,7 @@ internal class TextEditorInputConnection(
 		// The keyboard's finish never arrives for a connection it has left, so a word it was
 		// composing is finished here, which offers it to the behaviors.
 		state.finishComposition()
+		state.endHandwritingPreview()
 		state.platformExtensions.connectionClosed(this)
 	}
 
@@ -413,6 +415,13 @@ internal class TextEditorInputConnection(
 		if (consumer == null) return
 		if (executor == null) consumer.accept(result) else executor.execute { consumer.accept(result) }
 	}
+
+	override fun previewHandwritingGesture(
+		gesture: PreviewableHandwritingGesture,
+		cancellationSignal: CancellationSignal?,
+	): Boolean = isActive &&
+			Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE &&
+			state.previewGesture(gesture, ScreenGestureGeometry(state, view), cancellationSignal) { view.post(it) }
 
 	override fun commitCompletion(text: CompletionInfo?): Boolean = false
 

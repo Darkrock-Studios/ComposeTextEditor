@@ -1323,7 +1323,7 @@ Constraints that shape the order:
   on the Hebrew word's left edge, where "abc " ends, rather than on its right
   edge, where its first letter is. Place and hang each end as Compose does,
   and check the selection highlight agrees. Found in 3.19.
-- [ ] **3.22 Handwriting gestures show no preview on Android. S.** [Opus]
+- [x] **3.22 Handwriting gestures show no preview on Android. S.** [Opus]
   [Lane F] Gboard previews a select or delete gesture while the stylus is
   still down (`previewHandwritingGesture`, API 34); `BasicTextField`
   highlights the range it would select or delete. The editor offers no
@@ -1332,6 +1332,31 @@ Constraints that shape the order:
   tint for delete), clear it on the cancellation signal or the next edit,
   and add the four previewable gestures to
   `supportedHandwritingGesturePreviews`. Found in 3.17.
+  Done, after Compose foundation 1.12: `EditorInfo` offers previews of
+  select, select range, delete and delete range; the connection's
+  `previewHandwritingGesture` maps the area as the gesture's perform does
+  (a delete's word is not widened, as in Compose) into
+  `TextEditorState.handwritingPreview` (`input/HandwritingPreview.kt`), which
+  the editor draws through `DrawSelection` after the selection: in the
+  focused selection colour for a select, in the text colour at a fifth of
+  its alpha for a delete, over the selection where they meet, as Compose
+  draws both. A preview ends when its cancellation signal fires (posted to
+  the main thread; a late one leaves a newer preview, and one already
+  cancelled shows none), when any gesture is performed, when the connection
+  closes, and, as Compose's, at the next change to the text (a bold toggle
+  included, a rich span such as a spell check mark not), the selection or
+  the caret, ended where the state makes the change; an area over no text
+  shows none. Tests:
+  `HandwritingPreviewTest` (drawing and ending, desktop),
+  `HandwritingPreviewGestureTest` (offer, routing, cancel, perform, close).
+  On the API 36 emulator with Gboard, a stylus scribble over "quick" held
+  still drew the selection highlight over the word while the stylus was
+  down, and on lift Gboard performed a select (or a delete, which removed
+  the word and its highlight); in one run whose handwriting session Gboard
+  had ended early, the delete tint showed and stayed until the next edit, as
+  Compose's would, since no cancellation came. An `EditText` in the same
+  window (a throwaway comparison screen) made Gboard end each handwriting
+  session within milliseconds; without it, sessions lasted the stroke.
 - [x] **4.1 Compile and test iOS in CI.** [Opus] [Lane L] [Mac work] A macOS
   runner that builds the iOS targets and the iOS sample app. Without it every
   iOS change is a guess. Done: the `ios` job in `ci-build.yml`. There are no

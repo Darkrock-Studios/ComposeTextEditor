@@ -131,6 +131,7 @@ class TextEditorCursorState(
 		_affinity = affinity
 		_runSide = runSide
 		_position = newPosition
+		if (newPosition != oldPosition) editorState.handwritingPreview = null
 		_cursorPositionFlow.tryEmit(newPosition)
 
 		// Focus handlers and pointer taps re-assert the position the caret already

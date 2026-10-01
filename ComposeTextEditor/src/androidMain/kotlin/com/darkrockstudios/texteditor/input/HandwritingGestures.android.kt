@@ -3,6 +3,7 @@ package com.darkrockstudios.texteditor.input
 import android.graphics.PointF
 import android.graphics.RectF
 import android.os.Build
+import android.os.CancellationSignal
 import android.view.inputmethod.DeleteGesture
 import android.view.inputmethod.DeleteRangeGesture
 import android.view.inputmethod.EditorInfo
@@ -10,6 +11,7 @@ import android.view.inputmethod.HandwritingGesture
 import android.view.inputmethod.InputConnection
 import android.view.inputmethod.InsertGesture
 import android.view.inputmethod.JoinOrSplitGesture
+import android.view.inputmethod.PreviewableHandwritingGesture
 import android.view.inputmethod.RemoveSpaceGesture
 import android.view.inputmethod.SelectGesture
 import android.view.inputmethod.SelectRangeGesture
@@ -20,10 +22,7 @@ import androidx.compose.ui.text.TextGranularity
 import androidx.compose.ui.text.TextRange
 import com.darkrockstudios.texteditor.state.TextEditorState
 
-/**
- * The handwriting gestures the editor performs (API 34), Compose's set. None is previewed:
- * the editor has no highlight to show one with.
- */
+/** The handwriting gestures the editor performs and previews (API 34), Compose's sets. */
 @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
 internal fun EditorInfo.offerHandwritingGestures() {
 	supportedHandwritingGestures = listOf(
@@ -34,6 +33,12 @@ internal fun EditorInfo.offerHandwritingGestures() {
 		JoinOrSplitGesture::class.java,
 		InsertGesture::class.java,
 		RemoveSpaceGesture::class.java,
+	)
+	supportedHandwritingGesturePreviews = setOf(
+		SelectGesture::class.java,
+		DeleteGesture::class.java,
+		SelectRangeGesture::class.java,
+		DeleteRangeGesture::class.java,
 	)
 }
 
@@ -57,6 +62,7 @@ internal fun TextEditorInputConnection.performGesture(
 	gesture: HandwritingGesture,
 	geometry: GestureGeometry,
 ): Int {
+	state.endHandwritingPreview()
 	val text = state.documentChars
 	return when (gesture) {
 		is SelectGesture -> unlessMissed(
@@ -116,6 +122,50 @@ internal fun TextEditorInputConnection.performGesture(
 		else -> InputConnection.HANDWRITING_GESTURE_RESULT_UNSUPPORTED
 	}
 }
+
+/**
+ * Highlights the text a select or delete [gesture] would act on, mapped as
+ * [performGesture] maps it (a delete's word is not widened, as in Compose), until
+ * [cancellation] fires, a gesture is performed, or the text, selection or caret changes.
+ * The keyboard can cancel on a binder thread, so the preview is ended through [onMain].
+ * False for a gesture the editor does not preview.
+ */
+@RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
+internal fun TextEditorState.previewGesture(
+	gesture: PreviewableHandwritingGesture,
+	geometry: GestureGeometry,
+	cancellation: CancellationSignal?,
+	onMain: (Runnable) -> Unit,
+): Boolean {
+	if (cancellation?.isCanceled == true) return gesture.isPreviewed()
+	val (range, deletes) = when (gesture) {
+		is SelectGesture ->
+			textRangeInArea(geometry.area(gesture.selectionArea), gesture.granularity.toCompose()) to false
+
+		is SelectRangeGesture -> textRangeBetweenAreas(
+			geometry.area(gesture.selectionStartArea),
+			geometry.area(gesture.selectionEndArea),
+			gesture.granularity.toCompose(),
+		) to false
+
+		is DeleteGesture ->
+			textRangeInArea(geometry.area(gesture.deletionArea), gesture.granularity.toCompose()) to true
+
+		is DeleteRangeGesture -> textRangeBetweenAreas(
+			geometry.area(gesture.deletionStartArea),
+			geometry.area(gesture.deletionEndArea),
+			gesture.granularity.toCompose(),
+		) to true
+
+		else -> return false
+	}
+	val preview = previewHandwriting(range, deletes)
+	cancellation?.setOnCancelListener { onMain { endHandwritingPreview(preview) } }
+	return true
+}
+
+private fun PreviewableHandwritingGesture.isPreviewed(): Boolean =
+	this is SelectGesture || this is SelectRangeGesture || this is DeleteGesture || this is DeleteRangeGesture
 
 private inline fun TextEditorInputConnection.unlessMissed(
 	range: TextRange,

@@ -2,6 +2,7 @@ package com.darkrockstudios.texteditor.input
 
 import android.os.Build
 import android.os.Bundle
+import android.os.CancellationSignal
 import android.os.Handler
 import android.provider.Settings
 import android.view.KeyEvent
@@ -13,6 +14,7 @@ import android.view.inputmethod.ExtractedTextRequest
 import android.view.inputmethod.HandwritingGesture
 import android.view.inputmethod.InputConnection
 import android.view.inputmethod.InputContentInfo
+import android.view.inputmethod.PreviewableHandwritingGesture
 import android.view.inputmethod.SurroundingText
 import androidx.annotation.RequiresApi
 import com.darkrockstudios.texteditor.input.KeyboardTraceFormat.quote
@@ -201,6 +203,11 @@ internal class TracingInputConnection(
 			true
 		}
 	}
+
+	override fun previewHandwritingGesture(gesture: PreviewableHandwritingGesture, cancellationSignal: CancellationSignal?): Boolean =
+		command("previewHandwritingGesture", { args(gesture.javaClass.simpleName) }, replayable = false) {
+			inner.previewHandwritingGesture(gesture, cancellationSignal)
+		}
 
 	override fun commitContent(inputContentInfo: InputContentInfo, flags: Int, opts: Bundle?): Boolean =
 		command("commitContent", { args(flags) }, replayable = false) { inner.commitContent(inputContentInfo, flags, opts) }

@@ -13,8 +13,8 @@ import com.darkrockstudios.texteditor.utils.getRunBoxes
 import com.darkrockstudios.texteditor.utils.lineTextLeft
 
 /**
- * Draws the selected rows in view, a rectangle per stretch of each row the selection
- * covers: one in plain text, several where it crosses between left-to-right and
+ * Draws the rows in view [selection] covers, a rectangle per stretch of each row: one in
+ * plain text, several where it crosses between left-to-right and
  * right-to-left runs. A selected line break shows as a sliver a space wide past its
  * line's text (to the left in a right-to-left paragraph), trailing spaces included, so an
  * empty line inside the selection is visible, as native editors draw it; a soft wrap has none.
@@ -22,8 +22,9 @@ import com.darkrockstudios.texteditor.utils.lineTextLeft
 internal fun DrawScope.DrawSelection(
 	state: TextEditorState,
 	selectionColor: Color,
+	selection: TextEditorRange? = state.selector.selection,
 ) {
-	val selection = state.selector.selection ?: return
+	selection ?: return
 	val rows = state.lineOffsets
 	val scroll = state.scrollState.value.toFloat()
 

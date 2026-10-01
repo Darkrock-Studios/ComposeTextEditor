@@ -41,6 +41,7 @@ import com.darkrockstudios.texteditor.lastRowAtOrAbove
 import com.darkrockstudios.texteditor.rowAt
 import com.darkrockstudios.texteditor.rowIndexOf
 import com.darkrockstudios.texteditor.input.EditorActionRegistry
+import com.darkrockstudios.texteditor.input.HandwritingPreview
 import com.darkrockstudios.texteditor.input.HeldKey
 import com.darkrockstudios.texteditor.input.KeyboardSettings
 import com.darkrockstudios.texteditor.input.KillRing
@@ -343,6 +344,12 @@ class TextEditorState private constructor(
 		internal set
 
 	/**
+	 * The stylus gesture the keyboard is previewing, drawn as a highlight. As Compose's, it
+	 * ends at the next change to the text, the selection or the caret.
+	 */
+	internal var handwritingPreview: HandwritingPreview? by mutableStateOf(null)
+
+	/**
 	 * The last committed document content. Every mutation publishes a whole new
 	 * [DocumentSnapshot] rather than editing the previous one in place, so a reader
 	 * on any thread sees a complete, self-consistent snapshot and can never observe
@@ -359,7 +366,10 @@ class TextEditorState private constructor(
 			val textChanged = value.lines !== field.lines
 			field = value
 			_revision.intValue++
-			if (textChanged) _textRevision.intValue++
+			if (textChanged) {
+				_textRevision.intValue++
+				handwritingPreview = null
+			}
 		}
 
 	/**
