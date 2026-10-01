@@ -44,8 +44,9 @@ import com.darkrockstudios.texteditor.input.EditorActionRegistry
 import com.darkrockstudios.texteditor.input.HeldKey
 import com.darkrockstudios.texteditor.input.KeyboardSettings
 import com.darkrockstudios.texteditor.input.KillRing
-import com.darkrockstudios.texteditor.input.imeActionFor
 import com.darkrockstudios.texteditor.input.TabSettings
+import com.darkrockstudios.texteditor.input.imeActionFor
+import com.darkrockstudios.texteditor.input.isWithinDocument
 import com.darkrockstudios.texteditor.RichTextStyles
 import com.darkrockstudios.texteditor.richstyle.BlockSpanStyle
 import com.darkrockstudios.texteditor.richstyle.HeaderSpanStyle
@@ -950,7 +951,19 @@ class TextEditorState private constructor(
 		val textBefore = lines.map { textLines[it].text }
 		fun rangeChanged() =
 			textLines.size != lineCount || lines.any { textLines[it].text != textBefore[it - range.start.line] }
-		runBehaviors { hook(it, range) || rangeChanged() }
+		// A selection standing when a composition the editor ends is offered (a handle
+		// grabbed, focus lost) outlives the behaviors' edits, which clear it as any edit
+		// does, unless an edit reached into it.
+		heldSelection = selector.selection?.takeIf { holdsRange(it) }?.let { BatchRange(it, getStringInRange(it)) }
+		try {
+			runBehaviors { hook(it, range) || rangeChanged() }
+			val held = heldSelection
+			if (held != null && selector.selection == null && held.holds()) {
+				selector.updateSelection(held.range.start, held.range.end)
+			}
+		} finally {
+			heldSelection = null
+		}
 		if (workingContent !== contentBefore || cursorPosition != caretBefore) requestImeResync()
 	}
 
@@ -969,6 +982,7 @@ class TextEditorState private constructor(
 
 	private val landedInBatch = ArrayDeque<LandedInput>()
 	private var heldComposition: HeldComposition? = null
+	private var heldSelection: BatchRange? = null
 
 	/**
 	 * Depth of the IME batches open on this editor: Android's `beginBatchEdit`, a skiko
@@ -1049,7 +1063,7 @@ class TextEditorState private constructor(
 
 	/** Moves the open batch's ranges across [operation], as the rich spans move. */
 	internal fun landedInputMoved(operation: TextEditOperation) {
-		if (landedInBatch.isEmpty() && heldComposition == null) return
+		if (landedInBatch.isEmpty() && heldComposition == null && heldSelection == null) return
 		// Text put in right at a range's end follows it rather than joining it.
 		val editStart = when (operation) {
 			is TextEditOperation.Insert -> operation.position
@@ -1062,6 +1076,7 @@ class TextEditorState private constructor(
 		}
 		landedInBatch.forEach { it.move() }
 		heldComposition?.move()
+		heldSelection?.move()
 	}
 
 	// In-editor rich-span clipboard. The system clipboard only carries the
@@ -1334,13 +1349,28 @@ class TextEditorState private constructor(
 		}
 	}
 
-	/** Sets [isFocused]; losing focus also clears any pending IME composing region. */
+	/**
+	 * Sets [isFocused]; losing focus also finishes any IME composition ([finishComposition]).
+	 * Not while an IME batch is open: what is offered then waits for the batch, and the
+	 * keyboard that left mid-batch never ends it, so its text is dropped unoffered when the
+	 * connection closes. The close finishes the composition instead, once the batch is released.
+	 */
 	fun updateFocus(focused: Boolean) {
 		isFocused = focused
-		// Clear composing state when focus is lost
-		if (!focused) {
-			clearComposingRange()
-		}
+		if (!focused && imeBatchDepth == 0) finishComposition()
+	}
+
+	/**
+	 * Ends the IME composition, keeping its text: the keyboard's `finishComposingText`,
+	 * and the editor's own endings (a pointer leaving it, focus loss, an Android
+	 * connection closing), after which the keyboard's finish finds nothing. Finishing
+	 * a typed composition commits the user's word, so the typed-text hook is told, as
+	 * for a commit. Text the keyboard merely marked is dropped silently.
+	 */
+	internal fun finishComposition() {
+		val composing = composingRange?.takeIf { composingIsTyped && isWithinDocument(it) }
+		clearComposingRange()
+		if (composing != null) textInputLanded(getStringInRange(composing), composing)
 	}
 
 	/**

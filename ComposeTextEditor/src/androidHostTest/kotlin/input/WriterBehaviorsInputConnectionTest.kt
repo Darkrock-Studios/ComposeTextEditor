@@ -13,6 +13,7 @@ import kotlinx.coroutines.test.TestScope
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /** The writer behaviors reached through the Android [TextEditorInputConnection]. */
@@ -39,6 +40,33 @@ class WriterBehaviorsInputConnectionTest {
 		connection.finishComposingText()
 
 		assertEquals("a\u2014 it\u2019s", text())
+	}
+
+	@Test
+	fun `a composition the closing connection ends is substituted`() {
+		state.editBehaviors += SmartPunctuation()
+		connection.setComposingText("don't", 1)
+
+		connection.closeConnection()
+
+		assertEquals("don\u2019t", text())
+		assertNull(state.composingRange)
+		state.undo()
+		assertEquals("don't", text())
+	}
+
+	@Test
+	fun `a composition open through a batch when focus is lost is substituted by the close`() {
+		state.editBehaviors += SmartPunctuation()
+		connection.beginBatchEdit()
+		connection.setComposingText("don't", 1)
+
+		state.updateFocus(false)
+		assertEquals("don't", text())
+		connection.closeConnection()
+
+		assertEquals("don\u2019t", text())
+		assertNull(state.composingRange)
 	}
 
 	@Test

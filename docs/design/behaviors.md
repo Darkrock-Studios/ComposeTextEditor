@@ -18,6 +18,15 @@ the line break hook, `onNewlineLanded`, and the paste hook, `onPaste`.
   offered, so a keyboard sees its own composition untouched until it commits.
   A committed word is processed character by character, as if typed, so a
   keyboard committing `it's` whole gets the same result as one typing it.
+  A typed composition the editor ends itself (a tap or drag outside it, focus
+  loss, the Android connection closing) is offered as finished too (5.9),
+  since the keyboard's own finish, coming later, finds nothing.
+- **The pointer owns the caret.** A pointer leaving a composition finishes it
+  before its own placement is read: the behavior's edit lands first, then the
+  caret or selection goes where the pointer is on the substituted text, as it
+  would after the keyboard's finish. A selection the pointer makes (a
+  double-click, a drag) is therefore never cleared by the edit. On focus loss
+  and a connection closing the caret stays, mapped across the edit.
 - **One undo gives back what was typed.** The behavior edits on top of the
   typed text, which was already its own step, so the first undo reverts only
   the substitution: `--` typed, an em dash shown, undo shows `--` again.

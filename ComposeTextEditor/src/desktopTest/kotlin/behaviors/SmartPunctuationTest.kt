@@ -20,6 +20,7 @@ import io.mockk.mockk
 import kotlinx.coroutines.test.TestScope
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -203,6 +204,33 @@ class SmartPunctuationTest {
 		state.imeFinishComposing()
 
 		assertEquals("x \u201990s", state.text())
+	}
+
+	@Test
+	fun `a composition ended by focus loss is substituted, and undoes to what was typed`() {
+		val state = editor("x ")
+		state.updateFocus(true)
+		state.imeSetComposingText("don't", newCursorPosition = 1)
+
+		state.updateFocus(false)
+
+		assertEquals("x don\u2019t", state.text())
+		assertNull(state.composingRange)
+		state.undo()
+		assertEquals("x don't", state.text())
+	}
+
+	@Test
+	fun `a selection outside the composition outlives the substitution, mapped`() {
+		val state = editor("tail")
+		state.cursor.updatePosition(CharLineOffset(0, 0))
+		state.imeSetComposingText("a--", newCursorPosition = 1)
+		state.selector.updateSelection(CharLineOffset(0, 4), CharLineOffset(0, 6))
+
+		state.updateFocus(false)
+
+		assertEquals("a\u2014tail", state.text())
+		assertEquals("ai", state.selector.getSelectedText().text)
 	}
 
 	@Test

@@ -225,9 +225,12 @@ private fun Modifier.handleMouseInput(
 			(buttons.isPrimaryPressed && !buttons.isSecondaryPressed) || !buttons.areAnyPressed -> {
 				val isShiftPressed = press.keyboardModifiers.isShiftPressed
 				val clicks = clickCounter.register(down)
+				val placesCaret = clicks == 1 && !isShiftPressed
+				// Before anything under the pointer is read, so a behavior's edit is laid out first.
+				state.finishCompositionIfPointerLeaves(state.pointerHitAt(downAt).position.takeIf { placesCaret })
 				// The second and third press of a multi-click select; only a plain first
 				// press can become a click on what is under it.
-				val pressed = if (clicks == 1 && !isShiftPressed) ClickTarget.at(state, downAt) else null
+				val pressed = if (placesCaret) ClickTarget.at(state, downAt) else null
 				val held = pressed != null && selectionDrag != null && state.selectionContains(downAt)
 				val outcome = if (held) {
 					selectionDrag.holdPress()
@@ -342,7 +345,11 @@ private class PointerSelection(
 			isShiftPressed: Boolean = false,
 			isTouch: Boolean = false,
 		): PointerSelection {
-			val hit = state.pointerHitAt(position)
+			var hit = state.pointerHitAt(position)
+			val placesCaret = !isShiftPressed && granularity == SelectionGranularity.Character
+			if (state.finishCompositionIfPointerLeaves(hit.position.takeIf { placesCaret })) {
+				hit = state.pointerHitAt(position)
+			}
 			val anchor = if (isShiftPressed) {
 				val fixed = state.selector.extensionAnchor(state.cursorPosition)
 				TextEditorRange(fixed, fixed)
@@ -350,10 +357,7 @@ private class PointerSelection(
 				state.selector.rangeAt(granularity.unitOf(hit), granularity)
 			}
 			state.selector.hideCaretHandle()
-			return PointerSelection(state, anchor, granularity, isTouch).also {
-				it.selectTo(hit)
-				state.endCompositionIfPointerLeft()
-			}
+			return PointerSelection(state, anchor, granularity, isTouch).also { it.selectTo(hit) }
 		}
 	}
 }
@@ -604,6 +608,8 @@ private suspend fun AwaitPointerEventScope.dragSelectionHandle(
 	origin: Offset,
 	autoScrollScope: CoroutineScope,
 ) {
+	// A behavior's edit reaching into the selection clears it, and with it the handle.
+	state.finishCompositionIfPointerLeaves(caretAt = null)
 	val selection = state.selector.selection ?: return
 	val anchor = if (handle.isStart) selection.end else selection.start
 	val downAt = down.inContent(origin)
@@ -611,7 +617,6 @@ private suspend fun AwaitPointerEventScope.dragSelectionHandle(
 	val grabOffset = grabOffset(state, handle.position, downAt, handleAffinity)
 	state.selector.setDraggingHandle(handle.isStart)
 	state.selector.magnifierCenter = magnifierCenter(state, handle.position, downAt + grabOffset, handleAffinity)
-	state.endCompositionIfPointerLeft()
 
 	val autoScroll = DragAutoScroll(state, autoScrollScope, grabOffset) { target ->
 		// Anything else that changes the selection mid-drag (an edit, an undo) ends it.
@@ -664,10 +669,10 @@ private suspend fun AwaitPointerEventScope.dragCaretHandle(
 			state.selector.magnifierCenter = null
 			return@DragAutoScroll
 		}
-		val hit = state.pointerHitAt(target)
+		var hit = state.pointerHitAt(target)
+		if (state.finishCompositionIfPointerLeaves(hit.position)) hit = state.pointerHitAt(target)
 		state.selector.dragCaretHandleTo(hit.position, hit.affinity)
 		state.selector.magnifierCenter = magnifierCenter(state, hit.position, target, hit.affinity)
-		state.endCompositionIfPointerLeft()
 	}
 	try {
 		return followDrag(autoScroll, down, origin, viewConfiguration.touchSlop, consumeAll = true) != null
@@ -731,17 +736,27 @@ private fun Density.isOnAnyHandle(position: Offset, state: TextEditorState): Boo
 	findHandleAtPosition(position, state) != null || isOnCaretHandle(position, state)
 
 /**
- * Ends the IME composition once a pointer has put the caret or a selection outside it,
- * which is what keyboards do themselves when told of the move. One that does not would
- * replace the old composing word, wherever it is, with its next keystroke. A caret
- * placed inside the composition keeps it: some keyboards edit mid-composition.
+ * Finishes the IME composition before a pointer puts the caret at [caretAt], or a
+ * selection (null), outside it, which is what keyboards do themselves when told of the
+ * move. One that does not would replace the old composing word, wherever it is, with
+ * its next keystroke. A caret placed inside the composition keeps it: some keyboards
+ * edit mid-composition.
+ *
+ * The pointer owns the caret: a typed composition is offered to the behaviors first,
+ * so what they make of it is laid out before the pointer's position is read, and the
+ * caret or selection then goes where the pointer is on the substituted text, as after a
+ * keyboard's own finish. Returns whether a behavior changed the document, in which case
+ * the caller reads its hit again.
  */
-private fun TextEditorState.endCompositionIfPointerLeft() {
-	val composing = composingRange ?: return
-	val caretInside = selector.selection == null &&
-			(cursorPosition isAfterOrEqual composing.start) &&
-			(cursorPosition isBeforeOrEqual composing.end)
-	if (!caretInside) clearComposingRange()
+private fun TextEditorState.finishCompositionIfPointerLeaves(caretAt: CharLineOffset?): Boolean {
+	val composing = composingRange ?: return false
+	val caretInside = caretAt != null &&
+			(caretAt isAfterOrEqual composing.start) &&
+			(caretAt isBeforeOrEqual composing.end)
+	if (caretInside) return false
+	val revisionBefore = revision
+	finishComposition()
+	return revision != revisionBefore
 }
 
 private fun Density.findHandleAtPosition(
@@ -773,7 +788,7 @@ private val CaretHandleHitRadius = SelectionHandleDiameter / 2 * 1.5f
 
 /**
  * Places the caret for a tap or a right-click, then offers the event to the [RichSpan]
- * under it. A tap reports only when it lifts on the span it landed on, [pressedSpan].
+ * under it. A tap reports only when it lifts on the span it landed on at [pressedAt].
  * Returns whether the caret was placed.
  */
 private fun Density.handleSpanInteraction(
@@ -783,11 +798,11 @@ private fun Density.handleSpanInteraction(
 	modifiers: PointerKeyboardModifiers,
 	onSpanClick: SpanClickSink?,
 	readOnly: Boolean,
-	pressedSpan: RichSpan? = null,
+	pressedAt: Offset? = null,
 ): Boolean {
 	if (clickType == SpanClickType.TAP && isOnAnyHandle(offset, state)) return false
 
-	val hit = state.pointerHitAt(offset)
+	var hit = state.pointerHitAt(offset)
 	val placesCaret = when (clickType) {
 		SpanClickType.PRIMARY_CLICK, SpanClickType.TAP -> true
 		// Like native editors, a right-click inside the selection keeps it for the context
@@ -796,14 +811,16 @@ private fun Density.handleSpanInteraction(
 		SpanClickType.SECONDARY_CLICK -> !readOnly && !state.selector.selectionContains(hit.character)
 	}
 	if (placesCaret) {
+		if (state.finishCompositionIfPointerLeaves(hit.position)) hit = state.pointerHitAt(offset)
 		if (!readOnly) {
 			state.cursor.updatePosition(hit.position, hit.affinity)
 		}
 		state.selector.clearSelection()
-		state.endCompositionIfPointerLeft()
 	}
 
+	// Both read after the composition is finished, since a behavior's edit moves the spans.
 	val span = state.spanAt(offset)
+	val pressedSpan = pressedAt?.let { state.spanAt(it) }
 	if (span != null && (clickType != SpanClickType.TAP || span == pressedSpan)) {
 		onSpanClick?.invoke(RichSpanClick(span, clickType, offset, modifiers))
 	}
@@ -916,7 +933,7 @@ private fun Modifier.handleTouchInteractions(
 									event.keyboardModifiers,
 									onSpanClick,
 									readOnly,
-									pressedSpan = pressed.span,
+									pressedAt = downAt,
 								)
 								if (placed && caretHandle) state.selector.showCaretHandle()
 								if (pressed.link != null && links?.opensOnTap == true &&

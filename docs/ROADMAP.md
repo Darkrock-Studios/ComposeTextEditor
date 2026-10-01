@@ -186,9 +186,9 @@ review.
 | C | Drawing and geometry | `Draw*.kt`, `cursor/`, `scrollbar/`, `state/TextEditorScrollState.kt`, hit testing | 1.8, 1.10, 1.11, 1.17, 1.18, 1.25, 3.3, 3.12, 3.16, 4.14, 7.6, 7.7, 7.27, 7.41, 7.78 |
 | D | Bindings, actions, menu | `input/KeyBindings.kt`, `input/EditorCommand.kt`, `input/BuiltinEditorActions.kt`, `contextmenu/` | 2.1, 2.2, 2.4, 2.5, 2.7 to 2.12, 4.8, 5.8, 7.58 |
 | E | Input sessions on desktop, iOS, web | `desktopMain`, `iosMain`, `wasmJsMain` under `input/` | 4.2 to 4.7, 4.10 to 4.12, 4.19, 4.21, 4.22, 4.24 to 4.26, 4.28, 4.29, 4.32, 4.33, 4.35, 4.37 to 4.40, 7.37 |
-| F | Android input | `androidMain` | 0.4, 0.12, 3.9 to 3.11, 3.14, 3.17, 4.16, 4.18, 4.20, 4.27, 4.30, 4.31, 4.34, 4.36, 7.40 |
+| F | Android input | `androidMain` | 0.4, 0.12, 3.9 to 3.11, 3.14, 3.17, 4.16, 4.18, 4.20, 4.27, 4.30, 4.31, 4.34, 4.36, 4.41, 7.40 |
 | G | Edit pipeline and undo | `state/TextEditManager.kt`, `state/TextEditHistory.kt`, `state/EditBehavior.kt`, `input/ImeEditLogic.kt` | 1.20, 5.1 to 5.5, 5.9 to 5.11, 5.13 to 5.18, 6.1 to 6.6, 6.14, 6.15, 6.17, 6.22, 6.23, 6.28, 6.29, 6.33 to 6.35, 6.40, 6.45, 7.54, 7.55 |
-| H | Clipboard and HTML | `clipboard/`, `html/`, `dragdrop/` | 4.9, 4.13, 4.17, 6.7 to 6.13, 6.18 to 6.21, 5.12, 6.24 to 6.27, 6.30 to 6.32, 6.36 to 6.39, 6.41 to 6.44, 6.46, 7.39, 7.46, 7.47, 7.49, 7.53, 7.63 |
+| H | Clipboard and HTML | `clipboard/`, `html/`, `dragdrop/` | 4.9, 4.13, 4.17, 6.7 to 6.13, 6.18 to 6.21, 5.12, 6.24 to 6.27, 6.30 to 6.32, 6.36 to 6.39, 6.41 to 6.44, 6.46, 6.47, 7.39, 7.46, 7.47, 7.49, 7.53, 7.63 |
 | I | Markdown and block model | `ComposeTextEditorMarkdown/`, `richstyle/`, `state/TextEditorStateBlockExt.kt` | 5.6, 7.14 to 7.16, 7.43, 7.45, 7.52, 7.64, 7.67, 7.70 to 7.72, 7.79, 7.80, 7.83, 7.85 |
 | J | Find addon | `ComposeTextEditorFind/` | 7.17 to 7.19, 7.26, 7.29, 7.42, 7.68, 7.69 |
 | K | Spell check addon | `ComposeTextEditorSpellCheck/` | 7.20 to 7.22, 7.28, 7.30, 7.31, 7.34, 7.35, 7.38, 7.44, 7.50, 7.56, 7.61, 7.74, 7.76, 7.77, 7.81, 7.84 |
@@ -2005,6 +2005,19 @@ iOS Safari; browser tests run in CI (met: the `browser` job, 4.15).
   rather than keeping it (seen on desktop, from the same common code), so the
   session ends and UIKit's tab reaches no editor. The handled Tab's own echo
   was the bug found there, fixed in 2.9.
+- [ ] **4.41 A stale connection's close ends its successor's composition. S.**
+  [Fable] [Lane F] `TextEditorInputConnection.closeConnection` finishes the
+  state's composition (5.9) whichever connection it is, while
+  `connectionClosed` guards on `activeConnection`. Android closes the old
+  connection after `restartInput` has opened and started the new one, posted
+  to the main thread, so a close arriving after the new keyboard has begun a
+  word finishes that word mid-composition: a behavior may rewrite it and the
+  keyboard's next `setComposingText` inserts rather than replaces. Before
+  5.9 the same close dropped the composing range with the same duplication.
+  A restart's own close is the one that ends the old composition today (the
+  `ImeCursorSync.flush` comment relies on it), so a guard must end it at the
+  restart instead, or at `connectionOpened`; decide against a keyboard trace
+  of a restart (4.30's recorder) before changing it.
 
 ## Phase 5: writer conveniences
 
@@ -2149,7 +2162,7 @@ iOS Safari; browser tests run in CI (met: the `browser` job, 4.15).
   style. Unlink removes whole links the selection
   touches or the caret is in. See `docs/design/editor-actions.md`,
   "Formatting toggles".
-- [ ] **5.9 A composition the editor ends is not offered. C.** [Fable]
+- [x] **5.9 A composition the editor ends is not offered. C.** [Fable]
   [Lane G] 5.1 offers a typed composition when the IME commits or finishes
   it, but the editor also ends one itself, with a bare `clearComposingRange`:
   a tap or drag outside it (`endCompositionIfPointerLeft`), focus loss, and
@@ -2158,6 +2171,22 @@ iOS Safari; browser tests run in CI (met: the `browser` job, 4.15).
   Offering it there means a behavior may edit while the pointer is placing
   the caret, so decide who owns the caret first. Touches lane B's pointer
   handling and lane F's connection; do it when both are idle.
+  Done: `TextEditorState.finishComposition` ends a composition keeping its
+  text and offers a typed one to `onTextInput`, as the keyboard's
+  `finishComposingText` does; a pointer leaving the composition, focus loss
+  and the Android connection closing all go through it. The pointer owns the
+  caret: a tap, press, drag or handle drag finishes the composition before
+  its placement is read, so a behavior's edit is laid out first and the
+  caret or selection then goes where the pointer is on the substituted text,
+  which also keeps a double-click's or drag's selection, since a behavior's
+  edit would clear one made before it. A caret placed inside the composition
+  keeps it, as before. A selection already standing (a handle grabbed, focus
+  lost) is put back after the behaviors' edits, mapped, unless an edit reached
+  into it. Focus loss while an Android batch is open (disabling the editor
+  counts as focus loss) leaves the composition to the connection's close,
+  since what is offered mid-batch is dropped with the batch when the keyboard
+  never ends it. The behavior's edit stays its own undo step and asks the IME
+  to resync. Paste and drop still end a composition unoffered: 6.47.
 - [x] **5.10 Text typed at a link's end joins the link. R.** [Opus] [Lane G]
   Typing right after a link (`setLink`, a pasted or auto-made one) takes its
   link style and grows its `LinkSpanStyle` over the new text, and after Enter
@@ -2963,6 +2992,15 @@ iOS Safari; browser tests run in CI (met: the `browser` job, 4.15).
   that look on a plain line, as paste did before 6.38. Strip the looks where
   the edit manager inserts styled text, as `resolveInheritedStyle` does for a
   multi-line replace, so every path is covered.
+- [ ] **6.47 A paste or drop over a composition ends it unoffered. S.**
+  [Fable] [Lane H] The paste actions (`input/BuiltinEditorActions.kt`) and a
+  drop (`dragdrop/TextDrop.kt`) end a live composition with a bare
+  `clearComposingRange` before inserting, so a word the keyboard was still
+  composing (Gboard's `don't`, a toolbar Paste tapped right after it) keeps
+  its straight apostrophe where a tap, focus loss or the connection's close
+  would have offered it (5.9). Go through `TextEditorState.finishComposition`
+  there, keeping the resync they request; the behaviors' edit then precedes
+  the paste's own `onPaste` offer and the paste lands at the mapped caret.
 
 ## Phase 7: reach
 
