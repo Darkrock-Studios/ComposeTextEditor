@@ -30,7 +30,7 @@ internal suspend fun TextEditorState.readHtmlPasteDocument(
 	pastedText: AnnotatedString,
 ): HtmlDocument? {
 	val html = readClipboardHtml(clipboard) ?: return null
-	val document = parseHtmlDocument(html, richTextStyles)
+	val document = parseHtmlDocument(html, richTextStyles, allowedLinkSchemes = allowedLinkSchemes)
 	if (document.hasNoDecorations()) return null
 	if (document.text.text != pastedText.text) return null
 	return document

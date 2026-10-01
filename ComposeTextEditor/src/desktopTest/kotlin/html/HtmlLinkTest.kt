@@ -9,6 +9,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.RichTextStyles
 import com.darkrockstudios.texteditor.TextEditorRange
+import com.darkrockstudios.texteditor.html.DEFAULT_LINK_SCHEMES
 import com.darkrockstudios.texteditor.html.HtmlLink
 import com.darkrockstudios.texteditor.html.parseHtmlDocument
 import com.darkrockstudios.texteditor.html.sanitizeLinkUrl
@@ -104,6 +105,7 @@ class HtmlLinkTest {
 		val html = text.toHtml(
 			config,
 			listOf(HtmlLink(0, 2, "https://x.test"), HtmlLink(3, 5, "javascript:alert(1)")),
+			allowedLinkSchemes = DEFAULT_LINK_SCHEMES,
 		)
 		assertEquals("<a href=\"https://x.test\">a<u>b</u></a> cd", html)
 	}

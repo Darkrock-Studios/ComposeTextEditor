@@ -192,6 +192,9 @@ internal class SemanticsDocument(
 	 */
 	private var chunkLinks: Map<SpanIndex.Chunk, List<ChunkLink>> = emptyMap()
 
+	/** The allowlist [chunkLinks] was found under. */
+	private var linkSchemes: Set<String>? = null
+
 	/** How many span chunks [text] has scanned for links, for the cost tests. */
 	internal var chunksScanned = 0
 
@@ -240,6 +243,12 @@ internal class SemanticsDocument(
 	fun text(): AnnotatedString {
 		state.revision
 		val content = state.snapshot()
+		val schemes = state.allowedLinkSchemes
+		if (schemes != linkSchemes) {
+			linkSchemes = schemes
+			chunkLinks = emptyMap()
+			textContent = null
+		}
 		if (content !== textContent) {
 			text = content.textWithLinks()
 			textContent = content
@@ -275,7 +284,7 @@ internal class SemanticsDocument(
 		chunkLinks = found
 		for (span in spanIndex.loose) {
 			val style = span.style as? LinkSpanStyle ?: continue
-			val url = sanitizeLinkUrl(style.url) ?: continue
+			val url = sanitizeLinkUrl(style.url, state.allowedLinkSchemes) ?: continue
 			add(
 				LinkAnnotation.Url(url, linkInteractionListener = listener),
 				indexOf(span.range.start.line, span.range.start.char),
@@ -294,7 +303,7 @@ internal class SemanticsDocument(
 		lines.forEachIndexed { line, spans ->
 			for (span in spans) {
 				val style = span.style as? LinkSpanStyle ?: continue
-				val url = sanitizeLinkUrl(style.url) ?: continue
+				val url = sanitizeLinkUrl(style.url, state.allowedLinkSchemes) ?: continue
 				add(ChunkLink(line, span.start, span.end, LinkAnnotation.Url(url, linkInteractionListener = listener)))
 			}
 		}

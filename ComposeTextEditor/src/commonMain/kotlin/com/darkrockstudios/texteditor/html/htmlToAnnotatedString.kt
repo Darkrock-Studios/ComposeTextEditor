@@ -43,11 +43,13 @@ import kotlin.math.roundToInt
  *
  * Block structure (lists, blockquotes, code fences) flattens to line breaks, and a
  * link keeps only the configured link style, not its destination. Use
- * `withHtml().importHtml` to keep both.
+ * `withHtml().importHtml` to keep both. A link whose destination [sanitizeLinkUrl]
+ * refuses under [allowedLinkSchemes] keeps its text without that style.
  */
 fun String.toAnnotatedStringFromHtml(
-	styles: RichTextStyles = RichTextStyles.DEFAULT
-): AnnotatedString = parseHtmlDocument(this, styles).text
+	styles: RichTextStyles = RichTextStyles.DEFAULT,
+	allowedLinkSchemes: Set<String> = DEFAULT_LINK_SCHEMES,
+): AnnotatedString = parseHtmlDocument(this, styles, allowedLinkSchemes = allowedLinkSchemes).text
 
 /**
  * Parses an HTML fragment into text plus the line-anchored decorations it
@@ -61,10 +63,11 @@ internal fun parseHtmlDocument(
 	html: String,
 	styles: RichTextStyles = RichTextStyles.DEFAULT,
 	includeImages: Boolean = false,
+	allowedLinkSchemes: Set<String> = DEFAULT_LINK_SCHEMES,
 ): HtmlDocument {
 	val body = Ksoup.parseBodyFragment(unwrapClipboardHtml(html)).body()
 	val marksConvertedSpaces = html.contains(CONVERTED_SPACE_CLASS) || html.contains(SPACERUN_STYLE, ignoreCase = true)
-	return HtmlSpanBuilder(styles, includeImages, marksConvertedSpaces).build(body)
+	return HtmlSpanBuilder(styles, includeImages, marksConvertedSpaces, allowedLinkSchemes).build(body)
 }
 
 private val START_FRAGMENT = Regex("""<!--\s*StartFragment\s*-->""", RegexOption.IGNORE_CASE)
@@ -213,6 +216,7 @@ private class HtmlSpanBuilder(
 	private val includeImages: Boolean,
 	/** The source marks every no-break space that stands for an ordinary one (Safari, Word). */
 	private val marksConvertedSpaces: Boolean,
+	private val allowedLinkSchemes: Set<String>,
 ) {
 
 	private val out = StringBuilder()
@@ -436,7 +440,7 @@ private class HtmlSpanBuilder(
 		)
 
 		val block = blockStyleFor(name, scope)
-		val href = if (name == "a") sanitizeLinkUrl(element.attr("href")) else null
+		val href = if (name == "a") sanitizeLinkUrl(element.attr("href"), allowedLinkSchemes) else null
 		val start = out.length
 		val spansAtEntry = spans.size
 		val pendingAtEntry = pendingNewlines()

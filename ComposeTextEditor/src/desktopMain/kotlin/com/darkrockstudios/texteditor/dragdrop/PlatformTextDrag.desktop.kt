@@ -55,9 +55,9 @@ internal actual fun DragAndDropEvent.carriesText(): Boolean =
 	runCatching { awtTransferable.offersText() }.getOrDefault(false)
 
 @OptIn(ExperimentalComposeUiApi::class)
-internal actual fun DragAndDropEvent.droppedText(styles: RichTextStyles): DroppedText? {
+internal actual fun DragAndDropEvent.droppedText(styles: RichTextStyles, allowedLinkSchemes: Set<String>): DroppedText? {
 	val transferable = runCatching { awtTransferable }.getOrNull() ?: return null
-	val text = transferable.readStyledText(styles) ?: return null
+	val text = transferable.readStyledText(styles, allowedLinkSchemes) ?: return null
 	return DroppedText(text, transferable.readHtmlMarkup())
 }
 

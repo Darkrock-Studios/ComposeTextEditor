@@ -329,8 +329,10 @@ the caret and selection handles. A span click is reported on release, when the
 press and release land on the same span without a drag, so placing the caret
 or selecting never reads as a click; links open by the host's `onLinkClick` on
 Ctrl/Cmd+click in an editor and on a plain click in `RichTextView`, and only
-a destination `sanitizeLinkUrl` allows (relative, http, https, mailto, tel, ftp)
-reaches it, the same allowlist every importer applies.
+a destination `sanitizeLinkUrl` allows (relative, and http, https, mailto, tel
+and ftp unless the host sets its own `allowedLinkSchemes` on the state;
+`javascript:`, `data:`, `vbscript:` and `file:` never) reaches it, the same
+allowlist every importer applies.
 
 ## Document model and transactions
 

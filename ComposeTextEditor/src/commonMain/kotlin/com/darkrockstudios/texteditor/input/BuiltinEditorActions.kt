@@ -193,7 +193,7 @@ private fun EditorActionContext.pasteClipboard(plainText: Boolean) {
 		val clipboardText = if (plainText) {
 			ClipboardHelper.getPlainText(clipboard)?.let(::AnnotatedString)
 		} else {
-			ClipboardHelper.getText(clipboard, state.richTextStyles)
+			ClipboardHelper.getText(clipboard, state.richTextStyles, state.allowedLinkSchemes)
 		}
 		clipboardText?.let {
 			val curSelection = state.selector.selection

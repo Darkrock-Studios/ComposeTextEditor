@@ -1973,13 +1973,28 @@ iOS Safari; browser tests run in CI.
   with paste, leaves out a span whose style already covers its range, since
   inserting beside or inside such a span stretched it. A drop into another
   editor carries only what its markup does (`dragdrop/DraggedRichSpansTest.kt`).
-- [ ] **6.25 A host's own link scheme is refused. S.** [Opus] [Lane H]
+- [x] **6.25 A host's own link scheme is refused. S.** [Opus] [Lane H]
   Since 6.16 one allowlist (relative, http, https, mailto, tel, ftp) decides
   which links import and open, so a host whose documents link with its own
   scheme (`myapp://scene/3`, `obsidian:`, `sms:`) loses those links on markdown
   or HTML import, and one it attaches directly never reaches its `onLinkClick`.
   Let a host extend the allowlist (a set of schemes on the configuration or the
   state), still refusing `javascript:`, `data:`, `vbscript:` and `file:`.
+  Done: `TextEditorState.allowedLinkSchemes` (snapshot state) is the whole
+  allowlist, `DEFAULT_LINK_SCHEMES` unless the host assigns its own
+  (`DEFAULT_LINK_SCHEMES + "myapp"`), matched ignoring case; relative URLs are
+  always kept and `REFUSED_LINK_SCHEMES` (`javascript`, `vbscript`, `data`,
+  `file`) always refused, whatever the set says. `sanitizeLinkUrl` takes the
+  set, and every place that sanitises reads the state's: HTML import, paste
+  (`ClipboardHelper.getText` takes it, so the pasted text keeps the link's
+  look) and drop, markdown import, `setLink`, HTML export and copy, the
+  pointer's open and hand cursor, and the semantics links, which rescan when
+  the set changes. The standalone converters (`toAnnotatedStringFromHtml`,
+  `toAnnotatedStringFromMarkdown`) take it too, defaulting to the defaults
+  (`html/HostLinkSchemesTest.kt`). A scheme that is not ASCII is refused, and
+  the state keeps a copy of the set it is given. `rememberSaveableTextEditorState`
+  does not save the set; markdown export still writes every link, as 6.16 left
+  it. The iOS clipboard and drag actuals take the set (Mac queue). Found: 6.30.
 - [ ] **6.26 Bold text at a heading's size copies out as a heading. S.** [Opus]
   [Lane H] HTML copy-out (`html/HtmlTag.kt`, `headerTag` and
   `uniformHeadingTag`) reads a run that is bold at a configured heading size
@@ -2008,6 +2023,14 @@ iOS Safari; browser tests run in CI.
   position and `DrawDropCaret` draws it downstream, at the start of the next
   row. Keep the hit's affinity (`TextEditorState.pointerHitAt`) for the drop
   caret.
+- [ ] **6.30 A link's look crosses into an editor that refuses its scheme. S.**
+  [Opus] [Lane H] On desktop a paste or drop between two editors in one process
+  takes the exact `AnnotatedString` flavor ahead of the markup, so a `myapp:`
+  link copied from an editor that allows the scheme arrives in one that does not
+  with the link style baked over its text but no link (the markup parse, which
+  reads the receiver's `allowedLinkSchemes`, adds none). Strip the link style
+  from runs the receiving parse does not confirm as links, or read the markup
+  when the copy came from another state.
 - [x] **6.13 Plain paste reads the HTML flavor.** [Opus] [Lane H] On desktop,
   `Action.PasteAsPlainText` takes `ClipboardHelper.getText(...).text`, so a
   foreign paste that offers HTML yields the text of the parsed markup rather
@@ -2996,4 +3019,5 @@ records results and removes entries that passed.
 | 3.16 | No `iosMain` change: commonMain now measures the keyboard cover (4.24) in the placement of a layout node on the canvas (`state/KeyboardCover.kt`, `measuresKeyboardCover`) instead of from a flow over `WindowInsets.ime`. Repeat 4.24's simulator check: tap a line the keyboard will cover, type Returns at the bottom, and dismiss and raise the keyboard | Compiles. The tapped line comes above the keyboard at once, Returns keep the caret at the keyboard's top, and the text does not jump while the keyboard slides | |
 | 7.37 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64`. commonMain `input/TextEditorTextInputService.kt` adds `internal expect val startsInputQuietly`; the iOS actual (`iosMain/.../input/TextEditorTextInputService.ios.kt`) is `false`. Then in the iOS sample app, with the keyboard up, turn Read only on and off without touching the editor, then type with the soft keyboard; and try the iOS actual as `true` (a session started, then `LocalSoftwareKeyboardController.hide()` after it) | Compiles. With `false`, the keyboard goes with Read only and comes back only on a tap, and typing then works. With `true`, if the keyboard stays down while a hardware keyboard or dictation can type at once, and a tap raises it, keep `true` and record it in 7.37 | |
 | 7.52 | `./gradlew :ComposeTextEditorMarkdown:compileKotlinIosSimulatorArm64 :ComposeTextEditorMarkdown:iosSimulatorArm64Test :ComposeTextEditor:compileKotlinIosSimulatorArm64 :ComposeTextEditor:iosSimulatorArm64Test :ComposeTextEditorFind:compileKotlinIosSimulatorArm64 :ComposeTextEditorSpellCheck:compileKotlinIosSimulatorArm64`. The new module has no iOS source of its own; core's `iosMain` clipboard and drag actuals take a `RichTextStyles` where they took the markdown configuration, and `iosTest/.../ClipboardHelperIosTest.kt` was adapted unbuilt. Then build the iOS sample app as the `ios` job does | Everything compiles, the iOS tests pass, and the sample app's markdown demo opens | |
+| 6.25 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64 :ComposeTextEditor:iosSimulatorArm64Test`. `ClipboardHelper.getText` and the internal `droppedText` `expect` take `allowedLinkSchemes`; the iOS actuals (`iosMain/.../clipboard/ClipboardHelper.ios.kt`, whose `readStyled` takes it with a default, and `iosMain/.../dragdrop/PlatformTextDrag.ios.kt`) pass it on or ignore it. Then in the iOS sample app, set `state.allowedLinkSchemes = DEFAULT_LINK_SCHEMES + "myapp"` on the demo editor and paste `<a href="myapp://x">x</a>` markup copied from a page | Compiles and the tests pass; the pasted `myapp:` link keeps its link look and link span | |
 | 0.7 | An iOS simulator smoke test that runs the app rather than only building it: an XCUITest target in `sampleAppiOS` that opens the blank editor, taps it and types with `typeText("Hello")`, then reads the editor back through its accessibility value; run it with `xcodebuild test` on an iOS simulator destination and add that step to the `ios` job in `.github/workflows/ci-build.yml`. The Android equivalent is `androidApp/src/androidTest/.../EditorTypingSmokeTest.kt` | The UI test passes locally and in the `ios` job, and fails if typing stops reaching the editor | |

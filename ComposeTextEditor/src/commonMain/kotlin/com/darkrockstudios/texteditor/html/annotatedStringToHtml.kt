@@ -13,14 +13,15 @@ import com.darkrockstudios.texteditor.RichTextStyles
  */
 fun AnnotatedString.toHtml(
 	styles: RichTextStyles = RichTextStyles.DEFAULT
-): String = toHtml(styles, links = emptyList())
+): String = toHtml(styles, links = emptyList(), allowedLinkSchemes = DEFAULT_LINK_SCHEMES)
 
 /** What one character is written under: its tags, inside the link it belongs to. */
 private data class HtmlRun(val tags: List<HtmlTag>, val link: String?)
 
 /**
  * [toHtml] with [links] over this text written as `<a href>`. A link whose
- * destination [sanitizeLinkUrl] refuses is written as its text alone. Over a
+ * destination [sanitizeLinkUrl] refuses under [allowedLinkSchemes] is written as its
+ * text alone. Over a
  * link, spans of exactly the configured link style (or a [retired] one) are left
  * out: the anchor is what carries that look, while formatting of the link's own
  * still shows.
@@ -29,13 +30,14 @@ internal fun AnnotatedString.toHtml(
 	styles: RichTextStyles,
 	links: List<HtmlLink>,
 	retired: RetiredStyles = RetiredStyles(styles, emptyList()),
+	allowedLinkSchemes: Set<String>,
 ): String {
 	if (text.isEmpty()) return ""
 
 	val inLink = BooleanArray(text.length)
 	val linkAt = arrayOfNulls<String>(text.length)
 	links.forEach { link ->
-		val url = sanitizeLinkUrl(link.url)
+		val url = sanitizeLinkUrl(link.url, allowedLinkSchemes)
 		for (i in link.start.coerceAtLeast(0) until link.end.coerceAtMost(text.length)) {
 			inLink[i] = true
 			linkAt[i] = url

@@ -140,11 +140,12 @@ private fun TextEditorState.fenceRunContaining(line: Int): IntRange? {
 /**
  * Makes [range] a hyperlink to [url]: bakes the configured link style over the
  * text and attaches the [LinkSpanStyle] that carries the destination through
- * serialization, as one undo step. A destination [sanitizeLinkUrl] refuses
- * (`javascript:`, `data:`, `vbscript:`, `file:`) is not set, and answers false.
+ * serialization, as one undo step. A destination [sanitizeLinkUrl] refuses under
+ * [TextEditorState.allowedLinkSchemes] (`javascript:`, `data:`, `vbscript:`, `file:`
+ * always) is not set, and answers false.
  */
 fun TextEditorState.setLink(range: TextEditorRange, url: String): Boolean {
-	if (sanitizeLinkUrl(url) == null) return false
+	if (sanitizeLinkUrl(url, allowedLinkSchemes) == null) return false
 	editGroup {
 		addStyleSpan(range, richTextStyles.linkStyle)
 		addRichSpan(range, LinkSpanStyle(url))

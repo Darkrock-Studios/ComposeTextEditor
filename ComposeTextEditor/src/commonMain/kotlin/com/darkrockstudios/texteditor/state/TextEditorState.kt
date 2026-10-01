@@ -35,6 +35,8 @@ import com.darkrockstudios.texteditor.cursor.CursorMetrics
 import com.darkrockstudios.texteditor.cursor.getWrapForDrawing
 import com.darkrockstudios.texteditor.cursor.getWrappedLineIndex
 import com.darkrockstudios.texteditor.effectiveHeight
+import com.darkrockstudios.texteditor.html.DEFAULT_LINK_SCHEMES
+import com.darkrockstudios.texteditor.html.REFUSED_LINK_SCHEMES
 import com.darkrockstudios.texteditor.lastRowAtOrAbove
 import com.darkrockstudios.texteditor.rowAt
 import com.darkrockstudios.texteditor.rowIndexOf
@@ -190,6 +192,25 @@ class TextEditorState(
 	 * most recent one's.
 	 */
 	val retiredRichTextStyles: List<RichTextStyles> get() = retiredStyles
+
+	/**
+	 * The URL schemes a link may use, matched ignoring case: [DEFAULT_LINK_SCHEMES] unless
+	 * the host assigns its own set, such as `DEFAULT_LINK_SCHEMES + "myapp"` for documents
+	 * that link with `myapp://`. A relative URL is always allowed and
+	 * [REFUSED_LINK_SCHEMES] always refused. HTML and markdown import, paste and drop,
+	 * `setLink`, HTML export and copy, a link's open on click and its semantics all read
+	 * it; a link refused at import is gone, so assign it before loading content.
+	 * `rememberSaveableTextEditorState` does not save it, so assign it wherever the
+	 * state is made or restored.
+	 */
+	var allowedLinkSchemes: Set<String>
+		get() = linkSchemes
+		set(value) {
+			linkSchemes = value.toSet()
+		}
+
+	// A copy, so a host's mutable set changed in place cannot change it unseen.
+	private var linkSchemes: Set<String> by mutableStateOf(DEFAULT_LINK_SCHEMES)
 
 	/** Whether [richTextStyles] was assigned, which is what opts typed text into the body style. */
 	internal var richTextStylesSet: Boolean = false

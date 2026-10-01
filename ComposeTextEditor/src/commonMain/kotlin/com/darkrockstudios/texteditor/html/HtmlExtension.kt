@@ -68,6 +68,7 @@ class HtmlExtension(
 			formats = formats,
 			styles = styles,
 			retiredStyles = editorState.retiredRichTextStyles,
+			allowedLinkSchemes = editorState.allowedLinkSchemes,
 		)
 	}
 
@@ -83,6 +84,7 @@ class HtmlExtension(
 			html = html,
 			styles = editorState.richTextStyles,
 			includeImages = provider != null,
+			allowedLinkSchemes = editorState.allowedLinkSchemes,
 		)
 		// One revision, so a concurrent export can't catch the document loaded but
 		// not yet styled.
@@ -162,7 +164,8 @@ internal fun headerLevelsOf(spans: Set<RichSpan>): Map<Int, Int> =
  * Writes [lines] as an HTML fragment, taking each line's block structure from
  * [blocks] by its [HtmlLine.docLine]. Shared by whole-document export and by the
  * clipboard, so a copied selection carries the same markup a save would. A span
- * carrying one of [retiredStyles]' styles writes as that style's markup.
+ * carrying one of [retiredStyles]' styles writes as that style's markup, and a link
+ * to a scheme outside [allowedLinkSchemes] as its text alone.
  */
 internal fun renderHtmlFragment(
 	lines: List<HtmlLine>,
@@ -171,6 +174,7 @@ internal fun renderHtmlFragment(
 	formats: Map<Int, ParagraphFormatSpanStyle>,
 	styles: RichTextStyles,
 	retiredStyles: List<RichTextStyles>,
+	allowedLinkSchemes: Set<String>,
 ): String {
 	val writer = HtmlWriter()
 	val containers = HtmlContainers(blocks, formats)
@@ -189,6 +193,7 @@ internal fun renderHtmlFragment(
 				links = line.links,
 				styles = styles,
 				retired = retired,
+				allowedLinkSchemes = allowedLinkSchemes,
 			),
 			inCodeFence = blocks.has(line.docLine, CodeFence),
 		)
@@ -262,6 +267,7 @@ private fun lineHtml(
 	links: List<HtmlLink>,
 	styles: RichTextStyles,
 	retired: RetiredStyles,
+	allowedLinkSchemes: Set<String>,
 ): String {
 	// Fenced lines are literal code: running them through `toHtml` would see the
 	// baked-in monospace as an inline code run and wrap every line in `<code>`.
@@ -287,8 +293,8 @@ private fun lineHtml(
 			" alt=\"${image.alt.escapeHtmlAttribute()}\">"
 
 		heading != null -> "<${heading.tag}${format.styleAttribute()}>" +
-			"${AnnotatedString(line.text).toHtml(styles, links)}</${heading.tag}>"
-		else -> line.toHtml(styles, links, retired)
+			"${AnnotatedString(line.text).toHtml(styles, links, allowedLinkSchemes = allowedLinkSchemes)}</${heading.tag}>"
+		else -> line.toHtml(styles, links, retired, allowedLinkSchemes)
 	}
 
 	return when {
