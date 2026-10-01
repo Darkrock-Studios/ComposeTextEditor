@@ -186,9 +186,9 @@ review.
 | D | Bindings, actions, menu | `input/KeyBindings.kt`, `input/EditorCommand.kt`, `input/BuiltinEditorActions.kt`, `contextmenu/` | 2.1, 2.2, 2.4, 2.5, 2.7 to 2.12, 4.8, 5.8, 7.58 |
 | E | Input sessions on desktop, iOS, web | `desktopMain`, `iosMain`, `wasmJsMain` under `input/` | 4.2 to 4.7, 4.10 to 4.12, 4.19, 4.21, 4.22, 4.24 to 4.26, 4.28, 4.29, 4.32, 4.33, 4.35, 7.37 |
 | F | Android input | `androidMain` | 0.4, 3.9 to 3.11, 3.14, 3.17, 4.16, 4.18, 4.20, 4.27, 4.30, 4.31, 4.34, 7.40 |
-| G | Edit pipeline and undo | `state/TextEditManager.kt`, `state/TextEditHistory.kt`, `state/EditBehavior.kt`, `input/ImeEditLogic.kt` | 1.20, 5.1 to 5.5, 5.9, 6.1 to 6.6, 6.14, 6.15, 6.17, 6.22, 6.23, 6.28, 6.29 |
-| H | Clipboard and HTML | `clipboard/`, `html/`, `dragdrop/` | 4.9, 4.13, 4.17, 6.7 to 6.13, 6.18 to 6.21, 6.24 to 6.27, 7.39, 7.46, 7.47, 7.49, 7.53, 7.63 |
-| I | Markdown and block model | `ComposeTextEditorMarkdown/`, `richstyle/`, `state/TextEditorStateBlockExt.kt` | 5.6, 7.14 to 7.16, 7.43, 7.45, 7.52 |
+| G | Edit pipeline and undo | `state/TextEditManager.kt`, `state/TextEditHistory.kt`, `state/EditBehavior.kt`, `input/ImeEditLogic.kt` | 1.20, 5.1 to 5.5, 5.9 to 5.11, 6.1 to 6.6, 6.14, 6.15, 6.17, 6.22, 6.23, 6.28, 6.29 |
+| H | Clipboard and HTML | `clipboard/`, `html/`, `dragdrop/` | 4.9, 4.13, 4.17, 6.7 to 6.13, 6.18 to 6.21, 5.12, 6.24 to 6.27, 6.30 to 6.32, 7.39, 7.46, 7.47, 7.49, 7.53, 7.63 |
+| I | Markdown and block model | `ComposeTextEditorMarkdown/`, `richstyle/`, `state/TextEditorStateBlockExt.kt` | 5.6, 7.14 to 7.16, 7.43, 7.45, 7.52, 7.64 |
 | J | Find addon | `ComposeTextEditorFind/` | 7.17 to 7.19, 7.26, 7.29, 7.42 |
 | K | Spell check addon | `ComposeTextEditorSpellCheck/` | 7.20 to 7.22, 7.28, 7.30, 7.31, 7.34, 7.35, 7.38, 7.44, 7.61 |
 | L | Tests and CI | test sources, `.github/workflows/` | 0.1 to 0.3, 0.5 to 0.10, 4.1, 4.15, 7.62 |
@@ -211,7 +211,7 @@ Limits on parallel work:
 | Do first | Before |
 | --- | --- |
 | 0.1 | Every caret item in lane A |
-| 1.1 | The break iterator part of 1.5, and turning on the 0.3 invariants Then 2026-09-30, after the 4.6 fix: Left and Right with a hardware keyboard step over each emoji sequence, flag, keycap and accented letter whole, once per press and once per held repeat. Left open only for the backspace rule over e + U+0301: decide whether iOS's whole-cluster delete is the intended behavior here, then tick |
+| 1.1 | The break iterator part of 1.5, and turning on the 0.3 invariants |
 | 4.1 | Trusting any iOS change |
 | 4.2 | 4.3, 4.5 to 4.7, 4.11, 4.12 |
 | 5.1 | 5.2 to 5.4, which can then run in parallel as separate behaviours |
@@ -1994,7 +1994,7 @@ iOS Safari; browser tests run in CI.
   (`html/HostLinkSchemesTest.kt`). A scheme that is not ASCII is refused, and
   the state keeps a copy of the set it is given. `rememberSaveableTextEditorState`
   does not save the set; markdown export still writes every link, as 6.16 left
-  it. The iOS clipboard and drag actuals take the set (Mac queue). Found: 6.30.
+  it. The iOS clipboard and drag actuals take the set (Mac queue). Found: 6.32.
 - [x] **6.26 Bold text at a heading's size copies out as a heading. S.** [Opus]
   [Lane H] HTML copy-out (`html/HtmlTag.kt`, `headerTag` and
   `uniformHeadingTag`) reads a run that is bold at a configured heading size
@@ -2051,14 +2051,6 @@ iOS Safari; browser tests run in CI.
   and a block's line too (`dragdrop/DropCaretAffinityTest.kt`). A hover is
   read on each pointer move only, so a scroll under a still drag leaves the
   drop caret where it was until the pointer moves.
-- [ ] **6.30 A link's look crosses into an editor that refuses its scheme. S.**
-  [Opus] [Lane H] On desktop a paste or drop between two editors in one process
-  takes the exact `AnnotatedString` flavor ahead of the markup, so a `myapp:`
-  link copied from an editor that allows the scheme arrives in one that does not
-  with the link style baked over its text but no link (the markup parse, which
-  reads the receiver's `allowedLinkSchemes`, adds none). Strip the link style
-  from runs the receiving parse does not confirm as links, or read the markup
-  when the copy came from another state.
 - [ ] **6.31 A heading's inline formatting is lost in HTML. S.** [Opus]
   [Lane H] `HtmlExtension.kt` `lineHtml` writes a heading block's line from
   `AnnotatedString(line.text)`, dropping every span to shed the baked heading
@@ -2085,6 +2077,14 @@ iOS Safari; browser tests run in CI.
   placing copied rich spans and HTML blocks at a stale position, or throwing
   when the lines are gone. Read the selection after the clipboard, or
   revalidate it, as 5.4's paste seam does for its own range.
+- [ ] **6.32 A link's look crosses into an editor that refuses its scheme. S.**
+  [Opus] [Lane H] On desktop a paste or drop between two editors in one process
+  takes the exact `AnnotatedString` flavor ahead of the markup, so a `myapp:`
+  link copied from an editor that allows the scheme arrives in one that does not
+  with the link style baked over its text but no link (the markup parse, which
+  reads the receiver's `allowedLinkSchemes`, adds none). Strip the link style
+  from runs the receiving parse does not confirm as links, or read the markup
+  when the copy came from another state.
 
 ## Phase 7: reach
 
