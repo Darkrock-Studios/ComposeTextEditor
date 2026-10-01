@@ -1,6 +1,8 @@
 package state
 
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.font.FontWeight
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.input.imeCommitText
@@ -326,5 +328,22 @@ class TextInputBehaviorTest {
 		state.undo()
 		assertEquals("ab", state.text())
 		assertFalse(state.canUndo)
+	}
+
+	@Test
+	fun `a behavior that only styles the text leaves the chain going`() {
+		val state = editor()
+		val second = Recorder()
+		state.editBehaviors += object : EditBehavior {
+			override fun onTextInput(state: TextEditorState, text: String, range: TextEditorRange): Boolean {
+				state.addStyleSpan(range, SpanStyle(fontWeight = FontWeight.Bold))
+				return false
+			}
+		}
+		state.editBehaviors += second
+
+		state.insertTypedString("a")
+
+		assertEquals(listOf("a" to range(0, 1)), second.landed)
 	}
 }

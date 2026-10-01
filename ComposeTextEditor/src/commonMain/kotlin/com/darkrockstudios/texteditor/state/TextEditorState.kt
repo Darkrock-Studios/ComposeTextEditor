@@ -680,8 +680,8 @@ class TextEditorState(
 
 	/**
 	 * Behaviors consulted before [insertNewlineAtCursor], [backspaceAtCursor] and
-	 * [deleteAtCursor], and told after typed text has landed ([insertTypedString]
-	 * and the IME's commits), in order; the first to claim an edit wins. Every
+	 * [deleteAtCursor], and told after typed text ([insertTypedString] and the IME's
+	 * commits) or a paste has landed, in order; the first to claim an edit wins. Every
 	 * input path reaches these, hardware keys and IME alike.
 	 *
 	 * Pre-loaded with [LineBlockEditBehavior] at index 0, which claims every
@@ -723,20 +723,40 @@ class TextEditorState(
 	/**
 	 * Tells the behaviors that typed [text] has landed at [range], after the
 	 * default edit and any IME caret placement, so a behavior edits on top of the
-	 * finished insert and owns the caret from there. The IME is asked to resync
-	 * only when a behavior changed the document or moved the caret: the edit it
-	 * expected has already happened, so a claim alone leaves its mirror right.
+	 * finished insert and owns the caret from there.
 	 */
 	internal fun textInputLanded(text: String, range: TextEditorRange) {
 		// A lone line break is the Enter key, which has its own hook; the one that
 		// lands here raw (an IME committing "\n" over its composition) is a
 		// replacement of the composition, not typed text.
 		if (text.isEmpty() || text == "\n") return
+		offerLanded(range) { it.onTextInput(this, text, range) }
+	}
+
+	/** Tells the behaviors that pasted [text] has landed at [range], once the paste has committed. */
+	internal fun pasteLanded(text: String, range: TextEditorRange) {
+		if (text.isEmpty()) return
+		offerLanded(range) { it.onPaste(this, text, range) }
+	}
+
+	/**
+	 * Offers text that landed at [range] to the behaviors through [hook]. A behavior
+	 * that changes the text there ends the chain, claimed or not, since [range] no
+	 * longer holds; one that only styles it (a link) leaves it to the next. The IME
+	 * is asked to resync only when a behavior changed the document or moved the
+	 * caret: the edit it expected has already happened, so a claim alone leaves its
+	 * mirror right.
+	 */
+	private fun offerLanded(range: TextEditorRange, hook: (EditBehavior) -> Boolean) {
 		// The working content, so an edit inside a host's open transaction counts.
 		val contentBefore = workingContent
 		val caretBefore = cursorPosition
-		// An edit ends the chain, claimed or not: the range no longer holds.
-		runBehaviors { it.onTextInput(this, text, range) || workingContent !== contentBefore }
+		val lineCount = textLines.size
+		val lines = range.start.line..range.end.line
+		val textBefore = lines.map { textLines[it].text }
+		fun rangeChanged() =
+			textLines.size != lineCount || lines.any { textLines[it].text != textBefore[it - range.start.line] }
+		runBehaviors { hook(it) || rangeChanged() }
 		if (workingContent !== contentBefore || cursorPosition != caretBefore) requestImeResync()
 	}
 

@@ -1608,9 +1608,29 @@ iOS Safari; browser tests run in CI.
   it. It belongs in `ComposeTextEditorMarkdown` (7.52), as an opt-in
   `EditBehavior` on the 5.1 hook that the markdown demo installs, with
   examples there.
-- [ ] **5.4 Auto-link** [Opus] [Lane G] typed and pasted URLs. Decided: opt-in,
+- [x] **5.4 Auto-link** [Opus] [Lane G] typed and pasted URLs. Decided: opt-in,
   off by default. Paste does not go through the 5.1 hook, so the pasted half
   needs its own seam.
+  Done: `behaviors/AutoLink(typed, pasted)`, installed with
+  `editBehaviors.add(0, AutoLink())` so it runs ahead of the line block
+  behavior on Enter. A typed URL links when whitespace, Enter, or a closing
+  bracket the URL did not open follows it; a paste links every URL it holds.
+  URLs start with `http://`, `https://`, `ftp://` or `mailto:`, or `www.`
+  (linked as `https://`), and email addresses link as `mailto:`; bare domains
+  do not. Trailing punctuation and unbalanced closing brackets are left out
+  (Word, Google Docs, GitHub). `sanitizeLinkUrl` gates the destination and
+  `setLink` makes the link, its own undo step after the text, so one undo
+  takes the link off and keeps the text; Enter's link shares the Enter's step
+  (5.11). Code and existing links are left alone; a paste is judged out to the
+  runs it joins. The paste seam is `EditBehavior.onPaste(state, text, range)`,
+  offered by both paste actions in `input/BuiltinEditorActions.kt` through
+  `TextEditorState.pasteLanded` once the paste has committed. A behavior that
+  only styles the landed text (a link) no longer ends the hook's chain; one
+  that changes the text still does, so auto-link and smart punctuation act on
+  one commit (`AutoLinkTest`, `AutoLinkE2eTest`,
+  `WriterBehaviorsImeTest`, `WriterBehaviorsInputConnectionTest`). Design in
+  `docs/design/behaviors.md`. The sample's rich text demo has a switch for
+  typed and for pasted URLs.
 - [x] **5.5 Enter after a heading. S.** [Opus] [Lane G] `LineBlockEditBehavior`
   continues any line block, headings included, so the line after a chapter
   title is another heading. It should be body text. Done: Enter at a heading's
@@ -1680,6 +1700,33 @@ iOS Safari; browser tests run in CI.
   Offering it there means a behavior may edit while the pointer is placing
   the caret, so decide who owns the caret first. Touches lane B's pointer
   handling and lane F's connection; do it when both are idle.
+- [ ] **5.10 Text typed at a link's end joins the link. R.** [Opus] [Lane G]
+  Typing right after a link (`setLink`, a pasted or auto-made one) takes its
+  link style and grows its `LinkSpanStyle` over the new text, and after Enter
+  at the link's end the next line's text takes the link style without being
+  a link (probed in a scratch test: the style and `linkAt` both carry on).
+  Word, Google Docs and TextEdit end a link at its last character: text typed
+  after it is plain and outside it. Leave the link and its style out of the
+  typing style at a link's end, on the same line and across a line break, and
+  stop the span growing; a caret inside a link keeps both. Shows with 5.4: a
+  pasted URL ends at the caret, so text typed straight after the paste joins
+  the link, and after Enter following a typed URL the next line looks linked.
+  The span's growth is the re-anchoring in `RichSpanManager`, lane G's.
+- [ ] **5.11 An auto-link made by Enter undoes with the line break. S.** [Opus]
+  [Lane G] `AutoLink` links the URL before the caret in `onNewline`, which runs
+  inside `insertTypedNewline`'s undo group, so one undo takes back the line
+  break and the link together, keeping the URL; after a space it takes back
+  only the link, as Word does after either. A hook told once a typed line break
+  has landed (after the group, as `onTextInput` is) would give Enter the same
+  shape, and would free the behavior from running ahead of
+  `LineBlockEditBehavior`.
+- [ ] **5.12 A drop is not offered to `onPaste`. S.** [Opus] [Lane H] Text
+  dropped into the editor (`dragdrop/TextDragAndDrop.kt`, `dropText`) lands
+  without telling the behaviors, so `AutoLink(pasted = true)` leaves a dropped
+  URL plain, where Word and Google Docs link it. Offer a drop through
+  `TextEditorState.pasteLanded` once it has committed, as the paste actions do.
+  A host replacing the paste actions has no way to offer its paste either,
+  since `pasteLanded` is internal; make it public if a host asks.
 
 ## Phase 6: undo and clipboard fidelity
 
@@ -1972,6 +2019,15 @@ iOS Safari; browser tests run in CI.
   plain flavor (`e2e/PlainPasteE2eTest.kt`). The iOS actual compiled and
   pasted in the simulator 2026-09-30: iOS's edit-menu Paste reads through it,
   and text on the general pasteboard pasted as is, 200k characters included.
+- [ ] **6.30 Paste reads the selection before it awaits the clipboard. C.**
+  [Opus] [Lane H] `pasteClipboard` (`input/BuiltinEditorActions.kt`) takes the
+  selection and the insert position, then suspends on
+  `readHtmlPasteDocument` and `ClipboardHelper.readCopyId` before it edits.
+  On the web the async clipboard can take a while (a permission prompt), and
+  a click or edit in between leaves the paste replacing a stale selection and
+  placing copied rich spans and HTML blocks at a stale position, or throwing
+  when the lines are gone. Read the selection after the clipboard, or
+  revalidate it, as 5.4's paste seam does for its own range.
 
 ## Phase 7: reach
 

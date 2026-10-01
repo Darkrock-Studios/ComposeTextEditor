@@ -7,7 +7,10 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.input.CommitTextCommand
 import androidx.compose.ui.text.input.ImeOptions
 import androidx.compose.ui.text.input.SetComposingTextCommand
+import com.darkrockstudios.texteditor.behaviors.AutoLink
 import com.darkrockstudios.texteditor.behaviors.SmartPunctuation
+import com.darkrockstudios.texteditor.state.linkAt
+import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.input.SkikoTextEditorInputMethodRequest
 import com.darkrockstudios.texteditor.state.TextEditorState
 import io.mockk.mockk
@@ -68,5 +71,36 @@ class WriterBehaviorsImeTest {
 		request.onEditCommand(listOf(SetComposingTextCommand("\"hi", 1), CommitTextCommand("\"hi\"", 1)))
 
 		assertEquals("\u201Chi\u201D", text())
+	}
+
+	@Test
+	fun `a committed URL links when the keyboard commits a space`() {
+		state.editBehaviors.add(0, AutoLink())
+
+		request.editText { setComposingText("www.example.com", 1) }
+		request.editText { commitText("www.example.com", 1) }
+		request.editText { commitText(" ", 1) }
+
+		assertEquals("https://www.example.com", state.linkAt(CharLineOffset(0, 0)))
+	}
+
+	@Test
+	fun `web edit commands reach the auto-link`() {
+		state.editBehaviors.add(0, AutoLink())
+
+		request.onEditCommand(listOf(CommitTextCommand("https://example.com ", 1)))
+
+		assertEquals("https://example.com", state.linkAt(CharLineOffset(0, 0)))
+	}
+
+	@Test
+	fun `an IME line break links the URL before it`() {
+		state.editBehaviors.add(0, AutoLink())
+
+		request.editText { commitText("https://example.com", 1) }
+		request.editText { commitText("\n", 1) }
+
+		assertEquals("https://example.com\n", text())
+		assertEquals("https://example.com", state.linkAt(CharLineOffset(0, 0)))
 	}
 }

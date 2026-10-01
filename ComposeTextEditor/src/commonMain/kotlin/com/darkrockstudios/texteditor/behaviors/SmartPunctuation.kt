@@ -65,7 +65,7 @@ data class SmartPunctuation(
 
 	override fun onTextInput(state: TextEditorState, text: String, range: TextEditorRange): Boolean {
 		if (text.none { it in TRIGGERS || it.isDigit() }) return false
-		val codeStyles = (state.retiredRichTextStyles + state.richTextStyles).mapTo(mutableSetOf()) { it.codeStyle }
+		val codeStyles = state.codeStyles()
 		val results = (range.start.line..range.end.line).map { lineRewrites(state, it, range, codeStyles) }
 		val rewrites = results.asReversed().flatMap { it.rewrites }
 		if (rewrites.isEmpty()) return false

@@ -291,7 +291,8 @@ character, without ever producing a key event. Line-block smart editing is the
 first behavior, which is what makes it reach every input path rather than only
 the ones that go through key handling; the typed-text hook sees what every
 path commits (never an IME's composing updates) and is what smart punctuation,
-markdown as you type, and auto-link build on. Both, and the reasoning for
+markdown as you type, and auto-link build on; a paste hook is told where a paste
+landed, for auto-link's pasted half. Both, and the reasoning for
 keeping them separate: [design/editor-actions.md](design/editor-actions.md).
 
 The IME contract runs in two directions. Commands flow in, and each one lands

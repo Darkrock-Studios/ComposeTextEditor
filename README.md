@@ -73,7 +73,8 @@ the [API reference & recipes](https://darkrock-studios.github.io/ComposeTextEdit
   and maximum lines, single line, maximum length and input filters. No soft-wrap
   toggle yet.
 - Opt-in writer conveniences: smart punctuation (curly quotes and apostrophes, em
-  and en dashes, ellipses), each substitution switchable and undone in one step
+  and en dashes, ellipses), each substitution switchable, and auto-linking of typed
+  and pasted URLs, each undone in one step
   ([docs/design/behaviors.md](docs/design/behaviors.md)).
 
 #### Platforms

@@ -1,10 +1,11 @@
 # Writer conveniences
 
 The opt-in `EditBehavior`s core ships for prose: smart punctuation (roadmap
-5.2). They live in the `behaviors` package, are off by default, and a host turns
-one on by adding it to `TextEditorState.editBehaviors`. Each builds on the
-typed-text hook, `EditBehavior.onTextInput`, described in
-[editor-actions.md](editor-actions.md), "Edit behaviors".
+5.2) and auto-link (5.4). They live in the `behaviors` package, are off by
+default, and a host turns one on by adding it to `TextEditorState.editBehaviors`.
+Each builds on the typed-text hook, `EditBehavior.onTextInput`, described in
+[editor-actions.md](editor-actions.md), "Edit behaviors"; auto-link also uses
+`onNewline` and the paste hook, `onPaste`.
 
 ## Shared rules
 
@@ -82,3 +83,63 @@ quote it just made, but the two disagree in places (the spaced hyphen, three
 hyphens), so leave `SmartPunctuation` off on iOS unless the keyboard's is off.
 Whether the keyboard's converted characters reach the editor is the Mac queue's
 5.2 row.
+
+## Auto-link
+
+```kotlin
+// Ahead of LineBlockEditBehavior, so Enter on a list item or quote links too.
+state.editBehaviors.add(0, AutoLink())
+state.editBehaviors.add(0, AutoLink(pasted = false)) // typed URLs only
+```
+
+`typed` links a URL once it is complete: when a space (or any whitespace)
+is typed after it, when Enter is pressed after it, or when a closing bracket
+is typed that cannot belong to it (`(see https://example.com)` links at the
+`)`). `pasted` links a paste that is a URL, and every URL in pasted text,
+once the paste lands; both paste actions, Paste and Paste as Plain Text, are
+offered, so every platform's paste is. A paste is judged out to the runs of
+text it joins, so a URL pasted against `/docs/intro` links whole, and one
+pasted into the middle of a word is not a URL at all. A host that registers its
+own paste action, or a drop, offers nothing (roadmap 5.12).
+
+What counts as a URL, and where it ends:
+
+- A run starting with `http://`, `https://` or `ftp://` (any case) with a
+  letter or digit after the scheme, or `mailto:` and an address. A run
+  starting with `www.` and a host with a dot links as `https://`. An email
+  address (`me@example.com`) links as `mailto:`. A bare domain
+  (`example.com`) is not linked: Word does not either, and it would catch
+  file names and abbreviations.
+- Trailing punctuation is left out (`.`, `,`, `;`, `:`, `!`, `?`, straight and
+  curly quotes, the emphasis marks `*` and `_`), and so is a closing bracket the
+  URL did not open, so
+  `(https://example.com).` links the address alone while
+  `https://en.wikipedia.org/wiki/Foo_(bar)` keeps its parenthesis. Leading
+  brackets, quotes and emphasis marks are left out too. This is what Word,
+  Google Docs and GitHub do. A `mailto:` link may carry a query
+  (`?subject=`).
+- Only a destination `sanitizeLinkUrl` allows is linked (the allowlist every
+  importer applies), so extending the allowlist extends auto-link.
+
+The link is `setLink`'s: the state's link style and a `LinkSpanStyle`. A typed
+or pasted link is its own undo step after the text, so one undo takes the link
+off and keeps the text, as in Word. A link made by Enter shares the Enter's
+step, since `onNewline` runs before the line break inside the same undo group:
+one undo takes back both the line break and the link, keeping the URL (roadmap
+5.11). Text already linked (a rich paste's links), inline code and code blocks
+are left alone; nothing to link makes no undo step.
+
+A link only styles the text, so the behavior never claims the input: the chain
+goes on to the next behavior, and with `SmartPunctuation` installed after it a
+committed `"see www.example.com" ` comes out with curly quotes and the link.
+
+Typed URLs reach the behavior the same way on every input path: a keyboard
+that composes the URL as one word and commits it, then commits the space, is
+the space trigger; one that commits `"https://example.com "` whole is too.
+
+Text typed at a link's end joins the link, and after Enter it takes the link's
+style (roadmap 5.10). That is the editor's typing style, not this behavior's,
+but a pasted URL ends at the caret, so text typed straight after the paste joins
+the link until 5.10 is fixed; a typed URL is linked only once a space or
+bracket follows it, so it is not affected.
+

@@ -20,6 +20,7 @@ import com.darkrockstudios.texteditor.richstyle.unnestListItems
 import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.applyStyleForEditAt
 import com.darkrockstudios.texteditor.state.clearFormatting
+import com.darkrockstudios.texteditor.state.endWhenInsertedAt
 import com.darkrockstudios.texteditor.state.linksAtSelection
 import com.darkrockstudios.texteditor.state.unlink
 import com.darkrockstudios.texteditor.state.insertTypedNewline
@@ -207,7 +208,10 @@ private fun EditorActionContext.pasteClipboard(plainText: Boolean) {
 			val htmlDocument = if (plainText) null else state.readHtmlPasteDocument(clipboard, text)
 			val clipboardCopyId = if (plainText) null else ClipboardHelper.readCopyId(clipboard)
 			state.preserveCopiedRichSpansThroughNextEdit()
+			var pastedAt = insertPosition
 			state.withAtomicEdit {
+				// Where the text lands now: the caret may have moved while the clipboard was read.
+				pastedAt = curSelection?.start ?: state.cursorPosition
 				if (curSelection != null) {
 					state.replace(curSelection, state.applyStyleForEditAt(curSelection.start, text))
 				} else {
@@ -224,6 +228,7 @@ private fun EditorActionContext.pasteClipboard(plainText: Boolean) {
 				if (!screened) htmlDocument?.let { state.applyHtmlPasteBlocks(it, insertPosition, text) }
 			}
 			state.selector.clearSelection()
+			state.pasteLanded(text.text, TextEditorRange(pastedAt, text.endWhenInsertedAt(pastedAt)))
 		}
 	}
 }

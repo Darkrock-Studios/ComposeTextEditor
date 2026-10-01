@@ -2,7 +2,10 @@ package input
 
 import android.view.View
 import androidx.compose.ui.text.AnnotatedString
+import com.darkrockstudios.texteditor.CharLineOffset
+import com.darkrockstudios.texteditor.behaviors.AutoLink
 import com.darkrockstudios.texteditor.behaviors.SmartPunctuation
+import com.darkrockstudios.texteditor.state.linkAt
 import com.darkrockstudios.texteditor.input.TextEditorInputConnection
 import com.darkrockstudios.texteditor.state.TextEditorState
 import io.mockk.mockk
@@ -45,5 +48,20 @@ class WriterBehaviorsInputConnectionTest {
 		connection.endBatchEdit()
 
 		assertEquals("\u201Cwait\u2026\u201D", text())
+	}
+
+	@Test
+	fun `a committed URL links on the space, and on Enter`() {
+		state.editBehaviors.add(0, AutoLink())
+
+		connection.setComposingText("https://a.com", 1)
+		connection.commitText("https://a.com", 1)
+		connection.commitText(" ", 1)
+		connection.commitText("www.b.org", 1)
+		connection.commitText("\n", 1)
+
+		assertEquals("https://a.com www.b.org\n", text())
+		assertEquals("https://a.com", state.linkAt(CharLineOffset(0, 0)))
+		assertEquals("https://www.b.org", state.linkAt(CharLineOffset(0, 14)))
 	}
 }

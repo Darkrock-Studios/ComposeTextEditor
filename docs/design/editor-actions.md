@@ -276,6 +276,7 @@ interface EditBehavior {
     fun onBackspace(state: TextEditorState): Boolean = false
     fun onDeleteForward(state: TextEditorState): Boolean = false
     fun onTextInput(state: TextEditorState, text: String, range: TextEditorRange): Boolean = false
+    fun onPaste(state: TextEditorState, text: String, range: TextEditorRange): Boolean = false
 }
 ```
 
@@ -292,8 +293,11 @@ whole word a soft keyboard or a candidate window commits, in place of what
 it was composing, or a composition it finishes as it stands), a dictated
 phrase through the accessibility `insertTextAtCursor`, and a host's own
 `insertTypedString`. It never sees an IME's composing updates, which are not
-committed text, and it never sees a paste, which is not typing (an auto-link
-over pasted URLs needs its own seam). A lone typed line break is the Enter
+committed text, and it never sees a paste, which is not typing. A paste goes to
+`onPaste` instead, told where the pasted text landed once the paste (both paste
+actions, so every platform's paste) has committed as its own undo step; an edit
+there is a step of its own, as on the typed-text hook. A host that registers its
+own paste action replaces that offer along with the paste. A lone typed line break is the Enter
 key and goes to `onNewline`, never to `onTextInput`; the one exception is an
 IME committing `"\n"` over its own composition, which is a replacement of
 the composition and reaches neither hook (see `ImeLineBlockParityTest`).
@@ -307,11 +311,12 @@ resync when it moves the text or the caret. It also gives the undo shape
 native editors have for free: the typed text is its own step, the behavior's
 replacement the next, so one undo of an em dash gives back the two hyphens.
 Several edits go in one `editGroup` to be one step. The chain is skipped for
-edits a behavior makes while handling one, and a behavior that edits ends
-the chain whether or not it claims, since the range it was told no longer
-holds. Smart punctuation, markdown as you type, and auto-link are opt-in
+edits a behavior makes while handling one, and a behavior that changes the
+text ends the chain whether or not it claims, since the range it was told no
+longer holds; one that only styles it (auto-link's link) leaves the chain
+going, so auto-link and smart punctuation both act on one commit. Smart punctuation, markdown as you type, and auto-link are opt-in
 behaviors on this hook; `TextInputBehaviorTest` shows the shape. The ones core
-ships (`SmartPunctuation`) are described in [behaviors.md](behaviors.md).
+ships (`SmartPunctuation`, `AutoLink`) are described in [behaviors.md](behaviors.md).
 
 The chain is consulted inside the public semantic functions, so every caller
 gets it:
@@ -478,11 +483,10 @@ primitives stay `internal`.
 - Tab cannot nest a list item, since the block model has no nesting (roadmap
   5.6). A code-editor indent (to the next tab stop, or matching the line above)
   is a host's own `editor.indent`.
-- Behaviors see typed text, newline, backspace and forward delete. A paste
-  is not offered to `onTextInput`; the pasted-URL half of auto-link needs a
-  paste seam of its own. Nor is a typed composition the editor ends itself
-  (a tap outside it, focus loss), only one the IME commits or finishes
-  (roadmap 5.9).
+- Behaviors see typed text, pastes, newline, backspace and forward delete. A
+  drop is not offered to `onPaste`. Nor is a typed composition the editor ends
+  itself (a tap outside it, focus loss) offered to `onTextInput`, only one the
+  IME commits or finishes (roadmap 5.9).
 - The IME routing is unverified on real hardware. See "Device verification
   still owed" above; that list should be worked through before a release ships
   this.
