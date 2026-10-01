@@ -1584,7 +1584,7 @@ iOS Safari; browser tests run in CI.
   scroll that follows the caret lands after the send; resending then is 3.10.
   A stylus or floating keyboard pass is a person's (QA plan, "Android
   keyboards").
-- [ ] **4.32 Keyboard settings on iOS and the web. C.** [Opus] [Lane E]
+- [x] **4.32 Keyboard settings on iOS and the web. C.** [Opus] [Lane E]
   [Mac work] 3.11 added `TextEditorState.keyboardSettings`, which only Android
   honours. `TextEditorTextInputService.ios.kt` passes fixed `ImeOptions` and
   web passes `ImeOptions.Default`; both should build them from the settings
@@ -1596,6 +1596,21 @@ iOS Safari; browser tests run in CI.
   (`TextEditorState.isSingleLine`) asks for `singleLine = true` and its action
   key from `TextEditorState.effectiveImeAction()` (Done by default); a
   hardware Enter already presses it on every platform.
+  Done. `TextEditorState.skikoImeOptions()` builds the options from the
+  settings, the single-line flag and the action key; iOS and the web pass it
+  to `startSkikoInputSession`, which reads it as snapshot state and starts the
+  input method again when it changes (`collectLatest`), calling a per-run hook
+  the web uses to adopt each new text area and set its `autocapitalize` from
+  the capitalisation. The request's `onImeAction` runs `performImeAction` for
+  any action that does not start a line; iOS calls it for Return in a single
+  line or under an action key, and Compose's web text area never calls it, so
+  a web Enter stays with the key handler. Desktop keeps `ImeOptions.Default`.
+  A single line on the web now gets an `<input>` rather than a `<textarea>`,
+  as Compose maps it. `SkikoKeyboardSettingsTest`; on the iOS simulator,
+  turning Single line on with the keyboard up turns Return into Done, and
+  Done closes the keyboard without a line break. Left: on iOS a settings
+  change raises a keyboard the user had dismissed, as the restart makes the
+  input view first responder again; the web half wants a phone pass with 4.11.
 - [x] **4.31 Android's cursor anchor misses a view that moves alone. C.**
   [Opus] [Lane F] The anchor is resent when the caret moves in the view
   (3.10), but a view that moves on screen with nothing in the editor changing

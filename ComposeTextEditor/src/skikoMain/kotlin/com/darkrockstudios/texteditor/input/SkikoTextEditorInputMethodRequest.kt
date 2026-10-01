@@ -21,15 +21,36 @@ import androidx.compose.ui.text.input.TextFieldValue
 import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.precedingGraphemeBoundary
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import androidx.compose.ui.text.input.TextEditorState as ComposeTextEditorState
 
 /**
+ * The keyboard options iOS and the web ask for: the editor's [KeyboardSettings], with a
+ * single line asking for single-line text and its action key (Done by default), as
+ * Android's `EditorInfo` does.
+ */
+internal fun TextEditorState.skikoImeOptions(): ImeOptions {
+	val settings = keyboardSettings
+	return ImeOptions(
+		singleLine = isSingleLine,
+		capitalization = settings.capitalization,
+		autoCorrect = settings.autoCorrect,
+		keyboardType = settings.keyboardType,
+		imeAction = effectiveImeAction(),
+	)
+}
+
+/**
  * Starts a Compose skiko input-method session bound to this editor. A platform's
- * `TextEditorTextInputService` hands it that platform's [imeOptions], whether the
+ * `TextEditorTextInputService` hands it that platform's [imeOptions], read as snapshot
+ * state: when they change, the input method starts again with the new ones, as Android
+ * restarts its input for new settings, calling [onRun] with them for each run. It also
+ * hands whether the
  * platform needs a text layout to hit-test ([exposeTextLayout]), whether it acts on a
  * hardware key itself as well ([echoesKeys]), and [imeResync]; every
  * edit the platform delivers lands in [ImeEditLogic] through
@@ -48,13 +69,31 @@ import androidx.compose.ui.text.input.TextEditorState as ComposeTextEditorState
  */
 internal suspend fun TextEditorState.startSkikoInputSession(
 	session: PlatformTextInputSession,
-	imeOptions: ImeOptions,
+	imeOptions: () -> ImeOptions,
 	exposeTextLayout: Boolean = false,
 	echoesKeys: Boolean = false,
 	imeResync: SkikoImeResync = SkikoImeResync.None,
+	onRun: CoroutineScope.(ImeOptions) -> Unit = {},
+): Nothing = coroutineScope {
+	snapshotFlow(imeOptions).collectLatest { options ->
+		coroutineScope {
+			onRun(options)
+			runSkikoInputMethod(session, options, exposeTextLayout, echoesKeys, imeResync)
+		}
+	}
+	throw CancellationException("The keyboard options stopped")
+}
+
+/** One run of the platform's input method with [imeOptions]; see [startSkikoInputSession]. */
+private suspend fun TextEditorState.runSkikoInputMethod(
+	session: PlatformTextInputSession,
+	imeOptions: ImeOptions,
+	exposeTextLayout: Boolean,
+	echoesKeys: Boolean,
+	imeResync: SkikoImeResync,
 ): Nothing = coroutineScope {
 	val request = SkikoTextEditorInputMethodRequest(
-		this@startSkikoInputSession,
+		this@runSkikoInputMethod,
 		imeOptions,
 		exposeTextLayout,
 		echoesKeys,
@@ -154,7 +193,13 @@ internal class SkikoTextEditorInputMethodRequest(
 		commands.forEach { editorState.applyImeEditCommand(it) }
 	}
 
-	override val onImeAction: ((ImeAction) -> Unit)? = null
+	/**
+	 * The keyboard's action key, or Return in a single line: iOS calls this rather than
+	 * typing a line break. An action that starts a line is not one to run.
+	 */
+	override val onImeAction: ((ImeAction) -> Unit)? = { action ->
+		if (!action.startsLine) editorState.performImeAction(action)
+	}
 
 	private val documentLayout = if (exposeTextLayout) DocumentTextLayout(editorState) else null
 
