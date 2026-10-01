@@ -3008,13 +3008,29 @@ iOS Safari; browser tests run in CI (met: the `browser` job, 4.15).
   view (`LocalUIView`), whose drop interaction is hit first and whose
   gesture handling exempts only its own long press. Either way, the long
   press inside the selection that lifts a drag must agree with the edit menu.
-- [ ] **6.42 A finger drag shows no picture of the text. S.** [Opus] [Lane H]
+- [x] **6.42 A finger drag shows no picture of the text. S.** [Opus] [Lane H]
   The drag's decoration is 1 by 1 pixel, which suits desktop, where the
   platform's cursor shows the drag. On Android nothing follows the finger but
   the drop caret under it. `TextView` shows the text (up to 20 characters) in
   a bubble above the finger; Compose's `ComposeDragShadowBuilder` centres the
   decoration on the finger, so a picture has to sit within its size to show
   above it. Draw the dragged text where a finger started the drag.
+  Done: `TextView`'s drag shadow (AOSP `Editor.getTextThumbnailBuilder`) is
+  the text cut through the cluster at its 21st character, no ellipsis, at
+  `TextAppearance.Large` in the field's text colours with its spans, on
+  nothing, and centred on the finger (the default `DragShadowBuilder`), not
+  above it; the emulator shows the same. A drag a finger starts
+  (`SelectionDrag.start`'s `byFinger`) now draws that
+  (`dragdrop/FingerDragPicture.kt`): the cut text in its span styles (a
+  heading's size included) over the editor's text style at 22 sp, in the
+  editor's text colour, unwrapped and centred, without blocks' indents and
+  line heights, as the decoration, which Compose centres on the finger as
+  `TextView`'s is. Mouse drags keep the 1 pixel decoration, an external
+  mouse on Android too, where `TextView` shows its picture for any pointer
+  (`FingerDragPictureTest`). On the API 36 emulator,
+  beside an `EditText` holding the same text, a long press inside a selected
+  26 letter word and a drag showed "abcdefghijklmnopqrstu" centred on the
+  finger in both, the editor's with its bold red run.
 - [x] **6.43 A word pasted or dropped back in lands larger. S.** [Opus]
   [Lane H] In the Android sample's rich text editor, copying "world" from
   the first paragraph and pasting it with Ctrl+V a few words on, or dragging

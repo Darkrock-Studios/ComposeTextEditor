@@ -926,7 +926,7 @@ private fun Modifier.handleTouchInteractions(
 							touchToolbar == null -> onContextMenuRequest?.invoke(downAt)
 							!touchToolbar.isNative -> touchToolbar.showMenuAt(downAt)
 							touchToolbar.isShown && state.selectionContains(downAt) &&
-									selectionDrag?.start(down.position) == true -> touchToolbar.hide()
+									selectionDrag?.start(down.position, byFinger = true) == true -> touchToolbar.hide()
 							else -> showToolbarOnRelease = true
 						}
 					} else {

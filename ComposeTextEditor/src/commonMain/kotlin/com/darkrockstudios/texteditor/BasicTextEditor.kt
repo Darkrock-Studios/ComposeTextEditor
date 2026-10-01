@@ -423,6 +423,7 @@ fun BasicTextEditor(
 				}
 				val dragAndDrop = remember(state) { TextDragAndDrop(state, inputRequester::editor) }
 				dragAndDrop.enabled = editable
+				dragAndDrop.textColor = style.textColor
 				// The canvas: a box, so the handles' popups are placed from its content.
 				Box(
 					modifier = Modifier

@@ -37,9 +37,10 @@ import kotlin.random.Random
 internal interface SelectionDrag {
 	/**
 	 * Starts a platform drag of the selection, [offset] being where the pointer is in the
-	 * canvas node. False where none started, so the press selects instead.
+	 * canvas node; a drag a finger starts ([byFinger]) shows a picture of the text. False
+	 * where none started, so the press selects instead.
 	 */
-	fun start(offset: Offset): Boolean
+	fun start(offset: Offset, byFinger: Boolean = false): Boolean
 
 	/**
 	 * A press inside the selection is held. Where the platform starts drags itself (the
@@ -92,6 +93,9 @@ internal class TextDragAndDrop(
 	/** Whether drops edit this editor; a read-only one only lets its text be dragged out as a copy. */
 	var enabled: Boolean = true
 
+	/** The editor's text colour, which a finger drag's picture of the text is drawn in. */
+	var textColor: Color = Color.Unspecified
+
 	/**
 	 * Where a drag over the editor would drop, drawn as a caret while it hovers, with the
 	 * row it is drawn on: past a wrapped row's end, that row's end rather than the next
@@ -117,17 +121,22 @@ internal class TextDragAndDrop(
 	/** Whether [start] is asking the platform for a drag. */
 	private var requesting = false
 
+	/** Whether the drag [start] asks for is a finger's. */
+	private var byFinger = false
+
 	internal var requestTransfer: ((Offset) -> Unit)? = null
 
-	override fun start(offset: Offset): Boolean {
+	override fun start(offset: Offset, byFinger: Boolean): Boolean {
 		val request = requestTransfer?.takeIf { dragsText } ?: return false
 		// The platforms that take a request (desktop, Android) start the drag inside it.
 		started = false
 		requesting = true
+		this.byFinger = byFinger
 		try {
 			request(offset)
 		} finally {
 			requesting = false
+			this.byFinger = false
 		}
 		return started
 	}
@@ -158,10 +167,11 @@ internal class TextDragAndDrop(
 		val rich = data(state.selectionAsHtml(selection)) ?: return
 		val drag = OutgoingDrag(id, selection, text)
 		outgoing = drag
+		val picture = (if (byFinger) state.dragPicture(text, textColor) else null) ?: POINTER_PICTURE
 		// A drag too large to carry its markup to another process (Android's binder
 		// limit) still drags its text.
-		started = scope.startDragAndDropTransfer(rich, DECORATION_SIZE) {} ||
-				data(null)?.let { scope.startDragAndDropTransfer(it, DECORATION_SIZE) {} } == true
+		started = scope.startDragAndDropTransfer(rich, picture.size, picture.draw) ||
+				data(null)?.let { scope.startDragAndDropTransfer(it, picture.size, picture.draw) } == true
 		if (!started && outgoing === drag) outgoing = null
 	}
 
@@ -255,8 +265,8 @@ internal class TextDragAndDrop(
 	}
 
 	private companion object {
-		/** The drag shows the platform's cursor, not a picture of the text. */
-		val DECORATION_SIZE = Size(1f, 1f)
+		/** A pointer's drag shows the platform's cursor, not a picture of the text. */
+		val POINTER_PICTURE = DragPicture(Size(1f, 1f)) {}
 	}
 }
 
