@@ -21,8 +21,10 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.EditorLineLimits
 import com.darkrockstudios.texteditor.TextEditor
+import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.RichTextStyles
 import com.darkrockstudios.texteditor.behaviors.AutoLink
 import com.darkrockstudios.texteditor.behaviors.SmartPunctuation
@@ -79,12 +81,12 @@ fun TextEditorDemoUi(
 			rememberSaveableTextEditorState(richSpanStyleSaver = imageSaver)
 		}
 	}
-	// The plain rich text demo is a rich text editor with nothing installed, its
-	// default styles included; the others are markdown editors with the theme's.
+	// Every demo takes the theme's styles; the plain rich text demo is a rich text editor
+	// with nothing installed, and the others are markdown editors.
+	remember(state, styles) { state.richTextStyles = styles }
 	val markdownExtension = if (demoContent == DemoContent.Rich) {
 		null
 	} else {
-		remember(state, styles) { state.richTextStyles = styles }
 		remember(state, imageProvider) { state.withMarkdown(imageProvider = imageProvider) }
 	}
 
@@ -99,10 +101,11 @@ fun TextEditorDemoUi(
 	LaunchedEffect(Unit) {
 		if (demoContent == DemoContent.Rich) {
 			//state.selector.updateSelection(CharLineOffset(0, 10), CharLineOffset(0, 20))
-			state.addRichSpan(6, 11, HIGHLIGHT)
+			state.addStyleSpan(
+				TextEditorRange(CharLineOffset(0, 6), CharLineOffset(0, 11)),
+				state.richTextStyles.highlightStyle,
+			)
 			state.addRichSpan(16, 31, SpellCheckStyle)
-
-			//state.addRichSpan(30, 35, HIGHLIGHT)
 		}
 
 		state.editOperations.collect { operation ->

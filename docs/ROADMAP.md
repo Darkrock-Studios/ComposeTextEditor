@@ -3482,17 +3482,22 @@ Shaping is one line per keystroke. These still scale with document length:
   (`ImeEditLogicTest`).
 - [x] Stray `println` calls in `state/TextEditorState.kt` and
   `SpellCheckState.kt`. Removed.
-- [ ] The sample app's toolbar Link button attaches its own
+- [x] The sample app's toolbar Link button attaches its own
   `sample.LinkSpanStyle`, not the library's, so those links get no hand icon
-  and do not open on Ctrl+click (1.15). Markdown-parsed links do.
+  and do not open on Ctrl+click (1.15). Markdown-parsed links do. Now it
+  calls `setLink` and `unlink` in one undo step, its dialog refuses a URL the
+  editor would not set, and a selection ending where a link starts no longer
+  edits that link; the sample's `LinkSpanStyle` is gone.
 - [x] `docs/design/text-input-sessions.md` describes iOS as routing through
   the shared IME logic; it does not yet (4.2). True since 4.2's Linux part.
 - [x] `getOffsetAtCharacter` returns a negative char for negative input.
   It now clamps to the document start (`CharacterIndexConversionTest`).
-- [ ] The sample app's toolbar Highlight button attaches a `HighlightSpanStyle`
+- [x] The sample app's toolbar Highlight button attaches a `HighlightSpanStyle`
   rich span (`sample.HIGHLIGHT`), which markdown export does not serialize;
   the markdown form of a highlight is the configuration's `highlightStyle`
-  span style (7.16), which the button should toggle instead.
+  span style (7.16), which the button should toggle instead. Now it toggles
+  that, and the plain rich text demo seeds its highlight the same way and
+  takes the theme's styles, so the highlight reads in dark mode.
 - [x] `rememberTextEditorStyle` leaves `backgroundColor` out of its `remember`
   keys, so a new background colour is ignored until another key changes.
 - [x] The document content is not snapshot state, so the skiko input session
