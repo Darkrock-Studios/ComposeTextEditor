@@ -302,8 +302,10 @@ phrase through the accessibility `insertTextAtCursor`, and a host's own
 committed text, and it never sees a paste, which is not typing. A paste goes to
 `onPaste` instead, told where the pasted text landed once the paste (both paste
 actions, so every platform's paste) has committed as its own undo step; an edit
-there is a step of its own, as on the typed-text hook. A host that registers its
-own paste action replaces that offer along with the paste. A lone typed line break is the Enter
+there is a step of its own, as on the typed-text hook. A drop that is not a move
+within the editor is offered the same way. A host that registers its own paste
+action replaces that offer along with the paste, and makes it by calling
+`pasteLanded` once its paste has committed. A lone typed line break is the Enter
 key and goes to `onNewline`, never to `onTextInput`; the one exception is an
 IME committing `"\n"` over its own composition, which is a replacement of
 the composition and reaches neither hook (see `ImeLineBlockParityTest`).
@@ -488,9 +490,8 @@ primitives stay `internal`.
 
 - A code-editor indent (to the next tab stop, or matching the line above) is a
   host's own `editor.indent`.
-- Behaviors see typed text, pastes, newline, backspace and forward delete. A
-  drop is not offered to `onPaste`. Nor is a typed composition the editor ends
-  itself (a tap outside it, focus loss) offered to `onTextInput`, only one the
+- Behaviors see typed text, pastes and drops, newline, backspace and forward
+  delete. A typed composition the editor ends itself (a tap outside it, focus loss) offered to `onTextInput`, only one the
   IME commits or finishes (roadmap 5.9).
 - The IME routing is unverified on real hardware. See "Device verification
   still owed" above; that list should be worked through before a release ships

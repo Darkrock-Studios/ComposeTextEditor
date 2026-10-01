@@ -763,10 +763,24 @@ class TextEditorState(
 		offerLanded(range) { it.onTextInput(this, text, range) }
 	}
 
-	/** Tells the behaviors that pasted [text] has landed at [range], once the paste has committed. */
-	internal fun pasteLanded(text: String, range: TextEditorRange) {
+	/**
+	 * Tells the [editBehaviors] that pasted [text] has landed at [range]
+	 * ([EditBehavior.onPaste]). The paste actions and a drop call it; a host that
+	 * performs a paste of its own, having replaced the paste actions, calls it once
+	 * that paste has committed, outside its own [editGroup] or transaction, so an
+	 * edit a behavior makes is an undo step of its own. [range] is where [text]
+	 * now stands in the document; one outside it throws.
+	 */
+	fun pasteLanded(text: String, range: TextEditorRange) {
+		require(holdsRange(range)) { "range $range is not in the document" }
 		if (text.isEmpty()) return
 		offerLanded(range) { it.onPaste(this, text, range) }
+	}
+
+	private fun holdsRange(range: TextEditorRange): Boolean {
+		val (start, end) = range
+		return start.line >= 0 && start <= end && end.line < textLines.size &&
+			start.char in 0..textLines[start.line].length && end.char in 0..textLines[end.line].length
 	}
 
 	/**

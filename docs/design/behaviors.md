@@ -99,8 +99,10 @@ is typed that cannot belong to it (`(see https://example.com)` links at the
 once the paste lands; both paste actions, Paste and Paste as Plain Text, are
 offered, so every platform's paste is. A paste is judged out to the runs of
 text it joins, so a URL pasted against `/docs/intro` links whole, and one
-pasted into the middle of a word is not a URL at all. A host that registers its
-own paste action, or a drop, offers nothing (roadmap 5.12).
+pasted into the middle of a word is not a URL at all. A drop is offered as a
+paste, unless it moves text within the editor. A host that registers its own
+paste action offers its paste by calling `TextEditorState.pasteLanded` once it
+has committed.
 
 What counts as a URL, and where it ends:
 

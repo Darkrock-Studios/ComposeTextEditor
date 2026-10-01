@@ -1793,13 +1793,19 @@ iOS Safari; browser tests run in CI.
   has landed (after the group, as `onTextInput` is) would give Enter the same
   shape, and would free the behavior from running ahead of
   `LineBlockEditBehavior`.
-- [ ] **5.12 A drop is not offered to `onPaste`. S.** [Opus] [Lane H] Text
+- [x] **5.12 A drop is not offered to `onPaste`. S.** [Opus] [Lane H] Text
   dropped into the editor (`dragdrop/TextDragAndDrop.kt`, `dropText`) lands
   without telling the behaviors, so `AutoLink(pasted = true)` leaves a dropped
   URL plain, where Word and Google Docs link it. Offer a drop through
   `TextEditorState.pasteLanded` once it has committed, as the paste actions do.
   A host replacing the paste actions has no way to offer its paste either,
-  since `pasteLanded` is internal; make it public if a host asks.
+  since `pasteLanded` is internal; make it public if a host asks. Done:
+  `dropText` offers the dropped text where it landed once its edit group has
+  committed, so a dropped URL links and one undo takes only the link off. A
+  move within the editor is not offered, since it is not new text (a URL the
+  user unlinked stays plain), and neither is a refused drop. `TextEditorState.pasteLanded` is public, for a host that performs its
+  own paste to call once that paste has committed; a range past the document's
+  lines throws (`dragdrop/DropOfferedAsPasteTest.kt`).
 
 ## Phase 6: undo and clipboard fidelity
 

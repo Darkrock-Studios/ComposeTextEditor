@@ -45,11 +45,11 @@ interface EditBehavior {
 	fun onTextInput(state: TextEditorState, text: String, range: TextEditorRange): Boolean = false
 
 	/**
-	 * Called once pasted [text] has landed in the document at [range], after the
-	 * paste committed as its own undo step, so an edit a behavior makes here is a
-	 * step of its own: one undo takes it back and keeps the paste. As with
+	 * Called once pasted or dropped [text] has landed in the document at [range],
+	 * after the paste committed as its own undo step, so an edit a behavior makes
+	 * here is a step of its own: one undo takes it back and keeps the paste. As with
 	 * [onTextInput], a behavior that changes the text ends the chain whether or not
-	 * it claims.
+	 * it claims. A host's own paste is offered through [TextEditorState.pasteLanded].
 	 */
 	fun onPaste(state: TextEditorState, text: String, range: TextEditorRange): Boolean = false
 }
