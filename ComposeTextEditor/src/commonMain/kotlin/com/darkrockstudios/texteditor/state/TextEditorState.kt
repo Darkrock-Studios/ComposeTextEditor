@@ -880,6 +880,8 @@ class TextEditorState private constructor(
 		getCursorAffinity = { cursor.affinity },
 		getLineOffsets = { _lineOffsets },
 		ensureLineShaped = ::ensureLineShaped,
+		getCaretX = ::caretContentX,
+		getCaretRoom = { lineBreakWidth },
 	)
 
 	/** The text selection: its [TextEditorRange], gestures, and selected-content queries. */
@@ -1958,8 +1960,7 @@ class TextEditorState private constructor(
 		val currentWrappedLine = lineOffsets.getWrapForDrawing(position, affinity)
 			?: return CursorMetrics(position = Offset.Zero, height = 0f)
 
-		val runSide = if (position == cursorPosition && affinity == cursor.affinity) cursor.runSide else null
-		val cursorX = currentWrappedLine.caretX(position.char, runSide) - scrollX
+		val cursorX = currentWrappedLine.caretX(position.char, caretRunSide(position, affinity)) - scrollX
 		val cursorY = currentWrappedLine.offset.y - scrollState.value
 
 		val lineHeight = currentWrappedLine.effectiveHeight
@@ -1969,6 +1970,14 @@ class TextEditorState private constructor(
 			height = lineHeight
 		)
 	}
+
+	/** The caret's [TextEditorCursorState.runSide] when [position] is where the caret is, else none. */
+	private fun caretRunSide(position: CharLineOffset, affinity: CaretAffinity): CaretAffinity? =
+		if (position == cursorPosition && affinity == cursor.affinity) cursor.runSide else null
+
+	/** [getPositionForOffset]'s x in content, which no scroll moves; null with no row for [position]. */
+	internal fun caretContentX(position: CharLineOffset, affinity: CaretAffinity): Float? =
+		lineOffsets.getWrapForDrawing(position, affinity)?.caretX(position.char, caretRunSide(position, affinity))
 
 	/**
 	 * Maps a pixel [Offset] within the editor (e.g. a tap location) to the nearest

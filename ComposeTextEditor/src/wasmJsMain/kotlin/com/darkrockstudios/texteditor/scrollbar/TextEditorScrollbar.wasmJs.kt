@@ -10,3 +10,7 @@ actual fun TextEditorScrollbar(
 	scrollState: TextEditorScrollState,
 	content: @Composable (modifier: Modifier) -> Unit
 ) = EditorWithVerticalScrollbar(modifier, scrollState, content)
+
+@Composable
+internal actual fun EditorHorizontalScrollbar(scrollState: TextEditorScrollState, modifier: Modifier) =
+	EditorHorizontalScrollbarBar(scrollState, modifier)

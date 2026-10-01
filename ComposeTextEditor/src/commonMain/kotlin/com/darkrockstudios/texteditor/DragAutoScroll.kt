@@ -2,6 +2,7 @@ package com.darkrockstudios.texteditor
 
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.geometry.Offset
+import com.darkrockstudios.texteditor.state.TextEditorScrollState
 import com.darkrockstudios.texteditor.state.TextEditorState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -11,8 +12,9 @@ import kotlinx.coroutines.launch
 
 /**
  * Auto-scroll for a drag that selects: while the pointer is above or below the
- * viewport the editor keeps scrolling, even with the pointer held still, at a speed
- * proportional to how far outside it is. [onDrag] receives the point being dragged, the
+ * viewport, or with wrapping off left or right of it, the editor keeps scrolling that
+ * way, even with the pointer held still, at a speed proportional to how far outside it is.
+ * Sideways, the dragged point is kept inside the viewport. [onDrag] receives the point being dragged, the
  * pointer plus [targetOffset], kept on a row wholly inside the viewport; it gets it on
  * every move and on every frame that scrolls, so the selection follows the text as it
  * moves under the pointer. A handle drag passes the offset from the finger to the text
@@ -30,16 +32,31 @@ internal class DragAutoScroll(
 	private var pointer = Offset.Zero
 	private var ticker: Job? = null
 
-	// The scroll position is whole pixels; a slow scroll moves less than one per frame.
-	private var fraction = 0f
+	private val vertical = Axis(state.scrollState)
+	private val sideways = Axis(state.horizontalScrollState)
+
+	/** One direction's scroll, which a held pointer moves at a speed proportional to how far out it is. */
+	private class Axis(private val scroll: TextEditorScrollState) {
+		// The scroll position is whole pixels; a slow scroll moves less than one per frame.
+		var fraction = 0f
+
+		/** Scrolls for [seconds] with the pointer [overflow] pixels out, returning the pixels scrolled. */
+		fun step(overflow: Float, seconds: Float): Float {
+			if (overflow == 0f) return 0f
+			val wanted = fraction + overflow * SPEED_PER_PX_OUTSIDE * seconds
+			val whole = wanted.toInt()
+			fraction = wanted - whole
+			return if (whole != 0) scroll.scrollBy(whole.toFloat()) else 0f
+		}
+	}
 
 	fun update(position: Offset) {
 		pointer = position
 		// Back inside, the editor's scroll into view is the drag's again, so it is
 		// handed back before this move places the caret.
-		if (pointerOverflow(position) == 0f) stop()
+		if (!overflows(position)) stop()
 		onDrag(clampToViewport(position + targetOffset))
-		if (pointerOverflow(position) != 0f && ticker == null) {
+		if (overflows(position) && ticker == null) {
 			// This owns the scroll now: the editor's scroll into view would restart
 			// against it every frame for a caret a line drag leaves off screen.
 			state.scrollManager.stopScrolling()
@@ -53,7 +70,8 @@ internal class DragAutoScroll(
 		val wasScrolling = ticker != null
 		ticker?.cancel()
 		ticker = null
-		fraction = 0f
+		vertical.fraction = 0f
+		sideways.fraction = 0f
 		if (wasScrolling) {
 			state.scrollManager.cursorScrollSuppressed = false
 			state.scrollManager.ensureCursorVisible()
@@ -67,14 +85,8 @@ internal class DragAutoScroll(
 				// A stalled frame (a GC, a hidden window) must not turn into a jump of pages.
 				val seconds = ((frame - lastFrame) / 1_000_000_000f).coerceAtMost(MAX_FRAME_SECONDS)
 				lastFrame = frame
-				val overflow = pointerOverflow(pointer)
-				if (overflow != 0f) {
-					val wanted = fraction + overflow * SPEED_PER_PX_OUTSIDE * seconds
-					val whole = wanted.toInt()
-					fraction = wanted - whole
-					val scrolled = if (whole != 0) state.scrollState.scrollBy(whole.toFloat()) else 0f
-					if (scrolled != 0f) onDrag(clampToViewport(pointer + targetOffset))
-				}
+				val scrolled = vertical.step(pointerOverflow(pointer), seconds) + sideways.step(pointerOverflowX(pointer), seconds)
+				if (scrolled != 0f) onDrag(clampToViewport(pointer + targetOffset))
 			}
 		}
 	}
@@ -83,16 +95,44 @@ internal class DragAutoScroll(
 	private fun overflow(position: Offset): Float = overflow(position, top = 0f, bottom = state.viewportSize.height)
 
 	/** How far the pointer at [position] is past the edges that scroll: the viewport's, or [startAt] past them. */
-	private fun pointerOverflow(position: Offset): Float {
-		val height = state.viewportSize.height
-		val start = startAt?.y ?: return overflow(position, top = 0f, bottom = height)
-		return overflow(position, top = minOf(0f, start), bottom = maxOf(height, start))
+	private fun pointerOverflow(position: Offset): Float = edgeOverflow(position.y, startAt?.y, state.viewportSize.height)
+
+	/** [at]'s distance before 0 (negative) or past [extent], or past [start] where the drag began beyond an edge. */
+	private fun edgeOverflow(at: Float, start: Float?, extent: Float): Float =
+		if (start == null) overflow(at, 0f, extent) else overflow(at, minOf(0f, start), maxOf(extent, start))
+
+	private fun overflow(position: Offset, top: Float, bottom: Float): Float = overflow(position.y, top, bottom)
+
+	private fun overflow(at: Float, from: Float, to: Float): Float = when {
+		at < from -> at - from
+		at > to -> at - to
+		else -> 0f
 	}
 
-	private fun overflow(position: Offset, top: Float, bottom: Float): Float = when {
-		position.y < top -> position.y - top
-		position.y > bottom -> position.y - bottom
-		else -> 0f
+	/** Whether the pointer at [position] is past an edge that scrolls. */
+	private fun overflows(position: Offset): Boolean = pointerOverflow(position) != 0f || pointerOverflowX(position) != 0f
+
+	/**
+	 * How far the pointer at [position] is left (negative) or right (positive) of the
+	 * viewport, or of [startAt] past its sides; zero where the content cannot scroll that
+	 * way, so a drag through the side padding at the content's edge scrolls nothing.
+	 */
+	private fun pointerOverflowX(position: Offset): Float {
+		val scroll = state.horizontalScrollState
+		val overflow = edgeOverflow(position.x, startAt?.x, state.viewportSize.width)
+		val canScroll = if (overflow < 0f) scroll.value > 0 else scroll.value < scroll.maxValue
+		return if (canScroll) overflow else 0f
+	}
+
+	/**
+	 * [position] held inside the viewport sideways while there is a sideways range, short
+	 * of the right edge by the room the editor keeps for a caret there, so the caret the
+	 * drag places is in view and nothing scrolls to reveal it once the drag stops.
+	 */
+	private fun clampSideways(position: Offset): Offset {
+		if (state.horizontalScrollState.maxValue == 0) return position
+		val right = (state.viewportSize.width - state.lineBreakWidth - 1f).coerceAtLeast(0f)
+		return position.copy(x = position.x.coerceIn(0f, right))
 	}
 
 	/**
@@ -104,7 +144,7 @@ internal class DragAutoScroll(
 	 */
 	private fun clampToViewport(position: Offset): Offset {
 		val overflow = overflow(position)
-		if (overflow == 0f) return pastDocumentEdge(position) ?: position
+		if (overflow == 0f) return pastDocumentEdge(position) ?: clampSideways(position)
 		val top = state.scrollState.value.toFloat()
 		val bottom = top + state.viewportSize.height
 		val rows = state.lineOffsets
@@ -130,7 +170,7 @@ internal class DragAutoScroll(
 		}
 		val y = row?.let { it.offset.y + it.effectiveHeight / 2f - top }
 			?: position.y.coerceIn(0f, (state.viewportSize.height - 1f).coerceAtLeast(0f))
-		return position.copy(y = y)
+		return clampSideways(position.copy(y = y))
 	}
 
 	/** The document's start above its first row, its end below its last, else null. */

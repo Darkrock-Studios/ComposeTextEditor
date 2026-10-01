@@ -25,3 +25,6 @@ actual fun TextEditorScrollbar(
 		)
 	}
 }
+
+@Composable
+internal actual fun EditorHorizontalScrollbar(scrollState: TextEditorScrollState, modifier: Modifier) = Unit
