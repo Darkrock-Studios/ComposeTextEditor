@@ -207,7 +207,7 @@ private fun EditorActionContext.pasteClipboard(plainText: Boolean) {
 		}
 		val paste = readClipboardPaste(clipboard, state.richTextStyles, state.allowedLinkSchemes) ?: return@launch
 		val clipboardText = paste.text.normalizeLineEndings()
-		val htmlDocument = state.htmlPasteDocument(paste.html, clipboardText)
+		val htmlDocument = state.htmlPasteDocument(paste.html, clipboardText, paste.document)
 		state.asEditor(target) { state.landPaste(clipboardText, htmlDocument, paste.copyId, plainText = false) }
 	}
 }

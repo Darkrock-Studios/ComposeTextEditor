@@ -2981,7 +2981,7 @@ iOS Safari; browser tests run in CI (met: the `browser` job, 4.15).
   line goes too: pasted text cannot tell it from a block's. A look of a
   retired or another editor's configuration is not recognised
   (`clipboard/PastedBlockLookTest.kt`). Found: 6.40, 6.41.
-- [ ] **6.39 A paste's clipboard read still passes through global stashes off
+- [x] **6.39 A paste's clipboard read still passes through global stashes off
   desktop. S.** [Opus] [Lane H] `readClipboardPaste` (6.37) answers a paste's text,
   markup and copy id together, but Android, iOS and the web build it from
   `ClipboardHelper.getText`, which leaves what it read in a field on the helper
@@ -2993,6 +2993,16 @@ iOS Safari; browser tests run in CI (met: the `browser` job, 4.15).
   foreign markup twice, once for the text and again for its blocks
   (`htmlPasteDocument`); `ClipboardPaste` could carry the parsed document. Found
   in 6.37's review.
+  Done: each platform's `readClipboardPaste` builds the paste from its one read
+  (Android's `ClipboardHelper.readPaste` of the clip, iOS's `readStyled` of the
+  pasteboard, the web's `readPaste` of the event's or the async clipboard's
+  flavors), and the stashes and the `readClipboardHtml` expect are gone, so
+  `readCopyId` and `getText` read the clipboard themselves. `ClipboardPaste`
+  carries the markup as parsed for its text (`document`), which the paste's
+  blocks take instead of parsing it again; markup the text did not come from
+  (this editor's copy whose markup re-parses to other characters, several items)
+  is left off, since its blocks cannot apply. Desktop's drop reads the markup once
+  (`readPaste`) (`AndroidRichClipboardTest`, `ClipboardReadFailureTest`).
 - [x] **6.40 A heading's whole text pasted inside a line makes that line a
   heading. S.** [Opus] [Lane G] Copying all of an h2 "Title" (no line break) and
   pasting it at column 2 of a plain "hello" gives an h2 "heTitlello":
@@ -4533,3 +4543,4 @@ records results and removes entries that passed.
 | 6.20 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64` and `:ComposeTextEditor:iosSimulatorArm64Test`. The `dragdrop/PlatformTextDrag.kt` expects changed: `textDragTransferData` takes a nullable `html`, and `droppedText` an `ownDrag` flag; the iOS actuals (`iosMain/.../dragdrop/PlatformTextDrag.ios.kt`) still answer null and false, by choice (6.20 says why; 6.46 follows up). Common code changed a long press inside the selection while the platform toolbar is up (it tries to start a drag, which on iOS returns at once since `platformDragsText` is false) and a pointer press inside the selection (held through `holdPress`; the wider slop for a drag the platform starts is the web's only). Then on an iPad simulator in the sample app: select a word with a long press and long-press inside it again; with the pointer (I/O > Input > Send Pointer to Device), click inside the selection, and press inside it and drag; with Notes and then Safari beside the sample app in Split View, drag text from them over the editor and drop it | Compiles and the tests pass. The second long press shows the edit menu on lift and starts no drag; the click places the caret and the pointer drag selects from the press, as before; the drops from Notes and Safari land nothing, show no drop caret, and nothing crashes | Compile part passed 2026-10-01 at `0a4ca7ed`, with the iOS tests passing. The rest is for a person |
 | 4.26 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64` and `:ComposeTextEditor:iosSimulatorArm64Test`. `skikoMain` changed: `SkikoTextEditorInputMethodRequest` runs each `editText` block and each `onEditCommand` list as one IME batch (`TextEditorState.imeBatch`), so the edit behaviors are offered what landed once the block ends. No `iosMain` change. Then in the iOS sample app with `SmartPunctuation` added to the editor's `editBehaviors`: type `a--`, `"hi"`, `it's` and `...` with the soft keyboard, with autocorrect on, and undo once after the dash | Compiles and the tests pass. The dash, the curly quotes, the apostrophe and the ellipsis appear as the character is typed, the keyboard's suggestions follow the substituted text (no stray characters, nothing doubled or lost when autocorrect rewrites the word before), and one undo gives `a--` back | |
 | 6.44 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64`. The `dragdrop/PlatformTextDrag.kt` expect `droppedText` takes a `target: DelegatableNode?` (the node taking the drop, for Android to read content URIs through its activity); the iOS actual (`iosMain/.../dragdrop/PlatformTextDrag.ios.kt`) takes and ignores it, still answering null | Compiles | |
+| 6.39 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64` and `:ComposeTextEditor:iosSimulatorArm64Test`. `clipboard/ClipboardHtml.kt` drops the `readClipboardHtml` expect; the iOS `readClipboardPaste` actual (`iosMain/.../clipboard/ClipboardHtml.ios.kt`) builds the paste from one `readStyled`, which now parses the markup once (`parsePasteHtml`), carries it as `document`, and leaves off markup it rejected; `ClipboardHelper.readCopyId` reads the pasteboard itself and the `lastReadHtml`/`lastReadCopyId` stashes are gone (`ClipboardHelper.ios.kt`). Then in the iOS sample app: copy a bulleted list in the editor and paste it, and paste a bulleted list copied from Notes | Compiles and the tests pass. Both paste as bulleted lists, with one paste prompt at most | |

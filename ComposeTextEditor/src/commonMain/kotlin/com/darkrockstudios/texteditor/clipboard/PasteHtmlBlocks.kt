@@ -15,14 +15,15 @@ import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.takeOutOfOtherLinks
 
 /**
- * Parses a paste's [html], or null when it holds nothing usable.
+ * Parses a paste's [html], or takes [parsed], the same markup already parsed for its
+ * text; null when it holds nothing usable.
  *
  * Done before the paste mutates anything, as the clipboard read is. Awaiting between
  * the insert and the block structure would publish the pasted text as unadorned lines
  * for as long as the read takes, and an export sampling the document in that window
  * would serialize it that way.
  *
- * Null when the re-parse does not reproduce [pastedText], the clipboard's text as read:
+ * Null when the markup's text is not [pastedText], the clipboard's text as read:
  * the text then came from another flavor (plain text, or an in-process copy that
  * differs), and the line numbers describe a document that was never pasted. Text the
  * input filter changes takes no blocks either; the caller checks that.
@@ -30,9 +31,10 @@ import com.darkrockstudios.texteditor.state.takeOutOfOtherLinks
 internal fun TextEditorState.htmlPasteDocument(
 	html: String?,
 	pastedText: AnnotatedString,
+	parsed: HtmlDocument? = null,
 ): HtmlDocument? {
 	html ?: return null
-	val document = parseHtmlDocument(html, richTextStyles, allowedLinkSchemes = allowedLinkSchemes)
+	val document = parsed ?: parseHtmlDocument(html, richTextStyles, allowedLinkSchemes = allowedLinkSchemes)
 	if (document.hasNoDecorations()) return null
 	if (document.text.text != pastedText.text) return null
 	return document

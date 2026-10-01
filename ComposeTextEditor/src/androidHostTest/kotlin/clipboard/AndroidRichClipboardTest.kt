@@ -10,7 +10,8 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import com.darkrockstudios.texteditor.RichTextStyles
 import com.darkrockstudios.texteditor.clipboard.ClipboardHelper
-import com.darkrockstudios.texteditor.clipboard.readClipboardHtml
+import com.darkrockstudios.texteditor.clipboard.readClipboardPaste
+import com.darkrockstudios.texteditor.html.DEFAULT_LINK_SCHEMES
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -66,14 +67,38 @@ class AndroidRichClipboardTest {
 		val text = ClipboardHelper.getText(clipboard, config)!!
 		assertEquals("plain bold", text.text)
 		assertTrue(text.spanStyles.any { it.item.fontWeight == FontWeight.Bold && it.start == 6 && it.end == 10 })
-		assertEquals("plain <b>bold</b>", readClipboardHtml(clipboard))
+		assertEquals("plain <b>bold</b>", readClipboardPaste(clipboard, config, DEFAULT_LINK_SCHEMES)!!.html)
 	}
 
 	@Test
 	fun `a clip without markup pastes its text`() = runTest {
 		val clipboard = clipboardHolding(item("just text", null))
 		assertEquals(AnnotatedString("just text"), ClipboardHelper.getText(clipboard, config))
-		assertNull(readClipboardHtml(clipboard))
+		assertNull(readClipboardPaste(clipboard, config, DEFAULT_LINK_SCHEMES)!!.html)
+	}
+
+	/** One read answers the text, the markup as parsed for it, and the copy id (6.39). */
+	@Test
+	fun `a paste reads the clip once and carries its markup parsed`() = runTest {
+		val clipboard = clipboardHolding(item("plain bold", "plain <b>bold</b>"), copyId = 42L)
+
+		val paste = readClipboardPaste(clipboard, config, DEFAULT_LINK_SCHEMES)!!
+
+		assertEquals("plain bold", paste.text.text)
+		assertEquals("plain <b>bold</b>", paste.html)
+		assertEquals(42L, paste.copyId)
+		assertEquals(paste.text, paste.document?.text)
+		coVerify(exactly = 1) { clipboard.getClipEntry() }
+	}
+
+	/** A paste's read leaves nothing for a later read to answer from (6.39). */
+	@Test
+	fun `a clip with no text leaves nothing behind for a later read`() = runTest {
+		val empty = clipboardHolding(item(null, null), copyId = 7L)
+		assertNull(readClipboardPaste(empty, config, DEFAULT_LINK_SCHEMES))
+		assertNull(ClipboardHelper.getText(empty, config))
+
+		assertNull(ClipboardHelper.readCopyId(clipboardHolding(item("foreign", null))))
 	}
 
 	@Test
@@ -90,16 +115,8 @@ class AndroidRichClipboardTest {
 
 	@Test
 	fun `the copy id rides in the description extras`() = runTest {
-		// As a paste reads them: the text, then the markup, then the copy id, from one read.
-		val ours = clipboardHolding(item("x", null), copyId = 42L)
-		ClipboardHelper.getText(ours, config)
-		readClipboardHtml(ours)
-		assertEquals(42L, ClipboardHelper.readCopyId(ours))
-		coVerify(exactly = 1) { ours.getClipEntry() }
-
-		val foreign = clipboardHolding(item("x", null))
-		ClipboardHelper.getText(foreign, config)
-		assertNull(ClipboardHelper.readCopyId(foreign))
+		assertEquals(42L, ClipboardHelper.readCopyId(clipboardHolding(item("x", null), copyId = 42L)))
+		assertNull(ClipboardHelper.readCopyId(clipboardHolding(item("x", null))))
 		assertTrue(ClipboardHelper.supportsCopyProvenance)
 	}
 
@@ -108,7 +125,9 @@ class AndroidRichClipboardTest {
 		// Markup that re-parses to other text (here, collapsing the double space).
 		val clipboard = clipboardHolding(item("a  b", "a  <b>b</b>"), copyId = 3L)
 		assertEquals(AnnotatedString("a  b"), ClipboardHelper.getText(clipboard, config))
-		ClipboardHelper.readCopyId(clipboard)
+		val paste = readClipboardPaste(clipboard, config, DEFAULT_LINK_SCHEMES)!!
+		assertNull(paste.document)
+		assertNull(paste.html)
 	}
 
 	@Test

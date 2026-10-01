@@ -8,6 +8,7 @@ import androidx.compose.ui.platform.Clipboard
 import androidx.compose.ui.platform.toClipEntry
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.buildAnnotatedString
+import com.darkrockstudios.texteditor.html.HtmlDocument
 import com.darkrockstudios.texteditor.html.toAnnotatedStringFromHtml
 import com.darkrockstudios.texteditor.html.toHtml
 import com.darkrockstudios.texteditor.RichTextStyles
@@ -23,40 +24,41 @@ actual object ClipboardHelper {
 	private const val COPY_ID_EXTRA = "com.darkrockstudios.texteditor.COPY_ID"
 	private const val TAG = "ClipboardHelper"
 
-	/**
-	 * The clip the last [getText] read, which a paste's [readClipboardHtml] and
-	 * [readCopyId] reuse: Android 12 and later tell the user each time an app reads
-	 * another app's clip.
-	 */
-	internal var pasteClip: ClipData? = null
-		private set
-
 	actual suspend fun getText(
 		clipboard: Clipboard,
 		styles: RichTextStyles,
 		allowedLinkSchemes: Set<String>,
-	): AnnotatedString? {
-		val clipData = clipboard.getClipEntry()?.clipData
-		pasteClip = clipData
-		val items = clipData?.items() ?: return null
+	): AnnotatedString? = clipboard.getClipEntry()?.clipData?.let { readPaste(it, styles, allowedLinkSchemes) }?.text
+
+	/**
+	 * [clip] as a paste reads it: each item's markup, or its text where it has none, one
+	 * item per line, the first item's markup, and the copy id.
+	 */
+	internal fun readPaste(clip: ClipData, styles: RichTextStyles, allowedLinkSchemes: Set<String>): ClipboardPaste? {
+		val items = clip.items()
 		// This editor's own copy must paste the characters it copied, which the in-editor
 		// span buffer matches against; markup that re-parses to other text loses its
 		// styling rather than change them.
-		val ours = clipData.copyId() != null
+		val copyId = clip.copyId()
+		var document: HtmlDocument? = null
 		val styled = items.mapNotNull { item ->
 			val text = item.text?.toString()
 			item.htmlText
-				?.toAnnotatedStringFromHtml(styles, allowedLinkSchemes)
-				?.takeIf { it.text.isNotEmpty() && (!ours || it.text == text) }
+				?.let { parsePasteHtml(it, styles, allowedLinkSchemes) }
+				?.takeIf { copyId == null || it.text.text == text }
+				?.also { if (items.size == 1) document = it }
+				?.text
 				?: text?.let(::AnnotatedString)
 		}
 		if (styled.isEmpty()) return null
-		return styled.singleOrNull() ?: buildAnnotatedString {
+		val joined = styled.singleOrNull() ?: buildAnnotatedString {
 			styled.forEachIndexed { index, text ->
 				if (index > 0) append('\n')
 				append(text)
 			}
 		}
+		// Markup the text did not come from describes other text, so its blocks cannot apply.
+		return ClipboardPaste(joined, document?.let { items.first().htmlText }, copyId, document)
 	}
 
 	actual suspend fun getPlainText(clipboard: Clipboard): String? {
@@ -95,11 +97,7 @@ actual object ClipboardHelper {
 		}
 	}
 
-	actual suspend fun readCopyId(clipboard: Clipboard): Long? {
-		val clipData = pasteClip ?: clipboard.getClipEntry()?.clipData
-		pasteClip = null
-		return clipData?.copyId()
-	}
+	actual suspend fun readCopyId(clipboard: Clipboard): Long? = clipboard.getClipEntry()?.clipData?.copyId()
 
 	actual val supportsCopyProvenance: Boolean get() = true
 

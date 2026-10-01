@@ -13,8 +13,7 @@ import androidx.compose.ui.unit.Density
 import com.darkrockstudios.texteditor.clipboard.AnnotatedStringTransferable
 import com.darkrockstudios.texteditor.clipboard.ClipboardHelper
 import com.darkrockstudios.texteditor.clipboard.offersText
-import com.darkrockstudios.texteditor.clipboard.readHtmlMarkup
-import com.darkrockstudios.texteditor.clipboard.readStyledText
+import com.darkrockstudios.texteditor.clipboard.readPaste
 import com.darkrockstudios.texteditor.RichTextStyles
 import java.awt.dnd.DropTargetDragEvent
 import java.awt.dnd.DropTargetDropEvent
@@ -63,8 +62,8 @@ internal actual fun DragAndDropEvent.droppedText(
 	target: DelegatableNode?,
 ): DroppedText? {
 	val transferable = runCatching { awtTransferable }.getOrNull() ?: return null
-	val text = transferable.readStyledText(styles, allowedLinkSchemes) ?: return null
-	return DroppedText(text, transferable.readHtmlMarkup())
+	val paste = transferable.readPaste(styles, allowedLinkSchemes) ?: return null
+	return DroppedText(paste.text, paste.html)
 }
 
 /** AWT reports the location in the root's points, which Compose scales by the density. */

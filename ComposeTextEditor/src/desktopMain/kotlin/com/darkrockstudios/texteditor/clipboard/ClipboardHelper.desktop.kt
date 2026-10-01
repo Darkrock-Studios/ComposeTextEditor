@@ -5,7 +5,6 @@ import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.Clipboard
 import androidx.compose.ui.platform.asAwtTransferable
 import androidx.compose.ui.text.AnnotatedString
-import com.darkrockstudios.texteditor.html.DEFAULT_LINK_SCHEMES
 import com.darkrockstudios.texteditor.html.toAnnotatedStringFromHtml
 import com.darkrockstudios.texteditor.html.toHtml
 import com.darkrockstudios.texteditor.RichTextStyles
@@ -86,7 +85,19 @@ internal suspend fun <T> Clipboard.readClipboard(decode: (Transferable) -> T?): 
  * flavor other applications provide, else the plain text.
  */
 internal fun Transferable.readStyledText(styles: RichTextStyles, allowedLinkSchemes: Set<String>): AnnotatedString? =
-	readAnnotatedString() ?: readHtml(styles, allowedLinkSchemes) ?: readPlainText()
+	readAnnotatedString()
+		?: readHtmlMarkup()?.let { parsePasteHtml(it, styles, allowedLinkSchemes) }?.text
+		?: readPlainText()
+
+/** [readStyledText] with the markup, as parsed where the text came from it, and the copy id. */
+internal fun Transferable.readPaste(styles: RichTextStyles, allowedLinkSchemes: Set<String>): ClipboardPaste? {
+	val html = readHtmlMarkup()
+	val copyId = readCopyId()
+	readAnnotatedString()?.let { return ClipboardPaste(it, html, copyId) }
+	val document = html?.let { parsePasteHtml(it, styles, allowedLinkSchemes) }
+	val text = document?.text ?: readPlainText() ?: return null
+	return ClipboardPaste(text, html, copyId, document)
+}
 
 /** Whether this offers text in any flavor [readStyledText] takes. */
 internal fun Transferable.offersText(): Boolean =
@@ -109,11 +120,8 @@ private fun Transferable.readAnnotatedString(): AnnotatedString? = runCatching {
 	getTransferData(annotatedStringFlavor) as? AnnotatedString
 }.getOrNull()
 
-private fun Transferable.readHtml(
-	styles: RichTextStyles,
-	allowedLinkSchemes: Set<String> = DEFAULT_LINK_SCHEMES,
-): AnnotatedString? =
-	readHtmlMarkup()?.toAnnotatedStringFromHtml(styles, allowedLinkSchemes)?.takeIf { it.text.isNotEmpty() }
+private fun Transferable.readHtml(styles: RichTextStyles): AnnotatedString? =
+	readHtmlMarkup()?.toAnnotatedStringFromHtml(styles)?.takeIf { it.text.isNotEmpty() }
 
 private fun Transferable.readPlainText(): AnnotatedString? = runCatching {
 	if (!isDataFlavorSupported(DataFlavor.stringFlavor)) return null

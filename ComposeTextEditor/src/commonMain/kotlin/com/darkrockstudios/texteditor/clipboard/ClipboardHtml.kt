@@ -3,21 +3,20 @@ package com.darkrockstudios.texteditor.clipboard
 import androidx.compose.ui.platform.Clipboard
 import androidx.compose.ui.text.AnnotatedString
 import com.darkrockstudios.texteditor.RichTextStyles
+import com.darkrockstudios.texteditor.html.HtmlDocument
+import com.darkrockstudios.texteditor.html.parseHtmlDocument
 
 /**
- * The raw markup on the clipboard's `text/html` flavor, or null when the
- * platform does not offer one.
- *
- * [ClipboardHelper.getText] already turns this into styled text; this exists so
- * a paste can recover the block structure — lists, blockquotes, code fences —
- * that styling alone cannot carry. Callers re-parse the same markup and match
- * the result against the text they were given, which is what tells them the text
- * really did come from this flavor rather than an in-process copy.
+ * What a paste took off the clipboard: the text, the markup it came with, and the copy id.
+ * [document] is the markup as parsed for [text], where [text] came from it, so the paste's
+ * blocks need not parse it again.
  */
-internal expect suspend fun readClipboardHtml(clipboard: Clipboard): String?
-
-/** What a paste took off the clipboard: the text, the markup it came with, and the copy id. */
-internal class ClipboardPaste(val text: AnnotatedString, val html: String?, val copyId: Long?)
+internal class ClipboardPaste(
+	val text: AnnotatedString,
+	val html: String?,
+	val copyId: Long?,
+	val document: HtmlDocument? = null,
+)
 
 /**
  * Reads the clipboard for a paste. The text, markup and copy id come from one read of
@@ -30,16 +29,6 @@ internal expect suspend fun readClipboardPaste(
 	allowedLinkSchemes: Set<String>,
 ): ClipboardPaste?
 
-/**
- * [readClipboardPaste] through [ClipboardHelper.getText], [readClipboardHtml] and
- * [ClipboardHelper.readCopyId], for a platform whose helper hands the later two what
- * [ClipboardHelper.getText] read.
- */
-internal suspend fun readClipboardPasteFromHelper(
-	clipboard: Clipboard,
-	styles: RichTextStyles,
-	allowedLinkSchemes: Set<String>,
-): ClipboardPaste? {
-	val text = ClipboardHelper.getText(clipboard, styles, allowedLinkSchemes) ?: return null
-	return ClipboardPaste(text, readClipboardHtml(clipboard), ClipboardHelper.readCopyId(clipboard))
-}
+/** [html] parsed as a paste's markup, or null when it holds no text. */
+internal fun parsePasteHtml(html: String, styles: RichTextStyles, allowedLinkSchemes: Set<String>): HtmlDocument? =
+	parseHtmlDocument(html, styles, allowedLinkSchemes = allowedLinkSchemes).takeIf { it.text.isNotEmpty() }
