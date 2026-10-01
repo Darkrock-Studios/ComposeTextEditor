@@ -7,7 +7,6 @@ import androidx.compose.ui.input.key.isAltPressed
 import androidx.compose.ui.input.key.isCtrlPressed
 import androidx.compose.ui.input.key.isMetaPressed
 import androidx.compose.ui.input.key.isShiftPressed
-import androidx.compose.ui.input.key.key
 import com.darkrockstudios.texteditor.input.EditorCommand.Action
 import com.darkrockstudios.texteditor.input.EditorCommand.Motion
 
@@ -30,7 +29,7 @@ val KeyEvent.isCtrlShortcut: Boolean
  *
  * ```kotlin
  * val bindings = KeyBindings { event ->
- *     if (event.key == Key.D && event.isCtrlShortcut && event.isShiftPressed) InsertDate
+ *     if (event.layoutKey == Key.D && event.isCtrlShortcut && event.isShiftPressed) InsertDate
  *     else platformKeyBindings().commandFor(event)
  * }
  * ```
@@ -81,7 +80,7 @@ val LocalKeyBindings = staticCompositionLocalOf { platformKeyBindings() }
 object CtrlKeyBindings : KeyBindings {
 	override fun commandFor(event: KeyEvent): EditorCommand? {
 		val ctrl = event.isCtrlShortcut
-		return when (event.navigationKey) {
+		return when (val key = event.navigationKey) {
 			Key.A -> if (ctrl) Action.SelectAll else null
 			Key.C -> if (ctrl) Action.Copy else null
 			Key.X -> when {
@@ -90,7 +89,7 @@ object CtrlKeyBindings : KeyBindings {
 				else -> null
 			}
 
-			Key.B, Key.I, Key.U, Key.E -> if (ctrl && !event.isShiftPressed) formattingToggleFor(event.key) else null
+			Key.B, Key.I, Key.U, Key.E -> if (ctrl && !event.isShiftPressed) formattingToggleFor(key) else null
 			Key.Backslash -> if (ctrl && !event.isShiftPressed) Action.ClearFormatting else null
 			Key.V -> when {
 				ctrl && event.isShiftPressed -> Action.PasteAsPlainText
@@ -179,7 +178,7 @@ object MacKeyBindings : KeyBindings {
 		if (event.isEmacsChord) emacsCommandFor(event)?.let { return it }
 		val cmd = event.isMetaPressed
 		val option = event.isAltPressed
-		return when (event.navigationKey) {
+		return when (val key = event.navigationKey) {
 			Key.A -> if (cmd) Action.SelectAll else null
 
 			Key.C -> if (cmd) Action.Copy else null
@@ -189,7 +188,7 @@ object MacKeyBindings : KeyBindings {
 				else -> null
 			}
 
-			Key.B, Key.I, Key.U, Key.E -> if (cmd && !event.isShiftPressed) formattingToggleFor(event.key) else null
+			Key.B, Key.I, Key.U, Key.E -> if (cmd && !event.isShiftPressed) formattingToggleFor(key) else null
 			Key.Backslash -> if (cmd && !event.isShiftPressed && !option) Action.ClearFormatting else null
 			// Cmd+Option+Shift+V is Cocoa's Paste and Match Style; Cmd+Shift+V is the common alias.
 			Key.V -> when {
@@ -289,7 +288,7 @@ private val KeyEvent.isEmacsChord: Boolean
  * `moveToEndOfParagraph:`; the motions extend the selection with Shift, the deletions
  * and the yank take none.
  */
-private fun emacsCommandFor(event: KeyEvent): EditorCommand? = when (event.key) {
+private fun emacsCommandFor(event: KeyEvent): EditorCommand? = when (event.layoutKey) {
 	Key.A -> Motion.ParagraphStart
 	Key.E -> Motion.ParagraphEnd
 	Key.F -> Motion.Right
@@ -323,12 +322,13 @@ private val KeyEvent.isEnterHostChord: Boolean
 	get() = isCtrlPressed || isMetaPressed || isAltPressed
 
 /**
- * The dedicated key a numpad key stands in for when Num Lock is off. Desktop Compose
- * keeps the numpad location on these, so they never equal [Key.MoveHome] and friends,
- * and laptops that fold navigation into the numpad have no other Home, End or Page keys.
+ * [layoutKey], with a numpad key read as the dedicated key it stands in for when Num
+ * Lock is off. Desktop Compose keeps the numpad location on these, so they never equal
+ * [Key.MoveHome] and friends, and laptops that fold navigation into the numpad have no
+ * other Home, End or Page keys.
  */
 internal val KeyEvent.navigationKey: Key
-	get() = when (val key = key) {
+	get() = when (val key = layoutKey) {
 		Key.NumPadDirectionUp -> Key.DirectionUp
 		Key.NumPadDirectionDown -> Key.DirectionDown
 		Key.NumPadDirectionLeft -> Key.DirectionLeft

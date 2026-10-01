@@ -1,5 +1,24 @@
 # Migration
 
+## Chords matched on `layoutKey`
+
+From the first release after 2.8.0, the built-in key bindings match letter
+chords on `KeyEvent.layoutKey` (`com.darkrockstudios.texteditor.input`)
+rather than `KeyEvent.key`. On desktop Linux, `key` names a letter by the
+first keyboard layout installed, not the active one, so on BÉPO or Dvorak the
+two can name different letters for the same key. A host's own `KeyBindings`
+that tests `event.key` and delegates the rest to `platformKeyBindings()` should
+test `event.layoutKey` instead, or its chords and the built-in ones land on
+different keys:
+
+```kotlin
+// Before
+if (event.key == Key.D && event.isCtrlShortcut) InsertDate else platformKeyBindings().commandFor(event)
+
+// After
+if (event.layoutKey == Key.D && event.isCtrlShortcut) InsertDate else platformKeyBindings().commandFor(event)
+```
+
 ## Markdown as a module
 
 From the first release after 2.8.0, markdown import and export are out of

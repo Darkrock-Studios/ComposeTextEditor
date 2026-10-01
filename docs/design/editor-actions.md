@@ -464,7 +464,7 @@ val InsertDate = EditorCommand.Action("myapp.insertDate", isEdit = true)
 state.actions.register(EditorActionSpec(InsertDate) { it.state.insertStringAtCursor(today()) })
 
 val bindings = KeyBindings { event ->
-    if (event.key == Key.D && event.isCtrlShortcut && event.isShiftPressed) InsertDate
+    if (event.layoutKey == Key.D && event.isCtrlShortcut && event.isShiftPressed) InsertDate
     else platformKeyBindings().commandFor(event)
 }
 
@@ -475,6 +475,9 @@ Use `isCtrlShortcut` rather than `isCtrlPressed`: Windows synthesizes AltGr as
 left-Ctrl plus right-Alt, so a bare Ctrl test steals the layout chords that type
 a character. On macOS shortcuts belong on Cmd (`isMetaPressed`); a host chord
 that should follow the platform checks `platformKeyBindings() === MacKeyBindings`.
+Match on `layoutKey` rather than `key`: on desktop Linux `key` names a letter by
+the first keyboard layout installed, not the active one, so a BÉPO or Dvorak
+user would find the chord on QWERTY's key.
 
 *Replace a built-in.* Register over its id. `editor.paste` bound to a paste that
 sanitizes the clipboard changes the chord, the context menu and anything else

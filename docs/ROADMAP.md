@@ -184,7 +184,7 @@ review.
 | B | Pointer and touch | `textEditorPointerInputHandling.kt`, `state/TextEditorSelectionManager.kt`, `DrawSelectionHandles.kt` | 1.9, 1.12 to 1.16, 1.21 to 1.24, 3.1, 3.2, 3.4 to 3.8, 3.13, 3.15, 3.18, 4.23, 6.16 |
 | C | Drawing and geometry | `Draw*.kt`, `cursor/`, `scrollbar/`, `state/TextEditorScrollState.kt`, hit testing | 1.8, 1.10, 1.11, 1.17, 1.18, 3.3, 3.12, 3.16, 4.14, 7.6, 7.7, 7.27, 7.41 |
 | D | Bindings, actions, menu | `input/KeyBindings.kt`, `input/EditorCommand.kt`, `input/BuiltinEditorActions.kt`, `contextmenu/` | 2.1, 2.2, 2.4, 2.5, 2.7 to 2.12, 4.8, 5.8, 7.58 |
-| E | Input sessions on desktop, iOS, web | `desktopMain`, `iosMain`, `wasmJsMain` under `input/` | 4.2 to 4.7, 4.10 to 4.12, 4.19, 4.21, 4.22, 4.24 to 4.26, 4.28, 4.29, 4.32, 4.33, 4.35, 4.37, 7.37 |
+| E | Input sessions on desktop, iOS, web | `desktopMain`, `iosMain`, `wasmJsMain` under `input/` | 4.2 to 4.7, 4.10 to 4.12, 4.19, 4.21, 4.22, 4.24 to 4.26, 4.28, 4.29, 4.32, 4.33, 4.35, 4.37, 4.38, 7.37 |
 | F | Android input | `androidMain` | 0.4, 0.12, 3.9 to 3.11, 3.14, 3.17, 4.16, 4.18, 4.20, 4.27, 4.30, 4.31, 4.34, 4.36, 7.40 |
 | G | Edit pipeline and undo | `state/TextEditManager.kt`, `state/TextEditHistory.kt`, `state/EditBehavior.kt`, `input/ImeEditLogic.kt` | 1.20, 5.1 to 5.5, 5.9 to 5.11, 5.13, 6.1 to 6.6, 6.14, 6.15, 6.17, 6.22, 6.23, 6.28, 6.29, 6.33 to 6.35, 7.54, 7.55 |
 | H | Clipboard and HTML | `clipboard/`, `html/`, `dragdrop/` | 4.9, 4.13, 4.17, 6.7 to 6.13, 6.18 to 6.21, 5.12, 6.24 to 6.27, 6.30 to 6.32, 6.36, 6.37, 7.39, 7.46, 7.47, 7.49, 7.53, 7.63 |
@@ -751,9 +751,32 @@ fixes what users feel every minute.
   `moveToBeginningOfParagraph:` and `moveToEndOfParagraph:` do; F, B, N and P
   are Right, Left, Down and Up (N and P keep the goal x); D and H delete
   forward and backward. Shift extends the motions. Ctrl+Y waits for 2.11.
-- [ ] **2.7 Layout-aware shortcuts. U.** [Opus] [Lane D] A BEPO user reports
+- [x] **2.7 Layout-aware shortcuts. U.** [Opus] [Lane D] A BEPO user reports
   shortcuts follow physical QWERTY positions on desktop (hammer-editor#945).
   Confirm, then match on the produced character where the platform provides it.
+  Confirmed by reading: Compose desktop's `Key` is AWT's key code, which
+  XToolkit takes from the first layout installed ("will not depend on actual
+  locale", `XKeysym.getLegacyJavaKeycodeOnly`), so with US listed before BÉPO
+  every letter chord sits on its QWERTY key; AWT's extended key code is the
+  active layout's. Done: a public `KeyEvent.layoutKey`, which the built-in
+  bindings and the find addon's chords match on, and which a host's own
+  bindings should too (`docs/MIGRATION.md`). It is an `expect` whose iOS
+  actual needs a compile on the Mac (Mac queue). On desktop Linux it answers
+  the extended key code when that is a Latin letter. A letter key the active
+  layout gives a dead key or an accented Latin letter (BÉPO's circumflex on
+  QWERTY's Y, its 'à' on Z) becomes that key, so Ctrl+Y and Ctrl+Z do not land
+  on two keys. One it gives anything else keeps its reported key: a letter or
+  mark of another script (Cyrillic, Greek, Thai), so shortcuts stay on the
+  first layout's letters there, as GTK's do, and punctuation, which Greek and
+  Hebrew put on letter keys too. That leaves BÉPO's '.' (QWERTY's V) a second
+  Ctrl+V, the price of keeping those layouts' chords.
+  AltGr is Ctrl+Alt on Windows and never a shortcut. The produced character is
+  not used: Ctrl turns it into a control character on X11 and Windows. Windows
+  and macOS keep `key` until checked on a real keyboard (Mac queue for macOS;
+  Windows key codes already follow the layout's letters). Tested with
+  synthetic AWT events (`input/LayoutKeyTest.kt`); not run on a real layout,
+  since switching this machine's layout was off limits. The web has the same
+  problem with every layout: 4.38.
 - [x] **2.8 Enter with modifiers. S.** [Opus] [Lane D] Every Enter chord
   inserts a newline. Leave Ctrl/Cmd+Enter unbound so hosts can claim it.
   Enter and Shift+Enter break the line; any chord with Ctrl, Cmd or Alt is
@@ -1426,6 +1449,16 @@ Also seen:
     Instruments' Time Profiler would not attach from the command line
     (`xctrace record --attach` stalled with nothing recorded), so the split
     inside a frame is unmeasured.
+- [ ] **4.38 Web shortcuts follow QWERTY positions. S.** [Opus] [Lane E]
+  Compose web builds `Key` from the DOM event's `code`, the physical key named
+  by its US QWERTY letter, so on AZERTY, QWERTZ, BÉPO or Dvorak every letter
+  chord (Ctrl+Z, Ctrl+B) sits on the QWERTY key in the browser. The event's
+  `key` is the active layout's character even with Ctrl held, and Compose puts
+  it in the key event's code point. Give `layoutKey`'s web actual
+  (`LayoutKey.wasmJs.kt`, which answers `key` today) the Latin letter of the
+  code point on a key down, as 2.7 did with AWT's extended key code. Check dead
+  keys (`key` is "Dead") and macOS Option chords, and test with synthetic DOM
+  key events whose `key` and `code` differ. Found in 2.7.
 
 Exit criteria: typing, composition, and clipboard work in current Chrome,
 Firefox, and Safari on desktop; the soft keyboard works on Android Chrome and
@@ -3765,3 +3798,4 @@ records results and removes entries that passed.
 | 7.8, 7.48 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64` and `:ComposeTextEditor:iosSimulatorArm64Test` (commonMain changed how the lines, rows and spans are stored; no `iosMain` or `skikoMain` change). Then re-time the iOS simulator as 4.21 did (iPhone 17 Pro Max simulator, Debug framework, a 200,000-character document of 2,000 lines of 99 characters, temporary logging): the keyboard's `editText` block and the frames over 20 ms while typing twelve keys, then rotate the device and time the frame the rotation costs and how long the rows take to settle | Before (4.21, `f3b8d8f`): `editText` 9.4 ms median at 200k against 0.7 ms at 2k. A pass: `editText` within a few times the 2k figure, wherever the caret is (desktop went 837 µs to 174 µs, and 2,026 µs to 94 µs with a span on every line); a rotation that shapes only the visible lines at once and settles the rest in the background without the scroll jumping. Record the numbers here and in 7.8 and 7.48 || Partial, 2026-10-01 at `0063e6f6`: compiles, the tests pass, and `editText` is 1.1 ms median at the end of 200k and 1.3 ms at the start (recorded in 7.8). The rotation is left for a person: the simulator tools here cannot rotate the device |
 | 4.8 | On an iPad simulator or device with a mouse or trackpad (in the Simulator, I/O > Input > Send Pointer to Device, then Control-click for a right-click): right-click a word in the sample's editor, right-click in an unfocused editor, and right-click a misspelt word in the spell-check demo | Compiles. The system edit menu opens at the pointer with Cut, Copy, Paste and Select All as they apply, also on an editor not yet focused; on a misspelt word the editor's menu with its suggestions opens instead | |
 | 4.23 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64`. `clipboard/PrimarySelection.kt` adds `internal expect fun platformPrimarySelection()`; the iOS actual (`iosMain/.../clipboard/PrimarySelection.ios.kt`) answers null | Compiles. Nothing to run: iOS has no primary selection ||
+| 2.7 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64`. `input/LayoutKey.kt` adds the public `expect val KeyEvent.layoutKey`; the iOS actual (`iosMain/.../input/LayoutKey.ios.kt`) answers `key`. Then in the macOS desktop sample app, with the US layout and again with "Dvorak" and "Dvorak - QWERTY ⌘" input sources: Cmd+Z, Cmd+X, Cmd+B, Ctrl+A and Ctrl+F | Compiles. Record which keys the chords land on under each source, against TextEdit. The desktop `layoutKey` answers `key` on macOS (`hostKeyCodeMayMissLayout`); if Dvorak's chords sit on the QWERTY keys where TextEdit's follow the Dvorak letters, turn it on for macOS and check "Dvorak - QWERTY ⌘" still matches TextEdit ||
