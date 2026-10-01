@@ -15,7 +15,6 @@ import com.darkrockstudios.texteditor.html.sanitizeLinkUrl
 import com.darkrockstudios.texteditor.html.selectionAsHtml
 import com.darkrockstudios.texteditor.html.withHtml
 import com.darkrockstudios.texteditor.input.CtrlKeyBindings
-import com.darkrockstudios.texteditor.markdown.MarkdownExtension
 import com.darkrockstudios.texteditor.pointerIconAt
 import com.darkrockstudios.texteditor.richstyle.LinkSpanStyle
 import com.darkrockstudios.texteditor.state.TextEditorState
@@ -30,7 +29,10 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/** A host extends the link allowlist with its own schemes; the dangerous ones stay refused (6.25). */
+/**
+ * A host extends the link allowlist with its own schemes; the dangerous ones stay refused
+ * (6.25). Markdown import's case is the markdown module's `MarkdownLinkSafetyTest`.
+ */
 class HostLinkSchemesTest {
 
 	private val hostSchemes = DEFAULT_LINK_SCHEMES + setOf("myapp", "sms")
@@ -90,14 +92,6 @@ class HostLinkSchemesTest {
 		val anchor = "<p>go <a href=\"myapp://scene/3\">there</a></p>"
 		assertEquals(anchor, state.withHtml().exportAsHtml())
 		assertEquals(anchor, state.selectionAsHtml(TextEditorRange(CharLineOffset(0, 0), CharLineOffset(0, 8))))
-	}
-
-	@Test
-	fun `markdown import keeps a host link`() {
-		val extension = MarkdownExtension(state())
-		extension.importMarkdown("text [mom](sms:+15550100) and [scene](myapp://scene/3)")
-		assertEquals(listOf("sms:+15550100", "myapp://scene/3"), extension.editorState.linkUrls())
-		assertTrue(extension.editorState.hasLinkStyle)
 	}
 
 	@Test

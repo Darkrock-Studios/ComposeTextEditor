@@ -192,7 +192,7 @@ review.
 | J | Find addon | `ComposeTextEditorFind/` | 7.17 to 7.19, 7.26, 7.29, 7.42 |
 | K | Spell check addon | `ComposeTextEditorSpellCheck/` | 7.20 to 7.22, 7.28, 7.30, 7.31, 7.34, 7.35, 7.38, 7.44, 7.61 |
 | L | Tests and CI | test sources, `.github/workflows/` | 0.1 to 0.3, 0.5 to 0.11, 4.1, 4.15, 7.62, 7.65 |
-| M | Accessibility and host API | semantics in `BasicTextEditor.kt`, `RichTextView.kt`, `state/rememberTextEditorState.kt` | 7.1 to 7.4, 7.13, 7.23 to 7.25, 7.32, 7.36, 7.59, 7.60, 7.64 |
+| M | Accessibility and host API | semantics in `BasicTextEditor.kt`, `RichTextView.kt`, `state/rememberTextEditorState.kt` | 7.1 to 7.4, 7.13, 7.23 to 7.25, 7.32, 7.36, 7.59, 7.60, 7.66 |
 | N | Core layout and performance | `state/TextEditorState.kt` | 5.7, 7.8 to 7.12 |
 
 Housekeeping items are [Opus] and fit any lane that is already in the file.
@@ -3044,7 +3044,7 @@ Shaping is one line per keystroke. These still scale with document length:
   Done: both `setText` overloads reset as `setDocument` does (one helper): the
   selection and composing region are dropped and the cursor is coerced into
   the new text.
-- [ ] **7.64 The single-line action key is the state's, not the editor's. C.**
+- [ ] **7.66 The single-line action key is the state's, not the editor's. C.**
   [Opus] [Lane M] `TextEditorState.isSingleLine` is true while any composed
   editor shows the state with `EditorLineLimits.SingleLine`, and
   `effectiveImeAction()` reads it, so a multi-line editor showing the same

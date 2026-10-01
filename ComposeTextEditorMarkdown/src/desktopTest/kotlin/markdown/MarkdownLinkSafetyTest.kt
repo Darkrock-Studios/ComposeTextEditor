@@ -1,6 +1,7 @@
 package markdown
 
 import com.darkrockstudios.texteditor.RichTextStyles
+import com.darkrockstudios.texteditor.html.DEFAULT_LINK_SCHEMES
 import com.darkrockstudios.texteditor.markdown.MarkdownExtension
 import com.darkrockstudios.texteditor.richstyle.LinkSpanStyle
 import com.darkrockstudios.texteditor.state.TextEditorState
@@ -9,12 +10,14 @@ import kotlinx.coroutines.test.TestScope
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
-/** Markdown import agrees with the HTML path's allowlist for link destinations (6.9). */
+/** Markdown import agrees with the HTML path's allowlist for link destinations (6.9), a host's schemes included (6.25). */
 class MarkdownLinkSafetyTest {
 
-	private fun editor(markdown: String): MarkdownExtension {
+	private fun editor(markdown: String, schemes: Set<String>? = null): MarkdownExtension {
 		val state = TextEditorState(scope = TestScope(), measurer = mockk(relaxed = true))
+		schemes?.let { state.allowedLinkSchemes = it }
 		return MarkdownExtension(state).apply { importMarkdown(markdown) }
 	}
 
@@ -46,5 +49,22 @@ class MarkdownLinkSafetyTest {
 			val extension = editor("a [click]($url) b")
 			assertEquals(emptyList(), extension.editorState.linkUrls(), url)
 		}
+	}
+
+	@Test
+	fun `markdown import keeps a host link`() {
+		val extension = editor(
+			"text [mom](sms:+15550100) and [scene](myapp://scene/3)",
+			schemes = DEFAULT_LINK_SCHEMES + setOf("myapp", "sms"),
+		)
+		assertEquals(listOf("sms:+15550100", "myapp://scene/3"), extension.editorState.linkUrls())
+		assertTrue(extension.editorState.hasLinkStyle)
+	}
+
+	@Test
+	fun `markdown import refuses a dangerous scheme a host allows`() {
+		val extension = editor("a [click](javascript:alert(1)) b", schemes = DEFAULT_LINK_SCHEMES + "javascript")
+		assertEquals("a click b", extension.editorState.getAllText().text)
+		assertEquals(emptyList(), extension.editorState.linkUrls())
 	}
 }
