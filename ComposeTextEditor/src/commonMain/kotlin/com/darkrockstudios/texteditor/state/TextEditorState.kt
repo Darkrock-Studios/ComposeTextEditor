@@ -231,6 +231,8 @@ class TextEditorState private constructor(
 		set(value) {
 			if (wraps != value) {
 				wraps = value
+				// Nothing scrolls sideways once wrapped, even before a relayout the viewport defers.
+				if (value) scrollManager.updateContentWidth(0)
 				invalidateLayoutInputs()
 				updateBookKeeping(LayoutUpdate.Reshape)
 			}
@@ -1155,6 +1157,9 @@ class TextEditorState private constructor(
 	 */
 	val horizontalScrollState: TextEditorScrollState get() = scrollManager.horizontalScrollState
 
+	/** How far the content is scrolled sideways: a row's x less where it is drawn in the canvas. */
+	internal val scrollX: Float get() = horizontalScrollState.value.toFloat()
+
 	/**
 	 * The [CharLineOffset] currently at the top of the viewport. Compose-observable:
 	 * composables reading this recompose when the user scrolls. Useful for driving
@@ -1919,7 +1924,8 @@ class TextEditorState private constructor(
 
 	/**
 	 * Returns the [CursorMetrics] (pixel position and line height) for the caret at
-	 * [CharLineOffset] [position], accounting for the current scroll offset.
+	 * [CharLineOffset] [position], accounting for the current scroll offsets, vertical and
+	 * sideways.
 	 */
 	fun getPositionForOffset(position: CharLineOffset): CursorMetrics =
 		getPositionForOffset(position, CaretAffinity.Downstream)
@@ -1933,7 +1939,7 @@ class TextEditorState private constructor(
 			?: return CursorMetrics(position = Offset.Zero, height = 0f)
 
 		val runSide = if (position == cursorPosition && affinity == cursor.affinity) cursor.runSide else null
-		val cursorX = currentWrappedLine.caretX(position.char, runSide)
+		val cursorX = currentWrappedLine.caretX(position.char, runSide) - scrollX
 		val cursorY = currentWrappedLine.offset.y - scrollState.value
 
 		val lineHeight = currentWrappedLine.effectiveHeight
@@ -1946,7 +1952,7 @@ class TextEditorState private constructor(
 
 	/**
 	 * Maps a pixel [Offset] within the editor (e.g. a tap location) to the nearest
-	 * [CharLineOffset], accounting for scroll. A point above the first row hits the
+	 * [CharLineOffset], accounting for both scroll offsets. A point above the first row hits the
 	 * first row and a point below the last row hits the last row; x is hit-tested on
 	 * that row either way, as native text fields do.
 	 */
@@ -1962,13 +1968,14 @@ class TextEditorState private constructor(
 		if (rows.isEmpty()) return downstreamHit(CharLineOffset(0, 0))
 
 		val contentY = offset.y + scrollState.value
+		val contentX = offset.x + scrollX
 		val row = rows[rows.lastRowAtOrAbove(contentY).coerceAtLeast(0)]
 		val lineLength = textLines.getOrNull(row.line)?.length
 			?: return downstreamHit(CharLineOffset(textLines.lastIndex, textLines.last().length))
 		val lineText = textLines[row.line].text
 		if (row.wrapsToNextRow) {
 			// Hit as a vertical move to this row is, so the two agree at its end.
-			val (char, affinity) = row.caretAtX(offset.x - row.offset.x)
+			val (char, affinity) = row.caretAtX(contentX - row.offset.x)
 			val snapped = lineText.snapToGraphemeBoundary(char.coerceAtMost(lineLength), forward = false)
 			// A row laid out for longer text than the line now has ends past it.
 			if (affinity == CaretAffinity.Downstream || snapped != char) {
@@ -1984,7 +1991,7 @@ class TextEditorState private constructor(
 		val lineHeight = paragraph.getLineHeight(row.virtualLineIndex)
 		val yInLine = (contentY - row.offset.y).coerceIn(0f, (lineHeight - 1f).coerceAtLeast(0f))
 		val charPos = paragraph.getOffsetForPosition(
-			Offset(offset.x - row.offset.x, paragraph.getLineTop(row.virtualLineIndex) + yInLine)
+			Offset(contentX - row.offset.x, paragraph.getLineTop(row.virtualLineIndex) + yInLine)
 		)
 		// Skia already answers on a cluster boundary; the snap guards the caret invariant.
 		val char = lineText.snapToGraphemeBoundary(min(charPos, lineLength), forward = false)

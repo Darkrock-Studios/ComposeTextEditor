@@ -37,7 +37,8 @@ data class DrawnShape(
  * Runs [block] on a real canvas of [size] that also records each `drawRect`,
  * `drawLine`, `drawCircle`, `drawPath`, and point of `drawPoints`, so a test can assert
  * drawing geometry without reading pixels. A line or path is recorded as its bounding
- * box. Other primitives are drawn, not recorded.
+ * box, moved by the translations in force, so in the canvas's coordinates; scales and
+ * rotations are not followed. Other primitives are drawn, not recorded.
  */
 fun recordDrawing(
 	size: Size,
@@ -51,37 +52,65 @@ fun recordDrawing(
 }
 
 private class RecordingCanvas(private val inner: Canvas) : Canvas by inner {
-	val shapes = mutableListOf<DrawnShape>()
+	private val recorded = mutableListOf<DrawnShape>()
+	val shapes: List<DrawnShape> get() = recorded
+
+	private var origin = Offset.Zero
+	private val saved = ArrayDeque<Offset>()
+
+	private fun record(shape: DrawnShape) {
+		recorded += shape.copy(bounds = shape.bounds.translate(origin), contours = shape.contours.map { it.translate(origin) })
+	}
+
+	override fun translate(dx: Float, dy: Float) {
+		origin += Offset(dx, dy)
+		inner.translate(dx, dy)
+	}
+
+	override fun save() {
+		saved.addLast(origin)
+		inner.save()
+	}
+
+	override fun saveLayer(bounds: Rect, paint: Paint) {
+		saved.addLast(origin)
+		inner.saveLayer(bounds, paint)
+	}
+
+	override fun restore() {
+		saved.removeLastOrNull()?.let { origin = it }
+		inner.restore()
+	}
 
 	override fun drawRect(left: Float, top: Float, right: Float, bottom: Float, paint: Paint) {
-		shapes += DrawnShape(ShapeKind.Rect, Rect(left, top, right, bottom), paint.color)
+		record(DrawnShape(ShapeKind.Rect, Rect(left, top, right, bottom), paint.color))
 		inner.drawRect(left, top, right, bottom, paint)
 	}
 
 	override fun drawRect(rect: Rect, paint: Paint) = drawRect(rect.left, rect.top, rect.right, rect.bottom, paint)
 
 	override fun drawLine(p1: Offset, p2: Offset, paint: Paint) {
-		shapes += DrawnShape(
+		record(DrawnShape(
 			ShapeKind.Line,
 			Rect(min(p1.x, p2.x), min(p1.y, p2.y), max(p1.x, p2.x), max(p1.y, p2.y)),
 			paint.color,
 			paint.strokeWidth,
-		)
+		))
 		inner.drawLine(p1, p2, paint)
 	}
 
 	override fun drawCircle(center: Offset, radius: Float, paint: Paint) {
-		shapes += DrawnShape(ShapeKind.Circle, Rect(center, radius), paint.color)
+		record(DrawnShape(ShapeKind.Circle, Rect(center, radius), paint.color))
 		inner.drawCircle(center, radius, paint)
 	}
 
 	override fun drawPath(path: Path, paint: Paint) {
-		shapes += DrawnShape(ShapeKind.Path, path.getBounds(), paint.color, paint.strokeWidth, path.contourBounds())
+		record(DrawnShape(ShapeKind.Path, path.getBounds(), paint.color, paint.strokeWidth, path.contourBounds()))
 		inner.drawPath(path, paint)
 	}
 
 	override fun drawPoints(pointMode: PointMode, points: List<Offset>, paint: Paint) {
-		points.forEach { shapes += DrawnShape(ShapeKind.Point, Rect(it, it), paint.color, paint.strokeWidth) }
+		points.forEach { record(DrawnShape(ShapeKind.Point, Rect(it, it), paint.color, paint.strokeWidth)) }
 		inner.drawPoints(pointMode, points, paint)
 	}
 }

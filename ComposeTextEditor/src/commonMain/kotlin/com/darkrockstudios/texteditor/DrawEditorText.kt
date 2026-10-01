@@ -36,46 +36,69 @@ internal fun DrawScope.DrawEditorText(
 
 	// Pass 1: paint backgrounds for every visible virtual line BEFORE any text
 	// is drawn. Opaque fills (e.g. a code-fence card) need to land here so the
-	// text painted in pass 2 sits on top instead of being covered. Foreground
-	// rich-span decorations (bullets, borders, underlines) still run in pass 2
+	// text painted in pass 3 sits on top instead of being covered. Foreground
+	// rich-span decorations (bullets, borders, underlines) still run in pass 3
 	// after the text so they overlay correctly.
-	for (virtualLine in visible) {
-		drawRichSpans(virtualLine, state, phase = RichSpanDrawPhase.Background)
+	inContentSpace(state) {
+		for (virtualLine in visible) {
+			drawRichSpans(virtualLine, state, phase = RichSpanDrawPhase.Background)
+		}
 	}
 
-	var lastLine = -1
-	for (virtualLine in visible) {
-		if (lastLine != virtualLine.line && state.textLines.size > virtualLine.line) {
-			// drawText paints from sub-line 0 down; anchor at the paragraph top so a
-			// mid-paragraph entry (earlier sub-lines culled above the viewport) doesn't
-			// shift the whole paragraph down by one wrap-line.
-			val offset = Offset(virtualLine.offset.x, virtualLine.paragraphTop - scrollY)
-			decorateLine?.let {
-				decorateLine(virtualLine.line, offset, state, style)
-			}
-
-			val blockReplacesText = virtualLine.richSpans.any {
-				(it.style as? BlockSpanStyle)?.replacesText() == true
-			}
-			if (!blockReplacesText) {
-				drawText(
-					textLayoutResult = virtualLine.textLayoutResult,
-					color = style.textColor,
-					topLeft = offset,
-				)
-			}
-
-			lastLine = virtualLine.line
+	// Pass 2: the host's decorations behind each line, in the canvas's coordinates and
+	// unclipped, so a gutter can draw beside the text; the offset is where the text is drawn.
+	if (decorateLine != null) {
+		val scrollX = state.scrollX
+		forEachParagraph(visible, state) { virtualLine ->
+			decorateLine(virtualLine.line, Offset(virtualLine.offset.x - scrollX, virtualLine.paragraphTop - scrollY), state, style)
 		}
+	}
 
-		drawRichSpans(virtualLine, state, phase = RichSpanDrawPhase.Foreground)
+	inContentSpace(state) {
+		var lastLine = -1
+		for (virtualLine in visible) {
+			if (startsParagraph(virtualLine, lastLine, state)) {
+				val blockReplacesText = virtualLine.richSpans.any {
+					(it.style as? BlockSpanStyle)?.replacesText() == true
+				}
+				if (!blockReplacesText) {
+					// drawText paints from sub-line 0 down; anchor at the paragraph top so a
+					// mid-paragraph entry (earlier sub-lines culled above the viewport) doesn't
+					// shift the whole paragraph down by one wrap-line.
+					drawText(
+						textLayoutResult = virtualLine.textLayoutResult,
+						color = style.textColor,
+						topLeft = Offset(virtualLine.offset.x, virtualLine.paragraphTop - scrollY),
+					)
+				}
 
-		// Draw composing underline if this line intersects the composing region
-		state.composingRange?.let { composingRange ->
-			drawComposingUnderline(virtualLine, state, composingRange, style)
+				lastLine = virtualLine.line
+			}
+
+			drawRichSpans(virtualLine, state, phase = RichSpanDrawPhase.Foreground)
+
+			// Draw composing underline if this line intersects the composing region
+			state.composingRange?.let { composingRange ->
+				drawComposingUnderline(virtualLine, state, composingRange, style)
+			}
 		}
 	}
 }
+
+/** Runs [block] on the first visible row of each paragraph among [visible] that the text still has. */
+private inline fun forEachParagraph(visible: List<LineWrap>, state: TextEditorState, block: (LineWrap) -> Unit) {
+	var lastLine = -1
+	for (virtualLine in visible) {
+		if (startsParagraph(virtualLine, lastLine, state)) {
+			block(virtualLine)
+			lastLine = virtualLine.line
+		}
+	}
+}
+
+/** Whether [row], after a row of [lastLine], is its paragraph's first in view, on a line the text still has. */
+private fun startsParagraph(row: LineWrap, lastLine: Int, state: TextEditorState): Boolean =
+	lastLine != row.line && state.textLines.size > row.line
 
 private val ComposingUnderlineWidth = 1.dp
 

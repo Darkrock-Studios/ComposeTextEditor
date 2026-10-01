@@ -41,7 +41,8 @@ internal fun TextEditorState.textRangeInArea(
 	var end = -1
 	while (index <= last) {
 		val row = rows[index]
-		val rect = Rect(area.left - row.offset.x, top - row.paragraphTop, area.right - row.offset.x, bottom - row.paragraphTop)
+		val left = area.left + scrollX - row.offset.x
+		val rect = Rect(left, top - row.paragraphTop, left + area.width, bottom - row.paragraphTop)
 		val range = row.textLayoutResult.rangeInRect(rect, granularity, inclusion)
 		if (!range.collapsed) {
 			val lineStart = getCharacterIndex(CharLineOffset(row.line, 0))
@@ -73,7 +74,7 @@ internal fun TextEditorState.textRangeBetweenAreas(
 internal fun TextEditorState.offsetAtGesturePoint(point: Offset, lineMargin: Float): Int {
 	val row = rowAtGesturePoint(point, lineMargin) ?: return -1
 	val paragraph = row.textLayoutResult.multiParagraph
-	val x = point.x - row.offset.x
+	val x = point.x + scrollX - row.offset.x
 	val y = (paragraph.getLineTop(row.virtualLineIndex) + paragraph.getLineBottom(row.virtualLineIndex)) / 2f
 	return flatIndex(row, paragraph.getOffsetForPosition(Offset(x, y)))
 }
@@ -107,7 +108,7 @@ private fun TextEditorState.rowAtGesturePoint(point: Offset, lineMargin: Float):
 	val row = listOfNotNull(rows.getOrNull(above), rows.getOrNull(above + 1)).firstOrNull { row ->
 		y >= row.offset.y - lineMargin && y <= row.offset.y + row.effectiveHeight + lineMargin
 	} ?: return null
-	val x = point.x - row.offset.x
+	val x = point.x + scrollX - row.offset.x
 	return row.takeIf { x >= -lineMargin && x <= row.textLayoutResult.multiParagraph.width + lineMargin }
 }
 
