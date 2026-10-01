@@ -130,6 +130,66 @@ class PastedBlockLookTest {
 		state.assertLook(2, body.merge(styles.header2Style))
 	}
 
+	/** Its marker takes a line only where the paste covers the line whole (6.40). */
+	@Test
+	fun `a whole heading's text pasted inside a plain line is body text`() = runTest {
+		val (state, actions) = editor("## Title\nhello")
+		copy(state, actions, CharLineOffset(0, 0), CharLineOffset(0, 5))
+		pasteAt(state, actions, CharLineOffset(1, 2))
+
+		assertEquals("## Title\nheTitlello", state.blockLines())
+		state.assertLook(1, body)
+	}
+
+	@Test
+	fun `a whole heading's text pasted at either end of a plain line is body text`() = runTest {
+		val (state, actions) = editor("## Title\nhello\nworld")
+		copy(state, actions, CharLineOffset(0, 0), CharLineOffset(0, 5))
+		pasteAt(state, actions, CharLineOffset(1, 0))
+		pasteAt(state, actions, CharLineOffset(2, 5))
+
+		assertEquals("## Title\nTitlehello\nworldTitle", state.blockLines())
+		state.assertLook(1, body)
+		state.assertLook(2, body)
+	}
+
+	@Test
+	fun `a whole list item's text pasted inside a plain line is no list item`() = runTest {
+		val (state, actions) = editor("- item\nhello")
+		copy(state, actions, CharLineOffset(0, 0), CharLineOffset(0, 4))
+		pasteAt(state, actions, CharLineOffset(1, 2))
+
+		assertEquals("- item\nheitemllo", state.blockLines())
+	}
+
+	@Test
+	fun `a whole heading's text pasted onto an empty list item makes it a heading`() = runTest {
+		val (state, actions) = editor("## Title\n- ")
+		copy(state, actions, CharLineOffset(0, 0), CharLineOffset(0, 5))
+		pasteAt(state, actions, CharLineOffset(1, 0))
+
+		assertEquals("## Title\n## Title", state.blockLines())
+	}
+
+	@Test
+	fun `a heading line pasted at a list item's start goes above it`() = runTest {
+		val (state, actions) = editor("## Title\n- item")
+		copy(state, actions, CharLineOffset(0, 0), CharLineOffset(1, 0))
+		pasteAt(state, actions, CharLineOffset(1, 0))
+
+		assertEquals("## Title\n## Title\n- item", state.blockLines())
+	}
+
+	@Test
+	fun `lines pasted inside a plain line keep only the blocks of the lines they cover whole`() = runTest {
+		val (state, actions) = editor("## Title\n- item\nend\nhello")
+		copy(state, actions, CharLineOffset(0, 0), CharLineOffset(2, 3))
+		pasteAt(state, actions, CharLineOffset(3, 2))
+
+		assertEquals("## Title\n- item\nend\nheTitle\n- item\nendllo", state.blockLines())
+		state.assertLook(3, body)
+	}
+
 	@Test
 	fun `a foreign heading pasted inside a plain line is body text`() = runTest {
 		val (state, _) = editor("hello")

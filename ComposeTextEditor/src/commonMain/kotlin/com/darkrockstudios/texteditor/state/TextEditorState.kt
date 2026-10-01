@@ -49,6 +49,7 @@ import com.darkrockstudios.texteditor.input.imeActionFor
 import com.darkrockstudios.texteditor.input.isWithinDocument
 import com.darkrockstudios.texteditor.RichTextStyles
 import com.darkrockstudios.texteditor.richstyle.BlockSpanStyle
+import com.darkrockstudios.texteditor.richstyle.anchorsToLine
 import com.darkrockstudios.texteditor.richstyle.HeaderSpanStyle
 import com.darkrockstudios.texteditor.richstyle.LineBlockEditBehavior
 import com.darkrockstudios.texteditor.richstyle.LinkSpanStyle
@@ -2535,8 +2536,7 @@ class TextEditorState private constructor(
 			// A line marker or placeholder block belongs to its line, not to the
 			// characters copied out of it: a fragment of an item's text pastes as
 			// plain text, only a copy covering the whole span carries the marker.
-			val lineAnchored = span.style.stickyAtStart || span.style is BlockSpanStyle
-			if (lineAnchored &&
+			if (span.style.anchorsToLine &&
 				(span.range.start < range.start || span.range.end > range.end)
 			) {
 				return@mapNotNull null
@@ -2612,6 +2612,8 @@ class TextEditorState private constructor(
 	 * span of the same style already covers is left out: inserting inside that span, or
 	 * beside one that grows at its edge, stretched it over the inserted text. A link
 	 * landing against a link to the same place joins it, since a link does not grow.
+	 * A line's marker, block or format takes only lines the insert covers whole: text
+	 * landing inside a line without its line break takes that line as it is (6.40).
 	 */
 	internal fun addPreservedRichSpans(insertPosition: CharLineOffset, spans: List<PreservedRichSpan>) = withAtomicEdit {
 		spans.forEach { preserved ->
@@ -2629,11 +2631,15 @@ class TextEditorState private constructor(
 				else
 					preserved.relativeEnd.char
 			)
-			// A copied block takes a pasted line from whatever block there refuses to
-			// share it, a list the paste continued onto a pasted heading. The line the
-			// paste began in keeps its own.
+			if (preserved.style.anchorsToLine &&
+				(startPos.char != 0 || endPos.char != textLines.getOrNull(endPos.line)?.length)
+			) {
+				return@forEach
+			}
+			// A copied block takes a line it covers whole from whatever block there refuses
+			// to share it, a list the paste continued onto a pasted heading.
 			val block = allBlockRegistry.firstOrNull { it.spanStyle === preserved.style }
-			if (block != null && preserved.relativeStart.lineDiff > 0 && startPos.char == 0) {
+			if (block != null) {
 				val refusing = lineBlocks(startPos.line).filter { lineBlocksConflict(block.spanStyle, it.spanStyle) }
 				if (refusing.isNotEmpty()) {
 					editManager.recordLineBlockChanges(listOf(startPos.line)) {

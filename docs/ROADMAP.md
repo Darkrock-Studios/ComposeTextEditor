@@ -187,7 +187,7 @@ review.
 | D | Bindings, actions, menu | `input/KeyBindings.kt`, `input/EditorCommand.kt`, `input/BuiltinEditorActions.kt`, `contextmenu/` | 2.1, 2.2, 2.4, 2.5, 2.7 to 2.12, 4.8, 5.8, 7.58 |
 | E | Input sessions on desktop, iOS, web | `desktopMain`, `iosMain`, `wasmJsMain` under `input/` | 4.2 to 4.7, 4.10 to 4.12, 4.19, 4.21, 4.22, 4.24 to 4.26, 4.28, 4.29, 4.32, 4.33, 4.35, 4.37 to 4.40, 7.37 |
 | F | Android input | `androidMain` | 0.4, 0.12, 3.9 to 3.11, 3.14, 3.17, 4.16, 4.18, 4.20, 4.27, 4.30, 4.31, 4.34, 4.36, 4.41, 7.40 |
-| G | Edit pipeline and undo | `state/TextEditManager.kt`, `state/TextEditHistory.kt`, `state/EditBehavior.kt`, `input/ImeEditLogic.kt` | 1.20, 5.1 to 5.5, 5.9 to 5.11, 5.13 to 5.18, 6.1 to 6.6, 6.14, 6.15, 6.17, 6.22, 6.23, 6.28, 6.29, 6.33 to 6.35, 6.40, 6.45, 7.54, 7.55 |
+| G | Edit pipeline and undo | `state/TextEditManager.kt`, `state/TextEditHistory.kt`, `state/EditBehavior.kt`, `input/ImeEditLogic.kt` | 1.20, 5.1 to 5.5, 5.9 to 5.11, 5.13 to 5.18, 6.1 to 6.6, 6.14, 6.15, 6.17, 6.22, 6.23, 6.28, 6.29, 6.33 to 6.35, 6.40, 6.45, 7.54, 7.55, 6.47 |
 | H | Clipboard and HTML | `clipboard/`, `html/`, `dragdrop/` | 4.9, 4.13, 4.17, 6.7 to 6.13, 6.18 to 6.21, 5.12, 6.24 to 6.27, 6.30 to 6.32, 6.36 to 6.39, 6.41 to 6.44, 6.46, 6.47, 7.39, 7.46, 7.47, 7.49, 7.53, 7.63 |
 | I | Markdown and block model | `ComposeTextEditorMarkdown/`, `richstyle/`, `state/TextEditorStateBlockExt.kt` | 5.6, 7.14 to 7.16, 7.43, 7.45, 7.52, 7.64, 7.67, 7.70 to 7.72, 7.79, 7.80, 7.83, 7.85 |
 | J | Find addon | `ComposeTextEditorFind/` | 7.17 to 7.19, 7.26, 7.29, 7.42, 7.68, 7.69 |
@@ -2979,7 +2979,7 @@ iOS Safari; browser tests run in CI (met: the `browser` job, 4.15).
   foreign markup twice, once for the text and again for its blocks
   (`htmlPasteDocument`); `ClipboardPaste` could carry the parsed document. Found
   in 6.37's review.
-- [ ] **6.40 A heading's whole text pasted inside a line makes that line a
+- [x] **6.40 A heading's whole text pasted inside a line makes that line a
   heading. S.** [Opus] [Lane G] Copying all of an h2 "Title" (no line break) and
   pasting it at column 2 of a plain "hello" gives an h2 "heTitlello":
   `addPreservedRichSpans` places the copied heading marker on the line the
@@ -2988,6 +2988,15 @@ iOS Safari; browser tests run in CI (met: the `browser` job, 4.15).
   so `<h2>Title</h2>` pasted there lands as body text. A copied block should
   take a line only where the paste covers it whole, as Word gives text pasted
   without its paragraph mark the destination's style. Found in 6.38's review.
+  Done: a copied line marker, block or paragraph format (`anchorsToLine`) lands
+  only on a line the paste covers whole, from its start to its end, and takes it
+  from any block there that refuses to share it, the first line included (a
+  heading's whole text pasted onto an empty list item made it both). So text
+  pasted inside a line, or at either end of one, takes that line as it is, as
+  markup already did; a paste at a paragraph's start leaves the line its last
+  line joins with that paragraph's blocks and format, where 6.33 and 6.34's
+  tests had expected the copied ones (`clipboard/PastedBlockLookTest.kt`,
+  `state/ParagraphFormatTest.kt`, `state/JoinParagraphStyleTest.kt`). Found: 6.47.
 - [x] **6.41 Part of a heading dropped into another line keeps the heading's
   look. S.** [Opus] [Lane H] A drop (`dragdrop/TextDrop.kt` `insertAt`) takes
   the link look off text no link covers, as a paste does, but not a block's
@@ -3016,6 +3025,14 @@ iOS Safari; browser tests run in CI (met: the `browser` job, 4.15).
   would have offered it (5.9). Go through `TextEditorState.finishComposition`
   there, keeping the resync they request; the behaviors' edit then precedes
   the paste's own `onPaste` offer and the paste lands at the mapped caret.
+- [ ] **6.47 A copied image or rule pasted inside a line leaves a space. C.**
+  [Opus] [Lane G] An image or horizontal rule line holds a one-space
+  placeholder under its `BlockSpanStyle`. Copying the placeholder without its
+  line break and pasting it inside or at the end of a text line lands the bare
+  space: the block takes only a line the paste covers whole (6.40), and the line
+  model has no inline image. Paste such a block onto a line of its own (split
+  the line, as Word puts a pasted picture in its own paragraph when it cannot sit
+  inline), or leave the placeholder out. Found in 6.40's review.
 
 ## Phase 7: reach
 
