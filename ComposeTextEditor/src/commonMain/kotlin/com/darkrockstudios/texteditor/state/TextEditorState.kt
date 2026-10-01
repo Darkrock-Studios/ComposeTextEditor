@@ -2475,6 +2475,7 @@ class TextEditorState private constructor(
 			}
 			if (covered) return@forEach
 			if (preserved.style is LinkSpanStyle) {
+				takeOutOfOtherLinks(TextEditorRange(startPos, endPos), preserved.style)
 				val touching = richSpanManager.getSpansInRange(TextEditorRange(startPos, endPos)).filter {
 					it.style == preserved.style && (it.range.end == startPos || it.range.start == endPos)
 				}

@@ -2185,7 +2185,7 @@ iOS Safari; browser tests run in CI (met: the `browser` job, 4.15).
   "inxx" leaves "lin" linked (`state/LinkComposingTest.kt`). A replace across
   lines, or of a link across lines, keeps the general handling. Found: 5.16,
   5.17.
-- [ ] **5.15 A link pasted onto another link overlaps it. C.** [Opus] [Lane G]
+- [x] **5.15 A link pasted onto another link overlaps it. C.** [Opus] [Lane G]
   A rich paste of a copied link into another link, inside it or over all of
   its word, keeps the link it lands in over the pasted text (an insert inside
   a link joins it, and since 5.13 a replace of its word does when the text
@@ -2194,6 +2194,14 @@ iOS Safari; browser tests run in CI (met: the `browser` job, 4.15).
   so two links with different destinations cover it and `linkAt` and the
   serializers see either. A pasted link should take its text out of the link
   it lands in. Found in 5.13's review.
+  Done: reproduced, inside the link and over its word, from this editor's copy
+  and from markup. A link placed over text a link to elsewhere covers takes that
+  text out of it, the other link keeping its parts before and after
+  (`takeOutOfOtherLinks`): a pasted or dropped link from the span buffer
+  (`addPreservedRichSpans`), a link from pasted markup, and `setLink`. A
+  markup link that a link to the same place already covers, the buffer's
+  (compared through `sanitizeLinkUrl`, as the copy wrote it) or the one the
+  paste landed in, is not added again (`clipboard/PastedLinkInLinkTest.kt`).
 - [ ] **5.16 Redo of a composition over a link's end loses the link. S.**
   [Opus] [Lane G] Composing over the linked "link" of "see link here" as "lin"
   and then "linx" lands "lin" linked and the "x" out of it, one key at a time

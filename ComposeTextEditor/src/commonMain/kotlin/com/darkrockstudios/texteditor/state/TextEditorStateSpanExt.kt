@@ -57,6 +57,23 @@ internal fun TextEditorState.getSpanStylesForEditAt(position: CharLineOffset): S
 	return setOfNotNull(bodyStyle)
 }
 
+/**
+ * Takes [range] out of every link to another destination than [link]'s that covers
+ * some of it, leaving that link's parts before and after: a link placed over text
+ * another link covers would overlap it, and [linkAt] and the serializers would see
+ * either.
+ */
+internal fun TextEditorState.takeOutOfOtherLinks(range: TextEditorRange, link: LinkSpanStyle) {
+	val others = richSpanManager.getSpansInRange(range).filter {
+		it.style is LinkSpanStyle && it.style != link && it.range.start < range.end && range.start < it.range.end
+	}
+	others.forEach { other ->
+		removeRichSpan(other)
+		if (other.range.start < range.start) addRichSpan(other.range.start, range.start, other.style)
+		if (range.end < other.range.end) addRichSpan(range.end, other.range.end, other.style)
+	}
+}
+
 /** Whether [style] is the link style, or one a configuration before this one gave links. */
 internal fun TextEditorState.isLinkStyle(style: SpanStyle): Boolean =
 	style == richTextStyles.linkStyle || retiredRichTextStyles.any { it.linkStyle == style }

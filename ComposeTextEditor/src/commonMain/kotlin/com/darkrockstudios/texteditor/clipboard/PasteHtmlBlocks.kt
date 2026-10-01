@@ -6,10 +6,13 @@ import com.darkrockstudios.texteditor.html.HtmlDocument
 import com.darkrockstudios.texteditor.html.addParagraphFormats
 import com.darkrockstudios.texteditor.html.parseHtmlDocument
 import com.darkrockstudios.texteditor.html.pastedLinkSpans
+import com.darkrockstudios.texteditor.html.sanitizeLinkUrl
 import com.darkrockstudios.texteditor.richstyle.LinkSpanStyle
+import com.darkrockstudios.texteditor.richstyle.RichSpan
 import com.darkrockstudios.texteditor.richstyle.applyDocumentBlocks
 import com.darkrockstudios.texteditor.state.LayoutUpdate
 import com.darkrockstudios.texteditor.state.TextEditorState
+import com.darkrockstudios.texteditor.state.takeOutOfOtherLinks
 
 /**
  * Parses a paste's [html], or null when it holds nothing usable.
@@ -52,10 +55,34 @@ internal fun TextEditorState.applyHtmlPasteBlocks(
 	pastedText: AnnotatedString,
 ) {
 	val pastedLines = insertPosition.line..insertPosition.line + pastedText.text.count { it == '\n' }
+	val links = htmlPasteLinks(document, insertPosition)
+	// Outside the line recording, which sees only spans starting on the pasted lines.
+	links.forEach { takeOutOfOtherLinks(it.range, it.style as LinkSpanStyle) }
 	editManager.recordLineChanges(pastedLines) {
+		if (links.isNotEmpty()) {
+			richSpanManager.addRichSpans(links)
+			updateBookKeeping(LayoutUpdate.SpansOnly)
+		}
 		placeHtmlPasteBlocks(document, insertPosition, pastedText, pastedLines)
 	}
 }
+
+/**
+ * The markup's links, which are inline, so unlike blocks they hold on the spliced first
+ * and last lines too. One a link to the same place already covers is left out: the
+ * in-editor span buffer restored it, or the paste landed inside it, and a second span
+ * would overlap it. The buffer's destination is as the user set it, the markup's as
+ * [sanitizeLinkUrl] wrote it.
+ */
+private fun TextEditorState.htmlPasteLinks(document: HtmlDocument, insertPosition: CharLineOffset): List<RichSpan> =
+	pastedLinkSpans(document.links, insertPosition).filterNot { link ->
+		val url = (link.style as LinkSpanStyle).url
+		richSpanManager.getSpansInRange(link.range).any { span ->
+			val style = span.style as? LinkSpanStyle ?: return@any false
+			(style.url == url || sanitizeLinkUrl(style.url, allowedLinkSchemes) == url) &&
+				span.range.start <= link.range.start && span.range.end >= link.range.end
+		}
+	}
 
 private fun TextEditorState.placeHtmlPasteBlocks(
 	document: HtmlDocument,
@@ -63,20 +90,6 @@ private fun TextEditorState.placeHtmlPasteBlocks(
 	pastedText: AnnotatedString,
 	pastedLines: IntRange,
 ) {
-	// Links are inline, so unlike blocks they hold on the spliced first and last lines
-	// too. One the in-editor span buffer already restored is not added again, as a
-	// second span split per line would overlap it.
-	val restored = pastedLines
-		.flatMap { richSpanManager.getRichSpansStartingOn(it) }
-		.filter { it.style is LinkSpanStyle }
-	val links = pastedLinkSpans(document.links, insertPosition).filterNot { link ->
-		restored.any { it.style == link.style && it.range.start <= link.range.start && it.range.end >= link.range.end }
-	}
-	if (links.isNotEmpty()) {
-		richSpanManager.addRichSpans(links)
-		updateBookKeeping(LayoutUpdate.SpansOnly)
-	}
-
 	// A paste splices into a line at both ends: whatever preceded the insertion
 	// point stays on the first pasted line and whatever followed it joins the
 	// last. Those two lines are part of the document, not of the source, so a
