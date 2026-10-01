@@ -48,7 +48,9 @@ fun TextLayoutResult.lineTextLeft(lineIndex: Int, density: Density?): Float {
  * Compose's own selection path ([TextLayoutResult.getPathForRange], what `BasicTextField`
  * draws) has them: a range that crosses between left-to-right and right-to-left text
  * covers separate stretches of the row, and gets a box for each. Boxes that touch are
- * merged. Each box is the row's full height. The range is clipped to the row's text,
+ * merged. Each box is the row's full height, from [getLineTop] to [getLineBottom] in the
+ * layout's coordinates (measured from the paragraph's top, not the row's). The range is
+ * clipped to the row's text,
  * which leaves out the spaces a soft wrap hangs past the row's end.
  *
  * A row of left-to-right text in a left-to-right paragraph has a single stretch, read

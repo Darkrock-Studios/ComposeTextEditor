@@ -182,7 +182,7 @@ review.
 | --- | --- | --- | --- |
 | A | Caret motion | `state/TextEditorCursorState.kt`, `state/TextEditorStateCursorExt.kt`, `state/WordSegmentationUtils.kt`, `input/TextEditorKeyCommandHandler.kt` | 1.1 to 1.7, 1.19, 2.3, 2.6, 7.5, 7.33 |
 | B | Pointer and touch | `textEditorPointerInputHandling.kt`, `state/TextEditorSelectionManager.kt`, `DrawSelectionHandles.kt` | 1.9, 1.12 to 1.16, 1.21 to 1.24, 3.1, 3.2, 3.4 to 3.8, 3.13, 3.15, 3.18, 4.23, 6.16 |
-| C | Drawing and geometry | `Draw*.kt`, `cursor/`, `scrollbar/`, `state/TextEditorScrollState.kt`, hit testing | 1.8, 1.10, 1.11, 1.17, 1.18, 3.3, 3.12, 3.16, 4.14, 7.6, 7.7, 7.27, 7.41 |
+| C | Drawing and geometry | `Draw*.kt`, `cursor/`, `scrollbar/`, `state/TextEditorScrollState.kt`, hit testing | 1.8, 1.10, 1.11, 1.17, 1.18, 1.25, 3.3, 3.12, 3.16, 4.14, 7.6, 7.7, 7.27, 7.41 |
 | D | Bindings, actions, menu | `input/KeyBindings.kt`, `input/EditorCommand.kt`, `input/BuiltinEditorActions.kt`, `contextmenu/` | 2.1, 2.2, 2.4, 2.5, 2.7 to 2.12, 4.8, 5.8, 7.58 |
 | E | Input sessions on desktop, iOS, web | `desktopMain`, `iosMain`, `wasmJsMain` under `input/` | 4.2 to 4.7, 4.10 to 4.12, 4.19, 4.21, 4.22, 4.24 to 4.26, 4.28, 4.29, 4.32, 4.33, 4.35, 4.37, 4.38, 7.37 |
 | F | Android input | `androidMain` | 0.4, 0.12, 3.9 to 3.11, 3.14, 3.17, 4.16, 4.18, 4.20, 4.27, 4.30, 4.31, 4.34, 4.36, 7.40 |
@@ -687,6 +687,13 @@ fixes what users feel every minute.
   keeps its colour and handles. Only Compose focus counts: switching to another
   window does not dim the selection, as it does natively on macOS. A handle
   drag under way when focus goes keeps going.
+- [x] **1.25 Composing underline on wrapped rows. R.** [Opus] [Lane C] The
+  IME composing underline on any row but a paragraph's first is drawn a row
+  too low per row above it: its y added the row's layout bottom, measured
+  from the paragraph's top, to the row's own top. Found reading the code in
+  7.7, then reproduced in the harness.
+  Done: measured from the paragraph's top, where the text is drawn from
+  (`drawing/ComposingUnderlineTest.kt`, rows 1, 2 and 9, scrolled).
 
 ### Found by the differential tests
 

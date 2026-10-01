@@ -132,8 +132,9 @@ internal fun DrawScope.drawComposingUnderline(
 			// Whole pixels, so a thin underline stays crisp instead of blurring over two rows.
 			val thickness = ComposingUnderlineWidth.toPx().roundToInt().coerceAtLeast(1).toFloat()
 
+			// The boxes are in the paragraph layout's coordinates, which the text is drawn from.
 			boxes.forEach { box ->
-				val top = floor(lineWrap.offset.y - scrollY + box.bottom - thickness)
+				val top = floor(lineWrap.paragraphTop - scrollY + box.bottom - thickness)
 				drawRect(
 					color = underlineColor,
 					topLeft = Offset(box.left, top),
