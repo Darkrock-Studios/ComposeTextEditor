@@ -3850,13 +3850,20 @@ Shaping is one line per keystroke. These still scale with document length:
   word it scanned, the nearest word beyond each end included
   (`SpellCheckStateTest`, `ComputeAffectedRangesTest`, `SpellCheckE2eTest`).
   Found 7.81.
-- [ ] **7.77 A batch's ranges are paired with the text at collection. C.**
+- [x] **7.77 A batch's ranges are paired with the text at collection. C.**
   [Opus] [Lane K] `SpellCheckingTextEditor` reads `computedAgainst` when the
   debounced collector takes a batch, not when the batch ended. While an earlier
   batch's check holds `checkMutex`, the next batch waits in the buffer, and an
   edit made meanwhile (a later batch's) is already in the text it is paired
   with: `LineDiff` sees no change, so a line inserted above it puts the check a
   line off. Record the text with each batch as it closes.
+  Done: the debounce reads the text as each edit of the batch arrives and
+  pairs the batch with the last read, which no later edit is in (reading as
+  the quiet period ends could take in an edit whose value had not arrived). A
+  batch from a document replaced since is dropped, since the replacement has
+  its own full check. A batch that waited is moved through the edits since by
+  `LineDiff`, whose single band can widen it over the lines between them
+  (`SpellCheckE2eTest`, `DebounceUntilQuiescentTest`).
 - [ ] **7.81 Invalidation reads a burst's edits in the text its later edits
   left. C.** [Opus] [Lane K] Edits that commit before the collector runs (a
   replace-all, whose replacements go last to first) reach

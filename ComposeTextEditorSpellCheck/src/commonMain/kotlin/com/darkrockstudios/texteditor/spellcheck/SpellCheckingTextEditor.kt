@@ -13,6 +13,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.darkrockstudios.texteditor.BasicTextEditor
@@ -150,12 +151,13 @@ fun SpellCheckingTextEditor(
 	}
 
 	LaunchedEffect(state) {
-		state.textState.editOperations.debounceUntilQuiescentWithBatch(500.milliseconds)
-			.collect { operations ->
-				val rangesToCheck = computeAffectedRanges(operations)
-				val computedAgainst = state.textState.textLines
-				rangesToCheck.forEach { range ->
-					state.runPartialSpellCheck(range, computedAgainst)
+		val text = state.textState
+		text.editOperations.debounceUntilQuiescentWithBatch(500.milliseconds) { BatchText(text.textLines, text.documentGeneration.value) }
+			.collect { (operations, batchText) ->
+				// A document replaced since has its own full check.
+				if (batchText.generation != text.documentGeneration.value) return@collect
+				computeAffectedRanges(operations).forEach { range ->
+					state.runPartialSpellCheck(range, batchText.lines)
 				}
 			}
 	}
@@ -358,6 +360,9 @@ fun SpellCheckingTextEditor(
 }
 
 /** Opens the menu with these items and trailing items, where the gesture asked for it. */
+/** The text a batch of edits left, and the document it is in. */
+private class BatchText(val lines: List<AnnotatedString>, val generation: Int)
+
 private typealias ShowMenu = (items: List<ContextMenuItem>, trailingItems: List<ContextMenuItem>) -> Unit
 
 private fun RichSpan.isFlag(): Boolean = style is SpellCheckStyle || style is DiagnosticStyle

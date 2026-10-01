@@ -122,6 +122,46 @@ class SpellCheckE2eTest {
 		}
 	}
 
+	/** Holds the lookup of [word] until [release]; [delegate] answers every lookup. */
+	private class GatedWord(private val word: String, private val delegate: EditorSpellChecker) : EditorSpellChecker by delegate {
+		private val gate = CompletableDeferred<Unit>()
+
+		fun release() {
+			gate.complete(Unit)
+		}
+
+		override suspend fun isCorrectWord(word: String): Boolean {
+			if (word == this.word) gate.await()
+			return delegate.isCorrectWord(word)
+		}
+	}
+
+	@Test
+	fun `a batch waiting behind a check follows a line inserted above it after it closed`() {
+		val checker = GatedWord("gate", CountingSpellChecker(correctWords = setOf("fine", "gate", "zz")))
+		spellCheckUiTest(spellChecker = checker, initialText = "fine\nfine\nfine") {
+			fun insert(line: Int, char: Int, text: String) {
+				val at = CharLineOffset(line, char)
+				state.textState.replace(TextEditorRange(at, at), text)
+			}
+
+			// Its check holds the lock on the lookup of "gate", below the lines the next edits change.
+			insert(2, 4, " gate")
+			letSpellCheckSettle()
+			// This batch closes and waits its turn.
+			insert(1, 4, " teh")
+			letSpellCheckSettle()
+			// Lands before the waiting batch is taken.
+			insert(0, 0, "zz\n")
+			checker.release()
+			letSpellCheckSettle()
+			letSpellCheckSettle()
+
+			assertEquals("zz\nfine\nfine teh\nfine gate", state.textState.getAllText().text)
+			assertEquals(listOf("teh"), flaggedWords)
+		}
+	}
+
 	@Test
 	fun `a typed word is checked once, not once per character`() {
 		val words = words(60)
