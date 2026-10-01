@@ -33,10 +33,10 @@ internal enum class HtmlTag(val tag: String) {
 	val isHeading: Boolean get() = this <= H6
 }
 
-internal fun SpanStyle.htmlTags(config: RichTextStyles): Set<HtmlTag> {
+internal fun SpanStyle.htmlTags(config: RichTextStyles, headingsBySize: Boolean): Set<HtmlTag> {
 	// A header carries bold plus a size; emitting <strong> as well would make the
 	// paste round-trip back as bold-inside-header, so the header tag stands alone.
-	headerTag(config)?.let { return setOf(it) }
+	if (headingsBySize) headerTag(config)?.let { return setOf(it) }
 
 	val tags = LinkedHashSet<HtmlTag>()
 	if (fontWeight == FontWeight.Bold) tags += HtmlTag.STRONG
@@ -54,18 +54,13 @@ private fun SpanStyle.headerTag(config: RichTextStyles): HtmlTag? {
 	val heading = headingTagBySize(config) ?: return null
 	// A run whose style is identical to emphasized body text carries nothing that
 	// says which of the two it is. Under the default configuration h4 is exactly
-	// that — bold at the body font size — so mid-sentence runs are read as the far
-	// likelier bold, and it takes a whole uniformly styled line ([uniformHeadingTag])
-	// to be read as a heading.
+	// that (bold at the body font size), so it is read as the far likelier bold.
 	if (heading.spanStyle(config) == config.defaultTextStyle.merge(config.boldStyle)) return null
 	return heading
 }
 
-/**
- * The heading level whose configured size this style matches, ignoring whether
- * anything else could have produced the same style.
- */
-internal fun SpanStyle.headingTagBySize(config: RichTextStyles): HtmlTag? {
+/** The heading level whose configured size this style matches. */
+private fun SpanStyle.headingTagBySize(config: RichTextStyles): HtmlTag? {
 	if (fontWeight != FontWeight.Bold || fontSize == TextUnit.Unspecified) return null
 	return when (fontSize.value) {
 		config.header1Style.fontSize.value -> HtmlTag.H1

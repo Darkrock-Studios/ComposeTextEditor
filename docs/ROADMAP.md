@@ -1995,14 +1995,20 @@ iOS Safari; browser tests run in CI.
   the state keeps a copy of the set it is given. `rememberSaveableTextEditorState`
   does not save the set; markdown export still writes every link, as 6.16 left
   it. The iOS clipboard and drag actuals take the set (Mac queue). Found: 6.30.
-- [ ] **6.26 Bold text at a heading's size copies out as a heading. S.** [Opus]
+- [x] **6.26 Bold text at a heading's size copies out as a heading. S.** [Opus]
   [Lane H] HTML copy-out (`html/HtmlTag.kt`, `headerTag` and
   `uniformHeadingTag`) reads a run that is bold at a configured heading size
   as that heading, so a whole line bold at 24 sp is written as `<h2>` though
   it has no heading block. Since 7.46 a pasted size lands as sp relative to the
   body, so a bold word 1.5 times the body size can reach it. Take the heading
   from the line's heading block, which export already knows, rather than from
-  the size.
+  the size. Done: it was worse than written: a bold word at a heading's size
+  mid line was written as an `<h2>` inside the `<p>`. Export and copy take a
+  line's heading from its heading block alone, so such text writes as
+  `<strong>` (HTML writes no size, so the size stays only in an in-process
+  copy); `uniformHeadingTag` is gone. The standalone `AnnotatedString.toHtml`,
+  which has no blocks, still reads a run at a heading's size as that heading
+  (`html/HeadingSizeBoldHtmlTest.kt`). Found: 6.31, 7.64.
 - [ ] **6.20 Drag and drop on Android, iOS and web. S.** [Opus] [Lane H]
   `dragdrop/PlatformTextDrag` has desktop actuals only. Android: build the
   transfer from `ClipData.newHtmlText` with `View.DRAG_FLAG_GLOBAL`, read drops
@@ -2031,6 +2037,12 @@ iOS Safari; browser tests run in CI.
   reads the receiver's `allowedLinkSchemes`, adds none). Strip the link style
   from runs the receiving parse does not confirm as links, or read the markup
   when the copy came from another state.
+- [ ] **6.31 A heading's inline formatting is lost in HTML. S.** [Opus]
+  [Lane H] `HtmlExtension.kt` `lineHtml` writes a heading block's line from
+  `AnnotatedString(line.text)`, dropping every span to shed the baked heading
+  style, so "My *great* title" exports and copies as `<h2>My great title</h2>`.
+  Strip only the configured heading style (current or retired) and write the
+  rest, as markdown export keeps a heading's emphasis.
 - [x] **6.13 Plain paste reads the HTML flavor.** [Opus] [Lane H] On desktop,
   `Action.PasteAsPlainText` takes `ClipboardHelper.getText(...).text`, so a
   foreign paste that offers HTML yields the text of the parsed markup rather
@@ -2635,6 +2647,14 @@ Shaping is one line per keystroke. These still scale with document length:
   thread reads it whole. `AnnotatedString.toHtml(styles)` and
   `ClipboardHelper.setText` without markup have no state and read the
   current styles alone.
+
+- [ ] **7.64 Bold text at a heading's size exports to markdown as a heading.
+  S.** [Opus] [Lane I] `annotatedStringToMarkdown.kt` `styleMarkers` keeps a
+  legacy heading path for spanless content: any run bold at a configured
+  heading size writes as that heading's marker, so "a **BIG** b" with the bold
+  word at 24 sp exports as `a ` and `## BIG` on lines of their own. HTML takes a
+  line's heading from its block alone since 6.26; markdown export should too,
+  writing such a run as bold with its size.
 
 ### Find and replace addon
 

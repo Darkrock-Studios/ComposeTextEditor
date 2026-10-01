@@ -132,8 +132,7 @@ class ClipboardBlockStructureE2eTest {
 			markdown.importMarkdown("Some **bold** text.")
 			waitForIdle()
 
-			// Every fragment of a styled run is uniformly styled, and the default h4
-			// is bold at the body size, so a size match cannot tell the two apart.
+			// The default h4 is bold at the body size, as the copied word is.
 			val from = text.indexOf("bold")
 			selectRange(from, from + "bold".length)
 			press(Key.C, ctrl = true)

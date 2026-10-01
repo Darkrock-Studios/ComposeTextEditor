@@ -122,6 +122,11 @@ this exercises the clipboard's HTML as the block carrier.
    sized.
 4. In the Blank Markdown demo (empty document, never typed into), paste immediately.
    **Expect:** correctly sized.
+5. From a word processor, copy a sentence with one word bold at 16.5 pt in 11 pt
+   text (1.5 times, which lands at the default h2's 24 sp) and paste it into a
+   paragraph. Copy that line out into a browser rich-text field.
+   **Expect:** the word arrives bold inside its sentence, not as a heading on a line
+   of its own (6.26).
 
 ### 2.6 Context menu parity (#87, #50)
 

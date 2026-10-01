@@ -111,18 +111,10 @@ class HtmlExtension(
 
 }
 
-/**
- * A line to serialize, paired with the document line its decorations come from.
- *
- * [isWholeLine] is false for the partly covered first and last lines of a copied
- * selection. Only a whole line can be read as a heading by how it is styled: any
- * fragment of a bold run is uniformly styled, and the default h4 is bold at the
- * body size, so the size match cannot tell the two apart.
- */
+/** A line to serialize, paired with the document line its decorations come from. */
 internal class HtmlLine(
 	val text: AnnotatedString,
 	val docLine: Int,
-	val isWholeLine: Boolean = true,
 	/** The links over [text], in its own offsets. */
 	val links: List<HtmlLink> = emptyList(),
 )
@@ -189,7 +181,6 @@ internal fun renderHtmlFragment(
 				headerLevel = headerLevels[line.docLine],
 				// An item's format is on its `<li>`.
 				format = formats[line.docLine].takeIf { blocks.listBlockAt(line.docLine) == null },
-				isWholeLine = line.isWholeLine,
 				links = line.links,
 				styles = styles,
 				retired = retired,
@@ -263,7 +254,6 @@ private fun lineHtml(
 	blocks: DocumentBlocks,
 	headerLevel: Int?,
 	format: ParagraphFormatSpanStyle?,
-	isWholeLine: Boolean,
 	links: List<HtmlLink>,
 	styles: RichTextStyles,
 	retired: RetiredStyles,
@@ -275,16 +265,11 @@ private fun lineHtml(
 
 	val image = blocks.imageLines[index]
 	val isRule = index in blocks.horizontalRuleLines
-	// A heading's span carries its level; font-size matching remains only as
-	// the fallback for spanless content, and only for a whole line, since any
-	// fragment of a styled run is uniform on its own. A uniformly styled heading
-	// line has no inner formatting left to render, so the tag is written here
-	// rather than by `toHtml`, which declines any heading level it cannot tell
-	// apart from bold body text.
+	// The heading comes from the line's block, never from how its text is sized: bold
+	// text at a heading's size is bold text.
 	val heading = when {
 		isRule || image != null -> null
 		headerLevel != null -> HtmlTag.entries[headerLevel - 1]
-		isWholeLine -> line.uniformHeadingTag(styles, retired)
 		else -> null
 	}
 	val content = when {
@@ -293,8 +278,8 @@ private fun lineHtml(
 			" alt=\"${image.alt.escapeHtmlAttribute()}\">"
 
 		heading != null -> "<${heading.tag}${format.styleAttribute()}>" +
-			"${AnnotatedString(line.text).toHtml(styles, links, allowedLinkSchemes = allowedLinkSchemes)}</${heading.tag}>"
-		else -> line.toHtml(styles, links, retired, allowedLinkSchemes)
+			"${AnnotatedString(line.text).toHtml(styles, links, allowedLinkSchemes = allowedLinkSchemes, headingsBySize = false)}</${heading.tag}>"
+		else -> line.toHtml(styles, links, retired, allowedLinkSchemes, headingsBySize = false)
 	}
 
 	return when {

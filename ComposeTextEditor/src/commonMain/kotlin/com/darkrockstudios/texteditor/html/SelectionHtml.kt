@@ -11,14 +11,12 @@ import com.darkrockstudios.texteditor.state.TextEditorState
  * A copy's `AnnotatedString` holds character styling alone: lists, blockquotes,
  * headings and fences live in line-anchored rich spans, which do not travel with
  * it. Without this the clipboard's HTML flavor described a selection with no
- * blocks at all, so pasting anywhere the in-process span buffer does not reach —
- * another application, or after any edit invalidated it — dropped every block.
+ * blocks at all, so pasting anywhere the in-process span buffer does not reach
+ * (another application, or after any edit invalidated it) dropped every block.
  *
  * A partially covered line keeps its block: a fragment of a list item is still a
  * list item, and [applyHtmlPasteBlocks] independently declines to place a block
  * on the first or last pasted line when the paste splices into an existing one.
- * Such a line is not whole, though, so it is never read as a heading by how it is
- * styled: every fragment of a styled run is uniform on its own.
  *
  * Text and blocks come from one snapshot, so a concurrent edit cannot pair the
  * text of one revision with the line indices of another.
@@ -39,7 +37,6 @@ internal fun TextEditorState.selectionAsHtml(range: TextEditorRange): String {
 		HtmlLine(
 			text = line.subSequence(start, end),
 			docLine = docLine,
-			isWholeLine = start == 0 && end == line.length,
 			links = links[docLine].orEmpty().mapNotNull { link ->
 				val linkStart = maxOf(link.start, start)
 				val linkEnd = minOf(link.end, end)

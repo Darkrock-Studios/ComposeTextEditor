@@ -264,8 +264,8 @@ class HtmlExtensionTest {
 
 	@Test
 	fun `a heading sized like body text still round trips`() = runTest {
-		// The default h4 is bold at the body font size, so it survives only because
-		// a whole uniformly styled line is read as a heading.
+		// The default h4 is bold at the body font size; the line's heading block, not
+		// its style, writes it.
 		assertEquals("<h4>Sub</h4>", createHtmlExtension().roundTrip("<h4>Sub</h4>"))
 	}
 

@@ -106,6 +106,7 @@ class HtmlLinkTest {
 			config,
 			listOf(HtmlLink(0, 2, "https://x.test"), HtmlLink(3, 5, "javascript:alert(1)")),
 			allowedLinkSchemes = DEFAULT_LINK_SCHEMES,
+			headingsBySize = false,
 		)
 		assertEquals("<a href=\"https://x.test\">a<u>b</u></a> cd", html)
 	}
