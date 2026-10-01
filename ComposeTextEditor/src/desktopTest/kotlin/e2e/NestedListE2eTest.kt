@@ -2,9 +2,10 @@ package e2e
 
 import androidx.compose.ui.input.key.Key
 import com.darkrockstudios.texteditor.CharLineOffset
-import utils.editorUiTest
+import com.darkrockstudios.texteditor.state.listLevel
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import utils.editorUiTest
 
 /**
  * The nested list chords through the key handler: Tab and Shift+Tab at an
@@ -42,7 +43,7 @@ class NestedListE2eTest {
 		state.cursor.updatePosition(CharLineOffset(1, 1))
 		press(Key.Tab)
 		assertEquals("b    ", lines[1])
-		assertEquals(0, markdown.listLevel(1))
+		assertEquals(0, markdown.editorState.listLevel(1))
 	}
 
 	@Test

@@ -7,7 +7,7 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.graphics.Color
-import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
+import com.darkrockstudios.texteditor.RichTextStyles
 import com.darkrockstudios.texteditor.richstyle.HighlightSpanStyle
 import org.jetbrains.compose.ui.tooling.preview.Preview
 
@@ -31,17 +31,17 @@ fun App() {
 	val darkColorScheme = remember { darkColorScheme(primary = Color(0xFF66ffc7)) }
 
 	var colorScheme by remember { mutableStateOf(lightColorScheme) }
-	var markdownScheme by remember { mutableStateOf(MarkdownConfiguration.DEFAULT) }
+	var richTextStyles by remember { mutableStateOf(RichTextStyles.DEFAULT) }
 	fun toggleDarkMode(on: Boolean) {
 		colorScheme = if (on) {
 			darkColorScheme
 		} else {
 			lightColorScheme
 		}
-		markdownScheme = if (on) {
-			MarkdownConfiguration.DEFAULT_DARK
+		richTextStyles = if (on) {
+			RichTextStyles.DEFAULT_DARK
 		} else {
-			MarkdownConfiguration.DEFAULT
+			RichTextStyles.DEFAULT
 		}
 	}
 
@@ -63,24 +63,24 @@ fun App() {
 				Destination.TextEditor -> TextEditorDemoUi(
 					navigateTo = ::navigateTo,
 					demoContent = DemoContent.Rich,
-					configuration = markdownScheme,
+					styles = richTextStyles,
 				)
 
 				Destination.MarkdownEditor -> TextEditorDemoUi(
 					navigateTo = ::navigateTo,
 					demoContent = DemoContent.Markdown,
-					configuration = markdownScheme,
+					styles = richTextStyles,
 				)
 
 				Destination.EmptyTextEditor -> TextEditorDemoUi(
 					navigateTo = ::navigateTo,
 					demoContent = DemoContent.Empty,
-					configuration = markdownScheme,
+					styles = richTextStyles,
 				)
 
 				Destination.SpellChecking -> SpellCheckingTextEditorDemoUi(
 					navigateTo = ::navigateTo,
-					configuration = markdownScheme,
+					styles = richTextStyles,
 				)
 
 				Destination.CodeEditor -> CodeEditorDemoUi(
@@ -93,7 +93,7 @@ fun App() {
 
 				Destination.RichTextView -> RichTextViewDemoUi(
 					navigateTo = ::navigateTo,
-					configuration = markdownScheme,
+					styles = richTextStyles,
 				)
 			}
 		}

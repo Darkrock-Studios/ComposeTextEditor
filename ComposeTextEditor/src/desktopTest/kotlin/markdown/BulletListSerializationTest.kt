@@ -8,14 +8,15 @@ import com.darkrockstudios.texteditor.markdown.MarkdownExtension
 import com.darkrockstudios.texteditor.richstyle.BULLET_LIST_PARAGRAPH_STYLE
 import com.darkrockstudios.texteditor.richstyle.BulletListSpanStyle
 import com.darkrockstudios.texteditor.state.TextEditorState
+import com.darkrockstudios.texteditor.state.toggleBulletList
 import io.mockk.mockk
-import kotlinx.coroutines.test.TestScope
-import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.runTest
 
 class BulletListSerializationTest {
 
@@ -232,7 +233,7 @@ class BulletListSerializationTest {
 		extension.importMarkdown("plain text")
 		assertTrue(extension.bulletLines().isEmpty())
 
-		extension.toggleBulletList(0..0)
+		extension.editorState.toggleBulletList(0..0)
 		assertEquals(listOf(0), extension.bulletLines())
 		assertEquals("- plain text", extension.exportAsMarkdown())
 	}
@@ -243,7 +244,7 @@ class BulletListSerializationTest {
 		extension.importMarkdown("- item")
 		assertEquals(listOf(0), extension.bulletLines())
 
-		extension.toggleBulletList(0..0)
+		extension.editorState.toggleBulletList(0..0)
 		assertTrue(extension.bulletLines().isEmpty())
 		assertEquals("item", extension.exportAsMarkdown())
 	}
@@ -253,7 +254,7 @@ class BulletListSerializationTest {
 		val extension = createMarkdownExtension()
 		extension.importMarkdown("- one\nplain")
 
-		extension.toggleBulletList(0..1)
+		extension.editorState.toggleBulletList(0..1)
 		assertEquals(listOf(0, 1), extension.bulletLines())
 	}
 
@@ -541,7 +542,7 @@ class BulletListSerializationTest {
 		val extension = createMarkdownExtension()
 		extension.importMarkdown("- with indent")
 
-		extension.toggleBulletList(0..0)
+		extension.editorState.toggleBulletList(0..0)
 		val line = extension.editorState.textLines[0]
 		val hasIndent = line.paragraphStyles.any { it.item == BULLET_LIST_PARAGRAPH_STYLE }
 		assertFalse(hasIndent, "removing bullet should clear the indent paragraph style")

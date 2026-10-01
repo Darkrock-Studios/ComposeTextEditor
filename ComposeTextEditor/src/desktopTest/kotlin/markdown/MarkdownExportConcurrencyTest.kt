@@ -9,7 +9,7 @@ import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.markdown.MarkdownExtension
 import com.darkrockstudios.texteditor.state.TextEditorState
-import kotlinx.coroutines.test.TestScope
+import com.darkrockstudios.texteditor.state.toggleBulletList
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
@@ -17,6 +17,7 @@ import kotlin.concurrent.thread
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import kotlinx.coroutines.test.TestScope
 
 /**
  * Downstream consumers export on a debounce from a background dispatcher while the
@@ -250,7 +251,7 @@ class MarkdownExportConcurrencyTest {
 		val sizeBefore = before.size
 		assertTrue(sizeBefore > 0, "Expected the imported bullets to produce spans")
 
-		extension.toggleBulletList(0..0)
+		extension.editorState.toggleBulletList(0..0)
 
 		assertEquals(sizeBefore, before.size, "The returned set changed under a later edit")
 	}

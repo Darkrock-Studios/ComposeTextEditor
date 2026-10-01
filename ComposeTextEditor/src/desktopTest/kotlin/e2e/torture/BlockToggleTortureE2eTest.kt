@@ -2,12 +2,16 @@ package e2e.torture
 
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.text.AnnotatedString
-import utils.assertBlockState
-import utils.assertRichSpanInvariants
-import utils.editorUiTest
+import com.darkrockstudios.texteditor.state.toggleBlockquote
+import com.darkrockstudios.texteditor.state.toggleBulletList
+import com.darkrockstudios.texteditor.state.toggleCodeFence
+import com.darkrockstudios.texteditor.state.toggleOrderedList
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import utils.assertBlockState
+import utils.assertRichSpanInvariants
+import utils.editorUiTest
 
 /**
  * Block styles (bullet, ordered, quote, fence) under hostile realistic editing:
@@ -19,7 +23,7 @@ class BlockToggleTortureE2eTest {
 	fun `typing at the end of a bulleted item extends it`() = editorUiTest(
 		initialText = AnnotatedString("item"),
 	) {
-		markdown.toggleBulletList(0..0)
+		markdown.editorState.toggleBulletList(0..0)
 		press(Key.MoveEnd)
 		typeText(" grows")
 
@@ -32,7 +36,7 @@ class BlockToggleTortureE2eTest {
 	fun `enter mid item splits into two bulleted items`() = editorUiTest(
 		initialText = AnnotatedString("itemtail"),
 	) {
-		markdown.toggleBulletList(0..0)
+		markdown.editorState.toggleBulletList(0..0)
 		press(Key.MoveHome)
 		repeat(4) { press(Key.DirectionRight) }
 		press(Key.Enter)
@@ -45,7 +49,7 @@ class BlockToggleTortureE2eTest {
 
 	@Test
 	fun `enter on an empty list item exits the list`() = editorUiTest {
-		markdown.toggleBulletList(0..0)
+		markdown.editorState.toggleBulletList(0..0)
 		typeText("item")
 		press(Key.Enter)
 		assertBlockState(1, bullet = true)
@@ -62,7 +66,7 @@ class BlockToggleTortureE2eTest {
 	fun `backspace at column 0 demotes first then merges`() = editorUiTest(
 		initialText = AnnotatedString("plain\nitem"),
 	) {
-		markdown.toggleBulletList(1..1)
+		markdown.editorState.toggleBulletList(1..1)
 		press(Key.MoveEnd, ctrl = true)
 		press(Key.MoveHome)
 
@@ -79,7 +83,7 @@ class BlockToggleTortureE2eTest {
 	fun `backspace at column 0 merges adjacent same-block items directly`() = editorUiTest(
 		initialText = AnnotatedString("one\ntwo"),
 	) {
-		markdown.toggleBulletList(0..1)
+		markdown.editorState.toggleBulletList(0..1)
 		press(Key.MoveEnd, ctrl = true)
 		press(Key.MoveHome)
 
@@ -94,8 +98,8 @@ class BlockToggleTortureE2eTest {
 	fun `bullet toggle over an ordered line swaps the list type`() = editorUiTest(
 		initialText = AnnotatedString("a\nb\nc"),
 	) {
-		markdown.toggleOrderedList(0..2)
-		markdown.toggleBulletList(1..1)
+		markdown.editorState.toggleOrderedList(0..2)
+		markdown.editorState.toggleBulletList(1..1)
 
 		assertBlockState(0, ordered = true)
 		assertBlockState(1, bullet = true)
@@ -112,11 +116,11 @@ class BlockToggleTortureE2eTest {
 	fun `code fence toggle strips stacked quote and bullet`() = editorUiTest(
 		initialText = AnnotatedString("code"),
 	) {
-		markdown.toggleBulletList(0..0)
-		markdown.toggleBlockquote(0..0)
+		markdown.editorState.toggleBulletList(0..0)
+		markdown.editorState.toggleBlockquote(0..0)
 		assertBlockState(0, bullet = true, quote = true)
 
-		markdown.toggleCodeFence(0..0)
+		markdown.editorState.toggleCodeFence(0..0)
 
 		assertBlockState(0, fence = true)
 		assertRichSpanInvariants()
@@ -126,8 +130,8 @@ class BlockToggleTortureE2eTest {
 	fun `quote stacks with bullet and both survive typing`() = editorUiTest(
 		initialText = AnnotatedString("item"),
 	) {
-		markdown.toggleBulletList(0..0)
-		markdown.toggleBlockquote(0..0)
+		markdown.editorState.toggleBulletList(0..0)
+		markdown.editorState.toggleBlockquote(0..0)
 		press(Key.MoveEnd)
 		typeText(" and more")
 
@@ -141,7 +145,7 @@ class BlockToggleTortureE2eTest {
 		initialText = AnnotatedString("alpha\nbravo\ncharlie"),
 	) {
 		press(Key.A, ctrl = true)
-		markdown.toggleBulletList(0..2)
+		markdown.editorState.toggleBulletList(0..2)
 
 		assertEquals(
 			listOf("alpha", "bravo", "charlie"),
@@ -159,8 +163,8 @@ class BlockToggleTortureE2eTest {
 	fun `toggle undo redo cycle is lossless`() = editorUiTest(
 		initialText = AnnotatedString("one\ntwo"),
 	) {
-		markdown.toggleBlockquote(0..1)
-		markdown.toggleBulletList(0..1)
+		markdown.editorState.toggleBlockquote(0..1)
+		markdown.editorState.toggleBulletList(0..1)
 		assertBlockState(0, quote = true, bullet = true)
 		assertBlockState(1, quote = true, bullet = true)
 
@@ -183,7 +187,7 @@ class BlockToggleTortureE2eTest {
 	fun `deleting a whole bulleted line leaves no orphan span`() = editorUiTest(
 		initialText = AnnotatedString("aa\nbb\ncc"),
 	) {
-		markdown.toggleBulletList(0..2)
+		markdown.editorState.toggleBulletList(0..2)
 
 		press(Key.MoveHome, ctrl = true)
 		press(Key.DirectionDown)
@@ -201,7 +205,7 @@ class BlockToggleTortureE2eTest {
 	fun `inserting an item renumbers an ordered list on export`() = editorUiTest(
 		initialText = AnnotatedString("a\nb\nc"),
 	) {
-		markdown.toggleOrderedList(0..2)
+		markdown.editorState.toggleOrderedList(0..2)
 		press(Key.MoveHome, ctrl = true)
 		press(Key.MoveEnd)
 		press(Key.Enter)
@@ -216,7 +220,7 @@ class BlockToggleTortureE2eTest {
 	fun `a smart backspace demotion is undoable`() = editorUiTest(
 		initialText = AnnotatedString("plain\nitem"),
 	) {
-		markdown.toggleBulletList(1..1)
+		markdown.editorState.toggleBulletList(1..1)
 		press(Key.MoveEnd, ctrl = true)
 		press(Key.MoveHome)
 
@@ -231,7 +235,7 @@ class BlockToggleTortureE2eTest {
 
 	@Test
 	fun `a smart enter exit from a list is undoable`() = editorUiTest {
-		markdown.toggleBulletList(0..0)
+		markdown.editorState.toggleBulletList(0..0)
 		typeText("item")
 		press(Key.Enter)
 		press(Key.Enter)
@@ -247,10 +251,10 @@ class BlockToggleTortureE2eTest {
 	fun `fencing 50 lines and unfencing is symmetric`() = editorUiTest(
 		initialText = AnnotatedString((0 until 50).joinToString("\n") { "line$it" }),
 	) {
-		markdown.toggleCodeFence(0..49)
+		markdown.editorState.toggleCodeFence(0..49)
 		for (line in 0 until 50) assertBlockState(line, fence = true)
 
-		markdown.toggleCodeFence(0..49)
+		markdown.editorState.toggleCodeFence(0..49)
 		assertTrue(
 			state.richSpanManager.getAllRichSpans().isEmpty(),
 			"unfencing must leave zero rich spans",

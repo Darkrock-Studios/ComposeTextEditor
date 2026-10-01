@@ -5,22 +5,23 @@ import androidx.compose.ui.input.pointer.PointerKeyboardModifiers
 import androidx.compose.ui.text.AnnotatedString
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.LinkClicks
-import com.darkrockstudios.texteditor.pointerIconAt
+import com.darkrockstudios.texteditor.RichTextStyles
 import com.darkrockstudios.texteditor.SemanticsDocument
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.input.CtrlKeyBindings
-import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
 import com.darkrockstudios.texteditor.markdown.MarkdownExtension
+import com.darkrockstudios.texteditor.pointerIconAt
 import com.darkrockstudios.texteditor.richstyle.LinkSpanStyle
 import com.darkrockstudios.texteditor.state.TextEditorState
+import com.darkrockstudios.texteditor.state.setLink
 import io.mockk.mockk
-import kotlinx.coroutines.test.TestScope
-import utils.editorUiTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlinx.coroutines.test.TestScope
+import utils.editorUiTest
 
 /**
  * Every source of a link agrees with the HTML path's allowlist (6.9): markdown import
@@ -38,7 +39,7 @@ class LinkDestinationSafetyTest {
 		richSpanManager.getAllRichSpans().mapNotNull { (it.style as? LinkSpanStyle)?.url }
 
 	private val TextEditorState.hasLinkStyle: Boolean
-		get() = textLines.any { line -> line.spanStyles.any { it.item == MarkdownConfiguration.DEFAULT.linkStyle } }
+		get() = textLines.any { line -> line.spanStyles.any { it.item == RichTextStyles.DEFAULT.linkStyle } }
 
 	@Test
 	fun `markdown import refuses an unsafe destination and keeps the text`() {
@@ -69,12 +70,12 @@ class LinkDestinationSafetyTest {
 		val extension = editor("one two")
 		val range = TextEditorRange(CharLineOffset(0, 4), CharLineOffset(0, 7))
 
-		assertFalse(extension.setLink(range, "javascript:alert(1)"))
+		assertFalse(extension.editorState.setLink(range, "javascript:alert(1)"))
 		assertEquals(emptyList(), extension.editorState.linkUrls())
 		assertFalse(extension.editorState.hasLinkStyle)
 		assertFalse(extension.editorState.canUndo)
 
-		assertTrue(extension.setLink(range, "https://example.com"))
+		assertTrue(extension.editorState.setLink(range, "https://example.com"))
 		assertEquals(listOf("https://example.com"), extension.editorState.linkUrls())
 	}
 

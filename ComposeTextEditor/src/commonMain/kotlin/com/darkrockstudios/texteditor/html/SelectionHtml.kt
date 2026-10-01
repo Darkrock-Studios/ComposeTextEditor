@@ -52,9 +52,9 @@ internal fun TextEditorState.selectionAsHtml(range: TextEditorRange): String {
 	val spans = spansOnLines.filterTo(mutableSetOf()) { it.range.start.line in coveredLines }
 	return renderHtmlFragment(
 		lines = lines,
-		blocks = documentBlocksOf(spans, markdownConfiguration),
+		blocks = documentBlocksOf(spans, richTextStyles),
 		headerLevels = headerLevelsOf(spans),
 		formats = content.paragraphFormats(coveredLines),
-		configuration = markdownConfiguration,
+		styles = richTextStyles,
 	)
 }

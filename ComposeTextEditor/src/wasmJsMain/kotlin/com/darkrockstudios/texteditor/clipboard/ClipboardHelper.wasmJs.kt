@@ -6,7 +6,7 @@ import androidx.compose.ui.platform.Clipboard
 import androidx.compose.ui.text.AnnotatedString
 import com.darkrockstudios.texteditor.html.toAnnotatedStringFromHtml
 import com.darkrockstudios.texteditor.html.toHtml
-import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
+import com.darkrockstudios.texteditor.RichTextStyles
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.js.ExperimentalWasmJsInterop
 import kotlin.js.JsException
@@ -51,13 +51,13 @@ actual object ClipboardHelper {
 
 	actual suspend fun getText(
 		clipboard: Clipboard,
-		configuration: MarkdownConfiguration,
+		styles: RichTextStyles,
 	): AnnotatedString? {
 		val flavors = takeEventPaste() ?: readFlavors()
 		lastReadHtml = flavors?.html
 		flavors ?: return null
 		flavors.html
-			?.toAnnotatedStringFromHtml(configuration)
+			?.toAnnotatedStringFromHtml(styles)
 			?.takeIf { it.text.isNotEmpty() }
 			?.let { return it }
 		return flavors.text?.let(::AnnotatedString)
@@ -73,7 +73,7 @@ actual object ClipboardHelper {
 	actual suspend fun setText(
 		clipboard: Clipboard,
 		text: AnnotatedString,
-		configuration: MarkdownConfiguration,
+		styles: RichTextStyles,
 		copyId: Long?,
 		html: String?,
 	): Boolean {
@@ -84,7 +84,7 @@ actual object ClipboardHelper {
 		eventWroteText = null
 		if (eventWrote) return true
 		if (hasRichClipboard()) {
-			val markup = html ?: text.toHtml(configuration)
+			val markup = html ?: text.toHtml(styles)
 			return succeeds("write HTML to") { writeClipboardHtml(markup, text.text).await<JsAny?>() }
 		}
 		return succeeds("write text to") { writeClipboardText(text.text).await<JsAny?>() }

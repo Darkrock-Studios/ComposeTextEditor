@@ -2,20 +2,18 @@ package markdown
 
 import androidx.compose.ui.text.AnnotatedString
 import com.darkrockstudios.texteditor.markdown.MarkdownExtension
-import com.darkrockstudios.texteditor.richstyle.BULLET_LISTS
-import com.darkrockstudios.texteditor.richstyle.Blockquote
+import com.darkrockstudios.texteditor.richstyle.BlockquoteSpanStyle
 import com.darkrockstudios.texteditor.richstyle.BulletListSpanStyle
-import com.darkrockstudios.texteditor.richstyle.LineBlockStyle
 import com.darkrockstudios.texteditor.richstyle.MAX_LIST_LEVEL
-import com.darkrockstudios.texteditor.richstyle.ORDERED_LISTS
 import com.darkrockstudios.texteditor.richstyle.OrderedListSpanStyle
+import com.darkrockstudios.texteditor.richstyle.RichSpanStyle
 import com.darkrockstudios.texteditor.richstyle.applyDocumentBlocks
 import com.darkrockstudios.texteditor.state.TextEditorState
 import io.mockk.mockk
-import kotlinx.coroutines.test.TestScope
-import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.runTest
 
 /**
  * Nested lists in markdown: a nested item is indented to its ancestor's
@@ -40,7 +38,7 @@ class NestedListSerializationTest {
 			}
 			.sortedBy { it.first }
 
-	private fun MarkdownExtension.load(lines: List<String>, vararg blocks: Pair<LineBlockStyle, List<Int>>) {
+	private fun MarkdownExtension.load(lines: List<String>, vararg blocks: Pair<RichSpanStyle, List<Int>>) {
 		editorState.setText(AnnotatedString(lines.joinToString("\n")))
 		editorState.applyDocumentBlocks(blockLines = blocks.toMap())
 	}
@@ -76,9 +74,9 @@ class NestedListSerializationTest {
 		val e = extension()
 		e.load(
 			listOf("a", "b", "c", "d"),
-			ORDERED_LISTS[0] to listOf(0, 3),
-			BULLET_LISTS[1] to listOf(1),
-			ORDERED_LISTS[2] to listOf(2),
+			OrderedListSpanStyle.of(0) to listOf(0, 3),
+			BulletListSpanStyle.of(1) to listOf(1),
+			OrderedListSpanStyle.of(2) to listOf(2),
 		)
 		assertEquals("1. a\n   - b\n     1. c\n2. d", e.exportAsMarkdown())
 	}
@@ -105,7 +103,7 @@ class NestedListSerializationTest {
 		val markdown = "> - a\n>   - b\n> - c"
 		e.importMarkdown(markdown)
 		assertEquals(listOf(Triple(0, "b", 0), Triple(1, "b", 1), Triple(2, "b", 0)), e.listLines())
-		assertEquals(listOf(0, 1, 2), e.linesWith(Blockquote.spanStyle))
+		assertEquals(listOf(0, 1, 2), e.linesWith(BlockquoteSpanStyle))
 		assertEquals(markdown, e.exportAsMarkdown())
 	}
 
@@ -152,7 +150,7 @@ class NestedListSerializationTest {
 	@Test
 	fun `an orphaned nested item keeps its level in the model and exports at the level allowed`() = runTest {
 		val e = extension()
-		e.load(listOf("text", "b"), BULLET_LISTS[2] to listOf(1))
+		e.load(listOf("text", "b"), BulletListSpanStyle.of(2) to listOf(1))
 		assertEquals(listOf(Triple(1, "b", 2)), e.listLines())
 		assertEquals("text\n\n- b", e.exportAsMarkdown())
 	}
@@ -160,7 +158,7 @@ class NestedListSerializationTest {
 	@Test
 	fun `a jump of two levels exports as a jump of one`() = runTest {
 		val e = extension()
-		e.load(listOf("a", "b", "c"), BULLET_LISTS[0] to listOf(0), BULLET_LISTS[2] to listOf(1), BULLET_LISTS[3] to listOf(2))
+		e.load(listOf("a", "b", "c"), BulletListSpanStyle.of(0) to listOf(0), BulletListSpanStyle.of(2) to listOf(1), BulletListSpanStyle.of(3) to listOf(2))
 		assertEquals("- a\n  - b\n    - c", e.exportAsMarkdown())
 	}
 
@@ -195,7 +193,7 @@ class NestedListSerializationTest {
 	@Test
 	fun `a quote starting or ending closes the nesting on export`() = runTest {
 		val e = extension()
-		e.load(listOf("a", "b"), BULLET_LISTS[0] to listOf(0), BULLET_LISTS[1] to listOf(1), Blockquote to listOf(1))
+		e.load(listOf("a", "b"), BulletListSpanStyle.of(0) to listOf(0), BulletListSpanStyle.of(1) to listOf(1), BlockquoteSpanStyle to listOf(1))
 		// The quoted item starts a list of its own, at the top level.
 		assertEquals("- a\n> - b", e.exportAsMarkdown())
 	}

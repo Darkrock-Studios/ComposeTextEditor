@@ -9,12 +9,14 @@ import com.darkrockstudios.texteditor.markdown.MarkdownExtension
 import com.darkrockstudios.texteditor.markdown.toAnnotatedStringFromMarkdown
 import com.darkrockstudios.texteditor.markdown.toMarkdown
 import com.darkrockstudios.texteditor.state.TextEditorState
+import com.darkrockstudios.texteditor.state.linkAt
+import com.darkrockstudios.texteditor.state.setLink
 import io.mockk.mockk
-import kotlinx.coroutines.test.TestScope
-import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.runTest
 
 /**
  * Export escapes a character only where it would start markdown syntax in
@@ -103,7 +105,7 @@ class ProseEscapingTest {
 	fun `an exclamation mark before a link does not make an image`() = runTest {
 		val e = extension()
 		e.editorState.setText(AnnotatedString("Wow!here"))
-		e.setLink(
+		e.editorState.setLink(
 			com.darkrockstudios.texteditor.TextEditorRange(
 				com.darkrockstudios.texteditor.CharLineOffset(0, 4),
 				com.darkrockstudios.texteditor.CharLineOffset(0, 8),
@@ -114,7 +116,7 @@ class ProseEscapingTest {
 		assertEquals("Wow\\![here](https://x.test)", exported)
 		e.importMarkdown(exported)
 		assertEquals("Wow!here", e.editorState.getAllText().text)
-		assertEquals("https://x.test", e.linkAt(com.darkrockstudios.texteditor.CharLineOffset(0, 5)))
+		assertEquals("https://x.test", e.editorState.linkAt(com.darkrockstudios.texteditor.CharLineOffset(0, 5)))
 	}
 
 	@Test
@@ -176,7 +178,7 @@ class ProseEscapingTest {
 	fun `brackets inside a link's text are escaped`() = runTest {
 		val e = extension()
 		e.editorState.setText(AnnotatedString("see [1] here"))
-		e.setLink(
+		e.editorState.setLink(
 			com.darkrockstudios.texteditor.TextEditorRange(
 				com.darkrockstudios.texteditor.CharLineOffset(0, 4),
 				com.darkrockstudios.texteditor.CharLineOffset(0, 7),

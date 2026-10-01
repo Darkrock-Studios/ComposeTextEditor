@@ -3,14 +3,23 @@ package blocks
 import androidx.compose.ui.text.AnnotatedString
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.markdown.MarkdownExtension
+import com.darkrockstudios.texteditor.richstyle.nestListItems
+import com.darkrockstudios.texteditor.richstyle.unnestListItems
 import com.darkrockstudios.texteditor.state.TextEditorState
+import com.darkrockstudios.texteditor.state.isBulletList
+import com.darkrockstudios.texteditor.state.isOrderedList
+import com.darkrockstudios.texteditor.state.listLevel
+import com.darkrockstudios.texteditor.state.toggleBlockquote
+import com.darkrockstudios.texteditor.state.toggleBulletList
+import com.darkrockstudios.texteditor.state.toggleHeader
+import com.darkrockstudios.texteditor.state.toggleOrderedList
 import io.mockk.mockk
-import kotlinx.coroutines.test.TestScope
-import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.runTest
 
 /**
  * Nesting and un-nesting list items, what happens to the items under them,
@@ -30,69 +39,69 @@ class NestedListEditingTest {
 	@Test
 	fun `nesting is bounded by the item above`() = runTest {
 		val e = extension("- a\n- b")
-		assertFalse(e.nestList(0..0), "the first item has nothing to nest under")
-		assertTrue(e.nestList(1..1))
+		assertFalse(e.editorState.nestListItems(0..0), "the first item has nothing to nest under")
+		assertTrue(e.editorState.nestListItems(1..1))
 		assertEquals("- a\n  - b", e.exportAsMarkdown())
-		assertFalse(e.nestList(1..1), "b cannot go deeper than one below a")
-		assertEquals(1, e.listLevel(1))
+		assertFalse(e.editorState.nestListItems(1..1), "b cannot go deeper than one below a")
+		assertEquals(1, e.editorState.listLevel(1))
 	}
 
 	@Test
 	fun `nesting a parent makes its children its siblings`() = runTest {
 		val e = extension("- a\n- b\n  - c\n  - d")
-		assertTrue(e.nestList(1..1))
+		assertTrue(e.editorState.nestListItems(1..1))
 		assertEquals("- a\n  - b\n  - c\n  - d", e.exportAsMarkdown())
 	}
 
 	@Test
 	fun `un-nesting a parent lifts its subtree with it`() = runTest {
 		val e = extension("- a\n  - b\n    - c\n      - d\n    - e\n  - f\n- g")
-		assertTrue(e.unnestList(1..1))
+		assertTrue(e.editorState.unnestListItems(1..1))
 		assertEquals("- a\n- b\n  - c\n    - d\n  - e\n  - f\n- g", e.exportAsMarkdown())
 	}
 
 	@Test
 	fun `a selection nests as one block and un-nests as one`() = runTest {
 		val e = extension("- a\n- b\n- c\n- d")
-		assertTrue(e.nestList(1..2))
+		assertTrue(e.editorState.nestListItems(1..2))
 		assertEquals("- a\n  - b\n  - c\n- d", e.exportAsMarkdown())
-		assertTrue(e.nestList(2..2))
+		assertTrue(e.editorState.nestListItems(2..2))
 		assertEquals("- a\n  - b\n    - c\n- d", e.exportAsMarkdown())
-		assertTrue(e.unnestList(1..2))
+		assertTrue(e.editorState.unnestListItems(1..2))
 		assertEquals("- a\n- b\n  - c\n- d", e.exportAsMarkdown())
 	}
 
 	@Test
 	fun `clearing a parent's list lifts its subtree`() = runTest {
 		val e = extension("- a\n  - b\n    - c\n- d")
-		e.toggleBulletList(0..0)
+		e.editorState.toggleBulletList(0..0)
 		assertEquals("a\n\n- b\n  - c\n- d", e.exportAsMarkdown())
 	}
 
 	@Test
 	fun `a nested item counts as having its kind, and switching kinds keeps its level`() = runTest {
 		val e = extension("- a\n  - b\n  - c")
-		assertTrue(e.isBulletList(1))
-		e.toggleOrderedList(1..1)
+		assertTrue(e.editorState.isBulletList(1))
+		e.editorState.toggleOrderedList(1..1)
 		assertEquals("- a\n  1. b\n  - c", e.exportAsMarkdown())
-		assertEquals(1, e.listLevel(1))
-		e.toggleOrderedList(1..1)
+		assertEquals(1, e.editorState.listLevel(1))
+		e.editorState.toggleOrderedList(1..1)
 		// Body text ends the nesting, so c comes up to the top level.
 		assertEquals("- a\n\nb\n\n- c", e.exportAsMarkdown())
-		assertFalse(e.isOrderedList(1))
+		assertFalse(e.editorState.isOrderedList(1))
 	}
 
 	@Test
 	fun `each nesting step is one undo step, followers included`() = runTest {
 		val e = extension("- a\n  - b\n    - c\n  - d")
-		e.unnestList(1..1)
+		e.editorState.unnestListItems(1..1)
 		assertEquals("- a\n- b\n  - c\n  - d", e.exportAsMarkdown())
 		e.state.undo()
 		assertEquals("- a\n  - b\n    - c\n  - d", e.exportAsMarkdown())
 		e.state.redo()
 		assertEquals("- a\n- b\n  - c\n  - d", e.exportAsMarkdown())
 		e.state.undo()
-		e.nestList(3..3)
+		e.editorState.nestListItems(3..3)
 		assertEquals("- a\n  - b\n    - c\n    - d", e.exportAsMarkdown())
 		e.state.undo()
 		assertEquals("- a\n  - b\n    - c\n  - d", e.exportAsMarkdown())
@@ -101,7 +110,7 @@ class NestedListEditingTest {
 	@Test
 	fun `a blank line does not end a nesting, a paragraph does`() = runTest {
 		val e = extension("- a\n\n\n- b")
-		assertTrue(e.nestList(2..2))
+		assertTrue(e.editorState.nestListItems(2..2))
 		assertEquals("- a\n\n\n  - b", e.exportAsMarkdown())
 
 		val f = extension("- a\n\ntext\n\n- b")
@@ -163,12 +172,12 @@ class NestedListEditingTest {
 	@Test
 	fun `a heading or a quote on a list parent lifts its children`() = runTest {
 		val e = extension("- a\n  - b\n    - c")
-		e.toggleHeader(0..0, 1)
+		e.editorState.toggleHeader(0..0, 1)
 		assertEquals("# a\n\n- b\n  - c", e.exportAsMarkdown())
 		e.state.undo()
 		assertEquals("- a\n  - b\n    - c", e.exportAsMarkdown())
 
-		e.toggleBlockquote(0..0)
+		e.editorState.toggleBlockquote(0..0)
 		assertEquals("> - a\n- b\n  - c", e.exportAsMarkdown())
 		e.state.undo()
 		assertEquals("- a\n  - b\n    - c", e.exportAsMarkdown())
@@ -177,14 +186,14 @@ class NestedListEditingTest {
 	@Test
 	fun `a selection that ends on a blank line un-nests by its last item`() = runTest {
 		val e = extension("- a\n  - b\n\n\n    - c\n  - d")
-		assertTrue(e.unnestList(1..2))
+		assertTrue(e.editorState.unnestListItems(1..2))
 		assertEquals("- a\n- b\n\n\n  - c\n  - d", e.exportAsMarkdown())
 	}
 
 	@Test
 	fun `a top-level item ends a lifted subtree and the items after it stay`() = runTest {
 		val e = extension("- a\n  - b\n    - c\n- d\n  - e")
-		e.toggleBulletList(1..1)
+		e.editorState.toggleBulletList(1..1)
 		assertEquals("- a\n\nb\n\n- c\n- d\n  - e", e.exportAsMarkdown())
 		e.state.undo()
 		assertEquals("- a\n  - b\n    - c\n- d\n  - e", e.exportAsMarkdown())

@@ -7,6 +7,7 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.TextUnit
+import com.darkrockstudios.texteditor.RichTextStyles
 
 /**
  * Structural predicates for reading inline markdown semantics off a
@@ -43,9 +44,9 @@ internal val SpanStyle.markdownColor: Color?
 	get() = color.takeIf { it != Color.Unspecified }
 
 /**
- * The font size this style sets, or null when unset or equal to [config]'s body
+ * The font size this style sets, or null when unset or equal to [styles]' body
  * text size: the parser lays the body style over every paragraph, and a size
  * that only restates it is not a change the document made.
  */
-internal fun SpanStyle.markdownFontSize(config: MarkdownConfiguration): TextUnit? =
-	fontSize.takeIf { it != TextUnit.Unspecified && it != config.defaultTextStyle.fontSize }
+internal fun SpanStyle.markdownFontSize(styles: RichTextStyles): TextUnit? =
+	fontSize.takeIf { it != TextUnit.Unspecified && it != styles.defaultTextStyle.fontSize }

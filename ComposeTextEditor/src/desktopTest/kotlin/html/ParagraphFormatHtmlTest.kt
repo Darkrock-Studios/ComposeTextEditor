@@ -11,18 +11,18 @@ import com.darkrockstudios.texteditor.clipboard.applyHtmlPasteBlocks
 import com.darkrockstudios.texteditor.html.HtmlExtension
 import com.darkrockstudios.texteditor.html.parseHtmlDocument
 import com.darkrockstudios.texteditor.html.selectionAsHtml
-import com.darkrockstudios.texteditor.richstyle.BULLET_LISTS
+import com.darkrockstudios.texteditor.richstyle.BulletListSpanStyle
 import com.darkrockstudios.texteditor.richstyle.ParagraphFormatSpanStyle
 import com.darkrockstudios.texteditor.richstyle.applyDocumentBlocks
 import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.paragraphFormat
 import com.darkrockstudios.texteditor.state.setParagraphFormat
 import io.mockk.mockk
-import kotlinx.coroutines.test.TestScope
-import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.runTest
 
 /**
  * A paragraph's format (5.7) travels through HTML as inline CSS on the paragraph's own
@@ -63,7 +63,7 @@ class ParagraphFormatHtmlTest {
 	fun `a list item carries its format on its li`() = runTest {
 		val e = extension()
 		e.load("one", "two")
-		e.editorState.applyDocumentBlocks(blockLines = mapOf(BULLET_LISTS[0] to listOf(0, 1)))
+		e.editorState.applyDocumentBlocks(blockLines = mapOf(BulletListSpanStyle.of(0) to listOf(0, 1)))
 		e.editorState.setParagraphFormat(1..1, ParagraphFormatSpanStyle(textAlign = TextAlign.Right))
 		assertEquals("<ul>\n<li>one</li>\n<li style=\"text-align:right\">two</li>\n</ul>", e.exportAsHtml())
 	}
@@ -120,7 +120,7 @@ class ParagraphFormatHtmlTest {
 	fun `an item holding a nested list keeps its format`() = runTest {
 		val e = extension()
 		e.load("one", "two")
-		e.editorState.applyDocumentBlocks(blockLines = mapOf(BULLET_LISTS[0] to listOf(0), BULLET_LISTS[1] to listOf(1)))
+		e.editorState.applyDocumentBlocks(blockLines = mapOf(BulletListSpanStyle.of(0) to listOf(0), BulletListSpanStyle.of(1) to listOf(1)))
 		e.editorState.setParagraphFormat(0..0, ParagraphFormatSpanStyle(indent = 24.sp))
 		val html = e.exportAsHtml()
 		e.importHtml(html)

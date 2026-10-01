@@ -5,9 +5,9 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
+import com.darkrockstudios.texteditor.RichTextStyles
 import com.darkrockstudios.texteditor.html.toAnnotatedStringFromHtml
 import com.darkrockstudios.texteditor.html.toHtml
-import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -16,7 +16,7 @@ import kotlin.test.assertTrue
 /** One case per confirmed finding from the branch review. */
 class HtmlReviewFixesTest {
 
-	private val config = MarkdownConfiguration.DEFAULT
+	private val config = RichTextStyles.DEFAULT
 
 	private fun AnnotatedString.resolvedAt(index: Int): SpanStyle =
 		spanStyles.filter { index >= it.start && index < it.end }

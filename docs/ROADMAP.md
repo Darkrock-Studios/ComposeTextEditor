@@ -2482,6 +2482,21 @@ Shaping is one line per keystroke. These still scale with document length:
     `LINE_BLOCK_STYLES` for the order), where every public type lands, the
     test split (a test-only dependency of core's desktop tests on the
     module, spiked), and the host migration.
+  - Core: done. `RichTextStyles` (`RichTextStyles.kt`) on
+    `TextEditorState.richTextStyles`, public get and set, retiring the old
+    value and rebaking heading lines on a change; every core reader (the
+    block registry, normalization, the formatting toggles, clear formatting,
+    HTML, the clipboard on every platform, drag and drop) reads it. The block
+    API is on the state (`state/TextEditorStateBlockExt.kt`, and
+    `nestListItems`, `unnestListItems` public); `applyDocumentBlocks` is
+    public, keyed by span style, and takes the rich spans an importer
+    attaches; `LINE_BLOCK_STYLES`, `lineBlocksConflict`, `isNestingBlank`,
+    `sanitizeLinkUrl` and the CSS helpers are public. `LineBlockStyle` lost
+    its markdown hooks: `markdown/MarkdownBlockSyntax.kt` holds them.
+    `MarkdownConfiguration` is the syntax choices alone, `MarkdownExtension`
+    reads the state's styles and forwards its block members, deprecated, to
+    the state. The markdown package and its tests use core's public API
+    only. The sample app's plain rich text demo installs nothing.
 
 ### Find and replace addon
 

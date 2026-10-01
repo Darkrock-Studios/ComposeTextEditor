@@ -9,18 +9,20 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
+import com.darkrockstudios.texteditor.RichTextStyles
 import com.darkrockstudios.texteditor.markdown.HighlightSyntax
 import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
 import com.darkrockstudios.texteditor.markdown.MarkdownExtension
 import com.darkrockstudios.texteditor.markdown.toAnnotatedStringFromMarkdown
 import com.darkrockstudios.texteditor.markdown.toMarkdown
 import com.darkrockstudios.texteditor.state.TextEditorState
+import com.darkrockstudios.texteditor.state.linkAt
 import io.mockk.mockk
-import kotlinx.coroutines.test.TestScope
-import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.runTest
 
 /**
  * The markdown forms of the styles CommonMark has no syntax for: underline as
@@ -30,12 +32,11 @@ import kotlin.test.assertTrue
  */
 class InlineStyleSyntaxTest {
 
-	private val config = MarkdownConfiguration.DEFAULT
+	private val config = RichTextStyles.DEFAULT
 
-	private fun TestScope.extension(configuration: MarkdownConfiguration = config) =
+	private fun TestScope.extension(styles: RichTextStyles = config) =
 		MarkdownExtension(
-			TextEditorState(scope = this, measurer = mockk(relaxed = true)),
-			configuration,
+			TextEditorState(scope = this, measurer = mockk(relaxed = true)).apply { richTextStyles = styles },
 		)
 
 	private fun AnnotatedString.styledRanges(): List<Triple<Int, Int, SpanStyle>> =
@@ -52,7 +53,7 @@ class InlineStyleSyntaxTest {
 	@Test
 	fun `underline exports as a u tag`() {
 		val input = styled("some ", config.underlineStyle, "under", " text")
-		assertEquals("some <u>under</u> text", input.toMarkdown(config))
+		assertEquals("some <u>under</u> text", input.toMarkdown(styles = config))
 	}
 
 	@Test
@@ -67,13 +68,13 @@ class InlineStyleSyntaxTest {
 	@Test
 	fun `highlight exports as double equals by default`() {
 		val input = styled("a ", config.highlightStyle, "lit", " word")
-		assertEquals("a ==lit== word", input.toMarkdown(config))
+		assertEquals("a ==lit== word", input.toMarkdown(styles = config))
 	}
 
 	@Test
 	fun `highlight exports as a mark tag when configured`() {
-		val marked = config.copy(highlightSyntax = HighlightSyntax.MARK_TAG)
-		val input = styled("a ", marked.highlightStyle, "lit", " word")
+		val marked = MarkdownConfiguration(highlightSyntax = HighlightSyntax.MARK_TAG)
+		val input = styled("a ", config.highlightStyle, "lit", " word")
 		assertEquals("a <mark>lit</mark> word", input.toMarkdown(marked))
 	}
 
@@ -112,7 +113,7 @@ class InlineStyleSyntaxTest {
 		val url = "https://x.test/f?sig=YWJj==&id=ZGVm=="
 		e.importMarkdown("[doc]($url)")
 		assertEquals("doc", e.editorState.getAllText().text)
-		assertEquals(url, e.linkAt(com.darkrockstudios.texteditor.CharLineOffset(0, 1)))
+		assertEquals(url, e.editorState.linkAt(com.darkrockstudios.texteditor.CharLineOffset(0, 1)))
 
 		listOf(
 			"<https://x.test/?a==b==c>" to "<https://x.test/?a==b==c>",
@@ -130,7 +131,7 @@ class InlineStyleSyntaxTest {
 	fun `a highlight whose text starts or ends with an equals sign round-trips`() {
 		listOf("=x", "x=", "==", "a=b").forEach { word ->
 			val input = styled("say ", config.highlightStyle, word, " now")
-			val markdown = input.toMarkdown(config)
+			val markdown = input.toMarkdown(styles = config)
 			val parsed = markdown.toAnnotatedStringFromMarkdown(config)
 			assertEquals("say $word now", parsed.text, "markdown was: $markdown")
 			assertEquals(
@@ -149,16 +150,16 @@ class InlineStyleSyntaxTest {
 			highlightStyle = SpanStyle(background = Color.Yellow, color = Color.Black),
 			defaultTextStyle = SpanStyle(fontSize = 16.sp, background = Color.White),
 		)
-		assertEquals("**b**", styled("", themed.boldStyle, "b", "").toMarkdown(themed))
-		assertEquals("<u>u</u>", styled("", themed.underlineStyle, "u", "").toMarkdown(themed))
-		assertEquals("==h==", styled("", themed.highlightStyle, "h", "").toMarkdown(themed))
-		assertEquals("body", styled("", themed.defaultTextStyle, "body", "").toMarkdown(themed))
+		assertEquals("**b**", styled("", themed.boldStyle, "b", "").toMarkdown(styles = themed))
+		assertEquals("<u>u</u>", styled("", themed.underlineStyle, "u", "").toMarkdown(styles = themed))
+		assertEquals("==h==", styled("", themed.highlightStyle, "h", "").toMarkdown(styles = themed))
+		assertEquals("body", styled("", themed.defaultTextStyle, "body", "").toMarkdown(styles = themed))
 	}
 
 	@Test
 	fun `bold text at a size that is no heading keeps both bold and size`() {
 		val input = styled("", SpanStyle(fontWeight = FontWeight.Bold, fontSize = 20.sp), "big", "")
-		assertEquals("<span style=\"font-size:20px\">**big**</span>", input.toMarkdown(config))
+		assertEquals("<span style=\"font-size:20px\">**big**</span>", input.toMarkdown(styles = config))
 	}
 
 	@Test
@@ -173,14 +174,14 @@ class InlineStyleSyntaxTest {
 		)
 		val e = extension(light)
 		e.importMarkdown("plain **bold** text")
-		e.markdownConfiguration = dark
+		e.editorState.richTextStyles = dark
 		assertEquals("plain **bold** text", e.exportAsMarkdown())
 	}
 
 	@Test
 	fun `a link style that equals the underline style still writes underlines`() {
 		val plainLinks = config.copy(linkStyle = config.underlineStyle)
-		assertEquals("<u>u</u>", styled("", plainLinks.underlineStyle, "u", "").toMarkdown(plainLinks))
+		assertEquals("<u>u</u>", styled("", plainLinks.underlineStyle, "u", "").toMarkdown(styles = plainLinks))
 	}
 
 	@Test
@@ -207,7 +208,7 @@ class InlineStyleSyntaxTest {
 	@Test
 	fun `a highlight over a line break round-trips through the standalone converters`() {
 		val input = styled("", config.highlightStyle, "a\nb", "")
-		val markdown = input.toMarkdown(config)
+		val markdown = input.toMarkdown(styles = config)
 		assertEquals("==a==\n==b==", markdown)
 		val parsed = markdown.toAnnotatedStringFromMarkdown(config)
 		assertEquals("a\nb", parsed.text)
@@ -234,7 +235,7 @@ class InlineStyleSyntaxTest {
 	@Test
 	fun `literal double equals and tags in prose survive a round trip`() {
 		listOf("if a==b==c then", "type <u> to underline", "see <mark>").forEach { text ->
-			val markdown = AnnotatedString(text).toMarkdown(config)
+			val markdown = AnnotatedString(text).toMarkdown(styles = config)
 			val parsed = markdown.toAnnotatedStringFromMarkdown(config)
 			assertEquals(text, parsed.text, "markdown was: $markdown")
 			assertTrue(parsed.styledRanges().isEmpty(), "markdown was: $markdown")
@@ -244,13 +245,13 @@ class InlineStyleSyntaxTest {
 	@Test
 	fun `colour exports as an inline span style`() {
 		val input = styled("a ", SpanStyle(color = Color.Red), "red", " word")
-		assertEquals("a <span style=\"color:#ff0000\">red</span> word", input.toMarkdown(config))
+		assertEquals("a <span style=\"color:#ff0000\">red</span> word", input.toMarkdown(styles = config))
 	}
 
 	@Test
 	fun `translucent colour exports with an alpha channel`() {
 		val input = styled("", SpanStyle(color = Color(0x80FF0000)), "red", "")
-		assertEquals("<span style=\"color:#ff000080\">red</span>", input.toMarkdown(config))
+		assertEquals("<span style=\"color:#ff000080\">red</span>", input.toMarkdown(styles = config))
 	}
 
 	@Test
@@ -272,15 +273,15 @@ class InlineStyleSyntaxTest {
 	@Test
 	fun `size exports as an inline span style`() {
 		val input = styled("a ", SpanStyle(fontSize = 20.sp), "big", " word")
-		assertEquals("a <span style=\"font-size:20px\">big</span> word", input.toMarkdown(config))
+		assertEquals("a <span style=\"font-size:20px\">big</span> word", input.toMarkdown(styles = config))
 		val em = styled("", SpanStyle(fontSize = 1.5.em), "big", "")
-		assertEquals("<span style=\"font-size:1.5em\">big</span>", em.toMarkdown(config))
+		assertEquals("<span style=\"font-size:1.5em\">big</span>", em.toMarkdown(styles = config))
 	}
 
 	@Test
 	fun `the body text size is not exported`() {
 		val input = styled("a ", config.defaultTextStyle, "plain", " word")
-		assertEquals("a plain word", input.toMarkdown(config))
+		assertEquals("a plain word", input.toMarkdown(styles = config))
 	}
 
 	@Test
@@ -304,12 +305,12 @@ class InlineStyleSyntaxTest {
 			listOf(Triple(0, 1, SpanStyle(color = Color(0xFF0000FF), fontSize = 20.sp))),
 			parsed.styledRanges(),
 		)
-		val exported = parsed.toMarkdown(config)
+		val exported = parsed.toMarkdown(styles = config)
 		assertEquals(
 			"<span style=\"color:#0000ff\"><span style=\"font-size:20px\">x</span></span>",
 			exported,
 		)
-		assertEquals(exported, exported.toAnnotatedStringFromMarkdown(config).toMarkdown(config))
+		assertEquals(exported, exported.toAnnotatedStringFromMarkdown(config).toMarkdown(styles = config))
 	}
 
 	@Test
@@ -338,14 +339,14 @@ class InlineStyleSyntaxTest {
 	@Test
 	fun `a coloured bold span emits both markers`() {
 		val input = styled("", SpanStyle(fontWeight = FontWeight.Bold, color = Color.Red), "x", "")
-		assertEquals("<span style=\"color:#ff0000\">**x**</span>", input.toMarkdown(config))
+		assertEquals("<span style=\"color:#ff0000\">**x**</span>", input.toMarkdown(styles = config))
 	}
 
 	@Test
 	fun `combined underline and strikethrough emit both markers`() {
 		val decoration = TextDecoration.combine(listOf(TextDecoration.Underline, TextDecoration.LineThrough))
 		val input = styled("", SpanStyle(textDecoration = decoration), "x", "")
-		assertEquals("<u>~~x~~</u>", input.toMarkdown(config))
+		assertEquals("<u>~~x~~</u>", input.toMarkdown(styles = config))
 	}
 
 	@Test

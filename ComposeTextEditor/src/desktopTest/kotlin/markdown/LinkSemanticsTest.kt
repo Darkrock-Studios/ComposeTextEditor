@@ -8,11 +8,13 @@ import com.darkrockstudios.texteditor.markdown.MarkdownExtension
 import com.darkrockstudios.texteditor.richstyle.LinkSpanStyle
 import com.darkrockstudios.texteditor.richstyle.RichSpan
 import com.darkrockstudios.texteditor.state.TextEditorState
+import com.darkrockstudios.texteditor.state.linkAt
+import com.darkrockstudios.texteditor.state.setLink
 import io.mockk.mockk
-import kotlinx.coroutines.test.TestScope
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import kotlinx.coroutines.test.TestScope
 
 /**
  * A link's identity is its [LinkSpanStyle]: import must attach it with the
@@ -67,7 +69,7 @@ class LinkSemanticsTest {
 		val url = "https://en.wikipedia.org/wiki/A (disambiguation)"
 		val extension = editor()
 		extension.editorState.setText("click here now")
-		extension.setLink(
+		extension.editorState.setLink(
 			TextEditorRange(CharLineOffset(0, 6), CharLineOffset(0, 10)),
 			url,
 		)
@@ -76,7 +78,7 @@ class LinkSemanticsTest {
 		assertEquals("click [here](<$url>) now", exported)
 
 		extension.importMarkdown(exported)
-		assertEquals(url, extension.linkAt(CharLineOffset(0, 7)))
+		assertEquals(url, extension.editorState.linkAt(CharLineOffset(0, 7)))
 		assertEquals(exported, extension.exportAsMarkdown())
 	}
 
@@ -123,12 +125,12 @@ class LinkSemanticsTest {
 		val extension = editor()
 		val state = extension.editorState
 		state.setText("click here")
-		extension.setLink(
+		extension.editorState.setLink(
 			TextEditorRange(CharLineOffset(0, 6), CharLineOffset(0, 10)),
 			"https://example.com",
 		)
 
-		assertEquals("https://example.com", extension.linkAt(CharLineOffset(0, 7)))
+		assertEquals("https://example.com", extension.editorState.linkAt(CharLineOffset(0, 7)))
 		assertEquals("click [here](https://example.com)", extension.exportAsMarkdown())
 
 		// The display style and the span are one group, so one undo reverts both.

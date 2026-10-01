@@ -28,7 +28,7 @@ internal inline fun forEachCssDeclaration(css: String, action: (property: String
 }
 
 /** The colour and font size an inline `style` attribute sets, or null when it sets neither. */
-internal fun cssColorAndSize(css: String): SpanStyle? {
+fun cssColorAndSize(css: String): SpanStyle? {
 	var color: Color? = null
 	var fontSize: TextUnit? = null
 	forEachCssDeclaration(css) { property, value ->
@@ -57,7 +57,7 @@ private val NAMED_COLORS = mapOf(
  * Reads a CSS hex (`#rgb`, `#rrggbb`, `#rrggbbaa`), `rgb()`/`rgba()` (comma or space
  * separated) or basic keyword colour.
  */
-internal fun parseCssColor(value: String): Color? {
+fun parseCssColor(value: String): Color? {
 	val trimmed = value.trim()
 	NAMED_COLORS[trimmed.lowercase()]?.let { return Color(0xFF000000.toInt() or it) }
 	if (trimmed.startsWith("#")) {
@@ -106,7 +106,7 @@ internal fun parseCssLength(value: String): TextUnit? {
 internal fun parseCssFontSize(value: String): TextUnit? = parseCssLength(value)?.takeIf { it.value > 0f }
 
 /** [number] for CSS, to two decimals and never in exponent form. */
-internal fun formatCssNumber(number: Float): String {
+fun formatCssNumber(number: Float): String {
 	val hundredths = (number * 100f).roundToLong()
 	val magnitude = abs(hundredths)
 	val whole = magnitude / 100

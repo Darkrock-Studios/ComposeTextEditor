@@ -43,17 +43,21 @@ import com.darkrockstudios.texteditor.input.KeyboardSettings
 import com.darkrockstudios.texteditor.input.KillRing
 import com.darkrockstudios.texteditor.input.imeActionFor
 import com.darkrockstudios.texteditor.input.TabSettings
-import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
+import com.darkrockstudios.texteditor.RichTextStyles
 import com.darkrockstudios.texteditor.richstyle.BlockSpanStyle
+import com.darkrockstudios.texteditor.richstyle.HeaderSpanStyle
 import com.darkrockstudios.texteditor.richstyle.LineBlockEditBehavior
 import com.darkrockstudios.texteditor.richstyle.ParagraphFormatSpanStyle
 import com.darkrockstudios.texteditor.richstyle.RichSpan
 import com.darkrockstudios.texteditor.richstyle.RichSpanStyle
 import com.darkrockstudios.texteditor.richstyle.allBlockRegistry
-import com.darkrockstudios.texteditor.richstyle.conflicts
 import com.darkrockstudios.texteditor.richstyle.demoteLineBlock
+import com.darkrockstudios.texteditor.richstyle.headerBlock
+import com.darkrockstudios.texteditor.richstyle.lineBlocksConflict
 import com.darkrockstudios.texteditor.richstyle.lineBlocks
 import com.darkrockstudios.texteditor.richstyle.normalizeLineBlocks
+import com.darkrockstudios.texteditor.richstyle.rebuildWithBlock
+import com.darkrockstudios.texteditor.richstyle.rebuildWithoutBlock
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -146,30 +150,64 @@ class TextEditorState(
 		}
 
 	/**
-	 * Styling used when converting styled text to and from an external
-	 * representation, currently the clipboard's HTML flavor. Header levels are
-	 * recognised by matching font sizes against this, so a mismatch silently
-	 * downgrades headings to plain bold text.
+	 * The character styles rich text formatting uses: what the formatting actions
+	 * apply, what a heading bakes into its line, and what HTML, the clipboard and the
+	 * format addons recognise a span by. Assigning a different value retires the old
+	 * one ([retiredRichTextStyles]) and swaps every heading line's baked style for the
+	 * new one, off the undo history.
 	 *
-	 * Kept in sync by
-	 * [MarkdownExtension][com.darkrockstudios.texteditor.markdown.MarkdownExtension];
-	 * editors that do not use markdown keep the default.
+	 * Assigning the styles, the default included, also makes
+	 * [RichTextStyles.defaultTextStyle] the style of text typed where the document
+	 * carries none, as the importers give every paragraph that style; an editor never
+	 * assigned them types in [textStyle] alone. The format extensions assign them when
+	 * installed.
 	 */
-	var markdownConfiguration: MarkdownConfiguration = MarkdownConfiguration.DEFAULT
-		internal set(value) {
+	var richTextStyles: RichTextStyles = RichTextStyles.DEFAULT
+		set(value) {
+			val previous = field
 			field = value
-			hasMarkdownConfiguration = true
+			richTextStylesSet = true
+			if (previous != value) {
+				retiredStyles.remove(value)
+				if (previous !in retiredStyles) retiredStyles += previous
+				rebakeHeaderLines(previous, value)
+			}
 			// The typing style is derived from this as well as from the text, so a
-			// config swap invalidates it even though the document did not change.
+			// swap invalidates it even though the document did not change.
 			cursor.refreshStyles()
 		}
 
+	private val retiredStyles = mutableListOf<RichTextStyles>()
+
 	/**
-	 * Whether an extension installed [markdownConfiguration]. A plain editor keeps
-	 * the default value but never opts in, so its typed text stays on [textStyle].
+	 * The style configurations this editor was switched away from, each once, oldest
+	 * first, the current one excluded. A span still carrying one of their styles (a
+	 * document is not rewritten on a theme change, so undo keeps matching) is that
+	 * style's marker to a serializer, not the text's own colour or size.
 	 */
-	internal var hasMarkdownConfiguration: Boolean = false
+	val retiredRichTextStyles: List<RichTextStyles> get() = retiredStyles
+
+	/** Whether [richTextStyles] was assigned, which is what opts typed text into the body style. */
+	internal var richTextStylesSet: Boolean = false
 		private set
+
+	/**
+	 * Swaps every heading line's baked display style from [previous]'s to
+	 * [current]'s. A heading's identity lives in its [HeaderSpanStyle] span; the
+	 * baked SpanStyle is presentation only, so this is a display migration on the
+	 * direct line-update path, not an undoable edit.
+	 */
+	private fun rebakeHeaderLines(previous: RichTextStyles, current: RichTextStyles) {
+		if (richSpanManager.getAllRichSpans().none { it.style is HeaderSpanStyle }) return
+		withAtomicEdit {
+			textLines.forEachIndexed { line, existing ->
+				val level = richSpanManager.getRichSpansStartingOn(line)
+					.firstNotNullOfOrNull { it.style as? HeaderSpanStyle }?.level ?: return@forEachIndexed
+				val stripped = rebuildWithoutBlock(existing, headerBlock(level, previous))
+				updateLine(line, rebuildWithBlock(stripped, headerBlock(level, current)))
+			}
+		}
+	}
 
 	/**
 	 * Theming colors for line-block gutter markers, mirrored from
@@ -231,7 +269,7 @@ class TextEditorState(
 		val lines = snapshot.lines.size
 		val first = minOf(untouchedBefore, lines)
 		val end = lines - minOf(untouchedAfter, lines)
-		val result = normalizeLineBlocks(snapshot, markdownConfiguration, first until end, spansChanged)
+		val result = normalizeLineBlocks(snapshot, richTextStyles, first until end, spansChanged)
 		untouchedBefore = Int.MAX_VALUE
 		untouchedAfter = Int.MAX_VALUE
 		spansChanged = false
@@ -2127,7 +2165,7 @@ class TextEditorState(
 			// paste began in keeps its own.
 			val block = allBlockRegistry.firstOrNull { it.spanStyle === preserved.style }
 			if (block != null && preserved.relativeStart.lineDiff > 0 && startPos.char == 0) {
-				val refusing = lineBlocks(startPos.line).filter { conflicts(block.spanStyle, it.spanStyle) }
+				val refusing = lineBlocks(startPos.line).filter { lineBlocksConflict(block.spanStyle, it.spanStyle) }
 				if (refusing.isNotEmpty()) {
 					editManager.recordLineBlockChanges(listOf(startPos.line)) {
 						refusing.forEach { demoteLineBlock(startPos.line, it) }

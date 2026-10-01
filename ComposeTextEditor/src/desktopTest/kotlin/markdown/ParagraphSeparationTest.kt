@@ -4,19 +4,19 @@ import androidx.compose.ui.text.AnnotatedString
 import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
 import com.darkrockstudios.texteditor.markdown.MarkdownExtension
 import com.darkrockstudios.texteditor.markdown.ParagraphSeparator
-import com.darkrockstudios.texteditor.richstyle.Blockquote
-import com.darkrockstudios.texteditor.richstyle.BulletList
-import com.darkrockstudios.texteditor.richstyle.CodeFence
-import com.darkrockstudios.texteditor.richstyle.LineBlockStyle
-import com.darkrockstudios.texteditor.richstyle.OrderedList
+import com.darkrockstudios.texteditor.richstyle.BlockquoteSpanStyle
+import com.darkrockstudios.texteditor.richstyle.BulletListSpanStyle
+import com.darkrockstudios.texteditor.richstyle.CodeFenceSpanStyle
+import com.darkrockstudios.texteditor.richstyle.HeaderSpanStyle
+import com.darkrockstudios.texteditor.richstyle.OrderedListSpanStyle
+import com.darkrockstudios.texteditor.richstyle.RichSpanStyle
 import com.darkrockstudios.texteditor.richstyle.applyDocumentBlocks
-import com.darkrockstudios.texteditor.richstyle.headerBlock
 import com.darkrockstudios.texteditor.state.TextEditorState
 import io.mockk.mockk
-import kotlinx.coroutines.test.TestScope
-import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.runTest
 
 /**
  * An editor line is a markdown paragraph: export puts a blank line between
@@ -33,14 +33,14 @@ class ParagraphSeparationTest {
 		)
 
 	/** Loads [lines] as the document, with [blocks] on the given line indices. */
-	private fun MarkdownExtension.load(lines: List<String>, vararg blocks: Pair<LineBlockStyle, List<Int>>) {
+	private fun MarkdownExtension.load(lines: List<String>, vararg blocks: Pair<RichSpanStyle, List<Int>>) {
 		editorState.setText(AnnotatedString(lines.joinToString("\n")))
 		editorState.applyDocumentBlocks(blockLines = blocks.toMap())
 	}
 
 	private fun MarkdownExtension.lines(): List<String> = editorState.getAllText().text.split("\n")
 
-	private fun MarkdownExtension.assertRoundTrip(lines: List<String>, markdown: String, vararg blocks: Pair<LineBlockStyle, List<Int>>) {
+	private fun MarkdownExtension.assertRoundTrip(lines: List<String>, markdown: String, vararg blocks: Pair<RichSpanStyle, List<Int>>) {
 		load(lines, *blocks)
 		assertEquals(markdown, exportAsMarkdown(), "export")
 		importMarkdown(markdown)
@@ -67,18 +67,18 @@ class ParagraphSeparationTest {
 		e.assertRoundTrip(
 			listOf("before", "a", "b", "after"),
 			"before\n\n- a\n- b\n\nafter",
-			BulletList to listOf(1, 2),
+			BulletListSpanStyle to listOf(1, 2),
 		)
 		e.assertRoundTrip(
 			listOf("a", "b", "c"),
 			"- a\n1. b\n- c",
-			BulletList to listOf(0, 2),
-			OrderedList to listOf(1),
+			BulletListSpanStyle to listOf(0, 2),
+			OrderedListSpanStyle to listOf(1),
 		)
 		e.assertRoundTrip(
 			listOf("a", "", "b"),
 			"- a\n\n\n- b",
-			BulletList to listOf(0, 2),
+			BulletListSpanStyle to listOf(0, 2),
 		)
 	}
 
@@ -87,18 +87,18 @@ class ParagraphSeparationTest {
 		extension().assertRoundTrip(
 			listOf("a", "", "b"),
 			"- a\n- \n- b",
-			BulletList to listOf(0, 1, 2),
+			BulletListSpanStyle to listOf(0, 1, 2),
 		)
 	}
 
 	@Test
 	fun `quoted paragraphs are separated by a bare quote marker`() = runTest {
 		val e = extension()
-		e.assertRoundTrip(listOf("a", "b"), "> a\n>\n> b", Blockquote to listOf(0, 1))
-		e.assertRoundTrip(listOf("a", "", "b"), "> a\n>\n> \n> b", Blockquote to listOf(0, 1, 2))
-		e.assertRoundTrip(listOf("a", "", "b"), "> a\n\n\n> b", Blockquote to listOf(0, 2))
-		e.assertRoundTrip(listOf("a", "b"), "> a\n\nb", Blockquote to listOf(0))
-		e.assertRoundTrip(listOf("a", "b"), "a\n\n> b", Blockquote to listOf(1))
+		e.assertRoundTrip(listOf("a", "b"), "> a\n>\n> b", BlockquoteSpanStyle to listOf(0, 1))
+		e.assertRoundTrip(listOf("a", "", "b"), "> a\n>\n> \n> b", BlockquoteSpanStyle to listOf(0, 1, 2))
+		e.assertRoundTrip(listOf("a", "", "b"), "> a\n\n\n> b", BlockquoteSpanStyle to listOf(0, 2))
+		e.assertRoundTrip(listOf("a", "b"), "> a\n\nb", BlockquoteSpanStyle to listOf(0))
+		e.assertRoundTrip(listOf("a", "b"), "a\n\n> b", BlockquoteSpanStyle to listOf(1))
 	}
 
 	@Test
@@ -106,7 +106,7 @@ class ParagraphSeparationTest {
 		extension().assertRoundTrip(
 			listOf("a", "code", "", "more", "b"),
 			"a\n\n```\ncode\n\nmore\n```\n\nb",
-			CodeFence to listOf(1, 2, 3),
+			CodeFenceSpanStyle to listOf(1, 2, 3),
 		)
 	}
 
@@ -116,7 +116,7 @@ class ParagraphSeparationTest {
 		e.assertRoundTrip(
 			listOf("Title", "body"),
 			"# Title\n\nbody",
-			headerBlock(1, MarkdownConfiguration.DEFAULT) to listOf(0),
+			HeaderSpanStyle.of(1) to listOf(0),
 		)
 		e.load(listOf("a", "", "b"))
 		e.editorState.applyDocumentBlocks(horizontalRuleLines = listOf(1))
@@ -165,10 +165,10 @@ class ParagraphSeparationTest {
 	@Test
 	fun `empty quoted lines are blank lines on both sides`() = runTest {
 		val e = extension()
-		e.assertRoundTrip(listOf("", ""), "> \n", Blockquote to listOf(0))
-		e.assertRoundTrip(listOf("", ""), "> \n> ", Blockquote to listOf(0, 1))
-		e.assertRoundTrip(listOf("a", "", "", "", "b"), "> a\n>\n> \n> \n> \n> b", Blockquote to listOf(0, 1, 2, 3, 4))
-		e.assertRoundTrip(listOf("a", "", "b"), "a\n\n> \nb", Blockquote to listOf(1))
+		e.assertRoundTrip(listOf("", ""), "> \n", BlockquoteSpanStyle to listOf(0))
+		e.assertRoundTrip(listOf("", ""), "> \n> ", BlockquoteSpanStyle to listOf(0, 1))
+		e.assertRoundTrip(listOf("a", "", "", "", "b"), "> a\n>\n> \n> \n> \n> b", BlockquoteSpanStyle to listOf(0, 1, 2, 3, 4))
+		e.assertRoundTrip(listOf("a", "", "b"), "a\n\n> \nb", BlockquoteSpanStyle to listOf(1))
 	}
 
 	@Test
@@ -191,6 +191,6 @@ class ParagraphSeparationTest {
 		val e = extension(MarkdownConfiguration.DEFAULT.copy(paragraphSeparator = ParagraphSeparator.NEWLINE))
 		e.assertRoundTrip(listOf("one", "two"), "one\ntwo")
 		e.assertRoundTrip(listOf("one", "", "two"), "one\n\ntwo")
-		e.assertRoundTrip(listOf("a", "b"), "> a\n> b", Blockquote to listOf(0, 1))
+		e.assertRoundTrip(listOf("a", "b"), "> a\n> b", BlockquoteSpanStyle to listOf(0, 1))
 	}
 }

@@ -9,15 +9,18 @@ import androidx.compose.ui.unit.LayoutDirection
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
 import com.darkrockstudios.texteditor.markdown.MarkdownExtension
+import com.darkrockstudios.texteditor.richstyle.BulletListSpanStyle
 import com.darkrockstudios.texteditor.richstyle.ORDERED_LIST_PARAGRAPH_STYLE
 import com.darkrockstudios.texteditor.richstyle.OrderedListSpanStyle
 import com.darkrockstudios.texteditor.state.TextEditorState
+import com.darkrockstudios.texteditor.state.toggleBulletList
+import com.darkrockstudios.texteditor.state.toggleOrderedList
 import io.mockk.mockk
-import kotlinx.coroutines.test.TestScope
-import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.runTest
 
 class OrderedListSerializationTest {
 
@@ -175,7 +178,7 @@ class OrderedListSerializationTest {
 		// Switching list type should swap, not stack.
 		val extension = createMarkdownExtension()
 		extension.importMarkdown("- item")
-		extension.toggleOrderedList(0..0)
+		extension.editorState.toggleOrderedList(0..0)
 
 		assertEquals(listOf(0), extension.orderedLines())
 		// No bullet span should remain.
@@ -189,7 +192,7 @@ class OrderedListSerializationTest {
 	fun `toggleBulletList on an ordered-list line replaces ordered with bullet`() = runTest {
 		val extension = createMarkdownExtension()
 		extension.importMarkdown("1. item")
-		extension.toggleBulletList(0..0)
+		extension.editorState.toggleBulletList(0..0)
 
 		assertTrue(extension.orderedLines().isEmpty(), "ordered span should be replaced")
 		assertEquals("- item", extension.exportAsMarkdown())
@@ -201,7 +204,7 @@ class OrderedListSerializationTest {
 		extension.importMarkdown("plain text")
 		assertTrue(extension.orderedLines().isEmpty())
 
-		extension.toggleOrderedList(0..0)
+		extension.editorState.toggleOrderedList(0..0)
 		assertEquals(listOf(0), extension.orderedLines())
 		assertEquals("1. plain text", extension.exportAsMarkdown())
 	}
@@ -212,7 +215,7 @@ class OrderedListSerializationTest {
 		extension.importMarkdown("1. item")
 		assertEquals(listOf(0), extension.orderedLines())
 
-		extension.toggleOrderedList(0..0)
+		extension.editorState.toggleOrderedList(0..0)
 		assertTrue(extension.orderedLines().isEmpty())
 		assertEquals("item", extension.exportAsMarkdown())
 	}
@@ -222,7 +225,7 @@ class OrderedListSerializationTest {
 		val extension = createMarkdownExtension()
 		extension.importMarkdown("1. one\nplain")
 
-		extension.toggleOrderedList(0..1)
+		extension.editorState.toggleOrderedList(0..1)
 		assertEquals(listOf(0, 1), extension.orderedLines())
 		assertEquals("1. one\n2. plain", extension.exportAsMarkdown())
 	}
@@ -308,7 +311,7 @@ class OrderedListSerializationTest {
 		val extension = createMarkdownExtension()
 		extension.importMarkdown("1. item")
 
-		extension.toggleOrderedList(0..0)
+		extension.editorState.toggleOrderedList(0..0)
 		val line = extension.editorState.textLines[0]
 		val hasIndent = line.paragraphStyles.any { it.item == ORDERED_LIST_PARAGRAPH_STYLE }
 		assertTrue(!hasIndent, "indent paragraph style should be gone after removal")

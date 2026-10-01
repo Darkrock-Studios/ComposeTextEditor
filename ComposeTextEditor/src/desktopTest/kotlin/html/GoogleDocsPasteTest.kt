@@ -5,19 +5,19 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.style.TextAlign
 import com.darkrockstudios.texteditor.CharLineOffset
+import com.darkrockstudios.texteditor.RichTextStyles
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.html.HtmlExtension
 import com.darkrockstudios.texteditor.html.toAnnotatedStringFromHtml
-import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
 import com.darkrockstudios.texteditor.richstyle.ParagraphFormatSpanStyle
 import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.paragraphFormat
 import io.mockk.mockk
-import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlinx.coroutines.test.runTest
 
 /**
  * Pasting from Google Docs: the author's own colours, greys included, and highlights
@@ -26,7 +26,7 @@ import kotlin.test.assertTrue
  */
 class GoogleDocsPasteTest {
 
-	private val config = MarkdownConfiguration.DEFAULT
+	private val config = RichTextStyles.DEFAULT
 
 	private fun docsParagraph(vararg runs: Pair<String, String>): String =
 		"""<b style="font-weight:normal;" id="docs-internal-guid-1"><p dir="ltr">""" +

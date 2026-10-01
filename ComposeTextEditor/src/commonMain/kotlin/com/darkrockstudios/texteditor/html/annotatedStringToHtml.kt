@@ -2,7 +2,7 @@ package com.darkrockstudios.texteditor.html
 
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
-import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
+import com.darkrockstudios.texteditor.RichTextStyles
 
 /**
  * Serializes this [AnnotatedString] to an HTML fragment suitable for the system
@@ -12,8 +12,8 @@ import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
  * dropped and its text emitted unstyled. Newlines become `<br>`.
  */
 fun AnnotatedString.toHtml(
-	configuration: MarkdownConfiguration = MarkdownConfiguration.DEFAULT
-): String = toHtml(configuration, links = emptyList())
+	styles: RichTextStyles = RichTextStyles.DEFAULT
+): String = toHtml(styles, links = emptyList())
 
 /** What one character is written under: its tags, inside the link it belongs to. */
 private data class HtmlRun(val tags: List<HtmlTag>, val link: String?)
@@ -25,7 +25,7 @@ private data class HtmlRun(val tags: List<HtmlTag>, val link: String?)
  * what carries that look, while formatting of the link's own still shows.
  */
 internal fun AnnotatedString.toHtml(
-	configuration: MarkdownConfiguration,
+	styles: RichTextStyles,
 	links: List<HtmlLink>,
 ): String {
 	if (text.isEmpty()) return ""
@@ -39,11 +39,11 @@ internal fun AnnotatedString.toHtml(
 			linkAt[i] = url
 		}
 	}
-	val resolved = resolveSpanStyles(except = configuration.linkStyle, over = inLink)
+	val resolved = resolveSpanStyles(except = styles.linkStyle, over = inLink)
 	val runCache = HashMap<Pair<SpanStyle, String?>, HtmlRun>()
 	val runs = Array(text.length) { index ->
 		runCache.getOrPut(resolved[index] to linkAt[index]) {
-			HtmlRun(resolved[index].htmlTags(configuration).sortedBy { it.ordinal }, linkAt[index])
+			HtmlRun(resolved[index].htmlTags(styles).sortedBy { it.ordinal }, linkAt[index])
 		}
 	}
 
@@ -161,7 +161,7 @@ private fun AnnotatedString.resolveSpanStyles(
  * more often than it is a bold paragraph — and refusing it would make the
  * default h4 unwritable.
  */
-internal fun AnnotatedString.uniformHeadingTag(config: MarkdownConfiguration): HtmlTag? {
+internal fun AnnotatedString.uniformHeadingTag(config: RichTextStyles): HtmlTag? {
 	if (text.isEmpty()) return null
 	val resolved = resolveSpanStyles()
 	val style = resolved[0]

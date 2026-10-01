@@ -4,29 +4,35 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.TextUnit
+import com.darkrockstudios.texteditor.RichTextStyles
 
 /**
  * Converts an AnnotatedString to a markdown string, handling supported markdown styles.
  * Only converts styles that match our supported markdown styles, dropping any unsupported styles.
  *
+ * @param configuration The syntax choices to write in.
  * @param links Hyperlinks to emit, as text ranges (in this string's character
  * offsets) paired with their destination URLs. Each becomes `[text](url)`,
  * with the markers enclosing any emphasis inside the range.
+ * @param styles The styles a span is recognised by; an editor's own are on
+ * `TextEditorState.richTextStyles`.
  */
 fun AnnotatedString.toMarkdown(
 	configuration: MarkdownConfiguration = MarkdownConfiguration.DEFAULT,
 	links: List<Pair<IntRange, String>> = emptyList(),
-): String = toMarkdown(configuration, links, emptyList())
+	styles: RichTextStyles = RichTextStyles.DEFAULT,
+): String = toMarkdown(configuration, links, styles, emptyList())
 
 /**
- * [retiredConfigurations] are configurations the document was styled under
- * before [configuration]; a span still carrying one of their configured
- * styles is written as that style's marker, not as its colour or size.
+ * [retiredStyles] are the style configurations the document was styled under
+ * before [styles]; a span still carrying one of their configured styles is
+ * written as that style's marker, not as its colour or size.
  */
 internal fun AnnotatedString.toMarkdown(
 	configuration: MarkdownConfiguration,
 	links: List<Pair<IntRange, String>>,
-	retiredConfigurations: List<MarkdownConfiguration>,
+	styles: RichTextStyles,
+	retiredStyles: List<RichTextStyles>,
 ): String {
 	if (text.isEmpty()) return ""
 
@@ -36,7 +42,7 @@ internal fun AnnotatedString.toMarkdown(
 	val rangesByMarker = LinkedHashMap<StyleMarkerPair, MutableList<IntRange>>()
 	spanStyles.forEach { span ->
 		if (span.end <= span.start) return@forEach
-		styleMarkers(span.item, configuration, retiredConfigurations).forEach { marker ->
+		styleMarkers(span.item, styles, configuration, retiredStyles).forEach { marker ->
 			rangesByMarker.getOrPut(marker) { mutableListOf() }
 				.add(span.start until span.end)
 		}
@@ -303,15 +309,16 @@ private fun subtractRuns(
  */
 private fun styleMarkers(
 	style: SpanStyle,
-	config: MarkdownConfiguration,
-	retiredConfigurations: List<MarkdownConfiguration> = emptyList(),
+	config: RichTextStyles,
+	syntax: MarkdownConfiguration,
+	retiredStyles: List<RichTextStyles> = emptyList(),
 ): List<StyleMarkerPair> {
 	// A configured style is written as the one marker it stands for: its colour,
 	// size or background is how the configuration shows that marker, not
 	// something the document says about the text. That holds for a
 	// configuration the document was styled under earlier as well.
-	configuredMarkers(style, config)?.let { return it }
-	retiredConfigurations.forEach { retired -> configuredMarkers(style, retired)?.let { return it } }
+	configuredMarkers(style, config, syntax)?.let { return it }
+	retiredStyles.forEach { retired -> configuredMarkers(style, retired, syntax)?.let { return it } }
 
 	// Legacy heading path for content styled without a HeaderSpanStyle span
 	// (old documents, host apps writing raw font sizes). Checked first so a
@@ -337,7 +344,7 @@ private fun styleMarkers(
 			fontSizeSpanTag(size)?.let { add(StyleMarkerPair(it, "</span>")) }
 		}
 		if (style.isUnderlineStyle) add(UNDERLINE_MARKER)
-		if (style.isHighlightStyle) add(highlightMarker(config))
+		if (style.isHighlightStyle) add(highlightMarker(syntax))
 		if (style.isCodeStyle) add(CODE_MARKER)
 		// Not isBoldStyle: a bold run with a size that is no heading's is bold
 		// text at that size, and the heading branch above has already passed it.
@@ -353,14 +360,14 @@ private fun styleMarkers(
  * checked before the link, body and quote styles, which write nothing, so a
  * host whose link style is a plain underline still gets its underlines written.
  */
-private fun configuredMarkers(style: SpanStyle, config: MarkdownConfiguration): List<StyleMarkerPair>? =
+private fun configuredMarkers(style: SpanStyle, config: RichTextStyles, syntax: MarkdownConfiguration): List<StyleMarkerPair>? =
 	when (style) {
 		config.boldStyle -> listOf(BOLD_MARKER)
 		config.italicStyle -> listOf(ITALIC_MARKER)
 		config.codeStyle -> listOf(CODE_MARKER)
 		config.strikethroughStyle -> listOf(STRIKETHROUGH_MARKER)
 		config.underlineStyle -> listOf(UNDERLINE_MARKER)
-		config.highlightStyle -> listOf(highlightMarker(config))
+		config.highlightStyle -> listOf(highlightMarker(syntax))
 		config.defaultTextStyle, config.linkStyle, config.blockquoteStyle -> emptyList()
 		else -> null
 	}
@@ -373,8 +380,8 @@ private val UNDERLINE_MARKER = StyleMarkerPair("<u>", "</u>")
 private val DOUBLE_EQUALS_MARKER = StyleMarkerPair("==", "==")
 private val MARK_TAG_MARKER = StyleMarkerPair("<mark>", "</mark>")
 
-private fun highlightMarker(config: MarkdownConfiguration): StyleMarkerPair =
-	when (config.highlightSyntax) {
+private fun highlightMarker(syntax: MarkdownConfiguration): StyleMarkerPair =
+	when (syntax.highlightSyntax) {
 		HighlightSyntax.DOUBLE_EQUALS -> DOUBLE_EQUALS_MARKER
 		HighlightSyntax.MARK_TAG -> MARK_TAG_MARKER
 	}

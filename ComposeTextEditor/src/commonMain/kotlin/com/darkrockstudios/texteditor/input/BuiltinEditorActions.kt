@@ -12,7 +12,7 @@ import com.darkrockstudios.texteditor.clipboard.readHtmlPasteDocument
 import com.darkrockstudios.texteditor.clipboard.withSizeForPasteAt
 import com.darkrockstudios.texteditor.html.selectionAsHtml
 import com.darkrockstudios.texteditor.input.EditorCommand.Action
-import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
+import com.darkrockstudios.texteditor.RichTextStyles
 import com.darkrockstudios.texteditor.richstyle.listBlockAt
 import com.darkrockstudios.texteditor.richstyle.listLevel
 import com.darkrockstudios.texteditor.richstyle.nestListItems
@@ -128,13 +128,13 @@ internal fun EditorActionRegistry.registerBuiltinActions() {
 	)
 }
 
-/** Reads the style at invocation, so a later markdown configuration change is honoured. */
+/** Reads the style at invocation, so a later change of the state's styles is honoured. */
 private fun EditorActionRegistry.registerFormattingToggle(
 	action: Action,
-	style: (MarkdownConfiguration) -> SpanStyle,
+	style: (RichTextStyles) -> SpanStyle,
 ) {
 	register(EditorActionSpec(action) { ctx ->
-		ctx.state.toggleSpanStyle(style(ctx.state.markdownConfiguration))
+		ctx.state.toggleSpanStyle(style(ctx.state.richTextStyles))
 	})
 }
 
@@ -175,7 +175,7 @@ private fun EditorActionContext.writeSelection(selection: TextEditorRange): susp
 	val buffer = state.richSpanBuffer
 	val textRevision = state.textRevision
 	return {
-		val written = ClipboardHelper.setText(clipboard, selectedText, state.markdownConfiguration, copyId, html)
+		val written = ClipboardHelper.setText(clipboard, selectedText, state.richTextStyles, copyId, html)
 		if (!written && state.richSpanBuffer === buffer && state.textRevision == textRevision) {
 			state.richSpanBuffer = previousBuffer
 		}
@@ -192,7 +192,7 @@ private fun EditorActionContext.pasteClipboard(plainText: Boolean) {
 		val clipboardText = if (plainText) {
 			ClipboardHelper.getPlainText(clipboard)?.let(::AnnotatedString)
 		} else {
-			ClipboardHelper.getText(clipboard, state.markdownConfiguration)
+			ClipboardHelper.getText(clipboard, state.richTextStyles)
 		}
 		clipboardText?.let {
 			val curSelection = state.selector.selection

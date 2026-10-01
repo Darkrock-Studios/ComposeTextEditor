@@ -8,7 +8,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.sp
-import com.darkrockstudios.texteditor.markdown.MarkdownStyles
+import com.darkrockstudios.texteditor.RichTextStyles
 
 const val alice_wounder_land = """
   **Down the Rabbit-Hole**
@@ -267,7 +267,7 @@ fun createRichTextDemo2(): AnnotatedString = buildAnnotatedString {
 	append("1234567890123456789112345678921234567893")
 }
 
-private val DEFAULT = MarkdownStyles()
+private val DEFAULT = RichTextStyles.DEFAULT
 fun createRichTextDemo(): AnnotatedString = buildAnnotatedString {
 	// Title
 	withStyle(SpanStyle(fontSize = 24.sp, color = Color(0xFF1a73e8))) {
@@ -278,7 +278,7 @@ fun createRichTextDemo(): AnnotatedString = buildAnnotatedString {
 	append("In the world of digital typography, formatting plays a crucial role in how we perceive and interact with text. ")
 
 	// Bold section separated from other styles
-	withStyle(DEFAULT.BOLD) {
+	withStyle(DEFAULT.boldStyle) {
 		append("The careful application of styles can transform ordinary text into engaging, hierarchical content that guides the reader's eye and emphasizes key information. ")
 	}
 
@@ -286,7 +286,7 @@ fun createRichTextDemo(): AnnotatedString = buildAnnotatedString {
 
 	// Green and italic styles applied separately
 	withStyle(SpanStyle(color = Color(0xFF0F9D58))) {
-		withStyle(DEFAULT.ITALICS) {
+		withStyle(DEFAULT.italicStyle) {
 			append("The interplay between various typographic elements – from font choices to spacing, from color to weight – creates a visual rhythm that can either enhance or detract from the reading experience.")
 		}
 	}
@@ -308,11 +308,11 @@ fun createRichTextDemo(): AnnotatedString = buildAnnotatedString {
 		append("Typography in the digital age presents unique challenges and opportunities. While traditional print media operated within fixed constraints, digital text must remain flexible and adaptable. ")
 
 		// Applying bold separately within the colored section
-		withStyle(DEFAULT.BOLD) {
+		withStyle(DEFAULT.boldStyle) {
 			append("The way we style and present text can significantly impact how information is absorbed and retained. Consider how different formatting choices affect the reading experience: headlines draw attention, body text provides the core content, and highlighted elements guide the reader through key points. ")
 
 			// Italic applied separately within bold
-			withStyle(DEFAULT.ITALICS) {
+			withStyle(DEFAULT.italicStyle) {
 				append("The interplay between these elements creates a visual hierarchy that helps readers navigate through complex information structures.")
 			}
 		}
@@ -326,7 +326,7 @@ fun createRichTextDemo(): AnnotatedString = buildAnnotatedString {
 		append("The fundamental goals of clarity, readability, and visual appeal continue to guide design decisions in both print and digital media. Modern tools and technologies have expanded our capabilities, allowing for more sophisticated formatting options and dynamic adjustments based on viewing context. ")
 	}
 
-	withStyle(DEFAULT.BOLD) {
+	withStyle(DEFAULT.boldStyle) {
 		append("Yet the core principles of good typography remain constant: text should be easy to read, visually pleasing, and structured in a way that supports the content's message and purpose.")
 	}
 	append("\n\n")
@@ -349,14 +349,14 @@ fun createRichTextDemo(): AnnotatedString = buildAnnotatedString {
 
 	// Bold and color applied separately
 	withStyle(SpanStyle(color = Color(0xFF1a73e8))) {
-		withStyle(DEFAULT.BOLD) {
+		withStyle(DEFAULT.boldStyle) {
 			append("the importance of thoughtful text formatting cannot be overstated. ")
 		}
 	}
 
 	append("From simple documents to complex applications, the way we style and present text plays a crucial role in communication effectiveness. ")
 
-	withStyle(DEFAULT.ITALICS) {
+	withStyle(DEFAULT.italicStyle) {
 		append("The challenge lies in balancing aesthetic appeal with functional requirements, ensuring that our text remains both beautiful and usable across all contexts.")
 	}
 
@@ -370,7 +370,7 @@ fun createRichTextDemo(): AnnotatedString = buildAnnotatedString {
 			textDecoration = TextDecoration.Underline
 		)
 	) {
-		withStyle(DEFAULT.BOLD) {
+		withStyle(DEFAULT.boldStyle) {
 			append("Thank you for exploring this demonstration of rich text formatting!")
 		}
 	}

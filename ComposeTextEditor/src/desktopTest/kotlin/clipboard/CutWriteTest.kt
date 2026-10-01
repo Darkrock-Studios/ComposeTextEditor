@@ -9,21 +9,20 @@ import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.clipboard.ClipboardHelper
 import com.darkrockstudios.texteditor.contextmenu.ContextMenuActions
 import com.darkrockstudios.texteditor.html.HtmlExtension
-import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
 import com.darkrockstudios.texteditor.richstyle.BulletListSpanStyle
 import com.darkrockstudios.texteditor.state.TextEditorState
 import io.mockk.mockk
-import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.test.TestScope
-import kotlinx.coroutines.test.advanceUntilIdle
-import kotlinx.coroutines.test.runTest
-import utils.InMemoryClipboard
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runTest
+import utils.InMemoryClipboard
 
 /** Cut deletes only once the clipboard holds the text, so a refused write loses nothing (6.19). */
 @OptIn(ExperimentalComposeUiApi::class)
@@ -103,7 +102,7 @@ class CutWriteTest {
 	@Test
 	fun `a refused cut keeps the blocks of what the clipboard holds`() = runTest {
 		val state = TextEditorState(scope = this, measurer = mockk(relaxed = true))
-		HtmlExtension(state, MarkdownConfiguration.DEFAULT).importHtml("<ul><li>one</li><li>two</li></ul>")
+		HtmlExtension(state).importHtml("<ul><li>one</li><li>two</li></ul>")
 		val clipboard = InMemoryClipboard()
 		state.selector.selectAll()
 		ContextMenuActions(state, clipboard, this).copy()

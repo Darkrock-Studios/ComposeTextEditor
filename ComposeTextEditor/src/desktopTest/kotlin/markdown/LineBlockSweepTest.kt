@@ -9,12 +9,16 @@ import com.darkrockstudios.texteditor.richstyle.CodeFenceSpanStyle
 import com.darkrockstudios.texteditor.richstyle.HorizontalRuleSpanStyle
 import com.darkrockstudios.texteditor.richstyle.InMemoryImageProvider
 import com.darkrockstudios.texteditor.state.TextEditorState
+import com.darkrockstudios.texteditor.state.toggleBlockquote
+import com.darkrockstudios.texteditor.state.toggleBulletList
+import com.darkrockstudios.texteditor.state.toggleCodeFence
+import com.darkrockstudios.texteditor.state.toggleOrderedList
 import io.mockk.mockk
-import kotlinx.coroutines.test.TestScope
-import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.runTest
 
 /**
  * Multi-line block toggles act on every selected line that can carry the style:
@@ -43,7 +47,7 @@ class LineBlockSweepTest {
 		val extension = createMarkdownExtension()
 		extension.importMarkdown("Chapter One\n\n\nShe walked in.")
 
-		extension.toggleBulletList(extension.selectAll())
+		extension.editorState.toggleBulletList(extension.selectAll())
 
 		assertEquals(listOf(0, 1, 2), extension.linesWith(BulletListSpanStyle))
 		assertEquals("- Chapter One\n- \n- She walked in.", extension.exportAsMarkdown())
@@ -55,8 +59,8 @@ class LineBlockSweepTest {
 		val original = "Chapter One\n\nShe walked in."
 		extension.importMarkdown(original)
 
-		extension.toggleBulletList(extension.selectAll())
-		extension.toggleBulletList(extension.selectAll())
+		extension.editorState.toggleBulletList(extension.selectAll())
+		extension.editorState.toggleBulletList(extension.selectAll())
 
 		assertTrue(extension.linesWith(BulletListSpanStyle).isEmpty())
 		assertEquals(original, extension.exportAsMarkdown())
@@ -68,7 +72,7 @@ class LineBlockSweepTest {
 		extension.importMarkdown("- one\n- \n- two")
 		assertEquals(listOf(0, 1, 2), extension.linesWith(BulletListSpanStyle))
 
-		extension.toggleBulletList(extension.selectAll())
+		extension.editorState.toggleBulletList(extension.selectAll())
 
 		assertTrue(extension.linesWith(BulletListSpanStyle).isEmpty())
 		assertEquals("one\n\n\ntwo", extension.exportAsMarkdown())
@@ -79,7 +83,7 @@ class LineBlockSweepTest {
 		val extension = createMarkdownExtension()
 		extension.importMarkdown("First\n\n\nSecond\n\n\nThird")
 
-		extension.toggleOrderedList(extension.selectAll())
+		extension.editorState.toggleOrderedList(extension.selectAll())
 
 		assertEquals(
 			"1. First\n2. \n3. Second\n4. \n5. Third",
@@ -92,7 +96,7 @@ class LineBlockSweepTest {
 		val extension = createMarkdownExtension()
 		extension.importMarkdown("fun a() {}\n\n\nfun b() {}")
 
-		extension.toggleCodeFence(extension.selectAll())
+		extension.editorState.toggleCodeFence(extension.selectAll())
 
 		assertEquals(listOf(0, 1, 2), extension.linesWith(CodeFenceSpanStyle))
 		assertEquals("```\nfun a() {}\n\nfun b() {}\n```", extension.exportAsMarkdown())
@@ -103,7 +107,7 @@ class LineBlockSweepTest {
 		val extension = createMarkdownExtension()
 		extension.importMarkdown("before\n---\nafter")
 
-		extension.toggleBulletList(extension.selectAll())
+		extension.editorState.toggleBulletList(extension.selectAll())
 
 		assertEquals(listOf(0, 2), extension.linesWith(BulletListSpanStyle))
 		assertEquals(listOf(1), extension.linesWith(HorizontalRuleSpanStyle))
@@ -114,7 +118,7 @@ class LineBlockSweepTest {
 	fun `select-all bullet across a rule survives a save and reload`() = runTest {
 		val extension = createMarkdownExtension()
 		extension.importMarkdown("before\n---\nafter")
-		extension.toggleBulletList(extension.selectAll())
+		extension.editorState.toggleBulletList(extension.selectAll())
 		val saved = extension.exportAsMarkdown()
 
 		extension.importMarkdown(saved)
@@ -129,8 +133,8 @@ class LineBlockSweepTest {
 		val original = "before\n\n---\n\nafter"
 		extension.importMarkdown(original)
 
-		extension.toggleBulletList(extension.selectAll())
-		extension.toggleBulletList(extension.selectAll())
+		extension.editorState.toggleBulletList(extension.selectAll())
+		extension.editorState.toggleBulletList(extension.selectAll())
 
 		assertTrue(extension.linesWith(BulletListSpanStyle).isEmpty())
 		assertEquals(original, extension.exportAsMarkdown())
@@ -141,7 +145,7 @@ class LineBlockSweepTest {
 		val extension = createMarkdownExtension()
 		extension.importMarkdown("before\n---\nafter")
 
-		extension.toggleBlockquote(extension.selectAll())
+		extension.editorState.toggleBlockquote(extension.selectAll())
 
 		assertEquals(listOf(0, 1, 2), extension.linesWith(BlockquoteSpanStyle))
 		assertEquals(listOf(1), extension.linesWith(HorizontalRuleSpanStyle))
@@ -153,7 +157,7 @@ class LineBlockSweepTest {
 		val extension = createMarkdownExtension(provider = InMemoryImageProvider())
 		extension.importMarkdown("before\n![alt](img.png)\nafter")
 
-		extension.toggleBulletList(extension.selectAll())
+		extension.editorState.toggleBulletList(extension.selectAll())
 
 		assertEquals(listOf(0, 1, 2), extension.linesWith(BulletListSpanStyle))
 		assertEquals(
@@ -168,7 +172,7 @@ class LineBlockSweepTest {
 		val original = "before\n\n---\n\n---\n\nafter"
 		extension.importMarkdown(original)
 
-		extension.toggleBulletList(1..2)
+		extension.editorState.toggleBulletList(1..2)
 
 		assertTrue(extension.linesWith(BulletListSpanStyle).isEmpty())
 		assertEquals(original, extension.exportAsMarkdown())
@@ -179,7 +183,7 @@ class LineBlockSweepTest {
 		val extension = createMarkdownExtension()
 		extension.importMarkdown("one\ntwo")
 
-		extension.toggleBulletList(0..9)
+		extension.editorState.toggleBulletList(0..9)
 
 		assertEquals(listOf(0, 1), extension.linesWith(BulletListSpanStyle))
 	}
@@ -189,7 +193,7 @@ class LineBlockSweepTest {
 		val extension = createMarkdownExtension()
 		extension.importMarkdown("one\n\ntwo")
 
-		extension.toggleBulletList(1..1)
+		extension.editorState.toggleBulletList(1..1)
 
 		assertEquals(listOf(1), extension.linesWith(BulletListSpanStyle))
 	}
@@ -200,7 +204,7 @@ class LineBlockSweepTest {
 		val original = "Chapter One\n\nShe walked in."
 		extension.importMarkdown(original)
 
-		extension.toggleBulletList(extension.selectAll())
+		extension.editorState.toggleBulletList(extension.selectAll())
 		extension.editorState.undo()
 
 		assertTrue(extension.linesWith(BulletListSpanStyle).isEmpty())

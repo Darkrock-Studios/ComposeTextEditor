@@ -4,6 +4,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.unit.TextUnit
+import com.darkrockstudios.texteditor.RichTextStyles
 import com.darkrockstudios.texteditor.html.cssColorAndSize
 import com.darkrockstudios.texteditor.html.formatCssNumber
 import com.darkrockstudios.texteditor.html.parseCssColor
@@ -30,7 +31,7 @@ private val ATTRIBUTE_REGEX = Regex("""([A-Za-z-]+)\s*=\s*(?:"([^"]*)"|'([^']*)'
  * Reads [tag] as one of the tags the editor styles, or returns null for any
  * other tag, which the importer keeps as literal text.
  */
-internal fun parseInlineHtmlTag(tag: String, styles: MarkdownStyles): InlineHtmlTag? {
+internal fun parseInlineHtmlTag(tag: String, styles: RichTextStyles): InlineHtmlTag? {
 	val match = TAG_REGEX.matchEntire(tag) ?: return null
 	val closing = match.groupValues[1] == "/"
 	val name = match.groupValues[2].lowercase()
@@ -42,8 +43,8 @@ internal fun parseInlineHtmlTag(tag: String, styles: MarkdownStyles): InlineHtml
 			(attribute.groupValues[2].ifEmpty { attribute.groupValues[3] })
 	}
 	val style = when (name) {
-		"u", "ins" -> styles.UNDERLINE
-		"mark" -> styles.HIGHLIGHT
+		"u", "ins" -> styles.underlineStyle
+		"mark" -> styles.highlightStyle
 		"span" -> attributes["style"]?.let(::cssColorAndSize)
 		"font" -> attributes["color"]?.let(::parseCssColor)?.let { SpanStyle(color = it) }
 		else -> null

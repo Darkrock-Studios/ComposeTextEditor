@@ -3,23 +3,22 @@ package markdown
 import androidx.compose.ui.text.AnnotatedString
 import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
 import com.darkrockstudios.texteditor.markdown.MarkdownExtension
-import com.darkrockstudios.texteditor.richstyle.Blockquote
-import com.darkrockstudios.texteditor.richstyle.BulletList
+import com.darkrockstudios.texteditor.richstyle.BlockquoteSpanStyle
+import com.darkrockstudios.texteditor.richstyle.BulletListSpanStyle
 import com.darkrockstudios.texteditor.richstyle.HR_PLACEHOLDER
 import com.darkrockstudios.texteditor.richstyle.IMAGE_PLACEHOLDER
 import com.darkrockstudios.texteditor.richstyle.ImageBlockSpanStyle
 import com.darkrockstudios.texteditor.richstyle.InMemoryImageProvider
-import com.darkrockstudios.texteditor.richstyle.LineBlockStyle
-import com.darkrockstudios.texteditor.richstyle.OrderedList
+import com.darkrockstudios.texteditor.richstyle.OrderedListSpanStyle
+import com.darkrockstudios.texteditor.richstyle.RichSpanStyle
 import com.darkrockstudios.texteditor.richstyle.applyDocumentBlocks
-import com.darkrockstudios.texteditor.richstyle.atListLevel
 import com.darkrockstudios.texteditor.state.TextEditorState
 import io.mockk.mockk
-import kotlinx.coroutines.test.TestScope
-import kotlinx.coroutines.test.runTest
 import kotlin.random.Random
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.runTest
 
 /**
  * The serialization contract, checked over generated documents instead of
@@ -36,7 +35,7 @@ class LineBlockRoundTripPropertyTest {
 		val isRule: Boolean = false,
 		val isImage: Boolean = false,
 		val quote: Boolean,
-		val list: LineBlockStyle?,
+		val list: RichSpanStyle?,
 	)
 
 	private val bodyPool = listOf(
@@ -56,8 +55,8 @@ class LineBlockRoundTripPropertyTest {
 
 	private fun generateLine(random: Random): GeneratedLine {
 		val list = when (random.nextInt(4)) {
-			0 -> BulletList
-			1 -> OrderedList
+			0 -> BulletListSpanStyle
+			1 -> OrderedListSpanStyle
 			else -> null
 		}
 		return when (random.nextInt(10)) {
@@ -100,7 +99,7 @@ class LineBlockRoundTripPropertyTest {
 					index to ImageBlockSpanStyle(source = "img.png", alt = "alt", provider = provider)
 				},
 			blockLines = mapOf(
-				Blockquote to lines.withIndex().filter { it.value.quote }.map { it.index },
+				BlockquoteSpanStyle to lines.withIndex().filter { it.value.quote }.map { it.index },
 			) + lines.withIndex()
 				.filter { it.value.list != null }
 				.groupBy({ it.value.list!! }, { it.index }),
@@ -173,4 +172,11 @@ class LineBlockRoundTripPropertyTest {
 			)
 		}
 	}
+}
+
+/** This list style's kind at [level]. */
+private fun RichSpanStyle.atListLevel(level: Int): RichSpanStyle = when (this) {
+	is BulletListSpanStyle -> BulletListSpanStyle.of(level)
+	is OrderedListSpanStyle -> OrderedListSpanStyle.of(level)
+	else -> this
 }

@@ -2,7 +2,7 @@ package com.darkrockstudios.texteditor.richstyle
 
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
-import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
+import com.darkrockstudios.texteditor.RichTextStyles
 import com.darkrockstudios.texteditor.state.DocumentSnapshot
 import com.darkrockstudios.texteditor.state.LineSplice
 
@@ -30,7 +30,7 @@ import com.darkrockstudios.texteditor.state.LineSplice
  */
 internal fun normalizeLineBlocks(
 	snapshot: DocumentSnapshot,
-	config: MarkdownConfiguration,
+	config: RichTextStyles,
 	changed: IntRange,
 	spansChanged: Boolean,
 ): DocumentSnapshot {
@@ -42,7 +42,7 @@ internal fun normalizeLineBlocks(
 
 private fun repairPlaceholders(
 	snapshot: DocumentSnapshot,
-	config: MarkdownConfiguration,
+	config: RichTextStyles,
 	changed: IntRange,
 ): DocumentSnapshot {
 	val registry = allBlockStyles(config)

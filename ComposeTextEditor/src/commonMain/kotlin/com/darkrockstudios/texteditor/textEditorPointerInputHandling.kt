@@ -388,7 +388,7 @@ private class ClickTarget(val span: RichSpan?, val link: String?) {
 	companion object {
 		fun at(state: TextEditorState, offset: Offset): ClickTarget = ClickTarget(
 			state.spanAt(offset),
-			state.characterAt(offset)?.let { state.linkAt(it) },
+			state.characterAt(offset)?.let { state.linkToOpenAt(it) },
 		)
 	}
 }
@@ -439,7 +439,7 @@ private fun TextEditorState.characterAt(offset: Offset): CharLineOffset? {
  * The URL of the [LinkSpanStyle] covering [position], if any. A destination the allowlist
  * refuses, which only a host attaching the span directly can place, is no link to open.
  */
-private fun TextEditorState.linkAt(position: CharLineOffset): String? =
+private fun TextEditorState.linkToOpenAt(position: CharLineOffset): String? =
 	lineOffsets.rowAt(position)
 		?.richSpans
 		?.firstOrNull { it.style is LinkSpanStyle && it.containsPosition(position) }
@@ -457,7 +457,7 @@ internal fun pointerIconAt(
 	default: PointerIcon?,
 ): PointerIcon? {
 	if (links == null || !links.opensOnClick(modifiers)) return default
-	val link = state.characterAt(offset)?.let { state.linkAt(it) }
+	val link = state.characterAt(offset)?.let { state.linkToOpenAt(it) }
 	return if (link != null) PointerIcon.Hand else default
 }
 

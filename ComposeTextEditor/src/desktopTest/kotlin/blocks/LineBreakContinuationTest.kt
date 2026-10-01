@@ -4,17 +4,20 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.unit.sp
 import com.darkrockstudios.texteditor.CharLineOffset
+import com.darkrockstudios.texteditor.RichTextStyles
 import com.darkrockstudios.texteditor.TextEditorRange
-import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
 import com.darkrockstudios.texteditor.markdown.MarkdownExtension
 import com.darkrockstudios.texteditor.richstyle.BlockquoteSpanStyle
 import com.darkrockstudios.texteditor.richstyle.BulletListSpanStyle
 import com.darkrockstudios.texteditor.state.TextEditorState
+import com.darkrockstudios.texteditor.state.headerLevel
+import com.darkrockstudios.texteditor.state.toggleBulletList
+import com.darkrockstudios.texteditor.state.toggleHeader
 import io.mockk.mockk
-import kotlinx.coroutines.test.TestScope
-import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.runTest
 import markdown.linesWith
 
 /**
@@ -90,8 +93,8 @@ class LineBreakContinuationTest {
 
 		e.replace(CharLineOffset(0, 1), CharLineOffset(0, 3), "\n")
 
-		assertEquals(1, e.headerLevel(0))
-		assertEquals(1, e.headerLevel(1))
+		assertEquals(1, e.editorState.headerLevel(0))
+		assertEquals(1, e.editorState.headerLevel(1))
 	}
 
 	@Test
@@ -102,8 +105,8 @@ class LineBreakContinuationTest {
 
 		state.insertStringAtCursor(AnnotatedString("\nbody"))
 
-		assertEquals(1, e.headerLevel(0))
-		assertEquals(null, e.headerLevel(1))
+		assertEquals(1, e.editorState.headerLevel(0))
+		assertEquals(null, e.editorState.headerLevel(1))
 		assertEquals("# Title\n\nbody", e.exportAsMarkdown())
 	}
 
@@ -232,7 +235,7 @@ class LineBreakContinuationTest {
 		e.replace(CharLineOffset(0, 1), CharLineOffset(1, 1), "X\nY")
 
 		assertEquals(listOf("OX", "Ywo"), state.textLines.map { it.text })
-		assertEquals(2, e.headerLevel(1))
+		assertEquals(2, e.editorState.headerLevel(1))
 		assertEquals(before.map { it.item }, state.textLines[1].paragraphStyles.map { it.item })
 	}
 
@@ -253,15 +256,16 @@ class LineBreakContinuationTest {
 		}
 
 		assertEquals(listOf("item", "Heading", "intro", "Heading"), state.textLines.map { it.text })
-		assertEquals(1, e.headerLevel(1))
+		assertEquals(1, e.editorState.headerLevel(1))
 		assertEquals(listOf(0), e.linesWith(BulletListSpanStyle))
 	}
 
 	@Test
 	fun `typing after lines pasted at a heading's end types body text`() = runTest {
 		val e = MarkdownExtension(
-			TextEditorState(scope = this, measurer = mockk(relaxed = true)),
-			MarkdownConfiguration.DEFAULT.copy(defaultTextStyle = SpanStyle(fontSize = 24.sp)),
+			TextEditorState(scope = this, measurer = mockk(relaxed = true)).apply {
+				richTextStyles = RichTextStyles.DEFAULT.copy(defaultTextStyle = SpanStyle(fontSize = 24.sp))
+			},
 		)
 		e.importMarkdown("# Title")
 		val state = e.editorState
@@ -270,7 +274,7 @@ class LineBreakContinuationTest {
 		state.insertStringAtCursor(AnnotatedString("\nbody"))
 		state.insertCharacterAtCursor('!')
 
-		val heading = e.markdownConfiguration.getHeaderStyle(1)
+		val heading = e.editorState.richTextStyles.getHeaderStyle(1)
 		assertEquals(emptyList(), state.textLines[1].spanStyles.filter { it.item == heading })
 	}
 
@@ -280,14 +284,14 @@ class LineBreakContinuationTest {
 		val state = e.editorState
 		state.cursor.updatePosition(CharLineOffset(0, 5))
 		state.insertNewlineAtCursor()
-		e.toggleHeader(1..1, 2)
+		e.editorState.toggleHeader(1..1, 2)
 		state.cursor.updatePosition(CharLineOffset(1, 0))
 
 		state.insertStringAtCursor(AnnotatedString("Sub\nbody\nmore"))
 
-		assertEquals(2, e.headerLevel(1))
-		assertEquals(null, e.headerLevel(2))
-		assertEquals(null, e.headerLevel(3))
+		assertEquals(2, e.editorState.headerLevel(1))
+		assertEquals(null, e.editorState.headerLevel(2))
+		assertEquals(null, e.editorState.headerLevel(3))
 	}
 
 	@Test
@@ -330,17 +334,17 @@ class LineBreakContinuationTest {
 		val state = e.editorState
 		state.cursor.updatePosition(CharLineOffset(0, 5))
 		state.insertNewlineAtCursor()
-		e.toggleHeader(1..1, 2)
+		e.editorState.toggleHeader(1..1, 2)
 		state.cursor.updatePosition(CharLineOffset(1, 0))
 		state.insertStringAtCursor(AnnotatedString("\nitem"))
-		e.toggleBulletList(2..2)
+		e.editorState.toggleBulletList(2..2)
 		assertEquals(listOf("Title", "", "item"), state.textLines.map { it.text })
-		assertEquals(2, e.headerLevel(1))
+		assertEquals(2, e.editorState.headerLevel(1))
 
 		e.replace(CharLineOffset(1, 0), CharLineOffset(2, 0), "Q")
 
 		assertEquals("Qitem", state.textLines[1].text)
-		assertEquals(null, e.headerLevel(1))
+		assertEquals(null, e.editorState.headerLevel(1))
 		assertEquals(listOf(1), e.linesWith(BulletListSpanStyle))
 	}
 
@@ -350,13 +354,13 @@ class LineBreakContinuationTest {
 		val state = e.editorState
 		state.cursor.updatePosition(CharLineOffset(0, 5))
 		state.insertNewlineAtCursor()
-		e.toggleHeader(1..1, 2)
+		e.editorState.toggleHeader(1..1, 2)
 		state.cursor.updatePosition(CharLineOffset(1, 0))
 
 		state.insertCharacterAtCursor('\n')
 
-		assertEquals(2, e.headerLevel(1))
-		assertEquals(null, e.headerLevel(2))
+		assertEquals(2, e.editorState.headerLevel(1))
+		assertEquals(null, e.editorState.headerLevel(2))
 		assertEquals(CharLineOffset(2, 0), state.cursorPosition)
 	}
 }

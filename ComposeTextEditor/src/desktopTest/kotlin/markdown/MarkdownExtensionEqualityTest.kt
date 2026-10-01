@@ -2,15 +2,16 @@ package markdown
 
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
+import com.darkrockstudios.texteditor.RichTextStyles
 import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
 import com.darkrockstudios.texteditor.markdown.MarkdownExtension
 import com.darkrockstudios.texteditor.state.TextEditorState
 import io.mockk.mockk
-import kotlinx.coroutines.test.TestScope
-import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.runTest
 
 class MarkdownExtensionEqualityTest {
 
@@ -50,8 +51,8 @@ class MarkdownExtensionEqualityTest {
 		val before = extension.hashCode()
 
 		extension.editorState.setText("entirely new content")
-		extension.markdownConfiguration = MarkdownConfiguration.DEFAULT.copy(
-			header1Style = MarkdownConfiguration.DEFAULT.header1Style.copy(color = Color.Red)
+		extension.editorState.richTextStyles = RichTextStyles.DEFAULT.copy(
+			header1Style = RichTextStyles.DEFAULT.header1Style.copy(color = Color.Red)
 		)
 
 		assertEquals(before, extension.hashCode())

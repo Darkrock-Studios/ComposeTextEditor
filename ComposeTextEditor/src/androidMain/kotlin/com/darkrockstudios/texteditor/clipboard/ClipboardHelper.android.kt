@@ -10,7 +10,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.buildAnnotatedString
 import com.darkrockstudios.texteditor.html.toAnnotatedStringFromHtml
 import com.darkrockstudios.texteditor.html.toHtml
-import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
+import com.darkrockstudios.texteditor.RichTextStyles
 
 /**
  * Copies offer the selection as HTML beside its text (`ClipData.newHtmlText`), which
@@ -33,7 +33,7 @@ actual object ClipboardHelper {
 
 	actual suspend fun getText(
 		clipboard: Clipboard,
-		configuration: MarkdownConfiguration,
+		styles: RichTextStyles,
 	): AnnotatedString? {
 		val clipData = clipboard.getClipEntry()?.clipData
 		pasteClip = clipData
@@ -45,7 +45,7 @@ actual object ClipboardHelper {
 		val styled = items.mapNotNull { item ->
 			val text = item.text?.toString()
 			item.htmlText
-				?.toAnnotatedStringFromHtml(configuration)
+				?.toAnnotatedStringFromHtml(styles)
 				?.takeIf { it.text.isNotEmpty() && (!ours || it.text == text) }
 				?: text?.let(::AnnotatedString)
 		}
@@ -69,11 +69,11 @@ actual object ClipboardHelper {
 	actual suspend fun setText(
 		clipboard: Clipboard,
 		text: AnnotatedString,
-		configuration: MarkdownConfiguration,
+		styles: RichTextStyles,
 		copyId: Long?,
 		html: String?,
 	): Boolean {
-		val clipData = ClipData.newHtmlText("text", text.text, html ?: text.toHtml(configuration))
+		val clipData = ClipData.newHtmlText("text", text.text, html ?: text.toHtml(styles))
 		if (copyId != null) {
 			clipData.description.extras = PersistableBundle().apply { putLong(COPY_ID_EXTRA, copyId) }
 		}

@@ -6,9 +6,9 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
+import com.darkrockstudios.texteditor.RichTextStyles
 import com.darkrockstudios.texteditor.html.cssColorAndSize
 import com.darkrockstudios.texteditor.html.toAnnotatedStringFromHtml
-import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -22,7 +22,7 @@ import kotlin.test.assertNull
  */
 class HtmlColorAndSizeTest {
 
-	private val config = MarkdownConfiguration.DEFAULT
+	private val config = RichTextStyles.DEFAULT
 	private val red = Color(0xFF, 0, 0)
 
 	private fun AnnotatedString.resolvedAt(index: Int): SpanStyle =

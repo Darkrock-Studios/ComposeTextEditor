@@ -40,20 +40,22 @@ one `LineBlockStyle` value:
 3. Optionally a baked-in `SpanStyle` for the line text (code fences bake
    monospace; headings bake the configured heading style).
 
-The bundle also carries the two serialization hooks, `markdownPrefix` (what
-export writes) and `markdownPattern` (what import recognizes), so adding a new
-block style is one instance, not changes to apply, demote, import, export,
-toggle, Enter, and Backspace separately.
+Adding a new block style is one instance, not changes to apply, demote,
+toggle, Enter, and Backspace separately, plus one row in each format's syntax
+table: the markdown module keeps a block's prefix (what export writes) and
+pattern (what import recognizes) per block span style
+(`MarkdownBlockSyntax`), ordered by core's `LINE_BLOCK_STYLES`, so it peels
+markers in the order core resolves a stack.
 
-The registry per markdown configuration: the *prefix blocks* (blockquote, the
-six heading levels, ordered list, bullet list) round-trip through a single-line
-prefix (`> `, `# `, `1. `, `- `), in match-priority order. Code fence is a
-*wrap block*: it round-trips through ``` markers around a contiguous run and is
-handled out-of-band by the importer and exporter.
+The registry per style configuration (`RichTextStyles`): the *prefix blocks*
+(blockquote, the six heading levels, ordered list, bullet list) round-trip
+through a single-line prefix (`> `, `# `, `1. `, `- `), in match-priority
+order. Code fence is a *wrap block*: it round-trips through ``` markers around
+a contiguous run and is handled out-of-band by the importer and exporter.
 
 ## Stacking rules
 
-Which blocks may share a line is defined in one predicate (`conflicts`):
+Which blocks may share a line is defined in one predicate (`lineBlocksConflict`, public so an importer peels by it):
 
 - The two list styles exclude each other.
 - Headings exclude each other and both list styles (`- # item` is a bullet
@@ -172,7 +174,7 @@ ever discard is a marker on empty content.
 ## Serialization
 
 **Export** walks lines from one snapshot, prepending each block's
-`markdownPrefix` in emission order, then converting the body with markdown
+prefix in emission order, then converting the body with markdown
 escaping. Escaping is the safety net for plain text, applied only where a
 character would start or end syntax in its position (`markdownEscapes`): a
 literal `- ` at the start of a plain paragraph exports as `\- ` and survives,
@@ -272,7 +274,7 @@ run, and the text form holds exactly one per fence. It lives in a
 marker itself does, attached by import off the undo history like the blocks,
 written after the opening marker by export from the run's first line, and read
 or set (for the whole run, one undo step) through
-`MarkdownExtension.codeFenceLanguage` and `setCodeFenceLanguage`. One span per
+`TextEditorState.codeFenceLanguage` and `setCodeFenceLanguage`. One span per
 line is what lets the language survive whatever the fence survives: a split at
 the run's first line, a join with the line above, fencing the line above,
 un-fencing the first line, splitting a run in two. Each leaves some line of

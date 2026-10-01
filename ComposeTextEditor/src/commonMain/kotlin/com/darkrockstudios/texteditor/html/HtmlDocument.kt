@@ -2,7 +2,7 @@ package com.darkrockstudios.texteditor.html
 
 import androidx.compose.ui.text.AnnotatedString
 import com.darkrockstudios.texteditor.TextEditorRange
-import com.darkrockstudios.texteditor.richstyle.LineBlockStyle
+import com.darkrockstudios.texteditor.richstyle.RichSpanStyle
 import com.darkrockstudios.texteditor.richstyle.ParagraphFormatSpanStyle
 
 /**
@@ -15,7 +15,8 @@ import com.darkrockstudios.texteditor.richstyle.ParagraphFormatSpanStyle
  */
 internal class HtmlDocument(
 	val text: AnnotatedString,
-	val blockLines: Map<LineBlockStyle, Set<Int>>,
+	/** The lines of each line block, keyed by the block's span style. */
+	val blockLines: Map<RichSpanStyle, Set<Int>>,
 	val horizontalRuleLines: Set<Int>,
 	val imageLines: Map<Int, HtmlImageRef>,
 	/** Each link's range in [text], one per line it covers, and its sanitized destination. */

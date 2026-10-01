@@ -11,13 +11,15 @@ import com.darkrockstudios.texteditor.richstyle.BulletListSpanStyle
 import com.darkrockstudios.texteditor.richstyle.CODE_FENCE_PARAGRAPH_STYLE
 import com.darkrockstudios.texteditor.richstyle.CodeFenceSpanStyle
 import com.darkrockstudios.texteditor.state.TextEditorState
+import com.darkrockstudios.texteditor.state.toggleBulletList
+import com.darkrockstudios.texteditor.state.toggleCodeFence
 import io.mockk.mockk
-import kotlinx.coroutines.test.TestScope
-import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.runTest
 
 class CodeFenceSerializationTest {
 
@@ -203,7 +205,7 @@ class CodeFenceSerializationTest {
 		extension.importMarkdown("plain text")
 		assertTrue(extension.codeFenceLines().isEmpty())
 
-		extension.toggleCodeFence(0..0)
+		extension.editorState.toggleCodeFence(0..0)
 		assertEquals(listOf(0), extension.codeFenceLines())
 
 		val mono = SpanStyle(fontFamily = FontFamily.Monospace)
@@ -218,7 +220,7 @@ class CodeFenceSerializationTest {
 		extension.importMarkdown("```\nplain\n```")
 		assertEquals(listOf(0), extension.codeFenceLines())
 
-		extension.toggleCodeFence(0..0)
+		extension.editorState.toggleCodeFence(0..0)
 		assertTrue(extension.codeFenceLines().isEmpty())
 
 		val mono = SpanStyle(fontFamily = FontFamily.Monospace)
@@ -232,7 +234,7 @@ class CodeFenceSerializationTest {
 		val extension = createMarkdownExtension()
 		extension.importMarkdown("- item")
 
-		extension.toggleCodeFence(0..0)
+		extension.editorState.toggleCodeFence(0..0)
 
 		assertEquals(listOf(0), extension.codeFenceLines())
 		val bulletSpans = extension.editorState.richSpanManager.getAllRichSpans()
@@ -246,7 +248,7 @@ class CodeFenceSerializationTest {
 		val extension = createMarkdownExtension()
 		extension.importMarkdown("> quoted")
 
-		extension.toggleCodeFence(0..0)
+		extension.editorState.toggleCodeFence(0..0)
 
 		assertEquals(listOf(0), extension.codeFenceLines())
 		val blockquoteSpans = extension.editorState.richSpanManager.getAllRichSpans()
@@ -262,7 +264,7 @@ class CodeFenceSerializationTest {
 		val extension = createMarkdownExtension()
 		extension.importMarkdown("```\nitem\n```")
 
-		extension.toggleBulletList(0..0)
+		extension.editorState.toggleBulletList(0..0)
 
 		assertTrue(extension.codeFenceLines().isEmpty(), "code fence should be replaced")
 		assertEquals("- item", extension.exportAsMarkdown())
@@ -273,7 +275,7 @@ class CodeFenceSerializationTest {
 		val extension = createMarkdownExtension()
 		extension.importMarkdown("```\nfenced\n```\nplain")
 
-		extension.toggleCodeFence(0..1)
+		extension.editorState.toggleCodeFence(0..1)
 
 		assertEquals(listOf(0, 1), extension.codeFenceLines())
 		assertEquals("```\nfenced\nplain\n```", extension.exportAsMarkdown())
@@ -299,7 +301,7 @@ class CodeFenceSerializationTest {
 		val extension = createMarkdownExtension()
 		extension.importMarkdown("```\nfoo\n```")
 
-		extension.toggleCodeFence(0..0)
+		extension.editorState.toggleCodeFence(0..0)
 
 		val line = extension.editorState.textLines[0]
 		val hasIndent = line.paragraphStyles.any { it.item == CODE_FENCE_PARAGRAPH_STYLE }

@@ -3,14 +3,15 @@ package markdown
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.unit.sp
 import com.darkrockstudios.texteditor.CharLineOffset
-import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
+import com.darkrockstudios.texteditor.RichTextStyles
 import com.darkrockstudios.texteditor.markdown.MarkdownExtension
 import com.darkrockstudios.texteditor.state.TextEditorState
+import com.darkrockstudios.texteditor.state.toggleOrderedList
 import io.mockk.mockk
-import kotlinx.coroutines.test.TestScope
-import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.runTest
 
 /**
  * Typed text adopts the styles of the character next to it, falling back to the
@@ -19,12 +20,11 @@ import kotlin.test.assertEquals
 class TypedTextBodyStyleTest {
 
 	private val bodyStyle = SpanStyle(fontSize = 24.sp)
-	private val config = MarkdownConfiguration.DEFAULT.copy(defaultTextStyle = bodyStyle)
+	private val config = RichTextStyles.DEFAULT.copy(defaultTextStyle = bodyStyle)
 
-	private fun TestScope.editor(config: MarkdownConfiguration = this@TypedTextBodyStyleTest.config) =
+	private fun TestScope.editor(config: RichTextStyles = this@TypedTextBodyStyleTest.config) =
 		MarkdownExtension(
-			TextEditorState(scope = this, measurer = mockk(relaxed = true)),
-			config,
+			TextEditorState(scope = this, measurer = mockk(relaxed = true)).apply { richTextStyles = config },
 		)
 
 	private fun TextEditorState.type(text: String) = text.forEach { insertCharacterAtCursor(it) }
@@ -57,7 +57,7 @@ class TypedTextBodyStyleTest {
 		state.moveToEndOf(0)
 		state.insertNewlineAtCursor()
 		state.insertNewlineAtCursor()
-		extension.toggleOrderedList(2..2)
+		extension.editorState.toggleOrderedList(2..2)
 		state.type("one")
 		state.insertNewlineAtCursor()
 		state.type("two")

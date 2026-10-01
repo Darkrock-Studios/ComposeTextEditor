@@ -4,21 +4,23 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.unit.sp
 import com.darkrockstudios.texteditor.CharLineOffset
-import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
+import com.darkrockstudios.texteditor.RichTextStyles
 import com.darkrockstudios.texteditor.markdown.MarkdownExtension
 import com.darkrockstudios.texteditor.richstyle.BlockquoteSpanStyle
 import com.darkrockstudios.texteditor.richstyle.BulletListSpanStyle
 import com.darkrockstudios.texteditor.richstyle.HeaderSpanStyle
 import com.darkrockstudios.texteditor.state.EditorInputFilter
 import com.darkrockstudios.texteditor.state.TextEditorState
+import com.darkrockstudios.texteditor.state.headerLevel
+import com.darkrockstudios.texteditor.state.toggleHeader
 import io.mockk.mockk
-import kotlinx.coroutines.test.TestScope
-import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.runTest
 import markdown.linesWith
 
 /**
@@ -29,10 +31,10 @@ import markdown.linesWith
 class HeadingEnterTest {
 
 	private val bodyStyle = SpanStyle(fontSize = 24.sp)
-	private val config = MarkdownConfiguration.DEFAULT.copy(defaultTextStyle = bodyStyle)
+	private val config = RichTextStyles.DEFAULT.copy(defaultTextStyle = bodyStyle)
 
 	private fun TestScope.extension(markdown: String): MarkdownExtension {
-		val e = MarkdownExtension(TextEditorState(scope = this, measurer = mockk(relaxed = true)), config)
+		val e = MarkdownExtension(TextEditorState(scope = this, measurer = mockk(relaxed = true)).apply { richTextStyles = config })
 		e.importMarkdown(markdown)
 		return e
 	}
@@ -50,8 +52,8 @@ class HeadingEnterTest {
 		state.insertNewlineAtCursor()
 		state.type("body")
 
-		assertEquals(1, e.headerLevel(0))
-		assertNull(e.headerLevel(1))
+		assertEquals(1, e.editorState.headerLevel(0))
+		assertNull(e.editorState.headerLevel(1))
 		assertEquals(setOf(bodyStyle), state.stylesOn(1))
 		assertEquals(emptyList(), state.textLines[1].paragraphStyles)
 		assertEquals("# Title\n\nbody", e.exportAsMarkdown())
@@ -63,12 +65,12 @@ class HeadingEnterTest {
 		val state = e.editorState
 		state.cursor.updatePosition(CharLineOffset(0, 5))
 		state.insertNewlineAtCursor()
-		e.toggleHeader(1..1, 2)
+		e.editorState.toggleHeader(1..1, 2)
 
 		state.insertNewlineAtCursor()
 
-		assertEquals(2, e.headerLevel(1))
-		assertNull(e.headerLevel(2))
+		assertEquals(2, e.editorState.headerLevel(1))
+		assertNull(e.editorState.headerLevel(2))
 		assertEquals(CharLineOffset(2, 0), state.cursorPosition)
 	}
 
@@ -80,8 +82,8 @@ class HeadingEnterTest {
 
 		state.insertNewlineAtCursor()
 
-		assertEquals(1, e.headerLevel(0))
-		assertEquals(1, e.headerLevel(1))
+		assertEquals(1, e.editorState.headerLevel(0))
+		assertEquals(1, e.editorState.headerLevel(1))
 		assertEquals("# Ti\n\n# tle", e.exportAsMarkdown())
 	}
 
@@ -94,7 +96,7 @@ class HeadingEnterTest {
 		state.insertNewlineAtCursor()
 		state.type("body")
 
-		assertNull(e.headerLevel(1))
+		assertNull(e.editorState.headerLevel(1))
 		assertEquals(listOf(0, 1), e.linesWith(BlockquoteSpanStyle))
 		assertEquals("body", state.textLines[1].text)
 	}
@@ -138,7 +140,7 @@ class HeadingEnterTest {
 		state.redo()
 
 		assertEquals(after, e.exportAsMarkdown())
-		assertNull(e.headerLevel(1))
+		assertNull(e.editorState.headerLevel(1))
 	}
 
 	@Test
@@ -147,14 +149,14 @@ class HeadingEnterTest {
 		val state = e.editorState
 		state.cursor.updatePosition(CharLineOffset(0, 5))
 		state.insertNewlineAtCursor()
-		e.toggleHeader(1..1, 2)
+		e.editorState.toggleHeader(1..1, 2)
 		state.insertNewlineAtCursor()
 
 		state.undo()
 		state.redo()
 
-		assertEquals(2, e.headerLevel(1))
-		assertNull(e.headerLevel(2))
+		assertEquals(2, e.editorState.headerLevel(1))
+		assertNull(e.editorState.headerLevel(2))
 	}
 
 	@Test
@@ -175,7 +177,7 @@ class HeadingEnterTest {
 		val state = e.editorState
 		state.cursor.updatePosition(CharLineOffset(0, 5))
 		state.insertNewlineAtCursor()
-		e.toggleHeader(1..1, 2)
+		e.editorState.toggleHeader(1..1, 2)
 		state.cursor.updatePosition(CharLineOffset(1, 0))
 
 		state.type("Sub")

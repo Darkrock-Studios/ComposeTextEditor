@@ -18,23 +18,27 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.unit.dp
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
-import com.darkrockstudios.texteditor.markdown.MarkdownExtension
 import com.darkrockstudios.texteditor.richstyle.*
 import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.getRichSpansAtPosition
 import com.darkrockstudios.texteditor.state.getRichSpansInRange
 import com.darkrockstudios.texteditor.state.hasStyleThroughout
+import com.darkrockstudios.texteditor.state.headerLevel
+import com.darkrockstudios.texteditor.state.toggleBlockquote
+import com.darkrockstudios.texteditor.state.toggleBulletList
+import com.darkrockstudios.texteditor.state.toggleCodeFence
+import com.darkrockstudios.texteditor.state.toggleHeader
+import com.darkrockstudios.texteditor.state.toggleOrderedList
 import com.darkrockstudios.texteditor.state.toggleSpanStyle
 import markdown.decreaseFontSize
 import markdown.increaseFontSize
 
 @Composable
 fun TextEditorToolbar(
-	mardkown: MarkdownExtension,
+	state: TextEditorState,
 	markdownControls: Boolean,
 	modifier: Modifier = Modifier,
 ) {
-	val state = remember(mardkown) { mardkown.editorState }
 
 	var isBoldActive by remember { mutableStateOf(false) }
 	var isItalicActive by remember { mutableStateOf(false) }
@@ -66,16 +70,16 @@ fun TextEditorToolbar(
 				state.getRichSpansAtPosition(position)
 			}
 
-			isBoldActive = isActive(mardkown.markdownStyles.BOLD)
-			isItalicActive = isActive(mardkown.markdownStyles.ITALICS)
-			isCodeActive = isActive(mardkown.markdownStyles.CODE)
-			isStrikethroughActive = isActive(mardkown.markdownStyles.STRIKETHROUGH)
+			isBoldActive = isActive(state.richTextStyles.boldStyle)
+			isItalicActive = isActive(state.richTextStyles.italicStyle)
+			isCodeActive = isActive(state.richTextStyles.codeStyle)
+			isStrikethroughActive = isActive(state.richTextStyles.strikethroughStyle)
 			existingLinkSpan = richSpans.firstOrNull { it.style is LinkSpanStyle }
 			isBlockquoteActive = richSpans.any { it.style === BlockquoteSpanStyle }
 			isBulletListActive = richSpans.any { it.style is BulletListSpanStyle }
 			isOrderedListActive = richSpans.any { it.style is OrderedListSpanStyle }
 			isCodeFenceActive = richSpans.any { it.style === CodeFenceSpanStyle }
-			currentHeaderLevel = mardkown.headerLevel(position.line) ?: 0
+			currentHeaderLevel = state.headerLevel(position.line) ?: 0
 			isHighlightActive = richSpans.any { it.style == HIGHLIGHT }
 		}
 	}
@@ -119,7 +123,7 @@ fun TextEditorToolbar(
 			// Formatting Controls Group
 			Row {
 				FormatButton(
-					onClick = { state.toggleSpanStyle(mardkown.markdownStyles.BOLD) },
+					onClick = { state.toggleSpanStyle(state.richTextStyles.boldStyle) },
 					icon = Icons.Default.FormatBold,
 					contentDescription = "Bold",
 					isActive = isBoldActive,
@@ -128,7 +132,7 @@ fun TextEditorToolbar(
 				Spacer(modifier = Modifier.width(4.dp))
 
 				FormatButton(
-					onClick = { state.toggleSpanStyle(mardkown.markdownStyles.ITALICS) },
+					onClick = { state.toggleSpanStyle(state.richTextStyles.italicStyle) },
 					icon = Icons.Default.FormatItalic,
 					contentDescription = "Italic",
 					isActive = isItalicActive,
@@ -138,7 +142,7 @@ fun TextEditorToolbar(
 					Spacer(modifier = Modifier.width(4.dp))
 
 					FormatButton(
-						onClick = { state.toggleSpanStyle(mardkown.markdownStyles.CODE) },
+						onClick = { state.toggleSpanStyle(state.richTextStyles.codeStyle) },
 						icon = Icons.Default.Code,
 						contentDescription = "Inline Code",
 						isActive = isCodeActive,
@@ -147,7 +151,7 @@ fun TextEditorToolbar(
 					Spacer(modifier = Modifier.width(4.dp))
 
 					FormatButton(
-						onClick = { state.toggleSpanStyle(mardkown.markdownStyles.STRIKETHROUGH) },
+						onClick = { state.toggleSpanStyle(state.richTextStyles.strikethroughStyle) },
 						icon = Icons.Default.FormatStrikethrough,
 						contentDescription = "Strikethrough",
 						isActive = isStrikethroughActive,
@@ -176,7 +180,7 @@ fun TextEditorToolbar(
 
 					TextLabelButton(
 						onClick = {
-							cycleHeader(state, mardkown, currentHeaderLevel)
+							cycleHeader(state, currentHeaderLevel)
 						},
 						label = if (currentHeaderLevel == 0) "H" else "H$currentHeaderLevel",
 						contentDescription = if (currentHeaderLevel == 0)
@@ -189,7 +193,7 @@ fun TextEditorToolbar(
 					Spacer(modifier = Modifier.width(4.dp))
 
 					FormatButton(
-						onClick = { toggleBlockquote(state, mardkown) },
+						onClick = { toggleBlockquote(state) },
 						icon = Icons.Default.FormatQuote,
 						contentDescription = "Blockquote",
 						isActive = isBlockquoteActive,
@@ -198,7 +202,7 @@ fun TextEditorToolbar(
 					Spacer(modifier = Modifier.width(4.dp))
 
 					FormatButton(
-						onClick = { toggleBulletList(state, mardkown) },
+						onClick = { toggleBulletList(state) },
 						icon = Icons.Default.FormatListBulleted,
 						contentDescription = "Bullet list",
 						isActive = isBulletListActive,
@@ -207,7 +211,7 @@ fun TextEditorToolbar(
 					Spacer(modifier = Modifier.width(4.dp))
 
 					FormatButton(
-						onClick = { toggleOrderedList(state, mardkown) },
+						onClick = { toggleOrderedList(state) },
 						icon = Icons.Default.FormatListNumbered,
 						contentDescription = "Ordered list",
 						isActive = isOrderedListActive,
@@ -216,7 +220,7 @@ fun TextEditorToolbar(
 					Spacer(modifier = Modifier.width(4.dp))
 
 					FormatButton(
-						onClick = { toggleCodeFence(state, mardkown) },
+						onClick = { toggleCodeFence(state) },
 						icon = Icons.Default.Terminal,
 						contentDescription = "Code block",
 						isActive = isCodeFenceActive,
@@ -240,7 +244,7 @@ fun TextEditorToolbar(
 
 					// Font size decrease button
 					ToolbarButton(
-						onClick = { decreaseFontSize(mardkown) },
+						onClick = { decreaseFontSize(state) },
 						icon = Icons.Default.Remove,
 						contentDescription = "Decrease Font Size"
 					)
@@ -256,7 +260,7 @@ fun TextEditorToolbar(
 
 					// Font size increase button
 					ToolbarButton(
-						onClick = { increaseFontSize(mardkown) },
+						onClick = { increaseFontSize(state) },
 						icon = Icons.Default.Add,
 						contentDescription = "Increase Font Size"
 					)
@@ -289,12 +293,12 @@ fun TextEditorToolbar(
 			initialUrl = (request.existingSpan?.style as? LinkSpanStyle)?.url ?: "",
 			isEditing = isEditing,
 			onConfirm = { url ->
-				applyLink(state, mardkown, request, url)
+				applyLink(state, request, url)
 				linkDialogState = null
 			},
 			onRemove = if (isEditing) {
 				{
-					applyLink(state, mardkown, request, url = "")
+					applyLink(state, request, url = "")
 					linkDialogState = null
 				}
 			} else null,
@@ -349,56 +353,55 @@ private fun LinkDialog(
 
 private fun applyLink(
 	state: TextEditorState,
-	markdown: MarkdownExtension,
 	request: LinkDialogRequest,
 	url: String,
 ) {
 	request.existingSpan?.let { state.removeRichSpan(it) }
-	state.removeStyleSpan(request.range, markdown.markdownStyles.LINK)
+	state.removeStyleSpan(request.range, state.richTextStyles.linkStyle)
 	if (url.isNotBlank()) {
-		state.addStyleSpan(request.range, markdown.markdownStyles.LINK)
+		state.addStyleSpan(request.range, state.richTextStyles.linkStyle)
 		state.addRichSpan(request.range.start, request.range.end, LinkSpanStyle(url))
 	}
 }
 
-private fun toggleBlockquote(state: TextEditorState, markdown: MarkdownExtension) {
+private fun toggleBlockquote(state: TextEditorState) {
 	val selection = state.selector.selection
 	val lines = if (selection != null) {
 		selection.start.line..selection.end.line
 	} else {
 		state.cursorPosition.line..state.cursorPosition.line
 	}
-	markdown.toggleBlockquote(lines)
+	state.toggleBlockquote(lines)
 }
 
-private fun toggleBulletList(state: TextEditorState, markdown: MarkdownExtension) {
+private fun toggleBulletList(state: TextEditorState) {
 	val selection = state.selector.selection
 	val lines = if (selection != null) {
 		selection.start.line..selection.end.line
 	} else {
 		state.cursorPosition.line..state.cursorPosition.line
 	}
-	markdown.toggleBulletList(lines)
+	state.toggleBulletList(lines)
 }
 
-private fun toggleOrderedList(state: TextEditorState, markdown: MarkdownExtension) {
+private fun toggleOrderedList(state: TextEditorState) {
 	val selection = state.selector.selection
 	val lines = if (selection != null) {
 		selection.start.line..selection.end.line
 	} else {
 		state.cursorPosition.line..state.cursorPosition.line
 	}
-	markdown.toggleOrderedList(lines)
+	state.toggleOrderedList(lines)
 }
 
-private fun toggleCodeFence(state: TextEditorState, markdown: MarkdownExtension) {
+private fun toggleCodeFence(state: TextEditorState) {
 	val selection = state.selector.selection
 	val lines = if (selection != null) {
 		selection.start.line..selection.end.line
 	} else {
 		state.cursorPosition.line..state.cursorPosition.line
 	}
-	markdown.toggleCodeFence(lines)
+	state.toggleCodeFence(lines)
 }
 
 private fun insertHorizontalRule(state: TextEditorState) {
@@ -450,7 +453,6 @@ private fun reconcileHorizontalRules(state: TextEditorState) {
 // removes it, toggling a new level swaps it.
 private fun cycleHeader(
 	state: TextEditorState,
-	markdown: MarkdownExtension,
 	currentLevel: Int,
 ) {
 	val nextLevel = (currentLevel + 1) % 7
@@ -461,9 +463,9 @@ private fun cycleHeader(
 		state.cursorPosition.line..state.cursorPosition.line
 	}
 	if (nextLevel != 0) {
-		markdown.toggleHeader(lines, nextLevel)
+		state.toggleHeader(lines, nextLevel)
 	} else if (currentLevel != 0) {
-		markdown.toggleHeader(lines, currentLevel)
+		state.toggleHeader(lines, currentLevel)
 	}
 }
 

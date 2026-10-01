@@ -8,13 +8,14 @@ import com.darkrockstudios.texteditor.markdown.MarkdownExtension
 import com.darkrockstudios.texteditor.richstyle.BLOCKQUOTE_PARAGRAPH_STYLE
 import com.darkrockstudios.texteditor.richstyle.BlockquoteSpanStyle
 import com.darkrockstudios.texteditor.state.TextEditorState
+import com.darkrockstudios.texteditor.state.toggleBlockquote
 import io.mockk.mockk
-import kotlinx.coroutines.test.TestScope
-import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.runTest
 
 class BlockquoteSerializationTest {
 
@@ -133,7 +134,7 @@ class BlockquoteSerializationTest {
 		extension.importMarkdown("plain text")
 		assertTrue(extension.blockquoteLines().isEmpty())
 
-		extension.toggleBlockquote(0..0)
+		extension.editorState.toggleBlockquote(0..0)
 		assertEquals(listOf(0), extension.blockquoteLines())
 		assertEquals("> plain text", extension.exportAsMarkdown())
 	}
@@ -144,7 +145,7 @@ class BlockquoteSerializationTest {
 		extension.importMarkdown("> already a quote")
 		assertEquals(listOf(0), extension.blockquoteLines())
 
-		extension.toggleBlockquote(0..0)
+		extension.editorState.toggleBlockquote(0..0)
 		assertTrue(extension.blockquoteLines().isEmpty())
 		assertEquals("already a quote", extension.exportAsMarkdown())
 	}
@@ -154,7 +155,7 @@ class BlockquoteSerializationTest {
 		val extension = createMarkdownExtension()
 		extension.importMarkdown("> quoted\nplain")
 
-		extension.toggleBlockquote(0..1)
+		extension.editorState.toggleBlockquote(0..1)
 		assertEquals(listOf(0, 1), extension.blockquoteLines())
 	}
 
@@ -342,7 +343,7 @@ class BlockquoteSerializationTest {
 		val extension = createMarkdownExtension()
 		extension.importMarkdown("> with indent")
 
-		extension.toggleBlockquote(0..0)
+		extension.editorState.toggleBlockquote(0..0)
 		val line = extension.editorState.textLines[0]
 		val hasIndent = line.paragraphStyles.any { it.item == BLOCKQUOTE_PARAGRAPH_STYLE }
 		assertFalse(hasIndent, "removing blockquote should clear the indent paragraph style")

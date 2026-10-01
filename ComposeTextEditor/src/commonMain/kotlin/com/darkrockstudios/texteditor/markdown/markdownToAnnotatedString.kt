@@ -2,6 +2,7 @@ package com.darkrockstudios.texteditor.markdown
 
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.buildAnnotatedString
+import com.darkrockstudios.texteditor.RichTextStyles
 import com.darkrockstudios.texteditor.annotatedstring.normalizeLineEndings
 import com.darkrockstudios.texteditor.html.sanitizeLinkUrl
 import com.fleeksoft.ksoup.nodes.Entities
@@ -30,12 +31,12 @@ internal class MarkdownParseResult(
  * Parses this string as GitHub Flavored Markdown and renders it into a styled
  * [AnnotatedString].
  *
- * @param configuration Styling (fonts, colors, weights) applied to the parsed
- * markdown elements.
+ * @param styles Styling (fonts, colors, weights) applied to the parsed markdown
+ * elements; an editor's own are on `TextEditorState.richTextStyles`.
  */
 fun String.toAnnotatedStringFromMarkdown(
-	configuration: MarkdownConfiguration = MarkdownConfiguration.DEFAULT
-): AnnotatedString = parseMarkdownWithLinks(configuration).annotatedString
+	styles: RichTextStyles = RichTextStyles.DEFAULT
+): AnnotatedString = parseMarkdownWithLinks(styles).annotatedString
 
 /**
  * Parses like [toAnnotatedStringFromMarkdown] but also reports every inline
@@ -43,11 +44,9 @@ fun String.toAnnotatedStringFromMarkdown(
  * link spans the [AnnotatedString] itself cannot carry.
  */
 internal fun String.parseMarkdownWithLinks(
-	configuration: MarkdownConfiguration = MarkdownConfiguration.DEFAULT,
+	styles: RichTextStyles = RichTextStyles.DEFAULT,
 	literalLines: Set<Int>? = null,
 ): MarkdownParseResult {
-	val styles = MarkdownStyles(configuration)
-
 	val normalized = normalizeLineEndings()
 	val standIns = IndentStandIns.forSource(normalized)
 	val source = (standIns?.substitute(normalized) { literalLines ?: normalized.fencedLineIndices() } ?: normalized)
@@ -314,7 +313,7 @@ private fun codeSpanEnd(line: String, start: Int): Int {
  * the matching close tag arrives; a tag still open when its enclosing element
  * ends is closed there, as a browser would.
  */
-internal class MarkdownRenderContext(val styles: MarkdownStyles) {
+internal class MarkdownRenderContext(val styles: RichTextStyles) {
 	val links = mutableListOf<ParsedLink>()
 
 	private class OpenTag(val name: String, val pushed: Boolean)
@@ -386,7 +385,7 @@ private fun AnnotatedString.Builder.appendMarkdownNode(
 
 	when (node.type) {
 		MarkdownElementTypes.PARAGRAPH -> {
-			pushStyle(styles.BASE_TEXT)
+			pushStyle(styles.defaultTextStyle)
 			appendMarkdownChildren(original, node, startOffset, context)
 			pop()
 		}
@@ -399,25 +398,25 @@ private fun AnnotatedString.Builder.appendMarkdownNode(
 		}
 
 		MarkdownElementTypes.EMPH -> {
-			pushStyle(styles.ITALICS)
+			pushStyle(styles.italicStyle)
 			appendStyledContent(node, original, startOffset, context)
 			pop()
 		}
 
 		MarkdownElementTypes.STRONG -> {
-			pushStyle(styles.BOLD)
+			pushStyle(styles.boldStyle)
 			appendStyledContent(node, original, startOffset, context)
 			pop()
 		}
 
 		GFMElementTypes.STRIKETHROUGH -> {
-			pushStyle(styles.STRIKETHROUGH)
+			pushStyle(styles.strikethroughStyle)
 			appendStyledContent(node, original, startOffset, context)
 			pop()
 		}
 
 		MarkdownElementTypes.CODE_SPAN -> {
-			pushStyle(styles.CODE)
+			pushStyle(styles.codeStyle)
 			val codeText = nodeText.removeSurrounding("`")
 			append(codeText)
 			pop()
@@ -432,7 +431,7 @@ private fun AnnotatedString.Builder.appendMarkdownNode(
 		}
 
 		MarkdownElementTypes.CODE_FENCE -> {
-			pushStyle(styles.CODE)
+			pushStyle(styles.codeStyle)
 
 			// Get the lines and strip fence markers
 			val lines = nodeText.lines()
@@ -484,7 +483,7 @@ private fun AnnotatedString.Builder.appendMarkdownNode(
 				?.getTextInNode(original)?.toString()
 				?.removeSurrounding("<", ">")
 				?.takeIf { sanitizeLinkUrl(it.decodedDestination()) != null }
-			if (url != null) pushStyle(styles.LINK)
+			if (url != null) pushStyle(styles.linkStyle)
 			val textStart = length
 			var childOffset = startOffset
 			node.children.forEach { child ->
@@ -604,7 +603,7 @@ private fun AnnotatedString.Builder.handleHeader(
 	context: MarkdownRenderContext,
 ) {
 	// Apply the header style
-	pushStyle(context.styles.header(level))
+	pushStyle(context.styles.getHeaderStyle(level))
 
 	// Process the child nodes, ignoring `#` markers but supporting nested spans
 	context.scope(this) {

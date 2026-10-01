@@ -8,9 +8,8 @@ import com.darkrockstudios.texteditor.state.bodyStyle
 import com.darkrockstudios.texteditor.state.getSpanStylesForEditAt
 
 /**
- * [text] pasted at [position] with the styles there that size text (the markdown
- * body style, a heading's style, a host's own size) beneath its own spans, when it
- * carries any.
+ * [text] pasted at [position] with the styles there that size text (the body style,
+ * a heading's style, a host's own size) beneath its own spans, when it carries any.
  *
  * Styled pasted text keeps only its own styles, and markup (from another app, or on
  * platforms where markup is the only styled flavor, from this editor) carries no
@@ -30,9 +29,8 @@ internal fun TextEditorState.withSizeForPasteAt(position: CharLineOffset, text: 
 }
 
 /**
- * [text] with the markdown body style beneath everything, as markdown import gives
- * it, when this editor has a markdown configuration. A later span (a heading's size)
- * still wins.
+ * [text] with the body style beneath everything, as the importers give it, when this
+ * editor has its styles installed. A later span (a heading's size) still wins.
  */
 internal fun TextEditorState.withBodyStyleBeneath(text: AnnotatedString): AnnotatedString {
 	val body = bodyStyle ?: return text

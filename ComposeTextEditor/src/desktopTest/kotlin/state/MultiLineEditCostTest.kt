@@ -7,13 +7,14 @@ import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.markdown.MarkdownExtension
 import com.darkrockstudios.texteditor.richstyle.BulletListSpanStyle
 import com.darkrockstudios.texteditor.state.TextEditorState
+import com.darkrockstudios.texteditor.state.toggleBulletList
 import io.mockk.mockk
-import kotlinx.coroutines.test.TestScope
-import kotlinx.coroutines.test.runTest
-import markdown.linesWith
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.runTest
+import markdown.linesWith
 
 /**
  * A style or block edit over many lines, and its undo and redo, writes the line
@@ -75,7 +76,7 @@ class MultiLineEditCostTest {
 		val lines = selected
 
 		var before = state.writes()
-		e.toggleBulletList(lines)
+		e.editorState.toggleBulletList(lines)
 		state.assertBounded(before, "the toggle", lines = 1, spans = 2)
 		val bulleted = e.linesWith(BulletListSpanStyle)
 		assertEquals(lines.toList(), bulleted)

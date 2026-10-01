@@ -1,17 +1,21 @@
 package com.darkrockstudios.texteditor.markdown
 
-data class MarkdownStyles(
-	private val config: MarkdownConfiguration = MarkdownConfiguration.DEFAULT
-) {
-	val BASE_TEXT = config.defaultTextStyle
-	val BOLD = config.boldStyle
-	val ITALICS = config.italicStyle
-	val CODE = config.codeStyle
-	val LINK = config.linkStyle
-	val STRIKETHROUGH = config.strikethroughStyle
-	val UNDERLINE = config.underlineStyle
-	val HIGHLIGHT = config.highlightStyle
-	val BLOCKQUOTE = config.blockquoteStyle
+import com.darkrockstudios.texteditor.RichTextStyles
 
-	fun header(level: Int) = config.getHeaderStyle(level)
+/** The styles under their old names; read [RichTextStyles] directly. */
+@Deprecated("Read the styles from TextEditorState.richTextStyles (RichTextStyles).")
+data class MarkdownStyles(
+	private val styles: RichTextStyles = RichTextStyles.DEFAULT
+) {
+	val BASE_TEXT = styles.defaultTextStyle
+	val BOLD = styles.boldStyle
+	val ITALICS = styles.italicStyle
+	val CODE = styles.codeStyle
+	val LINK = styles.linkStyle
+	val STRIKETHROUGH = styles.strikethroughStyle
+	val UNDERLINE = styles.underlineStyle
+	val HIGHLIGHT = styles.highlightStyle
+	val BLOCKQUOTE = styles.blockquoteStyle
+
+	fun header(level: Int) = styles.getHeaderStyle(level)
 }

@@ -4,16 +4,14 @@ import androidx.compose.ui.text.AnnotatedString
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.clipboard.withBodyStyleBeneath
-import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
 import com.darkrockstudios.texteditor.richstyle.Blockquote
-import com.darkrockstudios.texteditor.richstyle.BulletList
 import com.darkrockstudios.texteditor.richstyle.CodeFence
 import com.darkrockstudios.texteditor.richstyle.DocumentBlocks
 import com.darkrockstudios.texteditor.richstyle.HeaderSpanStyle
 import com.darkrockstudios.texteditor.richstyle.ImageBlockSpanStyle
 import com.darkrockstudios.texteditor.richstyle.ImageProvider
-import com.darkrockstudios.texteditor.richstyle.OrderedList
 import com.darkrockstudios.texteditor.richstyle.OrderedListSpanStyle
+import com.darkrockstudios.texteditor.RichTextStyles
 import com.darkrockstudios.texteditor.richstyle.ParagraphFormatSpanStyle
 import com.darkrockstudios.texteditor.richstyle.RichSpan
 import com.darkrockstudios.texteditor.richstyle.applyDocumentBlocks
@@ -35,22 +33,12 @@ import com.darkrockstudios.texteditor.state.paragraphFormat
  */
 class HtmlExtension(
 	val editorState: TextEditorState,
-	initialConfiguration: MarkdownConfiguration = MarkdownConfiguration.DEFAULT,
 	var imageProvider: ImageProvider? = null,
 ) {
-	/**
-	 * The style bundle heading levels and inline styles are matched against. Custom
-	 * heading sizes only survive a round trip when the same configuration is used
-	 * for both directions.
-	 */
-	var configuration: MarkdownConfiguration = initialConfiguration
-		set(value) {
-			field = value
-			editorState.markdownConfiguration = value
-		}
-
 	init {
-		editorState.markdownConfiguration = configuration
+		// Installs the styles: an HTML document carries the body style, so typed text
+		// takes it too (see TextEditorState.richTextStyles).
+		editorState.richTextStyles = editorState.richTextStyles
 	}
 
 	/**
@@ -63,7 +51,8 @@ class HtmlExtension(
 	 */
 	fun exportAsHtml(): String {
 		val content = editorState.content
-		val blocks = documentBlocksOf(content.richSpans, configuration)
+		val styles = editorState.richTextStyles
+		val blocks = documentBlocksOf(content.richSpans, styles)
 		val headerLevels = headerLevelsOf(content.richSpans)
 		val formats = content.paragraphFormats(content.lines.indices)
 		val lines = content.lines
@@ -77,7 +66,7 @@ class HtmlExtension(
 			blocks = blocks,
 			headerLevels = headerLevels,
 			formats = formats,
-			configuration = configuration,
+			styles = styles,
 		)
 	}
 
@@ -91,7 +80,7 @@ class HtmlExtension(
 		val provider = imageProvider
 		val document = parseHtmlDocument(
 			html = html,
-			configuration = configuration,
+			styles = editorState.richTextStyles,
 			includeImages = provider != null,
 		)
 		// One revision, so a concurrent export can't catch the document loaded but
@@ -178,7 +167,7 @@ internal fun renderHtmlFragment(
 	blocks: DocumentBlocks,
 	headerLevels: Map<Int, Int>,
 	formats: Map<Int, ParagraphFormatSpanStyle>,
-	configuration: MarkdownConfiguration,
+	styles: RichTextStyles,
 ): String {
 	val writer = HtmlWriter()
 	val containers = HtmlContainers(blocks, formats)
@@ -194,7 +183,7 @@ internal fun renderHtmlFragment(
 				format = formats[line.docLine].takeIf { blocks.listBlockAt(line.docLine) == null },
 				isWholeLine = line.isWholeLine,
 				links = line.links,
-				configuration = configuration,
+				styles = styles,
 			),
 			inCodeFence = blocks.has(line.docLine, CodeFence),
 		)
@@ -266,7 +255,7 @@ private fun lineHtml(
 	format: ParagraphFormatSpanStyle?,
 	isWholeLine: Boolean,
 	links: List<HtmlLink>,
-	configuration: MarkdownConfiguration,
+	styles: RichTextStyles,
 ): String {
 	// Fenced lines are literal code: running them through `toHtml` would see the
 	// baked-in monospace as an inline code run and wrap every line in `<code>`.
@@ -283,7 +272,7 @@ private fun lineHtml(
 	val heading = when {
 		isRule || image != null -> null
 		headerLevel != null -> HtmlTag.entries[headerLevel - 1]
-		isWholeLine -> line.uniformHeadingTag(configuration)
+		isWholeLine -> line.uniformHeadingTag(styles)
 		else -> null
 	}
 	val content = when {
@@ -292,8 +281,8 @@ private fun lineHtml(
 			" alt=\"${image.alt.escapeHtmlAttribute()}\">"
 
 		heading != null -> "<${heading.tag}${format.styleAttribute()}>" +
-			"${AnnotatedString(line.text).toHtml(configuration, links)}</${heading.tag}>"
-		else -> line.toHtml(configuration, links)
+			"${AnnotatedString(line.text).toHtml(styles, links)}</${heading.tag}>"
+		else -> line.toHtml(styles, links)
 	}
 
 	return when {
@@ -379,14 +368,12 @@ private class HtmlWriter {
 
 /**
  * Wraps this [TextEditorState] in an [HtmlExtension], the entry point for HTML
- * import and export.
+ * import and export. Heading levels and inline styles are matched against the
+ * state's [TextEditorState.richTextStyles] in both directions.
  *
- * @param initialConfiguration Styling that heading levels and inline styles are
- * matched against in both directions.
  * @param imageProvider Resolves image sources for imported `<img>` elements;
  * pass `null` to drop images.
  */
 fun TextEditorState.withHtml(
-	initialConfiguration: MarkdownConfiguration = MarkdownConfiguration.DEFAULT,
 	imageProvider: ImageProvider? = null,
-): HtmlExtension = HtmlExtension(this, initialConfiguration, imageProvider)
+): HtmlExtension = HtmlExtension(this, imageProvider)

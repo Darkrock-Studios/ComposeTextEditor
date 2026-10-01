@@ -2,7 +2,7 @@ package com.darkrockstudios.texteditor.clipboard
 
 import androidx.compose.ui.platform.Clipboard
 import androidx.compose.ui.text.AnnotatedString
-import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
+import com.darkrockstudios.texteditor.RichTextStyles
 
 /**
  * Platform-specific clipboard helper for text operations.
@@ -16,9 +16,9 @@ import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
  * - iOS: styled, as HTML beside plain text, with the copy id in a private type
  * - Web: styled, as HTML beside plain text, where the browser allows it
  *
- * `configuration` supplies the styling that header levels are matched against
- * when converting to and from HTML, so pass the editor's own or custom header
- * sizes will not survive the round trip.
+ * `styles` supplies the styling that header levels are matched against when
+ * converting to and from HTML, so pass the editor's own or custom header sizes
+ * will not survive the round trip.
  */
 expect object ClipboardHelper {
 	/**
@@ -30,7 +30,7 @@ expect object ClipboardHelper {
 	 */
 	suspend fun getText(
 		clipboard: Clipboard,
-		configuration: MarkdownConfiguration = MarkdownConfiguration.DEFAULT,
+		styles: RichTextStyles = RichTextStyles.DEFAULT,
 	): AnnotatedString?
 
 	/**
@@ -62,7 +62,7 @@ expect object ClipboardHelper {
 	suspend fun setText(
 		clipboard: Clipboard,
 		text: AnnotatedString,
-		configuration: MarkdownConfiguration = MarkdownConfiguration.DEFAULT,
+		styles: RichTextStyles = RichTextStyles.DEFAULT,
 		copyId: Long? = null,
 		html: String? = null,
 	): Boolean

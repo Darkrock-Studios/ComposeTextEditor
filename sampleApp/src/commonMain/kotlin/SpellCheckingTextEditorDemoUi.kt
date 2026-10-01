@@ -16,18 +16,18 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextIndent
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
+import com.darkrockstudios.texteditor.RichTextStyles
+import com.darkrockstudios.texteditor.markdown.withMarkdown
 import com.darkrockstudios.texteditor.rememberTextEditorStyle
 import com.darkrockstudios.texteditor.spellcheck.SpellCheckMode
 import com.darkrockstudios.texteditor.spellcheck.SpellCheckingTextEditor
-import com.darkrockstudios.texteditor.spellcheck.markdown.withMarkdown
 import com.darkrockstudios.texteditor.spellcheck.rememberSpellCheckState
 
 @Composable
 fun SpellCheckingTextEditorDemoUi(
 	modifier: Modifier = Modifier,
 	navigateTo: (Destination) -> Unit,
-	configuration: MarkdownConfiguration,
+	styles: RichTextStyles,
 ) {
 	val spellChecker by rememberSampleSpellChecker()
 	val imageProvider = rememberDemoImageProvider()
@@ -41,8 +41,9 @@ fun SpellCheckingTextEditorDemoUi(
 		enableSpellChecking = true,
 		spellCheckMode = SpellCheckMode.Word,
 	)
-	val markdownExtension = remember(state, configuration, imageProvider) {
-		state.withMarkdown(configuration, imageProvider = imageProvider)
+	remember(state, styles) { state.textState.richTextStyles = styles }
+	val markdownExtension = remember(state, imageProvider) {
+		state.textState.withMarkdown(imageProvider = imageProvider)
 	}
 
 	LaunchedEffect(markdownExtension) {
@@ -67,8 +68,8 @@ fun SpellCheckingTextEditorDemoUi(
 		}
 
 		TextEditorToolbar(
-			mardkown = markdownExtension,
-			markdownControls = true
+			state = state.textState,
+			markdownControls = true,
 		)
 
 		SpellCheckingTextEditor(

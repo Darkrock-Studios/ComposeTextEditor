@@ -3,19 +3,19 @@ package markdown
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withStyle
-import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
+import com.darkrockstudios.texteditor.RichTextStyles
 import com.darkrockstudios.texteditor.markdown.MarkdownExtension
 import com.darkrockstudios.texteditor.markdown.toAnnotatedStringFromMarkdown
 import com.darkrockstudios.texteditor.markdown.toMarkdown
-import com.darkrockstudios.texteditor.richstyle.BulletList
-import com.darkrockstudios.texteditor.richstyle.CodeFence
+import com.darkrockstudios.texteditor.richstyle.BulletListSpanStyle
+import com.darkrockstudios.texteditor.richstyle.CodeFenceSpanStyle
 import com.darkrockstudios.texteditor.richstyle.applyDocumentBlocks
 import com.darkrockstudios.texteditor.state.TextEditorState
 import io.mockk.mockk
-import kotlinx.coroutines.test.TestScope
-import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.runTest
 
 /**
  * A line's leading spaces and tabs are written as `&nbsp;` and `&emsp;` (7.45): four
@@ -26,7 +26,7 @@ import kotlin.test.assertEquals
  */
 class LeadingIndentTest {
 
-	private val config = MarkdownConfiguration.DEFAULT
+	private val config = RichTextStyles.DEFAULT
 
 	private fun TestScope.extension(): MarkdownExtension =
 		MarkdownExtension(TextEditorState(scope = this, measurer = mockk(relaxed = true)))
@@ -90,7 +90,7 @@ class LeadingIndentTest {
 	fun `a list item and a quote keep their body's indent`() = runTest {
 		val e = extension()
 		e.editorState.setText(AnnotatedString("  item\n    code-like"))
-		e.editorState.applyDocumentBlocks(blockLines = mapOf(BulletList to listOf(0)))
+		e.editorState.applyDocumentBlocks(blockLines = mapOf(BulletListSpanStyle to listOf(0)))
 		val markdown = e.exportAsMarkdown()
 		assertEquals("- &nbsp;&nbsp;item\n\n&nbsp;&nbsp;&nbsp;&nbsp;code-like", markdown)
 		e.importMarkdown(markdown)
@@ -101,7 +101,7 @@ class LeadingIndentTest {
 	fun `fenced lines keep their spaces as written`() = runTest {
 		val e = extension()
 		e.editorState.setText(AnnotatedString("fun main() {\n    println(\"&nbsp;\")\n}"))
-		e.editorState.applyDocumentBlocks(blockLines = mapOf(CodeFence to listOf(0, 1, 2)))
+		e.editorState.applyDocumentBlocks(blockLines = mapOf(CodeFenceSpanStyle to listOf(0, 1, 2)))
 		val markdown = e.exportAsMarkdown()
 		assertEquals("```\nfun main() {\n    println(\"&nbsp;\")\n}\n```", markdown)
 		e.importMarkdown(markdown)
@@ -137,7 +137,7 @@ class LeadingIndentTest {
 			withStyle(config.italicStyle) { append("a\n  ") }
 			append("b")
 		}
-		val markdown = text.toMarkdown(config)
+		val markdown = text.toMarkdown(styles = config)
 		assertEquals("*a*\n&nbsp;&nbsp;b", markdown)
 	}
 
@@ -161,7 +161,7 @@ class LeadingIndentTest {
 	@Test
 	fun `a delimiter after an indent is escaped as after punctuation`() {
 		val text = buildAnnotatedString { withStyle(config.italicStyle) { append("a\n  * b") } }
-		val back = text.toMarkdown(config).toAnnotatedStringFromMarkdown(config)
+		val back = text.toMarkdown(styles = config).toAnnotatedStringFromMarkdown(config)
 		assertEquals(text.text, back.text)
 		assertEquals(true, back.spanStyles.any { it.item == config.italicStyle && it.start == 0 && it.end == text.length })
 	}
@@ -176,7 +176,7 @@ class LeadingIndentTest {
 	@Test
 	fun `the string converters agree`() {
 		val text = AnnotatedString("    Indented\nplain")
-		val markdown = text.toMarkdown(config)
+		val markdown = text.toMarkdown(styles = config)
 		assertEquals("&nbsp;&nbsp;&nbsp;&nbsp;Indented\nplain", markdown)
 		assertEquals(text.text, markdown.toAnnotatedStringFromMarkdown(config).text)
 	}

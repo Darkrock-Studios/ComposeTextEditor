@@ -14,19 +14,18 @@ import androidx.compose.ui.unit.sp
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.annotatedstring.normalizeLineEndings
-import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
-import com.darkrockstudios.texteditor.richstyle.Blockquote
-import com.darkrockstudios.texteditor.richstyle.BulletList
-import com.darkrockstudios.texteditor.richstyle.CodeFence
+import com.darkrockstudios.texteditor.RichTextStyles
+import com.darkrockstudios.texteditor.richstyle.BlockquoteSpanStyle
+import com.darkrockstudios.texteditor.richstyle.BulletListSpanStyle
+import com.darkrockstudios.texteditor.richstyle.CodeFenceSpanStyle
 import com.darkrockstudios.texteditor.richstyle.HR_PLACEHOLDER
+import com.darkrockstudios.texteditor.richstyle.HeaderSpanStyle
 import com.darkrockstudios.texteditor.richstyle.IMAGE_PLACEHOLDER
-import com.darkrockstudios.texteditor.richstyle.LineBlockStyle
-import com.darkrockstudios.texteditor.richstyle.OrderedList
+import com.darkrockstudios.texteditor.richstyle.OrderedListSpanStyle
 import com.darkrockstudios.texteditor.richstyle.ParagraphFormatSpanStyle
-import com.darkrockstudios.texteditor.richstyle.atListLevel
-import com.darkrockstudios.texteditor.richstyle.isList
+import com.darkrockstudios.texteditor.richstyle.RichSpanStyle
+import com.darkrockstudios.texteditor.richstyle.isListBlock
 import com.darkrockstudios.texteditor.richstyle.listLevel
-import com.darkrockstudios.texteditor.richstyle.headerBlock
 import com.fleeksoft.ksoup.Ksoup
 import com.fleeksoft.ksoup.nodes.Element
 import com.fleeksoft.ksoup.nodes.Node
@@ -47,8 +46,8 @@ import kotlin.math.roundToInt
  * `withHtml().importHtml` to keep both.
  */
 fun String.toAnnotatedStringFromHtml(
-	configuration: MarkdownConfiguration = MarkdownConfiguration.DEFAULT
-): AnnotatedString = parseHtmlDocument(this, configuration).text
+	styles: RichTextStyles = RichTextStyles.DEFAULT
+): AnnotatedString = parseHtmlDocument(this, styles).text
 
 /**
  * Parses an HTML fragment into text plus the line-anchored decorations it
@@ -60,12 +59,12 @@ fun String.toAnnotatedStringFromHtml(
  */
 internal fun parseHtmlDocument(
 	html: String,
-	configuration: MarkdownConfiguration = MarkdownConfiguration.DEFAULT,
+	styles: RichTextStyles = RichTextStyles.DEFAULT,
 	includeImages: Boolean = false,
 ): HtmlDocument {
 	val body = Ksoup.parseBodyFragment(unwrapClipboardHtml(html)).body()
 	val marksConvertedSpaces = html.contains(CONVERTED_SPACE_CLASS) || html.contains(SPACERUN_STYLE, ignoreCase = true)
-	return HtmlSpanBuilder(configuration, includeImages, marksConvertedSpaces).build(body)
+	return HtmlSpanBuilder(styles, includeImages, marksConvertedSpaces).build(body)
 }
 
 private val START_FRAGMENT = Regex("""<!--\s*StartFragment\s*-->""", RegexOption.IGNORE_CASE)
@@ -154,7 +153,7 @@ private data class HtmlScope(
 	/** Whitespace is kept as written, by `<pre>` or by CSS. */
 	val preformatted: Boolean,
 	/** The list style `<li>` children take, set by the nearest `<ul>`/`<ol>` ancestor, at its depth. */
-	val listBlock: LineBlockStyle?,
+	val listBlock: RichSpanStyle?,
 	/** Inside a `<pre>` element, which becomes a code fence. */
 	val inPreElement: Boolean = false,
 	/** Inside an element marking its no-break spaces as ordinary ones. */
@@ -179,7 +178,7 @@ private data class HtmlScope(
  * its content really begins that many newlines later than [start].
  */
 private class BlockRange(
-	val block: LineBlockStyle,
+	val block: RichSpanStyle,
 	val start: Int,
 	val end: Int,
 	val pendingAtEntry: Int,
@@ -210,7 +209,7 @@ private class FormatRange(
  * a pending break materializes. Offsets convert to lines once the walk is done.
  */
 private class HtmlSpanBuilder(
-	private val config: MarkdownConfiguration,
+	private val config: RichTextStyles,
 	private val includeImages: Boolean,
 	/** The source marks every no-break space that stands for an ordinary one (Safari, Word). */
 	private val marksConvertedSpaces: Boolean,
@@ -258,7 +257,7 @@ private class HtmlSpanBuilder(
 			if (span.start >= end) null else AnnotatedString.Range(span.item, span.start, end)
 		}
 		val lines = lineIndex(text)
-		val blockLines = mutableMapOf<LineBlockStyle, MutableSet<Int>>()
+		val blockLines = mutableMapOf<RichSpanStyle, MutableSet<Int>>()
 		// The two list styles cannot share a line, so the innermost claim wins
 		// rather than whichever happens to be applied last.
 		val listClaimed = mutableSetOf<Int>()
@@ -271,7 +270,7 @@ private class HtmlSpanBuilder(
 			// An empty block still owns the line it sits on: `<li></li>` is a
 			// bulleted blank line, not a block with nowhere to attach.
 			val last = if (end > first) end - 1 else first
-			val isList = range.block.isList
+			val isList = range.block.isListBlock
 			val target = blockLines.getOrPut(range.block) { mutableSetOf() }
 			for (line in lines[first]..lines[last]) {
 				if (isList && !listClaimed.add(line)) continue
@@ -286,7 +285,7 @@ private class HtmlSpanBuilder(
 			horizontalRuleLines = horizontalRuleLines,
 			imageLines = imageLines,
 			links = linksPerLine(text, lines),
-			paragraphFormats = formatsPerLine(text, lines, formatless = horizontalRuleLines + imageLines.keys + blockLines[CodeFence].orEmpty()),
+			paragraphFormats = formatsPerLine(text, lines, formatless = horizontalRuleLines + imageLines.keys + blockLines[CodeFenceSpanStyle].orEmpty()),
 		)
 	}
 
@@ -422,8 +421,10 @@ private class HtmlSpanBuilder(
 			// A list's depth is how many lists hold it, whether inside an item or, as
 			// browsers also render, directly inside another list.
 			listBlock = when (name) {
-				"ul", "ol" -> (if (name == "ol") OrderedList else BulletList)
-					.atListLevel(scope.listBlock?.listLevel?.plus(1) ?: 0)
+				"ul", "ol" -> {
+					val level = scope.listBlock?.listLevel?.plus(1) ?: 0
+					if (name == "ol") OrderedListSpanStyle.of(level) else BulletListSpanStyle.of(level)
+				}
 				else -> scope.listBlock
 			},
 			inPreElement = nestedInPreElement,
@@ -484,14 +485,14 @@ private class HtmlSpanBuilder(
 		return tag == "ul" || tag == "ol"
 	}
 
-	private fun blockStyleFor(name: String, scope: HtmlScope): LineBlockStyle? = when (name) {
-		"blockquote" -> Blockquote
+	private fun blockStyleFor(name: String, scope: HtmlScope): RichSpanStyle? = when (name) {
+		"blockquote" -> BlockquoteSpanStyle
 		// A bare `<li>` with no list ancestor still reads as a bullet.
-		"li" -> scope.listBlock ?: BulletList
-		"pre" -> CodeFence
+		"li" -> scope.listBlock ?: BulletListSpanStyle
+		"pre" -> CodeFenceSpanStyle
 		// Heading elements land as heading blocks so the level survives as a
 		// HeaderSpanStyle span, the same way markdown import attaches it.
-		"h1", "h2", "h3", "h4", "h5", "h6" -> headerBlock(name[1] - '0', config)
+		"h1", "h2", "h3", "h4", "h5", "h6" -> HeaderSpanStyle.of(name[1] - '0')
 		else -> null
 	}
 

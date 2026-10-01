@@ -69,7 +69,7 @@ internal class TextDragAndDrop(private val state: TextEditorState) {
 			text = text,
 			html = state.selectionAsHtml(selection),
 			dragId = id,
-			configuration = state.markdownConfiguration,
+			styles = state.richTextStyles,
 			allowMove = enabled,
 			onEnded = ::onSourceEnded,
 		) ?: return
@@ -100,7 +100,7 @@ internal class TextDragAndDrop(private val state: TextEditorState) {
 	internal fun drop(event: DragAndDropEvent, positionInRoot: Offset?): Boolean {
 		val at = positionInRoot?.let(::offsetAt) ?: dropPosition ?: return false
 		dropPosition = null
-		val content = event.droppedText(state.markdownConfiguration) ?: return false
+		val content = event.droppedText(state.richTextStyles) ?: return false
 		return dropAt(at, content, event.dragId(), event.requestsCopy())
 	}
 

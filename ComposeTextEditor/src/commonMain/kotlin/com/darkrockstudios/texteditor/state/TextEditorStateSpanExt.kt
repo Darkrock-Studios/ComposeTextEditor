@@ -34,8 +34,9 @@ fun TextEditorState.getSpanStylesAtPosition(position: CharLineOffset): Set<SpanS
 /**
  * The character styles text inserted at [position] should adopt: those of the
  * character before it, or of the character it sits in front of. With neither (a
- * blank line below a blank line, as every new paragraph starts out), a markdown
- * editor falls back to its body style rather than leaving the text unstyled.
+ * blank line below a blank line, as every new paragraph starts out), an editor with
+ * the styles installed falls back to the body style rather than leaving the text
+ * unstyled.
  * Across a line break, the text style a block bakes into its line (a heading's
  * size) comes from [position]'s own line, not from the line above.
  */
@@ -48,8 +49,7 @@ internal fun TextEditorState.getSpanStylesForEditAt(position: CharLineOffset): S
 		if (baked.isNotEmpty() || own.isNotEmpty()) styles = styles - baked + own
 	}
 	if (styles.isNotEmpty()) return styles
-	if (!hasMarkdownConfiguration) return emptySet()
-	return setOf(markdownConfiguration.defaultTextStyle)
+	return setOfNotNull(bodyStyle)
 }
 
 /**

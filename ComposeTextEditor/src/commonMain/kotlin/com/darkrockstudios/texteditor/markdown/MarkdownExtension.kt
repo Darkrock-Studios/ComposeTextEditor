@@ -4,41 +4,43 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
-import com.darkrockstudios.texteditor.html.sanitizeLinkUrl
-import com.darkrockstudios.texteditor.richstyle.Blockquote
-import com.darkrockstudios.texteditor.richstyle.BulletList
-import com.darkrockstudios.texteditor.richstyle.BulletListSpanStyle
-import com.darkrockstudios.texteditor.richstyle.CodeFence
+import com.darkrockstudios.texteditor.richstyle.BlockquoteSpanStyle
 import com.darkrockstudios.texteditor.richstyle.CodeFenceLanguageSpanStyle
+import com.darkrockstudios.texteditor.richstyle.CodeFenceSpanStyle
 import com.darkrockstudios.texteditor.richstyle.HR_PLACEHOLDER
 import com.darkrockstudios.texteditor.richstyle.HeaderSpanStyle
+import com.darkrockstudios.texteditor.richstyle.HorizontalRuleSpanStyle
 import com.darkrockstudios.texteditor.richstyle.IMAGE_PLACEHOLDER
 import com.darkrockstudios.texteditor.richstyle.ImageBlockSpanStyle
 import com.darkrockstudios.texteditor.richstyle.ImageProvider
-import com.darkrockstudios.texteditor.richstyle.LineBlockStyle
 import com.darkrockstudios.texteditor.richstyle.LinkSpanStyle
 import com.darkrockstudios.texteditor.richstyle.MAX_LIST_LEVEL
-import com.darkrockstudios.texteditor.richstyle.OrderedList
 import com.darkrockstudios.texteditor.richstyle.OrderedListSpanStyle
-import com.darkrockstudios.texteditor.richstyle.PlaceholderKind
-import com.darkrockstudios.texteditor.richstyle.allowedOn
+import com.darkrockstudios.texteditor.richstyle.RichSpan
+import com.darkrockstudios.texteditor.richstyle.RichSpanStyle
 import com.darkrockstudios.texteditor.richstyle.applyDocumentBlocks
-import com.darkrockstudios.texteditor.richstyle.atListLevel
-import com.darkrockstudios.texteditor.richstyle.conflicts
-import com.darkrockstudios.texteditor.richstyle.documentBlocksOf
-import com.darkrockstudios.texteditor.richstyle.hasLineBlock
-import com.darkrockstudios.texteditor.richstyle.headerBlock
-import com.darkrockstudios.texteditor.richstyle.isList
+import com.darkrockstudios.texteditor.richstyle.isListBlock
 import com.darkrockstudios.texteditor.richstyle.isNestingBlank
-import com.darkrockstudios.texteditor.richstyle.lineBlockStyles
-import com.darkrockstudios.texteditor.richstyle.listBlockAt
+import com.darkrockstudios.texteditor.richstyle.lineBlocksConflict
 import com.darkrockstudios.texteditor.richstyle.listLevel
 import com.darkrockstudios.texteditor.richstyle.nestListItems
 import com.darkrockstudios.texteditor.richstyle.unnestListItems
-import com.darkrockstudios.texteditor.richstyle.RichSpan
-import com.darkrockstudios.texteditor.richstyle.rebuildWithBlock
-import com.darkrockstudios.texteditor.richstyle.rebuildWithoutBlock
 import com.darkrockstudios.texteditor.state.TextEditorState
+import com.darkrockstudios.texteditor.state.codeFenceLanguage
+import com.darkrockstudios.texteditor.state.headerLevel
+import com.darkrockstudios.texteditor.state.isBlockquote
+import com.darkrockstudios.texteditor.state.isBulletList
+import com.darkrockstudios.texteditor.state.isCodeFence
+import com.darkrockstudios.texteditor.state.isOrderedList
+import com.darkrockstudios.texteditor.state.linkAt
+import com.darkrockstudios.texteditor.state.listLevel
+import com.darkrockstudios.texteditor.state.setCodeFenceLanguage
+import com.darkrockstudios.texteditor.state.setLink
+import com.darkrockstudios.texteditor.state.toggleBlockquote
+import com.darkrockstudios.texteditor.state.toggleBulletList
+import com.darkrockstudios.texteditor.state.toggleCodeFence
+import com.darkrockstudios.texteditor.state.toggleHeader
+import com.darkrockstudios.texteditor.state.toggleOrderedList
 
 private val HR_LINE_TOKENS = setOf("---", "***", "___")
 
@@ -86,10 +88,10 @@ private data class CodeFenceStripResult(
  * next line starting with at least as long a run of the same character; the
  * marker lines are dropped from the output. Lines emitted inside a fence have
  * their indices (in the post-strip line numbering) recorded so `importMarkdown`
- * can attach [CodeFence] spans after the parser has built the AnnotatedString.
+ * can attach fence spans after the parser has built the AnnotatedString.
  *
- * An unclosed fence at EOF treats the remaining lines as fenced — matches GFM
- * parser behavior and avoids the worst case where a typo silently turns the
+ * An unclosed fence at EOF treats the remaining lines as fenced, which matches
+ * GFM parser behavior and avoids the worst case where a typo silently turns the
  * rest of the document into plain text.
  */
 private fun stripCodeFences(markdown: String): CodeFenceStripResult {
@@ -123,27 +125,28 @@ private fun stripCodeFences(markdown: String): CodeFenceStripResult {
 	)
 }
 
-/** A line's body once its stacked block markers are peeled, and the styles peeled. */
+/** A line's body once its stacked block markers are peeled, and the blocks peeled. */
 private data class PeeledLine(
 	val body: String,
-	val blocks: List<LineBlockStyle>,
+	val blocks: List<MarkdownBlockSyntax>,
 )
 
 /**
  * Peels stacked block markers off [line] as the exact mirror of how export
- * emits them: styles are tried in [registry] order (see
- * [com.darkrockstudios.texteditor.richstyle.lineBlockStyles]), each at
- * most once, and only when it can stack with everything already peeled.
- * `> - item` peels quote then bullet; `- 1990. plans` peels only the bullet,
- * because the two list styles are mutually exclusive, so `1990. ` stays in the
- * body text. A nested `> > quoted` keeps its second level as body text.
+ * emits them: blocks are tried in [syntax] order (see [PREFIX_BLOCK_SYNTAX]),
+ * each at most once, and only when it can stack with everything already
+ * peeled ([lineBlocksConflict]). `> - item` peels quote then bullet;
+ * `- 1990. plans` peels only the bullet, because the two list styles are
+ * mutually exclusive, so `1990. ` stays in the body text. A nested
+ * `> > quoted` keeps its second level as body text.
  */
-private fun peelLineBlocks(line: String, registry: List<LineBlockStyle>): PeeledLine {
+private fun peelLineBlocks(line: String, syntax: List<MarkdownBlockSyntax>): PeeledLine {
 	var body = line
-	val peeled = mutableListOf<LineBlockStyle>()
-	for (block in registry) {
-		if (peeled.any { conflicts(block.spanStyle, it.spanStyle) }) continue
-		val match = block.markdownPattern.matchEntire(body) ?: continue
+	val peeled = mutableListOf<MarkdownBlockSyntax>()
+	for (block in syntax) {
+		val pattern = block.pattern ?: continue
+		if (peeled.any { lineBlocksConflict(block.style, it.style) }) continue
+		val match = pattern.matchEntire(body) ?: continue
 		peeled += block
 		body = match.groupValues[1]
 	}
@@ -158,23 +161,23 @@ private fun peelLineBlocks(line: String, registry: List<LineBlockStyle>): Peeled
  * status closes every open item. See `docs/design/line-blocks.md`, "Nested
  * lists".
  */
-private class ListNesting(private val registry: List<LineBlockStyle>) {
+private class ListNesting {
 	/** Content offsets of the open ancestor items, indexed by level. */
 	private val contentOffsets = ArrayList<Int>()
 	private var quoted = false
-	private val listBlocks = registry.filter { it.isList }
+	private val listBlocks = PREFIX_BLOCK_SYNTAX.filter { it.isList }
 
 	/** A line that is not a list item and not blank ends the nesting. */
 	fun close() = contentOffsets.clear()
 
 	fun peel(line: String): PeeledLine {
-		val peeled = peelLineBlocks(line, registry)
-		val isQuoted = peeled.blocks.any { it === Blockquote }
+		val peeled = peelLineBlocks(line, PREFIX_BLOCK_SYNTAX)
+		val isQuoted = peeled.blocks.any { it.style === BlockquoteSpanStyle }
 		if (isQuoted != quoted) {
 			contentOffsets.clear()
 			quoted = isQuoted
 		}
-		val body = if (isQuoted) Blockquote.markdownPattern.matchEntire(line)!!.groupValues[1] else line
+		val body = if (isQuoted) BLOCKQUOTE_SYNTAX.pattern!!.matchEntire(line)!!.groupValues[1] else line
 		val indentChars = body.indexOfFirst { it != ' ' && it != '\t' }.let { if (it == -1) body.length else it }
 		val indent = body.take(indentChars).sumOf { if (it == '\t') 4 else 1 }
 
@@ -258,66 +261,39 @@ private fun AnnotatedString.withoutSpanStyles(styles: Collection<SpanStyle>): An
 	)
 }
 
+private const val MOVED_TO_STATE = "Moved to the state: every rich text editor has the block API, markdown or not."
+
 /**
- * An extension to TextEditorState that provides markdown functionality.
- * This separates markdown concerns from the core text editor functionality.
+ * Reads and writes the document as markdown: the entry point for using the
+ * editor as a markdown editor. The styles the document is rendered and
+ * recognised with are the state's
+ * [richTextStyles][TextEditorState.richTextStyles]; [markdownConfiguration]
+ * holds the syntax choices. The block toggles and queries live on the state
+ * (`toggleBulletList`, `headerLevel`, `setLink` and the rest, in
+ * `com.darkrockstudios.texteditor.state`); the members here forward to them
+ * for one release.
  */
 class MarkdownExtension(
 	val editorState: TextEditorState,
 	initialConfiguration: MarkdownConfiguration = MarkdownConfiguration.DEFAULT,
 	var imageProvider: ImageProvider? = null,
 ) {
+	/** The syntax choices export writes in and import reads by default. */
 	var markdownConfiguration: MarkdownConfiguration = initialConfiguration
-		set(value) {
-			val previous = field
-			field = value
-			markdownStyles = MarkdownStyles(markdownConfiguration)
-			editorState.markdownConfiguration = value
-			// Only a change of styles retires the previous configuration; the
-			// syntax choices touch no span.
-			val stylesChanged = previous.copy(
-				highlightSyntax = value.highlightSyntax,
-				paragraphSeparator = value.paragraphSeparator,
-			) != value
-			if (stylesChanged) {
-				retiredConfigurations += previous
-				rebakeHeaderLines(previous, value)
-			}
-		}
 
-	/**
-	 * Every configuration this extension has been switched away from. Inline
-	 * spans keep the styles of the configuration they were made under (a
-	 * document is not rewritten on a theme change, so undo keeps matching), and
-	 * the exporter reads a retired configuration's bold, body or link style as
-	 * that marker rather than as the text's own colour.
-	 */
-	private val retiredConfigurations = mutableListOf<MarkdownConfiguration>()
-
-	/**
-	 * Swaps every heading line's baked display style from [previous]'s to
-	 * [current]'s. A heading's identity lives in its [HeaderSpanStyle] span; the
-	 * baked SpanStyle is presentation only, so this is a display migration on
-	 * the direct line-update path, not an undoable edit.
-	 */
-	private fun rebakeHeaderLines(
-		previous: MarkdownConfiguration,
-		current: MarkdownConfiguration,
-	) {
-		editorState.withAtomicEdit {
-			editorState.textLines.forEachIndexed { line, existing ->
-				val level = headerLevel(line) ?: return@forEachIndexed
-				val stripped = rebuildWithoutBlock(existing, headerBlock(level, previous))
-				editorState.updateLine(line, rebuildWithBlock(stripped, headerBlock(level, current)))
-			}
-		}
-	}
-
-	var markdownStyles: MarkdownStyles = MarkdownStyles(markdownConfiguration)
-		private set
+	/** The styles under their old names; read [TextEditorState.richTextStyles]. */
+	@Deprecated(
+		"Read the styles from editorState.richTextStyles (RichTextStyles).",
+		ReplaceWith("editorState.richTextStyles"),
+	)
+	@Suppress("DEPRECATION")
+	val markdownStyles: MarkdownStyles
+		get() = MarkdownStyles(editorState.richTextStyles)
 
 	init {
-		editorState.markdownConfiguration = markdownConfiguration
+		// Installs the styles: a markdown document carries the body style, so typed
+		// text takes it from the first keystroke (see TextEditorState.richTextStyles).
+		editorState.richTextStyles = editorState.richTextStyles
 	}
 
 	/**
@@ -331,12 +307,16 @@ class MarkdownExtension(
 	 * made after the snapshot is taken simply isn't in the result.
 	 */
 	fun exportAsMarkdown(): String {
-		val content = editorState.content
-		val registry = lineBlockStyles(markdownConfiguration)
-		val blocks = documentBlocksOf(content.richSpans, markdownConfiguration)
-		val hrLines = blocks.horizontalRuleLines
-		val imageLines = blocks.imageLines
-		val codeFenceLines = blocks.linesFor(CodeFence)
+		val content = editorState.snapshot()
+		val styles = editorState.richTextStyles
+		val retiredStyles = editorState.retiredRichTextStyles
+		// A line-anchored span starts on the line it decorates.
+		val spansByLine = content.richSpans.groupBy { it.range.start.line }
+		fun stylesOn(line: Int): List<RichSpanStyle> = spansByLine[line].orEmpty().map { it.style }
+		fun has(line: Int, style: RichSpanStyle) = stylesOn(line).any { it === style }
+		val imageLines = content.richSpans
+			.mapNotNull { span -> (span.style as? ImageBlockSpanStyle)?.let { span.range.start.line to it } }
+			.toMap()
 		val linkSpansByLine = content.richSpans
 			.filter { it.style is LinkSpanStyle }
 			.groupBy { it.range.start.line }
@@ -350,18 +330,24 @@ class MarkdownExtension(
 		val text = annotated.text
 		// An empty document with any block decoration still serializes: a lone
 		// empty quote line is `> `, not nothing.
-		if (text.isEmpty() && blocks.isEmpty()) return ""
+		val hasBlocks = content.richSpans.any { span ->
+			val style = span.style
+			style === HorizontalRuleSpanStyle || style is ImageBlockSpanStyle || BLOCK_SYNTAX.any { it.style === style }
+		}
+		if (text.isEmpty() && !hasBlocks) return ""
 
 		val lines = content.lines
 		val separateParagraphs =
 			markdownConfiguration.paragraphSeparator == ParagraphSeparator.BLANK_LINE
-		fun isList(line: Int) = blocks.listBlockAt(line) != null
-		fun isQuoted(line: Int) = blocks.has(line, Blockquote)
+		fun listStyleAt(line: Int): RichSpanStyle? = stylesOn(line).firstOrNull { it.isListBlock }
+		fun isList(line: Int) = listStyleAt(line) != null
+		fun isQuoted(line: Int) = has(line, BlockquoteSpanStyle)
+		fun isFence(line: Int) = has(line, CodeFenceSpanStyle)
+		fun headerLevel(line: Int): Int? = stylesOn(line).firstNotNullOfOrNull { it as? HeaderSpanStyle }?.level
 
 		// A blank editor line, as opposed to a block with empty content: an empty
 		// list item, heading or fenced line is a block of its own. The same
 		// definition the editor nests by, read from the snapshot.
-		val spansByLine = content.richSpans.groupBy { it.range.start.line }
 		fun isBlankLine(line: Int): Boolean =
 			isNestingBlank(lines[line], spansByLine[line].orEmpty())
 
@@ -374,7 +360,7 @@ class MarkdownExtension(
 		fun needsSeparator(line: Int): Boolean {
 			if (!separateParagraphs || line + 1 >= lines.size || isBlankLine(line)) return false
 			val next = line + 1
-			if (line in codeFenceLines && next in codeFenceLines) return false
+			if (isFence(line) && isFence(next)) return false
 			if (isList(line) && isList(next)) return false
 			if (line in tableRows && next in tableRows) return false
 			return true
@@ -390,16 +376,17 @@ class MarkdownExtension(
 		val orderedCounters = IntArray(MAX_LIST_LEVEL + 1)
 		val contentOffsets = ArrayList<Int>()
 		var nestingQuoted = false
-		val prefixBlocks = registry.filter { !it.isList }
+		val prefixBlocks = PREFIX_BLOCK_SYNTAX.filter { !it.isList }
+		val listSyntax = BLOCK_SYNTAX.filter { it.isList }.associateBy { it.style }
 		// Code fences wrap a contiguous run with ` ``` ` markers rather than
-		// per-line prefixes — track open/close state across iterations.
+		// per-line prefixes; track open/close state across iterations.
 		var inCodeFence = false
 		// A legacy font-size heading's markdown ends with its own line break.
 		var previousEndsWithNewline = false
 		for (lineIndex in lines.indices) {
 			val lineLength = lines[lineIndex].length
 			val end = cursor + lineLength
-			val isFenceLine = lineIndex in codeFenceLines
+			val isFenceLine = isFence(lineIndex)
 
 			if (lineIndex > 0) {
 				if (!previousEndsWithNewline) sb.append('\n')
@@ -422,24 +409,22 @@ class MarkdownExtension(
 			}
 
 			val lineMarkdown = when {
-				lineIndex in hrLines -> "---"
+				has(lineIndex, HorizontalRuleSpanStyle) -> "---"
 				imageLines.containsKey(lineIndex) -> {
 					val style = imageLines.getValue(lineIndex)
 					"![${style.alt}](${style.source})"
 				}
 
-				// Fenced lines emit their text raw — going through `toMarkdown` would
+				// Fenced lines emit their text raw: going through `toMarkdown` would
 				// see the baked-in monospace span as inline-code and wrap each line in
 				// backticks. Inside a fence the content is literal anyway.
 				isFenceLine -> text.substring(cursor, end)
 
 				else -> {
-					// A prefix block's baked display style must not reach the
-					// inline serializer: a heading's SpanStyle would also match
-					// the legacy font-size branch and emit a second `# ` inline.
-					val baked = registry.mapNotNull { block ->
-						block.textStyle?.takeIf { blocks.has(lineIndex, block) }
-					}
+					// A heading's baked display style must not reach the inline
+					// serializer: it would also match the legacy font-size branch
+					// and emit a second `# ` inline.
+					val baked = listOfNotNull(headerLevel(lineIndex)?.let { styles.getHeaderStyle(it) })
 					// Link spans live on the state, not in the AnnotatedString, so
 					// the serializer is handed this line's links in line-local
 					// character offsets.
@@ -457,16 +442,15 @@ class MarkdownExtension(
 					}
 					annotated.subSequence(cursor, end)
 						.withoutSpanStyles(baked)
-						.toMarkdown(markdownConfiguration, links, retiredConfigurations)
+						.toMarkdown(markdownConfiguration, links, styles, retiredStyles)
 				}
 			}
-			// Fenced lines aren't subject to per-line block prefixes — code fences
-			// don't stack with bullet/blockquote/ordered, and the mutual-exclusion
-			// rule in `applyLineBlock` already enforces this.
-			val list = if (isFenceLine) null else blocks.listBlockAt(lineIndex)
+			// Fenced lines take no per-line block prefixes: a fence stacks with
+			// nothing, which the block model enforces.
+			val list = if (isFenceLine) null else listStyleAt(lineIndex)?.let(listSyntax::getValue)
 			if (!isFenceLine) {
 				prefixBlocks.forEach { block ->
-					if (blocks.has(lineIndex, block)) sb.append(block.markdownPrefix(0))
+					if (has(lineIndex, block.style)) sb.append(block.prefix(0))
 				}
 			}
 			// A quote starting or ending closes every open item.
@@ -480,13 +464,13 @@ class MarkdownExtension(
 			} else {
 				// A deeper level than the ancestors allow cannot be written; the
 				// normalization pass keeps the model from holding one.
-				val level = minOf(list.listLevel!!, contentOffsets.size)
+				val level = minOf(list.style.listLevel!!, contentOffsets.size)
 				for (deeper in level + 1..MAX_LIST_LEVEL) orderedCounters[deeper] = 0
-				val prefix = if (list.spanStyle is OrderedListSpanStyle) {
-					list.markdownPrefix(orderedCounters[level]++)
+				val prefix = if (list.style is OrderedListSpanStyle) {
+					list.prefix(orderedCounters[level]++)
 				} else {
 					orderedCounters[level] = 0
-					list.markdownPrefix(0)
+					list.prefix(0)
 				}
 				val indent = if (level == 0) 0 else contentOffsets[level - 1]
 				repeat(indent) { sb.append(' ') }
@@ -498,7 +482,7 @@ class MarkdownExtension(
 			previousEndsWithNewline = lineMarkdown.endsWith('\n')
 			cursor = end + 1
 		}
-		// Close an unfinished fence at EOF — the closing marker needs its own line
+		// Close an unfinished fence at EOF; the closing marker needs its own line
 		// so insert a separator newline before it.
 		if (inCodeFence) {
 			sb.append("\n```")
@@ -530,10 +514,9 @@ class MarkdownExtension(
 
 		val hrLineIndices = mutableListOf<Int>()
 		val imageLines = mutableListOf<Pair<Int, ImageBlockSpanStyle>>()
-		val blockHits = mutableMapOf<LineBlockStyle, MutableList<Int>>()
+		val blockHits = mutableMapOf<RichSpanStyle, MutableList<Int>>()
 		val provider = imageProvider
-		val registry = lineBlockStyles(markdownConfiguration)
-		val nesting = ListNesting(registry)
+		val nesting = ListNesting()
 		val processedLines = keptLines.mapIndexed { index, line ->
 			if (index in codeFenceLineIndices) {
 				nesting.close()
@@ -544,15 +527,15 @@ class MarkdownExtension(
 			// rule it once was rather than a bullet holding literal dashes.
 			val peeled = nesting.peel(line)
 			val imageMatch = STANDALONE_IMAGE_REGEX.matchEntire(peeled.body)
-			fun record(blocks: List<LineBlockStyle>) = blocks.forEach { block ->
-				blockHits.getOrPut(block) { mutableListOf() } += index
+			fun record(blocks: List<MarkdownBlockSyntax>) = blocks.forEach { block ->
+				blockHits.getOrPut(block.style) { mutableListOf() } += index
 			}
 			when {
 				peeled.body.trim() in HR_LINE_TOKENS -> {
 					hrLineIndices += index
-					// A rule takes only a stacked quote; a peeled list marker has
-					// no meaning on one and is dropped.
-					record(peeled.blocks.filter { it.allowedOn(PlaceholderKind.OTHER) })
+					// A rule takes only a stacked quote; normalization drops any other
+					// peeled marker from the placeholder line it lands on.
+					record(peeled.blocks)
 					HR_PLACEHOLDER
 				}
 
@@ -564,9 +547,9 @@ class MarkdownExtension(
 						alt = alt,
 						provider = provider,
 					)
-					// An image can be a quoted line or a list item, so its
-					// peeled markers all attach (`1. ![shot](url)`).
-					record(peeled.blocks.filter { it.allowedOn(PlaceholderKind.IMAGE) })
+					// An image can be a quoted line or a list item (`1. ![shot](url)`);
+					// normalization drops what else was peeled.
+					record(peeled.blocks)
 					IMAGE_PLACEHOLDER
 				}
 
@@ -579,20 +562,19 @@ class MarkdownExtension(
 			}
 		}
 		val processedMarkdown = processedLines.joinToString("\n")
-		val parsed = processedMarkdown.parseMarkdownWithLinks(markdownConfiguration, literalLines = codeFenceLineIndices)
+		val parsed = processedMarkdown.parseMarkdownWithLinks(editorState.richTextStyles, literalLines = codeFenceLineIndices)
 		val annotatedString = parsed.annotatedString
 		// setText publishes the text with no spans and applyDocumentBlocks attaches them
 		// afterwards. As one revision, so a concurrent export can't catch the document
 		// fully loaded but entirely unstyled.
-		editorState.withAtomicEdit {
+		editorState.editGroup {
 			editorState.setText(annotatedString)
 			editorState.applyDocumentBlocks(
 				horizontalRuleLines = hrLineIndices,
 				imageLines = imageLines.toMap(),
-				blockLines = blockHits + (CodeFence to codeFenceLineIndices),
+				blockLines = blockHits + (CodeFenceSpanStyle to codeFenceLineIndices),
+				richSpans = linkSpans(parsed.links, annotatedString.text) + fenceLanguageSpans(fenceInfoStrings),
 			)
-			attachLinkSpans(parsed.links, annotatedString.text)
-			attachFenceLanguages(fenceInfoStrings)
 		}
 	}
 
@@ -663,80 +645,22 @@ class MarkdownExtension(
 		return true
 	}
 
-	/** Attaches a [CodeFenceLanguageSpanStyle] on each fenced line, off the undo history like the blocks. */
-	private fun attachFenceLanguages(infoStrings: Map<Int, String>) {
-		if (infoStrings.isEmpty()) return
-		val spans = infoStrings.mapNotNull { (line, info) ->
+	/** A [CodeFenceLanguageSpanStyle] for each fenced line, read against the text just set. */
+	private fun fenceLanguageSpans(infoStrings: Map<Int, String>): List<RichSpan> =
+		infoStrings.mapNotNull { (line, info) ->
 			val length = editorState.textLines.getOrNull(line)?.length ?: return@mapNotNull null
 			RichSpan(
 				range = TextEditorRange(CharLineOffset(line, 0), CharLineOffset(line, length)),
 				style = CodeFenceLanguageSpanStyle(info),
 			)
 		}
-		editorState.richSpanManager.addRichSpans(spans)
-	}
 
 	/**
-	 * The info string (` ```kotlin `) of the fenced code block containing
-	 * [line], or null when the line is not fenced or its fence has none. A
-	 * fence's language is its first line's, the one export writes.
+	 * A [LinkSpanStyle] over each parsed link, in line coordinates. Markdown links
+	 * cannot span lines; a range that somehow does is clamped to its first line.
 	 */
-	fun codeFenceLanguage(line: Int): String? {
-		val run = fenceRunContaining(line) ?: return null
-		return editorState.richSpanManager.getRichSpansStartingOn(run.first)
-			.firstNotNullOfOrNull { it.style as? CodeFenceLanguageSpanStyle }
-			?.language
-	}
-
-	/**
-	 * Sets the info string of the fenced code block containing [line], or
-	 * removes it for a null or blank [language]. The value is trimmed; one
-	 * holding a backtick or a line break cannot be written after a fence marker
-	 * and is refused. One undo step; a no-op off a fence.
-	 */
-	fun setCodeFenceLanguage(line: Int, language: String?) {
-		val run = fenceRunContaining(line) ?: return
-		val info = language?.trim()?.ifEmpty { null }
-		if (info != null && !CodeFenceLanguageSpanStyle.isWritable(info)) return
-		fun languageSpansOn(member: Int) = editorState.richSpanManager.getRichSpansStartingOn(member)
-			.filter { it.style is CodeFenceLanguageSpanStyle }
-		fun holdsInfo(member: Int) =
-			languageSpansOn(member).map { (it.style as CodeFenceLanguageSpanStyle).language } == listOfNotNull(info)
-		if (run.all(::holdsInfo)) return
-		editorState.editGroup {
-			run.forEach { member ->
-				if (holdsInfo(member)) return@forEach
-				languageSpansOn(member).forEach { editorState.removeRichSpan(it) }
-				if (info != null) {
-					val length = editorState.textLines[member].length
-					editorState.addRichSpan(
-						TextEditorRange(CharLineOffset(member, 0), CharLineOffset(member, length)),
-						CodeFenceLanguageSpanStyle(info),
-					)
-				}
-			}
-		}
-	}
-
-	/** The lines of the fence run containing [line], or null when [line] is not fenced. */
-	private fun fenceRunContaining(line: Int): IntRange? {
-		if (line !in editorState.textLines.indices || !isCodeFence(line)) return null
-		var first = line
-		while (first > 0 && isCodeFence(first - 1)) first--
-		var last = line
-		while (last + 1 < editorState.textLines.size && isCodeFence(last + 1)) last++
-		return first..last
-	}
-
-	/**
-	 * Attaches a [LinkSpanStyle] over each parsed link. Like
-	 * [applyDocumentBlocks] this goes through the direct span-manager path:
-	 * loading a document is not something the user should undo one link at a
-	 * time. Markdown links cannot span lines; a range that somehow does is
-	 * clamped to its first line.
-	 */
-	private fun attachLinkSpans(links: List<ParsedLink>, text: String) {
-		if (links.isEmpty()) return
+	private fun linkSpans(links: List<ParsedLink>, text: String): List<RichSpan> {
+		if (links.isEmpty()) return emptyList()
 		val lineStarts = mutableListOf(0)
 		text.forEachIndexed { index, char ->
 			if (char == '\n') lineStarts += index + 1
@@ -747,7 +671,7 @@ class MarkdownExtension(
 			return if (found >= 0) found else -found - 2
 		}
 
-		val spans = links.map { link ->
+		return links.map { link ->
 			val line = lineOf(link.start)
 			val lineEnd = (lineStarts.getOrNull(line + 1)?.minus(1)) ?: text.length
 			RichSpan(
@@ -758,130 +682,67 @@ class MarkdownExtension(
 				style = LinkSpanStyle(link.url),
 			)
 		}
-		editorState.richSpanManager.addRichSpans(spans)
-		editorState.updateBookKeeping()
 	}
 
-	/**
-	 * Makes [range] a hyperlink to [url]: bakes the configuration's link display
-	 * style over the text and attaches the [LinkSpanStyle] that carries the
-	 * destination through serialization. Both go through the undoable edit
-	 * pipeline as one undo step.
-	 *
-	 * A destination the HTML path's allowlist refuses (`javascript:`, `data:`,
-	 * `vbscript:`, `file:`) is not set, and answers false.
-	 */
-	fun setLink(range: TextEditorRange, url: String): Boolean {
-		if (sanitizeLinkUrl(url) == null) return false
-		editorState.editGroup {
-			editorState.addStyleSpan(range, markdownConfiguration.linkStyle)
-			editorState.addRichSpan(range, LinkSpanStyle(url))
-		}
-		return true
-	}
+	@Deprecated(MOVED_TO_STATE, ReplaceWith("editorState.codeFenceLanguage(line)", "com.darkrockstudios.texteditor.state.codeFenceLanguage"))
+	fun codeFenceLanguage(line: Int): String? = editorState.codeFenceLanguage(line)
 
-	/**
-	 * The destination URL of the link covering [position], or null when the
-	 * position is not inside a link.
-	 */
-	fun linkAt(position: CharLineOffset): String? =
-		editorState.richSpanManager.getRichSpansStartingOn(position.line)
-			.firstOrNull { it.style is LinkSpanStyle && it.containsPosition(position) }
-			?.let { (it.style as LinkSpanStyle).url }
+	@Deprecated(MOVED_TO_STATE, ReplaceWith("editorState.setCodeFenceLanguage(line, language)", "com.darkrockstudios.texteditor.state.setCodeFenceLanguage"))
+	fun setCodeFenceLanguage(line: Int, language: String?) = editorState.setCodeFenceLanguage(line, language)
 
-	/** Returns whether [line] is currently rendered as a blockquote. */
-	fun isBlockquote(line: Int): Boolean = editorState.hasLineBlock(line, Blockquote)
+	@Deprecated(MOVED_TO_STATE, ReplaceWith("editorState.setLink(range, url)", "com.darkrockstudios.texteditor.state.setLink"))
+	fun setLink(range: TextEditorRange, url: String): Boolean = editorState.setLink(range, url)
 
-	/** Returns whether [line] is currently rendered as a bullet-list item, at any nesting level. */
-	fun isBulletList(line: Int): Boolean = editorState.listBlockAt(line)?.spanStyle is BulletListSpanStyle
+	@Deprecated(MOVED_TO_STATE, ReplaceWith("editorState.linkAt(position)", "com.darkrockstudios.texteditor.state.linkAt"))
+	fun linkAt(position: CharLineOffset): String? = editorState.linkAt(position)
 
-	/** Returns whether [line] is currently rendered as an ordered-list item, at any nesting level. */
-	fun isOrderedList(line: Int): Boolean = editorState.listBlockAt(line)?.spanStyle is OrderedListSpanStyle
+	@Deprecated(MOVED_TO_STATE, ReplaceWith("editorState.isBlockquote(line)", "com.darkrockstudios.texteditor.state.isBlockquote"))
+	fun isBlockquote(line: Int): Boolean = editorState.isBlockquote(line)
 
-	/** The nesting level (0 for a top-level item) of the list item on [line], or null when it is not one. */
-	fun listLevel(line: Int): Int? = editorState.listBlockAt(line)?.listLevel
+	@Deprecated(MOVED_TO_STATE, ReplaceWith("editorState.isBulletList(line)", "com.darkrockstudios.texteditor.state.isBulletList"))
+	fun isBulletList(line: Int): Boolean = editorState.isBulletList(line)
 
-	/**
-	 * Nests each list item in [lines] one level, never deeper than one below
-	 * the item before it, as Tab at an item's start does. One undo step; lines
-	 * that are not list items are left alone. Returns whether any item moved.
-	 */
+	@Deprecated(MOVED_TO_STATE, ReplaceWith("editorState.isOrderedList(line)", "com.darkrockstudios.texteditor.state.isOrderedList"))
+	fun isOrderedList(line: Int): Boolean = editorState.isOrderedList(line)
+
+	@Deprecated(MOVED_TO_STATE, ReplaceWith("editorState.listLevel(line)", "com.darkrockstudios.texteditor.state.listLevel"))
+	fun listLevel(line: Int): Int? = editorState.listLevel(line)
+
+	@Deprecated(MOVED_TO_STATE, ReplaceWith("editorState.nestListItems(lines)", "com.darkrockstudios.texteditor.richstyle.nestListItems"))
 	fun nestList(lines: IntRange): Boolean = editorState.nestListItems(lines)
 
-	/**
-	 * Un-nests each nested list item in [lines] one level, the items nested
-	 * under the last of them coming up with it, as Shift+Tab does. One undo
-	 * step. Returns whether any item moved.
-	 */
+	@Deprecated(MOVED_TO_STATE, ReplaceWith("editorState.unnestListItems(lines)", "com.darkrockstudios.texteditor.richstyle.unnestListItems"))
 	fun unnestList(lines: IntRange): Boolean = editorState.unnestListItems(lines)
 
-	/** Returns whether [line] is currently rendered as a fenced code line. */
-	fun isCodeFence(line: Int): Boolean = editorState.hasLineBlock(line, CodeFence)
+	@Deprecated(MOVED_TO_STATE, ReplaceWith("editorState.isCodeFence(line)", "com.darkrockstudios.texteditor.state.isCodeFence"))
+	fun isCodeFence(line: Int): Boolean = editorState.isCodeFence(line)
 
-	/**
-	 * Adds blockquote rendering (left bar + indented text) to each line in
-	 * [lines] that doesn't already have it; removes it from lines that do.
-	 * Mixed selections enable on every line for predictable toolbar behavior.
-	 */
-	fun toggleBlockquote(lines: IntRange) = toggleLineBlock(lines, Blockquote)
+	@Deprecated(MOVED_TO_STATE, ReplaceWith("editorState.toggleBlockquote(lines)", "com.darkrockstudios.texteditor.state.toggleBlockquote"))
+	fun toggleBlockquote(lines: IntRange) = editorState.toggleBlockquote(lines)
 
-	/**
-	 * Adds bullet-list rendering (gutter dot + hanging indent) to each line in
-	 * [lines] that doesn't already have it; removes it from lines that do.
-	 * Mixed selections enable on every line for predictable toolbar behavior.
-	 */
-	fun toggleBulletList(lines: IntRange) = toggleLineBlock(lines, BulletList)
+	@Deprecated(MOVED_TO_STATE, ReplaceWith("editorState.toggleBulletList(lines)", "com.darkrockstudios.texteditor.state.toggleBulletList"))
+	fun toggleBulletList(lines: IntRange) = editorState.toggleBulletList(lines)
 
-	/**
-	 * Adds ordered-list rendering (gutter numeral + hanging indent) to each line
-	 * in [lines] that doesn't already have it; removes it from lines that do.
-	 * Mixed selections enable on every line for predictable toolbar behavior.
-	 * Numbering is recomputed automatically based on contiguous-run position.
-	 */
-	fun toggleOrderedList(lines: IntRange) = toggleLineBlock(lines, OrderedList)
+	@Deprecated(MOVED_TO_STATE, ReplaceWith("editorState.toggleOrderedList(lines)", "com.darkrockstudios.texteditor.state.toggleOrderedList"))
+	fun toggleOrderedList(lines: IntRange) = editorState.toggleOrderedList(lines)
 
-	/**
-	 * Adds fenced-code rendering (monospace text + tinted card with a hairline
-	 * border) to each line in [lines] that doesn't already have it; removes it
-	 * from lines that do. Mixed selections enable on every line for predictable
-	 * toolbar behavior. Code fences demote any blockquote/list on the same
-	 * line — the four block styles can't coexist visually.
-	 */
-	fun toggleCodeFence(lines: IntRange) = toggleLineBlock(lines, CodeFence)
+	@Deprecated(MOVED_TO_STATE, ReplaceWith("editorState.toggleCodeFence(lines)", "com.darkrockstudios.texteditor.state.toggleCodeFence"))
+	fun toggleCodeFence(lines: IntRange) = editorState.toggleCodeFence(lines)
 
-	/**
-	 * Makes each line in [lines] a heading of [level] (1..6), or removes the
-	 * heading where every targeted line already carries that exact level.
-	 * Applying over a different heading level swaps the level. The heading is
-	 * semantic: it survives configuration changes and exports as `#` markers
-	 * regardless of the display style in force. One atomic undo entry covers
-	 * the whole toggle.
-	 */
-	fun toggleHeader(lines: IntRange, level: Int) {
-		editorState.editManager.toggleLineBlock(lines, headerBlock(level, markdownConfiguration))
-	}
+	@Deprecated(MOVED_TO_STATE, ReplaceWith("editorState.toggleHeader(lines, level)", "com.darkrockstudios.texteditor.state.toggleHeader"))
+	fun toggleHeader(lines: IntRange, level: Int) = editorState.toggleHeader(lines, level)
 
-	/**
-	 * The heading level (1..6) of [line], or null when the line is not a
-	 * heading. Reads the line's [HeaderSpanStyle] span, so the answer is
-	 * independent of the display styles in the active configuration.
-	 */
-	fun headerLevel(line: Int): Int? =
-		editorState.richSpanManager.getRichSpansStartingOn(line)
-			.firstNotNullOfOrNull { it.style as? HeaderSpanStyle }
-			?.level
-
-	private fun toggleLineBlock(lines: IntRange, block: LineBlockStyle) {
-		editorState.editManager.toggleLineBlock(lines, block)
-	}
+	@Deprecated(MOVED_TO_STATE, ReplaceWith("editorState.headerLevel(line)", "com.darkrockstudios.texteditor.state.headerLevel"))
+	fun headerLevel(line: Int): Int? = editorState.headerLevel(line)
 }
 
 /**
  * Wraps this [TextEditorState] in a [MarkdownExtension], the entry point for
- * markdown import/export and block toggles (blockquote, bullet/ordered lists,
- * code fences).
+ * markdown import and export. The styles are the state's
+ * [richTextStyles][TextEditorState.richTextStyles]; assign them before
+ * importing.
  *
- * @param initialConfiguration Styling applied to imported and exported markdown.
+ * @param initialConfiguration The syntax choices to write in and read by default.
  * @param imageProvider Resolves image sources for imported image blocks; pass
  * `null` to skip image handling.
  */

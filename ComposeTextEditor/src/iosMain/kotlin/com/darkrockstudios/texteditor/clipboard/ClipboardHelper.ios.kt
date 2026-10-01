@@ -4,7 +4,7 @@ import androidx.compose.ui.platform.Clipboard
 import androidx.compose.ui.text.AnnotatedString
 import com.darkrockstudios.texteditor.html.toAnnotatedStringFromHtml
 import com.darkrockstudios.texteditor.html.toHtml
-import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
+import com.darkrockstudios.texteditor.RichTextStyles
 import kotlinx.cinterop.BetaInteropApi
 import platform.Foundation.NSString
 import platform.Foundation.NSUTF8StringEncoding
@@ -30,9 +30,9 @@ actual object ClipboardHelper {
 
 	actual suspend fun getText(
 		clipboard: Clipboard,
-		configuration: MarkdownConfiguration,
+		styles: RichTextStyles,
 	): AnnotatedString? {
-		val paste = UIPasteboard.generalPasteboard.readStyled(configuration)
+		val paste = UIPasteboard.generalPasteboard.readStyled(styles)
 		lastReadHtml = paste.html
 		lastReadCopyId = paste.copyId
 		return paste.text
@@ -44,11 +44,11 @@ actual object ClipboardHelper {
 	actual suspend fun setText(
 		clipboard: Clipboard,
 		text: AnnotatedString,
-		configuration: MarkdownConfiguration,
+		styles: RichTextStyles,
 		copyId: Long?,
 		html: String?,
 	): Boolean {
-		UIPasteboard.generalPasteboard.writeStyled(text.text, html ?: text.toHtml(configuration), copyId)
+		UIPasteboard.generalPasteboard.writeStyled(text.text, html ?: text.toHtml(styles), copyId)
 		return true
 	}
 
@@ -70,17 +70,17 @@ private const val COPY_ID_TYPE = "com.darkrockstudios.texteditor.copy-id"
 internal class PasteboardPaste(val text: AnnotatedString?, val html: String?, val copyId: Long?)
 
 /**
- * The markup parsed with [configuration] where there is some, else the plain text. This
+ * The markup parsed with [styles] where there is some, else the plain text. This
  * editor's own copy must paste the characters it copied, which the in-editor span buffer
  * matches against, so its markup is used only where it re-parses to them. Several items
  * paste as their texts one per line.
  */
-internal fun UIPasteboard.readStyled(configuration: MarkdownConfiguration): PasteboardPaste {
+internal fun UIPasteboard.readStyled(styles: RichTextStyles): PasteboardPaste {
 	if (numberOfItems > 1) return PasteboardPaste(allTexts()?.let(::AnnotatedString), html = null, copyId = null)
 	val plain = string?.takeIf { it.isNotEmpty() }
 	val copyId = utf8(COPY_ID_TYPE)?.toLongOrNull()
 	val html = utf8(HTML_TYPE)
-	val styled = html?.toAnnotatedStringFromHtml(configuration)
+	val styled = html?.toAnnotatedStringFromHtml(styles)
 		?.takeIf { it.text.isNotEmpty() && (copyId == null || it.text == plain) }
 	return PasteboardPaste(text = styled ?: plain?.let(::AnnotatedString), html = html, copyId = copyId)
 }

@@ -4,18 +4,21 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import com.darkrockstudios.texteditor.CharLineOffset
+import com.darkrockstudios.texteditor.RichTextStyles
 import com.darkrockstudios.texteditor.TextEditorRange
-import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
 import com.darkrockstudios.texteditor.markdown.MarkdownExtension
 import com.darkrockstudios.texteditor.richstyle.HeaderSpanStyle
 import com.darkrockstudios.texteditor.state.TextEditorState
+import com.darkrockstudios.texteditor.state.headerLevel
+import com.darkrockstudios.texteditor.state.isBlockquote
+import com.darkrockstudios.texteditor.state.toggleHeader
 import io.mockk.mockk
-import kotlinx.coroutines.test.TestScope
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlinx.coroutines.test.TestScope
 
 /**
  * Headings as semantic line blocks: the level lives in a [HeaderSpanStyle]
@@ -41,24 +44,24 @@ class HeaderSemanticsTest {
 	fun `import attaches the heading span and level`() {
 		val e = editor("# Title")
 
-		assertEquals(1, e.headerLevel(0))
+		assertEquals(1, e.editorState.headerLevel(0))
 		assertEquals(listOf(HeaderSpanStyle.of(1)), e.headerSpansOn(0))
-		assertTrue(e.lineCarries(0, MarkdownConfiguration.DEFAULT.header1Style))
+		assertTrue(e.lineCarries(0, RichTextStyles.DEFAULT.header1Style))
 	}
 
 	@Test
 	fun `toggleHeader applies span plus display style and one undo removes both`() {
 		val e = editor("Title")
-		e.toggleHeader(0..0, 2)
+		e.editorState.toggleHeader(0..0, 2)
 
-		assertEquals(2, e.headerLevel(0))
-		assertTrue(e.lineCarries(0, MarkdownConfiguration.DEFAULT.header2Style))
+		assertEquals(2, e.editorState.headerLevel(0))
+		assertTrue(e.lineCarries(0, RichTextStyles.DEFAULT.header2Style))
 
 		e.editorState.undo()
 
-		assertNull(e.headerLevel(0), "one undo must remove the heading span")
+		assertNull(e.editorState.headerLevel(0), "one undo must remove the heading span")
 		assertFalse(
-			e.lineCarries(0, MarkdownConfiguration.DEFAULT.header2Style),
+			e.lineCarries(0, RichTextStyles.DEFAULT.header2Style),
 			"one undo must strip the baked display style",
 		)
 	}
@@ -66,39 +69,39 @@ class HeaderSemanticsTest {
 	@Test
 	fun `toggleHeader with a different level swaps the level`() {
 		val e = editor("# Title")
-		e.toggleHeader(0..0, 3)
+		e.editorState.toggleHeader(0..0, 3)
 
-		assertEquals(3, e.headerLevel(0))
+		assertEquals(3, e.editorState.headerLevel(0))
 		assertEquals(listOf(HeaderSpanStyle.of(3)), e.headerSpansOn(0))
-		assertTrue(e.lineCarries(0, MarkdownConfiguration.DEFAULT.header3Style))
-		assertFalse(e.lineCarries(0, MarkdownConfiguration.DEFAULT.header1Style))
+		assertTrue(e.lineCarries(0, RichTextStyles.DEFAULT.header3Style))
+		assertFalse(e.lineCarries(0, RichTextStyles.DEFAULT.header1Style))
 	}
 
 	@Test
 	fun `toggleHeader with the same level removes the heading`() {
 		val e = editor("### Title")
-		e.toggleHeader(0..0, 3)
+		e.editorState.toggleHeader(0..0, 3)
 
-		assertNull(e.headerLevel(0))
-		assertFalse(e.lineCarries(0, MarkdownConfiguration.DEFAULT.header3Style))
+		assertNull(e.editorState.headerLevel(0))
+		assertFalse(e.lineCarries(0, RichTextStyles.DEFAULT.header3Style))
 	}
 
 	@Test
 	fun `a configuration change re-bakes the display style and keeps the level`() {
 		val e = editor("# Title\n\nbody")
-		val restyled = MarkdownConfiguration(
+		val restyled = RichTextStyles(
 			header1Style = SpanStyle(fontSize = 40.sp, fontWeight = FontWeight.Bold),
 		)
 
-		e.markdownConfiguration = restyled
+		e.editorState.richTextStyles = restyled
 
-		assertEquals(1, e.headerLevel(0))
+		assertEquals(1, e.editorState.headerLevel(0))
 		assertTrue(
 			e.lineCarries(0, restyled.header1Style),
 			"the heading line must carry the new configuration's display style",
 		)
 		assertFalse(
-			e.lineCarries(0, MarkdownConfiguration.DEFAULT.header1Style),
+			e.lineCarries(0, RichTextStyles.DEFAULT.header1Style),
 			"the old configuration's display style must be stripped",
 		)
 		assertTrue(e.exportAsMarkdown().startsWith("# "))
@@ -128,8 +131,8 @@ class HeaderSemanticsTest {
 	fun `a quote stacked on a heading round trips`() {
 		val e = editor("> # T")
 
-		assertEquals(1, e.headerLevel(0))
-		assertTrue(e.isBlockquote(0))
+		assertEquals(1, e.editorState.headerLevel(0))
+		assertTrue(e.editorState.isBlockquote(0))
 		assertEquals("T", e.editorState.getAllText().text)
 
 		val exported = e.exportAsMarkdown()
@@ -146,10 +149,10 @@ class HeaderSemanticsTest {
 		state.setText("Title")
 		state.addStyleSpan(
 			TextEditorRange(CharLineOffset(0, 0), CharLineOffset(0, 5)),
-			MarkdownConfiguration.DEFAULT.header1Style,
+			RichTextStyles.DEFAULT.header1Style,
 		)
 
-		assertNull(e.headerLevel(0), "precondition: no heading span, only the raw style")
+		assertNull(e.editorState.headerLevel(0), "precondition: no heading span, only the raw style")
 		assertTrue(e.exportAsMarkdown().startsWith("# "))
 	}
 }

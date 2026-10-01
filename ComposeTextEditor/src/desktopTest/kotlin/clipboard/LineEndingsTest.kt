@@ -14,15 +14,16 @@ import com.darkrockstudios.texteditor.markdown.toAnnotatedStringFromMarkdown
 import com.darkrockstudios.texteditor.markdown.withMarkdown
 import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.insertTypedString
+import com.darkrockstudios.texteditor.state.isCodeFence
 import io.mockk.mockk
-import kotlinx.coroutines.test.TestScope
-import kotlinx.coroutines.test.runTest
-import utils.editorUiTest
-import utils.pasteHtml
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.runTest
+import utils.editorUiTest
+import utils.pasteHtml
 
 /**
  * Carriage returns never reach a line: `\r\n` and a lone `\r` both become `\n` on
@@ -161,6 +162,6 @@ class LineEndingsTest {
 	fun `a rich paste of preformatted CRLF markup keeps its block on every line`() = editorUiTest {
 		pasteHtml("<pre>a\r\nb</pre>")
 		assertEquals(listOf("a", "b"), lines)
-		assertTrue(markdown.isCodeFence(0) && markdown.isCodeFence(1), "both pasted lines should be fenced")
+		assertTrue(markdown.editorState.isCodeFence(0) && markdown.editorState.isCodeFence(1), "both pasted lines should be fenced")
 	}
 }
