@@ -381,15 +381,13 @@ class MarkdownExtension(
 		// Code fences wrap a contiguous run with ` ``` ` markers rather than
 		// per-line prefixes; track open/close state across iterations.
 		var inCodeFence = false
-		// A legacy font-size heading's markdown ends with its own line break.
-		var previousEndsWithNewline = false
 		for (lineIndex in lines.indices) {
 			val lineLength = lines[lineIndex].length
 			val end = cursor + lineLength
 			val isFenceLine = isFence(lineIndex)
 
 			if (lineIndex > 0) {
-				if (!previousEndsWithNewline) sb.append('\n')
+				sb.append('\n')
 				// Close a fence when leaving; the marker sits on its own line.
 				if (inCodeFence && !isFenceLine) {
 					sb.append("```\n")
@@ -421,10 +419,11 @@ class MarkdownExtension(
 				isFenceLine -> text.substring(cursor, end)
 
 				else -> {
-					// A heading's baked display style must not reach the inline
-					// serializer: it would also match the legacy font-size branch
-					// and emit a second `# ` inline.
-					val baked = listOfNotNull(headerLevel(lineIndex)?.let { styles.getHeaderStyle(it) })
+					// A heading's baked display style, under this configuration or a
+					// retired one, is the block's look, not bold text at a size.
+					val baked = headerLevel(lineIndex)
+						?.let { level -> (retiredStyles + styles).map { it.getHeaderStyle(level) } }
+						.orEmpty()
 					// Link spans live on the state, not in the AnnotatedString, so
 					// the serializer is handed this line's links in line-local
 					// character offsets.
@@ -442,7 +441,7 @@ class MarkdownExtension(
 					}
 					annotated.subSequence(cursor, end)
 						.withoutSpanStyles(baked)
-						.toMarkdown(markdownConfiguration, links, styles, retiredStyles)
+						.toMarkdown(markdownConfiguration, links, styles, retiredStyles, headingsBySize = false)
 				}
 			}
 			// Fenced lines take no per-line block prefixes: a fence stacks with
@@ -479,7 +478,6 @@ class MarkdownExtension(
 				contentOffsets += indent + prefix.length
 			}
 			sb.append(lineMarkdown)
-			previousEndsWithNewline = lineMarkdown.endsWith('\n')
 			cursor = end + 1
 		}
 		// Close an unfinished fence at EOF; the closing marker needs its own line

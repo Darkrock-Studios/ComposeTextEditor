@@ -2887,13 +2887,19 @@ Shaping is one line per keystroke. These still scale with document length:
   `ClipboardHelper.setText` without markup have no state and read the
   current styles alone.
 
-- [ ] **7.64 Bold text at a heading's size exports to markdown as a heading.
+- [x] **7.64 Bold text at a heading's size exports to markdown as a heading.
   S.** [Opus] [Lane I] `annotatedStringToMarkdown.kt` `styleMarkers` keeps a
   legacy heading path for spanless content: any run bold at a configured
   heading size writes as that heading's marker, so "a **BIG** b" with the bold
   word at 24 sp exports as `a ` and `## BIG` on lines of their own. HTML takes a
   line's heading from its block alone since 6.26; markdown export should too,
   writing such a run as bold with its size.
+  Done: `exportAsMarkdown` takes a line's heading from its heading block alone
+  and writes such a run as `<span style="font-size:24px">**BIG**</span>`, inside
+  a heading too; a heading's bake under a retired configuration is left out like
+  the current one. The standalone `AnnotatedString.toMarkdown`, which has no
+  blocks, still reads a run at a heading's size as that heading, as
+  `AnnotatedString.toHtml` does (`HeaderSemanticsTest`; `docs/MIGRATION.md`).
 - [ ] **7.67 An empty quoted list item at the end is not a fixpoint. R.** [Opus]
   [Lane I] Fuzz seed 2482 (`FUZZ_SEED=2482`, the markdown module's
   `MarkdownFuzzFixpointTest`) ends with an empty quoted list item after a

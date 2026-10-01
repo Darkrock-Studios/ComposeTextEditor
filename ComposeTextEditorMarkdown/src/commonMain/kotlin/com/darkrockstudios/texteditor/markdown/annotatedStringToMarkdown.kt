@@ -16,24 +16,29 @@ import com.darkrockstudios.texteditor.RichTextStyles
  * with the markers enclosing any emphasis inside the range.
  * @param styles The styles a span is recognised by; an editor's own are on
  * `TextEditorState.richTextStyles`.
+ *
+ * A string carries no heading blocks, so a run bold at one of [styles]' heading
+ * sizes is written as that heading, on a line of its own.
  */
 fun AnnotatedString.toMarkdown(
 	configuration: MarkdownConfiguration = MarkdownConfiguration.DEFAULT,
 	links: List<Pair<IntRange, String>> = emptyList(),
 	styles: RichTextStyles = RichTextStyles.DEFAULT,
-): String = toMarkdown(configuration, links, styles, emptyList())
+): String = toMarkdown(configuration, links, styles, emptyList(), headingsBySize = true)
 
 /**
  * [retiredStyles] are the style configurations the document was styled under
  * before [styles], oldest first; a span still carrying one of their configured
  * styles is written as that style's marker (the most recent one's), not as its
- * colour or size.
+ * colour or size. Without [headingsBySize] a run bold at a heading's size is bold
+ * text at that size: an editor's headings come from its heading blocks.
  */
 internal fun AnnotatedString.toMarkdown(
 	configuration: MarkdownConfiguration,
 	links: List<Pair<IntRange, String>>,
 	styles: RichTextStyles,
 	retiredStyles: List<RichTextStyles>,
+	headingsBySize: Boolean,
 ): String {
 	if (text.isEmpty()) return ""
 
@@ -43,7 +48,7 @@ internal fun AnnotatedString.toMarkdown(
 	val rangesByMarker = LinkedHashMap<StyleMarkerPair, MutableList<IntRange>>()
 	spanStyles.forEach { span ->
 		if (span.end <= span.start) return@forEach
-		styleMarkers(span.item, styles, configuration, retiredStyles).forEach { marker ->
+		styleMarkers(span.item, styles, configuration, retiredStyles, headingsBySize).forEach { marker ->
 			rangesByMarker.getOrPut(marker) { mutableListOf() }
 				.add(span.start until span.end)
 		}
@@ -312,7 +317,8 @@ private fun styleMarkers(
 	style: SpanStyle,
 	config: RichTextStyles,
 	syntax: MarkdownConfiguration,
-	retiredStyles: List<RichTextStyles> = emptyList(),
+	retiredStyles: List<RichTextStyles>,
+	headingsBySize: Boolean,
 ): List<StyleMarkerPair> {
 	// A configured style is written as the one marker it stands for: its colour,
 	// size or background is how the configuration shows that marker, not
@@ -321,12 +327,8 @@ private fun styleMarkers(
 	configuredMarkers(style, config, syntax)?.let { return it }
 	retiredStyles.asReversed().forEach { retired -> configuredMarkers(style, retired, syntax)?.let { return it } }
 
-	// Legacy heading path for content styled without a HeaderSpanStyle span
-	// (old documents, host apps writing raw font sizes). Checked first so a
-	// bold style with an explicit size never reads as inline bold. Heading
-	// lines carrying a span never reach here; export strips their baked style
-	// before serializing the line.
-	if (style.fontWeight == FontWeight.Bold && style.fontSize != TextUnit.Unspecified) {
+	// Checked first so a heading's bold never also reads as inline bold.
+	if (headingsBySize && style.fontWeight == FontWeight.Bold && style.fontSize != TextUnit.Unspecified) {
 		val heading = when (style.fontSize.value) {
 			config.header1Style.fontSize.value -> StyleMarkerPair("# ", "\n")
 			config.header2Style.fontSize.value -> StyleMarkerPair("## ", "\n")
@@ -347,8 +349,7 @@ private fun styleMarkers(
 		if (style.isUnderlineStyle) add(UNDERLINE_MARKER)
 		if (style.isHighlightStyle) add(highlightMarker(syntax))
 		if (style.isCodeStyle) add(CODE_MARKER)
-		// Not isBoldStyle: a bold run with a size that is no heading's is bold
-		// text at that size, and the heading branch above has already passed it.
+		// Bold at any size, the size written as its own tag above unless it is the body size.
 		if (style.fontWeight == FontWeight.Bold) add(BOLD_MARKER)
 		if (style.isItalicStyle) add(ITALIC_MARKER)
 		if (style.isStrikethroughStyle) add(STRIKETHROUGH_MARKER)
@@ -403,7 +404,7 @@ private data class StyleMarkerPair(
 	val trimsWhitespaceEdges: Boolean
 		get() = openMarker == "**" || openMarker == "*" || openMarker == "~~" || openMarker == "=="
 
-	/** A legacy font-size heading, which opens on a fresh line and closes with the line. */
+	/** A font-size heading, which opens on a fresh line and closes with the line. */
 	val isHeading: Boolean
 		get() = closeMarker == "\n"
 
