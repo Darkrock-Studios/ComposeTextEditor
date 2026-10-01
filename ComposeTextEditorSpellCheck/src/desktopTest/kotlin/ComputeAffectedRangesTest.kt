@@ -59,7 +59,7 @@ class ComputeAffectedRangesTest {
 		val typed = insertAt(at(0, 10), "abc")
 		val deleted = delete(range(at(0, 0), at(0, 4)))
 		assertEquals(
-			setOf(range(at(0, 6), at(0, 9)), range(at(0, 0), at(0, 4))),
+			setOf(range(at(0, 6), at(0, 9)), range(at(0, 0), at(0, 0))),
 			computeAffectedRanges(listOf(typed, deleted)).toSet(),
 		)
 	}
@@ -69,21 +69,21 @@ class ComputeAffectedRangesTest {
 		val typed = insertAt(at(3, 2), "abc")
 		val joined = delete(range(at(1, 4), at(2, 0)))
 		assertEquals(
-			setOf(range(at(2, 2), at(2, 5)), range(at(1, 4), at(2, 0))),
+			setOf(range(at(2, 2), at(2, 5)), range(at(1, 4), at(1, 4))),
 			computeAffectedRanges(listOf(typed, joined)).toSet(),
 		)
 	}
 
 	@Test
-	fun `a deletion is checked over the range it deleted`() {
-		assertEquals(listOf(range(at(2, 4), at(3, 2))), computeAffectedRanges(listOf(delete(range(at(2, 4), at(3, 2))))))
+	fun `a deletion is checked at the point it closed up`() {
+		assertEquals(listOf(range(at(2, 4), at(2, 4))), computeAffectedRanges(listOf(delete(range(at(2, 4), at(3, 2))))))
 	}
 
 	@Test
 	fun `an earlier edit the deletion took joins the deletion's range`() {
 		val typed = insertAt(at(0, 5), "abc")
 		val deleted = delete(range(at(0, 3), at(0, 10)))
-		assertEquals(listOf(range(at(0, 3), at(0, 10))), computeAffectedRanges(listOf(typed, deleted)))
+		assertEquals(listOf(range(at(0, 3), at(0, 3))), computeAffectedRanges(listOf(typed, deleted)))
 	}
 
 	@Test

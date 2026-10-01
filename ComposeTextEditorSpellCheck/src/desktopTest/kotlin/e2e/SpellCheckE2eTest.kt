@@ -110,6 +110,19 @@ class SpellCheckE2eTest {
 	}
 
 	@Test
+	fun `a deletion across the last lines keeps the flags it moved`() {
+		spellCheckUiTest(spellChecker = CountingSpellChecker(correctWords = setOf("fine")), initialText = "fine\nfine\nfine teh") {
+			assertEquals(listOf("teh"), flaggedWords)
+
+			state.textState.delete(TextEditorRange(CharLineOffset(0, 4), CharLineOffset(2, 4)))
+			letSpellCheckSettle()
+
+			assertEquals("fine teh", state.textState.getAllText().text)
+			assertEquals(listOf("teh"), flaggedWords)
+		}
+	}
+
+	@Test
 	fun `a typed word is checked once, not once per character`() {
 		val words = words(60)
 		val checker = CountingSpellChecker(correctWords = words.toSet())

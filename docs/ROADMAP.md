@@ -191,7 +191,7 @@ review.
 | H | Clipboard and HTML | `clipboard/`, `html/`, `dragdrop/` | 4.9, 4.13, 4.17, 6.7 to 6.13, 6.18 to 6.21, 5.12, 6.24 to 6.27, 6.30 to 6.32, 6.36 to 6.39, 6.41 to 6.44, 6.46, 7.39, 7.46, 7.47, 7.49, 7.53, 7.63 |
 | I | Markdown and block model | `ComposeTextEditorMarkdown/`, `richstyle/`, `state/TextEditorStateBlockExt.kt` | 5.6, 7.14 to 7.16, 7.43, 7.45, 7.52, 7.64, 7.67, 7.70 to 7.72, 7.79, 7.80 |
 | J | Find addon | `ComposeTextEditorFind/` | 7.17 to 7.19, 7.26, 7.29, 7.42, 7.68, 7.69 |
-| K | Spell check addon | `ComposeTextEditorSpellCheck/` | 7.20 to 7.22, 7.28, 7.30, 7.31, 7.34, 7.35, 7.38, 7.44, 7.50, 7.56, 7.61, 7.74, 7.76, 7.77 |
+| K | Spell check addon | `ComposeTextEditorSpellCheck/` | 7.20 to 7.22, 7.28, 7.30, 7.31, 7.34, 7.35, 7.38, 7.44, 7.50, 7.56, 7.61, 7.74, 7.76, 7.77, 7.81 |
 | L | Tests and CI | test sources, `.github/workflows/` | 0.1 to 0.3, 0.5 to 0.11, 4.1, 4.15, 7.62, 7.65 |
 | M | Accessibility and host API | semantics in `BasicTextEditor.kt`, `RichTextView.kt`, `state/rememberTextEditorState.kt` | 7.1 to 7.4, 7.13, 7.23 to 7.25, 7.32, 7.36, 7.51, 7.57, 7.59, 7.60, 7.66, 7.73, 7.75 |
 | N | Core layout and performance | `state/TextEditorState.kt` | 5.7, 7.8 to 7.12, 7.48 |
@@ -3829,7 +3829,7 @@ Shaping is one line per keystroke. These still scale with document length:
   the lines a replacement adds or removes (housekeeping). A deletion is still
   checked over the range it deleted, read in the text after it, to match what
   invalidation strips (7.76). Found 7.76 and 7.77.
-- [ ] **7.76 Invalidation reads a deletion's range in the text after it. S.**
+- [x] **7.76 Invalidation reads a deletion's range in the text after it. S.**
   [Opus] [Lane K] `SpellCheckState.invalidateSpellCheckSpans` strips the flags
   that intersect a `Delete`'s or `Replace`'s `range`, which addresses the text
   before the edit, from flags the core has already moved into the text after
@@ -3840,6 +3840,16 @@ Shaping is one line per keystroke. These still scale with document length:
   so the flags it stripped there stay off until a full check. Strip, and
   re-check, around the point the deletion closed up, and a replacement's new
   text, in the text after the edit.
+  Done: invalidation strips the flags over or touching what an edit wrote, or
+  the point a deletion closed up, read in the text after it, as diagnostics
+  already did; a flag on the word beside it goes too and the re-check puts it
+  back. The batch checks the same extent. That range past the last line did
+  not just go unchecked: `LineDiff` never moves a range past the document's
+  end, so `settlePartialCheck` spun forever on it; a partial check now cuts
+  its range to the document first. A word check replaces the flags of every
+  word it scanned, the nearest word beyond each end included
+  (`SpellCheckStateTest`, `ComputeAffectedRangesTest`, `SpellCheckE2eTest`).
+  Found 7.81.
 - [ ] **7.77 A batch's ranges are paired with the text at collection. C.**
   [Opus] [Lane K] `SpellCheckingTextEditor` reads `computedAgainst` when the
   debounced collector takes a batch, not when the batch ended. While an earlier
@@ -3847,6 +3857,15 @@ Shaping is one line per keystroke. These still scale with document length:
   edit made meanwhile (a later batch's) is already in the text it is paired
   with: `LineDiff` sees no change, so a line inserted above it puts the check a
   line off. Record the text with each batch as it closes.
+- [ ] **7.81 Invalidation reads a burst's edits in the text its later edits
+  left. C.** [Opus] [Lane K] Edits that commit before the collector runs (a
+  replace-all, whose replacements go last to first) reach
+  `invalidateSpellCheckSpans` one by one, each read in the text after the whole
+  burst rather than after itself. A replacement that adds lines before an
+  earlier-processed one moves that one's text, so its range strips flags
+  elsewhere, on lines no batch range re-checks, until a full check. Move each
+  edit's range through the edits after it, as `computeAffectedRanges` does,
+  once the burst is in. Found in 7.76.
 - [x] **7.21** [Opus] [Lane K] No ignore list or language API in
   `EditorSpellChecker`; add to dictionary exists only as a host menu extension
   (hammer-editor#861).

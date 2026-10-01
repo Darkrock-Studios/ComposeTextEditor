@@ -38,6 +38,7 @@ import com.darkrockstudios.texteditor.spellcheck.diagnostics.DiagnosticStyle
 import com.darkrockstudios.texteditor.spellcheck.diagnostics.TextDiagnosticsState
 import com.darkrockstudios.texteditor.spellcheck.utils.debounceUntilQuiescent
 import com.darkrockstudios.texteditor.spellcheck.utils.debounceUntilQuiescentWithBatch
+import com.darkrockstudios.texteditor.spellcheck.utils.endWhenInsertedAt
 import com.darkrockstudios.texteditor.state.SpanClickType
 import com.darkrockstudios.texteditor.state.TextEditOperation
 import com.darkrockstudios.texteditor.state.TextEditorState
@@ -381,16 +382,15 @@ private fun dpToPx(dp: Dp): Float {
  * edit addresses the text as it stood when it ran, so the ranges gathered before it are
  * moved by it before its own is merged in.
  *
- * A deletion is checked over the range it deleted, read in the text after it, since that
- * is what [SpellCheckState.invalidateSpellCheckSpans] strips the flags from.
+ * Each edit is checked over the text it wrote, or the point a deletion closed up, which
+ * is where [SpellCheckState.invalidateSpellCheckSpans] strips the flags.
  */
 internal fun computeAffectedRanges(operations: List<TextEditOperation>): List<TextEditorRange> {
 	val ranges = mutableListOf<TextEditorRange>()
 	for (op in operations) {
 		val change = op.textChange() ?: continue
 		for (i in ranges.indices) ranges[i] = change.move(ranges[i])
-		val checked = if (change.newEnd == change.start) TextEditorRange(change.start, change.end) else
-			TextEditorRange(change.start, change.newEnd)
+		val checked = TextEditorRange(change.start, change.newEnd)
 		val touching = ranges.filter { it.adjoins(checked) }
 		ranges.removeAll(touching)
 		ranges.add(touching.fold(checked) { acc, r -> acc.merge(r) })
@@ -418,13 +418,6 @@ private fun TextEditOperation.textChange(): TextChange? = when (this) {
 	is TextEditOperation.Delete -> TextChange(range.start, range.end, range.start)
 	is TextEditOperation.Replace -> TextChange(range.start, range.end, newText.text.endWhenInsertedAt(range.start))
 	else -> null
-}
-
-/** Where this text ends once inserted at [start], on the line its last line break leads to. */
-private fun String.endWhenInsertedAt(start: CharLineOffset): CharLineOffset {
-	val lastBreak = lastIndexOf('\n')
-	if (lastBreak < 0) return start.copy(char = start.char + length)
-	return CharLineOffset(start.line + count { it == '\n' }, length - lastBreak - 1)
 }
 
 /**
