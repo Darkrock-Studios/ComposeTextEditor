@@ -1103,6 +1103,41 @@ fixes what users feel every minute.
   there is no stylus handwriting (`View.setAutoHandwritingEnabled` and
   `EditorInfo.setStylusHandwritingEnabled`, API 33 and 35). Each needs a host
   hook or a design decision about what the editor does with the content.
+  Design, after Compose foundation 1.12's `BasicTextField`:
+  - Autofill: Compose's autofill manager enters a node only when its
+    semantics carry `onFillData`, and puts one in the structure it hands the
+    service only with a content type or data type. The editor publishes none,
+    so it is already out of autofill. `ContentDataType.None` would put it in
+    that structure, with the whole document as its value, on every request
+    its window makes, so the editor declares nothing, pinned by a test. No
+    opt-in: filling replaces the document, and a form field is
+    `BasicTextField`'s job.
+  - Keyboard content: `TextEditorState.keyboardContentReceiver` (androidMain):
+    the MIME types to advertise and a callback given the keyboard's
+    `InputContentInfo` (URI, description, link, grant), returning whether the
+    host took it. Unset, `EditorInfo` advertises no types and `commitContent`
+    refuses, as before. Set, the connection advertises its types; on a commit
+    flagged for a read grant the editor asks for the grant first (as Compose
+    and `InputConnectionCompat` do; a failed grant refuses), and releases it
+    when the host refuses. Setting or clearing it restarts input. Inserting
+    is the host's: an image block needs the host's `ImageProvider`.
+  - Stylus handwriting, API 34+ (Compose's floor; the call exists from 33):
+    an Android modifier on the editor, outside the touch code, watches the
+    initial pass for a stylus stroke that passes the handwriting slop before
+    the long press timeout, with Compose's bounds expansion and hover icon,
+    while the editor is editable, its keyboard is not for a password and the
+    IME offers handwriting. An unfocused editor takes focus with the caret
+    where the stroke began (as `EditText` does), the stroke is consumed, and
+    a replaying trigger calls `startStylusHandwriting` a frame into the input
+    session, as Compose's does. The IME commits what is written through the
+    connection, so behaviors, undo and the IME report see typing.
+    `EditorInfo.setStylusHandwritingEnabled` (API 35) matches.
+  - Handwriting gestures, API 34+: each gesture area is taken from the screen
+    into the editor's content and through each paragraph's
+    `getRangeForRect` with the gesture's granularity, as Compose maps it, and
+    the edit runs as the keyboard's own `setSelection` and `commitText`
+    would, in one batch. A gesture that finds no text commits its fallback
+    text.
 
 ## Phase 4: platform parity (parallel track)
 

@@ -311,6 +311,39 @@ the normal key path. Both are routed into the same
 The result: navigation, shortcuts, and printable characters resolve in one
 handler regardless of whether they originated from hardware or from the IME.
 
+### Beyond text: autofill, keyboard content, the stylus
+
+Each follows `BasicTextField` (roadmap 3.17).
+
+- **Autofill.** Compose's autofill manager enters a node only when its
+  semantics carry `onFillData`, and describes one to the service only when it
+  carries a content type or data type. The editor publishes none, so a
+  password manager never sees it. Declaring `ContentDataType.None` is not the
+  quieter choice: it puts the node, with the whole document as its value,
+  into every request the window makes.
+- **Keyboard content** (`commitContent`: GIFs, stickers) reaches the host's
+  `keyboardContentReceiver`. Only with one set does `EditorInfo` advertise
+  MIME types, so a keyboard offers nothing the host cannot take; without one
+  the connection refuses, as it always did. The editor asks for the read
+  grant a commit is flagged for before calling the host, as Compose does,
+  and releases it when the host refuses. The receiver's types are part of
+  what the flush compares for a restart, like the keyboard settings.
+- **Stylus handwriting** starts from an Android modifier on the editor that
+  watches the initial pass for a stylus stroke past the handwriting slop, as
+  Compose's `StylusHandwritingNode` does, kept out of the touch gesture code.
+  It focuses an unfocused editor with the caret where the stroke began and
+  fires a replaying trigger; the session collects it a frame after it starts
+  (the input method must be serving the view) and calls
+  `startStylusHandwriting`. The IME then writes through the connection like
+  any keyboard, so nothing downstream knows a pen was involved.
+- **Handwriting gestures** (select, delete, insert and the rest, API 34)
+  arrive as `performHandwritingGesture`. The connection maps each gesture's
+  screen areas into the editor's content (the view's screen location, the
+  canvas's place in the root, the scroll) and through each paragraph's
+  `getRangeForRect`, then edits as the keyboard's own `setSelection` and
+  `commitText` would, in one batch, so behaviors, undo and the expectation
+  treat it as a keyboard edit.
+
 ## Desktop
 
 Desktop establishes a real input-method session too: Compose attaches AWT
