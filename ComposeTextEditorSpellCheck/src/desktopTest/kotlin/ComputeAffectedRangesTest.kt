@@ -101,4 +101,26 @@ class ComputeAffectedRangesTest {
 			computeAffectedRanges(listOf(typed, replaced)).toSet(),
 		)
 	}
+
+	@Test
+	fun `a replace-all's edits, last to first, each reach where the earlier ones moved them`() {
+		fun replace(line: Int) = TextEditOperation.Replace(
+			range = TextEditorRange(CharLineOffset(line, 1), CharLineOffset(line, 2)),
+			newText = AnnotatedString("x\ny"),
+			oldText = AnnotatedString("a"),
+			cursorBefore = at,
+			cursorAfter = at,
+		)
+		val typed = CharLineOffset(7, 0)
+		val operations = listOf(replace(4), replace(2), replace(0), TextEditOperation.Insert(typed, AnnotatedString("z"), typed, typed))
+
+		assertEquals(
+			listOf(
+				TextEditorRange(CharLineOffset(0, 1), CharLineOffset(1, 1)),
+				TextEditorRange(CharLineOffset(3, 1), CharLineOffset(4, 1)),
+				TextEditorRange(CharLineOffset(6, 1), CharLineOffset(7, 2)),
+			),
+			computeAffectedRanges(operations).sortedBy { it.start },
+		)
+	}
 }

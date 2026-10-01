@@ -39,8 +39,11 @@ import com.darkrockstudios.texteditor.richstyle.writeLineBlocks
 import com.darkrockstudios.texteditor.utils.appendAnnotatedStrings
 import com.darkrockstudios.texteditor.utils.buildAnnotatedStringWithSpans
 import com.darkrockstudios.texteditor.utils.mergeAnnotatedStrings
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.onSubscription
 
 class TextEditManager(private val state: TextEditorState) {
 	private val spanManager = SpanManager()
@@ -53,6 +56,45 @@ class TextEditManager(private val state: TextEditorState) {
 		extraBufferCapacity = Int.MAX_VALUE,
 	)
 	val editOperations: SharedFlow<TextEditOperation> = _editOperations
+
+	/** How many operations [editOperations] has emitted. */
+	private var announced = 0L
+
+	/** How many it has emitted or will once their transaction commits. */
+	private var applied = 0L
+
+	/** See [TextEditorState.editOperationBursts]. */
+	val editOperationBursts: Flow<List<TextEditOperation>> = flow {
+		var taken = 0L
+		val burst = ArrayList<TextEditOperation>()
+		_editOperations.onSubscription { taken = announced }.collect { operation ->
+			taken++
+			burst += operation
+			if (taken >= applied) {
+				val landed = burst.toList()
+				burst.clear()
+				emit(landed)
+			}
+		}
+	}
+
+	/**
+	 * Emits [operation] on [editOperations] once the transaction commits. Counted as it is
+	 * applied, so a collector run as the first of a transaction's operations is emitted
+	 * knows the rest are coming.
+	 */
+	private fun announce(operation: TextEditOperation) {
+		applied++
+		state.onCommit {
+			announced++
+			_editOperations.tryEmit(operation)
+		}
+	}
+
+	/** Forgets the operations a transaction that threw will never emit. */
+	internal fun dropUnannounced() {
+		applied = announced
+	}
 
 	/** Whether edits are being recorded as typing; null lets the history infer it. */
 	private var typingOverride: Boolean? = null
@@ -237,7 +279,7 @@ class TextEditManager(private val state: TextEditorState) {
 			// is still staged, and a subscriber that serializes on the announcement
 			// would write the document as it stood before the edit. Queued before the
 			// continuation's own operation, so the two are announced in order.
-			if (!isDecoration) state.onCommit { _editOperations.tryEmit(operation) }
+			if (!isDecoration) announce(operation)
 
 			if (addToHistory) continueLineBlocks(operation)
 		}
@@ -1071,7 +1113,7 @@ class TextEditManager(private val state: TextEditorState) {
 		fun record(span: RichSpan, isAdd: Boolean) {
 			val operation = TextEditOperation.RichSpan(span.range, span.style, isAdd, cursorBefore = caret, cursorAfter = caret)
 			history.recordEdit(operation, OperationMetadata(), typing = false)
-			state.onCommit { _editOperations.tryEmit(operation) }
+			announce(operation)
 		}
 		(before - after).forEach { record(it, isAdd = false) }
 		recordLineBlocksSince(blocksBefore, caret)

@@ -122,6 +122,24 @@ class SpellCheckE2eTest {
 		}
 	}
 
+	@Test
+	fun `a burst's earlier edit clears no flag where its later edit moved other text`() {
+		val checker = CountingSpellChecker(correctWords = setOf("fine", "wonderful", "marvelous"))
+		spellCheckUiTest(spellChecker = checker, initialText = "fine\nfine teh\nfine wonderful") {
+			assertEquals(listOf("teh"), flaggedWords)
+
+			// Committed together, as a replace-all's, last to first.
+			state.textState.editGroup {
+				state.textState.replace(TextEditorRange(CharLineOffset(2, 5), CharLineOffset(2, 14)), "marvelous")
+				state.textState.replace(TextEditorRange(CharLineOffset(0, 4), CharLineOffset(0, 4)), "\nfine")
+			}
+			letSpellCheckSettle()
+
+			assertEquals("fine\nfine\nfine teh\nfine marvelous", state.textState.getAllText().text)
+			assertEquals(listOf("teh"), flaggedWords)
+		}
+	}
+
 	/** Holds the lookup of [word] until [release]; [delegate] answers every lookup. */
 	private class GatedWord(private val word: String, private val delegate: EditorSpellChecker) : EditorSpellChecker by delegate {
 		private val gate = CompletableDeferred<Unit>()

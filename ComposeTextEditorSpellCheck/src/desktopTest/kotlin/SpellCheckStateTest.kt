@@ -472,6 +472,30 @@ class SpellCheckStateTest {
 		assertEquals(listOf(1), remaining.map { it.range.start.line })
 	}
 
+	@Test
+	fun `a burst's earlier edit is read where its later edits moved it`() = runTest {
+		val textState = editorWithCounter(MeasureCounter())
+		val spellCheckState = SpellCheckState(textState, spellChecker)
+		textState.setText("aaa\nbbb\nccc\nddd")
+		for (line in 0..3) {
+			textState.addRichSpan(TextEditorRange(CharLineOffset(line, 0), CharLineOffset(line, 3)), SpellCheckStyle)
+		}
+
+		val operations = mutableListOf<TextEditOperation>()
+		val collector = launch { textState.editOperations.collect { operations += it } }
+		runCurrent()
+		// As a replace-all's, last to first: the second adds a line above the first
+		textState.replace(TextEditorRange(CharLineOffset(2, 1), CharLineOffset(2, 1)), "x")
+		textState.replace(TextEditorRange(CharLineOffset(0, 1), CharLineOffset(0, 1)), "x\ny")
+		runCurrent()
+		collector.cancel()
+
+		spellCheckState.invalidateSpellCheckSpans(operations)
+
+		val remaining = textState.richSpanManager.getAllRichSpans().filter { it.style is SpellCheckStyle }
+		assertEquals(listOf("bbb", "ddd"), remaining.map { textState.getStringInRange(it.range) })
+	}
+
 	/** [text] with a flag on each of [flagged], once [edit] has run and been invalidated. */
 	private fun TestScope.flagsAfter(text: String, flagged: List<String>, edit: (TextEditorState) -> Unit): List<String> {
 		textState.setText(text)

@@ -11,7 +11,6 @@ import com.darkrockstudios.texteditor.spellcheck.api.EditorSpellChecker.Scope
 import com.darkrockstudios.texteditor.spellcheck.api.Suggestion
 import com.darkrockstudios.texteditor.spellcheck.utils.LineDiff
 import com.darkrockstudios.texteditor.spellcheck.utils.applyCapitalizationStrategy
-import com.darkrockstudios.texteditor.spellcheck.utils.endWhenInsertedAt
 import com.darkrockstudios.texteditor.spellcheck.utils.replaceFlagged
 import com.darkrockstudios.texteditor.state.TextEditOperation
 import com.darkrockstudios.texteditor.state.TextEditorState
@@ -501,22 +500,24 @@ class SpellCheckState(
 	 *
 	 * The flags have already moved with the edit, so they are read in the text after it: those
 	 * over or touching the text it wrote, or the point a deletion closed up. A flag on a word
-	 * beside it goes too, and comes back with the re-check.
+	 * beside it goes too, and comes back with the re-check. Edits that have landed since
+	 * [operation] must be passed with it, through the overload taking a list.
 	 *
 	 * @param operation The [TextEditOperation] that mutated the document.
 	 */
 	fun invalidateSpellCheckSpans(operation: TextEditOperation) {
-		val written: TextEditorRange = when (operation) {
-			is TextEditOperation.Delete -> TextEditorRange(operation.range.start, operation.range.start)
-			is TextEditOperation.Insert -> TextEditorRange(operation.position, operation.text.text.endWhenInsertedAt(operation.position))
-			is TextEditOperation.Replace -> TextEditorRange(operation.range.start, operation.newText.text.endWhenInsertedAt(operation.range.start))
-			is TextEditOperation.StyleSpan,
-			is TextEditOperation.RichSpan,
-			is TextEditOperation.LineBlock -> return
-		}
+		invalidateSpellCheckSpans(listOf(operation))
+	}
 
-		val doomed = textState.getRichSpansInRange(written).filter { it.style is SpellCheckStyle }
-		if (doomed.isNotEmpty()) textState.updateRichSpans(remove = doomed, add = emptyList())
+	/**
+	 * Remove the spell-check decorations [operations] affected, edits that landed one after
+	 * another with no other since: each is read in the text after it, as moved by those after
+	 * it. See the overload for one edit.
+	 */
+	fun invalidateSpellCheckSpans(operations: List<TextEditOperation>) {
+		val doomed = computeAffectedRanges(operations)
+			.flatMapTo(LinkedHashSet()) { range -> textState.getRichSpansInRange(range).filter { it.style is SpellCheckStyle } }
+		if (doomed.isNotEmpty()) textState.updateRichSpans(remove = doomed.toList(), add = emptyList())
 	}
 
 	/**

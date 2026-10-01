@@ -144,10 +144,7 @@ fun SpellCheckingTextEditor(
 	}
 
 	LaunchedEffect(state) {
-		state.textState.editOperations
-			.collect { operation ->
-				state.invalidateSpellCheckSpans(operation)
-			}
+		state.textState.editOperationBursts.collect(state::invalidateSpellCheckSpans)
 	}
 
 	LaunchedEffect(state) {
@@ -391,17 +388,32 @@ private fun dpToPx(dp: Dp): Float {
  * is where [SpellCheckState.invalidateSpellCheckSpans] strips the flags.
  */
 internal fun computeAffectedRanges(operations: List<TextEditOperation>): List<TextEditorRange> {
+	// Each stored [lineShift] lines above where it stands: an edit on lines above every range
+	// (each of a replace-all's, which goes last to first) moves them all at once.
 	val ranges = mutableListOf<TextEditorRange>()
+	var lineShift = 0
+	var firstLine = Int.MAX_VALUE
 	for (op in operations) {
 		val change = op.textChange() ?: continue
-		for (i in ranges.indices) ranges[i] = change.move(ranges[i])
 		val checked = TextEditorRange(change.start, change.newEnd)
+		if (change.end.line < firstLine) {
+			lineShift += change.newEnd.line - change.end.line
+			ranges.add(checked.shifted(-lineShift))
+			firstLine = checked.start.line
+			continue
+		}
+		for (i in ranges.indices) ranges[i] = change.move(ranges[i].shifted(lineShift))
+		lineShift = 0
 		val touching = ranges.filter { it.adjoins(checked) }
 		ranges.removeAll(touching)
 		ranges.add(touching.fold(checked) { acc, r -> acc.merge(r) })
+		firstLine = ranges.minOf { it.start.line }
 	}
-	return ranges
+	return ranges.map { it.shifted(lineShift) }
 }
+
+private fun TextEditorRange.shifted(lines: Int): TextEditorRange =
+	if (lines == 0) this else TextEditorRange(start.copy(line = start.line + lines), end.copy(line = end.line + lines))
 
 /** An edit as the text from [start] to [end] replaced by text ending at [newEnd]. */
 private class TextChange(val start: CharLineOffset, val end: CharLineOffset, val newEnd: CharLineOffset) {

@@ -522,6 +522,7 @@ class TextEditorState private constructor(
 		editManager.history.beginGroup(selectionBefore)
 		val touchSelectionBefore = selector.isTouchSelection
 		var committed = false
+		var announced = false
 		try {
 			val result = block()
 			// Every publish passes through line-block normalization, so no caller
@@ -549,6 +550,7 @@ class TextEditorState private constructor(
 			val actions = pendingCommitActions.toList()
 			pendingCommitActions.clear()
 			actions.forEach { it() }
+			announced = true
 			return result
 		} finally {
 			// The throwing path discards everything staged: the draft, the relayout,
@@ -558,6 +560,7 @@ class TextEditorState private constructor(
 			pendingLayoutUpdate = null
 			pendingCursorScroll = false
 			pendingCommitActions.clear()
+			if (!announced) editManager.dropUnannounced()
 			if (!committed) {
 				untouchedBefore = Int.MAX_VALUE
 				untouchedAfter = Int.MAX_VALUE
@@ -1101,6 +1104,15 @@ class TextEditorState private constructor(
 	 * Collect this to observe the edit stream; decoration-only changes are excluded.
 	 */
 	val editOperations = editManager.editOperations
+
+	/**
+	 * [editOperations] as a collector catches up with them: each list holds, in order, the
+	 * operations applied since the collector took the last, so the text it reads then is the
+	 * one after the list's last. Several can land before a collector runs (a find
+	 * replace-all's), each addressing the text as it stood when it ran. Collect on the
+	 * dispatcher that edits the document.
+	 */
+	val editOperationBursts = editManager.editOperationBursts
 
 	/**
 	 * Everything this editor can be asked to do, keyed by action id, pre-loaded

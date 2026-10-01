@@ -191,7 +191,7 @@ review.
 | H | Clipboard and HTML | `clipboard/`, `html/`, `dragdrop/` | 4.9, 4.13, 4.17, 6.7 to 6.13, 6.18 to 6.21, 5.12, 6.24 to 6.27, 6.30 to 6.32, 6.36 to 6.39, 6.41 to 6.44, 6.46, 7.39, 7.46, 7.47, 7.49, 7.53, 7.63 |
 | I | Markdown and block model | `ComposeTextEditorMarkdown/`, `richstyle/`, `state/TextEditorStateBlockExt.kt` | 5.6, 7.14 to 7.16, 7.43, 7.45, 7.52, 7.64, 7.67, 7.70 to 7.72, 7.79, 7.80, 7.83 |
 | J | Find addon | `ComposeTextEditorFind/` | 7.17 to 7.19, 7.26, 7.29, 7.42, 7.68, 7.69 |
-| K | Spell check addon | `ComposeTextEditorSpellCheck/` | 7.20 to 7.22, 7.28, 7.30, 7.31, 7.34, 7.35, 7.38, 7.44, 7.50, 7.56, 7.61, 7.74, 7.76, 7.77, 7.81 |
+| K | Spell check addon | `ComposeTextEditorSpellCheck/` | 7.20 to 7.22, 7.28, 7.30, 7.31, 7.34, 7.35, 7.38, 7.44, 7.50, 7.56, 7.61, 7.74, 7.76, 7.77, 7.81, 7.84 |
 | L | Tests and CI | test sources, `.github/workflows/` | 0.1 to 0.3, 0.5 to 0.11, 4.1, 4.15, 7.62, 7.65 |
 | M | Accessibility and host API | semantics in `BasicTextEditor.kt`, `RichTextView.kt`, `state/rememberTextEditorState.kt` | 7.1 to 7.4, 7.13, 7.23 to 7.25, 7.32, 7.36, 7.51, 7.57, 7.59, 7.60, 7.66, 7.73, 7.75, 7.82 |
 | N | Core layout and performance | `state/TextEditorState.kt` | 5.7, 7.8 to 7.12, 7.48 |
@@ -3964,7 +3964,7 @@ Shaping is one line per keystroke. These still scale with document length:
   its own full check. A batch that waited is moved through the edits since by
   `LineDiff`, whose single band can widen it over the lines between them
   (`SpellCheckE2eTest`, `DebounceUntilQuiescentTest`).
-- [ ] **7.81 Invalidation reads a burst's edits in the text its later edits
+- [x] **7.81 Invalidation reads a burst's edits in the text its later edits
   left. C.** [Opus] [Lane K] Edits that commit before the collector runs (a
   replace-all, whose replacements go last to first) reach
   `invalidateSpellCheckSpans` one by one, each read in the text after the whole
@@ -3973,6 +3973,26 @@ Shaping is one line per keystroke. These still scale with document length:
   elsewhere, on lines no batch range re-checks, until a full check. Move each
   edit's range through the edits after it, as `computeAffectedRanges` does,
   once the burst is in. Found in 7.76.
+  Done: `TextEditorState.editOperationBursts` hands a collector the edits
+  that landed since it last ran, as a list: the editor counts each edit as it
+  is applied and as it is emitted, so a collector resumed as a group's first
+  edit is announced waits for the rest, and a group that throws is forgotten
+  (`EditOperationsDeliveryTest`). The spell check collector strips each
+  burst's flags through `invalidateSpellCheckSpans(List)`, which moves each
+  edit's range through the later ones (`computeAffectedRanges`, which moves
+  every range at once for an edit above them all, as each of a replace-all's
+  is: 5000 replacements went from about 170 ms to 2). A single edit keeps its
+  overload (`SpellCheckStateTest`, `ComputeAffectedRangesTest`,
+  `SpellCheckE2eTest`). Found 7.84.
+- [ ] **7.84 Diagnostics invalidation reads a burst's edits in the text after
+  it. S.** [Opus] [Lane K] `TextDiagnosticsState.invalidate` takes one edit
+  at a time off `editOperations`, as spell check did before 7.81, so a
+  replace-all whose later replacement adds lines above an earlier one strips
+  underlines off the wrong line until the refresh. Move it onto
+  `editOperationBursts` and `computeAffectedRanges`. A burst can also span a
+  `setText` or `setDocument`, which emits nothing, so its edits are read in the
+  new document, where both invalidations can strip flags the new document's
+  check has placed. Found in 7.81.
 - [x] **7.21** [Opus] [Lane K] No ignore list or language API in
   `EditorSpellChecker`; add to dictionary exists only as a host menu extension
   (hammer-editor#861).
