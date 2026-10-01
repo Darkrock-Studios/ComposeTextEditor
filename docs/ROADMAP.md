@@ -182,7 +182,7 @@ review.
 | Lane | Area | Main files | Items |
 | --- | --- | --- | --- |
 | A | Caret motion | `state/TextEditorCursorState.kt`, `state/TextEditorStateCursorExt.kt`, `state/WordSegmentationUtils.kt`, `input/TextEditorKeyCommandHandler.kt` | 1.1 to 1.7, 1.19, 2.3, 2.6, 7.5, 7.33 |
-| B | Pointer and touch | `textEditorPointerInputHandling.kt`, `state/TextEditorSelectionManager.kt`, `DrawSelectionHandles.kt` | 1.9, 1.12 to 1.16, 1.21 to 1.24, 3.1, 3.2, 3.4 to 3.8, 3.13, 3.15, 3.18, 4.23, 6.16 |
+| B | Pointer and touch | `textEditorPointerInputHandling.kt`, `state/TextEditorSelectionManager.kt`, `DrawSelectionHandles.kt` | 1.9, 1.12 to 1.16, 1.21 to 1.24, 3.1, 3.2, 3.4 to 3.8, 3.13, 3.15, 3.18, 3.19, 4.23, 6.16 |
 | C | Drawing and geometry | `Draw*.kt`, `cursor/`, `scrollbar/`, `state/TextEditorScrollState.kt`, hit testing | 1.8, 1.10, 1.11, 1.17, 1.18, 1.25, 3.3, 3.12, 3.16, 4.14, 7.6, 7.7, 7.27, 7.41, 7.78 |
 | D | Bindings, actions, menu | `input/KeyBindings.kt`, `input/EditorCommand.kt`, `input/BuiltinEditorActions.kt`, `contextmenu/` | 2.1, 2.2, 2.4, 2.5, 2.7 to 2.12, 4.8, 5.8, 7.58 |
 | E | Input sessions on desktop, iOS, web | `desktopMain`, `iosMain`, `wasmJsMain` under `input/` | 4.2 to 4.7, 4.10 to 4.12, 4.19, 4.21, 4.22, 4.24 to 4.26, 4.28, 4.29, 4.32, 4.33, 4.35, 4.37 to 4.40, 7.37 |
@@ -1124,6 +1124,25 @@ Constraints that shape the order:
   on the iOS simulator a long press on an unfocused empty editor shows Paste
   and Select All, a tap on the caret handle shows the menu, and a long press
   past a line's end puts the caret there with the menu.
+- [ ] **3.19 Selection handles look like the platform's. S.** [Opus] [Lane B]
+  [Mac work] `DrawSelectionHandles.kt` draws every handle the same way on every
+  platform: a 20 dp circle 19 dp below the row, joined to the row's top by a
+  2 dp stem. Native handles look different:
+  - **Android** (and `BasicTextField` everywhere, through Compose's
+    `SelectionHandle`): a teardrop about 22 dp, a disc with one square corner
+    at the anchor. The start handle hangs below and left of the selection's
+    start with its corner at top right; the end handle mirrors it; the caret
+    handle points straight up under the caret. No stem.
+  - **iOS:** the selection's start and end are 2 pt bars the row's height,
+    with a dot (about 10 pt) above the start bar and below the end bar. No
+    caret handle is drawn; the caret is moved by dragging it with the loupe.
+  - **Desktop touch and the web:** follow Android's, as `BasicTextField` does.
+  Draw each platform's shape from one `expect` (or a style hook a host can
+  replace), and move `handleCenter`, the hit areas, the touch toolbar's and
+  magnifier's anchors and the harness's `handleCenter` grab to the new
+  geometry. Check against `BasicTextField` side by side, with a golden
+  screenshot per shape. Requested by the owner: the current handles look
+  wrong next to native ones.
 - [x] **4.1 Compile and test iOS in CI.** [Opus] [Lane L] [Mac work] A macOS
   runner that builds the iOS targets and the iOS sample app. Without it every
   iOS change is a guess. Done: the `ios` job in `ci-build.yml`. There are no
