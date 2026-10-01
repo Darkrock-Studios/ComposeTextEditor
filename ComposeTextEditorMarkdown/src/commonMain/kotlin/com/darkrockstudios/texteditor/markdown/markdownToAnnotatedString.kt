@@ -399,8 +399,10 @@ private fun AnnotatedString.Builder.appendMarkdownNode(
 		}
 
 		MarkdownTokenTypes.WHITE_SPACE -> {
-			// Only keep newlines and spaces between words
-			if (nodeText.contains("\n") || startOffset > 0) {
+			// At the document's start a block's leading spaces drop, as CommonMark strips
+			// them (elsewhere they are kept, 7.76); a line of only whitespace, the file's
+			// own token, is kept wherever it is.
+			if (startOffset > 0 || node.parent?.type == MarkdownElementTypes.MARKDOWN_FILE) {
 				append(nodeText)
 			}
 		}

@@ -1,6 +1,7 @@
 package markdown
 
 import com.darkrockstudios.texteditor.markdown.MarkdownExtension
+import com.darkrockstudios.texteditor.markdown.toAnnotatedStringFromMarkdown
 import com.darkrockstudios.texteditor.state.TextEditorState
 import io.mockk.mockk
 import kotlinx.coroutines.test.TestScope
@@ -71,5 +72,32 @@ class WhitespaceOnlyBodyTest {
 		assertEquals("- a\n- [ ](https://example.com)", first)
 		markdown.importMarkdown(first)
 		assertEquals(first, markdown.exportAsMarkdown())
+	}
+
+	@Test
+	fun `a first line of spaces`() = roundTrip(" \nb")
+
+	@Test
+	fun `a first line of a tab`() = roundTrip("\t\nb")
+
+	@Test
+	fun `a lone line of spaces`() = roundTrip("  ")
+
+	@Test
+	fun `a line of spaces after a paragraph`() = roundTrip("a\n \nb")
+
+	@Test
+	fun `a quoted first line of spaces`() = roundTrip(">   \n> b")
+
+	@Test
+	fun `a first paragraph's leading spaces still drop`() {
+		val markdown = extension()
+		markdown.importMarkdown("   text")
+		assertEquals("text", markdown.editorState.blockLines())
+	}
+
+	@Test
+	fun `the converter keeps a first line of spaces`() {
+		assertEquals("  \nb", "  \nb".toAnnotatedStringFromMarkdown().text)
 	}
 }
