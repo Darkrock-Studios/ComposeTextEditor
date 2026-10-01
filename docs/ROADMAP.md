@@ -190,7 +190,7 @@ review.
 | H | Clipboard and HTML | `clipboard/`, `html/`, `dragdrop/` | 4.9, 4.13, 4.17, 6.7 to 6.13, 6.18 to 6.21, 5.12, 6.24 to 6.27, 6.30 to 6.32, 7.39, 7.46, 7.47, 7.49, 7.53, 7.63 |
 | I | Markdown and block model | `ComposeTextEditorMarkdown/`, `richstyle/`, `state/TextEditorStateBlockExt.kt` | 5.6, 7.14 to 7.16, 7.43, 7.45, 7.52, 7.64, 7.67, 7.70 to 7.72 |
 | J | Find addon | `ComposeTextEditorFind/` | 7.17 to 7.19, 7.26, 7.29, 7.42, 7.68, 7.69 |
-| K | Spell check addon | `ComposeTextEditorSpellCheck/` | 7.20 to 7.22, 7.28, 7.30, 7.31, 7.34, 7.35, 7.38, 7.44, 7.61, 7.74 |
+| K | Spell check addon | `ComposeTextEditorSpellCheck/` | 7.20 to 7.22, 7.28, 7.30, 7.31, 7.34, 7.35, 7.38, 7.44, 7.61, 7.74, 7.76, 7.77 |
 | L | Tests and CI | test sources, `.github/workflows/` | 0.1 to 0.3, 0.5 to 0.11, 4.1, 4.15, 7.62, 7.65 |
 | M | Accessibility and host API | semantics in `BasicTextEditor.kt`, `RichTextView.kt`, `state/rememberTextEditorState.kt` | 7.1 to 7.4, 7.13, 7.23 to 7.25, 7.32, 7.36, 7.59, 7.60, 7.66, 7.73, 7.75 |
 | N | Core layout and performance | `state/TextEditorState.kt` | 5.7, 7.8 to 7.12 |
@@ -3217,7 +3217,7 @@ Shaping is one line per keystroke. These still scale with document length:
   two characters late (`SentenceSegmentationTest`, `SegmentationCostTest`,
   `ComputeAffectedRangesTest`, and `SentenceModeSymSpellTest` against a real
   SymSpell checker). Found 7.74.
-- [ ] **7.74 A batch's earlier ranges are not moved by its later edits. C.**
+- [x] **7.74 A batch's earlier ranges are not moved by its later edits. C.**
   [Opus] [Lane K] `SpellCheckingTextEditor`'s `computeAffectedRanges` merges
   the ranges of one debounced batch of edits, each in the coordinates the
   text had when its edit ran, and never moves an earlier range by a later
@@ -3225,6 +3225,32 @@ Shaping is one line per keystroke. These still scale with document length:
   line above, then typing below within the debounce) leaves that range a line
   short of its text, so the check runs on the wrong line. Move each range by
   the edits after it, as `TextEditOperation.transformOffset` does.
+  Done: each insert, deletion or replacement moves the ranges gathered before
+  it, as text from one point to another replaced by text ending at a third
+  (lines added or removed, a joined line's tail), and a range inside what it
+  replaced closes up to it (`ComputeAffectedRangesTest`). Not through
+  `transformOffset`, which is internal to the core and whose `Replace` ignores
+  the lines a replacement adds or removes (housekeeping). A deletion is still
+  checked over the range it deleted, read in the text after it, to match what
+  invalidation strips (7.76). Found 7.76 and 7.77.
+- [ ] **7.76 Invalidation reads a deletion's range in the text after it. S.**
+  [Opus] [Lane K] `SpellCheckState.invalidateSpellCheckSpans` strips the flags
+  that intersect a `Delete`'s or `Replace`'s `range`, which addresses the text
+  before the edit, from flags the core has already moved into the text after
+  it. Deleting "xxxxxxxxxx " before "teh wrd" strips both flags, which lie where
+  the deleted text was; `computeAffectedRanges` re-checks that same extent to
+  make up for it (7.74). A multi-line deletion near the document's end leaves
+  a range past the last line, which `wordSegmentsInRange` answers with nothing,
+  so the flags it stripped there stay off until a full check. Strip, and
+  re-check, around the point the deletion closed up, and a replacement's new
+  text, in the text after the edit.
+- [ ] **7.77 A batch's ranges are paired with the text at collection. C.**
+  [Opus] [Lane K] `SpellCheckingTextEditor` reads `computedAgainst` when the
+  debounced collector takes a batch, not when the batch ended. While an earlier
+  batch's check holds `checkMutex`, the next batch waits in the buffer, and an
+  edit made meanwhile (a later batch's) is already in the text it is paired
+  with: `LineDiff` sees no change, so a line inserted above it puts the check a
+  line off. Record the text with each batch as it closes.
 - [x] **7.21** [Opus] [Lane K] No ignore list or language API in
   `EditorSpellChecker`; add to dictionary exists only as a host menu extension
   (hammer-editor#861).
@@ -3566,6 +3592,10 @@ Shaping is one line per keystroke. These still scale with document length:
   request no session wraps sees a forward delete, and a rich-span pass
   (spell check, find) re-runs none (`SkikoInputMethodRequestTest`).
   `skikoMain` is iOS code as well (Mac queue).
+- [ ] `TextEditOperation.Replace.transformOffset` ignores the lines a
+  replacement adds or removes: an offset on a later line keeps its line, and
+  one on the replaced range's last line, after it, moves by the length change
+  as if on one line. Only tests call `transformOffset` today. Found in 7.74.
 - [ ] The parallel lanes table leaves out items their lane tags name: 7.27
   (lane C), 7.48 (N), 7.50 and 7.56 (K), 7.51 and 7.57 (M); 7.57 is still
   open. Found reconciling lane I's 7.70 and 7.71.

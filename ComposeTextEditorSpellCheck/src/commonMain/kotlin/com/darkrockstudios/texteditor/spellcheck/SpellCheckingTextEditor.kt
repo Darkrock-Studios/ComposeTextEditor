@@ -376,26 +376,48 @@ private fun dpToPx(dp: Dp): Float {
 	return dp.value * density
 }
 
-/** The ranges the batch's [operations] left to check, as the text stands after them. */
+/**
+ * The ranges the batch's [operations] left to check, as the text stands after them. Each
+ * edit addresses the text as it stood when it ran, so the ranges gathered before it are
+ * moved by it before its own is merged in.
+ *
+ * A deletion is checked over the range it deleted, read in the text after it, since that
+ * is what [SpellCheckState.invalidateSpellCheckSpans] strips the flags from.
+ */
 internal fun computeAffectedRanges(operations: List<TextEditOperation>): List<TextEditorRange> {
-	return operations.fold(mutableListOf<TextEditorRange>()) { ranges, op ->
-		val opRange = when (op) {
-			is TextEditOperation.Insert -> TextEditorRange(op.position, op.text.text.endWhenInsertedAt(op.position))
-			is TextEditOperation.Delete -> op.range
-			is TextEditOperation.Replace ->
-				if (op.newText.isEmpty()) op.range
-				else TextEditorRange(op.range.start, op.newText.text.endWhenInsertedAt(op.range.start))
-
-			else -> null
-		}
-		opRange?.let { newRange ->
-			val touching = ranges.filter { it.adjoins(newRange) }
-			ranges.removeAll(touching)
-			val mergedRange = touching.fold(newRange) { acc, r -> acc.merge(r) }
-			ranges.add(mergedRange)
-		}
-		ranges
+	val ranges = mutableListOf<TextEditorRange>()
+	for (op in operations) {
+		val change = op.textChange() ?: continue
+		for (i in ranges.indices) ranges[i] = change.move(ranges[i])
+		val checked = if (change.newEnd == change.start) TextEditorRange(change.start, change.end) else
+			TextEditorRange(change.start, change.newEnd)
+		val touching = ranges.filter { it.adjoins(checked) }
+		ranges.removeAll(touching)
+		ranges.add(touching.fold(checked) { acc, r -> acc.merge(r) })
 	}
+	return ranges
+}
+
+/** An edit as the text from [start] to [end] replaced by text ending at [newEnd]. */
+private class TextChange(val start: CharLineOffset, val end: CharLineOffset, val newEnd: CharLineOffset) {
+	/** [range], in the text before the change, in the text after it. */
+	fun move(range: TextEditorRange): TextEditorRange =
+		TextEditorRange(move(range.start, inside = start), move(range.end, inside = newEnd))
+
+	/** Text the change replaced goes to [inside]. */
+	private fun move(offset: CharLineOffset, inside: CharLineOffset): CharLineOffset = when {
+		offset <= start -> offset
+		offset < end -> inside
+		offset.line == end.line -> CharLineOffset(newEnd.line, newEnd.char + offset.char - end.char)
+		else -> offset.copy(line = offset.line + newEnd.line - end.line)
+	}
+}
+
+private fun TextEditOperation.textChange(): TextChange? = when (this) {
+	is TextEditOperation.Insert -> TextChange(position, position, text.text.endWhenInsertedAt(position))
+	is TextEditOperation.Delete -> TextChange(range.start, range.end, range.start)
+	is TextEditOperation.Replace -> TextChange(range.start, range.end, newText.text.endWhenInsertedAt(range.start))
+	else -> null
 }
 
 /** Where this text ends once inserted at [start], on the line its last line break leads to. */
