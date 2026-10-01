@@ -67,6 +67,7 @@ class HtmlExtension(
 			headerLevels = headerLevels,
 			formats = formats,
 			styles = styles,
+			retiredStyles = editorState.retiredRichTextStyles,
 		)
 	}
 
@@ -160,7 +161,8 @@ internal fun headerLevelsOf(spans: Set<RichSpan>): Map<Int, Int> =
 /**
  * Writes [lines] as an HTML fragment, taking each line's block structure from
  * [blocks] by its [HtmlLine.docLine]. Shared by whole-document export and by the
- * clipboard, so a copied selection carries the same markup a save would.
+ * clipboard, so a copied selection carries the same markup a save would. A span
+ * carrying one of [retiredStyles]' styles writes as that style's markup.
  */
 internal fun renderHtmlFragment(
 	lines: List<HtmlLine>,
@@ -168,9 +170,11 @@ internal fun renderHtmlFragment(
 	headerLevels: Map<Int, Int>,
 	formats: Map<Int, ParagraphFormatSpanStyle>,
 	styles: RichTextStyles,
+	retiredStyles: List<RichTextStyles>,
 ): String {
 	val writer = HtmlWriter()
 	val containers = HtmlContainers(blocks, formats)
+	val retired = RetiredStyles(styles, retiredStyles)
 	lines.forEach { line ->
 		writer.openContainers(containers.around(line.docLine))
 		writer.appendLine(
@@ -184,6 +188,7 @@ internal fun renderHtmlFragment(
 				isWholeLine = line.isWholeLine,
 				links = line.links,
 				styles = styles,
+				retired = retired,
 			),
 			inCodeFence = blocks.has(line.docLine, CodeFence),
 		)
@@ -256,6 +261,7 @@ private fun lineHtml(
 	isWholeLine: Boolean,
 	links: List<HtmlLink>,
 	styles: RichTextStyles,
+	retired: RetiredStyles,
 ): String {
 	// Fenced lines are literal code: running them through `toHtml` would see the
 	// baked-in monospace as an inline code run and wrap every line in `<code>`.
@@ -272,7 +278,7 @@ private fun lineHtml(
 	val heading = when {
 		isRule || image != null -> null
 		headerLevel != null -> HtmlTag.entries[headerLevel - 1]
-		isWholeLine -> line.uniformHeadingTag(styles)
+		isWholeLine -> line.uniformHeadingTag(styles, retired)
 		else -> null
 	}
 	val content = when {
@@ -282,7 +288,7 @@ private fun lineHtml(
 
 		heading != null -> "<${heading.tag}${format.styleAttribute()}>" +
 			"${AnnotatedString(line.text).toHtml(styles, links)}</${heading.tag}>"
-		else -> line.toHtml(styles, links)
+		else -> line.toHtml(styles, links, retired)
 	}
 
 	return when {

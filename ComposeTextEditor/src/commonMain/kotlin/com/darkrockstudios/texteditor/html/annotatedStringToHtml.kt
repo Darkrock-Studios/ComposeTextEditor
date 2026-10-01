@@ -21,12 +21,14 @@ private data class HtmlRun(val tags: List<HtmlTag>, val link: String?)
 /**
  * [toHtml] with [links] over this text written as `<a href>`. A link whose
  * destination [sanitizeLinkUrl] refuses is written as its text alone. Over a
- * link, spans of exactly the configured link style are left out: the anchor is
- * what carries that look, while formatting of the link's own still shows.
+ * link, spans of exactly the configured link style (or a [retired] one) are left
+ * out: the anchor is what carries that look, while formatting of the link's own
+ * still shows.
  */
 internal fun AnnotatedString.toHtml(
 	styles: RichTextStyles,
 	links: List<HtmlLink>,
+	retired: RetiredStyles = RetiredStyles(styles, emptyList()),
 ): String {
 	if (text.isEmpty()) return ""
 
@@ -39,7 +41,7 @@ internal fun AnnotatedString.toHtml(
 			linkAt[i] = url
 		}
 	}
-	val resolved = resolveSpanStyles(except = styles.linkStyle, over = inLink)
+	val resolved = resolveSpanStyles(retired, overLink = inLink)
 	val runCache = HashMap<Pair<SpanStyle, String?>, HtmlRun>()
 	val runs = Array(text.length) { index ->
 		runCache.getOrPut(resolved[index] to linkAt[index]) {
@@ -132,17 +134,18 @@ private fun AnnotatedString.readsBackAsWritten(start: Int, end: Int, runs: Array
  * over a narrower one that turned bold back off.
  */
 private fun AnnotatedString.resolveSpanStyles(
-	except: SpanStyle? = null,
-	over: BooleanArray? = null,
+	retired: RetiredStyles,
+	overLink: BooleanArray? = null,
 ): Array<SpanStyle> {
 	val resolved = Array(text.length) { SpanStyle() }
 	spanStyles.forEach { range ->
 		val start = range.start.coerceAtLeast(0)
 		val end = range.end.coerceAtMost(text.length)
-		val skippable = over != null && range.item == except
+		val skippable = overLink != null && retired.isLinkStyle(range.item)
+		val style = retired.asCurrent(range.item)
 		for (i in start until end) {
-			if (skippable && over!![i]) continue
-			resolved[i] = resolved[i].merge(range.item)
+			if (skippable && overLink!![i]) continue
+			resolved[i] = resolved[i].merge(style)
 		}
 	}
 	return resolved
@@ -161,9 +164,9 @@ private fun AnnotatedString.resolveSpanStyles(
  * more often than it is a bold paragraph — and refusing it would make the
  * default h4 unwritable.
  */
-internal fun AnnotatedString.uniformHeadingTag(config: RichTextStyles): HtmlTag? {
+internal fun AnnotatedString.uniformHeadingTag(config: RichTextStyles, retired: RetiredStyles): HtmlTag? {
 	if (text.isEmpty()) return null
-	val resolved = resolveSpanStyles()
+	val resolved = resolveSpanStyles(retired)
 	val style = resolved[0]
 	if (resolved.any { it != style }) return null
 	return style.headingTagBySize(config)

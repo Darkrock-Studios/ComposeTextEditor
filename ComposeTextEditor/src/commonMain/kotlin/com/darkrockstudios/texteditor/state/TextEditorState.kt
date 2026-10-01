@@ -166,25 +166,28 @@ class TextEditorState(
 	var richTextStyles: RichTextStyles = RichTextStyles.DEFAULT
 		set(value) {
 			val previous = field
+			// Retired first, so an export on another thread that sees the new styles
+			// sees the old ones retired.
+			if (previous != value) retiredStyles = retiredStyles.filter { it != value && it != previous } + previous
 			field = value
 			richTextStylesSet = true
-			if (previous != value) {
-				retiredStyles.remove(value)
-				if (previous !in retiredStyles) retiredStyles += previous
-				rebakeHeaderLines(previous, value)
-			}
+			if (previous != value) rebakeHeaderLines(previous, value)
 			// The typing style is derived from this as well as from the text, so a
 			// swap invalidates it even though the document did not change.
 			cursor.refreshStyles()
 		}
 
-	private val retiredStyles = mutableListOf<RichTextStyles>()
+	// Replaced, never mutated, so an export on another thread reads one whole list.
+	@Volatile
+	private var retiredStyles: List<RichTextStyles> = emptyList()
 
 	/**
-	 * The style configurations this editor was switched away from, each once, oldest
-	 * first, the current one excluded. A span still carrying one of their styles (a
-	 * document is not rewritten on a theme change, so undo keeps matching) is that
-	 * style's marker to a serializer, not the text's own colour or size.
+	 * The style configurations this editor was switched away from, each once, in the
+	 * order they were last switched away from (the most recent last), the current one
+	 * excluded. A span still carrying one of their styles (a document is not rewritten
+	 * on a theme change, so undo keeps matching) is that style's marker to a serializer,
+	 * not the text's own colour or size; a style several of them share is read as the
+	 * most recent one's.
 	 */
 	val retiredRichTextStyles: List<RichTextStyles> get() = retiredStyles
 

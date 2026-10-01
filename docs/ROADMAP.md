@@ -2595,12 +2595,23 @@ Shaping is one line per keystroke. These still scale with document length:
   fixture notation over `applyDocumentBlocks` and the snapshot would let core's
   tests stand on core alone; worth doing if the dependency proves a burden
   (an IDE import cycle, or a markdown change failing core's suite).
-- [ ] **7.63 HTML export ignores retired styles. S.** [Opus] [Lane H] The
+- [x] **7.63 HTML export ignores retired styles. S.** [Opus] [Lane H] The
   markdown exporter writes a span still carrying a retired configuration's
   bold or link style as its marker (`TextEditorState.retiredRichTextStyles`);
   `html/HtmlTag.kt` matches the current styles alone, so after a theme change
   a copy or an HTML export of older text writes a configured colour or size
   where markdown writes `<strong>`. Read the retired styles there too.
+  Done: HTML writes no colour or size, so what was lost was a dark theme's
+  highlight (no `<mark>` after a switch to light) and a retired link style's
+  look written inside its anchor (`<u>`). Export and copy now read a span
+  carrying a retired style, and none of the current ones, as the current
+  style in that role (`html/HtmlTag.kt`, `RetiredStyles`), with markdown's
+  roles and order; a style several retired configurations share is read as
+  the most recent one's, in markdown too (`html/RetiredStylesHtmlTest.kt`).
+  The retired list is replaced rather than mutated, so an export on another
+  thread reads it whole. `AnnotatedString.toHtml(styles)` and
+  `ClipboardHelper.setText` without markup have no state and read the
+  current styles alone.
 
 ### Find and replace addon
 

@@ -56,5 +56,6 @@ internal fun TextEditorState.selectionAsHtml(range: TextEditorRange): String {
 		headerLevels = headerLevelsOf(spans),
 		formats = content.paragraphFormats(coveredLines),
 		styles = richTextStyles,
+		retiredStyles = retiredRichTextStyles,
 	)
 }

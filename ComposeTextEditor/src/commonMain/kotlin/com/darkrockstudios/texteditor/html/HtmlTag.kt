@@ -1,6 +1,7 @@
 package com.darkrockstudios.texteditor.html
 
 import androidx.compose.ui.graphics.isSpecified
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
@@ -90,4 +91,53 @@ internal fun HtmlTag.spanStyle(config: RichTextStyles): SpanStyle = when (this) 
 	HtmlTag.STRIKE -> config.strikethroughStyle
 	HtmlTag.UNDERLINE -> config.underlineStyle
 	HtmlTag.MARK -> config.highlightStyle
+}
+
+/**
+ * Each configured style a retired one stands in for, in the order a style equal to
+ * several is read as the first, as markdown export reads them. A heading line's style is
+ * rebaked when the styles change, so headings are not among them.
+ */
+private val CONFIGURED_STYLES: List<(RichTextStyles) -> SpanStyle> = listOf(
+	{ it.boldStyle },
+	{ it.italicStyle },
+	{ it.codeStyle },
+	{ it.strikethroughStyle },
+	{ it.underlineStyle },
+	{ it.highlightStyle },
+	{ it.defaultTextStyle },
+	{ it.linkStyle },
+	{ it.blockquoteStyle },
+)
+
+/**
+ * Reads a span carrying a style of one of [retired] (and of none of [styles]) as
+ * [styles]' style in that place, so it writes as the markup it stood for rather than as
+ * the look the old configuration gave it. The most recently retired configuration wins.
+ */
+internal class RetiredStyles(
+	private val styles: RichTextStyles,
+	retired: List<RichTextStyles>,
+) {
+	private val newestFirst = retired.asReversed()
+	private val current = if (retired.isEmpty()) emptySet() else CONFIGURED_STYLES.mapTo(HashSet()) { it(styles) }
+	private val retiredLinkStyles = retired.mapTo(HashSet()) { it.linkStyle }
+	private val read = HashMap<SpanStyle, SpanStyle>()
+
+	/**
+	 * Whether [style] is the link style, or a retired one no current style shares: over a
+	 * link, the anchor carries that look.
+	 */
+	fun isLinkStyle(style: SpanStyle): Boolean =
+		style == styles.linkStyle || (style in retiredLinkStyles && style !in current)
+
+	fun asCurrent(style: SpanStyle): SpanStyle {
+		if (newestFirst.isEmpty() || style in current) return style
+		return read.getOrPut(style) {
+			newestFirst.forEach { old ->
+				CONFIGURED_STYLES.forEach { role -> if (role(old) == style) return@getOrPut role(styles) }
+			}
+			style
+		}
+	}
 }

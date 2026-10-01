@@ -17,7 +17,9 @@ import androidx.compose.ui.unit.sp
  * A configured style is matched by equality, so a document styled under one
  * configuration and exported under another writes its spans as their colour
  * or size rather than as bold or a link; assign the styles before loading
- * content, and change them through the state, which rebakes the headings.
+ * content, and change them through the state, which rebakes the headings and
+ * keeps the old styles for the exporters to read
+ * ([retiredRichTextStyles][com.darkrockstudios.texteditor.state.TextEditorState.retiredRichTextStyles]).
  *
  * [defaultTextStyle] is the body text: the importers lay it over every
  * paragraph, and text typed where the document carries no style takes it.
