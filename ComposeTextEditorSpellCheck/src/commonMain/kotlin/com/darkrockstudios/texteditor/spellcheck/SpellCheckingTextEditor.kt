@@ -73,8 +73,9 @@ private val DefaultContentPadding = PaddingValues(start = 8.dp)
  * @param readOnly Shows the caret for navigation and selection but takes no edits; see
  *   [BasicTextEditor]. The menu on a flagged span offers Ignore, Add to dictionary and
  *   [spellCheckMenuItems], but no corrections or fixes.
- * @param lineLimits Fills the height given, or grows with the text between a minimum and
- *   maximum number of lines; see [BasicTextEditor].
+ * @param lineLimits Fills the height given, grows with the text between a minimum and
+ *   maximum number of lines, or keeps it to one row that scrolls sideways; see
+ *   [BasicTextEditor].
  * @param autoFocus Whether the editor requests focus on first composition.
  * @param style The [TextEditorStyle] controlling appearance.
  * @param contextMenuStrings Localized strings for the built-in context menu.

@@ -129,6 +129,9 @@ with a sideways scroll as with a vertical one.
 - The horizontal scroll is not saved with the state, unlike the first visible
   line.
 - `RichTextView` always wraps.
+- Scroll 0 is the content's left edge, so a right-to-left line wider than the
+  viewport shows its end until the caret goes to its start; `BasicTextField`'s
+  right-to-left single line shows its start.
 - A visible line is drawn whole, so a very long line costs all its glyphs each
   frame (Skia clips them).
 - Compose's `Constraints` cannot hold a width past 262,142 pixels, so a line

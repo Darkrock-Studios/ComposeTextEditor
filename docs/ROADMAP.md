@@ -3592,7 +3592,9 @@ iOS Safari; browser tests run in CI (met: the `browser` job, 4.15).
     the skiko text origin subtracts the sideways scroll, the touch toolbar moves
     with it, and the floating cursor's and the semantics' whole-document layouts
     are measured unwrapped (`softwrap/SoftWrapPlatformTest`, `SemanticsLayoutTest`).
-  - `SingleLine` scrolls sideways: not started.
+  - `SingleLine` scrolls sideways: done. A single-line editor counts as one with
+    wrapping off whatever its `softWrap`, so it stays one row tall and follows the
+    caret sideways, with no scrollbar (`LineLimitsE2eTest`).
   - The sample app's switch: not started.
 
 ### Right-to-left and bidirectional text
