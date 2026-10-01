@@ -856,8 +856,11 @@ class TextEditorState(
 	/** The action key's default, supplied by the composed editor, which can move focus. */
 	internal var defaultImeAction: ((ImeAction) -> Unit)? = null
 
-	internal fun performImeAction(action: ImeAction) {
-		(onImeAction ?: defaultImeAction)?.invoke(action)
+	/** Runs the action key's handler; false when there is none to run. */
+	internal fun performImeAction(action: ImeAction): Boolean {
+		val handler = onImeAction ?: defaultImeAction ?: return false
+		handler(action)
+		return true
 	}
 
 	/** The action key the keyboard shows, which a single line's Enter presses too. */

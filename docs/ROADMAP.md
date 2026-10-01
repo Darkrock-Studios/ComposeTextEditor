@@ -2982,11 +2982,16 @@ Shaping is one line per keystroke. These still scale with document length:
   would not round trip). A selection of the item's text is kept. Tab over
   several lines treats each line as Tab alone does (`NestedListE2eTest`,
   `TabE2eTest`; `docs/design/editor-actions.md`, "Tab").
-- [ ] **7.59** [Opus] [Lane M] The semantics offer `onImeAction` from
+- [x] **7.59** [Opus] [Lane M] The semantics offer `onImeAction` from
   `KeyboardSettings.imeAction` alone, so a single-line editor's default
   action key, Done since 7.40, is not offered to accessibility services and
   tests as a single-line `BasicTextField`'s is. Read
   `TextEditorState.effectiveImeAction()` instead.
+  Done: the semantics read `effectiveImeAction()`, the action key the
+  keyboard shows, so a single line offers Done and a multi-line editor's
+  default Enter still offers nothing (`SingleLineEnterE2eTest`). The action
+  reports failure when there is no handler to run (an unfocused editor with no
+  host `onImeAction`).
 - [x] **7.60 `setText` leaves the caret past the new text. R.** [Opus]
   [Lane M] `TextEditorState.setText` (both overloads) replaces the lines
   without coercing the caret, unlike `setDocument`: type "hello", call
@@ -2998,6 +3003,14 @@ Shaping is one line per keystroke. These still scale with document length:
   Done: both `setText` overloads reset as `setDocument` does (one helper): the
   selection and composing region are dropped and the cursor is coerced into
   the new text.
+- [ ] **7.64 The single-line action key is the state's, not the editor's. C.**
+  [Opus] [Lane M] `TextEditorState.isSingleLine` is true while any composed
+  editor shows the state with `EditorLineLimits.SingleLine`, and
+  `effectiveImeAction()` reads it, so a multi-line editor showing the same
+  state beside a single-line one offers Done in its semantics (7.59), and its
+  Enter presses the action key instead of starting a line. Pass each editor's
+  own line limit to the semantics, the key handler and the Android
+  `EditorInfo`, or document one state per line limit. Found in 7.59's review.
 
 ## Housekeeping
 
