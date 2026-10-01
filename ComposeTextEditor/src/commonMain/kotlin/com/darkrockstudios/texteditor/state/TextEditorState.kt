@@ -2309,7 +2309,15 @@ class TextEditorState(
 			val covered = richSpanManager.getSpansInRange(TextEditorRange(startPos, endPos)).any {
 				it.style == preserved.style && it.range.start <= startPos && it.range.end >= endPos
 			}
-			if (!covered) addRichSpan(startPos, endPos, preserved.style)
+			if (covered) return@forEach
+			// A line has one paragraph format: a copied one replaces the one the paste
+			// left on its line.
+			if (preserved.style.boundToParagraph) {
+				richSpanManager.getRichSpansStartingOn(startPos.line)
+					.filter { it.style::class == preserved.style::class && it.style != preserved.style }
+					.forEach { removeRichSpan(it) }
+			}
+			addRichSpan(startPos, endPos, preserved.style)
 		}
 	}
 

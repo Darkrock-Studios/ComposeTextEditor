@@ -1980,13 +1980,21 @@ iOS Safari; browser tests run in CI.
   seed 246 is in the markdown fixed seeds; seeds 1 to 1500 of that test keep
   every paragraph run whole). `RowListCostTest`'s span removal now reshapes the
   one line that loses its indent.
-- [ ] **6.34 Undoing a multi-line insert at a paragraph's start drops its
+- [x] **6.34 Undoing a multi-line insert at a paragraph's start drops its
   format. R.** [Opus] [Lane G] A paragraph format (`ParagraphFormatSpanStyle`)
   stays on the first line of a multi-line insert at its paragraph's start
   (`RichSpanManager.handleInsert`), so "target" centred, with "new\nx" pasted
   at its start, leaves the format on "new" and none on "xtarget"; undo deletes
   the first line with its format and "target" comes back plain. Enter at the
   same place keeps the format on both lines. Found in 6.5.
+  Done: lines landing at a paragraph's start, inserted or replacing text from
+  there (an empty paragraph's, or all of it), leave its format on the first of
+  them and on the paragraph's own text after the last, as Enter does; lines
+  between stay plain, as a paste inside a paragraph leaves them. Undo gives the
+  format back. A copied paragraph format pasted onto a line replaces the format
+  there, so a line keeps one (`state/ParagraphFormatTest.kt`; the HTML paste
+  test in `e2e/HtmlPasteUndoE2eTest.kt` now has "xtarget" keep its centring and
+  undo bring it back).
 - [ ] **6.35 A join leaves a heading's or fence's text style over part of a
   line. S.** [Opus] [Lane G] A heading or code fence bakes its `textStyle` (the
   heading's size, the fence's monospace) into the line's text. A join keeps one
