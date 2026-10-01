@@ -187,7 +187,7 @@ review.
 | E | Input sessions on desktop, iOS, web | `desktopMain`, `iosMain`, `wasmJsMain` under `input/` | 4.2 to 4.7, 4.10 to 4.12, 4.19, 4.21, 4.22, 4.24 to 4.26, 4.28, 4.29, 4.32, 4.33, 4.35, 4.37, 7.37 |
 | F | Android input | `androidMain` | 0.4, 0.12, 3.9 to 3.11, 3.14, 3.17, 4.16, 4.18, 4.20, 4.27, 4.30, 4.31, 4.34, 4.36, 7.40 |
 | G | Edit pipeline and undo | `state/TextEditManager.kt`, `state/TextEditHistory.kt`, `state/EditBehavior.kt`, `input/ImeEditLogic.kt` | 1.20, 5.1 to 5.5, 5.9 to 5.11, 5.13, 6.1 to 6.6, 6.14, 6.15, 6.17, 6.22, 6.23, 6.28, 6.29, 6.33 to 6.35, 7.54, 7.55 |
-| H | Clipboard and HTML | `clipboard/`, `html/`, `dragdrop/` | 4.9, 4.13, 4.17, 6.7 to 6.13, 6.18 to 6.21, 5.12, 6.24 to 6.27, 6.30 to 6.32, 7.39, 7.46, 7.47, 7.49, 7.53, 7.63 |
+| H | Clipboard and HTML | `clipboard/`, `html/`, `dragdrop/` | 4.9, 4.13, 4.17, 6.7 to 6.13, 6.18 to 6.21, 5.12, 6.24 to 6.27, 6.30 to 6.32, 6.36, 6.37, 7.39, 7.46, 7.47, 7.49, 7.53, 7.63 |
 | I | Markdown and block model | `ComposeTextEditorMarkdown/`, `richstyle/`, `state/TextEditorStateBlockExt.kt` | 5.6, 7.14 to 7.16, 7.43, 7.45, 7.52, 7.64, 7.67, 7.70 to 7.72 |
 | J | Find addon | `ComposeTextEditorFind/` | 7.17 to 7.19, 7.26, 7.29, 7.42, 7.68, 7.69 |
 | K | Spell check addon | `ComposeTextEditorSpellCheck/` | 7.20 to 7.22, 7.28, 7.30, 7.31, 7.34, 7.35, 7.38, 7.44, 7.50, 7.56, 7.61, 7.74, 7.76, 7.77 |
@@ -1463,8 +1463,36 @@ iOS Safari; browser tests run in CI.
   and Mozc on Linux and with Gboard Japanese on Android (hammer-editor#930).
   ComposeTextEditor PR 102 reworked IME edits afterwards; nobody has confirmed
   the result.
-- [ ] **4.17 Wayland paste. U.** [Opus] [Lane H] External paste fails on
+- [ ] **4.17 Wayland paste. U.** [Opus] [Human] [Lane H] External paste fails on
   Wayland with KDE; internal paste works (hammer-editor#921).
+  Investigated 2026-10-01, not reproduced: this machine runs GNOME on Wayland,
+  where the owner already found paste working. Desktop paste reads Compose's
+  `Clipboard`, whose desktop implementation is AWT's
+  `Toolkit.getSystemClipboard()`; there is no other clipboard API to fall back
+  to, and a second AWT request for the text flavor alone goes through the
+  same format list and conversion, so it would only repeat a failed read.
+  Hammer bundles Temurin 21 (its Flatpak manifest and release workflow), so
+  AWT is always `XToolkit` and the window is an XWayland one, whatever the
+  report's commenter says about a native Wayland window (only the JetBrains
+  Runtime's `WLToolkit` makes one). An in-process paste never leaves the JVM,
+  since AWT hands back its own contents, which is why internal paste works; an
+  external one goes through KWin's Wayland to X11 clipboard bridge. That bridge
+  had a bug that matches the report: after a while it stops updating the X11
+  clipboard ("target STRING not available") until the owner changes, fixed in
+  Plasma 6.2 (KDE bug 490577). Nothing in the editor's read is at fault on that
+  path, so no code change. Found on the way: 6.36, which is Windows only and
+  leaves this path as it was, and 6.37. To verify, on KDE Plasma
+  under Wayland: note the Plasma version (`plasmashell --version`) and run the
+  desktop sample app (`./gradlew :sampleApp:run`). Copy a sentence in a
+  Wayland-native application (Kate, or Firefox) and press Ctrl+V in the
+  editor; then copy in an XWayland application (`xterm`, or the sample app
+  itself) and paste into Kate; then, after ten minutes of use, copy again in
+  Kate and paste in the editor. Each paste should land. If one fails, run
+  `xclip -o -selection clipboard` (an X11 client, like the app) right after
+  the copy: if that prints nothing either, the bridge is at fault, not the
+  editor, and a Plasma before 6.2 is the likely cause. If `xclip` prints the
+  text and the editor still pastes nothing, report that with the `java
+  -version` of the runtime Hammer ships.
 - [ ] **4.18 ANR on Galaxy S21 Ultra. U.** [Opus] [Human] [Lane F] hammer-editor#545,
   stale.
 - [x] **4.19 Desktop candidate window. C.** [Opus] [Lane E] `lastCursorMetrics`
@@ -2475,6 +2503,23 @@ iOS Safari; browser tests run in CI.
   exact styling otherwise (`clipboard/RefusedLinkLookTest.kt`). A link look
   that is not the receiver's link style (a source editor with other styles, a
   retired style) is not recognised.
+- [x] **6.36 A busy clipboard throws into paste. S.** [Opus] [Lane H] Compose's
+  desktop `Clipboard.getClipEntry` calls AWT's `getContents` without a catch,
+  and AWT throws `IllegalStateException` while another application holds the
+  system clipboard open (Windows); the paste coroutine then failed with it.
+  Found investigating 4.17. Done: the desktop clipboard reads
+  (`ClipboardHelper` and the HTML read) take a clipboard that cannot be read as
+  empty and say so on stderr (`ClipboardReadFailureTest`).
+- [ ] **6.37 Desktop paste reads the clipboard three times. S.** [Opus] [Lane H]
+  `pasteClipboard` (`input/BuiltinEditorActions.kt`) reads the text, then the
+  HTML (`readClipboardHtml`), then the copy id, each through its own
+  `getClipEntry`, on the UI thread. AWT's `getContents` fetches every format
+  the source offers each time, and on X11 each transfer can wait on the owner
+  up to AWT's data-transfer timeout, freezing the window. The reads can also
+  disagree: a clipboard that changes, or turns busy (6.36), between them pastes
+  text without its blocks. Read the content once per paste, off the UI thread
+  as the primary selection's read is (4.23), and hand it to the three readers,
+  as Android's `pasteClip` does. Found reviewing 6.36.
 
 ## Phase 7: reach
 

@@ -3,6 +3,7 @@ package com.darkrockstudios.texteditor.clipboard
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.Clipboard
+import androidx.compose.ui.platform.asAwtTransferable
 import androidx.compose.ui.text.AnnotatedString
 import com.darkrockstudios.texteditor.html.DEFAULT_LINK_SCHEMES
 import com.darkrockstudios.texteditor.html.toAnnotatedStringFromHtml
@@ -21,13 +22,10 @@ actual object ClipboardHelper {
 		clipboard: Clipboard,
 		styles: RichTextStyles,
 		allowedLinkSchemes: Set<String>,
-	): AnnotatedString? {
-		val transferable = clipboard.getClipEntry()?.nativeClipEntry as? Transferable ?: return null
-		return transferable.readStyledText(styles, allowedLinkSchemes)
-	}
+	): AnnotatedString? = clipboard.readTransferable()?.readStyledText(styles, allowedLinkSchemes)
 
 	actual suspend fun getPlainText(clipboard: Clipboard): String? {
-		val transferable = clipboard.getClipEntry()?.nativeClipEntry as? Transferable ?: return null
+		val transferable = clipboard.readTransferable() ?: return null
 		return transferable.readPlainText()?.text?.takeIf { it.isNotEmpty() }
 			?: transferable.readHtml(RichTextStyles.DEFAULT)?.text
 	}
@@ -50,7 +48,7 @@ actual object ClipboardHelper {
 	}
 
 	actual suspend fun readCopyId(clipboard: Clipboard): Long? {
-		val transferable = clipboard.getClipEntry()?.nativeClipEntry as? Transferable ?: return null
+		val transferable = clipboard.readTransferable() ?: return null
 		return runCatching {
 			if (!transferable.isDataFlavorSupported(copyIdFlavor)) return null
 			transferable.getTransferData(copyIdFlavor) as? Long
@@ -61,6 +59,20 @@ actual object ClipboardHelper {
 }
 
 private val annotatedStringFlavor = DataFlavor(AnnotatedString::class.java, "AnnotatedString")
+
+/**
+ * The clipboard's content, or null when it cannot be read. AWT throws while another
+ * application holds the system clipboard open (Windows), and Compose passes that on.
+ */
+@OptIn(ExperimentalComposeUiApi::class)
+internal suspend fun Clipboard.readTransferable(): Transferable? = try {
+	getClipEntry()?.asAwtTransferable
+} catch (e: CancellationException) {
+	throw e
+} catch (e: Exception) {
+	System.err.println("ComposeTextEditor: could not read the clipboard: $e")
+	null
+}
 
 /**
  * The styled text on offer: an in-process copy exactly, else the text of the HTML
