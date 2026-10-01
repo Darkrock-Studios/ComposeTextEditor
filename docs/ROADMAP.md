@@ -1991,7 +1991,7 @@ iOS Safari; browser tests run in CI.
   kept marker wants. UI fuzz seed 27 (`FUZZ_SEED=27` on core's
   `EditorFuzzE2eTest` or the markdown module's `MarkdownUiFuzzFixpointTest`)
   throws the same from a Backspace's `handleMultiLineDelete` at op 43, after a
-  block toggle and an Enter; found in 7.65's seed sweep, likely the same cause.
+  block toggle and an Enter; found in 7.65's seed sweep.
   Done: every publish now gives each changed line exactly the paragraph styles
   its markers want, each over the whole line (`repairBlockParagraphs`, after
   `normalizeLineBlocks`); a paragraph style no block uses passes through, and a
@@ -2000,9 +2000,9 @@ iOS Safari; browser tests run in CI.
   its text, a host adding or removing a block span on the public span API. Also
   fixed by it: emptying a quote line dropped its indent while the marker
   stayed, so text typed there again had none (`state/JoinParagraphStyleTest.kt`;
-  seed 246 is in the markdown fixed seeds, and UI fuzz seed 27, whose Backspace
-  threw the same overlap, in `EditorFuzzE2eTest`'s; seeds 1 to 1500 of the
-  markdown test keep every paragraph run whole). `RowListCostTest`'s span removal now reshapes the
+  seed 246 is in the markdown fixed seeds, and UI fuzz seed 27 in
+  `EditorFuzzE2eTest`'s and `MarkdownUiFuzzFixpointTest`'s; seeds 1 to 1500 of
+  the markdown state test keep every paragraph run whole). `RowListCostTest`'s span removal now reshapes the
   one line that loses its indent.
 - [x] **6.34 Undoing a multi-line insert at a paragraph's start drops its
   format. R.** [Opus] [Lane G] A paragraph format (`ParagraphFormatSpanStyle`)
