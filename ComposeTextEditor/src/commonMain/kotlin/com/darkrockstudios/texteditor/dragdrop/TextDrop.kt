@@ -11,6 +11,7 @@ import com.darkrockstudios.texteditor.html.parseHtmlDocument
 import com.darkrockstudios.texteditor.state.PreservedRichSpan
 import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.endWhenInsertedAt
+import com.darkrockstudios.texteditor.state.removeBlockLooksOffTheirBlocks
 import com.darkrockstudios.texteditor.state.removeLinkLookOutsideLinks
 import com.darkrockstudios.texteditor.state.screenInput
 
@@ -67,10 +68,12 @@ internal fun TextEditorState.dropText(
 			at
 		}
 		val placed = TextEditorRange(insertAt, normalized.endWhenInsertedAt(insertAt))
+		// Judged once a move's source is gone, against the blocks the lines end up with.
+		removeBlockLooksOffTheirBlocks(placed.start, normalized)
 		selector.updateSelection(placed.start, placed.end)
 		placed
 	}
-	// A move is not new text, so it keeps the formatting it had.
+	// A move is not new text, so the behaviors do not see it as a paste.
 	if (moveFrom == null) pasteLanded(normalized.text, dropped)
 	return dropped
 }

@@ -187,7 +187,7 @@ review.
 | D | Bindings, actions, menu | `input/KeyBindings.kt`, `input/EditorCommand.kt`, `input/BuiltinEditorActions.kt`, `contextmenu/` | 2.1, 2.2, 2.4, 2.5, 2.7 to 2.12, 4.8, 5.8, 7.58 |
 | E | Input sessions on desktop, iOS, web | `desktopMain`, `iosMain`, `wasmJsMain` under `input/` | 4.2 to 4.7, 4.10 to 4.12, 4.19, 4.21, 4.22, 4.24 to 4.26, 4.28, 4.29, 4.32, 4.33, 4.35, 4.37 to 4.40, 7.37 |
 | F | Android input | `androidMain` | 0.4, 0.12, 3.9 to 3.11, 3.14, 3.17, 4.16, 4.18, 4.20, 4.27, 4.30, 4.31, 4.34, 4.36, 7.40 |
-| G | Edit pipeline and undo | `state/TextEditManager.kt`, `state/TextEditHistory.kt`, `state/EditBehavior.kt`, `input/ImeEditLogic.kt` | 1.20, 5.1 to 5.5, 5.9 to 5.11, 5.13 to 5.17, 6.1 to 6.6, 6.14, 6.15, 6.17, 6.22, 6.23, 6.28, 6.29, 6.33 to 6.35, 6.40, 7.54, 7.55 |
+| G | Edit pipeline and undo | `state/TextEditManager.kt`, `state/TextEditHistory.kt`, `state/EditBehavior.kt`, `input/ImeEditLogic.kt` | 1.20, 5.1 to 5.5, 5.9 to 5.11, 5.13 to 5.17, 6.1 to 6.6, 6.14, 6.15, 6.17, 6.22, 6.23, 6.28, 6.29, 6.33 to 6.35, 6.40, 6.45, 7.54, 7.55 |
 | H | Clipboard and HTML | `clipboard/`, `html/`, `dragdrop/` | 4.9, 4.13, 4.17, 6.7 to 6.13, 6.18 to 6.21, 5.12, 6.24 to 6.27, 6.30 to 6.32, 6.36 to 6.39, 6.41 to 6.44, 7.39, 7.46, 7.47, 7.49, 7.53, 7.63 |
 | I | Markdown and block model | `ComposeTextEditorMarkdown/`, `richstyle/`, `state/TextEditorStateBlockExt.kt` | 5.6, 7.14 to 7.16, 7.43, 7.45, 7.52, 7.64, 7.67, 7.70 to 7.72, 7.79, 7.80 |
 | J | Find addon | `ComposeTextEditorFind/` | 7.17 to 7.19, 7.26, 7.29, 7.42, 7.68, 7.69 |
@@ -2841,12 +2841,25 @@ iOS Safari; browser tests run in CI (met: the `browser` job, 4.15).
   so `<h2>Title</h2>` pasted there lands as body text. A copied block should
   take a line only where the paste covers it whole, as Word gives text pasted
   without its paragraph mark the destination's style. Found in 6.38's review.
-- [ ] **6.41 Part of a heading dropped into another line keeps the heading's
+- [x] **6.41 Part of a heading dropped into another line keeps the heading's
   look. S.** [Opus] [Lane H] A drop (`dragdrop/TextDrop.kt` `insertAt`) takes
   the link look off text no link covers, as a paste does, but not a block's
   look off text landing on a line that does not bake it, which a paste does
   since 6.38 (`removeBlockLooksOffTheirBlocks`): dragging "itl" out of an h2
   "Title" into a plain line leaves it at the h2 look. Found in 6.38's review.
+  Done: a drop takes them off too, inside its undo step, once its markup has
+  restored any whole lines' blocks and a move's source is gone, so against the
+  blocks the lines end up with; a move back into its own heading keeps the
+  look (`dragdrop/DroppedBlockLookTest.kt`). Found: 6.45.
+- [ ] **6.45 Styled text inserted outside paste and drop keeps a block's look.
+  S.** [Opus] [Lane G] `TextEditorState.insertTypedString(AnnotatedString)`
+  (`state/TextEditorStateExt.kt`) and the accessibility insert
+  (`insertAtCursor` in `EditorSemantics.kt`) put an `AnnotatedString` in
+  through `insertStringAtCursor` with neither `removeLinkLookOutsideLinks` nor
+  `removeBlockLooksOffTheirBlocks`, so text carrying a heading's look lands at
+  that look on a plain line, as paste did before 6.38. Strip the looks where
+  the edit manager inserts styled text, as `resolveInheritedStyle` does for a
+  multi-line replace, so every path is covered.
 
 ## Phase 7: reach
 
@@ -4095,6 +4108,11 @@ Shaping is one line per keystroke. These still scale with document length:
 
 ## Housekeeping
 
+- [ ] Paste (`landPaste` in `input/BuiltinEditorActions.kt`) and drop
+  (`insertAt` in `dragdrop/TextDrop.kt`) each settle the text they land by
+  hand: rich spans, `applyHtmlPasteBlocks`, `removeLinkLookOutsideLinks`,
+  `removeBlockLooksOffTheirBlocks`. 6.41 came from the two drifting apart;
+  share one helper. Found in 6.41.
 - [ ] On each Compose Multiplatform upgrade, recheck the web drag workarounds
   in `dragdrop/PlatformTextDrag.wasmJs.kt` (6.20) against
   `WebDragAndDropManager`: the `dragenter` sent after a refused `dragstart`

@@ -125,10 +125,11 @@ internal fun TextEditorState.removeLinkLookOutsideLinks(at: CharLineOffset, text
 /**
  * Takes off the parts of [text], just placed at [at], each block look (a heading's, a
  * fence's monospace) that the line the part landed on does not bake: text copied from
- * part of a heading, or pasted inside another line, brings the look without the marker.
- * The markers of the line it lands on decide its look, and publishing bakes theirs over
- * all of it, as for text a join moves (6.35). A span equal to a block look goes too:
- * pasted text cannot tell the user's own from one a block baked.
+ * part of a heading, or pasted or dropped inside another line, brings the look without
+ * the marker. The markers of the line it lands on decide its look, and publishing bakes
+ * theirs over all of it, as for text a join moves (6.35). A span equal to a block look
+ * goes too: pasted text cannot tell the user's own from one a block baked, and a drop,
+ * even of this editor's own text, takes the same rule.
  */
 internal fun TextEditorState.removeBlockLooksOffTheirBlocks(at: CharLineOffset, text: AnnotatedString) {
 	val everyLook = everyBakedLook
