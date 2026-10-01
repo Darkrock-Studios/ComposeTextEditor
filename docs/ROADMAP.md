@@ -4270,10 +4270,16 @@ Shaping is one line per keystroke. These still scale with document length:
   request no session wraps sees a forward delete, and a rich-span pass
   (spell check, find) re-runs none (`SkikoInputMethodRequestTest`).
   `skikoMain` is iOS code as well (Mac queue).
-- [ ] `TextEditOperation.Replace.transformOffset` ignores the lines a
+- [x] `TextEditOperation.Replace.transformOffset` ignores the lines a
   replacement adds or removes: an offset on a later line keeps its line, and
   one on the replaced range's last line, after it, moves by the length change
   as if on one line. Only tests call `transformOffset` today. Found in 7.74.
+  Fixed rather than removed, since every operation's mapping is the first
+  layer of `docs/design/edit-operation-offset-transforms.md`: positions from
+  the range's end on follow the new text's end, by its lines, as after an
+  insert, and one inside keeps its count of characters from the range's start,
+  up to the new text's end (`TransformOffsetTest`). The replace span handler
+  keeps its own mapping, as the design doc notes.
 - [x] The parallel lanes table leaves out items their lane tags name: 7.27
   (lane C), 7.48 (N), 7.50 and 7.56 (K), 7.51 and 7.57 (M); 7.57 is still
   open. Found reconciling lane I's 7.70 and 7.71. Now each row lists every

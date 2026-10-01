@@ -27,9 +27,10 @@ arithmetic with no knowledge of what the position means:
   below R shift up by the number of deleted lines. A position on R's end line
   past the range slides left onto the join point. A position inside R collapses
   to R's start.
-- **`Replace`**: delete-then-insert semantics; positions after the range shift
-  by the length delta, positions inside keep their offset relative to the range
-  start.
+- **`Replace`**: delete-then-insert semantics; positions from the range's end
+  on follow the new text's end, as after an insert, on later lines shifting by
+  the lines it adds or removes, and positions inside keep their count of
+  characters from the range start, up to the new text's end.
 - **`StyleSpan`, `RichSpan`, `LineBlock`**: identity. These change styling and
   decorations, never text length, so no position moves.
 
