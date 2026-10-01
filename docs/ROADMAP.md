@@ -2900,11 +2900,30 @@ Shaping is one line per keystroke. These still scale with document length:
   the current one. The standalone `AnnotatedString.toMarkdown`, which has no
   blocks, still reads a run at a heading's size as that heading, as
   `AnnotatedString.toHtml` does (`HeaderSemanticsTest`; `docs/MIGRATION.md`).
-- [ ] **7.67 An empty quoted list item at the end is not a fixpoint. R.** [Opus]
+- [x] **7.67 An empty quoted list item at the end is not a fixpoint. R.** [Opus]
   [Lane I] Fuzz seed 2482 (`FUZZ_SEED=2482`, the markdown module's
   `MarkdownFuzzFixpointTest`) ends with an empty quoted list item after a
   fence; the first export's last line `> - ` ends in one more space than the
   second export's. Found in 6.28's seed sweep.
+  Done: the item held a space, which CommonMark drops after a marker (any list
+  item or heading of only whitespace, anywhere). Export writes such a body as
+  indent entities (`> - &nbsp;`), and import reads an item's or heading's
+  entities back as the whitespace, where a plain line of only entities stays
+  an empty line; a foreign `-   ` is still an empty item
+  (`WhitespaceOnlyBodyTest`, seed 2482 in `MarkdownFuzzFixpointTest`;
+  `docs/design/line-blocks.md`, "Leading indent"). Found: 7.70, 7.71.
+- [ ] **7.70 A whitespace-only first line loses its whitespace. R.** [Opus]
+  [Lane I] A document whose first line is spaces alone (`setText(" \nb")`)
+  exports as ` ` and imports as an empty line, so the second export differs.
+  The parser drops a `WHITE_SPACE` token at offset 0
+  (`markdownToAnnotatedString.kt`, `appendMarkdownNode`); the same line
+  anywhere else keeps its spaces.
+- [ ] **7.71 A blank line of a tab gains a blank line on import. R.** [Opus]
+  [Lane I] A line of only a tab or four spaces after a paragraph (`a`, `\t`)
+  or a list item exports as `a`, a blank line, `\t`; import keeps the
+  separator because `isParagraphSeparator` reads the next line as indented
+  code, which a blank line never starts, so the second export has two blank
+  lines.
 - [ ] **7.72 Text joined onto a heading keeps the other heading's look. S.**
   [Opus] [Lane I] Deleting the line break between an h2 "Title" and an h3 "Sub"
   leaves "Sub" baked with the h3 look inside the h2 line, so the editor shows it

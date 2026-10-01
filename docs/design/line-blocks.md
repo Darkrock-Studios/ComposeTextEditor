@@ -242,15 +242,18 @@ paragraph is every line, and a paragraph drops up to three. Export writes
 each leading space as `&nbsp;` and each leading tab as `&emsp;` (a `&#9;`
 is a tab, which HTML collapses), in a line's body after its block prefixes,
 whenever the line holds more than whitespace; a line of only whitespace is a
-blank line, as before. Renderers show both entities as space, and an entity
-is not whitespace to the block parser, so what follows it is not at a
-line's start: it needs none of the line-start escapes (`&nbsp;&nbsp;- item`
-is prose), and a delimiter after it flanks as it does after punctuation
-(the entity's `;`), so `*"quoted"*` still opens emphasis there and a lone
-`*` is escaped where it could close one. The entities are always the
-line's first characters: a style or link over an indent starts after it,
-and one ending in the next line's indent closes at the end of the line
-before, so an indent's own styling (an underline under it) is not kept.
+blank line, as before, except in a list item or heading, which writes a
+body of only spaces and tabs as entities (`- &nbsp;`), since CommonMark
+reads a marker followed by whitespace alone as an empty item. Renderers
+show both entities as space, and an entity is not whitespace to the block
+parser, so what follows it is not at a line's start: it needs none of the
+line-start escapes (`&nbsp;&nbsp;- item` is prose), and a delimiter after
+it flanks as it does after punctuation (the entity's `;`), so
+`*"quoted"*` still opens emphasis there and a lone `*` is escaped where it
+could close one. The entities are always the line's first characters: a
+style or link over an indent starts after it, and one ending in the next
+line's indent closes at the end of the line before, so an indent's own
+styling (an underline under it) is not kept.
 
 Import reads a line's leading run of space and tab entities, after any
 block prefixes, back as the spaces and tabs: `&nbsp;`, `&#160;`, `&#32;`
@@ -262,10 +265,10 @@ moves and no character the file holds is mistaken for one. An entity
 elsewhere on a line stays literal text, as before, a typed `&nbsp;` is
 escaped (`\&nbsp;`) by the 7.14 rules, and fenced lines keep their
 whitespace as written. A foreign line of only such entities (a spacer)
-reads as an empty line. Rejected: a non-breaking space
-character, which is invisible in the file and reads back as content rather
-than indent; and no form (stripping the indent), which loses text on every
-save.
+reads as an empty line, unless it is a list item or heading, which holds
+the entities' whitespace. Rejected: a non-breaking space character, which
+is invisible in the file and reads back as content rather than indent; and
+no form (stripping the indent), which loses text on every save.
 
 ### Fence languages
 
