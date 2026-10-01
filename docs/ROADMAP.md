@@ -185,14 +185,14 @@ review.
 | C | Drawing and geometry | `Draw*.kt`, `cursor/`, `scrollbar/`, `state/TextEditorScrollState.kt`, hit testing | 1.8, 1.10, 1.11, 1.17, 1.18, 3.3, 3.12, 3.16, 4.14, 7.6, 7.7, 7.41 |
 | D | Bindings, actions, menu | `input/KeyBindings.kt`, `input/EditorCommand.kt`, `input/BuiltinEditorActions.kt`, `contextmenu/` | 2.1, 2.2, 2.4, 2.5, 2.7 to 2.12, 4.8, 5.8, 7.58 |
 | E | Input sessions on desktop, iOS, web | `desktopMain`, `iosMain`, `wasmJsMain` under `input/` | 4.2 to 4.7, 4.10 to 4.12, 4.19, 4.21, 4.22, 4.24 to 4.26, 4.28, 4.29, 4.32, 4.33, 4.35, 7.37 |
-| F | Android input | `androidMain` | 0.4, 3.9 to 3.11, 3.14, 3.17, 4.16, 4.18, 4.20, 4.27, 4.30, 4.31, 4.34, 7.40 |
+| F | Android input | `androidMain` | 0.4, 3.9 to 3.11, 3.14, 3.17, 4.16, 4.18, 4.20, 4.27, 4.30, 4.31, 4.34, 4.36, 7.40 |
 | G | Edit pipeline and undo | `state/TextEditManager.kt`, `state/TextEditHistory.kt`, `state/EditBehavior.kt`, `input/ImeEditLogic.kt` | 1.20, 5.1 to 5.5, 5.9 to 5.11, 6.1 to 6.6, 6.14, 6.15, 6.17, 6.22, 6.23, 6.28, 6.29 |
 | H | Clipboard and HTML | `clipboard/`, `html/`, `dragdrop/` | 4.9, 4.13, 4.17, 6.7 to 6.13, 6.18 to 6.21, 5.12, 6.24 to 6.27, 6.30 to 6.32, 7.39, 7.46, 7.47, 7.49, 7.53, 7.63 |
 | I | Markdown and block model | `ComposeTextEditorMarkdown/`, `richstyle/`, `state/TextEditorStateBlockExt.kt` | 5.6, 7.14 to 7.16, 7.43, 7.45, 7.52, 7.64 |
 | J | Find addon | `ComposeTextEditorFind/` | 7.17 to 7.19, 7.26, 7.29, 7.42 |
 | K | Spell check addon | `ComposeTextEditorSpellCheck/` | 7.20 to 7.22, 7.28, 7.30, 7.31, 7.34, 7.35, 7.38, 7.44, 7.61 |
-| L | Tests and CI | test sources, `.github/workflows/` | 0.1 to 0.3, 0.5 to 0.10, 4.1, 4.15, 7.62 |
-| M | Accessibility and host API | semantics in `BasicTextEditor.kt`, `RichTextView.kt`, `state/rememberTextEditorState.kt` | 7.1 to 7.4, 7.13, 7.23 to 7.25, 7.32, 7.36, 7.59, 7.60 |
+| L | Tests and CI | test sources, `.github/workflows/` | 0.1 to 0.3, 0.5 to 0.11, 4.1, 4.15, 7.62 |
+| M | Accessibility and host API | semantics in `BasicTextEditor.kt`, `RichTextView.kt`, `state/rememberTextEditorState.kt` | 7.1 to 7.4, 7.13, 7.23 to 7.25, 7.32, 7.36, 7.59, 7.60, 7.64 |
 | N | Core layout and performance | `state/TextEditorState.kt` | 5.7, 7.8 to 7.12 |
 
 Housekeeping items are [Opus] and fit any lane that is already in the file.
@@ -1522,7 +1522,7 @@ iOS Safari; browser tests run in CI.
   A floating keyboard or stylus pass is a person's (QA plan, "Android
   keyboards"). The marker's visibility flags inside a scrolling parent are
   4.34.
-- [ ] **4.34 The cursor anchor ignores clipping by the views around the
+- [x] **4.34 The cursor anchor ignores clipping by the views around the
   editor. C.** [Opus] [Lane F] `imeCaretInRoot` decides the marker's
   visibility flags from the canvas's `boundsInRoot`, which knows only
   Compose's own clipping. A `ComposeView` inside an Android `ScrollView` whose
@@ -1530,6 +1530,27 @@ iOS Safari; browser tests run in CI.
   visible, so floating candidates point at a caret no one can see. Clip by
   the view's `getGlobalVisibleRect` as well, as `TextView` does through
   `isPositionVisible`.
+  Done: the anchor clips the caret by the view's `getLocalVisibleRect` too
+  (`imeCaretInRoot`'s `rootVisible`, `ImeCaretTest`). Checked on an emulator
+  (API 36) with a temporary instrumented test: a `ComposeView` 2400 px tall in
+  a `ScrollView`, the caret on its first row, the IME monitoring. Scrolled
+  3000 px down, the anchor resent at the draw (the view's screen position
+  changed) with both flags invisible, and scrolled back with both visible;
+  without the clip both stayed visible. A parent that clips the view without
+  moving it on screen (a resize) waits for the next change, as `TextView`'s
+  position check does. Under a scaled ancestor the rect is in screen units,
+  as the anchor's translate-only matrix already is. The test also found 4.36.
+- [ ] **4.36 The keyboard cover assumes the Compose root ends at the window's
+  bottom. R.** [Opus] [Lane F] `updateKeyboardCover` measures the keyboard
+  from the bottom of the root (`keyboardCover`'s `rootHeight`), which is the
+  window's only when the root fills it. A `ComposeView` 600 px tall inside an
+  Android `ScrollView`, with the keyboard up, measured its whole canvas as
+  covered (found in 4.34's emulator check), so the anchor marked a caret on
+  screen invisible and the editor scrolls the caret toward a strip it thinks
+  is clear. Its doc names dialogs and popups; an embedded `ComposeView` is
+  the same. Measure from the root's position in the window on Android (the
+  view's `getLocationInWindow` and the window's height), or from the
+  platform's own inset of the view.
 - [x] **4.27 Android resyncs by restarting input. C.** [Opus] [Lane F]
   `requestImeResync` becomes `restartInput`, which clears the keyboard's
   suggestions and shift state. That suits a whole-document replace, not a

@@ -3,6 +3,7 @@
 package input
 
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
@@ -98,5 +99,29 @@ class ImeCaretTest {
 
 		assertNotNull(covered)
 		assertFalse(covered.topVisible || covered.bottomVisible)
+	}
+
+	/** A scrolling parent view clips the root itself, which Compose's bounds do not know (4.34). */
+	@Test
+	fun `a caret outside the part of the root the views around it show is hidden`() = editorUiTest(
+		initialText = AnnotatedString("line 1\nline 2"),
+	) {
+		test.runOnIdle { state.cursor.updatePosition(CharLineOffset(1, 0)) }
+		waitForIdle()
+		val caret = assertNotNull(test.runOnIdle { state.imeCaretInRoot() })
+		assertTrue(caret.topVisible && caret.bottomVisible)
+
+		fun visibleIn(rect: Rect) = assertNotNull(test.runOnIdle { state.imeCaretInRoot(rect) })
+
+		val all = visibleIn(Rect(0f, 0f, 400f, 300f))
+		assertTrue(all.topVisible && all.bottomVisible)
+		val scrolledOff = visibleIn(Rect(0f, 0f, 400f, caret.top - 1f))
+		assertFalse(scrolledOff.topVisible || scrolledOff.bottomVisible)
+		val half = visibleIn(Rect(0f, (caret.top + caret.bottom) / 2, 400f, 300f))
+		assertFalse(half.topVisible)
+		assertTrue(half.bottomVisible)
+		val none = visibleIn(Rect.Zero)
+		assertFalse(none.topVisible || none.bottomVisible)
+		assertEquals(caret.copy(topVisible = false, bottomVisible = false), none, "only the flags change")
 	}
 }
