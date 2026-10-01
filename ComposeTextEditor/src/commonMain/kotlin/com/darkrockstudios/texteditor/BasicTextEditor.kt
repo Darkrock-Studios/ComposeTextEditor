@@ -64,6 +64,8 @@ import com.darkrockstudios.texteditor.input.LocalKeyBindings
 import com.darkrockstudios.texteditor.input.TextEditorInputModifierElement
 import com.darkrockstudios.texteditor.input.TextInputRequester
 import com.darkrockstudios.texteditor.input.pastePlainText
+import com.darkrockstudios.texteditor.input.placeCaretForHandwriting
+import com.darkrockstudios.texteditor.input.stylusHandwriting
 import com.darkrockstudios.texteditor.richstyle.BlockSpanStyle
 import com.darkrockstudios.texteditor.state.LayoutUpdate
 import com.darkrockstudios.texteditor.state.LocalImeInsets
@@ -240,6 +242,15 @@ fun BasicTextEditor(
 			state, enabled, editable, singleLine, inputRequester::editor, focusRequester, contextMenuActions, contentDescription, openLink,
 		)
 	}
+	// A stylus stroke on an unfocused editor writes where it began, as in EditText.
+	val handwritingStroke: (Offset, Boolean) -> Unit = remember(state, focusRequester) {
+		{ start, focused ->
+			if (!focused) {
+				state.placeCaretForHandwriting(start - contentOrigin)
+				focusRequester.requestFocus()
+			}
+		}
+	}
 	val menuPlacement = remember(state, effectiveContextMenuState) {
 		ContextMenuPlacement(state, effectiveContextMenuState)
 	}
@@ -358,6 +369,7 @@ fun BasicTextEditor(
 			Box(
 				modifier = editorModifier
 					.focusRequester(focusRequester)
+					.stylusHandwriting(state, editable, handwritingStroke)
 					.requestFocusOnPress(
 						state,
 						focusRequester,

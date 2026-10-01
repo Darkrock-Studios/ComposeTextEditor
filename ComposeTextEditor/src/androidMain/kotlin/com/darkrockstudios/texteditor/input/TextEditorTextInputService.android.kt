@@ -11,8 +11,11 @@ import android.view.inputmethod.*
 import androidx.annotation.RequiresApi
 import androidx.annotation.VisibleForTesting
 import androidx.compose.ui.platform.PlatformTextInputMethodRequest
+import androidx.compose.runtime.withFrameMillis
 import androidx.compose.ui.platform.PlatformTextInputSession
 import com.darkrockstudios.texteditor.state.TextEditorState
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 
 internal actual val startsInputQuietly: Boolean = true
 
@@ -23,7 +26,12 @@ internal actual val startsInputQuietly: Boolean = true
 actual class TextEditorTextInputService actual constructor(
 	private val state: TextEditorState
 ) {
-	actual suspend fun startInput(session: PlatformTextInputSession): Nothing {
+	actual suspend fun startInput(session: PlatformTextInputSession): Nothing = coroutineScope {
+		launch {
+			// The input method serves the view from the next frame; asked sooner, it ignores the stylus.
+			withFrameMillis {}
+			startStylusHandwriting(session.view, state.platformExtensions)
+		}
 		session.startInputMethod(TextEditorInputMethodRequest(state, session.view))
 	}
 }
@@ -49,6 +57,9 @@ internal fun EditorInfo.populate(state: TextEditorState, connection: TextEditorI
 
 	val selection = state.selectionAsTextRange()
 	contentMimeTypes = state.keyboardContentReceiver?.mimeTypes?.toTypedArray()
+	if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
+		setStylusHandwritingEnabled(stylusHandwritingSupported() && settings.allowsHandwriting())
+	}
 
 	initialSelStart = selection.start
 	initialSelEnd = selection.end
