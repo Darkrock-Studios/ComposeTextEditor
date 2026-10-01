@@ -184,7 +184,7 @@ review.
 | B | Pointer and touch | `textEditorPointerInputHandling.kt`, `state/TextEditorSelectionManager.kt`, `DrawSelectionHandles.kt` | 1.9, 1.12 to 1.16, 1.21 to 1.24, 3.1, 3.2, 3.4 to 3.8, 3.13, 3.15, 4.23, 6.16 |
 | C | Drawing and geometry | `Draw*.kt`, `cursor/`, `scrollbar/`, `state/TextEditorScrollState.kt`, hit testing | 1.8, 1.10, 1.11, 1.17, 1.18, 3.3, 3.12, 3.16, 4.14, 7.6, 7.7, 7.41 |
 | D | Bindings, actions, menu | `input/KeyBindings.kt`, `input/EditorCommand.kt`, `input/BuiltinEditorActions.kt`, `contextmenu/` | 2.1, 2.2, 2.4, 2.5, 2.7 to 2.12, 4.8, 5.8, 7.58 |
-| E | Input sessions on desktop, iOS, web | `desktopMain`, `iosMain`, `wasmJsMain` under `input/` | 4.2 to 4.7, 4.10 to 4.12, 4.19, 4.21, 4.22, 4.24 to 4.26, 4.28, 4.29, 4.32, 4.33, 4.35, 7.37 |
+| E | Input sessions on desktop, iOS, web | `desktopMain`, `iosMain`, `wasmJsMain` under `input/` | 4.2 to 4.7, 4.10 to 4.12, 4.19, 4.21, 4.22, 4.24 to 4.26, 4.28, 4.29, 4.32, 4.33, 4.35, 4.37, 7.37 |
 | F | Android input | `androidMain` | 0.4, 3.9 to 3.11, 3.14, 3.17, 4.16, 4.18, 4.20, 4.27, 4.30, 4.31, 4.34, 4.36, 7.40 |
 | G | Edit pipeline and undo | `state/TextEditManager.kt`, `state/TextEditHistory.kt`, `state/EditBehavior.kt`, `input/ImeEditLogic.kt` | 1.20, 5.1 to 5.5, 5.9 to 5.11, 5.13, 6.1 to 6.6, 6.14, 6.15, 6.17, 6.22, 6.23, 6.28, 6.29, 6.33 to 6.35, 7.54, 7.55 |
 | H | Clipboard and HTML | `clipboard/`, `html/`, `dragdrop/` | 4.9, 4.13, 4.17, 6.7 to 6.13, 6.18 to 6.21, 5.12, 6.24 to 6.27, 6.30 to 6.32, 7.39, 7.46, 7.47, 7.49, 7.53, 7.63 |
@@ -1585,7 +1585,7 @@ iOS Safari; browser tests run in CI.
   moving it on screen (a resize) waits for the next change, as `TextView`'s
   position check does. Under a scaled ancestor the rect is in screen units,
   as the anchor's translate-only matrix already is. The test also found 4.36.
-- [ ] **4.36 The keyboard cover assumes the Compose root ends at the window's
+- [x] **4.36 The keyboard cover assumes the Compose root ends at the window's
   bottom. R.** [Opus] [Lane F] `updateKeyboardCover` measures the keyboard
   from the bottom of the root (`keyboardCover`'s `rootHeight`), which is the
   window's only when the root fills it. A `ComposeView` 600 px tall inside an
@@ -1596,6 +1596,24 @@ iOS Safari; browser tests run in CI.
   the same. Measure from the root's position in the window on Android (the
   view's `getLocationInWindow` and the window's height), or from the
   platform's own inset of the view.
+  Done: on Android the keyboard rises from the bottom of the window the view
+  is in (the root view's height less the view's top in the window), which the
+  view lends the state (`TextEditorState.windowBottomInRoot`); other platforms
+  keep the root's bottom (`KeyboardInsetE2eTest`, `WindowBottomInRootTest`).
+  Checked on an emulator (API 36, Gboard) with a temporary instrumented test:
+  a `ComposeView` 600 px tall at the top of a `ScrollView`, the keyboard 1008
+  px tall in a 2856 px window, was covered 600 px before and 0 after; placed
+  lower, it was covered 252 px, as the overlap is, and scrolling the parent
+  up 1000 px measured 0 again (the root's move reaches `onGloballyPositioned`).
+  A scaled ancestor is not converted, as the IME anchor's is not. iOS is 4.37.
+- [ ] **4.37 The keyboard cover on iOS assumes the root reaches the window's
+  bottom. C.** [Opus] [Lane E] [Mac work] 4.36 measures from the window's
+  bottom on Android only; elsewhere `windowBottomInRoot` is null and the
+  cover is measured from the root's bottom, so a `ComposeUIViewController`
+  embedded in a UIKit view that ends above the screen's bottom would read the
+  keyboard as covering more than it does. Confirm in the iOS sample with the
+  controller in a shorter container, and if so lend the state the window's
+  bottom from the root view, as Android's `CaptureViewForIme` does.
 - [x] **4.27 Android resyncs by restarting input. C.** [Opus] [Lane F]
   `requestImeResync` becomes `restartInput`, which clears the keyboard's
   suggestions and shift state. That suits a whole-document replace, not a

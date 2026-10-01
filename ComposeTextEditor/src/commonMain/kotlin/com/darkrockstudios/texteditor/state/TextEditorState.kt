@@ -631,6 +631,13 @@ class TextEditorState(
 	 */
 	internal var currentKeyboardHeight: (() -> Int)? = null
 
+	/**
+	 * The window's bottom in the root's coordinates, which a soft keyboard rises from, where
+	 * the platform knows the root may not reach it (Android's `ComposeView` embedded in
+	 * views). Null takes the root's bottom.
+	 */
+	internal var windowBottomInRoot: (() -> Float)? = null
+
 	// Referential: every pass publishes a new list, and comparing two by content would
 	// build every row of both.
 	private var _lineOffsets by mutableStateOf<List<LineWrap>>(emptyList(), referentialEqualityPolicy())
