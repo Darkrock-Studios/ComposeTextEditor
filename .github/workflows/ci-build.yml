@@ -220,6 +220,9 @@ jobs:
   # any iOS tests, and builds the sample app the same way Xcode does.
   ios:
     runs-on: macos-26
+    # A simulator that never boots or a UI test left waiting would otherwise hold a
+    # macOS runner for the six-hour default.
+    timeout-minutes: 60
 
     steps:
       - uses: actions/checkout@v6
@@ -250,13 +253,23 @@ jobs:
           :ComposeTextEditorSpellCheck:iosSimulatorArm64Test
           :ComposeTextEditorFind:compileKotlinIosArm64
           :ComposeTextEditorFind:iosSimulatorArm64Test
-      - name: Build the iOS sample app
-        # The project's run script phase links the simulator framework through Gradle.
-        run: >
-          xcodebuild
-          -project sampleAppiOS/SampleAppiOS.xcodeproj
-          -scheme SampleAppiOS
-          -configuration Debug
-          -destination 'generic/platform=iOS Simulator'
-          ARCHS=arm64 ONLY_ACTIVE_ARCH=YES CODE_SIGNING_ALLOWED=NO
-          build
+      - name: Build the iOS sample app and run its UI smoke test
+        # Builds the app as Xcode does (the run script phase links the simulator
+        # framework through Gradle), then types into it on a simulator (0.7). The
+        # runner's simulators vary, so this takes the first iPhone on the newest runtime
+        # that has one.
+        run: |
+          udid=$(xcrun simctl list devices available --json | python3 -c '
+          import json, sys
+          runtimes = json.load(sys.stdin)["devices"]
+          ios = sorted((r for r in runtimes if "iOS" in r), key=lambda r: [int(p) for p in r.rsplit("iOS-", 1)[1].split("-")])
+          phones = [d for r in reversed(ios) for d in runtimes[r] if d["name"].startswith("iPhone")]
+          if not phones:
+              sys.exit("No iPhone simulator is available on this runner")
+          print(phones[0]["udid"])')
+          xcrun simctl boot "$udid"
+          xcodebuild test \
+            -project sampleAppiOS/SampleAppiOS.xcodeproj \
+            -scheme SampleAppiOS \
+            -destination "id=$udid" \
+            CODE_SIGNING_ALLOWED=NO

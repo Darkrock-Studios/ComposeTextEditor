@@ -333,7 +333,7 @@ editor does rather than what it should do.
   pinned); `-PupdateGoldens` rewrites them (`docs/TESTING.md`). Passes here
   with the machine's fonts and with only DejaVu; the first CI run is the check
   that another Linux machine renders the same.
-- [ ] **0.7 CI breadth.** [Opus] [Lane L] [Mac work] Desktop suite on macOS and
+- [x] **0.7 CI breadth.** [Opus] [Lane L] [Mac work] Desktop suite on macOS and
   Windows runners. An Android emulator smoke job. Browser automation against
   the built wasm demo for real key and composition events. An iOS simulator
   smoke test. Mac part: the iOS simulator smoke test.
@@ -364,8 +364,13 @@ editor does rather than what it should do.
   emulator; `browser` builds the wasm demo and runs the Playwright suite in
   `browserTests/` in Chromium (real key presses, read back from the editor's
   accessibility node), which passes here. The emulator test found 7.60.
-  Still open: an iOS simulator smoke test that runs the app rather than only
-  building it (Mac queue).
+  The iOS smoke test, done on the Mac: a `SampleAppiOSUITests` XCUITest
+  target in `sampleAppiOS`, in the shared `SampleAppiOS` scheme, opens the
+  blank editor, taps it, types "Hello" and reads it back through the editor's
+  accessibility value; with typing broken it fails ("the editor reads"
+  nothing). The `ios` job now builds the sample app through `xcodebuild test`
+  on the newest runtime's first iPhone simulator, with a 60-minute timeout.
+  Passes locally on the iPhone 17 Pro Max simulator, iOS 26.0.
 - [ ] **0.8 Real OS input, nightly.** [Opus] [Lane L] Drive the sample app on a
   virtual Linux display with a dead-key layout. Most expensive, so last.
   Written, pending its first run: `.github/workflows/os-input-nightly.yml`
@@ -3278,4 +3283,3 @@ records results and removes entries that passed.
 | 6.12 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64`. `dragdrop/PlatformTextDrag.kt` adds four `internal expect` functions; the iOS actuals (`iosMain/.../dragdrop/PlatformTextDrag.ios.kt`) answer null and false. Then on the Mac's desktop sample app: select a word, drag it within the editor, then with Option held, then into TextEdit, and drag text from TextEdit into the editor | Compiles. The word moves (Option copies), arrives in TextEdit styled and leaves the editor, and TextEdit's text drops in at the drop caret || Compile part passed 2026-09-30 at `a53f285`. The drag part is not run: it needs a person driving the desktop sample app and TextEdit, which the tools here cannot |
 | 7.9, housekeeping | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64` and `:ComposeTextEditor:iosSimulatorArm64Test`. `skikoMain` changed: `SkikoTextEditorInputMethodRequest` folds `TextEditorState.textRevision` into its reads instead of the session collecting edits, and `DocumentTextLayout` keys on the line list and builds from `getAllPlainText()`. Then in the iOS sample app: type, forward delete with a hardware keyboard or the soft keyboard's delete after moving the caret, and use the spacebar trackpad over a long paragraph | Compiles and the tests pass. Typing and deletes reach the keyboard's mirror (autocorrect and suggestions follow the text), and the trackpad moves the caret through the current text || Partial, 2026-10-01 at `77d188b1`. Compiles and the tests pass. With the soft keyboard, typing reaches the keyboard's mirror ("helo" is offered "help" and autocorrects in place), and a delete after moving the caret leaves the suggestions on the word at the new caret. The spacebar trackpad starts at the caret and moves through the current text; its vertical steps are coarse, from the unstyled layout (4.6's follow-up). Left: a forward delete with a hardware keyboard (Fn+Delete), for a person |
 | 7.8, 7.48 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64` and `:ComposeTextEditor:iosSimulatorArm64Test` (commonMain changed how the lines, rows and spans are stored; no `iosMain` or `skikoMain` change). Then re-time the iOS simulator as 4.21 did (iPhone 17 Pro Max simulator, Debug framework, a 200,000-character document of 2,000 lines of 99 characters, temporary logging): the keyboard's `editText` block and the frames over 20 ms while typing twelve keys, then rotate the device and time the frame the rotation costs and how long the rows take to settle | Before (4.21, `f3b8d8f`): `editText` 9.4 ms median at 200k against 0.7 ms at 2k. A pass: `editText` within a few times the 2k figure, wherever the caret is (desktop went 837 µs to 174 µs, and 2,026 µs to 94 µs with a span on every line); a rotation that shapes only the visible lines at once and settles the rest in the background without the scroll jumping. Record the numbers here and in 7.8 and 7.48 || Partial, 2026-10-01 at `0063e6f6`: compiles, the tests pass, and `editText` is 1.1 ms median at the end of 200k and 1.3 ms at the start (recorded in 7.8). The rotation is left for a person: the simulator tools here cannot rotate the device |
-| 0.7 | An iOS simulator smoke test that runs the app rather than only building it: an XCUITest target in `sampleAppiOS` that opens the blank editor, taps it and types with `typeText("Hello")`, then reads the editor back through its accessibility value; run it with `xcodebuild test` on an iOS simulator destination and add that step to the `ios` job in `.github/workflows/ci-build.yml`. The Android equivalent is `androidApp/src/androidTest/.../EditorTypingSmokeTest.kt` | The UI test passes locally and in the `ios` job, and fails if typing stops reaching the editor | |

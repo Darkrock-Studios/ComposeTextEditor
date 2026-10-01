@@ -11,8 +11,15 @@
 | Android host tests | `./gradlew :ComposeTextEditor:testAndroidHostTest` | Android input logic on the JVM |
 | iOS simulator (Mac only) | `./gradlew :ComposeTextEditor:iosSimulatorArm64Test` | What only UIKit can answer |
 | Android emulator smoke | `./gradlew :androidApp:connectedDebugAndroidTest` | Key events and an input method's edits reach the editor on a device |
+| iOS simulator smoke (Mac only) | `xcodebuild test -project sampleAppiOS/SampleAppiOS.xcodeproj -scheme SampleAppiOS -destination 'platform=iOS Simulator,name=iPhone 17 Pro'` | Typing in the running sample app reaches the editor and reads back through accessibility |
 | Browser | `cd browserTests && npx playwright test` | Real key presses and input method compositions in Chromium against the built wasm demo |
 | Gradle check | `./gradlew check` | The JVM and host suites and lint, as the Ubuntu `build` job runs it |
+
+The iOS smoke test lives in the shared `SampleAppiOS` scheme. Xcode prefers a
+personal copy of a scheme in `xcuserdata` over the shared one, and an older personal
+copy has no tests (`xcodebuild` then says the scheme is not configured for the test
+action); delete `sampleAppiOS/SampleAppiOS.xcodeproj/xcuserdata/*/xcschemes/SampleAppiOS.xcscheme`
+to use the shared scheme.
 
 Narrow a run while iterating with `--tests`, for example
 `./gradlew :ComposeTextEditor:desktopTest --tests 'e2e.NavigationE2eTest'`.
@@ -206,7 +213,7 @@ that need load).
 | `desktop-windows` | Windows | The four desktop suites |
 | `android-emulator` | Ubuntu, API 35 emulator | The Android smoke test |
 | `browser` | Ubuntu, Chromium | The browser tests, typing and composition, against a production build of the demo |
-| `ios` | macOS | The iOS compile, the iOS tests, and the sample app build |
+| `ios` | macOS | The iOS compile, the iOS tests, the sample app build, and its UI smoke test |
 
 `.github/workflows/os-input-nightly.yml` runs nightly (and on pushes to
 `native-parity` that change it): real X key events under the US International
