@@ -593,6 +593,12 @@ class TextEditorState(
 	 */
 	internal var canvasPositionInRoot by mutableStateOf(Offset.Unspecified)
 
+	/**
+	 * The soft keyboard's height now, in pixels, while the canvas measures its cover; read
+	 * where the cover measured at the last placement may already trail the keyboard.
+	 */
+	internal var currentKeyboardHeight: (() -> Int)? = null
+
 	// Referential: every pass publishes a new list, and comparing two by content would
 	// build every row of both.
 	private var _lineOffsets by mutableStateOf<List<LineWrap>>(emptyList(), referentialEqualityPolicy())
