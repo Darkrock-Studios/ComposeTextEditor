@@ -53,13 +53,16 @@ internal fun Modifier.textEditorPointerInputHandling(
 	contentOrigin: () -> Offset,
 	touchToolbar: TouchToolbar? = null,
 	selectionDrag: ((Offset) -> Boolean)? = null,
+	primaryPaste: (() -> Unit)? = null,
 ): Modifier {
 	return this
 		.handleHandleDrag(state, contentOrigin, touchToolbar)
 		.handleTouchInteractions(
 			state, onSpanClick, onContextMenuRequest, readOnly, links, caretHandle, contentOrigin, touchToolbar,
 		)
-		.handleMouseInput(state, onSpanClick, onContextMenuRequest, readOnly, links, contentOrigin, touchToolbar, selectionDrag)
+		.handleMouseInput(
+			state, onSpanClick, onContextMenuRequest, readOnly, links, contentOrigin, touchToolbar, selectionDrag, primaryPaste,
+		)
 }
 
 /**
@@ -183,7 +186,8 @@ internal val DOUBLE_TAP_SLOP = 100.dp
  * whatever unit the press selected. A plain press inside the selection is held instead:
  * moving past the slop hands the selection to [selectionDrag], and coming up in place
  * puts the caret there, as native editors do. The secondary button opens the context
- * menu; any other button does nothing.
+ * menu. The middle button places the caret and runs [primaryPaste], where there is one;
+ * any other button does nothing.
  */
 private fun Modifier.handleMouseInput(
 	state: TextEditorState,
@@ -194,7 +198,8 @@ private fun Modifier.handleMouseInput(
 	contentOrigin: () -> Offset,
 	touchToolbar: TouchToolbar?,
 	selectionDrag: ((Offset) -> Boolean)?,
-): Modifier = pointerInput(state, links, touchToolbar, selectionDrag) {
+	primaryPaste: (() -> Unit)?,
+): Modifier = pointerInput(state, links, touchToolbar, selectionDrag, primaryPaste) {
 	val clickCounter = ClickCounter(viewConfiguration)
 	val touchSlop = viewConfiguration.touchSlop
 	coroutineScope {
@@ -260,6 +265,12 @@ private fun Modifier.handleMouseInput(
 					readOnly,
 				)
 				onContextMenuRequest?.invoke(downAt)
+			}
+
+			buttons.isTertiaryPressed && primaryPaste != null -> {
+				clickCounter.reset()
+				PointerSelection.press(state, downAt, SelectionGranularity.Character)
+				primaryPaste()
 			}
 
 			else -> clickCounter.reset()

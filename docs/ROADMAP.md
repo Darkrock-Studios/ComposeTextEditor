@@ -1490,7 +1490,7 @@ iOS Safari; browser tests run in CI.
   checked on an emulator through the virtual keyboard's Alt+E acute. A
   physical keyboard's layout is left for a person (QA plan, "Android
   keyboards").
-- [ ] **4.23 Primary selection on Linux. S.** [Opus] [Lane B] Middle-click
+- [x] **4.23 Primary selection on Linux. S.** [Opus] [Lane B] Middle-click
   paste of the X11 primary selection. Compose's `Clipboard` covers only the
   system clipboard, but AWT exposes the primary selection as
   `Toolkit.getSystemSelection()` (null on Windows and macOS). A full version
@@ -1502,6 +1502,24 @@ iOS Safari; browser tests run in CI.
   through the normal paste path so undo and line blocks behave. AWT under
   native Wayland has no primary selection (see 4.17), so it only works under
   X11 or XWayland.
+  Done: `clipboard/PrimarySelection.kt` has `internal expect fun
+  platformPrimarySelection()`, read through `LocalPrimarySelection`; the desktop
+  actual wraps `Toolkit.getSystemSelection()`, the others answer null (Mac
+  queue). An editor or selectable `RichTextView` offers its selection whenever
+  the selection changes to a new one (not on an edit, nor when a state is shown
+  again with its selection): it claims the selection once and offers the
+  document snapshot and range, so a drag claims once and the text is built only
+  when something pastes it. A cleared selection leaves the last one on offer,
+  as Qt does (GTK drops it); an editor leaving composition keeps it as text,
+  letting go of the document. A middle press in an editable editor places the
+  caret as a click does, reads the primary selection off the UI thread, and
+  pastes its text as Paste as plain text does, so one undo step, line blocks,
+  the input filter and `pasteLanded`; a read-only editor ignores it, as
+  before. Like a drop, it is not an editor action, so a host that replaces the
+  Paste actions does not replace it. The test suites set
+  `-Dcomposetexteditor.primarySelection=false` so a test's selection never
+  reaches the desktop's (`PrimarySelectionTest`, over an in-memory AWT
+  clipboard).
 - [x] **4.25 The skiko request ignores IME resync requests. S.** [Opus]
   [Lane E] `TextEditorState.requestImeResync` advances a generation that only
   the Android cursor sync consumes (`ImeCursorSync.android.kt`); the shared
@@ -3701,3 +3719,4 @@ records results and removes entries that passed.
 | 7.9, housekeeping | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64` and `:ComposeTextEditor:iosSimulatorArm64Test`. `skikoMain` changed: `SkikoTextEditorInputMethodRequest` folds `TextEditorState.textRevision` into its reads instead of the session collecting edits, and `DocumentTextLayout` keys on the line list and builds from `getAllPlainText()`. Then in the iOS sample app: type, forward delete with a hardware keyboard or the soft keyboard's delete after moving the caret, and use the spacebar trackpad over a long paragraph | Compiles and the tests pass. Typing and deletes reach the keyboard's mirror (autocorrect and suggestions follow the text), and the trackpad moves the caret through the current text || Partial, 2026-10-01 at `77d188b1`. Compiles and the tests pass. With the soft keyboard, typing reaches the keyboard's mirror ("helo" is offered "help" and autocorrects in place), and a delete after moving the caret leaves the suggestions on the word at the new caret. The spacebar trackpad starts at the caret and moves through the current text; its vertical steps are coarse, from the unstyled layout (4.6's follow-up). Left: a forward delete with a hardware keyboard (Fn+Delete), for a person |
 | 7.8, 7.48 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64` and `:ComposeTextEditor:iosSimulatorArm64Test` (commonMain changed how the lines, rows and spans are stored; no `iosMain` or `skikoMain` change). Then re-time the iOS simulator as 4.21 did (iPhone 17 Pro Max simulator, Debug framework, a 200,000-character document of 2,000 lines of 99 characters, temporary logging): the keyboard's `editText` block and the frames over 20 ms while typing twelve keys, then rotate the device and time the frame the rotation costs and how long the rows take to settle | Before (4.21, `f3b8d8f`): `editText` 9.4 ms median at 200k against 0.7 ms at 2k. A pass: `editText` within a few times the 2k figure, wherever the caret is (desktop went 837 µs to 174 µs, and 2,026 µs to 94 µs with a span on every line); a rotation that shapes only the visible lines at once and settles the rest in the background without the scroll jumping. Record the numbers here and in 7.8 and 7.48 || Partial, 2026-10-01 at `0063e6f6`: compiles, the tests pass, and `editText` is 1.1 ms median at the end of 200k and 1.3 ms at the start (recorded in 7.8). The rotation is left for a person: the simulator tools here cannot rotate the device |
 | 4.8 | On an iPad simulator or device with a mouse or trackpad (in the Simulator, I/O > Input > Send Pointer to Device, then Control-click for a right-click): right-click a word in the sample's editor, right-click in an unfocused editor, and right-click a misspelt word in the spell-check demo | Compiles. The system edit menu opens at the pointer with Cut, Copy, Paste and Select All as they apply, also on an editor not yet focused; on a misspelt word the editor's menu with its suggestions opens instead | |
+| 4.23 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64`. `clipboard/PrimarySelection.kt` adds `internal expect fun platformPrimarySelection()`; the iOS actual (`iosMain/.../clipboard/PrimarySelection.ios.kt`) answers null | Compiles. Nothing to run: iOS has no primary selection ||

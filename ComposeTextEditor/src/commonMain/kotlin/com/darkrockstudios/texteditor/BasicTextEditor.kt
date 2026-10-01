@@ -23,6 +23,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
@@ -44,6 +45,8 @@ import androidx.compose.ui.text.style.TextIndent
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.toSize
 import com.darkrockstudios.texteditor.clipboard.ClipboardEventsEffect
+import com.darkrockstudios.texteditor.clipboard.LocalPrimarySelection
+import com.darkrockstudios.texteditor.clipboard.PrimarySelectionEffect
 import com.darkrockstudios.texteditor.contextmenu.ContextMenuActions
 import com.darkrockstudios.texteditor.contextmenu.ContextMenuOpener
 import com.darkrockstudios.texteditor.contextmenu.ContextMenuPlacement
@@ -59,6 +62,7 @@ import com.darkrockstudios.texteditor.input.KeyBindings
 import com.darkrockstudios.texteditor.input.LocalKeyBindings
 import com.darkrockstudios.texteditor.input.TextEditorInputModifierElement
 import com.darkrockstudios.texteditor.input.TextInputRequester
+import com.darkrockstudios.texteditor.input.pastePlainText
 import com.darkrockstudios.texteditor.richstyle.BlockSpanStyle
 import com.darkrockstudios.texteditor.state.LayoutUpdate
 import com.darkrockstudios.texteditor.state.LocalImeInsets
@@ -74,6 +78,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.merge
+import kotlinx.coroutines.launch
 import kotlin.math.ceil
 import kotlin.time.Duration.Companion.milliseconds
 
@@ -153,6 +158,7 @@ fun BasicTextEditor(
 	// Capture platform view for IME cursor synchronization (Android only)
 	CaptureViewForIme(state)
 	ClipboardEventsEffect(state)
+	PrimarySelectionEffect(state)
 
 	val focusRequester = remember { FocusRequester() }
 	val interactionSource = remember { MutableInteractionSource() }
@@ -383,6 +389,19 @@ fun BasicTextEditor(
 				val linkClicks = remember(keyBindings) {
 					LinkClicks.forEditor(keyBindings) { currentOnLinkClick }
 				}
+				val primarySelection = LocalPrimarySelection.current
+				val primaryPasteScope = rememberCoroutineScope()
+				val primaryPaste: (() -> Unit)? = remember(state, editable, primarySelection, primaryPasteScope) {
+					if (editable && primarySelection != null) {
+						{
+							primaryPasteScope.launch {
+								primarySelection.readText()?.takeIf { it.isNotEmpty() }?.let { state.pastePlainText(it) }
+							}
+						}
+					} else {
+						null
+					}
+				}
 				val dragAndDrop = remember(state) { TextDragAndDrop(state, inputRequester::editor) }
 				dragAndDrop.enabled = editable
 				Canvas(
@@ -398,6 +417,7 @@ fun BasicTextEditor(
 							contentOrigin = { contentOrigin },
 							touchToolbar = touchToolbar,
 							selectionDrag = dragAndDrop::startSelectionDrag,
+							primaryPaste = primaryPaste,
 						)
 						.padding(horizontalPadding)
 						.textMagnifier(state, style)

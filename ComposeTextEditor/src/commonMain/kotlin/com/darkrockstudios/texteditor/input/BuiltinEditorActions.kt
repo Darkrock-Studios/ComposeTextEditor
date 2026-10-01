@@ -10,6 +10,7 @@ import com.darkrockstudios.texteditor.clipboard.ClipboardHelper
 import com.darkrockstudios.texteditor.clipboard.applyHtmlPasteBlocks
 import com.darkrockstudios.texteditor.clipboard.readHtmlPasteDocument
 import com.darkrockstudios.texteditor.clipboard.withSizeForPasteAt
+import com.darkrockstudios.texteditor.html.HtmlDocument
 import com.darkrockstudios.texteditor.html.selectionAsHtml
 import com.darkrockstudios.texteditor.input.EditorCommand.Action
 import com.darkrockstudios.texteditor.RichTextStyles
@@ -202,42 +203,58 @@ private fun EditorActionContext.pasteClipboard(plainText: Boolean) {
 		// in-editor rich spans and the pasted block structure as one revision.
 		val htmlDocument = if (plainText) null else state.readHtmlPasteDocument(clipboard, clipboardText)
 		val clipboardCopyId = if (plainText) null else ClipboardHelper.readCopyId(clipboard)
-
-		val curSelection = state.selector.selection
-		val insertPosition = curSelection?.start ?: state.cursorPosition
-		val sized = state.withSizeForPasteAt(insertPosition, clipboardText)
-		// Screened first: the copied spans and blocks are placed by the text's own
-		// layout, so text the filter changed pastes plain, and refused text not at all.
-		val text = state.screenAtSelection(sized) ?: return@launch
-		val screened = text != sized
-		// A composition's range would address the text as it stood before the paste.
-		if (state.composingRange != null) {
-			state.clearComposingRange()
-			state.requestImeResync()
-		}
-		state.preserveCopiedRichSpansThroughNextEdit()
-		state.withAtomicEdit {
-			state.editManager.alreadyScreened {
-				if (curSelection != null) {
-					state.replace(curSelection, state.applyStyleForEditAt(curSelection.start, text))
-				} else {
-					state.insertStringAtCursor(text)
-				}
-			}
-			if (!plainText && !screened) {
-				state.pasteRichSpans(
-					insertPosition,
-					text,
-					clipboardCopyId,
-					requireCopyIdMatch = ClipboardHelper.supportsCopyProvenance,
-				)
-			}
-			if (!screened) htmlDocument?.let { state.applyHtmlPasteBlocks(it, insertPosition, text) }
-			state.removeLinkLookOutsideLinks(insertPosition, text)
-		}
-		state.selector.clearSelection()
-		state.pasteLanded(text.text, TextEditorRange(insertPosition, text.endWhenInsertedAt(insertPosition)))
+		state.landPaste(clipboardText, htmlDocument, clipboardCopyId, plainText)
 	}
+}
+
+/**
+ * Pastes [text] as [Action.PasteAsPlainText] does, over the selection or at the caret:
+ * the X11 primary selection's middle-click paste.
+ */
+internal fun TextEditorState.pastePlainText(text: String) {
+	landPaste(AnnotatedString(text).normalizeLineEndings(), htmlDocument = null, clipboardCopyId = null, plainText = true)
+}
+
+private fun TextEditorState.landPaste(
+	clipboardText: AnnotatedString,
+	htmlDocument: HtmlDocument?,
+	clipboardCopyId: Long?,
+	plainText: Boolean,
+) {
+	val curSelection = selector.selection
+	val insertPosition = curSelection?.start ?: cursorPosition
+	val sized = withSizeForPasteAt(insertPosition, clipboardText)
+	// Screened first: the copied spans and blocks are placed by the text's own
+	// layout, so text the filter changed pastes plain, and refused text not at all.
+	val text = screenAtSelection(sized) ?: return
+	val screened = text != sized
+	// A composition's range would address the text as it stood before the paste.
+	if (composingRange != null) {
+		clearComposingRange()
+		requestImeResync()
+	}
+	preserveCopiedRichSpansThroughNextEdit()
+	withAtomicEdit {
+		editManager.alreadyScreened {
+			if (curSelection != null) {
+				replace(curSelection, applyStyleForEditAt(curSelection.start, text))
+			} else {
+				insertStringAtCursor(text)
+			}
+		}
+		if (!plainText && !screened) {
+			pasteRichSpans(
+				insertPosition,
+				text,
+				clipboardCopyId,
+				requireCopyIdMatch = ClipboardHelper.supportsCopyProvenance,
+			)
+		}
+		if (!screened) htmlDocument?.let { applyHtmlPasteBlocks(it, insertPosition, text) }
+		removeLinkLookOutsideLinks(insertPosition, text)
+	}
+	selector.clearSelection()
+	pasteLanded(text.text, TextEditorRange(insertPosition, text.endWhenInsertedAt(insertPosition)))
 }
 
 private fun TextEditorState.handleDelete() {

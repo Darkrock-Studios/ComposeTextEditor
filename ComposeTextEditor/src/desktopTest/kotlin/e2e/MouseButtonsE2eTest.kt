@@ -68,9 +68,8 @@ class MouseButtonsE2eTest {
 	}
 
 	/**
-	 * X11 pastes the primary selection on a middle click, which the editor does not
-	 * support yet (see 4.23). Until it does, the click must not disturb the caret or
-	 * the selection.
+	 * Where there is no primary selection to paste (Windows, macOS), a middle click
+	 * must not disturb the caret or the selection. `PrimarySelectionTest` covers X11.
 	 */
 	@Test
 	fun `middle click leaves the caret and selection alone`() = editorUiTest(initialText = document) {

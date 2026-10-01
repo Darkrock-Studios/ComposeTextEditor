@@ -42,6 +42,8 @@ import com.darkrockstudios.texteditor.RichSpanClickEventListener
 import com.darkrockstudios.texteditor.handleCenter as drawnHandleCenter
 import com.darkrockstudios.texteditor.RichSpanClickListener
 import com.darkrockstudios.texteditor.rememberTextEditorStyle
+import com.darkrockstudios.texteditor.clipboard.LocalPrimarySelection
+import com.darkrockstudios.texteditor.clipboard.PrimarySelection
 import com.darkrockstudios.texteditor.contextmenu.ContextMenuStrings
 import com.darkrockstudios.texteditor.contextmenu.TextEditorContextMenuState
 import com.darkrockstudios.texteditor.input.CtrlKeyBindings
@@ -57,7 +59,8 @@ import com.darkrockstudios.texteditor.state.rememberTextEditorState
  * data-level assertions. Character-index-based helpers ([clickAtCharacter],
  * [dragSelect]) resolve pixel positions through the editor's own layout, so
  * tests never hard-code coordinates. Clipboard operations go through an
- * isolated [InMemoryClipboard], never the OS clipboard.
+ * isolated [InMemoryClipboard], never the OS clipboard, and the X11 primary selection
+ * through [primarySelection], none by default.
  *
  * [keyBindings] is pinned rather than taken from the host, so the same shortcuts
  * are exercised no matter which OS runs the suite; pass [MacKeyBindings] to test
@@ -88,6 +91,7 @@ internal fun editorUiTest(
 	trailingFocusable: Boolean = false,
 	contentDescription: String? = null,
 	readOnly: Boolean = false,
+	primarySelection: PrimarySelection? = null,
 	block: EditorUiTestScope.() -> Unit,
 ) = runSkikoComposeUiTest(density = Density(density)) {
 	val clipboard = InMemoryClipboard()
@@ -104,6 +108,7 @@ internal fun editorUiTest(
 			LocalTextToolbar provides (textToolbar ?: LocalTextToolbar.current),
 			LocalNativeTextToolbar provides (textToolbar != null),
 			LocalPointerMenuIsTextToolbar provides pointerMenuIsTextToolbar,
+			LocalPrimarySelection provides primarySelection,
 		) {
 			Column {
 				BasicTextEditor(
