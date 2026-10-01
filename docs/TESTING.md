@@ -16,8 +16,42 @@
 
 Narrow a run while iterating with `--tests`, for example
 `./gradlew :ComposeTextEditor:desktopTest --tests 'e2e.NavigationE2eTest'`.
-Core's desktop tests depend on the markdown module: the block tests build and
-read their documents as markdown text (`docs/design/modules.md`, "Tests").
+Core's tests stand on core alone: the block tests build and read their
+documents in block lines (below), and what tests markdown is in the markdown
+module's suite.
+
+## Block lines
+
+`testUtils/blockLines/utils/BlockLines.kt` is a notation for a document's line
+blocks, so a test can load a document and check one as a line of text without a
+markdown parser: `state.setBlockLines("- a\n  - b")` loads it through
+`applyDocumentBlocks` as an importer does, and `state.blockLines()` reads it back
+from the snapshot. Each notation line is one document line: its markers, then
+its text.
+
+| Marker | Block |
+| --- | --- |
+| `> ` | blockquote, first when it stacks |
+| `#` to `######`, then a space | heading of that level |
+| two spaces per level, then `- ` | bullet item |
+| two spaces per level, then `1. ` | ordered item (any number reads; `1.` is written) |
+| three backticks, then a space | code fence line |
+| `---` alone | horizontal rule |
+| `![alt](source)` alone | image, given an `imageProvider` |
+
+A `\` after the markers keeps the rest as text (`\- not a list`), and is
+written wherever text would read as a marker. Unlike markdown it is strictly a
+line per line: no inline syntax, no blank line between paragraphs (a blank
+notation line is a blank document line), and a fence marks each of its lines.
+Inline styles and links are set through the state (`addStyleSpan`, `setLink`).
+A load leaves the styles as a format importer does: assigned, so typed text
+takes the body style, and the body style under every line; `asImported = false`
+loads bare text. Ordered numbers are the layout's (`orderedNumbers()` in a UI
+test). `BlockLinesTest` pins the notation.
+
+The state fuzz (`testUtils/stateFuzz`) is shared the same way: core runs its
+storms to the undo-to-origin invariant, the markdown module to a markdown
+fixpoint.
 
 Each desktop suite runs in one JVM with a 1 GB heap (the root
 `build.gradle.kts`); the core suite's heap stays under 200 MB after a

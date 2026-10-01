@@ -4,7 +4,6 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.font.FontWeight
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
-import com.darkrockstudios.texteditor.markdown.MarkdownExtension
 import com.darkrockstudios.texteditor.richstyle.BulletListSpanStyle
 import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.toggleBulletList
@@ -15,6 +14,7 @@ import kotlin.test.assertTrue
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
 import utils.linesWith
+import utils.setBlockLines
 
 /**
  * A style or block edit over many lines, and its undo and redo, writes the line
@@ -26,11 +26,11 @@ class MultiLineEditCostTest {
 	private val selected = 800..1_199
 	private val bold = SpanStyle(fontWeight = FontWeight.Bold)
 
-	private fun TestScope.extension(): MarkdownExtension {
-		val e = MarkdownExtension(TextEditorState(scope = this, measurer = mockk(relaxed = true)))
-		e.importMarkdown((0 until documentLines).joinToString("\n\n") { "line $it" })
-		assertEquals(documentLines, e.editorState.textLines.size)
-		return e
+	private fun TestScope.editor(): TextEditorState {
+		val state = TextEditorState(scope = this, measurer = mockk(relaxed = true))
+		state.setBlockLines((0 until documentLines).joinToString("\n") { "line $it" })
+		assertEquals(documentLines, state.textLines.size)
+		return state
 	}
 
 	private class Writes(val lines: Long, val spans: Long)
@@ -46,7 +46,7 @@ class MultiLineEditCostTest {
 
 	@Test
 	fun `bold over many lines, its undo and its redo each write the line list once`() = runTest {
-		val state = extension().editorState
+		val state = editor()
 		val first = selected.first
 		val last = selected.last
 		val range = TextEditorRange(CharLineOffset(first, 0), CharLineOffset(last, state.textLines[last].length))
@@ -71,24 +71,23 @@ class MultiLineEditCostTest {
 
 	@Test
 	fun `a list toggle over many lines, its undo and its redo stay bounded`() = runTest {
-		val e = extension()
-		val state = e.editorState
+		val state = editor()
 		val lines = selected
 
 		var before = state.writes()
-		e.editorState.toggleBulletList(lines)
+		state.toggleBulletList(lines)
 		state.assertBounded(before, "the toggle", lines = 1, spans = 2)
-		val bulleted = e.linesWith(BulletListSpanStyle)
+		val bulleted = state.linesWith(BulletListSpanStyle)
 		assertEquals(lines.toList(), bulleted)
 
 		before = state.writes()
 		state.undo()
 		state.assertBounded(before, "undo of the toggle", lines = 1, spans = 2)
-		assertEquals(emptyList(), e.linesWith(BulletListSpanStyle))
+		assertEquals(emptyList(), state.linesWith(BulletListSpanStyle))
 
 		before = state.writes()
 		state.redo()
 		state.assertBounded(before, "redo of the toggle", lines = 1, spans = 2)
-		assertEquals(bulleted, e.linesWith(BulletListSpanStyle))
+		assertEquals(bulleted, state.linesWith(BulletListSpanStyle))
 	}
 }

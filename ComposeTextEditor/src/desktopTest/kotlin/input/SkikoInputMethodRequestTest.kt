@@ -35,8 +35,6 @@ import com.darkrockstudios.texteditor.input.imeCommitText
 import com.darkrockstudios.texteditor.input.imeDeleteSurroundingText
 import com.darkrockstudios.texteditor.input.imeSetComposingRegion
 import com.darkrockstudios.texteditor.input.startSkikoInputSession
-import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
-import com.darkrockstudios.texteditor.markdown.MarkdownExtension
 import com.darkrockstudios.texteditor.richstyle.BulletListSpanStyle
 import com.darkrockstudios.texteditor.richstyle.RichSpan
 import com.darkrockstudios.texteditor.richstyle.SpellCheckStyle
@@ -57,6 +55,7 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import utils.editorUiTest
+import utils.setBlockLines
 
 /**
  * The one input request desktop, iOS, and web share. Desktop and iOS drive it through
@@ -234,7 +233,7 @@ class SkikoInputMethodRequestTest {
 	@Test
 	fun `backspace at the start of a bullet demotes it`() = runTest {
 		val state = TextEditorState(scope = this, measurer = mockk(relaxed = true))
-		MarkdownExtension(state, MarkdownConfiguration.DEFAULT).importMarkdown("plain\n- item")
+		state.setBlockLines("plain\n- item")
 		val request = SkikoTextEditorInputMethodRequest(state, ImeOptions.Default)
 		state.cursor.updatePosition(CharLineOffset(1, 0))
 
@@ -256,7 +255,7 @@ class SkikoInputMethodRequestTest {
 	@Test
 	fun `the iOS keyboard backspace at the start of a bullet demotes it`() = runTest {
 		val state = TextEditorState(scope = this, measurer = mockk(relaxed = true))
-		MarkdownExtension(state, MarkdownConfiguration.DEFAULT).importMarkdown("plain\n- item")
+		state.setBlockLines("plain\n- item")
 		val request = SkikoTextEditorInputMethodRequest(state, ImeOptions.Default)
 		state.cursor.updatePosition(CharLineOffset(1, 0))
 
@@ -355,7 +354,7 @@ class SkikoInputMethodRequestTest {
 	@Test
 	fun `a wider selection taken back from the caret is deleted as a selection`() = runTest {
 		val state = TextEditorState(scope = this, measurer = mockk(relaxed = true))
-		MarkdownExtension(state, MarkdownConfiguration.DEFAULT).importMarkdown("plain\n- item")
+		state.setBlockLines("plain\n- item")
 		val request = SkikoTextEditorInputMethodRequest(state, ImeOptions.Default)
 		state.cursor.updatePosition(CharLineOffset(1, 0))
 
@@ -637,9 +636,9 @@ class SkikoInputMethodRequestTest {
 		return job
 	}
 
-	private fun TestScope.markdownEditor(markdown: String): TextEditorState {
+	private fun TestScope.blockEditor(blockLines: String): TextEditorState {
 		val state = TextEditorState(scope = this, measurer = mockk(relaxed = true))
-		MarkdownExtension(state, MarkdownConfiguration.DEFAULT).importMarkdown(markdown)
+		state.setBlockLines(blockLines)
 		return state
 	}
 
@@ -649,7 +648,7 @@ class SkikoInputMethodRequestTest {
 	 */
 	@Test
 	fun `a restart resync starts the input method again`() = runTest {
-		val state = markdownEditor("- one\n- ")
+		val state = blockEditor("- one\n- ")
 		state.cursor.updatePosition(CharLineOffset(1, 0))
 		val session = RecordingSession()
 		val job = startSession(state, session, SkikoImeResync.RestartInput)
@@ -664,7 +663,7 @@ class SkikoInputMethodRequestTest {
 
 	@Test
 	fun `a rewrite resync is handed the value after a claim that edited nothing`() = runTest {
-		val state = markdownEditor("plain\n- item")
+		val state = blockEditor("plain\n- item")
 		state.cursor.updatePosition(CharLineOffset(1, 0))
 		val rewrites = mutableListOf<TextFieldValue>()
 		val job = startSession(state, RecordingSession(), SkikoImeResync.Rewrite { rewrites += it })
@@ -679,7 +678,7 @@ class SkikoInputMethodRequestTest {
 	/** Web mirrors the text only when it changes, so a claim that edited is rewritten too. */
 	@Test
 	fun `a rewrite resync is handed the value after a claim that edited`() = runTest {
-		val state = markdownEditor("- one")
+		val state = blockEditor("- one")
 		state.cursor.updatePosition(CharLineOffset(0, 3))
 		val rewrites = mutableListOf<TextFieldValue>()
 		val job = startSession(state, RecordingSession(), SkikoImeResync.Rewrite { rewrites += it })
@@ -693,7 +692,7 @@ class SkikoInputMethodRequestTest {
 
 	@Test
 	fun `a platform with no mirror ignores a resync`() = runTest {
-		val state = markdownEditor("plain\n- item")
+		val state = blockEditor("plain\n- item")
 		state.cursor.updatePosition(CharLineOffset(1, 0))
 		val session = RecordingSession()
 		val job = startSession(state, session, SkikoImeResync.None)

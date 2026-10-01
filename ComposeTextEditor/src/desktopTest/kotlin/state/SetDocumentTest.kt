@@ -2,10 +2,10 @@ package state
 
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.font.FontWeight
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
-import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
-import com.darkrockstudios.texteditor.markdown.MarkdownExtension
 import com.darkrockstudios.texteditor.richstyle.BulletListSpanStyle
 import com.darkrockstudios.texteditor.richstyle.HighlightSpanStyle
 import com.darkrockstudios.texteditor.richstyle.HorizontalRuleSpanStyle
@@ -16,6 +16,7 @@ import com.darkrockstudios.texteditor.richstyle.SpellCheckStyle
 import com.darkrockstudios.texteditor.state.DocumentSnapshot
 import com.darkrockstudios.texteditor.state.TextEditOperation
 import com.darkrockstudios.texteditor.state.TextEditorState
+import com.darkrockstudios.texteditor.state.setLink
 import io.mockk.mockk
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.launch
@@ -27,6 +28,8 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
+import utils.blockLines
+import utils.setBlockLines
 
 class SetDocumentTest {
 
@@ -38,55 +41,41 @@ class SetDocumentTest {
 		measurer = mockk(relaxed = true),
 	)
 
-	private fun newMarkdown() =
-		MarkdownExtension(newState(), MarkdownConfiguration.DEFAULT, imageProvider = provider)
+	private fun newDocument(blockLines: String) = newState().apply { setBlockLines(blockLines, imageProvider = provider) }
 
 	private fun range(startLine: Int, startChar: Int, endLine: Int, endChar: Int) =
 		TextEditorRange(CharLineOffset(startLine, startChar), CharLineOffset(endLine, endChar))
 
 	@Test
 	fun `copies rich blocks between editors`() {
-		val markdown = listOf(
-			"# Title",
-			"",
-			"Some **bold** text with a [link](https://example.com).",
-			"",
-			"---",
-			"",
-			"![alt](image.png)",
-			"",
-			"> quoted",
-			"",
-			"- bullet one",
-			"- bullet two",
-			"",
-			"1. first",
-			"2. second",
-			"",
-			"```",
-			"val x = 1",
-			"```",
-		).joinToString("\n")
-
-		val source = newMarkdown()
-		source.importMarkdown(markdown)
-		val target = newMarkdown()
-
-		target.editorState.setDocument(source.editorState.snapshot())
-
-		assertEquals(source.exportAsMarkdown(), target.exportAsMarkdown())
-		assertEquals(source.editorState.textLines, target.editorState.textLines)
-		assertEquals(
-			source.editorState.snapshot().richSpans,
-			target.editorState.snapshot().richSpans,
+		val source = newDocument(
+			listOf(
+				"# Title",
+				"Some bold text with a link.",
+				"---",
+				"![alt](image.png)",
+				"> quoted",
+				"- bullet one",
+				"- bullet two",
+				"1. first",
+				"1. second",
+				"``` val x = 1",
+			).joinToString("\n"),
 		)
+		source.addStyleSpan(range(1, 5, 1, 9), SpanStyle(fontWeight = FontWeight.Bold))
+		source.setLink(range(1, 22, 1, 26), "https://example.com")
+		val target = newState()
+
+		target.setDocument(source.snapshot())
+
+		assertEquals(source.blockLines(), target.blockLines())
+		assertEquals(source.textLines, target.textLines)
+		assertEquals(source.snapshot().richSpans, target.snapshot().richSpans)
 	}
 
 	@Test
 	fun `clean snapshot is published as is`() {
-		val source = newMarkdown()
-		source.importMarkdown("para\n\n---\n\n- item")
-		val snapshot = source.editorState.snapshot()
+		val snapshot = newDocument("para\n---\n- item").snapshot()
 		val target = newState()
 
 		target.setDocument(snapshot)
@@ -182,11 +171,10 @@ class SetDocumentTest {
 		val edits = scope.launch(start = CoroutineStart.UNDISPATCHED) {
 			state.editOperations.collect { emitted.add(it) }
 		}
-		val source = newMarkdown()
-		source.importMarkdown("text\n\n---")
+		val source = newDocument("text\n---")
 		val generation = state.documentGeneration.value
 
-		state.setDocument(source.editorState.snapshot())
+		state.setDocument(source.snapshot())
 		scope.testScheduler.advanceUntilIdle()
 		edits.cancel()
 
@@ -212,11 +200,10 @@ class SetDocumentTest {
 
 	@Test
 	fun `restored rule is still a rule`() {
-		val source = newMarkdown()
-		source.importMarkdown("above\n\n---\n\nbelow")
+		val source = newDocument("above\n---\nbelow")
 		val target = newState()
 
-		target.setDocument(source.editorState.snapshot())
+		target.setDocument(source.snapshot())
 
 		assertTrue(target.snapshot().richSpans.any { it.style is HorizontalRuleSpanStyle })
 	}

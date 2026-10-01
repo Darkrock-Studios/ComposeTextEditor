@@ -13,6 +13,7 @@ import androidx.compose.ui.text.withStyle
 import com.darkrockstudios.texteditor.richstyle.BulletListSpanStyle
 import utils.EditorUiTestScope
 import utils.editorUiTest
+import utils.setBlockLines
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -50,7 +51,7 @@ class SemanticsSetTextTest {
 
 	@Test
 	fun `set text keeps the blocks of the lines it leaves alone`() = editorUiTest {
-		markdown.importMarkdown("- alpha\n- bravo")
+		state.setBlockLines("- alpha\n- bravo")
 		waitForIdle()
 
 		setTextBySemantics("alpha\nbravo charlie")
@@ -65,7 +66,7 @@ class SemanticsSetTextTest {
 
 	@Test
 	fun `an insertion at a line start keeps the line's block marker`() = editorUiTest {
-		markdown.importMarkdown("- alpha\n- bravo")
+		state.setBlockLines("- alpha\n- bravo")
 		waitForIdle()
 
 		setTextBySemantics("alpha\nbig bravo")

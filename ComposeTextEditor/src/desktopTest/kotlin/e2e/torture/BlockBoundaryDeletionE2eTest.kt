@@ -13,9 +13,11 @@ import kotlin.test.assertTrue
 import utils.assertBlockState
 import utils.assertRichSpanInvariants
 import utils.blockFlags
+import utils.blockLines
 import utils.editorUiTest
 import utils.linesWith
 import utils.selectChars
+import utils.setBlockLines
 
 /**
  * Deletions that cross block boundaries: merging lists, joining styled lines into
@@ -25,7 +27,7 @@ class BlockBoundaryDeletionE2eTest {
 
 	@Test
 	fun `deleting the separator line merges two bullet lists`() = editorUiTest {
-		markdown.importMarkdown("- a\n\n\n- b")
+		state.setBlockLines("- a\n\n- b")
 		assertEquals(listOf("a", "", "b"), lines)
 
 		press(Key.MoveHome, ctrl = true)
@@ -35,7 +37,7 @@ class BlockBoundaryDeletionE2eTest {
 		assertEquals(listOf("a", "b"), lines)
 		assertBlockState(0, bullet = true)
 		assertBlockState(1, bullet = true)
-		assertEquals("- a\n- b", markdown.exportAsMarkdown(), "one contiguous list")
+		assertEquals("- a\n- b", state.blockLines(), "one contiguous list")
 		assertRichSpanInvariants()
 	}
 
@@ -43,7 +45,7 @@ class BlockBoundaryDeletionE2eTest {
 	fun `forward deleting the newline before a bulleted line makes it plain`() = editorUiTest(
 		initialText = AnnotatedString("plain\nitem"),
 	) {
-		markdown.editorState.toggleBulletList(1..1)
+		state.toggleBulletList(1..1)
 
 		press(Key.MoveHome, ctrl = true)
 		press(Key.MoveEnd)
@@ -60,8 +62,8 @@ class BlockBoundaryDeletionE2eTest {
 	fun `deleting across a quote to fence boundary leaves one block style`() = editorUiTest(
 		initialText = AnnotatedString("quoted\ncode"),
 	) {
-		markdown.editorState.toggleBlockquote(0..0)
-		markdown.editorState.toggleCodeFence(1..1)
+		state.toggleBlockquote(0..0)
+		state.toggleCodeFence(1..1)
 
 		selectChars(3, 9)
 		press(Key.Delete)
@@ -77,8 +79,8 @@ class BlockBoundaryDeletionE2eTest {
 	fun `select all delete in a fully styled doc leaves a clean empty state`() = editorUiTest(
 		initialText = AnnotatedString("one\ntwo\nthree"),
 	) {
-		markdown.editorState.toggleBulletList(0..2)
-		markdown.editorState.toggleBlockquote(0..2)
+		state.toggleBulletList(0..2)
+		state.toggleBlockquote(0..2)
 
 		press(Key.A, ctrl = true)
 		press(Key.Delete)
@@ -94,7 +96,7 @@ class BlockBoundaryDeletionE2eTest {
 	fun `deleting the last character of a one char item keeps the bullet`() = editorUiTest(
 		initialText = AnnotatedString("x"),
 	) {
-		markdown.editorState.toggleBulletList(0..0)
+		state.toggleBulletList(0..0)
 		press(Key.MoveEnd)
 		press(Key.Backspace)
 
@@ -105,7 +107,7 @@ class BlockBoundaryDeletionE2eTest {
 
 	@Test
 	fun `deleting across a horizontal rule removes it cleanly`() = editorUiTest {
-		markdown.importMarkdown("aa\n---\nbb")
+		state.setBlockLines("aa\n---\nbb")
 		assertEquals(listOf(1), state.linesWith(HorizontalRuleSpanStyle))
 
 		selectChars(1, 6)
@@ -120,8 +122,8 @@ class BlockBoundaryDeletionE2eTest {
 	fun `undo of a cross block delete restores both block styles`() = editorUiTest(
 		initialText = AnnotatedString("quoted\ncode"),
 	) {
-		markdown.editorState.toggleBlockquote(0..0)
-		markdown.editorState.toggleCodeFence(1..1)
+		state.toggleBlockquote(0..0)
+		state.toggleCodeFence(1..1)
 
 		selectChars(3, 9)
 		press(Key.Delete)
@@ -137,7 +139,7 @@ class BlockBoundaryDeletionE2eTest {
 	fun `word delete at the end of a bulleted word keeps the bullet`() = editorUiTest(
 		initialText = AnnotatedString("word"),
 	) {
-		markdown.editorState.toggleBulletList(0..0)
+		state.toggleBulletList(0..0)
 		press(Key.MoveEnd)
 		press(Key.Backspace, ctrl = true)
 
@@ -150,8 +152,8 @@ class BlockBoundaryDeletionE2eTest {
 	fun `deleting the blank line between two fences merges them`() = editorUiTest(
 		initialText = AnnotatedString("code1\n\ncode2"),
 	) {
-		markdown.editorState.toggleCodeFence(0..0)
-		markdown.editorState.toggleCodeFence(2..2)
+		state.toggleCodeFence(0..0)
+		state.toggleCodeFence(2..2)
 
 		press(Key.MoveHome, ctrl = true)
 		press(Key.MoveEnd)
@@ -161,8 +163,8 @@ class BlockBoundaryDeletionE2eTest {
 		assertBlockState(0, fence = true)
 		assertBlockState(1, fence = true)
 		assertEquals(
-			"```\ncode1\ncode2\n```",
-			markdown.exportAsMarkdown(),
+			"``` code1\n``` code2",
+			state.blockLines(),
 			"contiguous fence lines export as one fence pair",
 		)
 		assertRichSpanInvariants()
@@ -172,10 +174,10 @@ class BlockBoundaryDeletionE2eTest {
 	fun `backspacing through an entire mixed block document ends clean`() = editorUiTest(
 		initialText = AnnotatedString("qq\nbb\noo\ncc\npp"),
 	) {
-		markdown.editorState.toggleBlockquote(0..0)
-		markdown.editorState.toggleBulletList(1..1)
-		markdown.editorState.toggleOrderedList(2..2)
-		markdown.editorState.toggleCodeFence(3..3)
+		state.toggleBlockquote(0..0)
+		state.toggleBulletList(1..1)
+		state.toggleOrderedList(2..2)
+		state.toggleCodeFence(3..3)
 
 		press(Key.MoveEnd, ctrl = true)
 		var presses = 0

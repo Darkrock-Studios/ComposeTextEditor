@@ -5,6 +5,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.font.FontWeight
 import utils.editorUiTest
+import utils.setBlockLines
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -139,7 +140,7 @@ class UndoRedoE2eTest {
 
 	@Test
 	fun `pasting list items undoes in one step`() = editorUiTest {
-		markdown.importMarkdown("- one\n- two\n- three")
+		state.setBlockLines("- one\n- two\n- three")
 		waitForIdle()
 		press(Key.A, ctrl = true)
 		press(Key.C, ctrl = true)

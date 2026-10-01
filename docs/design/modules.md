@@ -234,29 +234,27 @@ test and the typed body style test with it. Those tests reached into core
 internals (`Blockquote` and the other `LineBlockStyle` instances,
 `headerBlock`, `getRichSpansStartingOn`); they were rewritten onto the public
 API (the span styles, the block API, the snapshot) while the package still
-lived in core, so the move was a move. The markdown round-trip torture test
-stays in core: it drives the `editorUiTest` harness, which uses internals, and
-core's tests see the module.
+lived in core, so the move was a move.
 
-Core's block-model tests build their documents and read their results through
-markdown text (`importMarkdown("- a\n  - b")`, `assertEquals("- a\n  - b",
-exportAsMarkdown())`): it is the compact, reviewable form of a block
-structure. Those keep it: core's desktop test source set depends on the
-markdown module, a test-only dependency that the main source sets do not
-have. Gradle allows the project cycle (it is a task graph, and no task is on
-both sides: the module's desktop jar is built from core's main classes before
-core's tests compile), and a spike confirmed the Kotlin compiler keeps
-core's tests as friends of core's main compilation with the module's jar on
-the classpath, so the tests' `internal` access holds. The harness and those
-tests use internals (`selector`, `cursor`, `lineOffsets`, `applyLineBlock`),
-so they cannot move to the module, and rewriting thirty files onto a second
-block notation would duplicate the markdown block syntax in test code and
-risk the safety net this refactor relies on. Should the dependency prove a
-burden, the fallback is a core-only fixture notation over
-`applyDocumentBlocks` and the snapshot. Core tests that used `withMarkdown()`
-only for the toggles or the styles use the state's block API and
-`richTextStyles` instead, and the Android and iOS host tests, which used only
-the configuration, use `RichTextStyles`.
+Core's block-model tests build their documents and read their results in
+block lines, a core-only notation over `applyDocumentBlocks` and the snapshot
+(`testUtils/blockLines`; `docs/TESTING.md`, "Block lines"):
+`setBlockLines("- a\n  - b")`, `assertEquals("- a\n  - b", blockLines())`.
+It keeps the markdown-like markers a reviewer reads at a glance but is
+strictly a line per line, with no inline syntax and nothing between lines, so
+it holds only block structure and needs no parser beyond a prefix match.
+Inline styles and links a test needs are set through the state. Core's
+desktop tests depend on no markdown, so a markdown change cannot fail core's
+suite and the IDE sees no project cycle (7.62).
+
+What tests markdown itself is in the module: the round-trip torture test, the
+fuzz fixpoint (the state fuzz is shared through `testUtils/stateFuzz`; core
+keeps its undo-to-origin storms and checks the UI storms' blocks reload through
+block lines), the markdown link safety and line ending cases, and the export of
+a paragraph format. They use core's public API only, on a state with a mocked
+measurer. Core tests that used `withMarkdown()` only for the toggles or the
+styles use the state's block API and `richTextStyles` instead, and the Android
+and iOS host tests, which used only the configuration, use `RichTextStyles`.
 
 ## Compatibility
 
@@ -287,7 +285,7 @@ changes. The migration is mechanical:
    and the registry), `docs/design/editor-actions.md` (the toggles' styles,
    the block toggles) and the kdoc that names `markdownConfiguration` follow.
 3. The module: the package and its tests moved, the parser dependency with
-   them, the test-only dependency for core's fixtures.
+   them, the test-only dependency for core's fixtures (dropped by 7.62).
 4. The deprecated forwarders, `SpellCheckState.withMarkdown` removed, the
    sample app, CI and publishing, `Module.md`s, the README, `MIGRATION.md`,
    the roadmap.

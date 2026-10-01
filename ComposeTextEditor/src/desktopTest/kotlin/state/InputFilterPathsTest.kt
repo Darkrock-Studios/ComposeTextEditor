@@ -6,7 +6,6 @@ import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.dragdrop.dropText
 import com.darkrockstudios.texteditor.input.imeCommitText
 import com.darkrockstudios.texteditor.input.imeSetComposingText
-import com.darkrockstudios.texteditor.markdown.withMarkdown
 import com.darkrockstudios.texteditor.richstyle.BulletListSpanStyle
 import com.darkrockstudios.texteditor.state.EditorInputFilter
 import com.darkrockstudios.texteditor.state.TextEditorState
@@ -17,6 +16,7 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import utils.setBlockLines
 
 /** Every way text enters places the caret and marks by what the input filter let land (7.13). */
 class InputFilterPathsTest {
@@ -96,8 +96,7 @@ class InputFilterPathsTest {
 	fun `a refused Enter in a list marks no other line`() = runTest {
 		val state = createState("", EditorInputFilter.SingleLine)
 		state.inputFilter = null
-		// Two blank lines in the file are one in the editor (7.15).
-		state.withMarkdown().importMarkdown("- item\n\n\nplain")
+		state.setBlockLines("- item\n\nplain")
 		state.inputFilter = EditorInputFilter.SingleLine
 		val before = state.richSpanManager.getAllRichSpans().filter { it.style == BulletListSpanStyle }
 		state.cursor.updatePosition(CharLineOffset(0, 4))

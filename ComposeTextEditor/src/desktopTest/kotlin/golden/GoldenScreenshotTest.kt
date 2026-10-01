@@ -13,6 +13,7 @@ import com.darkrockstudios.texteditor.state.setParagraphFormat
 import utils.EditorUiTestScope
 import utils.assertMatchesGolden
 import utils.editorUiTest
+import utils.setBlockLines
 import kotlin.test.Test
 
 /**
@@ -59,7 +60,7 @@ class GoldenScreenshotTest {
 
 	@Test
 	fun `nested list markers`() = golden("list-markers-nested", "") {
-		markdown.importMarkdown("- one\n  - two\n    - three\n1. first\n2. second")
+		state.setBlockLines("- one\n  - two\n    - three\n1. first\n1. second")
 	}
 
 	@Test

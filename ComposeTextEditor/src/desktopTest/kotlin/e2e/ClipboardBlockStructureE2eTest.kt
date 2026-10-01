@@ -4,15 +4,20 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.ClipEntry
+import com.darkrockstudios.texteditor.CharLineOffset
+import com.darkrockstudios.texteditor.RichTextStyles
+import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.richstyle.BlockquoteSpanStyle
 import com.darkrockstudios.texteditor.richstyle.BulletListSpanStyle
 import com.darkrockstudios.texteditor.richstyle.HeaderSpanStyle
-import com.darkrockstudios.texteditor.richstyle.RichSpanStyle
-import com.darkrockstudios.texteditor.state.TextEditorState
 import kotlinx.coroutines.runBlocking
 import utils.EditorUiTestScope
 import utils.ForeignHtmlTransferable
+import utils.blockLines
 import utils.editorUiTest
+import utils.linesWith
+import utils.pasteHtml
+import utils.setBlockLines
 import java.awt.datatransfer.Transferable
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -30,14 +35,7 @@ import kotlin.test.assertTrue
 @OptIn(ExperimentalComposeUiApi::class)
 class ClipboardBlockStructureE2eTest {
 
-	// Two blank lines in the file are one in the editor: the first is the block separator.
-	private val document = "Intro line\n\n\n- First item\n- Second item\n\n\n> A quoted line\n\n\nEnd."
-
-	private fun TextEditorState.linesWith(style: RichSpanStyle): List<Int> =
-		richSpanManager.getAllRichSpans()
-			.filter { it.style === style }
-			.map { it.range.start.line }
-			.sorted()
+	private val document = "Intro line\n\n- First item\n- Second item\n\n> A quoted line\n\nEnd."
 
 	/** The markup the clipboard offers other applications. */
 	private fun EditorUiTestScope.clipboardHtml(): String = runBlocking {
@@ -56,7 +54,7 @@ class ClipboardBlockStructureE2eTest {
 
 	@Test
 	fun `copied html carries list and quote markup`() = editorUiTest(width = 600.dp, height = 500.dp) {
-		markdown.importMarkdown(document)
+		state.setBlockLines(document)
 		waitForIdle()
 
 		val from = text.indexOf("First item")
@@ -79,7 +77,7 @@ class ClipboardBlockStructureE2eTest {
 	@Test
 	fun `a partially copied list item is still a list item`() =
 		editorUiTest(width = 600.dp, height = 500.dp) {
-			markdown.importMarkdown(document)
+			state.setBlockLines(document)
 			waitForIdle()
 
 			// Mid-way through the first item to mid-way through the quote line: every
@@ -98,7 +96,7 @@ class ClipboardBlockStructureE2eTest {
 	@Test
 	fun `blocks survive a paste after an intervening edit invalidated the span buffer`() =
 		editorUiTest(width = 600.dp, height = 500.dp) {
-			markdown.importMarkdown(document)
+			state.setBlockLines(document)
 			waitForIdle()
 
 			val from = text.indexOf("First item")
@@ -126,10 +124,18 @@ class ClipboardBlockStructureE2eTest {
 			)
 		}
 
+	/** The markdown module's round-trip torture test saves the shape `importHtml` gives this markup. */
+	@Test
+	fun `a pasted blockquote holding a rule lands as a quoted rule`() = editorUiTest {
+		pasteHtml("<blockquote>a<hr>b</blockquote>")
+		assertEquals("> a\n> ---\n> b", state.blockLines())
+	}
+
 	@Test
 	fun `copying part of a styled run does not make it a heading`() =
 		editorUiTest(width = 600.dp, height = 500.dp) {
-			markdown.importMarkdown("Some **bold** text.")
+			state.setBlockLines("Some bold text.")
+			state.addStyleSpan(TextEditorRange(CharLineOffset(0, 5), CharLineOffset(0, 9)), RichTextStyles.DEFAULT.boldStyle)
 			waitForIdle()
 
 			// The default h4 is bold at the body size, as the copied word is.
@@ -150,14 +156,14 @@ class ClipboardBlockStructureE2eTest {
 
 			assertTrue(
 				state.richSpanManager.getAllRichSpans().none { it.style is HeaderSpanStyle },
-				"pasting a bold fragment must not add a heading, got: ${markdown.exportAsMarkdown()}",
+				"pasting a bold fragment must not add a heading, got: ${state.blockLines()}",
 			)
 		}
 
 	@Test
 	fun `cut captures the markup before the delete`() =
 		editorUiTest(width = 600.dp, height = 500.dp) {
-			markdown.importMarkdown(document)
+			state.setBlockLines(document)
 			waitForIdle()
 
 			val from = text.indexOf("First item")
@@ -180,7 +186,7 @@ class ClipboardBlockStructureE2eTest {
 		// Copy in one editor, capture what it put on the clipboard.
 		var copied: Transferable? = null
 		editorUiTest(width = 600.dp, height = 500.dp) {
-			markdown.importMarkdown(document)
+			state.setBlockLines(document)
 			waitForIdle()
 			val from = text.indexOf("First item")
 			val to = text.indexOf("A quoted line") + "A quoted line".length

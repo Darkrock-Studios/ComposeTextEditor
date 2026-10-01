@@ -18,7 +18,7 @@ import kotlin.test.assertTrue
 
 /**
  * A document whose body text carries its font size as a span, the way a
- * `MarkdownConfiguration` with a scaled `defaultTextStyle` produces. Text inserted
+ * `RichTextStyles` with a scaled `defaultTextStyle` produces. Text inserted
  * into such a document has to pick that size up or it renders at the bare default.
  */
 class InsertIntoSizedTextTest {

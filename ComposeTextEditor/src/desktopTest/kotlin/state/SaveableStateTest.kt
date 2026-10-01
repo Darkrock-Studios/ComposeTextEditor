@@ -30,11 +30,14 @@ import androidx.compose.ui.unit.sp
 import com.darkrockstudios.texteditor.BasicTextEditor
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.LineWrap
-import com.darkrockstudios.texteditor.markdown.withMarkdown
+import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.richstyle.RichSpanStyle
 import com.darkrockstudios.texteditor.richstyle.SpellCheckStyle
 import com.darkrockstudios.texteditor.state.TextEditorState
+import com.darkrockstudios.texteditor.state.codeFenceLanguage
 import com.darkrockstudios.texteditor.state.rememberSaveableTextEditorState
+import com.darkrockstudios.texteditor.state.setCodeFenceLanguage
+import com.darkrockstudios.texteditor.state.setLink
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.ObjectInputStream
@@ -46,6 +49,8 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNotSame
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import utils.blockLines
+import utils.setBlockLines
 
 /**
  * [rememberSaveableTextEditorState] across a save and restore. The saved value goes
@@ -130,10 +135,9 @@ class SaveableStateTest {
 		lateinit var linesBefore: List<AnnotatedString>
 		lateinit var spansBefore: Set<Any>
 		runOnIdle {
-			state.withMarkdown().importMarkdown(
-				"# Title\n\nSome **bold** text with a [link](https://example.com).\n\n" +
-					"- one\n- two\n\n> quoted\n\n```\ncode\n```\n\n---\n\nlast"
-			)
+			state.setBlockLines("# Title\nSome bold text with a link.\n- one\n- two\n> quoted\n``` code\n---\nlast")
+			state.addStyleSpan(TextEditorRange(CharLineOffset(1, 5), CharLineOffset(1, 9)), SpanStyle(fontWeight = FontWeight.Bold))
+			state.setLink(TextEditorRange(CharLineOffset(1, 22), CharLineOffset(1, 26)), "https://example.com")
 			state.insertStringAtCursor(buildAnnotatedString { withStyle(rich) { append("styled ") } })
 			state.addRichSpan(0, 2, NoteStyle("a note"))
 			state.addRichSpan(10, 14, SpellCheckStyle)
@@ -167,7 +171,7 @@ class SaveableStateTest {
 		}
 		lateinit var before: List<AnnotatedString>
 		runOnIdle {
-			state.withMarkdown().importMarkdown("> - quoted item\n> # quoted heading\n\nplain")
+			state.setBlockLines("> - quoted item\n> # quoted heading\nplain")
 			before = state.snapshot().lines
 		}
 		assertTrue(before.any { it.paragraphStyles.size > 1 }, "precondition: a line with two blocks")
@@ -186,11 +190,12 @@ class SaveableStateTest {
 			state = rememberSaveableTextEditorState()
 			BasicTextEditor(state = state, modifier = Modifier.size(400.dp, 300.dp))
 		}
-		val markdown = "1. a\n   - b\n     1. c\n2. d\n\n```kotlin\nfun f() = 1\n```"
+		val document = "1. a\n  - b\n    1. c\n1. d\n``` fun f() = 1"
 		lateinit var linesBefore: List<AnnotatedString>
 		lateinit var spansBefore: Set<Any>
 		runOnIdle {
-			state.withMarkdown().importMarkdown(markdown)
+			state.setBlockLines(document)
+			state.setCodeFenceLanguage(4, "kotlin")
 			linesBefore = state.snapshot().lines
 			spansBefore = state.snapshot().richSpans
 		}
@@ -200,7 +205,8 @@ class SaveableStateTest {
 		assertEquals(spansBefore, state.snapshot().richSpans)
 		// The nested indents come back equal to the ones their levels strip.
 		assertEquals(linesBefore.map { it.paragraphStyles }, state.textLines.map { it.paragraphStyles })
-		assertEquals(markdown, state.withMarkdown().exportAsMarkdown())
+		assertEquals(document, state.blockLines())
+		assertEquals("kotlin", state.codeFenceLanguage(4))
 	}
 
 	@Test

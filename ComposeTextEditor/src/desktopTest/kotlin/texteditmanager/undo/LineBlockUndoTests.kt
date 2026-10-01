@@ -7,7 +7,6 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
-import com.darkrockstudios.texteditor.markdown.MarkdownExtension
 import com.darkrockstudios.texteditor.richstyle.BLOCKQUOTE_PARAGRAPH_STYLE
 import com.darkrockstudios.texteditor.richstyle.BULLET_LIST_PARAGRAPH_STYLE
 import com.darkrockstudios.texteditor.richstyle.BlockquoteSpanStyle
@@ -34,7 +33,6 @@ import kotlinx.coroutines.test.TestScope
 class LineBlockUndoTests {
 	private lateinit var scope: TestScope
 	private lateinit var state: TextEditorState
-	private lateinit var markdown: MarkdownExtension
 
 	@BeforeTest
 	fun setup() {
@@ -43,7 +41,6 @@ class LineBlockUndoTests {
 			scope = scope.backgroundScope,
 			measurer = mockk(relaxed = true)
 		)
-		markdown = MarkdownExtension(state)
 	}
 
 	private fun spanLines(style: Any) = state.richSpanManager.getAllRichSpans()
@@ -59,7 +56,7 @@ class LineBlockUndoTests {
 		state.setText("Hello World")
 		val prior = state.textLines[0]
 
-		markdown.editorState.toggleOrderedList(0..0)
+		state.toggleOrderedList(0..0)
 		assertEquals(listOf(0), spanLines(OrderedListSpanStyle))
 		assertTrue(hasParagraphStyle(0, ORDERED_LIST_PARAGRAPH_STYLE))
 
@@ -84,7 +81,7 @@ class LineBlockUndoTests {
 		)
 		assertEquals("Hello World!", state.textLines[0].text)
 
-		markdown.editorState.toggleOrderedList(0..0)
+		state.toggleOrderedList(0..0)
 		assertEquals(listOf(0), spanLines(OrderedListSpanStyle))
 
 		// Undo only the list — the typed char stays, and the list is fully gone.
@@ -101,7 +98,7 @@ class LineBlockUndoTests {
 	@Test
 	fun `undo blockquote removes span and indent`() {
 		state.setText("quote me")
-		markdown.editorState.toggleBlockquote(0..0)
+		state.toggleBlockquote(0..0)
 		assertEquals(listOf(0), spanLines(BlockquoteSpanStyle))
 		assertTrue(hasParagraphStyle(0, BLOCKQUOTE_PARAGRAPH_STYLE))
 
@@ -114,7 +111,7 @@ class LineBlockUndoTests {
 	@Test
 	fun `undo code fence removes span and indent`() {
 		state.setText("code line")
-		markdown.editorState.toggleCodeFence(0..0)
+		state.toggleCodeFence(0..0)
 		assertEquals(listOf(0), spanLines(CodeFenceSpanStyle))
 		assertTrue(hasParagraphStyle(0, CODE_FENCE_PARAGRAPH_STYLE))
 
@@ -133,7 +130,7 @@ class LineBlockUndoTests {
 		)
 		state.selector.updateSelection(selection.start, selection.end)
 
-		markdown.editorState.toggleOrderedList(0..2)
+		state.toggleOrderedList(0..2)
 
 		assertEquals(selection, state.selector.selection)
 	}
@@ -141,7 +138,7 @@ class LineBlockUndoTests {
 	@Test
 	fun `undo multi-line list toggle restores every line`() {
 		state.setText("one\ntwo\nthree")
-		markdown.editorState.toggleOrderedList(0..2)
+		state.toggleOrderedList(0..2)
 		assertEquals(listOf(0, 1, 2), spanLines(OrderedListSpanStyle))
 
 		state.undo()
@@ -166,7 +163,7 @@ class LineBlockUndoTests {
 			?.let { it.start to it.end }
 		assertEquals(6 to 11, boldRange())
 
-		markdown.editorState.toggleOrderedList(0..0)
+		state.toggleOrderedList(0..0)
 		assertEquals("Hello World", state.textLines[0].text)
 		assertEquals(6 to 11, boldRange())
 
@@ -189,7 +186,7 @@ class LineBlockUndoTests {
 		assertEquals(1, highlightSpans().size)
 		assertEquals(range, highlightSpans().single().range)
 
-		markdown.editorState.toggleOrderedList(0..0)
+		state.toggleOrderedList(0..0)
 		assertEquals(1, highlightSpans().size)
 		assertEquals(range, highlightSpans().single().range)
 
@@ -202,13 +199,13 @@ class LineBlockUndoTests {
 	@Test
 	fun `undo ordered list demoting a bullet restores the bullet`() {
 		state.setText("item")
-		markdown.editorState.toggleBulletList(0..0)
+		state.toggleBulletList(0..0)
 		assertEquals(listOf(0), spanLines(BulletListSpanStyle))
 		assertTrue(hasParagraphStyle(0, BULLET_LIST_PARAGRAPH_STYLE))
 		val bulletContent = state.textLines[0]
 
 		// Ordered list demotes the bullet as a mutually-excluded block.
-		markdown.editorState.toggleOrderedList(0..0)
+		state.toggleOrderedList(0..0)
 		assertEquals(listOf(0), spanLines(OrderedListSpanStyle))
 		assertTrue(spanLines(BulletListSpanStyle).isEmpty())
 

@@ -9,8 +9,6 @@ import com.darkrockstudios.texteditor.input.MacKeyBindings
 import com.darkrockstudios.texteditor.input.TabSettings
 import com.darkrockstudios.texteditor.richstyle.BulletListSpanStyle
 import com.darkrockstudios.texteditor.richstyle.OrderedListSpanStyle
-import com.darkrockstudios.texteditor.richstyle.RichSpanStyle
-import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.toggleBulletList
 import com.darkrockstudios.texteditor.state.toggleOrderedList
 import kotlin.test.Test
@@ -18,16 +16,12 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import utils.EditorUiTestScope
+import utils.blockLines
 import utils.editorUiTest
+import utils.linesWith
 
 /** Tab and Shift+Tab: indenting, list items, the settings, and the ways out of the editor. */
 class TabE2eTest {
-
-	private fun TextEditorState.linesWith(style: RichSpanStyle): List<Int> =
-		richSpanManager.getAllRichSpans()
-			.filter { it.style === style }
-			.map { it.range.start.line }
-			.sorted()
 
 	@Test
 	fun `the tab size sets how far tab indents and shift+tab outdents`() = editorUiTest(
@@ -64,13 +58,13 @@ class TabE2eTest {
 	fun `tab at the start of a list's first item indents its text`() = editorUiTest(
 		initialText = AnnotatedString("intro\nitem"),
 	) {
-		markdown.editorState.toggleBulletList(1..1)
+		state.toggleBulletList(1..1)
 		waitForIdle()
 		state.cursor.updatePosition(CharLineOffset(1, 0))
 		press(Key.Tab)
 		assertEquals(listOf("intro", "    item"), lines, "the first item has nothing to nest under (7.58)")
 		assertEquals(listOf(1), state.linesWith(BulletListSpanStyle))
-		assertEquals("intro\n\n- &nbsp;&nbsp;&nbsp;&nbsp;item", markdown.exportAsMarkdown())
+		assertEquals("intro\n-     item", state.blockLines())
 
 		state.cursor.updatePosition(CharLineOffset(1, 8))
 		press(Key.Tab)
@@ -81,8 +75,8 @@ class TabE2eTest {
 	fun `tab over several lines nests the items it can and indents the rest, in one undo step`() = editorUiTest(
 		initialText = AnnotatedString("one\ntwo\nthree\nfour"),
 	) {
-		markdown.editorState.toggleBulletList(1..1)
-		markdown.editorState.toggleOrderedList(2..2)
+		state.toggleBulletList(1..1)
+		state.toggleOrderedList(2..2)
 		waitForIdle()
 		press(Key.A, ctrl = true)
 		press(Key.Tab)
@@ -101,7 +95,7 @@ class TabE2eTest {
 	fun `shift+tab still strips leading spaces from a list item`() = editorUiTest(
 		initialText = AnnotatedString("    item"),
 	) {
-		markdown.editorState.toggleBulletList(0..0)
+		state.toggleBulletList(0..0)
 		waitForIdle()
 		press(Key.Tab, shift = true)
 		assertEquals("item", text)

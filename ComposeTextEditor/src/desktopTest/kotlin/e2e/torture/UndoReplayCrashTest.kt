@@ -1,11 +1,11 @@
 package e2e.torture
 
-import com.darkrockstudios.texteditor.markdown.MarkdownExtension
 import com.darkrockstudios.texteditor.state.TextEditorState
 import io.mockk.mockk
 import kotlinx.coroutines.test.TestScope
 import utils.FuzzOp
 import utils.StateFuzzInterpreter
+import utils.setBlockLines
 import kotlin.test.Test
 
 /**
@@ -20,8 +20,7 @@ class UndoReplayCrashTest {
 	@Test
 	fun `an undo storm over select all replacements must not crash`() {
 		val state = TextEditorState(scope = TestScope(), measurer = mockk(relaxed = true))
-		val markdown = MarkdownExtension(state)
-		markdown.importMarkdown("seed line\nsecond line")
+		state.setBlockLines("seed line\nsecond line")
 		val interpreter = StateFuzzInterpreter(state)
 
 		val script = listOf(

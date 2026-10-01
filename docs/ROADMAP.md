@@ -191,7 +191,7 @@ review.
 | I | Markdown and block model | `ComposeTextEditorMarkdown/`, `richstyle/`, `state/TextEditorStateBlockExt.kt` | 5.6, 7.14 to 7.16, 7.43, 7.45, 7.52, 7.64 |
 | J | Find addon | `ComposeTextEditorFind/` | 7.17 to 7.19, 7.26, 7.29, 7.42 |
 | K | Spell check addon | `ComposeTextEditorSpellCheck/` | 7.20 to 7.22, 7.28, 7.30, 7.31, 7.34, 7.35, 7.38, 7.44, 7.61 |
-| L | Tests and CI | test sources, `.github/workflows/` | 0.1 to 0.3, 0.5 to 0.11, 4.1, 4.15, 7.62 |
+| L | Tests and CI | test sources, `.github/workflows/` | 0.1 to 0.3, 0.5 to 0.11, 4.1, 4.15, 7.62, 7.65 |
 | M | Accessibility and host API | semantics in `BasicTextEditor.kt`, `RichTextView.kt`, `state/rememberTextEditorState.kt` | 7.1 to 7.4, 7.13, 7.23 to 7.25, 7.32, 7.36, 7.59, 7.60, 7.64 |
 | N | Core layout and performance | `state/TextEditorState.kt` | 5.7, 7.8 to 7.12 |
 
@@ -2667,20 +2667,40 @@ Shaping is one line per keystroke. These still scale with document length:
     only. The sample app's plain rich text demo installs nothing.
   - Module: done. `ComposeTextEditorMarkdown` (`composetexteditor-markdown`,
     package unchanged) holds the markdown package, its tests and the parser
-    dependency; core depends on no markdown. Core's desktop tests depend on
-    the module for their fixtures (`docs/design/modules.md`, "Tests").
+    dependency; core depends on no markdown. Core's desktop tests depended on
+    the module for their fixtures until 7.62.
     `SpellCheckState.withMarkdown` is gone: `textState.withMarkdown()`.
   - Hosts: done. The markdown demos install the module and the plain demo
     does not; the module is in the Dokka aggregate, `deploy.yml`, and the
     desktop and iOS CI jobs; `docs/MIGRATION.md` lists what a host changes.
     The iOS compile of the module is in the Mac queue.
-- [ ] **7.62 Core's block tests read their fixtures through the markdown
+- [x] **7.62 Core's block tests read their fixtures through the markdown
   module. S.** [Opus] [Lane L] Core's desktop tests depend on
   `ComposeTextEditorMarkdown` so the block tests can build and assert
   documents as markdown text (`docs/design/modules.md`, "Tests"). A core-only
   fixture notation over `applyDocumentBlocks` and the snapshot would let core's
   tests stand on core alone; worth doing if the dependency proves a burden
   (an IDE import cycle, or a markdown change failing core's suite).
+  Done: block lines (`testUtils/blockLines`; `docs/TESTING.md`, "Block
+  lines"), the markdown block markers a line at a time with no inline syntax
+  and nothing between lines, loaded through `applyDocumentBlocks` and read
+  from the snapshot, leaving the styles as an importer does.
+  Core's tests build and check documents in it, set inline styles and links
+  through the state, and no longer depend on the markdown module. What tests
+  markdown moved there: the round-trip torture test, the fuzz fixpoint (the
+  state fuzz shared as `testUtils/stateFuzz`), link safety, line endings and
+  the paragraph format export. The UI fuzz checks its storms' blocks reload
+  through block lines instead of markdown (7.65), and the renumbering tests
+  read the layout's numbers, since block lines writes every ordered item `1.`
+  (`BlockLinesTest`; `docs/design/modules.md`, "Tests").
+- [ ] **7.65 The UI storms no longer reach a markdown fixpoint. S.** [Opus]
+  [Lane L] Since 7.62 the markdown fixpoint runs on the state fuzz alone
+  (`MarkdownFuzzFixpointTest`); `EditorFuzzE2eTest` drives key events and the
+  clipboard, which build documents the state interpreter does not, and checks
+  only that their blocks reload through block lines. The markdown module has
+  no UI harness and core's tests no markdown. Give the markdown module a small
+  composed harness on core's public API, or record UI storm documents as
+  snapshots core writes and the markdown module replays.
 - [x] **7.63 HTML export ignores retired styles. S.** [Opus] [Lane H] The
   markdown exporter writes a span still carrying a retired configuration's
   bold or link style as its marker (`TextEditorState.retiredRichTextStyles`);

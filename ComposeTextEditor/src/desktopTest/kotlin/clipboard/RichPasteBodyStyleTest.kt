@@ -22,8 +22,8 @@ class RichPasteBodyStyleTest {
 	private val body = RichTextStyles.DEFAULT.defaultTextStyle
 
 	@Test
-	fun `bold markup pasted into a markdown editor keeps the body size`() = editorUiTest {
-		markdown.importMarkdown("hello")
+	fun `bold markup pasted into body text keeps the body size`() = editorUiTest {
+		state.withHtml().importHtml("<p>hello</p>")
 		press(Key.MoveEnd, ctrl = true)
 		pasteHtml("<b>bold</b> plain")
 		assertEquals("hellobold plain", text)
@@ -35,7 +35,7 @@ class RichPasteBodyStyleTest {
 
 	@Test
 	fun `a pasted heading keeps its own size`() = editorUiTest {
-		markdown.importMarkdown("hello")
+		state.withHtml().importHtml("<p>hello</p>")
 		press(Key.MoveEnd, ctrl = true)
 		press(Key.Enter)
 		pasteHtml("<h2>Title</h2>")
@@ -49,7 +49,7 @@ class RichPasteBodyStyleTest {
 
 	@Test
 	fun `bold markup pasted into a heading takes the heading's size`() = editorUiTest {
-		markdown.importMarkdown("## Title")
+		state.withHtml().importHtml("<h2>Title</h2>")
 		press(Key.MoveEnd, ctrl = true)
 		pasteHtml("<b>x</b>")
 		assertEquals("Titlex", text)

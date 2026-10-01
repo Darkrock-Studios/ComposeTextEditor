@@ -14,7 +14,7 @@ import kotlin.test.assertTrue
 private val BOLD = SpanStyle(fontWeight = FontWeight.Bold)
 
 /**
- * Body text that carries its font size as a span, the way a `MarkdownConfiguration`
+ * Body text that carries its font size as a span, the way a `RichTextStyles`
  * with a scaled `defaultTextStyle` produces it.
  */
 private val BASE_SIZE = SpanStyle(fontSize = 24.sp)

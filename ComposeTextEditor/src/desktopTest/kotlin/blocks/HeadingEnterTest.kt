@@ -5,7 +5,6 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.unit.sp
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.RichTextStyles
-import com.darkrockstudios.texteditor.markdown.MarkdownExtension
 import com.darkrockstudios.texteditor.richstyle.BlockquoteSpanStyle
 import com.darkrockstudios.texteditor.richstyle.BulletListSpanStyle
 import com.darkrockstudios.texteditor.richstyle.HeaderSpanStyle
@@ -21,7 +20,9 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
+import utils.blockLines
 import utils.linesWith
+import utils.setBlockLines
 
 /**
  * Enter at a heading's end starts body text, as in Word and Google Docs; a split
@@ -33,10 +34,10 @@ class HeadingEnterTest {
 	private val bodyStyle = SpanStyle(fontSize = 24.sp)
 	private val config = RichTextStyles.DEFAULT.copy(defaultTextStyle = bodyStyle)
 
-	private fun TestScope.extension(markdown: String): MarkdownExtension {
-		val e = MarkdownExtension(TextEditorState(scope = this, measurer = mockk(relaxed = true)).apply { richTextStyles = config })
-		e.importMarkdown(markdown)
-		return e
+	private fun TestScope.editor(blockLines: String): TextEditorState {
+		val state = TextEditorState(scope = this, measurer = mockk(relaxed = true)).apply { richTextStyles = config }
+		state.setBlockLines(blockLines)
+		return state
 	}
 
 	private fun TextEditorState.type(text: String) = text.forEach { insertCharacterAtCursor(it) }
@@ -45,66 +46,61 @@ class HeadingEnterTest {
 
 	@Test
 	fun `Enter at a heading's end starts body text`() = runTest {
-		val e = extension("# Title")
-		val state = e.editorState
+		val state = editor("# Title")
 		state.cursor.updatePosition(CharLineOffset(0, 5))
 
 		state.insertNewlineAtCursor()
 		state.type("body")
 
-		assertEquals(1, e.editorState.headerLevel(0))
-		assertNull(e.editorState.headerLevel(1))
+		assertEquals(1, state.headerLevel(0))
+		assertNull(state.headerLevel(1))
 		assertEquals(setOf(bodyStyle), state.stylesOn(1))
 		assertEquals(emptyList(), state.textLines[1].paragraphStyles)
-		assertEquals("# Title\n\nbody", e.exportAsMarkdown())
+		assertEquals("# Title\nbody", state.blockLines())
 	}
 
 	@Test
 	fun `Enter on an empty heading leaves it and starts body text below`() = runTest {
-		val e = extension("# Title")
-		val state = e.editorState
+		val state = editor("# Title")
 		state.cursor.updatePosition(CharLineOffset(0, 5))
 		state.insertNewlineAtCursor()
-		e.editorState.toggleHeader(1..1, 2)
+		state.toggleHeader(1..1, 2)
 
 		state.insertNewlineAtCursor()
 
-		assertEquals(2, e.editorState.headerLevel(1))
-		assertNull(e.editorState.headerLevel(2))
+		assertEquals(2, state.headerLevel(1))
+		assertNull(state.headerLevel(2))
 		assertEquals(CharLineOffset(2, 0), state.cursorPosition)
 	}
 
 	@Test
 	fun `a split inside a heading keeps both halves headings`() = runTest {
-		val e = extension("# Title")
-		val state = e.editorState
+		val state = editor("# Title")
 		state.cursor.updatePosition(CharLineOffset(0, 2))
 
 		state.insertNewlineAtCursor()
 
-		assertEquals(1, e.editorState.headerLevel(0))
-		assertEquals(1, e.editorState.headerLevel(1))
-		assertEquals("# Ti\n\n# tle", e.exportAsMarkdown())
+		assertEquals(1, state.headerLevel(0))
+		assertEquals(1, state.headerLevel(1))
+		assertEquals("# Ti\n# tle", state.blockLines())
 	}
 
 	@Test
 	fun `a quoted heading continues the quote but not the heading`() = runTest {
-		val e = extension("> # Title")
-		val state = e.editorState
+		val state = editor("> # Title")
 		state.cursor.updatePosition(CharLineOffset(0, 5))
 
 		state.insertNewlineAtCursor()
 		state.type("body")
 
-		assertNull(e.editorState.headerLevel(1))
-		assertEquals(listOf(0, 1), e.linesWith(BlockquoteSpanStyle))
+		assertNull(state.headerLevel(1))
+		assertEquals(listOf(0, 1), state.linesWith(BlockquoteSpanStyle))
 		assertEquals("body", state.textLines[1].text)
 	}
 
 	@Test
 	fun `the caret returning to the empty line after a heading types body text`() = runTest {
-		val e = extension("# Title\n\nbody")
-		val state = e.editorState
+		val state = editor("# Title\nbody")
 		state.cursor.updatePosition(CharLineOffset(0, 5))
 		state.insertNewlineAtCursor()
 		state.cursor.updatePosition(CharLineOffset(2, 0))
@@ -117,67 +113,62 @@ class HeadingEnterTest {
 
 	@Test
 	fun `one undo takes the new line away`() = runTest {
-		val e = extension("# Title")
-		val state = e.editorState
+		val state = editor("# Title")
 		state.cursor.updatePosition(CharLineOffset(0, 5))
 
 		state.insertNewlineAtCursor()
 		state.undo()
 
-		assertEquals("# Title", e.exportAsMarkdown())
+		assertEquals("# Title", state.blockLines())
 		assertEquals(1, state.textLines.size)
 	}
 
 	@Test
 	fun `redo brings back the body line`() = runTest {
-		val e = extension("# Title")
-		val state = e.editorState
+		val state = editor("# Title")
 		state.cursor.updatePosition(CharLineOffset(0, 5))
 		state.insertNewlineAtCursor()
-		val after = e.exportAsMarkdown()
+		val after = state.blockLines()
 
 		state.undo()
 		state.redo()
 
-		assertEquals(after, e.exportAsMarkdown())
-		assertNull(e.editorState.headerLevel(1))
+		assertEquals(after, state.blockLines())
+		assertNull(state.headerLevel(1))
 	}
 
 	@Test
 	fun `redo brings back an empty heading's body line`() = runTest {
-		val e = extension("# Title")
-		val state = e.editorState
+		val state = editor("# Title")
 		state.cursor.updatePosition(CharLineOffset(0, 5))
 		state.insertNewlineAtCursor()
-		e.editorState.toggleHeader(1..1, 2)
+		state.toggleHeader(1..1, 2)
 		state.insertNewlineAtCursor()
 
 		state.undo()
 		state.redo()
 
-		assertEquals(2, e.editorState.headerLevel(1))
-		assertNull(e.editorState.headerLevel(2))
+		assertEquals(2, state.headerLevel(1))
+		assertNull(state.headerLevel(2))
 	}
 
 	@Test
 	fun `redo of Enter in a list brings back the new item's bullet`() = runTest {
-		val e = extension("- a")
-		val state = e.editorState
+		val state = editor("- a")
 		state.cursor.updatePosition(CharLineOffset(0, 1))
 		state.insertNewlineAtCursor()
-		val after = e.exportAsMarkdown()
+		val after = state.blockLines()
 		state.undo()
 		state.redo()
-		assertEquals(after, e.exportAsMarkdown())
+		assertEquals(after, state.blockLines())
 	}
 
 	@Test
 	fun `text typed into an empty heading under another heading takes its own size`() = runTest {
-		val e = extension("# Title")
-		val state = e.editorState
+		val state = editor("# Title")
 		state.cursor.updatePosition(CharLineOffset(0, 5))
 		state.insertNewlineAtCursor()
-		e.editorState.toggleHeader(1..1, 2)
+		state.toggleHeader(1..1, 2)
 		state.cursor.updatePosition(CharLineOffset(1, 0))
 
 		state.type("Sub")
@@ -188,28 +179,26 @@ class HeadingEnterTest {
 
 	@Test
 	fun `Enter on an empty quoted item leaves the list and stays quoted`() = runTest {
-		val e = extension("> - a")
-		val state = e.editorState
+		val state = editor("> - a")
 		state.cursor.updatePosition(CharLineOffset(0, 1))
 
 		state.insertNewlineAtCursor()
-		assertEquals(listOf(0, 1), e.linesWith(BulletListSpanStyle))
+		assertEquals(listOf(0, 1), state.linesWith(BulletListSpanStyle))
 		state.insertNewlineAtCursor()
 
-		assertEquals(listOf(0), e.linesWith(BulletListSpanStyle))
-		assertEquals(listOf(0, 1), e.linesWith(BlockquoteSpanStyle))
+		assertEquals(listOf(0), state.linesWith(BulletListSpanStyle))
+		assertEquals(listOf(0, 1), state.linesWith(BlockquoteSpanStyle))
 	}
 
 	@Test
 	fun `a filter that turns the line break into a space leaves the next heading alone`() = runTest {
-		val e = extension("# A\n# B")
-		val state = e.editorState
+		val state = editor("# A\n# B")
 		state.inputFilter = EditorInputFilter { _, _, text -> AnnotatedString(text.text.replace('\n', ' ')) }
 		state.cursor.updatePosition(CharLineOffset(0, 1))
 
 		state.insertNewlineAtCursor()
 
 		assertEquals(listOf("A ", "B"), state.textLines.map { it.text })
-		assertEquals(listOf(0, 1), e.linesWith(HeaderSpanStyle.of(1)))
+		assertEquals(listOf(0, 1), state.linesWith(HeaderSpanStyle.of(1)))
 	}
 }
