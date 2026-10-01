@@ -267,7 +267,7 @@ editor does rather than what it should do.
   names the items it needs (`utils/EditorInvariants.kt`) and stays off while
   any is in `OPEN_PARITY_ITEMS`; today Left then Right, and Down moves one row,
   are on. Set `FUZZ_INVARIANTS=all` to run every one.
-- [ ] **0.4 Keyboard trace record and replay.** [Fable] [Lane F] A debug
+- [ ] **0.4 Keyboard trace record and replay.** [Opus] [Lane F] A debug
   recorder on the Android `InputConnection` that logs every command and read. A
   user attaches the trace to a bug report; the trace replays in
   `androidHostTest`. Build a corpus per keyboard (Gboard, Gboard Japanese,
@@ -379,7 +379,7 @@ fixes what users feel every minute.
 
 ### Caret and keyboard
 
-- [ ] **1.1 Grapheme-aware movement and deletion. R.** [Fable] [Lane A]
+- [ ] **1.1 Grapheme-aware movement and deletion. R.** [Opus] [Lane A]
   [Mac work] Left and Right step one UTF-16 unit
   (`state/TextEditorCursorState.kt`, `moveLeft`/`moveRight`). Backspace and
   Delete remove one unit (`state/TextEditorState.kt`,
@@ -695,7 +695,7 @@ fixes what users feel every minute.
   `moveToBeginningOfParagraph:` and `moveToEndOfParagraph:` do; F, B, N and P
   are Right, Left, Down and Up (N and P keep the goal x); D and H delete
   forward and backward. Shift extends the motions. Ctrl+Y waits for 2.11.
-- [ ] **2.7 Layout-aware shortcuts. U.** [Fable] [Lane D] A BEPO user reports
+- [ ] **2.7 Layout-aware shortcuts. U.** [Opus] [Lane D] A BEPO user reports
   shortcuts follow physical QWERTY positions on desktop (hammer-editor#945).
   Confirm, then match on the produced character where the platform provides it.
 - [x] **2.8 Enter with modifiers. S.** [Opus] [Lane D] Every Enter chord
@@ -915,9 +915,9 @@ fixes what users feel every minute.
   (the caret handle's and a link's too), and keeps the focus handler from
   focusing, as Android's gesture detector treats a second pointer. A finger
   landing outside the editor's node never reaches its handlers.
-- [ ] **3.14 Italics invisible on Android. U.** [Fable] [Lane F] Saved and
+- [ ] **3.14 Italics invisible on Android. U.** [Opus] [Human] [Lane F] Saved and
   exported correctly but not drawn (hammer-editor#956). Not reproduced.
-- [ ] **3.15 Magnifier on iOS and mobile web. C.** [Fable] [Lane B]
+- [ ] **3.15 Magnifier on iOS and mobile web. C.** [Opus] [Lane B]
   [Mac work] Compose has no magnifier outside Android (3.6). iOS text views
   show a loupe while the caret or a handle is dragged; matching it means
   drawing our own: an enlarged copy of the canvas around
@@ -1104,7 +1104,7 @@ Constraints that shape the order:
   typing Returns keeps the caret at the keyboard's top. Android reports
   `WindowInsets.ime` only to edge-to-edge windows, so this also covers 3.9
   there when the host has no `imePadding`; a window that resizes is still 3.9.
-- [ ] **4.8 Native edit menu. C.** [Fable] [Lane D] [Mac work] A Material
+- [ ] **4.8 Native edit menu. C.** [Opus] [Lane D] [Mac work] A Material
   dropdown is used instead of the platform text toolbar.
 - [x] **4.9 Rich clipboard. C.** [Opus] [Lane H] [Mac work] Plain text only
   (shared with 6.7).
@@ -1331,13 +1331,13 @@ iOS Safari; browser tests run in CI.
 
 ### Android and desktop
 
-- [ ] **4.16 Japanese input. U.** [Fable] [Lane F] Reported broken with Fcitx5
+- [ ] **4.16 Japanese input. U.** [Opus] [Human] [Lane F] Reported broken with Fcitx5
   and Mozc on Linux and with Gboard Japanese on Android (hammer-editor#930).
   ComposeTextEditor PR 102 reworked IME edits afterwards; nobody has confirmed
   the result.
-- [ ] **4.17 Wayland paste. U.** [Fable] [Lane H] External paste fails on
+- [ ] **4.17 Wayland paste. U.** [Opus] [Lane H] External paste fails on
   Wayland with KDE; internal paste works (hammer-editor#921).
-- [ ] **4.18 ANR on Galaxy S21 Ultra. U.** [Fable] [Lane F] hammer-editor#545,
+- [ ] **4.18 ANR on Galaxy S21 Ultra. U.** [Opus] [Human] [Lane F] hammer-editor#545,
   stale.
 - [x] **4.19 Desktop candidate window. C.** [Opus] [Lane E] `lastCursorMetrics`
   updates only when the caret is drawn, so it can lag during blink-off.
@@ -1362,7 +1362,7 @@ iOS Safari; browser tests run in CI.
   checked on an emulator through the virtual keyboard's Alt+E acute. A
   physical keyboard's layout is left for a person (QA plan, "Android
   keyboards").
-- [ ] **4.23 Primary selection on Linux. S.** [Fable] [Lane B] Middle-click
+- [ ] **4.23 Primary selection on Linux. S.** [Opus] [Lane B] Middle-click
   paste of the X11 primary selection. Compose's `Clipboard` covers only the
   system clipboard, but AWT exposes the primary selection as
   `Toolkit.getSystemSelection()` (null on Windows and macOS). A full version
@@ -2180,7 +2180,7 @@ iOS Safari; browser tests run in CI.
   takes it too. The iOS and web
   keyboards are 4.32. The semantics' `onImeAction` still reads the setting
   alone (7.59).
-- [ ] **7.41** [Fable] [Lane C] No soft-wrap toggle: every line wraps at the
+- [ ] **7.41** [Opus] [Lane C] No soft-wrap toggle: every line wraps at the
   viewport width, so a code editor cannot keep a line whole and scroll
   sideways, and `EditorLineLimits.SingleLine` (7.13) wraps and grows where
   `BasicTextField`'s single line scrolls. Split out of 7.13 because it is not
@@ -2227,20 +2227,20 @@ iOS Safari; browser tests run in CI.
   direction, as `BasicTextField` does; the `textStyle` KDoc on
   `TextEditorStyle` tells hosts to set `TextDirection.Content` for
   per-paragraph direction.
-- [ ] **7.33** [Fable] [Lane A] Arrow keys inside a mixed paragraph (a Hebrew
+- [ ] **7.33** [Opus] [Lane A] Arrow keys inside a mixed paragraph (a Hebrew
   word in English text, or the reverse) move logically, so the caret jumps
   visually at the run boundaries. macOS and Windows move visually through the
   runs, with the caret carrying a direction at each boundary; `BasicTextField`
   is logical here too. Needs `getBidiRunDirection` and a run-aware step, and a
   visual caret position at run boundaries.
-- [ ] **7.6** [Fable] [Lane C] Selection draws one rect per row from x(start)
+- [ ] **7.6** [Opus] [Lane C] Selection draws one rect per row from x(start)
   to x(end); wrong in right-to-left, and mixed text needs several rects.
   **R** (0.5, `drawing/GeometryTest.kt`, `failsUntil("7.6")`): in a
   right-to-left paragraph a selected line break's sliver is added to the
   right, so it eats a space's width off the selected text instead of lying
   past the text's left end; in "abc אבג def", selecting "c", the space, א and
   ב draws one box over "c", the space and the unselected ג, missing א and ב.
-- [ ] **7.7** [Fable] [Lane C] Underline boxes (spell check, composing, links)
+- [ ] **7.7** [Opus] [Lane C] Underline boxes (spell check, composing, links)
   assume no bidi.
 
 Hit testing and caret x already delegate to Compose and should be correct.
@@ -2697,7 +2697,7 @@ Shaping is one line per keystroke. These still scale with document length:
 
 ### Spell check addon
 
-- [ ] **7.20** [Fable] [Lane K] Sentence mode: sentences run across line
+- [ ] **7.20** [Opus] [Lane K] Sentence mode: sentences run across line
   boundaries, offsets shift on indented lines, and each partial check rescans
   the whole document. Tested only against fakes. Also: each period copies the
   sentence built so far (`sentenceBuilder.toString()`) to test for an
@@ -2784,7 +2784,7 @@ Shaping is one line per keystroke. These still scale with document length:
   styles unless the host's `richSpanStyleSaver` keeps them (the sample keeps
   images this way). Markdown was not used: it loses underline, colour and size
   (7.16) and needs the extension attached.
-- [ ] **7.24** [Fable] [Lane M] The state needs a `TextMeasurer` and a scope,
+- [ ] **7.24** [Opus] [Lane M] The state needs a `TextMeasurer` and a scope,
   so it cannot be created outside composition.
 - [x] **7.25** [Opus] [Lane M] No word count, no programmatic focus beyond
   `autoFocus`, `cursorDataFlow` has no initial value.
