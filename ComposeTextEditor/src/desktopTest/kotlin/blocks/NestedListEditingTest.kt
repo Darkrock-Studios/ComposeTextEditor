@@ -107,6 +107,18 @@ class NestedListEditingTest {
 	}
 
 	@Test
+	fun `undoing a clear gives back the items lifted past its sibling`() = runTest {
+		val markdown = "- a\n  - b\n    - c\n    - d\n      - e\n- f"
+		for (toggle in listOf<TextEditorState.() -> Unit>({ toggleBulletList(2..2) }, { toggleBlockquote(2..2) })) {
+			val e = extension(markdown)
+			val origin = e.exportAsMarkdown()
+			e.state.toggle()
+			e.state.undo()
+			assertEquals(origin, e.exportAsMarkdown())
+		}
+	}
+
+	@Test
 	fun `a blank line does not end a nesting, a paragraph does`() = runTest {
 		val state = editor("- a\n\n- b")
 		assertTrue(state.nestListItems(2..2))

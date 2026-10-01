@@ -5,7 +5,10 @@ import androidx.compose.ui.text.font.FontWeight
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.richstyle.BulletListSpanStyle
+import com.darkrockstudios.texteditor.richstyle.nestListItems
+import com.darkrockstudios.texteditor.richstyle.unnestListItems
 import com.darkrockstudios.texteditor.state.TextEditorState
+import com.darkrockstudios.texteditor.state.listLevel
 import com.darkrockstudios.texteditor.state.toggleBulletList
 import io.mockk.mockk
 import kotlin.test.Test
@@ -89,5 +92,43 @@ class MultiLineEditCostTest {
 		state.redo()
 		state.assertBounded(before, "redo of the toggle", lines = 1, spans = 2)
 		assertEquals(bulleted, state.linesWith(BulletListSpanStyle))
+	}
+
+	@Test
+	fun `nesting and un-nesting many list items, and lifting their followers, stay bounded`() = runTest {
+		val e = MarkdownExtension(TextEditorState(scope = this, measurer = mockk(relaxed = true)))
+		e.importMarkdown((0 until documentLines).joinToString("\n") { "- item $it" })
+		val state = e.editorState
+		val nested = selected.first + 1..selected.last
+
+		var before = state.writes()
+		assertTrue(state.nestListItems(selected))
+		state.assertBounded(before, "nesting", lines = 1, spans = 2)
+		assertEquals(listOf(0, 1, 1), listOf(selected.first - 1, selected.first, selected.last).map { state.listLevel(it) })
+		val nestedLines = state.textLines.toList()
+
+		before = state.writes()
+		state.undo()
+		state.assertBounded(before, "undo of nesting", lines = 1, spans = 2)
+		assertEquals(0, state.listLevel(selected.first))
+
+		before = state.writes()
+		state.redo()
+		state.assertBounded(before, "redo of nesting", lines = 1, spans = 2)
+		assertEquals(nestedLines, state.textLines.toList())
+		assertTrue(state.nestListItems(nested))
+		assertEquals(2, state.listLevel(selected.last))
+
+		// The first item comes up, and the 399 under it with it.
+		before = state.writes()
+		assertTrue(state.unnestListItems(selected.first..selected.first))
+		state.assertBounded(before, "un-nesting with followers", lines = 1, spans = 2)
+		assertEquals(listOf(0, 1), listOf(state.listLevel(selected.first), state.listLevel(selected.last)))
+
+		// Clearing the first lifts its followers to the top level.
+		before = state.writes()
+		state.toggleBulletList(selected.first..selected.first)
+		state.assertBounded(before, "clearing with followers", lines = 2, spans = 4)
+		assertEquals(0, state.listLevel(selected.last))
 	}
 }

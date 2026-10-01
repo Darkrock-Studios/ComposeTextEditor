@@ -1901,11 +1901,19 @@ iOS Safari; browser tests run in CI.
   (`state/UndoLineJoinTest.kt`). Seeds 777, 38, 185 and 359 are in the fixed
   seeds; undo to origin holds for seeds 1 to 3000. What the sweep found besides
   is 6.30 and 7.64.
-- [ ] **6.29 Nesting a long selection writes per line. S.** [Opus] [Lane G]
+- [x] **6.29 Nesting a long selection writes per line. S.** [Opus] [Lane G]
   `nestListItems` and `relevelListFollowers` (`richstyle/ListNesting.kt`) move each
   item with `setListLevelRaw`, a line splice and two span-index publishes per item,
   so Tab over a 400-item selection costs 400 splices where 6.17's toggle costs two.
-  Collect the moves and write them with `writeLineBlocks`.
+  Collect the moves and write them with `writeLineBlocks`. Done: nesting,
+  un-nesting and the followers they lift plan their moves in a `ListMoves`, whose
+  level queries read the planned levels, and write them once; Tab or Shift+Tab
+  over 400 items, or lifting 399 followers, writes the line list once and the span
+  index twice, and clearing an item with followers twice each
+  (`state/MultiLineEditCostTest.kt`). Found on the way: undoing a clear or a
+  quote of a nested item left the items it lifted past its sibling where they
+  were lifted to, since the lines recorded came from a walk that stopped at the
+  sibling; they now come from the planned moves (`blocks/NestedListEditingTest.kt`).
 - [ ] **6.30 A join leaves a block's indent over part of a line. R.** [Opus]
   [Lane G] Deleting or replacing across a quote line and a plain line keeps one
   line's marker (or none) but carries the other's `ParagraphStyle` over its part

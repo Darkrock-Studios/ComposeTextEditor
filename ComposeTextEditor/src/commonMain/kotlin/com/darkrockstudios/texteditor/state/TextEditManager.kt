@@ -954,13 +954,14 @@ class TextEditManager(private val state: TextEditorState) {
 		recordLineBlocksSince(before, cursorBefore)
 	}
 
-	private fun lineBlocksOf(lines: Collection<Int>): List<Triple<Int, AnnotatedString, List<RichSpanStyle>>> =
+	/** Each of [lines] as it stands, its content and block span styles, for [recordLineBlocksSince]. */
+	internal fun lineBlocksOf(lines: Collection<Int>): List<Triple<Int, AnnotatedString, List<RichSpanStyle>>> =
 		lines.distinct().filter { it in state.textLines.indices }.map { line ->
 			Triple(line, state.getLine(line), state.lineBlockSpanStyles(line))
 		}
 
 	/** Records, as one LineBlock entry, how the lines [before] captured have changed since. */
-	private fun recordLineBlocksSince(
+	internal fun recordLineBlocksSince(
 		before: List<Triple<Int, AnnotatedString, List<RichSpanStyle>>>,
 		cursorBefore: CharLineOffset,
 	) {
