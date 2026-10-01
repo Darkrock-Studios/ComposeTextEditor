@@ -1675,12 +1675,22 @@ iOS Safari; browser tests run in CI.
   "the" after a substitution (4.29's `None` holds), and one undo after `a--`
   gives back `a--`. (The simulator tool's `text` typing sends `'` for `"`, so
   a quote check through it reads single quotes.)
-- [ ] **5.3 Markdown as you type.** [Opus] [Lane G] "- ", "1. ", "# ", "> " at
+- [x] **5.3 Markdown as you type.** [Opus] [Lane G] "- ", "1. ", "# ", "> " at
   line start; inline `**bold**` and friends. Decided: not in core. Markdown
   is a storage detail for a WYSIWYG host like Hammer, which does not want
   it. It belongs in `ComposeTextEditorMarkdown` (7.52), as an opt-in
   `EditBehavior` on the 5.1 hook that the markdown demo installs, with
   examples there.
+  Done: `markdown/MarkdownShortcuts(blocks, inline)`, installed with
+  `editBehaviors.add(0, MarkdownShortcuts())`. At a line's start `- `, `* `,
+  `+ `, a number and `. ` or `) `, one to six `#` and `> ` make the block when
+  the space is typed (a marker the line's blocks refuse stays text), and
+  three backticks with a language then Enter make a code block in it. A
+  closing `**`/`__`, `*`/`_`, `` ` ``, `~~` or `==` makes its style over the
+  text since an opener of the same run length that starts a word, the
+  markers removed, and text typed after it is unstyled. One undo gives back
+  what was typed; nothing converts in code (`MarkdownShortcutsTest`; design in
+  `docs/design/behaviors.md`). The sample's markdown demos have a switch.
 - [x] **5.4 Auto-link** [Opus] [Lane G] typed and pasted URLs. Decided: opt-in,
   off by default. Paste does not go through the 5.1 hook, so the pasted half
   needs its own seam.

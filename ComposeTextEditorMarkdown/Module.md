@@ -53,6 +53,16 @@ The block toggles and queries (`toggleBulletList`, `toggleHeader`, `headerLevel`
 `setLink` and the rest) are on the state, in `com.darkrockstudios.texteditor.state`,
 so a toolbar needs no markdown to drive them.
 
+To format by typing markdown, install
+[MarkdownShortcuts][com.darkrockstudios.texteditor.markdown.MarkdownShortcuts]:
+`- `, `1. `, `# ` and `> ` at a line's start make the block, `**bold**` and the other
+inline syntax the style, and one undo gives back what was typed. It needs no
+`withMarkdown`; any rich text editor can take it:
+
+```kotlin
+state.editBehaviors.add(0, MarkdownShortcuts())
+```
+
 Images are only reconstructed on import when an
 [ImageProvider][com.darkrockstudios.texteditor.richstyle.ImageProvider] is supplied
 (`state.withMarkdown(imageProvider = myProvider)`); without one every `![alt](url)`

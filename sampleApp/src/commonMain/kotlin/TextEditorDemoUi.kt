@@ -26,6 +26,7 @@ import com.darkrockstudios.texteditor.TextEditor
 import com.darkrockstudios.texteditor.RichTextStyles
 import com.darkrockstudios.texteditor.behaviors.AutoLink
 import com.darkrockstudios.texteditor.behaviors.SmartPunctuation
+import com.darkrockstudios.texteditor.markdown.MarkdownShortcuts
 import com.darkrockstudios.texteditor.markdown.withMarkdown
 import com.darkrockstudios.texteditor.rememberTextEditorStyle
 import com.darkrockstudios.texteditor.richstyle.ImageBlockSpanStyle
@@ -129,6 +130,12 @@ fun TextEditorDemoUi(
 		// Ahead of the line block behavior, so Enter on a list item links too.
 		if (autoLink.typed || autoLink.pasted) state.editBehaviors.add(0, autoLink)
 	}
+	var markdownShortcuts by remember { mutableStateOf(false) }
+	LaunchedEffect(state, markdownShortcuts) {
+		state.editBehaviors.removeAll { it is MarkdownShortcuts }
+		// Ahead of the line block behavior, so Enter on a fence line reaches it.
+		if (markdownShortcuts) state.editBehaviors.add(0, MarkdownShortcuts())
+	}
 
 	Column(modifier = modifier) {
 		Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
@@ -178,6 +185,9 @@ fun TextEditorDemoUi(
 			LabeledSwitch("... ellipsis", punctuation.ellipses) { punctuation = punctuation.copy(ellipses = it) }
 			LabeledSwitch("Link typed URLs", autoLink.typed) { autoLink = autoLink.copy(typed = it) }
 			LabeledSwitch("Link pasted URLs", autoLink.pasted) { autoLink = autoLink.copy(pasted = it) }
+			if (markdownExtension != null) {
+				LabeledSwitch("Markdown shortcuts", markdownShortcuts) { markdownShortcuts = it }
+			}
 		}
 
 		if (editable) {
