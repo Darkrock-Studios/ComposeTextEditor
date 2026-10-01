@@ -3,6 +3,7 @@ package com.darkrockstudios.texteditor.dragdrop
 import androidx.compose.ui.draganddrop.DragAndDropEvent
 import androidx.compose.ui.draganddrop.DragAndDropTransferData
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.node.DelegatableNode
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.Density
 import com.darkrockstudios.texteditor.RichTextStyles
@@ -58,11 +59,14 @@ internal expect fun DragAndDropEvent.carriesText(): Boolean
 /**
  * The text this drag carries, read at the drop. An [ownDrag], this editor's own, must
  * drop the characters it dragged, which its source's rich spans are matched against.
+ * [target] is the node taking the drop, for a platform that reads what the drag carries
+ * through the window it lands in (Android's content URIs).
  */
 internal expect fun DragAndDropEvent.droppedText(
 	styles: RichTextStyles,
 	allowedLinkSchemes: Set<String>,
 	ownDrag: Boolean,
+	target: DelegatableNode?,
 ): DroppedText?
 
 /** Where the pointer is, in the root's pixels, or null where the platform does not say. */

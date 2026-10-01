@@ -1,12 +1,17 @@
 package dragdrop
 
+import android.app.Activity
 import android.content.ClipData
 import android.content.ClipDescription
+import android.content.ContentResolver
+import android.net.Uri
+import android.view.DragAndDropPermissions
 import android.view.DragEvent
 import android.view.View
 import androidx.compose.ui.draganddrop.DragAndDropEvent
 import androidx.compose.ui.draganddrop.DragAndDropStartTransferScope
 import androidx.compose.ui.draganddrop.DragAndDropTransferData
+import androidx.compose.ui.draganddrop.toAndroidDragEvent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.drawscope.DrawScope
@@ -15,6 +20,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Density
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.RichTextStyles
+import com.darkrockstudios.texteditor.dragdrop.MAX_DROPPED_FILE_BYTES
 import com.darkrockstudios.texteditor.dragdrop.TextDragAndDrop
 import com.darkrockstudios.texteditor.dragdrop.carriesText
 import com.darkrockstudios.texteditor.dragdrop.dragId
@@ -28,6 +34,8 @@ import io.mockk.mockk
 import io.mockk.mockkStatic
 import io.mockk.slot
 import io.mockk.unmockkAll
+import io.mockk.verify
+import java.io.FileNotFoundException
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
 import kotlin.test.AfterTest
@@ -141,7 +149,7 @@ class AndroidTextDragTest {
 
 	@Test
 	fun `a drop reads the markup and the text`() {
-		val dropped = event(clip(item("plain bold", "plain <b>bold</b>"))).droppedText(styles, schemes, ownDrag = false)!!
+		val dropped = event(clip(item("plain bold", "plain <b>bold</b>"))).droppedText(styles, schemes, ownDrag = false, target = null)!!
 		assertEquals("plain bold", dropped.text.text)
 		assertTrue(dropped.text.spanStyles.any { it.item.fontWeight == FontWeight.Bold && it.start == 6 })
 		assertEquals("plain <b>bold</b>", dropped.html)
@@ -149,7 +157,7 @@ class AndroidTextDragTest {
 
 	@Test
 	fun `a drop without markup takes the text, several items one per line`() {
-		val dropped = event(clip(item("one", null), item("two", null))).droppedText(styles, schemes, ownDrag = false)!!
+		val dropped = event(clip(item("one", null), item("two", null))).droppedText(styles, schemes, ownDrag = false, target = null)!!
 		assertEquals("one\ntwo", dropped.text.text)
 		assertNull(dropped.html)
 	}
@@ -158,16 +166,169 @@ class AndroidTextDragTest {
 	fun `this editor's own drag drops the characters it dragged`() {
 		// Markup that re-parses to other text (collapsing the double space) is not taken.
 		val drop = event(clip(item("a  b", "a  <b>b</b>")), localState = 5L)
-		assertEquals(AnnotatedString("a  b"), drop.droppedText(styles, schemes, ownDrag = true)!!.text)
+		assertEquals(AnnotatedString("a  b"), drop.droppedText(styles, schemes, ownDrag = true, target = null)!!.text)
 		// Another editor has no rich spans of its own to put back, so it takes the markup.
-		assertEquals("a b", drop.droppedText(styles, schemes, ownDrag = false)!!.text.text)
+		assertEquals("a b", drop.droppedText(styles, schemes, ownDrag = false, target = null)!!.text.text)
+	}
+
+	private fun uriItem(uri: Uri): ClipData.Item = mockk {
+		every { text } returns null
+		every { htmlText } returns null
+		every { this@mockk.uri } returns uri
+	}
+
+	private fun file(scheme: String = ContentResolver.SCHEME_CONTENT): Uri = mockk {
+		every { this@mockk.scheme } returns scheme
+	}
+
+	/** An activity whose content resolver holds [files], each a type and its bytes. */
+	private fun activityHolding(files: Map<Uri, Pair<String?, ByteArray>>, permissions: DragAndDropPermissions?): Activity {
+		val resolver = mockk<ContentResolver> {
+			every { getType(any()) } answers { files[firstArg()]?.first }
+			every { openInputStream(any()) } answers { files[firstArg()]?.second?.inputStream() }
+		}
+		return mockk {
+			every { contentResolver } returns resolver
+			every { requestDragAndDropPermissions(any()) } returns permissions
+		}
+	}
+
+	private fun quietLog() {
+		mockkStatic(android.util.Log::class)
+		every { android.util.Log.w(any(), any<String>(), any()) } returns 0
+		every { android.util.Log.w(any(), any<String>()) } returns 0
+	}
+
+	/** A text file dragged from Files carries a content URI and no text (6.44). */
+	@Test
+	fun `a drop of a text file reads it with the drop's permissions`() {
+		val notes = file()
+		val page = file()
+		val permissions = mockk<DragAndDropPermissions>(relaxed = true)
+		val activity = activityHolding(
+			mapOf(notes to ("text/plain" to "line one\nline two".encodeToByteArray()), page to ("text/html" to "<b>bold</b>".encodeToByteArray())),
+			permissions,
+		)
+		val drag = event(clip(uriItem(notes), uriItem(page))).toAndroidDragEvent()
+
+		val dropped = assertNotNull(drag.droppedText(styles, schemes, ownDrag = false) { activity })
+
+		assertEquals("line one\nline two\nbold", dropped.text.text)
+		assertTrue(dropped.text.spanStyles.any { it.item.fontWeight == FontWeight.Bold && it.start == 18 })
+		verify(exactly = 1) { activity.requestDragAndDropPermissions(drag) }
+		verify(exactly = 1) { permissions.release() }
+	}
+
+	@Test
+	fun `a dropped html file brings its markup for its blocks`() {
+		val page = file()
+		val activity = activityHolding(mapOf(page to ("TEXT/HTML; charset=utf-8" to "<ul><li>one</li></ul>".encodeToByteArray())), mockk(relaxed = true))
+
+		val dropped = assertNotNull(event(clip(uriItem(page))).toAndroidDragEvent().droppedText(styles, schemes, ownDrag = false) { activity })
+
+		assertEquals("one", dropped.text.text)
+		assertEquals("<ul><li>one</li></ul>", dropped.html)
+	}
+
+	@Test
+	fun `a dropped file's byte order mark and charset decide how it reads`() {
+		val bom = file()
+		val utf16 = file()
+		val latin = file()
+		val activity = activityHolding(
+			mapOf(
+				bom to ("text/plain" to byteArrayOf(0xEF.toByte(), 0xBB.toByte(), 0xBF.toByte()) + "caf\u00e9".encodeToByteArray()),
+				utf16 to ("text/plain" to byteArrayOf(0xFF.toByte(), 0xFE.toByte()) + "hi".toByteArray(Charsets.UTF_16LE)),
+				latin to ("text/plain; charset=ISO-8859-1" to "caf\u00e9".toByteArray(Charsets.ISO_8859_1)),
+			),
+			mockk(relaxed = true),
+		)
+
+		val dropped = event(clip(uriItem(bom), uriItem(utf16), uriItem(latin))).toAndroidDragEvent()
+			.droppedText(styles, schemes, ownDrag = false) { activity }
+
+		assertEquals("caf\u00e9\nhi\ncaf\u00e9", dropped!!.text.text)
+	}
+
+	@Test
+	fun `a dropped file the provider gives no type takes the drag's`() {
+		val notes = file()
+		val activity = activityHolding(mapOf(notes to (null to "notes".encodeToByteArray())), mockk(relaxed = true))
+		val description = mockk<ClipDescription> {
+			every { mimeTypeCount } returns 1
+			every { getMimeType(0) } returns "text/plain"
+		}
+		val drag = mockk<DragEvent> {
+			every { clipData } returns clip(uriItem(notes))
+			every { clipDescription } returns description
+		}
+
+		assertEquals("notes", drag.droppedText(styles, schemes, ownDrag = false) { activity }!!.text.text)
+	}
+
+	@Test
+	fun `a drop of a file that is not text, or unreadable, lands nothing`() {
+		quietLog()
+		val image = file()
+		val gone = file()
+		val activity = activityHolding(mapOf(image to ("image/png" to "png".encodeToByteArray())), mockk(relaxed = true))
+		every { activity.contentResolver.getType(gone) } returns "text/plain"
+		every { activity.contentResolver.openInputStream(gone) } throws FileNotFoundException()
+
+		assertNull(
+			event(clip(uriItem(image), uriItem(gone))).toAndroidDragEvent()
+				.droppedText(styles, schemes, ownDrag = false) { activity }
+		)
+	}
+
+	@Test
+	fun `a drop reads its files up to a megabyte in all`() {
+		quietLog()
+		val half = MAX_DROPPED_FILE_BYTES / 2 + 1
+		val first = file()
+		val second = file()
+		val activity = activityHolding(
+			mapOf(
+				first to ("text/plain" to ByteArray(half) { 'a'.code.toByte() }),
+				second to ("text/plain" to ByteArray(half) { 'b'.code.toByte() }),
+			),
+			mockk(relaxed = true),
+		)
+
+		val dropped = event(clip(uriItem(first), uriItem(second))).toAndroidDragEvent()
+			.droppedText(styles, schemes, ownDrag = false) { activity }
+
+		assertEquals("a".repeat(half), dropped!!.text.text)
+	}
+
+	/** Read with this app's own access, another app's drag could have it read its private files. */
+	@Test
+	fun `a drop reads only what the drag grants`() {
+		val granted = file()
+		val ungranted = activityHolding(mapOf(granted to ("text/plain" to "secret".encodeToByteArray())), permissions = null)
+		val resolver = ungranted.contentResolver
+		val path = file(scheme = "file")
+		val grants = activityHolding(mapOf(path to ("text/plain" to "secret".encodeToByteArray())), mockk(relaxed = true))
+
+		assertNull(event(clip(uriItem(granted))).toAndroidDragEvent().droppedText(styles, schemes, ownDrag = false) { ungranted })
+		assertNull(event(clip(uriItem(path))).toAndroidDragEvent().droppedText(styles, schemes, ownDrag = false) { grants })
+		verify(exactly = 0) { resolver.openInputStream(any()) }
+	}
+
+	@Test
+	fun `a drop of text asks no permissions`() {
+		val activity = activityHolding(emptyMap(), mockk(relaxed = true))
+		val drag = event(clip(item("plain", null))).toAndroidDragEvent()
+
+		assertEquals("plain", drag.droppedText(styles, schemes, ownDrag = false) { activity }!!.text.text)
+		verify(exactly = 0) { activity.requestDragAndDropPermissions(any()) }
 	}
 
 	@Test
 	fun `only a drag of text is taken`() {
 		assertTrue(event(mimeTypes = listOf(ClipDescription.MIMETYPE_TEXT_HTML)).carriesText())
 		assertFalse(event(mimeTypes = listOf("image/png")).carriesText())
-		assertNull(event(clip()).droppedText(styles, schemes, ownDrag = false))
+		assertNull(event(clip()).droppedText(styles, schemes, ownDrag = false, target = null))
 	}
 
 	@Test
@@ -192,7 +353,7 @@ class AndroidTextDragTest {
 		dnd.startTransfer(scope)
 		val drop = event(clip(item("one ", null)), localState = scope.data!!.localState)
 
-		val content = assertNotNull(drop.droppedText(styles, schemes, ownDrag = true))
+		val content = assertNotNull(drop.droppedText(styles, schemes, ownDrag = true, target = null))
 		assertTrue(dnd.dropAt(CharLineOffset(0, 13), content, drop.dragId(), drop.requestsCopy()))
 
 		assertEquals("two threeone ", state.getAllText().text)

@@ -2826,12 +2826,26 @@ iOS Safari; browser tests run in CI (met: the `browser` job, 4.15).
   the fallback back everywhere; a host document emptied and retyped takes the
   body style; an imported document with no paragraph (a lone fence) falls back
   to the host size.
-- [ ] **6.44 Android drops of text a URI carries. S.** [Opus] [Lane H]
+- [x] **6.44 Android drops of text a URI carries. S.** [Opus] [Lane H]
   The editor takes any drag whose description has a `text/*` type, but reads
   only an item's text and markup, so a `.txt` file dragged from Files shows
   the drop caret and then drops nothing. `TextView` reads such items with
   `coerceToStyledText` under `requestDragAndDropPermissions`, which needs the
   activity. Read them the same way, or refuse such drags at the start.
+  Done: an item with only a content URI is read at the drop, as `TextView` does,
+  through the activity of the node taking it (`droppedText` takes that node,
+  `target`; the other platforms ignore it) under the permissions the drop grants,
+  released after. Only what the drag grants is read: a drop that grants nothing,
+  or a URI that is not `content:`, reads nothing, so another app's drag cannot have
+  this app read its own private files for it. A `text/*` file reads by its byte
+  order mark, else its type's charset, else UTF-8; an HTML file's markup is parsed
+  as a paste's, its blocks included; a type the provider does not give is the
+  drag's when it names one. A drop reads at most 1 MiB of files in all, since it
+  reads on the main thread; a file past that, another kind of file, or one that
+  cannot be read drops nothing (host `dragdrop/AndroidTextDragTest.kt`). Not
+  driven on a device: a drag from Files needs a person. Like `TextView`, a file
+  from a slow provider (a cloud drive) holds the main thread while it reads, and
+  a `text/rtf` or `text/xml` file drops its source. The `expect` changed (Mac queue).
 - [x] **6.27 Cut from a canvas-focused editor on the web. C.** [Opus] [Lane H]
   An editable editor whose canvas holds DOM focus (after a touch the
   session does not hand focus back from) takes Ctrl/Cmd+X on the canvas, where
@@ -4518,3 +4532,4 @@ records results and removes entries that passed.
 | 6.37 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64`. `clipboard/ClipboardHtml.kt` adds `internal expect suspend fun readClipboardPaste`; the iOS actual (`iosMain/.../clipboard/ClipboardHtml.ios.kt`) goes through `ClipboardHelper.getText`, `readClipboardHtml` and `readCopyId` as the paste did. Then in the iOS sample app: copy a bulleted list in the editor and paste it, and paste a bulleted list copied from Notes | Compiles. Both paste as bulleted lists, with one paste prompt at most | Compile part passed 2026-10-01 at `0a4ca7ed`. The rest is for a person |
 | 6.20 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64` and `:ComposeTextEditor:iosSimulatorArm64Test`. The `dragdrop/PlatformTextDrag.kt` expects changed: `textDragTransferData` takes a nullable `html`, and `droppedText` an `ownDrag` flag; the iOS actuals (`iosMain/.../dragdrop/PlatformTextDrag.ios.kt`) still answer null and false, by choice (6.20 says why; 6.46 follows up). Common code changed a long press inside the selection while the platform toolbar is up (it tries to start a drag, which on iOS returns at once since `platformDragsText` is false) and a pointer press inside the selection (held through `holdPress`; the wider slop for a drag the platform starts is the web's only). Then on an iPad simulator in the sample app: select a word with a long press and long-press inside it again; with the pointer (I/O > Input > Send Pointer to Device), click inside the selection, and press inside it and drag; with Notes and then Safari beside the sample app in Split View, drag text from them over the editor and drop it | Compiles and the tests pass. The second long press shows the edit menu on lift and starts no drag; the click places the caret and the pointer drag selects from the press, as before; the drops from Notes and Safari land nothing, show no drop caret, and nothing crashes | Compile part passed 2026-10-01 at `0a4ca7ed`, with the iOS tests passing. The rest is for a person |
 | 4.26 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64` and `:ComposeTextEditor:iosSimulatorArm64Test`. `skikoMain` changed: `SkikoTextEditorInputMethodRequest` runs each `editText` block and each `onEditCommand` list as one IME batch (`TextEditorState.imeBatch`), so the edit behaviors are offered what landed once the block ends. No `iosMain` change. Then in the iOS sample app with `SmartPunctuation` added to the editor's `editBehaviors`: type `a--`, `"hi"`, `it's` and `...` with the soft keyboard, with autocorrect on, and undo once after the dash | Compiles and the tests pass. The dash, the curly quotes, the apostrophe and the ellipsis appear as the character is typed, the keyboard's suggestions follow the substituted text (no stray characters, nothing doubled or lost when autocorrect rewrites the word before), and one undo gives `a--` back | |
+| 6.44 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64`. The `dragdrop/PlatformTextDrag.kt` expect `droppedText` takes a `target: DelegatableNode?` (the node taking the drop, for Android to read content URIs through its activity); the iOS actual (`iosMain/.../dragdrop/PlatformTextDrag.ios.kt`) takes and ignores it, still answering null | Compiles | |

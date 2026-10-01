@@ -7,6 +7,7 @@ import androidx.compose.ui.draganddrop.DragAndDropEvent
 import androidx.compose.ui.draganddrop.DragAndDropTransferData
 import androidx.compose.ui.draganddrop.domDataTransferOrNull
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.node.DelegatableNode
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.Density
 import com.darkrockstudios.texteditor.RichTextStyles
@@ -130,6 +131,7 @@ internal actual fun DragAndDropEvent.droppedText(
 	styles: RichTextStyles,
 	allowedLinkSchemes: Set<String>,
 	ownDrag: Boolean,
+	target: DelegatableNode?,
 ): DroppedText? {
 	val transfer = dataTransfer ?: return null
 	val plain = getTransferData(transfer, "text/plain")?.takeIf { it.isNotEmpty() }

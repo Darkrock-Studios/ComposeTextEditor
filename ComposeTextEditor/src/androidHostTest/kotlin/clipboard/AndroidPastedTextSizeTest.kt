@@ -96,7 +96,7 @@ class AndroidPastedTextSizeTest {
 			every { clipData } returns clip(item("world", state.selectionAsHtml(world)))
 			every { localState } returns null
 		}
-		val content = DragAndDropEvent(drag).droppedText(RichTextStyles.DEFAULT, state.allowedLinkSchemes, ownDrag = false)!!
+		val content = DragAndDropEvent(drag).droppedText(RichTextStyles.DEFAULT, state.allowedLinkSchemes, ownDrag = false, target = null)!!
 
 		assertTrue(dnd.dropAt(CharLineOffset(0, 16), content, dragId = null, copy = false))
 

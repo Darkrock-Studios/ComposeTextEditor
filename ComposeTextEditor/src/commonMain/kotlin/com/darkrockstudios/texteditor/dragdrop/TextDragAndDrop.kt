@@ -14,6 +14,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.node.DelegatableNode
 import androidx.compose.ui.node.DelegatingNode
 import androidx.compose.ui.node.LayoutAwareModifierNode
 import androidx.compose.ui.node.ModifierNodeElement
@@ -178,7 +179,7 @@ internal class TextDragAndDrop(
 		DropCarets.hidden(this)
 	}
 
-	internal fun drop(event: DragAndDropEvent, positionInRoot: Offset?): Boolean {
+	internal fun drop(event: DragAndDropEvent, positionInRoot: Offset?, target: DelegatableNode?): Boolean {
 		val at = positionInRoot?.let(::hitAt)?.position ?: dropHit?.position ?: return false
 		endHover()
 		val dragId = event.dragId()
@@ -186,6 +187,7 @@ internal class TextDragAndDrop(
 			state.richTextStyles,
 			state.allowedLinkSchemes,
 			ownDrag = dragId != null && dragId == outgoing?.id,
+			target = target,
 		) ?: return false
 		return dropAt(at, content, dragId, event.requestsCopy())
 	}
@@ -269,7 +271,7 @@ private class TextDragAndDropNode(dragAndDrop: TextDragAndDrop) : DelegatingNode
 		override fun onExited(event: DragAndDropEvent) = dragAndDrop.endHover()
 		override fun onEnded(event: DragAndDropEvent) = dragAndDrop.endHover()
 		override fun onDrop(event: DragAndDropEvent): Boolean =
-			dragAndDrop.drop(event, event.pointerInRoot(requireDensity()))
+			dragAndDrop.drop(event, event.pointerInRoot(requireDensity()), this@TextDragAndDropNode)
 	}
 
 	private val source = delegate(DragAndDropSourceModifierNode { _ -> dragAndDrop.platformStartsTransfer(this) })
