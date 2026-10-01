@@ -233,8 +233,11 @@ private val QUOTE_BLANK_LINE = Regex("""^>\s*$""")
 /** A list item, quoted or not and at any indentation, as the peel recognises one. */
 private val LIST_ITEM_LINE = Regex("""^(?:>\s?)?[ \t]*(?:[-*+]|\d+\.)\s""")
 
-/** A line CommonMark reads as an indented code block when a block can start there. */
-private val INDENTED_CODE_LINE = Regex("""^(?: {4}|\t)""")
+/**
+ * A line CommonMark reads as an indented code block when a block can start there. One of
+ * only spaces and tabs is blank, and starts none.
+ */
+private val INDENTED_CODE_LINE = Regex("""^(?: {4}|\t)[ \t]*[^ \t]""")
 
 /**
  * Escapes a marker-shaped lead left in a peeled body. The peel already consumed
