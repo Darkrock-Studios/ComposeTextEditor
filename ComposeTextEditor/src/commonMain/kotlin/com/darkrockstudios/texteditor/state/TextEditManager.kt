@@ -63,6 +63,19 @@ class TextEditManager(private val state: TextEditorState) {
 	/** How many it has emitted or will once their transaction commits. */
 	private var applied = 0L
 
+	/** [applied] when the document was last replaced: the operations up to it addressed the one before. */
+	private var replacedAt = 0L
+
+	/**
+	 * Notes a replacement of the whole document as it is applied, ahead of the announcing
+	 * of the operations before it in its transaction. Returns what puts it back on a rollback.
+	 */
+	internal fun documentReplaced(): () -> Unit {
+		val previous = replacedAt
+		replacedAt = applied
+		return { replacedAt = previous }
+	}
+
 	/** See [TextEditorState.editOperationBursts]. */
 	val editOperationBursts: Flow<List<TextEditOperation>> = flow {
 		var taken = 0L
@@ -71,9 +84,11 @@ class TextEditManager(private val state: TextEditorState) {
 			taken++
 			burst += operation
 			if (taken >= applied) {
-				val landed = burst.toList()
+				// The burst's counts run up to [taken], so those a replacement made stale lead it.
+				val stale = (replacedAt - (taken - burst.size)).coerceIn(0L, burst.size.toLong()).toInt()
+				val landed = burst.subList(stale, burst.size).toList()
 				burst.clear()
-				emit(landed)
+				if (landed.isNotEmpty()) emit(landed)
 			}
 		}
 	}

@@ -4235,7 +4235,7 @@ Shaping is one line per keystroke. These still scale with document length:
   is: 5000 replacements went from about 170 ms to 2). A single edit keeps its
   overload (`SpellCheckStateTest`, `ComputeAffectedRangesTest`,
   `SpellCheckE2eTest`). Found 7.84.
-- [ ] **7.84 Diagnostics invalidation reads a burst's edits in the text after
+- [x] **7.84 Diagnostics invalidation reads a burst's edits in the text after
   it. S.** [Opus] [Lane K] `TextDiagnosticsState.invalidate` takes one edit
   at a time off `editOperations`, as spell check did before 7.81, so a
   replace-all whose later replacement adds lines above an earlier one strips
@@ -4244,6 +4244,14 @@ Shaping is one line per keystroke. These still scale with document length:
   `setText` or `setDocument`, which emits nothing, so its edits are read in the
   new document, where both invalidations can strip flags the new document's
   check has placed. Found in 7.81.
+  Done: `TextDiagnosticsState.invalidate(List)` strips each burst's underlines
+  through `computeAffectedRanges` and the span index, fed by `editOperationBursts`;
+  the single-edit overload stays. A burst leaves out the edits applied before the
+  document was last replaced, noted as the replacement is applied so a collector
+  resumed while its group commits drops them too, and forgotten if the group throws
+  (`EditOperationsDeliveryTest`, `TextDiagnosticsStateTest`). The debounced partial
+  spell check reads bursts as well, each edit tagged with its document, so a batch
+  spanning a replacement checks only the new document's edits.
 - [x] **7.21** [Opus] [Lane K] No ignore list or language API in
   `EditorSpellChecker`; add to dictionary exists only as a host menu extension
   (hammer-editor#861).

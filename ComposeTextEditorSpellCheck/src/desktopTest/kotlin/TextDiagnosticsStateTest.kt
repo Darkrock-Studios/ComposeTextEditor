@@ -19,7 +19,9 @@ import com.darkrockstudios.texteditor.state.TextEditOperation
 import com.darkrockstudios.texteditor.state.TextEditorState
 import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlin.coroutines.EmptyCoroutineContext
 import org.junit.Before
@@ -118,6 +120,26 @@ class TextDiagnosticsStateTest {
 
 		state.refresh()
 		assertEquals(listOf(range(0, 13, 20)), spans().map { it.range })
+	}
+
+	@Test
+	fun `a burst's earlier edit is read where its later edits moved it`() = runTest {
+		textState.setText("the the\nthe the\nthe the\nthe the")
+		val state = diagnostics()
+		state.refresh()
+
+		val operations = mutableListOf<TextEditOperation>()
+		val collector = launch { textState.editOperations.collect { operations += it } }
+		runCurrent()
+		// As a replace-all's, last to first: the second adds a line above the first
+		textState.replace(TextEditorRange(CharLineOffset(2, 1), CharLineOffset(2, 1)), "x")
+		textState.replace(TextEditorRange(CharLineOffset(0, 1), CharLineOffset(0, 1)), "x\ny")
+		runCurrent()
+		collector.cancel()
+
+		state.invalidate(operations)
+
+		assertEquals(listOf(2, 4), spans().map { it.range.start.line })
 	}
 
 	@Test

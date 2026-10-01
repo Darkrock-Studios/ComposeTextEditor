@@ -1129,8 +1129,10 @@ class TextEditorState private constructor(
 	 * [editOperations] as a collector catches up with them: each list holds, in order, the
 	 * operations applied since the collector took the last, so the text it reads then is the
 	 * one after the list's last. Several can land before a collector runs (a find
-	 * replace-all's), each addressing the text as it stood when it ran. Collect on the
-	 * dispatcher that edits the document.
+	 * replace-all's), each addressing the text as it stood when it ran. Those applied
+	 * before the document was last replaced ([documentGeneration]) are left out, since
+	 * they addressed the document it replaced. Collect on the dispatcher that edits the
+	 * document.
 	 */
 	val editOperationBursts = editManager.editOperationBursts
 
@@ -1259,6 +1261,7 @@ class TextEditorState private constructor(
 	val documentGeneration: StateFlow<Int> = _documentGeneration
 
 	private fun announceReplacement() {
+		onRollback(editManager.documentReplaced())
 		onCommit { _documentGeneration.value++ }
 	}
 
