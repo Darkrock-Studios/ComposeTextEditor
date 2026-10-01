@@ -613,7 +613,7 @@ private fun AnnotatedString.Builder.handleHeader(
 	context: MarkdownRenderContext,
 ) {
 	// Apply the header style
-	pushStyle(context.styles.getHeaderStyle(level))
+	pushStyle(context.styles.headingLook(level))
 
 	// Process the child nodes, ignoring `#` markers but supporting nested spans
 	context.scope(this) {

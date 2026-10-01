@@ -196,7 +196,7 @@ class JoinBlockTextStyleTest {
 	}
 
 	@Test
-	fun `a heading look equal to the body style is left as it is`() {
+	fun `a heading look equal to the body style is baked told apart from it`() {
 		val config = styles.copy(header4Style = body)
 		val line = AnnotatedString(
 			"Title",
@@ -205,7 +205,10 @@ class JoinBlockTextStyleTest {
 		)
 		val heading = RichSpan(TextEditorRange(CharLineOffset(0, 0), CharLineOffset(0, 5)), HeaderSpanStyle.of(4))
 
-		assertNull(blockStylesRepair(config)(line, listOf(heading)))
+		val repaired = blockStylesRepair(config)(line, listOf(heading))!!
+
+		assertEquals(listOf(body, config.headingLook(4)), repaired.spanStyles.map { it.item })
+		assertNull(blockStylesRepair(config)(repaired, listOf(heading)))
 	}
 
 	@Test
@@ -256,7 +259,7 @@ class JoinBlockTextStyleTest {
 	}
 
 	@Test
-	fun `a heading look equal to bold is not baked again over a word unbolded in it`() = runTest {
+	fun `unbolding a word in a heading whose look is bold leaves the heading's look`() = runTest {
 		val config = styles.copy(header4Style = styles.boldStyle)
 		val state = TextEditorState(scope = this, measurer = mockk(relaxed = true))
 		state.richTextStyles = config
@@ -267,12 +270,12 @@ class JoinBlockTextStyleTest {
 		state.insertStringAtCursor("x")
 
 		val looks = state.textLines[0].looks()
-		assertNull(looks[0].fontWeight)
+		assertEquals(FontWeight.Bold, looks[0].fontWeight)
 		assertEquals(FontWeight.Bold, looks[5].fontWeight)
 	}
 
 	@Test
-	fun `a heading look equal to bold stays on the tail a join takes`() = runTest {
+	fun `a heading look equal to bold stays behind when a join takes the tail`() = runTest {
 		val config = styles.copy(header4Style = styles.boldStyle)
 		val state = TextEditorState(scope = this, measurer = mockk(relaxed = true))
 		state.richTextStyles = config
@@ -281,6 +284,6 @@ class JoinBlockTextStyleTest {
 		state.delete(TextEditorRange(CharLineOffset(0, 5), CharLineOffset(1, 0)))
 
 		assertEquals("plainbold tail", state.blockLines())
-		assertEquals(FontWeight.Bold, state.textLines[0].looks()[6].fontWeight)
+		assertNull(state.textLines[0].looks()[6].fontWeight)
 	}
 }

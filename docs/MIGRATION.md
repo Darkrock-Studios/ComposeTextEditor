@@ -105,3 +105,11 @@ imports. The reasoning is in `docs/design/modules.md`.
 
 8. **Spell check.** `SpellCheckState.withMarkdown()` is gone (spell check does
    not depend on markdown): use `spellCheckState.textState.withMarkdown()`.
+
+9. **A heading style equal to an inline style.** A heading line carries
+   `RichTextStyles.headingLook(level)`, which is `getHeaderStyle(level)` unless
+   that equals an inline style (`header4Style = boldStyle`); then it is the
+   same look with the default platform style, so the user's bold inside the
+   heading stays theirs when the heading goes. Code that finds a heading's look
+   among a line's spans compares with `headingLook(level)`. Bold removed inside
+   such a heading no longer removes the heading's look, as with any heading.

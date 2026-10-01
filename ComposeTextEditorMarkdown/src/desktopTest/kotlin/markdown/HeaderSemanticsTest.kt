@@ -213,6 +213,19 @@ class HeaderSemanticsTest {
 	}
 
 	@Test
+	fun `a heading look equal to bold keeps a bold word inside the heading`() {
+		val state = TextEditorState(scope = TestScope(), measurer = mockk(relaxed = true))
+		state.richTextStyles = RichTextStyles.DEFAULT.copy(header4Style = RichTextStyles.DEFAULT.boldStyle)
+		val e = MarkdownExtension(state).apply { importMarkdown("#### one **two**") }
+
+		assertEquals("#### one **two**", e.exportAsMarkdown())
+
+		e.editorState.toggleHeader(0..0, 4)
+
+		assertEquals("one **two**", e.exportAsMarkdown())
+	}
+
+	@Test
 	fun `a heading joined onto another heading exports as one heading line`() {
 		val e = editor("## Title\n\n### Sub")
 		e.editorState.delete(TextEditorRange(CharLineOffset(0, 5), CharLineOffset(1, 0)))

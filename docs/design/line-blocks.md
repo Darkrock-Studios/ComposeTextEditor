@@ -191,9 +191,13 @@ on a plain line is the user's own. The edit that moves text strips instead:
 text landing on a line its own markers do not reach (a join's tail kept after
 another line's head, a split's tail, text a replace across lines or a breaking
 replace inherits) leaves its source line's blocks' text styles behind, and the
-markers where it lands bake theirs. A text style equal to an inline style
-(`header4Style = boldStyle`) cannot be told from the user's own, so it is
-neither baked by the repair nor left behind by a move.
+markers where it lands bake theirs. A heading whose style equals an inline
+style (`header4Style = boldStyle`) bakes `RichTextStyles.headingLook`, that
+style with the default platform style, which draws nothing but keeps it
+unequal: the span model merges equal styles, so a look equal to the user's
+bold would take it along wherever it went. A fence's monospace equal to an
+inline style cannot be told from the user's own, so it is neither baked by the
+repair nor left behind by a move.
 
 ## Serialization
 

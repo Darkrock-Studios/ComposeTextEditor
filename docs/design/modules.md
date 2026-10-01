@@ -77,6 +77,7 @@ data class RichTextStyles(
 	val header1Style: SpanStyle, /* ... */ val header6Style: SpanStyle,
 ) {
 	fun getHeaderStyle(level: Int): SpanStyle
+	fun headingLook(level: Int): SpanStyle  // what a heading line bakes (line-blocks.md)
 	companion object { val DEFAULT: RichTextStyles; val DEFAULT_DARK: RichTextStyles }
 }
 ```

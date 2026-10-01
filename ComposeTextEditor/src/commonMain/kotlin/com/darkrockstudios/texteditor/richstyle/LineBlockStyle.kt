@@ -143,7 +143,7 @@ internal val TextEditorState.allBlockRegistry: List<LineBlockStyle>
 
 /**
  * The block styles that exist per configuration. Heading blocks bake the
- * configured heading [androidx.compose.ui.text.SpanStyle] into the line text,
+ * configured heading look ([RichTextStyles.headingLook]) into the line text,
  * so their [LineBlockStyle] instances are scoped to the configuration; the
  * fixed blocks are shared so span-style identity stays global.
  */
@@ -152,7 +152,7 @@ private class LineBlockRegistry(styles: RichTextStyles) {
 		LineBlockStyle(
 			spanStyle = HeaderSpanStyle.of(level),
 			paragraphStyle = HEADER_PARAGRAPH_STYLE,
-			textStyle = styles.getHeaderStyle(level),
+			textStyle = styles.headingLook(level),
 		)
 	}
 	val prefixBlocks: List<LineBlockStyle> =
@@ -174,14 +174,10 @@ private class LineBlockRegistry(styles: RichTextStyles) {
 	/**
 	 * The styles a span may carry inline: a block's text style equal to one cannot be
 	 * told from the user's own, so it is neither baked again nor left behind (see
-	 * [bakedLooks]).
+	 * [bakedLooks]). A heading's look never is ([RichTextStyles.headingLook]); a code
+	 * fence's monospace can be.
 	 */
-	private val inlineStyles: Set<SpanStyle> = with(styles) {
-		setOf(
-			defaultTextStyle, boldStyle, italicStyle, codeStyle, linkStyle, strikethroughStyle,
-			underlineStyle, highlightStyle, blockquoteStyle,
-		)
-	}
+	private val inlineStyles: Set<SpanStyle> = styles.inlineStyles
 
 	private val body = styles.defaultTextStyle
 

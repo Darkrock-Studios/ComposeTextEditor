@@ -38,12 +38,12 @@ internal fun updateMarkdownStyles(
 		oldConfig.codeStyle to newConfig.codeStyle,
 		oldConfig.linkStyle to newConfig.linkStyle,
 		oldConfig.blockquoteStyle to newConfig.blockquoteStyle,
-		oldConfig.header1Style to newConfig.header1Style,
-		oldConfig.header2Style to newConfig.header2Style,
-		oldConfig.header3Style to newConfig.header3Style,
-		oldConfig.header4Style to newConfig.header4Style,
-		oldConfig.header5Style to newConfig.header5Style,
-		oldConfig.header6Style to newConfig.header6Style
+		oldConfig.headingLook(1) to newConfig.headingLook(1),
+		oldConfig.headingLook(2) to newConfig.headingLook(2),
+		oldConfig.headingLook(3) to newConfig.headingLook(3),
+		oldConfig.headingLook(4) to newConfig.headingLook(4),
+		oldConfig.headingLook(5) to newConfig.headingLook(5),
+		oldConfig.headingLook(6) to newConfig.headingLook(6)
 	)
 
 	state.processLines { index: Int, line: AnnotatedString ->
@@ -100,5 +100,8 @@ private fun deepCompareSpanStyles(style1: SpanStyle, style2: SpanStyle): Boolean
 	if (style1.baselineShift != style2.baselineShift) return false
 	if (style1.textGeometricTransform != style2.textGeometricTransform) return false
 	if (style1.localeList != style2.localeList) return false
+	// What tells a heading's look from an inline style it equals (RichTextStyles.headingLook).
+	if (style1.platformStyle != style2.platformStyle) return false
+	if (style1.drawStyle != style2.drawStyle) return false
 	return true
 }

@@ -189,7 +189,7 @@ review.
 | F | Android input | `androidMain` | 0.4, 0.12, 3.9 to 3.11, 3.14, 3.17, 4.16, 4.18, 4.20, 4.27, 4.30, 4.31, 4.34, 4.36, 7.40 |
 | G | Edit pipeline and undo | `state/TextEditManager.kt`, `state/TextEditHistory.kt`, `state/EditBehavior.kt`, `input/ImeEditLogic.kt` | 1.20, 5.1 to 5.5, 5.9 to 5.11, 5.13 to 5.17, 6.1 to 6.6, 6.14, 6.15, 6.17, 6.22, 6.23, 6.28, 6.29, 6.33 to 6.35, 6.40, 6.45, 7.54, 7.55 |
 | H | Clipboard and HTML | `clipboard/`, `html/`, `dragdrop/` | 4.9, 4.13, 4.17, 6.7 to 6.13, 6.18 to 6.21, 5.12, 6.24 to 6.27, 6.30 to 6.32, 6.36 to 6.39, 6.41 to 6.44, 6.46, 7.39, 7.46, 7.47, 7.49, 7.53, 7.63 |
-| I | Markdown and block model | `ComposeTextEditorMarkdown/`, `richstyle/`, `state/TextEditorStateBlockExt.kt` | 5.6, 7.14 to 7.16, 7.43, 7.45, 7.52, 7.64, 7.67, 7.70 to 7.72, 7.79, 7.80 |
+| I | Markdown and block model | `ComposeTextEditorMarkdown/`, `richstyle/`, `state/TextEditorStateBlockExt.kt` | 5.6, 7.14 to 7.16, 7.43, 7.45, 7.52, 7.64, 7.67, 7.70 to 7.72, 7.79, 7.80, 7.83 |
 | J | Find addon | `ComposeTextEditorFind/` | 7.17 to 7.19, 7.26, 7.29, 7.42, 7.68, 7.69 |
 | K | Spell check addon | `ComposeTextEditorSpellCheck/` | 7.20 to 7.22, 7.28, 7.30, 7.31, 7.34, 7.35, 7.38, 7.44, 7.50, 7.56, 7.61, 7.74, 7.76, 7.77, 7.81 |
 | L | Tests and CI | test sources, `.github/workflows/` | 0.1 to 0.3, 0.5 to 0.11, 4.1, 4.15, 7.62, 7.65 |
@@ -3651,7 +3651,7 @@ Shaping is one line per keystroke. These still scale with document length:
   break between "Title" and "Sub" exports as `## TitleSub`
   (`HeaderSemanticsTest`, `state/JoinBlockTextStyleTest.kt`). The paste is
   6.38 and the look equal to an inline style 7.79.
-- [ ] **7.79 A heading look equal to an inline style takes the user's spans of
+- [x] **7.79 A heading look equal to an inline style takes the user's spans of
   it with the heading. S.** [Opus] [Lane I] Under a configuration whose
   heading look equals an inline style (`header4Style = boldStyle`), demoting
   the heading or a style swap's rebake strips the user's bold inside the line
@@ -3662,6 +3662,26 @@ Shaping is one line per keystroke. These still scale with document length:
   line stays bold. Stripping only a run over the whole line would keep a
   user's partial bold; a bold run over the whole line stays ambiguous. Found
   in 7.72.
+  Done: no rule over runs can tell them apart, since the span model merges
+  equal styles (a word bolded or typed inside the heading joins its look). A
+  heading whose style equals an inline style bakes `RichTextStyles.headingLook`
+  instead, that style with the default platform style, which draws nothing but
+  keeps it unequal, and the importers and exporters read the same look. Such a
+  heading now behaves as any other: its look is baked over a joined line and
+  left behind by text moving off, the user's bold inside it outlives a
+  demotion, a rebake or another level, and exports as bold; bold removed
+  inside it leaves the heading's look. The saved state keeps the mark
+  (`HeadingInlineLookTest`, `JoinBlockTextStyleTest`,
+  `HeadingInlineFormattingHtmlTest`, `HeaderSemanticsTest`;
+  `docs/MIGRATION.md`, `docs/design/line-blocks.md`). Found 7.83.
+- [ ] **7.83 Markdown export drops the user's bold equal to a retired heading
+  look. S.** [Opus] [Lane I] `exportAsMarkdown` strips every retired
+  configuration's heading look from a heading line, including one that equals
+  a current inline style, so after a switch from `header4Style =
+  SpanStyle(Bold)` (bold then styled otherwise) to a configuration whose
+  `boldStyle` is plain bold, a bold word inside an h4 exports without its
+  `**`. HTML export leaves out only looks no current inline style shares
+  (`RetiredStyles.headingOnlyLooks`). Found in 7.79.
 - [ ] **7.80 A foreign paragraph's leading spaces are kept except at the
   file's start. R.** [Opus] [Lane I] CommonMark drops up to three leading
   spaces of a paragraph line, and import does for the first paragraph

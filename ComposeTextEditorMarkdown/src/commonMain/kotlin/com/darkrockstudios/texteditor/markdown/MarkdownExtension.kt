@@ -436,7 +436,7 @@ class MarkdownExtension(
 					// A heading's baked display style, under this configuration or a
 					// retired one, is the block's look, not bold text at a size.
 					val baked = headingLevel
-						?.let { level -> (retiredStyles + styles).map { it.getHeaderStyle(level) } }
+						?.let { level -> (retiredStyles + styles).map { it.headingLook(level) } }
 						.orEmpty()
 					// Link spans live on the state, not in the AnnotatedString, so
 					// the serializer is handed this line's links in line-local

@@ -643,7 +643,7 @@ private class HtmlSpanBuilder(
 			if (tag !in active) {
 				val start = runStart.remove(tag) ?: return@forEach
 				if (out.length > start) {
-					spans += AnnotatedString.Range(tag.spanStyle(config), start, out.length)
+					spans += AnnotatedString.Range(tag.look(config), start, out.length)
 				}
 			}
 		}
