@@ -6,7 +6,9 @@ From the first release after 2.8.0, the built-in key bindings match letter
 chords on `KeyEvent.layoutKey` (`com.darkrockstudios.texteditor.input`)
 rather than `KeyEvent.key`. On desktop Linux, `key` names a letter by the
 first keyboard layout installed, not the active one, so on BÉPO or Dvorak the
-two can name different letters for the same key. In a browser `key` is always
+two can name different letters for the same key. On desktop macOS `key` names
+a letter by what the key types without Cmd, so under "Dvorak - QWERTY ⌘" it
+names the Dvorak letter where the Cmd chord is the QWERTY one. In a browser `key` is always
 the key's US QWERTY position, so on any other layout (AZERTY, QWERTZ, BÉPO,
 Dvorak) they differ for every letter a layout moves. A host's own `KeyBindings`
 that tests `event.key` and delegates the rest to `platformKeyBindings()` should
