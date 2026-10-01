@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import com.darkrockstudios.texteditor.EditorLineLimits
 import com.darkrockstudios.texteditor.TextEditor
 import com.darkrockstudios.texteditor.RichTextStyles
+import com.darkrockstudios.texteditor.behaviors.SmartPunctuation
 import com.darkrockstudios.texteditor.markdown.withMarkdown
 import com.darkrockstudios.texteditor.rememberTextEditorStyle
 import com.darkrockstudios.texteditor.richstyle.ImageBlockSpanStyle
@@ -116,6 +117,11 @@ fun TextEditorDemoUi(
 	LaunchedEffect(state, limited) {
 		state.inputFilter = if (limited) EditorInputFilter.maxLength(280) else null
 	}
+	var punctuation by remember { mutableStateOf(NO_SMART_PUNCTUATION) }
+	LaunchedEffect(state, punctuation) {
+		state.editBehaviors.removeAll { it is SmartPunctuation }
+		if (punctuation != NO_SMART_PUNCTUATION) state.editBehaviors += punctuation
+	}
 
 	Column(modifier = modifier) {
 		Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
@@ -154,6 +160,15 @@ fun TextEditorDemoUi(
 			LabeledSwitch("Grow", grow) { grow = it }
 			LabeledSwitch("Single line", singleLine) { singleLine = it }
 			LabeledSwitch("280 max", limited) { limited = it }
+			LabeledSwitch("Curly \"quotes\"", punctuation.doubleQuotes) {
+				punctuation = punctuation.copy(doubleQuotes = it)
+			}
+			LabeledSwitch("Curly 'quotes'", punctuation.singleQuotes) {
+				punctuation = punctuation.copy(singleQuotes = it)
+			}
+			LabeledSwitch("-- em dash", punctuation.emDashes) { punctuation = punctuation.copy(emDashes = it) }
+			LabeledSwitch("a - b en dash", punctuation.enDashes) { punctuation = punctuation.copy(enDashes = it) }
+			LabeledSwitch("... ellipsis", punctuation.ellipses) { punctuation = punctuation.copy(ellipses = it) }
 		}
 
 		if (editable) {
@@ -196,6 +211,14 @@ fun TextEditorDemoUi(
 		)
 	}
 }
+
+private val NO_SMART_PUNCTUATION = SmartPunctuation(
+	doubleQuotes = false,
+	singleQuotes = false,
+	emDashes = false,
+	enDashes = false,
+	ellipses = false,
+)
 
 @Composable
 private fun LabeledSwitch(label: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {

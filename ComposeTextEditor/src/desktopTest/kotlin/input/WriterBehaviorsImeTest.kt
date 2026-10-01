@@ -1,0 +1,72 @@
+@file:OptIn(ExperimentalComposeUiApi::class)
+
+package input
+
+import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.input.CommitTextCommand
+import androidx.compose.ui.text.input.ImeOptions
+import androidx.compose.ui.text.input.SetComposingTextCommand
+import com.darkrockstudios.texteditor.behaviors.SmartPunctuation
+import com.darkrockstudios.texteditor.input.SkikoTextEditorInputMethodRequest
+import com.darkrockstudios.texteditor.state.TextEditorState
+import io.mockk.mockk
+import kotlinx.coroutines.test.TestScope
+import kotlin.test.BeforeTest
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
+
+/**
+ * The writer behaviors reached through the skiko input request desktop, iOS and web
+ * share: `editText` (desktop and iOS) and `onEditCommand` (web).
+ */
+class WriterBehaviorsImeTest {
+
+	private lateinit var state: TextEditorState
+	private lateinit var request: SkikoTextEditorInputMethodRequest
+
+	@BeforeTest
+	fun setup() {
+		state = TextEditorState(
+			scope = TestScope(),
+			measurer = mockk(relaxed = true),
+			initialText = AnnotatedString(""),
+		)
+		request = SkikoTextEditorInputMethodRequest(state, ImeOptions.Default)
+	}
+
+	private fun text() = state.getAllText().text
+
+	@Test
+	fun `committed punctuation is substituted and the IME is resynced`() {
+		state.editBehaviors += SmartPunctuation()
+		val generation = state.imeResyncGeneration
+
+		request.editText { commitText("a", 1) }
+		request.editText { commitText("-", 1) }
+		request.editText { commitText("-", 1) }
+
+		assertEquals("a\u2014", text())
+		assertTrue(state.imeResyncGeneration > generation)
+	}
+
+	@Test
+	fun `a committed composition is substituted`() {
+		state.editBehaviors += SmartPunctuation()
+
+		request.editText { setComposingText("it's", 1) }
+		request.editText { commitText("it's", 1) }
+
+		assertEquals("it\u2019s", text())
+	}
+
+	@Test
+	fun `web edit commands reach the substitution`() {
+		state.editBehaviors += SmartPunctuation()
+
+		request.onEditCommand(listOf(SetComposingTextCommand("\"hi", 1), CommitTextCommand("\"hi\"", 1)))
+
+		assertEquals("\u201Chi\u201D", text())
+	}
+}

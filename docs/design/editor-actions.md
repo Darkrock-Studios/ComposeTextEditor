@@ -310,7 +310,8 @@ Several edits go in one `editGroup` to be one step. The chain is skipped for
 edits a behavior makes while handling one, and a behavior that edits ends
 the chain whether or not it claims, since the range it was told no longer
 holds. Smart punctuation, markdown as you type, and auto-link are opt-in
-behaviors on this hook; `TextInputBehaviorTest` shows the shape.
+behaviors on this hook; `TextInputBehaviorTest` shows the shape. The ones core
+ships (`SmartPunctuation`) are described in [behaviors.md](behaviors.md).
 
 The chain is consulted inside the public semantic functions, so every caller
 gets it:

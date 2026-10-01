@@ -1580,7 +1580,7 @@ iOS Safari; browser tests run in CI.
   never offered), and the accessibility insert. A
   behaviour edits on top, so a substitution undoes back to what was typed.
   A paste is not offered; 5.4's pasted-URL half needs its own seam.
-- [ ] **5.2 Smart punctuation.** [Opus] [Lane G] Curly quotes, dashes from
+- [x] **5.2 Smart punctuation.** [Opus] [Lane G] Curly quotes, dashes from
   double hyphens, ellipsis. One undo step reverts the substitution, as in
   native editors: typing `--` gives an em dash and undo gives back `--`.
   Decided: an opt-in behaviour in core, off by default, built on the 5.1
@@ -1589,6 +1589,19 @@ iOS Safari; browser tests run in CI.
   not use, and Android, Windows, Linux, and the web leave it to the app. So
   on iOS the behaviour stays off unless the host turns the keyboard's own
   off, or the text would be converted twice (see the Mac queue).
+  Done: `behaviors/SmartPunctuation`, a data class with a switch per
+  substitution (`doubleQuotes`, `singleQuotes`, `emDashes`, `enDashes`,
+  `ellipses`). Quotes open at a line start and after whitespace, an opening
+  bracket or the other kind's opening quote, and close elsewhere; after a dash
+  they close when the line has a quotation of their kind open (interrupted
+  dialogue), else open; an opening single quote before a digit becomes an
+  apostrophe (`'90s`). Two hyphens make an em dash at once, spaced or not
+  (macOS); a spaced hyphen after a letter or digit makes an en dash when the
+  space after it is typed (Word); a third hyphen puts `---` back. A committed
+  word is processed as if typed character by character; inline code and code
+  blocks are never touched; one undo gives back the straight characters (`SmartPunctuationTest`, `SmartPunctuationE2eTest`,
+  `WriterBehaviorsImeTest`, `WriterBehaviorsInputConnectionTest`). Design in
+  `docs/design/behaviors.md`. The sample's rich text demo has a switch for each.
 - [ ] **5.3 Markdown as you type.** [Opus] [Lane G] "- ", "1. ", "# ", "> " at
   line start; inline `**bold**` and friends. Decided: not in core. Markdown
   is a storage detail for a WYSIWYG host like Hammer, which does not want
@@ -2910,7 +2923,7 @@ records results and removes entries that passed.
 | 7.8, 7.48 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64` and `:ComposeTextEditor:iosSimulatorArm64Test` (commonMain changed how the lines, rows and spans are stored; no `iosMain` or `skikoMain` change). Then re-time the iOS simulator as 4.21 did (iPhone 17 Pro Max simulator, Debug framework, a 200,000-character document of 2,000 lines of 99 characters, temporary logging): the keyboard's `editText` block and the frames over 20 ms while typing twelve keys, then rotate the device and time the frame the rotation costs and how long the rows take to settle | Before (4.21, `f3b8d8f`): `editText` 9.4 ms median at 200k against 0.7 ms at 2k. A pass: `editText` within a few times the 2k figure, wherever the caret is (desktop went 837 µs to 174 µs, and 2,026 µs to 94 µs with a span on every line); a rotation that shapes only the visible lines at once and settles the rest in the background without the scroll jumping. Record the numbers here and in 7.8 and 7.48 | |
 | 6.19 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64` and `:ComposeTextEditor:iosSimulatorArm64Test`. `ClipboardHelper.setText` now returns `Boolean` (`iosMain/.../clipboard/ClipboardHelper.ios.kt` answers true after writing). Then in the iOS sample app: select a word and Cut from the edit menu, and paste it elsewhere | Compiles and the tests pass. The word leaves the editor on Cut and pastes back | |
 | 7.10, 7.11 | Re-time the iOS simulator as 4.21 did (iPhone 17 Pro Max simulator, Debug framework, a 200,000-character document of 2,000 lines of 99 characters, temporary logging): the idle caret-blink frame, frames over 20 ms while typing twelve keys with the soft keyboard (count and worst), and the keyboard's `editText` block; also the time to open and close the soft keyboard, which no longer reshapes the document | Before (4.21, `f3b8d8f`): an idle blink frame 33 ms at 200k against under one vsync at 2k; typing frames up to 137 ms, about six over 20 ms a keystroke; `editText` 9.4 ms median. A pass: the blink frame at 200k within a vsync, as at 2k (7.11). Typing frames should drop by the row scans and the whole-text build; `editText` is 7.8's and is not expected to move. Record the numbers here and in 7.11 | |
-| 5.2 | In the iOS sample app with the soft keyboard (Settings > General > Keyboard > Smart Punctuation on), type `"quoted"`, `it's`, and `a--b` into the editor | Record whether curly quotes, the apostrophe, and the dash arrive already converted through the input session; this decides whether 5.2 must stay off on iOS by default | |
+| 5.2 | In the iOS sample app with the soft keyboard (Settings > General > Keyboard > Smart Punctuation on), type `"quoted"`, `it's`, and `a--b` into the editor. Then turn the keyboard's Smart Punctuation off, turn on every smart punctuation switch in the rich text demo, type the same, then a word that autocorrects ("teh" and space), and undo once after `a--` | Record whether curly quotes, the apostrophe, and the dash arrive already converted through the input session; this decides whether 5.2 must stay off on iOS by default. With the demo's switches, the same characters come out converted, autocorrect still works after a substitution (4.29's `None` holds), and undo gives back `--` | |
 | 3.16 | No `iosMain` change: commonMain now measures the keyboard cover (4.24) in the placement of a layout node on the canvas (`state/KeyboardCover.kt`, `measuresKeyboardCover`) instead of from a flow over `WindowInsets.ime`. Repeat 4.24's simulator check: tap a line the keyboard will cover, type Returns at the bottom, and dismiss and raise the keyboard | Compiles. The tapped line comes above the keyboard at once, Returns keep the caret at the keyboard's top, and the text does not jump while the keyboard slides | |
 | 7.37 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64`. commonMain `input/TextEditorTextInputService.kt` adds `internal expect val startsInputQuietly`; the iOS actual (`iosMain/.../input/TextEditorTextInputService.ios.kt`) is `false`. Then in the iOS sample app, with the keyboard up, turn Read only on and off without touching the editor, then type with the soft keyboard; and try the iOS actual as `true` (a session started, then `LocalSoftwareKeyboardController.hide()` after it) | Compiles. With `false`, the keyboard goes with Read only and comes back only on a tap, and typing then works. With `true`, if the keyboard stays down while a hardware keyboard or dictation can type at once, and a tap raises it, keep `true` and record it in 7.37 | |
 | 7.52 | `./gradlew :ComposeTextEditorMarkdown:compileKotlinIosSimulatorArm64 :ComposeTextEditorMarkdown:iosSimulatorArm64Test :ComposeTextEditor:compileKotlinIosSimulatorArm64 :ComposeTextEditor:iosSimulatorArm64Test :ComposeTextEditorFind:compileKotlinIosSimulatorArm64 :ComposeTextEditorSpellCheck:compileKotlinIosSimulatorArm64`. The new module has no iOS source of its own; core's `iosMain` clipboard and drag actuals take a `RichTextStyles` where they took the markdown configuration, and `iosTest/.../ClipboardHelperIosTest.kt` was adapted unbuilt. Then build the iOS sample app as the `ios` job does | Everything compiles, the iOS tests pass, and the sample app's markdown demo opens | |

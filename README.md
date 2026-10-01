@@ -72,6 +72,9 @@ the [API reference & recipes](https://darkrock-studios.github.io/ComposeTextEdit
 - Editor configuration: read-only with a caret, sizing to the text between minimum
   and maximum lines, single line, maximum length and input filters. No soft-wrap
   toggle yet.
+- Opt-in writer conveniences: smart punctuation (curly quotes and apostrophes, em
+  and en dashes, ellipses), each substitution switchable and undone in one step
+  ([docs/design/behaviors.md](docs/design/behaviors.md)).
 
 #### Platforms
 
