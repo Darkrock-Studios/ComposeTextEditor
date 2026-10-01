@@ -2948,11 +2948,17 @@ Shaping is one line per keystroke. These still scale with document length:
   changed its text. Find (7.42) and spell check (7.44) infer it from the line
   list's identity and the change in length, which a behavior that edits during the
   same call would throw off. Return what landed, or null when refused.
-- [ ] **7.56** [Opus] [Lane K] `wordSegments()` opens its ICU word cursor with
+- [x] **7.56** [Opus] [Lane K] `wordSegments()` opens its ICU word cursor with
   `use` inside the sequence builder, so a consumer that stops early (`first`,
   `find`, an abandoned iterator) never closes it, and the native break iterator
   waits for the finalizer. The spell checker drains the sequence, so only other
   callers leak; close the cursor per line or return a closeable scan.
+  Done: the scan segments its lines in batches, each with its own cursor
+  closed before the batch yields, so no cursor is open across a yield. A
+  cursor per line made a whole scan about 2.5 times slower on desktop (20,000
+  lines: 80 ms against 30 ms); batches double from one line to 256, so an
+  early stop reads at most about twice the lines it reached and a whole scan
+  opens a cursor per 256 lines (`SegmentationCostTest`).
 - [ ] **7.57** [Fable] [Lane M] What 7.36 could not match in the semantics text
   layout: character bounds sit off by the content padding, the space above the
   first paragraph and the editor's scroll offset, since a `TextLayoutResult`
