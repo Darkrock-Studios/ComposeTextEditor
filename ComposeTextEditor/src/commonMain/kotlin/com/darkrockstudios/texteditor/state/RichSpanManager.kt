@@ -5,6 +5,7 @@ import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.LineWrap
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.richstyle.BlockSpanStyle
+import com.darkrockstudios.texteditor.richstyle.LinkSpanStyle
 import com.darkrockstudios.texteditor.richstyle.RichSpan
 import com.darkrockstudios.texteditor.richstyle.RichSpanStyle
 
@@ -303,7 +304,12 @@ class RichSpanManager(
 				span.style.stickyAtStart && insertAtStart -> start
 				else -> operation.transformOffset(start, state)
 			}
-			val transformedEnd = operation.transformOffset(end, state)
+			// A link ends at its last character: text typed after it stays out.
+			val transformedEnd = if (span.style is LinkSpanStyle && operation.position == end && start != end) {
+				end
+			} else {
+				operation.transformOffset(end, state)
+			}
 			// A line-anchored marker stays on its line when the insert brings more lines
 			// (the edit pipeline continues a block onto them): the clamp trims the end
 			// to the line.

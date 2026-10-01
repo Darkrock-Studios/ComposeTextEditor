@@ -50,6 +50,7 @@ import com.darkrockstudios.texteditor.RichTextStyles
 import com.darkrockstudios.texteditor.richstyle.BlockSpanStyle
 import com.darkrockstudios.texteditor.richstyle.HeaderSpanStyle
 import com.darkrockstudios.texteditor.richstyle.LineBlockEditBehavior
+import com.darkrockstudios.texteditor.richstyle.LinkSpanStyle
 import com.darkrockstudios.texteditor.richstyle.ParagraphFormatSpanStyle
 import com.darkrockstudios.texteditor.richstyle.RichSpan
 import com.darkrockstudios.texteditor.richstyle.RichSpanStyle
@@ -2275,8 +2276,9 @@ class TextEditorState(
 
 	/**
 	 * Adds [spans], captured by [preservedRichSpans], relative to [insertPosition]. One a
-	 * span of the same style already covers is left out: inserting beside or inside that
-	 * span stretched it over the inserted text.
+	 * span of the same style already covers is left out: inserting inside that span, or
+	 * beside one that grows at its edge, stretched it over the inserted text. A link
+	 * landing against a link to the same place joins it, since a link does not grow.
 	 */
 	internal fun addPreservedRichSpans(insertPosition: CharLineOffset, spans: List<PreservedRichSpan>) = withAtomicEdit {
 		spans.forEach { preserved ->
@@ -2310,6 +2312,16 @@ class TextEditorState(
 				it.style == preserved.style && it.range.start <= startPos && it.range.end >= endPos
 			}
 			if (covered) return@forEach
+			if (preserved.style is LinkSpanStyle) {
+				val touching = richSpanManager.getSpansInRange(TextEditorRange(startPos, endPos)).filter {
+					it.style == preserved.style && (it.range.end == startPos || it.range.start == endPos)
+				}
+				if (touching.isNotEmpty()) {
+					touching.forEach { removeRichSpan(it) }
+					addRichSpan(minOf(startPos, touching.minOf { it.range.start }), maxOf(endPos, touching.maxOf { it.range.end }), preserved.style)
+					return@forEach
+				}
+			}
 			// A line has one paragraph format: a copied one replaces the one the paste
 			// left on its line.
 			if (preserved.style.boundToParagraph) {

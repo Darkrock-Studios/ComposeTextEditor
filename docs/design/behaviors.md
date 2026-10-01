@@ -141,11 +141,9 @@ Typed URLs reach the behavior the same way on every input path: a keyboard
 that composes the URL as one word and commits it, then commits the space, is
 the space trigger; one that commits `"https://example.com "` whole is too.
 
-Text typed at a link's end joins the link, and after Enter it takes the link's
-style (roadmap 5.10). That is the editor's typing style, not this behavior's,
-but a pasted URL ends at the caret, so text typed straight after the paste joins
-the link until 5.10 is fixed; a typed URL is linked only once a space or
-bracket follows it, so it is not affected.
+A link holds only its own characters: text typed at its end, or after Enter
+there, is plain and outside it, so text typed straight after a pasted URL does
+not join the link (roadmap 5.10).
 
 ## Markdown shortcuts
 
