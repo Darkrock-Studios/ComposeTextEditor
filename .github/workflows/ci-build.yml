@@ -80,6 +80,7 @@ jobs:
         run: >
           ./gradlew --stacktrace
           :ComposeTextEditor:desktopTest
+          :ComposeTextEditorMarkdown:desktopTest
           :ComposeTextEditorFind:desktopTest
           :ComposeTextEditorSpellCheck:desktopTest
       - name: Keep the test reports
@@ -114,6 +115,7 @@ jobs:
         run: >
           ./gradlew --stacktrace
           :ComposeTextEditor:desktopTest
+          :ComposeTextEditorMarkdown:desktopTest
           :ComposeTextEditorFind:desktopTest
           :ComposeTextEditorSpellCheck:desktopTest
       - name: Keep the test reports
@@ -242,6 +244,8 @@ jobs:
           ./gradlew --stacktrace
           :ComposeTextEditor:compileKotlinIosArm64
           :ComposeTextEditor:iosSimulatorArm64Test
+          :ComposeTextEditorMarkdown:compileKotlinIosArm64
+          :ComposeTextEditorMarkdown:iosSimulatorArm64Test
           :ComposeTextEditorSpellCheck:compileKotlinIosArm64
           :ComposeTextEditorSpellCheck:iosSimulatorArm64Test
           :ComposeTextEditorFind:compileKotlinIosArm64

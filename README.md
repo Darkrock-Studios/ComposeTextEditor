@@ -33,7 +33,9 @@ And now, it's working, and at this point, working pretty well.
 - ✅ Expose scroll state
 - ✅ Spell checking
 - ✅ Diagnostics from your own checker (grammar, style), underlined with a menu of fixes
-- ☑️ CommonMark Spec (partial)
+- ✅ Block structure: headings, nested lists, blockquotes, code fences, rules, images, links
+- ✅ HTML import, export and clipboard
+- ☑️ Markdown, as an addon (CommonMark, partial)
   - Inline styles (bold, italics, ect)
   - Block styles (code fence with its language tag, nested lists, images)
   - Underline (`<u>`), highlight (`==text==` or `<mark>`), colour and size (`<span style>`)
@@ -95,6 +97,11 @@ Text Editor:
 
 `implementation("com.darkrockstudios:composetexteditor:2.0.0")`
 
+Markdown addon, to use the editor as a markdown editor (`state.withMarkdown()`), from
+the first release after 2.8.0:
+
+`implementation("com.darkrockstudios:composetexteditor-markdown:<version>")`
+
 Spell Checking addon:
 
 `implementation("com.darkrockstudios:composetexteditor-spellcheck:2.0.0")`
@@ -102,6 +109,9 @@ Spell Checking addon:
 Find & Replace addon:
 
 `implementation("com.darkrockstudios:composetexteditor-find:2.0.0")`
+
+Upgrading from a release where markdown was part of the editor: see
+[docs/MIGRATION.md](docs/MIGRATION.md).
 
 On iOS, host the Compose view with `.ignoresSafeArea(.keyboard)` in SwiftUI, as the
 Compose Multiplatform template does. The editor keeps its caret above the keyboard itself;

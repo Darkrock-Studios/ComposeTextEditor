@@ -42,8 +42,7 @@ data class MarkdownConfiguration(
 		val DEFAULT = MarkdownConfiguration()
 
 		@Deprecated(
-			"The styles live on TextEditorState.richTextStyles; assign RichTextStyles.DEFAULT_DARK there.",
-			ReplaceWith("MarkdownConfiguration.DEFAULT"),
+			"The styles live on TextEditorState.richTextStyles: assign RichTextStyles.DEFAULT_DARK there and use MarkdownConfiguration.DEFAULT here.",
 			level = DeprecationLevel.ERROR,
 		)
 		val DEFAULT_DARK: MarkdownConfiguration

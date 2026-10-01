@@ -44,7 +44,8 @@ device. Treat **C** items on those platforms as leads to confirm first.
 
 Paths are relative to
 `ComposeTextEditor/src/commonMain/kotlin/com/darkrockstudios/texteditor/`
-unless they start with a source set or module name.
+unless they start with a source set or module name; the `markdown/` package
+and its tests live in `ComposeTextEditorMarkdown/` since 7.52.
 
 ## Non-goals
 
@@ -186,11 +187,11 @@ review.
 | E | Input sessions on desktop, iOS, web | `desktopMain`, `iosMain`, `wasmJsMain` under `input/` | 4.2 to 4.7, 4.10 to 4.12, 4.19, 4.21, 4.22, 4.24 to 4.26, 4.28, 4.29, 4.32, 4.33, 4.35, 7.37 |
 | F | Android input | `androidMain` | 0.4, 3.9 to 3.11, 3.14, 3.17, 4.16, 4.18, 4.20, 4.27, 4.30, 4.31, 4.34, 7.40 |
 | G | Edit pipeline and undo | `state/TextEditManager.kt`, `state/TextEditHistory.kt`, `state/EditBehavior.kt`, `input/ImeEditLogic.kt` | 1.20, 5.1 to 5.5, 5.9, 6.1 to 6.6, 6.14, 6.15, 6.17, 6.22, 6.23, 6.28, 6.29 |
-| H | Clipboard and HTML | `clipboard/`, `html/`, `dragdrop/` | 4.9, 4.13, 4.17, 6.7 to 6.13, 6.18 to 6.21, 6.24 to 6.27, 7.39, 7.46, 7.47, 7.49, 7.53 |
-| I | Markdown and block model | `markdown/`, `richstyle/` | 5.6, 7.14 to 7.16, 7.43, 7.45, 7.52 |
+| H | Clipboard and HTML | `clipboard/`, `html/`, `dragdrop/` | 4.9, 4.13, 4.17, 6.7 to 6.13, 6.18 to 6.21, 6.24 to 6.27, 7.39, 7.46, 7.47, 7.49, 7.53, 7.63 |
+| I | Markdown and block model | `ComposeTextEditorMarkdown/`, `richstyle/`, `state/TextEditorStateBlockExt.kt` | 5.6, 7.14 to 7.16, 7.43, 7.45, 7.52 |
 | J | Find addon | `ComposeTextEditorFind/` | 7.17 to 7.19, 7.26, 7.29, 7.42 |
 | K | Spell check addon | `ComposeTextEditorSpellCheck/` | 7.20 to 7.22, 7.28, 7.30, 7.31, 7.34, 7.35, 7.38, 7.44, 7.61 |
-| L | Tests and CI | test sources, `.github/workflows/` | 0.1 to 0.3, 0.5 to 0.10, 4.1, 4.15 |
+| L | Tests and CI | test sources, `.github/workflows/` | 0.1 to 0.3, 0.5 to 0.10, 4.1, 4.15, 7.62 |
 | M | Accessibility and host API | semantics in `BasicTextEditor.kt`, `RichTextView.kt`, `state/rememberTextEditorState.kt` | 7.1 to 7.4, 7.13, 7.23 to 7.25, 7.32, 7.36, 7.59, 7.60 |
 | N | Core layout and performance | `state/TextEditorState.kt` | 5.7, 7.8 to 7.12 |
 
@@ -1580,8 +1581,9 @@ iOS Safari; browser tests run in CI.
 - [ ] **5.3 Markdown as you type.** [Opus] [Lane G] "- ", "1. ", "# ", "> " at
   line start; inline `**bold**` and friends. Decided: not in core. Markdown
   is a storage detail for a WYSIWYG host like Hammer, which does not want
-  it. It belongs in the markdown module of 7.52, with examples in the
-  sample app's markdown demo.
+  it. It belongs in `ComposeTextEditorMarkdown` (7.52), as an opt-in
+  `EditBehavior` on the 5.1 hook that the markdown demo installs, with
+  examples there.
 - [ ] **5.4 Auto-link** [Opus] [Lane G] typed and pasted URLs. Decided: opt-in,
   off by default. Paste does not go through the 5.1 hook, so the pasted half
   needs its own seam.
@@ -1615,7 +1617,7 @@ iOS Safari; browser tests run in CI.
   empty top-level item ends the list, Backspace at a nested item's start
   un-nests, a toggle keeps the level when switching kinds and lifts a cleared
   parent's children; each is one undo step (`richstyle/ListNesting.kt`,
-  `MarkdownExtension.nestList` and `unnestList`). Tab inside an item's text
+  `TextEditorState.nestListItems` and `unnestListItems`). Tab inside an item's text
   still inserts, per 2.9. HTML nests since 7.47. Design in
   `docs/design/line-blocks.md`, "Nested lists".
 - [x] **5.7 Paragraph formatting.** [Fable] [Lane N] Paragraph spacing does not
@@ -1791,12 +1793,12 @@ iOS Safari; browser tests run in CI.
   ftp) at import and where a link opens. Markdown import reads a destination
   as a renderer does (backslash escapes and entities decoded, so
   `javascript&#58;` is caught) and keeps a refused link's text without the link
-  or its style, as HTML import does; `MarkdownExtension.setLink` refuses one and
+  or its style, as HTML import does; `TextEditorState.setLink` refuses one and
   answers false (it now returns whether it set the link). A link a host attached
   directly stays in the document, and its copies, paste and markdown export
   keep it, but the pointer's link lookup gives it no hand cursor and no
   Ctrl/Cmd+click open, and the semantics text publishes no link annotation for
-  it. `onRichSpanClick` and `MarkdownExtension.linkAt` still hand a host the span
+  it. `onRichSpanClick` and `TextEditorState.linkAt` still hand a host the span
   as it is (`html/LinkDestinationSafetyTest.kt`). A host's own scheme is refused
   as well: 6.25.
 - [x] **6.10 Non-breaking spaces** [Opus] [Lane H] become plain spaces on HTML
@@ -2451,13 +2453,13 @@ Shaping is one line per keystroke. These still scale with document length:
   `HTML_TAG` tokens; `==` is rewritten to `<mark>` in a pre-pass that leaves
   code, tables, link destinations, URLs and tags alone. Fence language tags:
   a fence's info string lives in a `CodeFenceLanguageSpanStyle` span on every
-  line of the run (`MarkdownExtension.codeFenceLanguage` and
+  line of the run (`TextEditorState.codeFenceLanguage` and
   `setCodeFenceLanguage`), written after the opening marker; normalization
   keeps a run on one language across edits, and joining two runs keeps the
   first run's. `~~~` fences import too. See `docs/design/line-blocks.md`,
   "Fence languages".
 
-- [ ] **7.52 Markdown as a layer, not core. S.** [Fable] [Lane I] This is a
+- [x] **7.52 Markdown as a layer, not core. S.** [Fable] [Lane I] This is a
   rich text editor that can be used as a markdown editor; markdown must not be
   baked into core. Today core's rich text styling runs through
   `MarkdownConfiguration` (`TextEditorState.markdownConfiguration`): about 20
@@ -2502,6 +2504,23 @@ Shaping is one line per keystroke. These still scale with document length:
     dependency; core depends on no markdown. Core's desktop tests depend on
     the module for their fixtures (`docs/design/modules.md`, "Tests").
     `SpellCheckState.withMarkdown` is gone: `textState.withMarkdown()`.
+  - Hosts: done. The markdown demos install the module and the plain demo
+    does not; the module is in the Dokka aggregate, `deploy.yml`, and the
+    desktop and iOS CI jobs; `docs/MIGRATION.md` lists what a host changes.
+    The iOS compile of the module is in the Mac queue.
+- [ ] **7.62 Core's block tests read their fixtures through the markdown
+  module. S.** [Opus] [Lane L] Core's desktop tests depend on
+  `ComposeTextEditorMarkdown` so the block tests can build and assert
+  documents as markdown text (`docs/design/modules.md`, "Tests"). A core-only
+  fixture notation over `applyDocumentBlocks` and the snapshot would let core's
+  tests stand on core alone; worth doing if the dependency proves a burden
+  (an IDE import cycle, or a markdown change failing core's suite).
+- [ ] **7.63 HTML export ignores retired styles. S.** [Opus] [Lane H] The
+  markdown exporter writes a span still carrying a retired configuration's
+  bold or link style as its marker (`TextEditorState.retiredRichTextStyles`);
+  `html/HtmlTag.kt` matches the current styles alone, so after a theme change
+  a copy or an HTML export of older text writes a configured colour or size
+  where markdown writes `<strong>`. Read the retired styles there too.
 
 ### Find and replace addon
 
@@ -2884,4 +2903,5 @@ records results and removes entries that passed.
 | 5.2 | In the iOS sample app with the soft keyboard (Settings > General > Keyboard > Smart Punctuation on), type `"quoted"`, `it's`, and `a--b` into the editor | Record whether curly quotes, the apostrophe, and the dash arrive already converted through the input session; this decides whether 5.2 must stay off on iOS by default | |
 | 3.16 | No `iosMain` change: commonMain now measures the keyboard cover (4.24) in the placement of a layout node on the canvas (`state/KeyboardCover.kt`, `measuresKeyboardCover`) instead of from a flow over `WindowInsets.ime`. Repeat 4.24's simulator check: tap a line the keyboard will cover, type Returns at the bottom, and dismiss and raise the keyboard | Compiles. The tapped line comes above the keyboard at once, Returns keep the caret at the keyboard's top, and the text does not jump while the keyboard slides | |
 | 7.37 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64`. commonMain `input/TextEditorTextInputService.kt` adds `internal expect val startsInputQuietly`; the iOS actual (`iosMain/.../input/TextEditorTextInputService.ios.kt`) is `false`. Then in the iOS sample app, with the keyboard up, turn Read only on and off without touching the editor, then type with the soft keyboard; and try the iOS actual as `true` (a session started, then `LocalSoftwareKeyboardController.hide()` after it) | Compiles. With `false`, the keyboard goes with Read only and comes back only on a tap, and typing then works. With `true`, if the keyboard stays down while a hardware keyboard or dictation can type at once, and a tap raises it, keep `true` and record it in 7.37 | |
+| 7.52 | `./gradlew :ComposeTextEditorMarkdown:compileKotlinIosSimulatorArm64 :ComposeTextEditorMarkdown:iosSimulatorArm64Test :ComposeTextEditor:compileKotlinIosSimulatorArm64 :ComposeTextEditor:iosSimulatorArm64Test :ComposeTextEditorFind:compileKotlinIosSimulatorArm64 :ComposeTextEditorSpellCheck:compileKotlinIosSimulatorArm64`. The new module has no iOS source of its own; core's `iosMain` clipboard and drag actuals take a `RichTextStyles` where they took the markdown configuration, and `iosTest/.../ClipboardHelperIosTest.kt` was adapted unbuilt. Then build the iOS sample app as the `ios` job does | Everything compiles, the iOS tests pass, and the sample app's markdown demo opens | |
 | 0.7 | An iOS simulator smoke test that runs the app rather than only building it: an XCUITest target in `sampleAppiOS` that opens the blank editor, taps it and types with `typeText("Hello")`, then reads the editor back through its accessibility value; run it with `xcodebuild test` on an iOS simulator destination and add that step to the `ios` job in `.github/workflows/ci-build.yml`. The Android equivalent is `androidApp/src/androidTest/.../EditorTypingSmokeTest.kt` | The UI test passes locally and in the `ios` job, and fails if typing stops reaching the editor | |
