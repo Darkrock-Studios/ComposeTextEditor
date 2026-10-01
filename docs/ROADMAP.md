@@ -187,7 +187,7 @@ review.
 | D | Bindings, actions, menu | `input/KeyBindings.kt`, `input/EditorCommand.kt`, `input/BuiltinEditorActions.kt`, `contextmenu/` | 2.1, 2.2, 2.4, 2.5, 2.7 to 2.12, 4.8, 5.8, 7.58 |
 | E | Input sessions on desktop, iOS, web | `desktopMain`, `iosMain`, `wasmJsMain` under `input/` | 4.2 to 4.7, 4.10 to 4.12, 4.19, 4.21, 4.22, 4.24 to 4.26, 4.28, 4.29, 4.32, 4.33, 4.35, 4.37 to 4.40, 7.37 |
 | F | Android input | `androidMain` | 0.4, 0.12, 3.9 to 3.11, 3.14, 3.17, 4.16, 4.18, 4.20, 4.27, 4.30, 4.31, 4.34, 4.36, 7.40 |
-| G | Edit pipeline and undo | `state/TextEditManager.kt`, `state/TextEditHistory.kt`, `state/EditBehavior.kt`, `input/ImeEditLogic.kt` | 1.20, 5.1 to 5.5, 5.9 to 5.11, 5.13 to 5.15, 6.1 to 6.6, 6.14, 6.15, 6.17, 6.22, 6.23, 6.28, 6.29, 6.33 to 6.35, 6.40, 7.54, 7.55 |
+| G | Edit pipeline and undo | `state/TextEditManager.kt`, `state/TextEditHistory.kt`, `state/EditBehavior.kt`, `input/ImeEditLogic.kt` | 1.20, 5.1 to 5.5, 5.9 to 5.11, 5.13 to 5.17, 6.1 to 6.6, 6.14, 6.15, 6.17, 6.22, 6.23, 6.28, 6.29, 6.33 to 6.35, 6.40, 7.54, 7.55 |
 | H | Clipboard and HTML | `clipboard/`, `html/`, `dragdrop/` | 4.9, 4.13, 4.17, 6.7 to 6.13, 6.18 to 6.21, 5.12, 6.24 to 6.27, 6.30 to 6.32, 6.36 to 6.39, 6.41, 7.39, 7.46, 7.47, 7.49, 7.53, 7.63 |
 | I | Markdown and block model | `ComposeTextEditorMarkdown/`, `richstyle/`, `state/TextEditorStateBlockExt.kt` | 5.6, 7.14 to 7.16, 7.43, 7.45, 7.52, 7.64, 7.67, 7.70 to 7.72, 7.79, 7.80 |
 | J | Find addon | `ComposeTextEditorFind/` | 7.17 to 7.19, 7.26, 7.29, 7.42, 7.68, 7.69 |
@@ -2167,13 +2167,24 @@ iOS Safari; browser tests run in CI (met: the `browser` job, 4.15).
   not look linked (plain text pasted over it), a change across the link's
   edge (5.14) and a link across lines get the general handling
   (`state/LinkComposingTest.kt`). Found: 5.14, 5.15.
-- [ ] **5.14 A replace reaching past a link's end leaves its look outside it.
+- [x] **5.14 A replace reaching past a link's end leaves its look outside it.
   R.** [Opus] [Lane G] An `inheritStyle` replace from inside a link to past its
   end ("nk he" of "see link here" with "xx") cuts the link at the replace's
   start, but each new character inherits the styles of the replaced one at its
   position, the link's look included, so "xx" looks linked and is not. Either
   the link should take in what lands from inside it, or the look should stay
   off; `removeLinkLookOutsideLinks` does the second for a paste. Found in 5.13.
+  Done: the look stays off, as text typed at a link's end does. A one-line
+  replace whose change reaches across a link's edge takes the characters it
+  changes out of the link (`RichSpanManager.linkAfterReplace`): the link keeps
+  its characters before the change, or after it, the ones the replace leaves as
+  they were included. Those changed characters take no link look, which they
+  keep only when one link holds all the characters they replace
+  (`TextEditManager.resolveInheritedStyle`). So "nk he" of "see link here"
+  replaced by "xx" leaves "li" linked and "xx" plain, and "ink h" replaced by
+  "inxx" leaves "lin" linked (`state/LinkComposingTest.kt`). A replace across
+  lines, or of a link across lines, keeps the general handling. Found: 5.16,
+  5.17.
 - [ ] **5.15 A link pasted onto another link overlaps it. C.** [Opus] [Lane G]
   A rich paste of a copied link into another link, inside it or over all of
   its word, keeps the link it lands in over the pasted text (an insert inside
@@ -2183,6 +2194,21 @@ iOS Safari; browser tests run in CI (met: the `browser` job, 4.15).
   so two links with different destinations cover it and `linkAt` and the
   serializers see either. A pasted link should take its text out of the link
   it lands in. Found in 5.13's review.
+- [ ] **5.16 Redo of a composition over a link's end loses the link. S.**
+  [Opus] [Lane G] Composing over the linked "link" of "see link here" as "lin"
+  and then "linx" lands "lin" linked and the "x" out of it, one key at a time
+  (5.13). The history merges the run into one replace of "link" by "linx",
+  whose change ("k" to "x") lies inside the link but whose "x" was baked
+  without the link's look, so on redo `linkAfterReplace` hands it to the
+  general handling, which drops the link the replace covers. Undo and redo
+  leave no link. Found in 5.14's review.
+- [ ] **5.17 A replace across the edge of a link spanning lines leaves its
+  look outside it. S.** [Opus] [Lane G] `linkAfterReplace` places only a link
+  on one line; a link across lines gets the general handling, which cuts it at
+  the replace's start or end, while the characters the replace leaves as they
+  were at its start or end keep their link look. With a link from (0,4) to
+  (1,3), replacing "e li" at (0,2) by "abli" starts the link after "li", which
+  still looks linked. Found in 5.14's review.
 
 ## Phase 6: undo and clipboard fidelity
 

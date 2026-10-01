@@ -515,12 +515,13 @@ class RichSpanManager(
 	 * Where [span], a link on the line of a one-line [operation] that replaces some of
 	 * its characters, lands, worked out on the characters the replace changes (it and
 	 * the text it replaces can share a start and an end, which stay as they were); or
-	 * null for the general handling, when the change reaches across the link's edge or
-	 * the new text in the link does not look linked (plain text pasted over it). The
-	 * change lands as typing does: inside the link it joins it, at the link's end or
-	 * before its start it stays out. So an input method's composition over the link's
-	 * word, which it sets again on every key, keeps the link however far it runs past
-	 * the link's end.
+	 * null for the general handling, when the change takes in the whole link or the new
+	 * text in the link does not look linked (plain text pasted over it). The change
+	 * lands as typing does: inside the link it joins it, at the link's end or before
+	 * its start it stays out, and across one of its edges it takes the characters it
+	 * changes out of the link. So an input method's composition over the link's word,
+	 * which it sets again on every key, keeps the link however far it runs past the
+	 * link's end.
 	 */
 	private fun linkAfterReplace(span: RichSpan, operation: TextEditOperation.Replace): List<RichSpan>? {
 		val range = operation.range
@@ -541,6 +542,8 @@ class RichSpanManager(
 			to <= linkStart -> linkStart + shift to linkEnd + shift
 			from >= linkEnd -> linkStart to linkEnd
 			linkStart <= from && to <= linkEnd -> linkStart to linkEnd + shift
+			linkStart < from -> linkStart to from
+			to < linkEnd -> to + shift to linkEnd + shift
 			else -> return null
 		}
 		val looked = BooleanArray(new.length)

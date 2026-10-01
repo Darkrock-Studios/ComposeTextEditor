@@ -202,6 +202,62 @@ class LinkComposingTest {
 	}
 
 	@Test
+	fun `a replace from inside a link to past its end leaves no link look outside it`() {
+		val state = linked()
+
+		state.replace(TextEditorRange(CharLineOffset(0, 6), CharLineOffset(0, 11)), "xx", inheritStyle = true)
+
+		assertEquals("see lixxre", state.getAllText().text)
+		assertEquals(listOf("li" to url), state.links())
+		assertEquals("li", state.linkLooking())
+	}
+
+	@Test
+	fun `a replace from before a link to inside it leaves no link look outside it`() {
+		val state = linked()
+
+		state.replace(TextEditorRange(CharLineOffset(0, 2), CharLineOffset(0, 6)), "abcde", inheritStyle = true)
+
+		assertEquals("seabcdenk here", state.getAllText().text)
+		assertEquals(listOf("nk" to url), state.links())
+		assertEquals("nk", state.linkLooking())
+	}
+
+	@Test
+	fun `a replace past a link's end keeps the linked letters it leaves as they were`() {
+		val state = linked()
+
+		state.replace(TextEditorRange(CharLineOffset(0, 5), CharLineOffset(0, 10)), "inxx", inheritStyle = true)
+
+		assertEquals("see linxxere", state.getAllText().text)
+		assertEquals(listOf("lin" to url), state.links())
+		assertEquals("lin", state.linkLooking())
+	}
+
+	@Test
+	fun `a replace into a link's start keeps the linked letters it leaves as they were`() {
+		val state = linked()
+
+		state.replace(TextEditorRange(CharLineOffset(0, 2), CharLineOffset(0, 7)), "zzin", inheritStyle = true)
+
+		assertEquals("sezzink here", state.getAllText().text)
+		assertEquals(listOf("ink" to url), state.links())
+		assertEquals("ink", state.linkLooking())
+	}
+
+	@Test
+	fun `undo of a replace across a link's end gives the link back as it was`() {
+		val state = linked()
+
+		state.replace(TextEditorRange(CharLineOffset(0, 5), CharLineOffset(0, 10)), "inxx", inheritStyle = true)
+		state.undo()
+
+		assertEquals("see link here", state.getAllText().text)
+		assertEquals(listOf("link" to url), state.links())
+		assertEquals("link", state.linkLooking())
+	}
+
+	@Test
 	fun `a replace of nothing at a link's end stays out of it`() {
 		val state = linked()
 

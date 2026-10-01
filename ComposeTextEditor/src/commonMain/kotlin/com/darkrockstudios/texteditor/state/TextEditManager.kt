@@ -501,11 +501,13 @@ class TextEditManager(private val state: TextEditorState) {
 	 * its end keep their own styles (see [sharedEnds]); each character between takes
 	 * the styles of the replaced character at its position, and those past the
 	 * replaced ones the styles an insert where the replaced ones end would (the
-	 * caret's typing style when the caret is there), with a link's look when they
-	 * replace a link's characters. A replace of nothing takes the insert's styles. A
-	 * style merely touching the range is not inherited, so a composition after bold
-	 * text with bold toggled off stays plain. Inherited styles layer over the
-	 * replacement's own. A replace across lines, or one that breaks its line,
+	 * caret's typing style when the caret is there). The changed characters take a
+	 * link's look only when they replace characters of one link alone, which they then
+	 * stay inside; across a link's edge the link leaves them out. A replace of nothing
+	 * takes the insert's styles. A style merely touching the range is not inherited, so
+	 * a composition after bold text with bold toggled off stays plain. Inherited styles
+	 * layer over the replacement's own. A replace across lines, or one that breaks its
+	 * line,
 	 * inherits by position alone, and none of the looks its lines' blocks bake (see
 	 * [bakedLooks]): the markers of each line the text lands on bake theirs.
 	 */
@@ -531,21 +533,27 @@ class TextEditManager(private val state: TextEditorState) {
 		val newMiddle = newText.length - prefix - suffix
 		val kept = prefix + minOf(oldMiddle, newMiddle)
 		val shift = newText.length - replaced.length
+		val middleStart = range.start.copy(char = range.start.char + prefix)
+		val middleEnd = if (withinLine) middleStart.copy(char = middleStart.char + oldMiddle) else range.end
+		val middleInLink by lazy { oldMiddle > 0 && linkHolds(TextEditorRange(middleStart, middleEnd)) }
+		// The changed characters keep a link's look only inside a link holding them all.
+		fun linkLookOff(style: SpanStyle) = withinLine && oldMiddle > 0 && state.isLinkStyle(style) && !middleInLink
 		val styled = buildAnnotatedString {
 			append(newText)
 			for (span in replaced.spanStyles) {
 				if (span.item in looks) continue
 				val start = span.start.coerceAtMost(kept)
-				val end = span.end.coerceAtMost(kept)
+				val end = (if (linkLookOff(span.item)) span.end.coerceAtMost(prefix) else span.end).coerceAtMost(kept)
 				if (start < end) addStyle(span.item, start, end)
 				val suffixStart = maxOf(span.start, replaced.length - suffix)
 				if (suffixStart < span.end) addStyle(span.item, suffixStart + shift, span.end + shift)
 			}
 			if (newMiddle > oldMiddle) {
-				val middleStart = range.start.copy(char = range.start.char + prefix)
-				val middleEnd = if (withinLine) middleStart.copy(char = middleStart.char + oldMiddle) else range.end
 				val extra = insertStylesAt(middleEnd)
-				if (withinLine && oldMiddle > 0) extra += linkLookReplacedOver(TextEditorRange(middleStart, middleEnd))
+				extra.removeAll { linkLookOff(it) }
+				if (withinLine && middleInLink) {
+					extra += state.getSpanStylesAtPosition(middleEnd.copy(char = middleEnd.char - 1)).filter { state.isLinkStyle(it) }
+				}
 				extra.forEach { addStyle(it, kept, prefix + newMiddle) }
 			}
 		}
@@ -553,16 +561,12 @@ class TextEditManager(private val state: TextEditorState) {
 	}
 
 	/**
-	 * The link's look on the last character of [replaced], one line's characters, when a
-	 * link holds all of them: characters added in their place stay inside the link (see
-	 * [RichSpanManager]'s placing of a link a replace changes).
+	 * Whether one link holds all of [replaced], one line's characters: characters added
+	 * in their place stay inside the link (see [RichSpanManager]'s placing of a link a
+	 * replace changes).
 	 */
-	private fun linkLookReplacedOver(replaced: TextEditorRange): Set<SpanStyle> {
-		val inLink = state.richSpanManager.getSpansInRange(replaced).any {
-			it.style is LinkSpanStyle && it.range.start <= replaced.start && replaced.end <= it.range.end
-		}
-		if (!inLink) return emptySet()
-		return state.getSpanStylesAtPosition(replaced.end.copy(char = replaced.end.char - 1)).filterTo(HashSet()) { state.isLinkStyle(it) }
+	private fun linkHolds(replaced: TextEditorRange): Boolean = state.richSpanManager.getSpansInRange(replaced).any {
+		it.style is LinkSpanStyle && it.range.start <= replaced.start && replaced.end <= it.range.end
 	}
 
 	private fun handleMultiLineReplace(
