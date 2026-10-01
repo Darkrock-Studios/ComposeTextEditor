@@ -357,6 +357,7 @@ class RichSpanManager(
 
 	/** Where [span] lands after [operation], or nothing when the replace takes it. */
 	private fun replaced(operation: TextEditOperation.Replace, span: RichSpan): List<RichSpan> = buildList {
+		if (span.style is LinkSpanStyle) linkAfterReplace(span, operation)?.let { return it }
 		val newEnd = operation.newTextEnd
 		val breaks = newEnd.line > operation.range.start.line
 
@@ -511,6 +512,47 @@ class RichSpanManager(
 	}
 
 	/**
+	 * Where [span], a link on the line of a one-line [operation] that replaces some of
+	 * its characters, lands, worked out on the characters the replace changes (it and
+	 * the text it replaces can share a start and an end, which stay as they were); or
+	 * null for the general handling, when the change reaches across the link's edge or
+	 * the new text in the link does not look linked (plain text pasted over it). The
+	 * change lands as typing does: inside the link it joins it, at the link's end or
+	 * before its start it stays out. So an input method's composition over the link's
+	 * word, which it sets again on every key, keeps the link however far it runs past
+	 * the link's end.
+	 */
+	private fun linkAfterReplace(span: RichSpan, operation: TextEditOperation.Replace): List<RichSpan>? {
+		val range = operation.range
+		val line = range.start.line
+		if (!range.isSingleLine() || !span.range.isSingleLine() || span.range.start.line != line) return null
+		val linkStart = span.range.start.char
+		val linkEnd = span.range.end.char
+		val at = range.start.char
+		if (linkEnd <= at || range.end.char <= linkStart) return null
+		val old = operation.oldText.text
+		val new = operation.newText.text
+		if ('\n' in new) return null
+		val (prefix, suffix) = sharedEnds(old, new)
+		val from = at + prefix
+		val to = range.end.char - suffix
+		val shift = new.length - old.length
+		val (start, end) = when {
+			to <= linkStart -> linkStart + shift to linkEnd + shift
+			from >= linkEnd -> linkStart to linkEnd
+			linkStart <= from && to <= linkEnd -> linkStart to linkEnd + shift
+			else -> return null
+		}
+		val looked = BooleanArray(new.length)
+		operation.newText.spanStyles.forEach { run ->
+			if (state.isLinkStyle(run.item)) for (i in run.start until run.end) looked[i] = true
+		}
+		if ((maxOf(start, at) until minOf(end, at + new.length)).any { !looked[it - at] }) return null
+		if (start >= end) return emptyList()
+		return listOf(span.copy(range = TextEditorRange(CharLineOffset(line, start), CharLineOffset(line, end))))
+	}
+
+	/**
 	 * Whether [line], which a join keeps (its index is the same before and after the
 	 * edit), already starts with a marker of [span]'s style.
 	 */
@@ -593,6 +635,22 @@ class RichSpanManager(
 		}
 		return result.toList()
 	}
+}
+
+/**
+ * How many characters [old] and [new] share at their start, and then at their end, the
+ * two never counting a character twice nor splitting a surrogate pair: what a replace of
+ * [old] by [new] leaves as it was.
+ */
+internal fun sharedEnds(old: CharSequence, new: CharSequence): Pair<Int, Int> {
+	val most = minOf(old.length, new.length)
+	var prefix = 0
+	while (prefix < most && old[prefix] == new[prefix]) prefix++
+	if (prefix > 0 && old[prefix - 1].isHighSurrogate()) prefix--
+	var suffix = 0
+	while (suffix < most - prefix && old[old.length - 1 - suffix] == new[new.length - 1 - suffix]) suffix++
+	if (suffix > 0 && old[old.length - suffix].isLowSurrogate()) suffix--
+	return prefix to suffix
 }
 
 // Sticky gutter markers render on empty lines, and placeholder blocks (rules,

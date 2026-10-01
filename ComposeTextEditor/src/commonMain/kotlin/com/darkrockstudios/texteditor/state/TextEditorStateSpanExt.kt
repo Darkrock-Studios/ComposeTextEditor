@@ -58,7 +58,7 @@ internal fun TextEditorState.getSpanStylesForEditAt(position: CharLineOffset): S
 }
 
 /** Whether [style] is the link style, or one a configuration before this one gave links. */
-private fun TextEditorState.isLinkStyle(style: SpanStyle): Boolean =
+internal fun TextEditorState.isLinkStyle(style: SpanStyle): Boolean =
 	style == richTextStyles.linkStyle || retiredRichTextStyles.any { it.linkStyle == style }
 
 /**

@@ -496,32 +496,41 @@ class TextEditManager(private val state: TextEditorState) {
 	/**
 	 * Bakes the styles an `inheritStyle` replace takes from the text it replaces
 	 * into its `newText`, so the operation that is applied, recorded, and announced
-	 * carries exactly the styling that lands in the document. Each character of the
-	 * replacement takes the styles of the replaced character at its position; the
-	 * characters past the replaced ones, and a replace of nothing, take the styles
-	 * an insert at the range's end would (the caret's typing style when the caret
-	 * is there). A style merely touching the range is not inherited, so a
-	 * composition after bold text with bold toggled off stays plain. Inherited
-	 * styles layer over the replacement's own. A replace across lines, or one that
-	 * breaks its line, inherits none of the looks its lines' blocks bake (see
+	 * carries exactly the styling that lands in the document. Within a line, the
+	 * characters the replacement shares with the replaced text at its start and at
+	 * its end keep their own styles (see [sharedEnds]); each character between takes
+	 * the styles of the replaced character at its position, and those past the
+	 * replaced ones the styles an insert where the replaced ones end would (the
+	 * caret's typing style when the caret is there), with a link's look when they
+	 * replace a link's characters. A replace of nothing takes the insert's styles. A
+	 * style merely touching the range is not inherited, so a composition after bold
+	 * text with bold toggled off stays plain. Inherited styles layer over the
+	 * replacement's own. A replace across lines, or one that breaks its line,
+	 * inherits by position alone, and none of the looks its lines' blocks bake (see
 	 * [bakedLooks]): the markers of each line the text lands on bake theirs.
 	 */
 	private fun resolveInheritedStyle(operation: TextEditOperation.Replace): TextEditOperation.Replace {
 		if (!operation.inheritStyle) return operation
 		val newText = operation.newText
 		val range = operation.range
-		val looks = if (range.isSingleLine() && !newText.contains('\n')) {
+		val withinLine = range.isSingleLine() && !newText.contains('\n')
+		val looks = if (withinLine) {
 			emptySet()
 		} else {
 			(range.start.line..range.end.line).flatMapTo(HashSet()) { state.bakedLooks(it) }
 		}
-		val insertStyles = (if (state.cursorPosition == range.end) state.cursor.styles else state.getSpanStylesForEditAt(range.end))
-			.filterTo(LinkedHashSet()) { it !in looks }
+		fun insertStylesAt(position: CharLineOffset) =
+			(if (state.cursorPosition == range.end && position == range.end) state.cursor.styles else state.getSpanStylesForEditAt(position))
+				.filterTo(LinkedHashSet()) { it !in looks }
 		if (range.start == range.end) {
-			return operation.copy(newText = newText.withInheritedStyles(insertStyles), inheritStyle = false)
+			return operation.copy(newText = newText.withInheritedStyles(insertStylesAt(range.end)), inheritStyle = false)
 		}
 		val replaced = state.getTextInRange(range)
-		val kept = minOf(replaced.length, newText.length)
+		val (prefix, suffix) = if (withinLine) sharedEnds(replaced.text, newText.text) else 0 to 0
+		val oldMiddle = replaced.length - prefix - suffix
+		val newMiddle = newText.length - prefix - suffix
+		val kept = prefix + minOf(oldMiddle, newMiddle)
+		val shift = newText.length - replaced.length
 		val styled = buildAnnotatedString {
 			append(newText)
 			for (span in replaced.spanStyles) {
@@ -529,10 +538,31 @@ class TextEditManager(private val state: TextEditorState) {
 				val start = span.start.coerceAtMost(kept)
 				val end = span.end.coerceAtMost(kept)
 				if (start < end) addStyle(span.item, start, end)
+				val suffixStart = maxOf(span.start, replaced.length - suffix)
+				if (suffixStart < span.end) addStyle(span.item, suffixStart + shift, span.end + shift)
 			}
-			if (newText.length > kept) insertStyles.forEach { addStyle(it, kept, newText.length) }
+			if (newMiddle > oldMiddle) {
+				val middleStart = range.start.copy(char = range.start.char + prefix)
+				val middleEnd = if (withinLine) middleStart.copy(char = middleStart.char + oldMiddle) else range.end
+				val extra = insertStylesAt(middleEnd)
+				if (withinLine && oldMiddle > 0) extra += linkLookReplacedOver(TextEditorRange(middleStart, middleEnd))
+				extra.forEach { addStyle(it, kept, prefix + newMiddle) }
+			}
 		}
 		return operation.copy(newText = styled, inheritStyle = false)
+	}
+
+	/**
+	 * The link's look on the last character of [replaced], one line's characters, when a
+	 * link holds all of them: characters added in their place stay inside the link (see
+	 * [RichSpanManager]'s placing of a link a replace changes).
+	 */
+	private fun linkLookReplacedOver(replaced: TextEditorRange): Set<SpanStyle> {
+		val inLink = state.richSpanManager.getSpansInRange(replaced).any {
+			it.style is LinkSpanStyle && it.range.start <= replaced.start && replaced.end <= it.range.end
+		}
+		if (!inLink) return emptySet()
+		return state.getSpanStylesAtPosition(replaced.end.copy(char = replaced.end.char - 1)).filterTo(HashSet()) { state.isLinkStyle(it) }
 	}
 
 	private fun handleMultiLineReplace(

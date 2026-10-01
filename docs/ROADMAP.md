@@ -187,7 +187,7 @@ review.
 | D | Bindings, actions, menu | `input/KeyBindings.kt`, `input/EditorCommand.kt`, `input/BuiltinEditorActions.kt`, `contextmenu/` | 2.1, 2.2, 2.4, 2.5, 2.7 to 2.12, 4.8, 5.8, 7.58 |
 | E | Input sessions on desktop, iOS, web | `desktopMain`, `iosMain`, `wasmJsMain` under `input/` | 4.2 to 4.7, 4.10 to 4.12, 4.19, 4.21, 4.22, 4.24 to 4.26, 4.28, 4.29, 4.32, 4.33, 4.35, 4.37, 4.38, 7.37 |
 | F | Android input | `androidMain` | 0.4, 0.12, 3.9 to 3.11, 3.14, 3.17, 4.16, 4.18, 4.20, 4.27, 4.30, 4.31, 4.34, 4.36, 7.40 |
-| G | Edit pipeline and undo | `state/TextEditManager.kt`, `state/TextEditHistory.kt`, `state/EditBehavior.kt`, `input/ImeEditLogic.kt` | 1.20, 5.1 to 5.5, 5.9 to 5.11, 5.13, 6.1 to 6.6, 6.14, 6.15, 6.17, 6.22, 6.23, 6.28, 6.29, 6.33 to 6.35, 7.54, 7.55 |
+| G | Edit pipeline and undo | `state/TextEditManager.kt`, `state/TextEditHistory.kt`, `state/EditBehavior.kt`, `input/ImeEditLogic.kt` | 1.20, 5.1 to 5.5, 5.9 to 5.11, 5.13 to 5.15, 6.1 to 6.6, 6.14, 6.15, 6.17, 6.22, 6.23, 6.28, 6.29, 6.33 to 6.35, 7.54, 7.55 |
 | H | Clipboard and HTML | `clipboard/`, `html/`, `dragdrop/` | 4.9, 4.13, 4.17, 6.7 to 6.13, 6.18 to 6.21, 5.12, 6.24 to 6.27, 6.30 to 6.32, 6.36, 6.37, 7.39, 7.46, 7.47, 7.49, 7.53, 7.63 |
 | I | Markdown and block model | `ComposeTextEditorMarkdown/`, `richstyle/`, `state/TextEditorStateBlockExt.kt` | 5.6, 7.14 to 7.16, 7.43, 7.45, 7.52, 7.64, 7.67, 7.70 to 7.72, 7.75, 7.76 |
 | J | Find addon | `ComposeTextEditorFind/` | 7.17 to 7.19, 7.26, 7.29, 7.42, 7.68, 7.69 |
@@ -2050,7 +2050,7 @@ iOS Safari; browser tests run in CI.
   own paste to call once that paste has committed; a range past the document's
   lines throws (`dragdrop/DropOfferedAsPasteTest.kt`).
 
-- [ ] **5.13 Composing over a link's word drops the link. S.** [Opus] [Lane G]
+- [x] **5.13 Composing over a link's word drops the link. S.** [Opus] [Lane G]
   An input method that puts its composing region back over the word before the
   caret (Gboard after a tap) and then sets new text there sends a replace over
   the word. When the word is the whole link, `RichSpanManager`'s replace takes
@@ -2058,6 +2058,35 @@ iOS Safari; browser tests run in CI.
   link short, while the inherited style keeps the link's look on the new text.
   A replace inside a link (or of all of it) on one line should keep the link
   over what lands there, as typing inside it does. Found in 5.10's review.
+  Done: a link a one-line replace touches is placed by the characters the
+  replace changes, the shared start and end with the text it replaces staying
+  as they were (`RichSpanManager.linkAfterReplace`, `sharedEnds`): a change
+  inside the link joins it, one at its end or before its start stays out, as
+  typing does since 5.10. An `inheritStyle` replace aligns its styles the same
+  way, and characters it adds where it replaced a link's characters take the
+  link's look. So a composition over the word keeps the link however far it
+  runs past the link's end, one key at a time, and letters it adds there stay
+  out, whether or not the input method recomposes the word; a correction or
+  find replace of a linked word keeps it whole. New text in the link that does
+  not look linked (plain text pasted over it), a change across the link's
+  edge (5.14) and a link across lines get the general handling
+  (`state/LinkComposingTest.kt`). Found: 5.14, 5.15.
+- [ ] **5.14 A replace reaching past a link's end leaves its look outside it.
+  R.** [Opus] [Lane G] An `inheritStyle` replace from inside a link to past its
+  end ("nk he" of "see link here" with "xx") cuts the link at the replace's
+  start, but each new character inherits the styles of the replaced one at its
+  position, the link's look included, so "xx" looks linked and is not. Either
+  the link should take in what lands from inside it, or the look should stay
+  off; `removeLinkLookOutsideLinks` does the second for a paste. Found in 5.13.
+- [ ] **5.15 A link pasted onto another link overlaps it. C.** [Opus] [Lane G]
+  A rich paste of a copied link into another link, inside it or over all of
+  its word, keeps the link it lands in over the pasted text (an insert inside
+  a link joins it, and since 5.13 a replace of its word does when the text
+  looks linked, as the copy does) and then adds the copied link over the same
+  text (`addPreservedRichSpans` only merges a link of the same destination),
+  so two links with different destinations cover it and `linkAt` and the
+  serializers see either. A pasted link should take its text out of the link
+  it lands in. Found in 5.13's review.
 
 ## Phase 6: undo and clipboard fidelity
 
