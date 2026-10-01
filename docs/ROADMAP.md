@@ -189,7 +189,7 @@ review.
 | F | Android input | `androidMain` | 0.4, 0.12, 3.9 to 3.11, 3.14, 3.17, 4.16, 4.18, 4.20, 4.27, 4.30, 4.31, 4.34, 4.36, 7.40 |
 | G | Edit pipeline and undo | `state/TextEditManager.kt`, `state/TextEditHistory.kt`, `state/EditBehavior.kt`, `input/ImeEditLogic.kt` | 1.20, 5.1 to 5.5, 5.9 to 5.11, 5.13, 6.1 to 6.6, 6.14, 6.15, 6.17, 6.22, 6.23, 6.28, 6.29, 6.33 to 6.35, 7.54, 7.55 |
 | H | Clipboard and HTML | `clipboard/`, `html/`, `dragdrop/` | 4.9, 4.13, 4.17, 6.7 to 6.13, 6.18 to 6.21, 5.12, 6.24 to 6.27, 6.30 to 6.32, 6.36, 6.37, 7.39, 7.46, 7.47, 7.49, 7.53, 7.63 |
-| I | Markdown and block model | `ComposeTextEditorMarkdown/`, `richstyle/`, `state/TextEditorStateBlockExt.kt` | 5.6, 7.14 to 7.16, 7.43, 7.45, 7.52, 7.64, 7.67, 7.70 to 7.72 |
+| I | Markdown and block model | `ComposeTextEditorMarkdown/`, `richstyle/`, `state/TextEditorStateBlockExt.kt` | 5.6, 7.14 to 7.16, 7.43, 7.45, 7.52, 7.64, 7.67, 7.70 to 7.72, 7.75 |
 | J | Find addon | `ComposeTextEditorFind/` | 7.17 to 7.19, 7.26, 7.29, 7.42, 7.68, 7.69 |
 | K | Spell check addon | `ComposeTextEditorSpellCheck/` | 7.20 to 7.22, 7.28, 7.30, 7.31, 7.34, 7.35, 7.38, 7.44, 7.50, 7.56, 7.61, 7.74, 7.76, 7.77 |
 | L | Tests and CI | test sources, `.github/workflows/` | 0.1 to 0.3, 0.5 to 0.11, 4.1, 4.15, 7.62, 7.65 |
@@ -2238,7 +2238,7 @@ iOS Safari; browser tests run in CI.
   there, so a line keeps one (`state/ParagraphFormatTest.kt`; the HTML paste
   test in `e2e/HtmlPasteUndoE2eTest.kt` now has "xtarget" keep its centring and
   undo bring it back).
-- [ ] **6.35 A join leaves a heading's or fence's text style over part of a
+- [x] **6.35 A join leaves a heading's or fence's text style over part of a
   line. S.** [Opus] [Lane G] A heading or code fence bakes its `textStyle` (the
   heading's size, the fence's monospace) into the line's text. A join keeps one
   line's markers but leaves each piece's text styles as they were: deleting from
@@ -2250,6 +2250,17 @@ iOS Safari; browser tests run in CI.
   heading on a split, or derive both the text and paragraph styles from the
   markers when a line is shaped, as `LineShaper` does for a paragraph format,
   which retires 6.33's repair too. Found in 6.33's review.
+  Done: 6.33's repair (now `repairBlockStyles`) also bakes each changed line's
+  block text styles over the whole line, after any run of the body style (so a
+  body line joined onto a heading takes its size) and before the spans the user
+  set inside the heading (so those still win). It strips no text style, since
+  one equal to a heading's look on a plain line is the user's own (7.64); the
+  edit that moves text strips instead: text landing on a line its own markers
+  do not reach (a join's tail after another line's head, a split's tail, text
+  an `inheritStyle` replace across lines or breaking its line inherits) leaves
+  its source line's block text styles behind. A text style equal to an inline
+  style is neither baked nor left behind. Undo gives both lines back as they
+  were (`state/JoinBlockTextStyleTest.kt`). Found: 6.36, 7.75.
 
 ### Clipboard
 
@@ -2561,6 +2572,18 @@ iOS Safari; browser tests run in CI.
   text without its blocks. Read the content once per paste, off the UI thread
   as the primary selection's read is (4.23), and hand it to the three readers,
   as Android's `pasteClip` does. Found reviewing 6.36.
+- [ ] **6.36 Part of a heading pasted into another line keeps the heading's
+  look. R.** [Opus] [Lane H] Copying "itl" out of an h2 "Title" and pasting it
+  into a plain line "hello" leaves "itl" baked with the h2 look (24 sp), though
+  the line is no heading (probed through the UI harness's Ctrl+C and Ctrl+V).
+  Word and Google Docs give pasted text that carries no paragraph mark the
+  destination paragraph's style. A heading pasted whole onto a line of its own
+  should keep its look, as `RichPasteBodyStyleTest` expects; text from part of
+  one should land without it, and pasted into a heading of another level take
+  that heading's (6.35 bakes the receiving heading's look over its line, but
+  leaves the pasted one's). HTML export already leaves a foreign heading look
+  out of a heading line (6.31). A drop of the same text likely lands the same
+  way (not probed). Found in 6.35.
 
 ## Phase 7: reach
 
@@ -3299,7 +3322,7 @@ Shaping is one line per keystroke. These still scale with document length:
   separator because `isParagraphSeparator` reads the next line as indented
   code, which a blank line never starts, so the second export has two blank
   lines.
-- [ ] **7.72 Text joined onto a heading keeps the other heading's look. S.**
+- [x] **7.72 Text joined onto a heading keeps the other heading's look. S.**
   [Opus] [Lane I] Deleting the line break between an h2 "Title" and an h3 "Sub"
   leaves "Sub" baked with the h3 look inside the h2 line, so the editor shows it
   at the h3 size and markdown export writes `## Title` and `### Sub` on lines
@@ -3310,6 +3333,22 @@ Shaping is one line per keystroke. These still scale with document length:
   look equals an inline style (`header4Style = boldStyle`), a style swap's
   rebake strips the user's spans of that style from the heading's line too,
   since `rebuildWithoutBlock` drops every span equal to the look. Found in 6.31.
+  Done with 6.35: a join strips the look of the heading its tail came from, and
+  the kept heading's look is baked over the joined line, so deleting the line
+  break between "Title" and "Sub" exports as `## TitleSub`
+  (`HeaderSemanticsTest`, `state/JoinBlockTextStyleTest.kt`). The paste is
+  6.36 and the look equal to an inline style 7.75.
+- [ ] **7.75 A heading look equal to an inline style takes the user's spans of
+  it with the heading. S.** [Opus] [Lane I] Under a configuration whose
+  heading look equals an inline style (`header4Style = boldStyle`), demoting
+  the heading or a style swap's rebake strips the user's bold inside the line
+  too, since `rebuildWithoutBlock` drops every span equal to the look. Such a
+  look is ambiguous to 6.35 as well, which neither bakes it over a joined line
+  nor leaves it behind when text moves off the heading, so a body line joined
+  onto such a heading stays unbolded and a heading's tail joined onto a plain
+  line stays bold. Stripping only a run over the whole line would keep a
+  user's partial bold; a bold run over the whole line stays ambiguous. Found
+  in 7.72.
 
 ### Find and replace addon
 

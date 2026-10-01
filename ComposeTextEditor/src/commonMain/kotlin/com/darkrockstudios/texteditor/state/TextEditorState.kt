@@ -60,7 +60,7 @@ import com.darkrockstudios.texteditor.richstyle.headerBlock
 import com.darkrockstudios.texteditor.richstyle.lineBlocksConflict
 import com.darkrockstudios.texteditor.richstyle.lineBlocks
 import com.darkrockstudios.texteditor.richstyle.normalizeLineBlocks
-import com.darkrockstudios.texteditor.richstyle.repairBlockParagraphs
+import com.darkrockstudios.texteditor.richstyle.repairBlockStyles
 import com.darkrockstudios.texteditor.richstyle.rebuildWithBlock
 import com.darkrockstudios.texteditor.richstyle.rebuildWithoutBlock
 import kotlinx.coroutines.CoroutineScope
@@ -380,7 +380,7 @@ class TextEditorState private constructor(
 		val first = minOf(untouchedBefore, lines)
 		val end = lines - minOf(untouchedAfter, lines)
 		val blocks = normalizeLineBlocks(snapshot, richTextStyles, first until end, spansChanged)
-		val paragraphs = repairBlockParagraphs(blocks, richTextStyles, first until end)
+		val styled = repairBlockStyles(blocks, richTextStyles, first until end)
 		untouchedBefore = Int.MAX_VALUE
 		untouchedAfter = Int.MAX_VALUE
 		spansChanged = false
@@ -388,10 +388,10 @@ class TextEditorState private constructor(
 		// invalidates any deferred partial relayout.
 		if (blocks !== snapshot) {
 			invalidateLayoutInputs()
-		} else if (paragraphs != null) {
-			reshapeAtCommit(paragraphs.lines)
+		} else if (styled != null) {
+			reshapeAtCommit(styled.lines)
 		}
-		return paragraphs?.snapshot ?: blocks
+		return styled?.snapshot ?: blocks
 	}
 
 	/**

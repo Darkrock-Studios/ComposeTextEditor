@@ -213,6 +213,14 @@ class HeaderSemanticsTest {
 	}
 
 	@Test
+	fun `a heading joined onto another heading exports as one heading line`() {
+		val e = editor("## Title\n\n### Sub")
+		e.editorState.delete(TextEditorRange(CharLineOffset(0, 5), CharLineOffset(1, 0)))
+
+		assertEquals("## TitleSub", e.exportAsMarkdown())
+	}
+
+	@Test
 	fun `the standalone converter still reads a run at a heading's size as that heading`() {
 		val text = "# Title".toAnnotatedStringFromMarkdown()
 		assertEquals("# Title\n", text.toMarkdown())

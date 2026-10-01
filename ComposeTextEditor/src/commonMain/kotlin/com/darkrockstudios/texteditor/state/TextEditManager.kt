@@ -19,6 +19,7 @@ import com.darkrockstudios.texteditor.richstyle.RichSpan
 import com.darkrockstudios.texteditor.richstyle.RichSpanStyle
 import com.darkrockstudios.texteditor.richstyle.allowedOn
 import com.darkrockstudios.texteditor.richstyle.atListLevel
+import com.darkrockstudios.texteditor.richstyle.bakedLooks
 import com.darkrockstudios.texteditor.richstyle.demoteLineBlock
 import com.darkrockstudios.texteditor.richstyle.hasLineBlock
 import com.darkrockstudios.texteditor.richstyle.isHeading
@@ -291,7 +292,10 @@ class TextEditManager(private val state: TextEditorState) {
 
 		val prefixEndIndex = operation.position.char.coerceIn(0, currentLine.length)
 		val prefix = currentLine.subSequence(0, prefixEndIndex)
-		val suffix = currentLine.subSequence(prefixEndIndex, currentLine.length)
+		val suffix = currentLine.subSequence(prefixEndIndex, currentLine.length).let {
+			// A break at the line's start takes its markers down with its text.
+			if (prefixEndIndex > 0) it.withoutLooksOf(lineIndex) else it
+		}
 		val lastInsertedLine = insertLines.last()
 
 		val replacement = ArrayList<AnnotatedString>(insertLines.size)
@@ -498,13 +502,21 @@ class TextEditManager(private val state: TextEditorState) {
 	 * an insert at the range's end would (the caret's typing style when the caret
 	 * is there). A style merely touching the range is not inherited, so a
 	 * composition after bold text with bold toggled off stays plain. Inherited
-	 * styles layer over the replacement's own.
+	 * styles layer over the replacement's own. A replace across lines, or one that
+	 * breaks its line, inherits none of the looks its lines' blocks bake (see
+	 * [bakedLooks]): the markers of each line the text lands on bake theirs.
 	 */
 	private fun resolveInheritedStyle(operation: TextEditOperation.Replace): TextEditOperation.Replace {
 		if (!operation.inheritStyle) return operation
 		val newText = operation.newText
 		val range = operation.range
-		val insertStyles = if (state.cursorPosition == range.end) state.cursor.styles else state.getSpanStylesForEditAt(range.end)
+		val looks = if (range.isSingleLine() && !newText.contains('\n')) {
+			emptySet()
+		} else {
+			(range.start.line..range.end.line).flatMapTo(HashSet()) { state.bakedLooks(it) }
+		}
+		val insertStyles = (if (state.cursorPosition == range.end) state.cursor.styles else state.getSpanStylesForEditAt(range.end))
+			.filterTo(LinkedHashSet()) { it !in looks }
 		if (range.start == range.end) {
 			return operation.copy(newText = newText.withInheritedStyles(insertStyles), inheritStyle = false)
 		}
@@ -513,6 +525,7 @@ class TextEditManager(private val state: TextEditorState) {
 		val styled = buildAnnotatedString {
 			append(newText)
 			for (span in replaced.spanStyles) {
+				if (span.item in looks) continue
 				val start = span.start.coerceAtMost(kept)
 				val end = span.end.coerceAtMost(kept)
 				if (start < end) addStyle(span.item, start, end)
@@ -537,10 +550,11 @@ class TextEditManager(private val state: TextEditorState) {
 		// Extract suffix from the last line
 		val suffix = if (range.end.line < state.textLines.size) {
 			val lastLine = state.textLines[range.end.line]
-			lastLine.subSequence(range.end.char.coerceIn(0, lastLine.length), lastLine.length)
-				.ifEmpty {
-					AnnotatedString("")
-				}
+			val tail = lastLine.subSequence(range.end.char.coerceIn(0, lastLine.length), lastLine.length)
+				.ifEmpty { AnnotatedString("") }
+			// The tail's markers follow it onto a line of the replace's own (see RichSpanManager.replaced).
+			val tailKeepsMarkers = if (newText.contains('\n')) !range.isSingleLine() else range.start.char == 0
+			if (tailKeepsMarkers) tail else tail.withoutLooksOf(range.end.line)
 		} else {
 			AnnotatedString("")
 		}
@@ -568,6 +582,18 @@ class TextEditManager(private val state: TextEditorState) {
 		}
 	}
 
+	/**
+	 * This text, taken from [line], without the looks [line]'s blocks bake into it (see
+	 * [bakedLooks]). Text an edit moves onto a line its own markers do not reach leaves
+	 * them behind: the markers of the line it lands on decide its look, and publishing
+	 * bakes theirs over all of it.
+	 */
+	private fun AnnotatedString.withoutLooksOf(line: Int): AnnotatedString {
+		val looks = state.bakedLooks(line)
+		if (looks.isEmpty() || spanStyles.none { it.item in looks }) return this
+		return withSpanStyles(spanStyles.filter { it.item !in looks })
+	}
+
 	private fun handleMultiLineDelete(operation: TextEditOperation.Delete) {
 		// Add bounds checking for line indices
 		val lines = state.textLines
@@ -588,9 +614,10 @@ class TextEditManager(private val state: TextEditorState) {
 
 		// Process the first and last lines
 		val firstLine = lines[startLine]
-		val lastLine = lines[endLine]
-
 		val startChar = operation.range.start.char.coerceIn(0, firstLine.text.length)
+		// With nothing kept ahead of it, the tail's markers survive the join.
+		val lastLine = if (startChar > 0) lines[endLine].withoutLooksOf(endLine) else lines[endLine]
+
 		val endChar = operation.range.end.char.coerceIn(0, lastLine.text.length)
 
 		if (startLine == 0 && endLine == lines.lastIndex &&

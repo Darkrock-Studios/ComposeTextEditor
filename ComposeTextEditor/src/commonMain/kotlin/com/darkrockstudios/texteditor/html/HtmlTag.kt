@@ -143,7 +143,7 @@ internal class RetiredStyles(
 	/**
 	 * The spans a [heading] line leaves out, since the heading element stands for them:
 	 * the look it is baked with, and any other heading look that is not also an inline
-	 * style, as text joined from another heading keeps that heading's look.
+	 * style, as text pasted from another heading keeps that heading's look.
 	 */
 	fun headingLooks(heading: HtmlTag): Set<SpanStyle> = headingOnlyLooks + heading.spanStyle(styles)
 
