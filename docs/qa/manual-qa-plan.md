@@ -228,6 +228,9 @@ this exercises the clipboard's HTML as the block carrier.
    the copy modifier and it stays.
 5. Drag text from a browser or text editor into the editor. **Expect:** it drops at
    the drop caret with its formatting and is selected.
+5b. Hover a drag to the right of a wrapped paragraph's first row. **Expect:** the drop
+   caret shows at that row's end, where a click there would put the caret, not at
+   the start of the next row; the text drops there (6.24).
 6. Right after a drop (inside the editor or into another app), click once in the
    editor. **Expect:** the click places the caret; it is not swallowed or read as a
    drag.

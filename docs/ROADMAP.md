@@ -609,7 +609,7 @@ fixes what users feel every minute.
   (`selection/PointerAffinityTest.kt`). A paragraph's last row still hits
   through the layout directly, so past the end of a row ending in a run of the
   other direction a click lands inside that run, where a vertical move goes to
-  the row's end. The drop caret of a drag and drop is 6.24.
+  the row's end. The drop caret of a drag and drop is 6.24 (done).
 - [x] **1.17 Empty lines and newlines. C.** [Opus] [Lane C] Empty lines inside
   a selection draw nothing (`DrawSelectionUi.kt`). Native shows a sliver for
   the newline.
@@ -2039,12 +2039,18 @@ iOS Safari; browser tests run in CI.
   touch-focused canvas, Safari and Firefox are for QA 2.11. The limits are
   7.39's: the default bindings' chords, and on a page of several viewports the
   one whose editor takes input with a selection answers.
-- [ ] **6.24 The drop caret past a wrapped row's end. C.** [Opus] [Lane H]
+- [x] **6.24 The drop caret past a wrapped row's end. C.** [Opus] [Lane H]
   Since 1.24 a point past a wrapped row's end hits its wrap offset, so a drop
   there inserts at the row's end, but `TextDragAndDrop.offsetAt` keeps only the
   position and `DrawDropCaret` draws it downstream, at the start of the next
   row. Keep the hit's affinity (`TextEditorState.pointerHitAt`) for the drop
-  caret.
+  caret. Done: a hover keeps the whole hit (`TextDragAndDrop.dropHit`), and
+  `DrawDropCaret` draws it as the caret is drawn (`calculateCursorPosition`
+  now has an overload for a position and affinity), so the drop caret past a
+  row's end matches the caret a click there places, on an indented empty line
+  and a block's line too (`dragdrop/DropCaretAffinityTest.kt`). A hover is
+  read on each pointer move only, so a scroll under a still drag leaves the
+  drop caret where it was until the pointer moves.
 - [ ] **6.30 A link's look crosses into an editor that refuses its scheme. S.**
   [Opus] [Lane H] On desktop a paste or drop between two editors in one process
   takes the exact `AnnotatedString` flavor ahead of the markup, so a `myapp:`

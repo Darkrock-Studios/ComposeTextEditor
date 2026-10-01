@@ -11,10 +11,13 @@ import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.caretX
 import com.darkrockstudios.texteditor.utils.lineTextLeft
 
-fun TextEditorState.calculateCursorPosition(): CursorMetrics {
-	val (_, charIndex) = cursorPosition
+fun TextEditorState.calculateCursorPosition(): CursorMetrics = calculateCursorPosition(cursorPosition, cursor.affinity)
 
-	val currentWrappedLine = lineOffsets.getWrapForDrawing(cursorPosition, cursor.affinity)
+/** Where a caret at [position] on the row [affinity] picks is drawn: the caret's, or a drop caret's. */
+internal fun TextEditorState.calculateCursorPosition(position: CharLineOffset, affinity: CaretAffinity): CursorMetrics {
+	val charIndex = position.char
+
+	val currentWrappedLine = lineOffsets.getWrapForDrawing(position, affinity)
 		?: return CursorMetrics(position = Offset.Zero, height = 0f)
 
 	val layout = currentWrappedLine.textLayoutResult
