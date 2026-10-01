@@ -2236,14 +2236,21 @@ iOS Safari; browser tests run in CI.
   composition begun meanwhile (resyncing the IME) and inserts the text it
   screened without screening it again (`clipboard/PasteReadsSelectionLateTest.kt`).
   A document loaded with `setText` meanwhile takes the paste at its caret.
-- [ ] **6.32 A link's look crosses into an editor that refuses its scheme. S.**
+- [x] **6.32 A link's look crosses into an editor that refuses its scheme. S.**
   [Opus] [Lane H] On desktop a paste or drop between two editors in one process
   takes the exact `AnnotatedString` flavor ahead of the markup, so a `myapp:`
   link copied from an editor that allows the scheme arrives in one that does not
   with the link style baked over its text but no link (the markup parse, which
   reads the receiver's `allowedLinkSchemes`, adds none). Strip the link style
   from runs the receiving parse does not confirm as links, or read the markup
-  when the copy came from another state.
+  when the copy came from another state. Done: paste and drop, once their links
+  are placed, take the receiver's link style off the landed text wherever no
+  link covers it, inside the same undo step and keeping the copied rich spans
+  the paste kept (`state.removeLinkLookOutsideLinks`), so the look follows the
+  links that landed on every platform and flavor; an in-process copy keeps its
+  exact styling otherwise (`clipboard/RefusedLinkLookTest.kt`). A link look
+  that is not the receiver's link style (a source editor with other styles, a
+  retired style) is not recognised.
 
 ## Phase 7: reach
 

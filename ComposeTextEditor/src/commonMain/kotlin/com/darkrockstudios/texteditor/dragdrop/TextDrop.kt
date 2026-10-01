@@ -11,6 +11,7 @@ import com.darkrockstudios.texteditor.html.parseHtmlDocument
 import com.darkrockstudios.texteditor.state.PreservedRichSpan
 import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.endWhenInsertedAt
+import com.darkrockstudios.texteditor.state.removeLinkLookOutsideLinks
 import com.darkrockstudios.texteditor.state.screenInput
 
 /**
@@ -78,6 +79,7 @@ private fun TextEditorState.insertAt(
 	editManager.alreadyScreened { insertStringAtCursor(text) }
 	richSpans?.let { addPreservedRichSpans(at, it) }
 	document?.let { applyHtmlPasteBlocks(it, at, text) }
+	removeLinkLookOutsideLinks(at, text)
 }
 
 /** This position once [removed], which ends at or before it, is gone. */
