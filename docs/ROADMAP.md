@@ -39,6 +39,8 @@ Each item also carries work tags:
 | **[Lane X]** | The parallel lane the item belongs to (see Workflow) |
 | **[Mac work]** | Needs the Mac: iOS code cannot be compiled or run on Linux |
 
+An item closed without a fix is ticked with a "Won't fix:" line giving the reason.
+
 Nothing here was verified on a physical Android, iOS, macOS, or Windows
 device. Treat **C** items on those platforms as leads to confirm first.
 
@@ -1761,7 +1763,7 @@ Also seen:
   and ABC-AZERTY layouts: Cmd+Z undoes and Cmd+Shift+Z redoes on the key that
   types z (QWERTY's W under AZERTY), Cmd+B bolds, Ctrl+A on the key that types
   a and Ctrl+F move as in TextEdit, and Cmd+Option+Shift+V pastes plain.
-- [ ] **4.39 A dead key on a letter key keeps its QWERTY letter on the web. S.**
+- [x] **4.39 A dead key on a letter key keeps its QWERTY letter on the web. S.**
   [Opus] [Lane E] Compose web gives a `key` of "Dead" the key code as its
   code point, as it does a capital typed on its own key, and keeps the DOM
   event to itself (`InternalKeyEvent`), so `layoutKeyFromCodePoint` cannot
@@ -1771,6 +1773,8 @@ Also seen:
   cannot pair them either. Fix upstream (expose the DOM `key`, or a code
   point of 0 for a named key), or pair the events by their order. Found in
   4.38.
+  Won't fix: the fix belongs in Compose web, and the gap is narrow (a dead key
+  on a letter key, held with Ctrl, on a non-QWERTY layout, in a browser).
 - [x] **4.40 Ask for sentence capitals before the phone keyboard rises. S.**
   [Opus] [Lane E] From 4.11's gap: the web session set the backing field's
   `autocapitalize` once it found the field, a frame or more after Compose had
