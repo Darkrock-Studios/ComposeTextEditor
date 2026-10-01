@@ -340,9 +340,12 @@ Each follows `BasicTextField` (roadmap 3.17).
   arrive as `performHandwritingGesture`. The connection maps each gesture's
   screen areas into the editor's content (the view's screen location, the
   canvas's place in the root, the scroll) and through each paragraph's
-  `getRangeForRect`, then edits as the keyboard's own `setSelection` and
+  segments as `getRangeForRect` takes them (skiko leaves that call
+  unimplemented, so the editor measures the grapheme or word bounds itself,
+  in common code), then edits as the keyboard's own `setSelection` and
   `commitText` would, in one batch, so behaviors, undo and the expectation
-  treat it as a keyboard edit.
+  treat it as a keyboard edit. Removing spaces deletes each run alone, so the
+  text between keeps its styles. No gesture is previewed (roadmap 3.22).
 
 ## Desktop
 

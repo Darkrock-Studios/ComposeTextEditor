@@ -1,5 +1,7 @@
 package com.darkrockstudios.texteditor.input
 
+import android.graphics.PointF
+import android.graphics.RectF
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -7,15 +9,23 @@ import android.os.SystemClock
 import android.text.TextUtils
 import android.view.KeyEvent
 import android.view.View
+import android.view.ViewConfiguration
 import android.view.inputmethod.*
 import androidx.annotation.RequiresApi
 import androidx.annotation.VisibleForTesting
 import androidx.compose.ui.platform.PlatformTextInputMethodRequest
 import androidx.compose.runtime.withFrameMillis
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.isSpecified
+import androidx.compose.ui.graphics.toComposeRect
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.platform.PlatformTextInputSession
 import com.darkrockstudios.texteditor.state.TextEditorState
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
+import java.util.concurrent.Executor
+import java.util.function.IntConsumer
 
 internal actual val startsInputQuietly: Boolean = true
 
@@ -57,9 +67,9 @@ internal fun EditorInfo.populate(state: TextEditorState, connection: TextEditorI
 
 	val selection = state.selectionAsTextRange()
 	contentMimeTypes = state.keyboardContentReceiver?.mimeTypes?.toTypedArray()
-	if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
-		setStylusHandwritingEnabled(stylusHandwritingSupported() && settings.allowsHandwriting())
-	}
+	val handwriting = stylusHandwritingSupported() && settings.allowsHandwriting()
+	if (handwriting) offerHandwritingGestures()
+	if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) setStylusHandwritingEnabled(handwriting)
 
 	initialSelStart = selection.start
 	initialSelEnd = selection.end
@@ -241,6 +251,36 @@ internal class TextEditorInputConnection(
 		state.imeSetSelection(start, end)
 	}
 
+	/**
+	 * Replaces flat [start] to [end] with [text] through the keyboard's own commands, for an
+	 * edit the keyboard asked for some other way (a handwriting gesture).
+	 */
+	internal fun replaceAsKeyboard(start: Int, end: Int, text: String): Boolean = edit {
+		finishComposingText()
+		setSelection(start, end)
+		commitText(text, 1)
+	}
+
+	/**
+	 * Deletes [ranges] (flat, in order, apart) through the keyboard's own commands, the last
+	 * first so the earlier ones stay put, and leaves the caret where the last one was.
+	 */
+	internal fun deleteAsKeyboard(ranges: List<TextRange>): Boolean = edit {
+		finishComposingText()
+		for (range in ranges.asReversed()) {
+			setSelection(range.start, range.end)
+			commitText("", 1)
+		}
+		val caret = ranges.last().start - ranges.dropLast(1).sumOf { it.length }
+		setSelection(caret, caret)
+	}
+
+	/** Types [text] over the selection through the keyboard's own commands. */
+	internal fun commitAtSelection(text: String): Boolean = edit {
+		finishComposingText()
+		commitText(text, 1)
+	}
+
 	private inline fun expect(update: ImeExpectation.() -> Unit) {
 		state.platformExtensions.imeSync?.expectation?.update()
 	}
@@ -364,6 +404,16 @@ internal class TextEditorInputConnection(
 		state.platformExtensions.connectionClosed(this)
 	}
 
+	override fun performHandwritingGesture(gesture: HandwritingGesture, executor: Executor?, consumer: IntConsumer?) {
+		val result = when {
+			!isActive -> InputConnection.HANDWRITING_GESTURE_RESULT_CANCELLED
+			Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE -> InputConnection.HANDWRITING_GESTURE_RESULT_UNSUPPORTED
+			else -> performGesture(state, gesture, ScreenGestureGeometry(state, view))
+		}
+		if (consumer == null) return
+		if (executor == null) consumer.accept(result) else executor.execute { consumer.accept(result) }
+	}
+
 	override fun commitCompletion(text: CompletionInfo?): Boolean = false
 
 	override fun commitCorrection(correctionInfo: CorrectionInfo?): Boolean {
@@ -380,6 +430,29 @@ internal class TextEditorInputConnection(
 		flags: Int,
 		opts: Bundle?
 	): Boolean = isActive && state.receiveKeyboardContent(inputContentInfo, flags, opts)
+}
+
+/**
+ * Takes a gesture's screen coordinates into the editor's text: the view is the Compose
+ * root, so its screen location and the text canvas's place in the root are the offsets.
+ */
+private class ScreenGestureGeometry(private val state: TextEditorState, private val view: View) : GestureGeometry {
+	private val origin: Offset = IntArray(2).let { location ->
+		view.getLocationOnScreen(location)
+		val canvas = state.canvasPositionInRoot.takeIf { it.isSpecified } ?: Offset.Zero
+		Offset(location[0].toFloat(), location[1].toFloat()) + canvas
+	}
+
+	override fun area(screen: RectF): Rect = screen.toComposeRect().translate(-origin)
+
+	override fun point(screen: PointF): Offset = Offset(screen.x, screen.y) - origin
+
+	override val lineMargin: Float =
+		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+			ViewConfiguration.get(view.context).scaledHandwritingGestureLineMargin.toFloat()
+		} else {
+			0f
+		}
 }
 
 internal data class ImeSurroundingText(val text: String, val selectionStart: Int, val selectionEnd: Int, val offset: Int)

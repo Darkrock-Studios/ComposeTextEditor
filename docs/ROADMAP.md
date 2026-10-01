@@ -186,7 +186,7 @@ review.
 | C | Drawing and geometry | `Draw*.kt`, `cursor/`, `scrollbar/`, `state/TextEditorScrollState.kt`, hit testing | 1.8, 1.10, 1.11, 1.17, 1.18, 1.25, 3.3, 3.12, 3.16, 4.14, 7.6, 7.7, 7.27, 7.41, 7.78 |
 | D | Bindings, actions, menu | `input/KeyBindings.kt`, `input/EditorCommand.kt`, `input/BuiltinEditorActions.kt`, `contextmenu/` | 2.1, 2.2, 2.4, 2.5, 2.7 to 2.12, 4.8, 5.8, 7.58 |
 | E | Input sessions on desktop, iOS, web | `desktopMain`, `iosMain`, `wasmJsMain` under `input/` | 4.2 to 4.7, 4.10 to 4.12, 4.19, 4.21, 4.22, 4.24 to 4.26, 4.28, 4.29, 4.32, 4.33, 4.35, 4.37 to 4.40, 7.37 |
-| F | Android input | `androidMain` | 0.4, 0.12, 3.9 to 3.11, 3.14, 3.17, 4.16, 4.18, 4.20, 4.27, 4.30, 4.31, 4.34, 4.36, 4.41, 7.40 |
+| F | Android input | `androidMain` | 0.4, 0.12, 3.9 to 3.11, 3.14, 3.17, 3.22, 4.16, 4.18, 4.20, 4.27, 4.30, 4.31, 4.34, 4.36, 4.41, 7.40 |
 | G | Edit pipeline and undo | `state/TextEditManager.kt`, `state/TextEditHistory.kt`, `state/EditBehavior.kt`, `input/ImeEditLogic.kt` | 1.20, 5.1 to 5.5, 5.9 to 5.11, 5.13 to 5.18, 6.1 to 6.6, 6.14, 6.15, 6.17, 6.22, 6.23, 6.28, 6.29, 6.33 to 6.35, 6.40, 6.45, 6.49, 7.54, 7.55 |
 | H | Clipboard and HTML | `clipboard/`, `html/`, `dragdrop/` | 4.9, 4.13, 4.17, 6.7 to 6.13, 6.18 to 6.21, 5.12, 6.24 to 6.27, 6.30 to 6.32, 6.36 to 6.39, 6.41 to 6.44, 6.46 to 6.48, 7.39, 7.46, 7.47, 7.49, 7.53, 7.63 |
 | I | Markdown and block model | `ComposeTextEditorMarkdown/`, `richstyle/`, `state/TextEditorStateBlockExt.kt` | 5.6, 7.14 to 7.16, 7.43, 7.45, 7.52, 7.64, 7.67, 7.70 to 7.72, 7.79, 7.80, 7.83, 7.85 |
@@ -1097,7 +1097,7 @@ fixes what users feel every minute.
   simulator the tapped line comes above the keyboard with the window still,
   Returns keep the caret at the keyboard's top, and the keyboard goes and
   comes back without the text jumping.
-- [ ] **3.17 Rich content, autofill, and stylus handwriting on Android. C.**
+- [x] **3.17 Rich content, autofill, and stylus handwriting on Android. C.**
   [Opus] [Lane F] From 3.11: `commitContent` returns false, so a keyboard's
   GIFs and stickers are refused; the editor offers nothing to autofill; and
   there is no stylus handwriting (`View.setAutoHandwritingEnabled` and
@@ -1138,6 +1138,49 @@ fixes what users feel every minute.
     the edit runs as the keyboard's own `setSelection` and `commitText`
     would, in one batch. A gesture that finds no text commits its fallback
     text.
+  Done, per part:
+  - Autofill: nothing declared, as designed; `EditorSemanticsTest` pins that
+    the editor publishes no content type, data type, fillable data or fill
+    action. On the API 36 emulator with Google's autofill service, focusing
+    and typing in the editor left `dumpsys autofill` at "No sessions".
+  - Keyboard content: `TextEditorState.keyboardContentReceiver` and
+    `KeyboardContentReceiver` (androidMain, `input/KeyboardContent.android.kt`).
+    `KeyboardContentTest` covers the advertised types, routing, the grant
+    (taken, kept, given back on refusal, a failed one refusing) and the
+    restart. The sample's rich text demos insert keyboard images as image
+    blocks (`KeyboardImages.android.kt`); on the emulator the editor's
+    `EditorInfo` reported `contentMimeTypes=[image/*]`. A commit from a real
+    keyboard was not driven (needs a device, below).
+  - Stylus handwriting: `Modifier.stylusHandwriting` (new `expect`, Mac
+    queue), Android's in `input/StylusHandwriting.android.kt`, skiko's a
+    no-op. Unlike Compose it also asks `isStylusHandwritingAvailable`, so with
+    a keyboard that cannot write a stylus still scrolls and selects, and the
+    hover icon is left off a password editor. `StylusHandwritingTest`,
+    `HandwritingCaretTest`. On the emulator (API 36, Gboard), strokes injected
+    with `input stylus motionevent` started Gboard's handwriting on an
+    unfocused editor with the caret where the stroke began, a written "L"
+    arrived through `commitText`, a second one at the caret, and one undo
+    took it back; `EditorInfo` reported `isStylusHandwritingEnabled=true`.
+  - Handwriting gestures: select, select range, delete, delete range (a
+    word takes one side's spaces, as Compose's), insert, join or split, and
+    remove space, which deletes each run of spaces alone so the text between
+    keeps its styles. Skiko leaves `getRangeForRect` unimplemented, so the
+    editor maps an area itself (`input/HandwritingGestureLayout.kt`: grapheme
+    or word segments whose bounds the inclusion strategy takes), the same on
+    every platform and tested on desktop (`HandwritingGestureLayoutTest`);
+    `HandwritingGestureEditTest` covers the edits. On the emulator a Gboard
+    scribble deleted the word under it, a straight stroke begun on text put
+    Gboard's `_` where it began, and undo restored the word. Limits: no previews
+    (3.22), and join or split does not refuse a bidi run's edge as Compose
+    does.
+  [Human] On a Samsung tablet with an S Pen and a Pixel with a USI stylus:
+  write in an unfocused editor (focus, caret at the stroke, text arrives),
+  then in a focused one; scribble out a word, circle one to select it, draw
+  a join and a split, and a caret-insert; undo each; check a finger still
+  scrolls and a stylus tap places the caret. With a keyboard that cannot
+  write (SwiftKey), a stylus drag selects as before. Gboard: insert a GIF and
+  a sticker in the sample's Markdown editor (each becomes an image block)
+  and in the Code Editor demo, which sets no receiver (Gboard offers none).
 
 ## Phase 4: platform parity (parallel track)
 
@@ -1278,6 +1321,15 @@ Constraints that shape the order:
   on the Hebrew word's left edge, where "abc " ends, rather than on its right
   edge, where its first letter is. Place and hang each end as Compose does,
   and check the selection highlight agrees. Found in 3.19.
+- [ ] **3.22 Handwriting gestures show no preview on Android. S.** [Opus]
+  [Lane F] Gboard previews a select or delete gesture while the stylus is
+  still down (`previewHandwritingGesture`, API 34); `BasicTextField`
+  highlights the range it would select or delete. The editor offers no
+  previews (3.17), so a scribble shows nothing until the stroke ends. Draw a
+  highlight for the previewed range (selection colour for select, a delete
+  tint for delete), clear it on the cancellation signal or the next edit,
+  and add the four previewable gestures to
+  `supportedHandwritingGesturePreviews`. Found in 3.17.
 - [x] **4.1 Compile and test iOS in CI.** [Opus] [Lane L] [Mac work] A macOS
   runner that builds the iOS targets and the iOS sample app. Without it every
   iOS change is a guess. Done: the `ios` job in `ci-build.yml`. There are no

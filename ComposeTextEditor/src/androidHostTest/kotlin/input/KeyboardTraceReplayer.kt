@@ -188,8 +188,10 @@ class KeyboardTraceReplayer(private val trace: String) {
 			"commitCompletion" -> connection.commitCompletion(null).toString()
 			"commitCorrection" -> connection.commitCorrection(null).toString()
 			"reportFullscreenMode" -> connection.reportFullscreenMode(args.word(0).toBooleanStrict()).toString()
-			// The host's receiver is not replayed; what it changed is in the trace as a change from outside.
+			// Neither the host's receiver nor a gesture's layout is replayed; what they changed is in the
+			// trace as a change from outside.
 			"commitContent" -> expected
+			"performHandwritingGesture" -> expected
 			"closeConnection" -> {
 				connection.closeConnection()
 				"true"
