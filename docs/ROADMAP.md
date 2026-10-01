@@ -2804,13 +2804,28 @@ iOS Safari; browser tests run in CI (met: the `browser` job, 4.15).
   a bubble above the finger; Compose's `ComposeDragShadowBuilder` centres the
   decoration on the finger, so a picture has to sit within its size to show
   above it. Draw the dragged text where a finger started the drag.
-- [ ] **6.43 A word pasted or dropped back in lands larger. S.** [Opus]
+- [x] **6.43 A word pasted or dropped back in lands larger. S.** [Opus]
   [Lane H] In the Android sample's rich text editor, copying "world" from
   the first paragraph and pasting it with Ctrl+V a few words on, or dragging
   it there, lands it visibly larger than the text around it, and the line
   grows. The markup round trip (`selectionAsHtml`, then the HTML import's size
   handling of 7.46 and 6.18) is the likely cause. The web demo does the same
   for a dragged move; check desktop.
+  Done: not the markup. The demo assigns `richTextStyles` (which opts typed
+  text into the body style, 16 sp) over a document of its own whose text
+  carries no body style and renders at the host's 14 sp. Text with no style to
+  adopt took the body style, so a paste, a drop, a move, and typing too, landed
+  at 16 sp on every platform, desktop's in-process copy included. The fallback
+  (`fallbackBodyStyle`, for `getSpanStylesForEditAt` and Clear formatting at the
+  caret) is now the body style only where the document has no text or carries
+  the body style (current or retired) somewhere; the answer is kept per line list
+  (`clipboard/PastedTextSizeTest.kt`, host `clipboard/AndroidPastedTextSizeTest.kt`).
+  Hammer imports markdown, which puts the body style on every paragraph, so its
+  documents fall back as before. Limits: the decision is the whole document's,
+  so one body run in a host's document (a paste from a markdown editor) brings
+  the fallback back everywhere; a host document emptied and retyped takes the
+  body style; an imported document with no paragraph (a lone fence) falls back
+  to the host size.
 - [ ] **6.44 Android drops of text a URI carries. S.** [Opus] [Lane H]
   The editor takes any drag whose description has a `text/*` type, but reads
   only an item's text and markup, so a `.txt` file dragged from Files shows

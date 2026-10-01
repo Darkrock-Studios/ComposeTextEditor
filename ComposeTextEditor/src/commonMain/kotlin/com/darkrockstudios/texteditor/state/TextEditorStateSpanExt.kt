@@ -34,10 +34,11 @@ fun TextEditorState.getSpanStylesAtPosition(position: CharLineOffset): Set<SpanS
 
 /**
  * The character styles text inserted at [position] should adopt: those of the
- * character before it, or of the character it sits in front of. With neither (a
- * blank line below a blank line, as every new paragraph starts out), an editor with
- * the styles installed falls back to the body style rather than leaving the text
- * unstyled.
+ * character before it, or of the character it sits in front of. Where that carries no
+ * style or there is none (a blank line below a blank line, as every new paragraph
+ * starts out), an editor with the styles installed falls back to the body style rather
+ * than leaving the text unstyled, unless the document has text and none of it carries
+ * the body style ([fallbackBodyStyle]).
  * Across a line break, the text style a block bakes into its line (a heading's
  * size) comes from [position]'s own line, not from the line above. A link holds only
  * its own characters, as in word processors: text typed past its end (on its line or
@@ -54,7 +55,7 @@ internal fun TextEditorState.getSpanStylesForEditAt(position: CharLineOffset): S
 	val linkStyles = styles.filterTo(HashSet()) { isLinkStyle(it) }
 	if (linkStyles.isNotEmpty() && outsideLinkOf(preceding ?: position, position)) styles = styles - linkStyles
 	if (styles.isNotEmpty()) return styles
-	return setOfNotNull(bodyStyle)
+	return setOfNotNull(fallbackBodyStyle)
 }
 
 /**

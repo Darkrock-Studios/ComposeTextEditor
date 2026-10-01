@@ -24,7 +24,8 @@ import androidx.compose.ui.unit.sp
  * ([retiredRichTextStyles][com.darkrockstudios.texteditor.state.TextEditorState.retiredRichTextStyles]).
  *
  * [defaultTextStyle] is the body text: the importers lay it over every
- * paragraph, and text typed where the document carries no style takes it.
+ * paragraph, and text typed where the document carries no style takes it, unless
+ * the document has text and none of it carries this style (a host's own content).
  */
 data class RichTextStyles(
 	val defaultTextStyle: SpanStyle = SpanStyle(fontSize = 16.sp),

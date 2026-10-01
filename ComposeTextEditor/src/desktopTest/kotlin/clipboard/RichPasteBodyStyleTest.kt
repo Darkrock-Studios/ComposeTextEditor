@@ -10,6 +10,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import utils.editorUiTest
+import utils.fontSizeAt
 import utils.pasteHtml
 
 /**
@@ -53,14 +54,8 @@ class RichPasteBodyStyleTest {
 		press(Key.MoveEnd, ctrl = true)
 		pasteHtml("<b>x</b>")
 		assertEquals("Titlex", text)
-		assertEquals(RichTextStyles.DEFAULT.header2Style.fontSize, fontSizeAt(text.indexOf("x")))
+		assertEquals(RichTextStyles.DEFAULT.header2Style.fontSize, state.fontSizeAt(text.indexOf("x")))
 	}
-
-	/** The size the character at [index] renders at: its spans merged in order. */
-	private fun utils.EditorUiTestScope.fontSizeAt(index: Int) = state.getAllText().spanStyles
-		.filter { index >= it.start && index < it.end }
-		.fold(androidx.compose.ui.text.SpanStyle()) { acc, range -> acc.merge(range.item) }
-		.fontSize
 
 	@Test
 	fun `html import puts the body style under its text`() = editorUiTest {
@@ -78,7 +73,7 @@ class RichPasteBodyStyleTest {
 	) {
 		press(Key.MoveEnd, ctrl = true)
 		pasteHtml("<b>x</b>")
-		assertEquals(24.sp, fontSizeAt(text.indexOf("x")))
+		assertEquals(24.sp, state.fontSizeAt(text.indexOf("x")))
 	}
 
 	@Test

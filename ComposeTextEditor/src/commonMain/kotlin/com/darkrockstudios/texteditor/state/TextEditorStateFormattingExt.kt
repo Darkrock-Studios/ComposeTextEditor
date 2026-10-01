@@ -3,6 +3,7 @@ package com.darkrockstudios.texteditor.state
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import com.darkrockstudios.texteditor.CharLineOffset
+import com.darkrockstudios.texteditor.RichTextStyles
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.richstyle.LinkSpanStyle
 import com.darkrockstudios.texteditor.richstyle.RichSpan
@@ -67,7 +68,7 @@ fun TextEditorState.hasStyleThroughout(range: TextEditorRange, style: SpanStyle)
 fun TextEditorState.clearFormatting() {
 	val selection = selector.selection?.takeIf { it.start != it.end }
 	if (selection == null) {
-		cursor.replaceStyles(lineStyles(cursorPosition.line) + listOfNotNull(bodyStyle))
+		cursor.replaceStyles(lineStyles(cursorPosition.line) + listOfNotNull(fallbackBodyStyle))
 		return
 	}
 	val found = mutableSetOf<SpanStyle>()
@@ -98,6 +99,33 @@ fun TextEditorState.clearFormatting() {
 /** The body text style, which the importers put on every line, once the styles are installed. */
 internal val TextEditorState.bodyStyle: SpanStyle?
 	get() = richTextStyles.defaultTextStyle.takeIf { richTextStylesSet }
+
+/**
+ * The style for text with none of its own to adopt: the body style, unless the document
+ * has text and none of it carries the body style (current or retired), as when a host
+ * filled it at its own size, so new text there lands at that size too (6.43).
+ */
+internal val TextEditorState.fallbackBodyStyle: SpanStyle?
+	get() {
+		val body = bodyStyle ?: return null
+		val lines = textLines
+		val retired = retiredRichTextStyles
+		val scan = bodyStyleScan?.takeIf { it.lines === lines && it.body == body && it.retired === retired }
+			?: BodyStyleScan(lines, body, retired).also { bodyStyleScan = it }
+		return body.takeIf { scan.takesBody }
+	}
+
+/** Whether [lines] are empty or carry [body] or a [retired] configuration's body style. */
+internal class BodyStyleScan(
+	val lines: List<AnnotatedString>,
+	val body: SpanStyle,
+	val retired: List<RichTextStyles>,
+) {
+	val takesBody: Boolean = run {
+		val bodies = retired.mapTo(hashSetOf(body)) { it.defaultTextStyle }
+		lines.all { it.isEmpty() } || lines.any { line -> line.spanStyles.any { it.item in bodies } }
+	}
+}
 
 /** The styles a heading or code block on [line] gives it. */
 internal fun TextEditorState.lineStyles(line: Int): Set<SpanStyle> =

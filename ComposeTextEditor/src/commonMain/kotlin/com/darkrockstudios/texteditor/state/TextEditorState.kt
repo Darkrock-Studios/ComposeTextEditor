@@ -245,8 +245,9 @@ class TextEditorState private constructor(
 	 * Assigning the styles, the default included, also makes
 	 * [RichTextStyles.defaultTextStyle] the style of text typed where the document
 	 * carries none, as the importers give every paragraph that style; an editor never
-	 * assigned them types in [textStyle] alone. The format extensions assign them when
-	 * installed.
+	 * assigned them types in [textStyle] alone, as does one whose text the host set
+	 * without that style anywhere, so new text matches it. The format extensions assign
+	 * them when installed.
 	 */
 	var richTextStyles: RichTextStyles = RichTextStyles.DEFAULT
 		set(value) {
@@ -298,6 +299,9 @@ class TextEditorState private constructor(
 	/** Whether [richTextStyles] was assigned, which is what opts typed text into the body style. */
 	internal var richTextStylesSet: Boolean = false
 		private set
+
+	/** [fallbackBodyStyle]'s last scan, for the lines and styles it read. */
+	internal var bodyStyleScan: BodyStyleScan? = null
 
 	/**
 	 * Swaps every heading line's baked display style from [previous]'s to

@@ -459,5 +459,11 @@ class EditorUiTestScope(
 	override fun waitForIdle() = test.waitForIdle()
 }
 
+/** The size the character at flat index [charIndex] renders at: its spans merged in order. */
+internal fun TextEditorState.fontSizeAt(charIndex: Int): androidx.compose.ui.unit.TextUnit = getAllText().spanStyles
+	.filter { charIndex >= it.start && charIndex < it.end }
+	.fold(SpanStyle()) { acc, range -> acc.merge(range.item) }
+	.fontSize
+
 /** Gap between the presses of a multi-click: well inside any double-click timeout. */
 private const val MULTI_CLICK_INTERVAL_MS = 50L
