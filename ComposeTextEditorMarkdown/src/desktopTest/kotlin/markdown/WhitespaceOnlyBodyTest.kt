@@ -97,6 +97,42 @@ class WhitespaceOnlyBodyTest {
 	}
 
 	@Test
+	fun `a later paragraph's leading spaces drop as the first's do`() {
+		val markdown = extension()
+		markdown.importMarkdown("a\n\n   text")
+		assertEquals("a\ntext", markdown.editorState.blockLines())
+	}
+
+	@Test
+	fun `a paragraph's continuation line drops its leading spaces`() {
+		val markdown = extension()
+		markdown.importMarkdown("a\n   b")
+		assertEquals("a\nb", markdown.editorState.blockLines())
+	}
+
+	@Test
+	fun `a quoted paragraph's leading spaces drop`() {
+		val markdown = extension()
+		markdown.importMarkdown("> a\n>\n>    text")
+		assertEquals("> a\n> text", markdown.editorState.blockLines())
+	}
+
+	@Test
+	fun `a continuation line inside bold or a link drops its leading spaces`() {
+		assertEquals("a\nb", "**a\n   b**".toAnnotatedStringFromMarkdown().text)
+		assertEquals("a\nb", "[a\n   b](https://example.com)".toAnnotatedStringFromMarkdown().text)
+	}
+
+	@Test
+	fun `the converter drops a list item's later paragraph's indent and keeps a quote's marker apart`() {
+		assertEquals("- a\n\nb", "- a\n\n   b".toAnnotatedStringFromMarkdown().text)
+		assertEquals("> a\n>    b", "> a\n>    b".toAnnotatedStringFromMarkdown().text)
+	}
+
+	@Test
+	fun `the editor's own leading spaces survive on any line`() = roundTrip("a\n   b\n\n  c")
+
+	@Test
 	fun `the converter keeps a first line of spaces`() {
 		assertEquals("  \nb", "  \nb".toAnnotatedStringFromMarkdown().text)
 	}

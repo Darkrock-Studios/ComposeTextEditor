@@ -293,7 +293,11 @@ elsewhere on a line stays literal text, as before, a typed `&nbsp;` is
 escaped (`\&nbsp;`) by the 7.14 rules, and fenced lines keep their
 whitespace as written. A foreign line of only such entities (a spacer)
 reads as an empty line, unless it is a list item or heading, which holds
-the entities' whitespace. Rejected: a non-breaking space character, which
+the entities' whitespace. Raw leading spaces and tabs on a foreign
+paragraph's line drop on every line, the first's and each continuation's, as
+CommonMark strips them; export never writes them, so this touches only foreign
+files. A line of only whitespace stays (7.70), and a fenced line keeps its
+whitespace as written. Rejected: a non-breaking space character, which
 is invisible in the file and reads back as content rather than indent; and
 no form (stripping the indent), which loses text on every save.
 

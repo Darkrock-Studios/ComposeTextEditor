@@ -3682,7 +3682,7 @@ Shaping is one line per keystroke. These still scale with document length:
   `boldStyle` is plain bold, a bold word inside an h4 exports without its
   `**`. HTML export leaves out only looks no current inline style shares
   (`RetiredStyles.headingOnlyLooks`). Found in 7.79.
-- [ ] **7.80 A foreign paragraph's leading spaces are kept except at the
+- [x] **7.80 A foreign paragraph's leading spaces are kept except at the
   file's start. R.** [Opus] [Lane I] CommonMark drops up to three leading
   spaces of a paragraph line, and import does for the first paragraph
   (`   text` reads as `text`), but keeps them on any later one (`a`, a blank
@@ -3692,6 +3692,14 @@ Shaping is one line per keystroke. These still scale with document length:
   writes raw leading spaces, so only foreign markdown sees it. Dropping them
   everywhere changes the output `MarkdownParsingTest` pins for its
   mixed-indent input. Found in 7.70.
+  Done: CommonMark's rule, everywhere: a paragraph's or list item's leading
+  whitespace drops on each of its lines, the first's and every continuation's,
+  inside bold or a link too, wherever the paragraph is. A line of only
+  whitespace stays (7.70) and a fenced line keeps its whitespace as written;
+  the editor's own indent is written as entities, so only foreign files
+  change. `MarkdownParsingTest` and one `InlineStyleSyntaxTest` case now pin
+  the stripped lines (`WhitespaceOnlyBodyTest`; `docs/design/line-blocks.md`,
+  "Leading indent").
 
 ### Find and replace addon
 

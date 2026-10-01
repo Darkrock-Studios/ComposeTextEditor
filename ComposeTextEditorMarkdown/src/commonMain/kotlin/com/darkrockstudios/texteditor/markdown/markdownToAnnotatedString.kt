@@ -58,11 +58,27 @@ internal fun String.parseMarkdownWithLinks(
 		.withHighlightTags()
 	val flavour = GFMFlavourDescriptor()
 	val parsedTree = MarkdownParser(flavour).buildMarkdownTreeFromString(source)
-	val context = MarkdownRenderContext(styles, allowedLinkSchemes)
+	val context = MarkdownRenderContext(styles, allowedLinkSchemes, source.lineStarts(literalLines.orEmpty()))
 	val annotated = buildAnnotatedString {
-		appendMarkdownChildren(source, parsedTree, 0, context)
+		appendMarkdownChildren(source, parsedTree, context)
 	}
 	return MarkdownParseResult(standIns?.restore(annotated) ?: annotated, context.links)
+}
+
+/** Where each of the [lines] starts in this string. */
+private fun String.lineStarts(lines: Set<Int>): Set<Int> {
+	if (lines.isEmpty()) return emptySet()
+	val last = lines.max()
+	val starts = HashSet<Int>()
+	var line = 0
+	var start = 0
+	while (true) {
+		if (line in lines) starts += start
+		val end = indexOf('\n', start)
+		if (end < 0 || line == last) return starts
+		line++
+		start = end + 1
+	}
 }
 
 /**
@@ -321,8 +337,43 @@ private fun codeSpanEnd(line: String, start: Int): Int {
 internal class MarkdownRenderContext(
 	val styles: RichTextStyles,
 	val allowedLinkSchemes: Set<String>,
+	/** Where the lines read as written (a fence's, its markers stripped) start in the source. */
+	val literalLineStarts: Set<Int> = emptySet(),
 ) {
 	val links = mutableListOf<ParsedLink>()
+
+	private var paragraph = false
+
+	/** Whether the tokens read so far in a paragraph end a line. */
+	private var lineStart = false
+
+	/** Runs [body] over a paragraph's or a list item's content, whose lines' indents drop. */
+	fun inParagraph(body: () -> Unit) {
+		val outer = paragraph
+		paragraph = true
+		lineStart = true
+		try {
+			body()
+		} finally {
+			paragraph = outer
+		}
+	}
+
+	/**
+	 * Whether [node], read next, is kept: CommonMark strips each of a paragraph's lines of
+	 * its leading whitespace, but for a line read as written. The editor's own indent is
+	 * written as entities, which are not whitespace to the parser. Any other node, an
+	 * element read whole included, ends the line's start.
+	 */
+	fun keeps(node: ASTNode): Boolean {
+		if (!paragraph) return true
+		when (node.type) {
+			MarkdownTokenTypes.EOL -> lineStart = true
+			MarkdownTokenTypes.WHITE_SPACE -> return !lineStart || node.startOffset in literalLineStarts
+			else -> lineStart = false
+		}
+		return true
+	}
 
 	private class OpenTag(val name: String, val pushed: Boolean)
 
@@ -372,56 +423,45 @@ internal class MarkdownRenderContext(
 internal fun AnnotatedString.Builder.appendMarkdownChildren(
 	original: String,
 	node: ASTNode,
-	startOffset: Int,
 	context: MarkdownRenderContext,
 ) = context.scope(this) {
-	var childOffset = startOffset
-	node.children.forEach { child ->
-		appendMarkdownNode(original, child, childOffset, context)
-		childOffset += child.getTextInNode(original).length
-	}
+	node.children.forEach { child -> appendMarkdownNode(original, child, context) }
 }
 
 private fun AnnotatedString.Builder.appendMarkdownNode(
 	original: String,
 	node: ASTNode,
-	startOffset: Int,
 	context: MarkdownRenderContext,
 ) {
+	if (!context.keeps(node)) return
 	val nodeText = node.getTextInNode(original).toString()
 	val styles = context.styles
 
 	when (node.type) {
 		MarkdownElementTypes.PARAGRAPH -> {
 			pushStyle(styles.defaultTextStyle)
-			appendMarkdownChildren(original, node, startOffset, context)
+			context.inParagraph { appendMarkdownChildren(original, node, context) }
 			pop()
 		}
 
-		MarkdownTokenTypes.WHITE_SPACE -> {
-			// At the document's start a block's leading spaces drop, as CommonMark strips
-			// them (elsewhere they are kept, 7.80); a line of only whitespace, the file's
-			// own token, is kept wherever it is.
-			if (startOffset > 0 || node.parent?.type == MarkdownElementTypes.MARKDOWN_FILE) {
-				append(nodeText)
-			}
-		}
+		// Whitespace [MarkdownRenderContext.keeps] lets through, a line of only whitespace too.
+		MarkdownTokenTypes.WHITE_SPACE -> append(nodeText)
 
 		MarkdownElementTypes.EMPH -> {
 			pushStyle(styles.italicStyle)
-			appendStyledContent(node, original, startOffset, context)
+			appendStyledContent(node, original, context)
 			pop()
 		}
 
 		MarkdownElementTypes.STRONG -> {
 			pushStyle(styles.boldStyle)
-			appendStyledContent(node, original, startOffset, context)
+			appendStyledContent(node, original, context)
 			pop()
 		}
 
 		GFMElementTypes.STRIKETHROUGH -> {
 			pushStyle(styles.strikethroughStyle)
-			appendStyledContent(node, original, startOffset, context)
+			appendStyledContent(node, original, context)
 			pop()
 		}
 
@@ -472,12 +512,12 @@ private fun AnnotatedString.Builder.appendMarkdownNode(
 			pop()
 		}
 
-		MarkdownElementTypes.ATX_1 -> handleHeader(original, node, startOffset, 1, context)
-		MarkdownElementTypes.ATX_2 -> handleHeader(original, node, startOffset, 2, context)
-		MarkdownElementTypes.ATX_3 -> handleHeader(original, node, startOffset, 3, context)
-		MarkdownElementTypes.ATX_4 -> handleHeader(original, node, startOffset, 4, context)
-		MarkdownElementTypes.ATX_5 -> handleHeader(original, node, startOffset, 5, context)
-		MarkdownElementTypes.ATX_6 -> handleHeader(original, node, startOffset, 6, context)
+		MarkdownElementTypes.ATX_1 -> handleHeader(original, node, 1, context)
+		MarkdownElementTypes.ATX_2 -> handleHeader(original, node, 2, context)
+		MarkdownElementTypes.ATX_3 -> handleHeader(original, node, 3, context)
+		MarkdownElementTypes.ATX_4 -> handleHeader(original, node, 4, context)
+		MarkdownElementTypes.ATX_5 -> handleHeader(original, node, 5, context)
+		MarkdownElementTypes.ATX_6 -> handleHeader(original, node, 6, context)
 
 		MarkdownElementTypes.INLINE_LINK -> {
 			// A bare destination parses as LINK_DESTINATION; the GFM flavour
@@ -495,22 +535,16 @@ private fun AnnotatedString.Builder.appendMarkdownNode(
 				?.takeIf { sanitizeLinkUrl(it.decodedDestination(), context.allowedLinkSchemes) != null }
 			if (url != null) pushStyle(styles.linkStyle)
 			val textStart = length
-			var childOffset = startOffset
 			node.children.forEach { child ->
 				if (child.type == MarkdownElementTypes.LINK_TEXT) {
 					// The first and last children are the bracket tokens; the
 					// nodes between them are the link text, styles and all.
 					context.scope(this) {
-						var gcOffset = childOffset
 						child.children.forEachIndexed { i, gc ->
-							if (i != 0 && i != child.children.lastIndex) {
-								appendMarkdownNode(original, gc, gcOffset, context)
-							}
-							gcOffset += gc.getTextInNode(original).length
+							if (i != 0 && i != child.children.lastIndex) appendMarkdownNode(original, gc, context)
 						}
 					}
 				}
-				childOffset += child.getTextInNode(original).length
 			}
 			val textEnd = length
 			if (url != null) pop()
@@ -527,11 +561,11 @@ private fun AnnotatedString.Builder.appendMarkdownNode(
 			// recurse into children (no glyph injection) so the body text survives
 			// without spurious bullet characters leaking into the AnnotatedString.
 			// Ordered list numbering is a follow-up.
-			appendMarkdownChildren(original, node, startOffset, context)
+			appendMarkdownChildren(original, node, context)
 		}
 
 		MarkdownElementTypes.LIST_ITEM -> {
-			appendMarkdownChildren(original, node, startOffset, context)
+			context.inParagraph { appendMarkdownChildren(original, node, context) }
 		}
 
 		MarkdownElementTypes.BLOCK_QUOTE -> {
@@ -539,7 +573,7 @@ private fun AnnotatedString.Builder.appendMarkdownNode(
 			// this branch only fires for blockquotes outside that pipeline (e.g. callers
 			// of toAnnotatedStringFromMarkdown directly). Recurse without injecting a
 			// literal `> ` marker so the body text isn't visually corrupted.
-			appendMarkdownChildren(original, node, startOffset, context)
+			appendMarkdownChildren(original, node, context)
 		}
 
 		MarkdownTokenTypes.TEXT -> {
@@ -552,7 +586,7 @@ private fun AnnotatedString.Builder.appendMarkdownNode(
 		}
 
 		MarkdownElementTypes.MARKDOWN_FILE -> {
-			appendMarkdownChildren(original, node, startOffset, context)
+			appendMarkdownChildren(original, node, context)
 		}
 
 		else -> {
@@ -560,7 +594,7 @@ private fun AnnotatedString.Builder.appendMarkdownNode(
 			if (nodeText.isNotEmpty()) {
 				append(nodeText.removeMarkdownEscapes())
 			} else {
-				appendMarkdownChildren(original, node, startOffset, context)
+				appendMarkdownChildren(original, node, context)
 			}
 		}
 	}
@@ -569,7 +603,6 @@ private fun AnnotatedString.Builder.appendMarkdownNode(
 private fun AnnotatedString.Builder.appendStyledContent(
 	node: ASTNode,
 	original: String,
-	startOffset: Int,
 	context: MarkdownRenderContext,
 ) = context.scope(this) {
 	var currentText = StringBuilder()
@@ -580,12 +613,13 @@ private fun AnnotatedString.Builder.appendStyledContent(
 			// Accumulate actual content
 			MarkdownTokenTypes.TEXT,
 			MarkdownTokenTypes.WHITE_SPACE -> {
-				currentText.append(child.getTextInNode(original))
+				if (context.keeps(child)) currentText.append(child.getTextInNode(original))
 			}
-			// Skip markdown syntax tokens
+			// Skip markdown syntax tokens, though they end a line's start
 			MarkdownTokenTypes.EMPH,
 			MarkdownTokenTypes.BACKTICK,
 			GFMTokenTypes.TILDE -> {
+				context.keeps(child)
 			}
 			// Handle any nested elements by recursing
 			else -> {
@@ -594,7 +628,7 @@ private fun AnnotatedString.Builder.appendStyledContent(
 					append(currentText.toString().removeMarkdownEscapes())
 					currentText.clear()
 				}
-				appendMarkdownNode(original, child, startOffset, context)
+				appendMarkdownNode(original, child, context)
 			}
 		}
 	}
@@ -608,7 +642,6 @@ private fun AnnotatedString.Builder.appendStyledContent(
 private fun AnnotatedString.Builder.handleHeader(
 	original: String,
 	node: ASTNode,
-	startOffset: Int,
 	level: Int,
 	context: MarkdownRenderContext,
 ) {
@@ -634,22 +667,17 @@ private fun AnnotatedString.Builder.handleHeader(
 					// whitespace tokens here so the styled header text doesn't accumulate
 					// a leading space on each export round-trip; the serializer already
 					// emits `## ` with its own trailing space.
-					var contentOffset = startOffset
 					var seenContent = false
 					child.children.forEach { gc ->
-						if (!seenContent && gc.type == MarkdownTokenTypes.WHITE_SPACE) {
-							contentOffset += gc.getTextInNode(original).length
-							return@forEach
-						}
+						if (!seenContent && gc.type == MarkdownTokenTypes.WHITE_SPACE) return@forEach
 						seenContent = true
-						appendMarkdownNode(original, gc, contentOffset, context)
-						contentOffset += gc.getTextInNode(original).length
+						appendMarkdownNode(original, gc, context)
 					}
 				}
 
 				else -> {
 					// Process any other nested styles or text
-					appendMarkdownNode(original, child, startOffset, context)
+					appendMarkdownNode(original, child, context)
 				}
 			}
 		}
