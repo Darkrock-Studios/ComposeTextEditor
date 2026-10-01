@@ -40,12 +40,12 @@ class LinkComposingTest {
 			.filter { it.style is LinkSpanStyle }
 			.map { getStringInRange(it.range) to (it.style as LinkSpanStyle).url }
 
-	private fun TextEditorState.linkStyled(char: Int): Boolean =
-		richTextStyles.linkStyle in getSpanStylesAtPosition(CharLineOffset(0, char))
+	private fun TextEditorState.linkStyled(char: Int, line: Int = 0): Boolean =
+		richTextStyles.linkStyle in getSpanStylesAtPosition(CharLineOffset(line, char))
 
-	/** The characters of line 0 that look linked, as a string. */
-	private fun TextEditorState.linkLooking(): String =
-		textLines[0].text.filterIndexed { index, _ -> linkStyled(index) }
+	/** The characters of [line] that look linked, as a string. */
+	private fun TextEditorState.linkLooking(line: Int = 0): String =
+		textLines[line].text.filterIndexed { index, _ -> linkStyled(index, line) }
 
 	@Test
 	fun `a composition retyping a link's word keeps the link`() {
@@ -322,6 +322,78 @@ class LinkComposingTest {
 		assertEquals("see link here", state.getAllText().text)
 		assertEquals(listOf("link" to url), state.links())
 		assertEquals("link", state.linkLooking())
+	}
+
+	/** "see link" and "here more", "link" to "her" linked. */
+	private fun linkedAcrossLines(): TextEditorState {
+		val state = TextEditorState(scope = TestScope(), measurer = mockk(relaxed = true), initialText = AnnotatedString("see link\nhere more"))
+		state.setLink(TextEditorRange(CharLineOffset(0, 4), CharLineOffset(1, 3)), url)
+		return state
+	}
+
+	@Test
+	fun `a replace into the start of a link across lines keeps the linked letters it leaves as they were`() {
+		val state = linkedAcrossLines()
+
+		state.replace(TextEditorRange(CharLineOffset(0, 2), CharLineOffset(0, 6)), "abli", inheritStyle = true)
+
+		assertEquals("seablink\nhere more", state.getAllText().text)
+		assertEquals(listOf("link\nher" to url), state.links())
+		assertEquals("link", state.linkLooking(0))
+	}
+
+	@Test
+	fun `a replace past the end of a link across lines keeps the linked letters it leaves as they were`() {
+		val state = linkedAcrossLines()
+
+		state.replace(TextEditorRange(CharLineOffset(1, 1), CharLineOffset(1, 5)), "erXX", inheritStyle = true)
+
+		assertEquals("see link\nherXXmore", state.getAllText().text)
+		assertEquals(listOf("link\nher" to url), state.links())
+		assertEquals("her", state.linkLooking(1))
+	}
+
+	@Test
+	fun `a replace across the start of a link across lines takes what it changes out of it`() {
+		val state = linkedAcrossLines()
+
+		state.replace(TextEditorRange(CharLineOffset(0, 2), CharLineOffset(0, 6)), "xyzw", inheritStyle = true)
+
+		assertEquals(listOf("nk\nher" to url), state.links())
+		assertEquals("nk", state.linkLooking(0))
+
+		state.undo()
+		assertEquals(listOf("link\nher" to url), state.links())
+		assertEquals("link", state.linkLooking(0))
+		assertEquals("her", state.linkLooking(1))
+	}
+
+	@Test
+	fun `a composition on a middle line of a link keeps the link whole`() {
+		val state = TextEditorState(scope = TestScope(), measurer = mockk(relaxed = true), initialText = AnnotatedString("see link\nall of\nhere more"))
+		state.setLink(TextEditorRange(CharLineOffset(0, 4), CharLineOffset(2, 3)), url)
+
+		state.replace(TextEditorRange(CharLineOffset(1, 0), CharLineOffset(1, 3)), "every", inheritStyle = true)
+
+		assertEquals(listOf("link\nevery of\nher" to url), state.links())
+		assertEquals("every of", state.linkLooking(1))
+	}
+
+	@Test
+	fun `redo of a composition over the end of a link across lines keeps the link`() {
+		val state = linkedAcrossLines()
+		state.cursor.updatePosition(CharLineOffset(1, 3))
+
+		state.imeSetComposingRegion(9, 12)
+		state.imeSetComposingText("he", 1)
+		state.imeCommitText("hex", 1)
+		assertEquals(listOf("link\nhe" to url), state.links())
+
+		state.undo()
+		state.redo()
+		assertEquals("see link\nhexe more", state.getAllText().text)
+		assertEquals(listOf("link\nhe" to url), state.links())
+		assertEquals("he", state.linkLooking(1))
 	}
 
 	@Test

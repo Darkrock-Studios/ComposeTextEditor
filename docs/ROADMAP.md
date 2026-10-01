@@ -187,7 +187,7 @@ review.
 | D | Bindings, actions, menu | `input/KeyBindings.kt`, `input/EditorCommand.kt`, `input/BuiltinEditorActions.kt`, `contextmenu/` | 2.1, 2.2, 2.4, 2.5, 2.7 to 2.12, 4.8, 5.8, 7.58 |
 | E | Input sessions on desktop, iOS, web | `desktopMain`, `iosMain`, `wasmJsMain` under `input/` | 4.2 to 4.7, 4.10 to 4.12, 4.19, 4.21, 4.22, 4.24 to 4.26, 4.28, 4.29, 4.32, 4.33, 4.35, 4.37 to 4.40, 7.37 |
 | F | Android input | `androidMain` | 0.4, 0.12, 3.9 to 3.11, 3.14, 3.17, 4.16, 4.18, 4.20, 4.27, 4.30, 4.31, 4.34, 4.36, 7.40 |
-| G | Edit pipeline and undo | `state/TextEditManager.kt`, `state/TextEditHistory.kt`, `state/EditBehavior.kt`, `input/ImeEditLogic.kt` | 1.20, 5.1 to 5.5, 5.9 to 5.11, 5.13 to 5.17, 6.1 to 6.6, 6.14, 6.15, 6.17, 6.22, 6.23, 6.28, 6.29, 6.33 to 6.35, 6.40, 6.45, 7.54, 7.55 |
+| G | Edit pipeline and undo | `state/TextEditManager.kt`, `state/TextEditHistory.kt`, `state/EditBehavior.kt`, `input/ImeEditLogic.kt` | 1.20, 5.1 to 5.5, 5.9 to 5.11, 5.13 to 5.18, 6.1 to 6.6, 6.14, 6.15, 6.17, 6.22, 6.23, 6.28, 6.29, 6.33 to 6.35, 6.40, 6.45, 7.54, 7.55 |
 | H | Clipboard and HTML | `clipboard/`, `html/`, `dragdrop/` | 4.9, 4.13, 4.17, 6.7 to 6.13, 6.18 to 6.21, 5.12, 6.24 to 6.27, 6.30 to 6.32, 6.36 to 6.39, 6.41 to 6.44, 6.46, 7.39, 7.46, 7.47, 7.49, 7.53, 7.63 |
 | I | Markdown and block model | `ComposeTextEditorMarkdown/`, `richstyle/`, `state/TextEditorStateBlockExt.kt` | 5.6, 7.14 to 7.16, 7.43, 7.45, 7.52, 7.64, 7.67, 7.70 to 7.72, 7.79, 7.80, 7.83 |
 | J | Find addon | `ComposeTextEditorFind/` | 7.17 to 7.19, 7.26, 7.29, 7.42, 7.68, 7.69 |
@@ -2278,13 +2278,27 @@ iOS Safari; browser tests run in CI (met: the `browser` job, 4.15).
   "lin" then "links" (whose shared "k" lost the look), redo to "lin" linked,
   and a replace of " li" by a plain " x" and a linked "i" leaves "ink"
   (`state/LinkComposingTest.kt`). Plain text over a whole link still drops it.
-- [ ] **5.17 A replace across the edge of a link spanning lines leaves its
+- [x] **5.17 A replace across the edge of a link spanning lines leaves its
   look outside it. S.** [Opus] [Lane G] `linkAfterReplace` places only a link
   on one line; a link across lines gets the general handling, which cuts it at
   the replace's start or end, while the characters the replace leaves as they
   were at its start or end keep their link look. With a link from (0,4) to
   (1,3), replacing "e li" at (0,2) by "abli" starts the link after "li", which
   still looks linked. Found in 5.14's review.
+  Done: `linkAfterReplace` places a link across lines too when the replace is
+  on its first or last line, where only its own start or end is an edge: the
+  example leaves "link" linked from "li", a replace across its end keeps the
+  letters it leaves as they were, and a composition merged over its end keeps
+  it on redo. A replace on a line between keeps the general handling, which
+  keeps the link whole (`state/LinkComposingTest.kt`). Found 5.18.
+- [ ] **5.18 A plain replace inside a link joins it without its look. S.**
+  [Opus] [Lane G] A replace that does not inherit styles (`replace` with
+  `inheritStyle = false`, the host's) of letters inside a link, say "nk" of
+  "link" by "NK", leaves the link over "liNK" (the general handling bridges
+  it) while "NK" does not look linked. Plain text over a link's first or last
+  letters leaves the link instead, and over its whole word drops it. Either
+  the look should follow, or the link should leave the plain letters,
+  splitting around them. Found in 5.17's review.
 
 ## Phase 6: undo and clipboard fidelity
 

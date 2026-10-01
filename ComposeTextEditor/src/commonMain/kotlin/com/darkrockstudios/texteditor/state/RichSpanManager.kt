@@ -512,27 +512,32 @@ class RichSpanManager(
 	}
 
 	/**
-	 * Where [span], a link on the line of a one-line [operation] that replaces some of
-	 * its characters, lands, worked out on the characters the replace changes (it and
-	 * the text it replaces can share a start and an end, which stay as they were; when
-	 * the new text looks linked anywhere, a character the link holds stays only when
-	 * its new one looks linked too); or null for the
-	 * general handling, when the change takes in the whole link or the new text in the
-	 * link does not look linked (plain text pasted over it). The change lands as typing
-	 * does: inside the link it joins it, at the link's end or before its start it stays
-	 * out, and across one of its edges it takes the characters it changes out of the
-	 * link. A change at the link's first or last characters, but not both, whose new
-	 * text does not look linked takes them out too: the history merges a composition
-	 * that dropped the link's last letter and typed on into one such replace. So an
-	 * input method's composition over the link's word, which it sets again on every
-	 * key, keeps the link however far it runs past the link's end, and on redo.
+	 * Where [span], a link with its start or end on the line of a one-line [operation]
+	 * that replaces some of its characters, lands, worked out on the characters the
+	 * replace changes (it and the text it replaces can share a start and an end, which
+	 * stay as they were; when the new text looks linked anywhere, a character the link
+	 * holds stays only when its new one looks linked too); or null for the general
+	 * handling, when the change takes in the whole link or the new text in the link
+	 * does not look linked (plain text pasted over it). The change lands as typing
+	 * does: inside the link it joins it, at the link's end or before its start it
+	 * stays out, and across one of its edges it takes the characters it changes out of
+	 * the link. A change at the link's first or last characters, but not both, whose
+	 * new text does not look linked takes them out too: the history merges a
+	 * composition that dropped the link's last letter and typed on into one such
+	 * replace. So an input method's composition over the link's word, which it sets
+	 * again on every key, keeps the link however far it runs past the link's end, and
+	 * on redo. The edges of a line a link runs across are not the link's.
 	 */
 	private fun linkAfterReplace(span: RichSpan, operation: TextEditOperation.Replace): List<RichSpan>? {
 		val range = operation.range
 		val line = range.start.line
-		if (!range.isSingleLine() || !span.range.isSingleLine() || span.range.start.line != line) return null
-		val linkStart = span.range.start.char
-		val linkEnd = span.range.end.char
+		if (!range.isSingleLine() || line !in span.range.start.line..span.range.end.line) return null
+		val startsHere = span.range.start.line == line
+		val endsHere = span.range.end.line == line
+		if (!startsHere && !endsHere) return null
+		// Past the line's ends, so neither counts as a link edge any change reaches.
+		val linkStart = if (startsHere) span.range.start.char else -1
+		val linkEnd = if (endsHere) span.range.end.char else Int.MAX_VALUE / 2
 		val at = range.start.char
 		if (linkEnd <= at || range.end.char <= linkStart) return null
 		val old = operation.oldText.text
@@ -561,7 +566,9 @@ class RichSpanManager(
 		}
 		if ((maxOf(start, at) until minOf(end, at + new.length)).any { !looked[it - at] }) return null
 		if (start >= end) return emptyList()
-		return listOf(span.copy(range = TextEditorRange(CharLineOffset(line, start), CharLineOffset(line, end))))
+		val newStart = if (startsHere) CharLineOffset(line, start) else span.range.start
+		val newEnd = if (endsHere) CharLineOffset(line, end) else span.range.end
+		return listOf(span.copy(range = TextEditorRange(newStart, newEnd)))
 	}
 
 	/**
