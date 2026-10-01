@@ -118,7 +118,7 @@ private val CONFIGURED_STYLES: List<(RichTextStyles) -> SpanStyle> = listOf(
  */
 internal class RetiredStyles(
 	private val styles: RichTextStyles,
-	retired: List<RichTextStyles>,
+	private val retired: List<RichTextStyles>,
 ) {
 	private val newestFirst = retired.asReversed()
 	private val current = if (retired.isEmpty()) emptySet() else styles.inlineStyles
@@ -132,22 +132,10 @@ internal class RetiredStyles(
 	fun isLinkStyle(style: SpanStyle): Boolean =
 		style == styles.linkStyle || (style in retiredLinkStyles && style !in current)
 
-	/**
-	 * Each heading level's look under [styles] and each retired configuration, but for one
-	 * that is also an inline style of its own configuration or of [styles].
-	 */
-	private val headingOnlyLooks: Set<SpanStyle> by lazy {
-		(newestFirst + styles).flatMapTo(HashSet()) { config ->
-			HEADINGS.map { it.look(config) }.filter { it !in config.inlineStyles && it !in styles.inlineStyles }
-		}
-	}
+	private val headingLooks by lazy { styles.exportedHeadingLooks(retired) }
 
-	/**
-	 * The spans a [heading] line leaves out, since the heading element stands for them:
-	 * the look it is baked with, and any other heading look that is not also an inline
-	 * style, as text pasted from another heading keeps that heading's look.
-	 */
-	fun headingLooks(heading: HtmlTag): Set<SpanStyle> = headingOnlyLooks + heading.look(styles)
+	/** The spans a [heading] line leaves out ([RichTextStyles.exportedHeadingLooks]). */
+	fun headingLooks(heading: HtmlTag): Set<SpanStyle> = headingLooks[HEADINGS.indexOf(heading)]
 
 	fun asCurrent(style: SpanStyle): SpanStyle {
 		if (newestFirst.isEmpty() || style in current) return style

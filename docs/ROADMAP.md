@@ -3997,7 +3997,7 @@ Shaping is one line per keystroke. These still scale with document length:
   leftover bake of such a look (an undo past the switch) then exports as the
   style too, as in HTML: the two cannot be told apart
   (`HeaderSemanticsTest`). Found 7.85.
-- [ ] **7.85 Markdown export leaves another level's heading look on a
+- [x] **7.85 Markdown export leaves another level's heading look on a
   heading line. S.** [Opus] [Lane I] HTML export leaves out every level's
   heading-only look, current and retired, on a heading line, as text pasted
   from another heading keeps that heading's look; `exportAsMarkdown` leaves
@@ -4005,6 +4005,13 @@ Shaping is one line per keystroke. These still scale with document length:
   sized span. Share one rule between the two (`RetiredStyles.headingOnlyLooks`
   is core-internal, so markdown keeps its own copy today). Found in 7.83's
   review.
+  Done: both exports leave out `RichTextStyles.exportedHeadingLooks` (public, so
+  markdown shares it): the line's own look, and every level's look, current and
+  retired, that is no configuration's inline style. A look equal to a retired
+  configuration's inline style now stays and exports as that style in both. A
+  span a host set equal to another level's look on a heading line is left out
+  too, as HTML already did: the span model cannot tell it from pasted heading text
+  (`HeaderSemanticsTest`).
 - [x] **7.80 A foreign paragraph's leading spaces are kept except at the
   file's start. R.** [Opus] [Lane I] CommonMark drops up to three leading
   spaces of a paragraph line, and import does for the first paragraph

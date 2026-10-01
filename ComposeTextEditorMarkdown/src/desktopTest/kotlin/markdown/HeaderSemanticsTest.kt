@@ -185,19 +185,60 @@ class HeaderSemanticsTest {
 	}
 
 	@Test
-	fun `a bold word at another heading's size inside a heading stays in the heading`() {
+	fun `a bold word at a size of its own inside a heading stays in the heading`() {
 		val e = editor("## a BIG b")
 		e.editorState.addStyleSpan(
 			TextEditorRange(CharLineOffset(0, 2), CharLineOffset(0, 5)),
-			RichTextStyles.DEFAULT.header1Style,
+			SpanStyle(fontSize = 30.sp, fontWeight = FontWeight.Bold),
 		)
 
 		val exported = e.exportAsMarkdown()
-		assertEquals("## a <span style=\"font-size:32px\">**BIG**</span> b", exported)
+		assertEquals("## a <span style=\"font-size:30px\">**BIG**</span> b", exported)
 
 		e.importMarkdown(exported)
 		assertEquals(2, e.editorState.headerLevel(0))
 		assertEquals(exported, e.exportAsMarkdown())
+	}
+
+	@Test
+	fun `another level's heading look on a heading line is left out, as in HTML`() {
+		val e = editor("#### Title")
+		e.editorState.addStyleSpan(
+			TextEditorRange(CharLineOffset(0, 0), CharLineOffset(0, 5)),
+			RichTextStyles.DEFAULT.header2Style,
+		)
+
+		assertEquals("#### Title", e.exportAsMarkdown())
+		assertTrue("<h4>Title</h4>" in HtmlExtension(e.editorState).exportAsHtml())
+	}
+
+	@Test
+	fun `another level's retired heading look on a heading line is left out`() {
+		val e = editor("#### Title")
+		e.editorState.richTextStyles = RichTextStyles.DEFAULT.copy(
+			header2Style = SpanStyle(fontSize = 28.sp, fontWeight = FontWeight.Bold),
+		)
+		e.editorState.addStyleSpan(
+			TextEditorRange(CharLineOffset(0, 0), CharLineOffset(0, 5)),
+			RichTextStyles.DEFAULT.header2Style,
+		)
+
+		assertEquals("#### Title", e.exportAsMarkdown())
+		assertTrue("<h4>Title</h4>" in HtmlExtension(e.editorState).exportAsHtml())
+	}
+
+	@Test
+	fun `a heading look equal to a retired configuration's bold stays bold on another heading`() {
+		val state = TextEditorState(scope = TestScope(), measurer = mockk(relaxed = true))
+		val oldBold = RichTextStyles.DEFAULT.header2Style
+		state.richTextStyles = RichTextStyles.DEFAULT.copy(boldStyle = oldBold)
+		val e = MarkdownExtension(state).apply { importMarkdown("#### one two") }
+		state.addStyleSpan(TextEditorRange(CharLineOffset(0, 4), CharLineOffset(0, 7)), oldBold)
+		state.richTextStyles = RichTextStyles.DEFAULT
+
+		assertEquals("#### one **two**", e.exportAsMarkdown())
+		val html = HtmlExtension(state).exportAsHtml()
+		assertTrue("<strong>two</strong>" in html, html)
 	}
 
 	@Test

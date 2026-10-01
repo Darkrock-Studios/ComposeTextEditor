@@ -90,6 +90,20 @@ data class RichTextStyles(
 	 */
 	fun headingLook(level: Int): SpanStyle = headingLooks[level.coerceIn(1, 6) - 1]
 
+	/**
+	 * The looks an export leaves out of a heading line, by level (level 1 first), since the
+	 * heading stands for them: the line's own [headingLook], and every level's look under
+	 * this configuration and [retired] (those the document was styled under before) that is
+	 * not also an inline style of any of them, as text pasted from another heading keeps
+	 * that heading's look. A look equal to an inline style exports as that style.
+	 */
+	fun exportedHeadingLooks(retired: List<RichTextStyles> = emptyList()): List<Set<SpanStyle>> {
+		val configs = retired + this
+		val inline = configs.flatMapTo(HashSet()) { it.inlineStyles }
+		val headingOnly = configs.flatMapTo(HashSet()) { config -> (1..6).map(config::headingLook) } - inline
+		return (1..6).map { headingOnly + headingLook(it) }
+	}
+
 	/** The style of a heading of [level] (1 to 6, clamped). */
 	fun getHeaderStyle(level: Int): SpanStyle {
 		return when (level) {
