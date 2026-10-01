@@ -185,7 +185,7 @@ review.
 | B | Pointer and touch | `textEditorPointerInputHandling.kt`, `state/TextEditorSelectionManager.kt`, `DrawSelectionHandles.kt` | 1.9, 1.12 to 1.16, 1.21 to 1.24, 3.1, 3.2, 3.4 to 3.8, 3.13, 3.15, 3.18, 4.23, 6.16 |
 | C | Drawing and geometry | `Draw*.kt`, `cursor/`, `scrollbar/`, `state/TextEditorScrollState.kt`, hit testing | 1.8, 1.10, 1.11, 1.17, 1.18, 1.25, 3.3, 3.12, 3.16, 4.14, 7.6, 7.7, 7.27, 7.41, 7.78 |
 | D | Bindings, actions, menu | `input/KeyBindings.kt`, `input/EditorCommand.kt`, `input/BuiltinEditorActions.kt`, `contextmenu/` | 2.1, 2.2, 2.4, 2.5, 2.7 to 2.12, 4.8, 5.8, 7.58 |
-| E | Input sessions on desktop, iOS, web | `desktopMain`, `iosMain`, `wasmJsMain` under `input/` | 4.2 to 4.7, 4.10 to 4.12, 4.19, 4.21, 4.22, 4.24 to 4.26, 4.28, 4.29, 4.32, 4.33, 4.35, 4.37, 4.38, 7.37 |
+| E | Input sessions on desktop, iOS, web | `desktopMain`, `iosMain`, `wasmJsMain` under `input/` | 4.2 to 4.7, 4.10 to 4.12, 4.19, 4.21, 4.22, 4.24 to 4.26, 4.28, 4.29, 4.32, 4.33, 4.35, 4.37 to 4.39, 7.37 |
 | F | Android input | `androidMain` | 0.4, 0.12, 3.9 to 3.11, 3.14, 3.17, 4.16, 4.18, 4.20, 4.27, 4.30, 4.31, 4.34, 4.36, 7.40 |
 | G | Edit pipeline and undo | `state/TextEditManager.kt`, `state/TextEditHistory.kt`, `state/EditBehavior.kt`, `input/ImeEditLogic.kt` | 1.20, 5.1 to 5.5, 5.9 to 5.11, 5.13 to 5.15, 6.1 to 6.6, 6.14, 6.15, 6.17, 6.22, 6.23, 6.28, 6.29, 6.33 to 6.35, 7.54, 7.55 |
 | H | Clipboard and HTML | `clipboard/`, `html/`, `dragdrop/` | 4.9, 4.13, 4.17, 6.7 to 6.13, 6.18 to 6.21, 5.12, 6.24 to 6.27, 6.30 to 6.32, 6.36 to 6.38, 7.39, 7.46, 7.47, 7.49, 7.53, 7.63 |
@@ -1457,7 +1457,7 @@ Also seen:
     Instruments' Time Profiler would not attach from the command line
     (`xctrace record --attach` stalled with nothing recorded), so the split
     inside a frame is unmeasured.
-- [ ] **4.38 Web shortcuts follow QWERTY positions. S.** [Opus] [Lane E]
+- [x] **4.38 Web shortcuts follow QWERTY positions. S.** [Opus] [Lane E]
   Compose web builds `Key` from the DOM event's `code`, the physical key named
   by its US QWERTY letter, so on AZERTY, QWERTZ, BÉPO or Dvorak every letter
   chord (Ctrl+Z, Ctrl+B) sits on the QWERTY key in the browser. The event's
@@ -1467,6 +1467,43 @@ Also seen:
   code point on a key down, as 2.7 did with AWT's extended key code. Check dead
   keys (`key` is "Dead") and macOS Option chords, and test with synthetic DOM
   key events whose `key` and `code` differ. Found in 2.7.
+  Done: the web `layoutKey` answers `layoutKeyFromCodePoint`
+  (`skikoMain/.../input/DomLayoutKey.kt`, so the desktop suite tests it), on
+  key down and key up alike, since the DOM gives `key` on both. A Latin letter
+  is that letter's key on whichever key it sits (AZERTY, QWERTZ, Dvorak's and
+  BÉPO's letters on punctuation keys). A letter key typing another script's
+  letter or mark keeps its QWERTY name, so Cyrillic, Greek, Hebrew and Thai
+  keep their shortcuts. One typing anything else, an accented Latin letter or
+  punctuation, becomes that key, so on a Latin layout no letter chord lands on
+  two keys (BÉPO's 'à' and Dvorak's ';' on QWERTY's Z are no second Ctrl+Z).
+  Desktop keeps punctuation on its letter key (2.7), where the clash needs two
+  layouts installed; on the web it would hit every Dvorak and BÉPO user, and
+  the cost is Greek's and Hebrew's Ctrl+Q and Ctrl+W, which the browser
+  claims anyway. A named key ("Dead", "F1", "End") is told apart by Compose
+  giving its key code as the code point (F1 is 'p', Numpad 1 without Num
+  Lock is 'a' in the DOM's codes), shared with the character-input predicate.
+  With Alt held (macOS Option, Windows AltGr as Ctrl+Alt) the character is
+  that layer's ('ƒ' for Option+F), so only a Latin letter moves the key.
+  Known gaps, in the KDoc: a dead key on a letter key keeps its QWERTY letter
+  (4.39); the code point follows Shift, so Turkish Q's 'ı' key is its own key
+  unshifted and I with Shift; Linux reports AltGr without Alt, so its layer
+  counts as the base one. `input/DomLayoutKeyTest.kt` (with the web's key
+  codes); verified in Chromium against the dev server with synthetic events
+  on the session's textarea (Ctrl with `code` KeyW and `key` "z" undoes, KeyZ
+  with "w", "à" or ";" and KeyV or KeyE with "." do nothing, KeyZ with "y"
+  redoes, with "я" undoes, Slash with "y" redoes);
+  `browserTests/tests/layout.spec.ts` repeats this, pending its first CI run.
+  Not run on a real non-QWERTY layout, nor Option chords on a Mac (Mac queue).
+- [ ] **4.39 A dead key on a letter key keeps its QWERTY letter on the web. S.**
+  [Opus] [Lane E] Compose web gives a `key` of "Dead" the key code as its
+  code point, as it does a capital typed on its own key, and keeps the DOM
+  event to itself (`InternalKeyEvent`), so `layoutKeyFromCodePoint` cannot
+  tell them apart: BÉPO's dead circumflex on QWERTY's Y is a second Ctrl+Y,
+  where desktop Linux answers the dead key (2.7). The session's keyboard
+  events reach Compose a frame after the DOM event, so a listener of ours
+  cannot pair them either. Fix upstream (expose the DOM `key`, or a code
+  point of 0 for a named key), or pair the events by their order. Found in
+  4.38.
 
 Exit criteria: typing, composition, and clipboard work in current Chrome,
 Firefox, and Safari on desktop; the soft keyboard works on Android Chrome and
@@ -3955,4 +3992,5 @@ records results and removes entries that passed.
 | 4.8 | On an iPad simulator or device with a mouse or trackpad (in the Simulator, I/O > Input > Send Pointer to Device, then Control-click for a right-click): right-click a word in the sample's editor, right-click in an unfocused editor, and right-click a misspelt word in the spell-check demo | Compiles. The system edit menu opens at the pointer with Cut, Copy, Paste and Select All as they apply, also on an editor not yet focused; on a misspelt word the editor's menu with its suggestions opens instead | |
 | 4.23 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64`. `clipboard/PrimarySelection.kt` adds `internal expect fun platformPrimarySelection()`; the iOS actual (`iosMain/.../clipboard/PrimarySelection.ios.kt`) answers null | Compiles. Nothing to run: iOS has no primary selection ||
 | 2.7 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64`. `input/LayoutKey.kt` adds the public `expect val KeyEvent.layoutKey`; the iOS actual (`iosMain/.../input/LayoutKey.ios.kt`) answers `key`. Then in the macOS desktop sample app, with the US layout and again with "Dvorak" and "Dvorak - QWERTY ⌘" input sources: Cmd+Z, Cmd+X, Cmd+B, Ctrl+A and Ctrl+F | Compiles. Record which keys the chords land on under each source, against TextEdit. The desktop `layoutKey` answers `key` on macOS (`hostKeyCodeMayMissLayout`); if Dvorak's chords sit on the QWERTY keys where TextEdit's follow the Dvorak letters, turn it on for macOS and check "Dvorak - QWERTY ⌘" still matches TextEdit ||
+| 4.38 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64`. `skikoMain` gains `input/DomLayoutKey.kt` (`layoutKeyFromCodePoint`, used by the web only; `UNICODE_KEY_CODE_BASE` moved there from desktop). Then the wasm demo in Safari and Chrome on macOS, with the US layout and again with French (AZERTY): Cmd+Z, Cmd+Shift+Z, Cmd+B, Ctrl+A and Ctrl+F (the Emacs chords), and Cmd+Option+Shift+V over copied bold text | Compiles. Under AZERTY, Cmd+Z undoes on the key that types z (QWERTY's W), not on QWERTY's Z; Cmd+B bolds; the Emacs chords move as in TextEdit; Cmd+Option+Shift+V pastes plain. Under US, all as before ||
 | 7.33 | In the iOS sample app with a hardware keyboard (the simulator's, or an iPad's), type `abc אבג def` and press Right from the start, then Left from the end; also Shift+Right. Compare a `UITextView` (Notes) with the same text. Then the same in the macOS desktop sample app against TextEdit. commonMain only, no `iosMain` change | Each press moves the caret one glyph further right (or left) on screen, through the Hebrew word, as Notes and TextEdit do. If iOS turns out logical, set `ARROW_KEYS_MOVE_VISUALLY` per platform in `state/VisualCaretMotion.kt`; if the arrows never reach the key handler on iOS (UIKit moving the caret through the input connection instead), file that ||

@@ -9,9 +9,6 @@ import java.awt.event.KeyEvent.VK_DEAD_GRAVE
 import java.awt.event.KeyEvent.VK_DEAD_SEMIVOICED_SOUND
 import java.awt.event.KeyEvent.VK_Z
 
-/** Where AWT puts a character with no key code of its own in the extended key code range. */
-internal const val UNICODE_KEY_CODE_BASE = 0x01000000
-
 /**
  * Whether AWT's key code can name a letter key by another layout than the active one:
  * XToolkit's takes the first layout installed. Windows and macOS keep [KeyEvent.key]

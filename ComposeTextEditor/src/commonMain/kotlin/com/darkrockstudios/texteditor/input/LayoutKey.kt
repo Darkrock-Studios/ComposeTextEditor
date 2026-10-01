@@ -11,7 +11,9 @@ import androidx.compose.ui.input.key.KeyEvent
  * A letter key the active layout gives a dead key or an accented Latin letter is that
  * key, not a letter key. One it gives anything else (Cyrillic, Greek or Thai, or
  * punctuation) keeps the first layout's letter, so shortcuts still work there, as
- * GTK's do. Elsewhere this is [KeyEvent.key].
+ * GTK's do. In a browser, which names every key by its US QWERTY position, this is the
+ * letter the key types in the active layout, by the same rules. Elsewhere this is
+ * [KeyEvent.key].
  *
  * Match chords of your own on this, as the built-in [KeyBindings] do, or a chord of
  * yours and a built-in one can land on different keys.
