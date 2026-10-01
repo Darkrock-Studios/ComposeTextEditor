@@ -4,15 +4,13 @@ import androidx.compose.ui.text.AnnotatedString
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.annotatedstring.normalizeLineEndings
-import com.darkrockstudios.texteditor.clipboard.applyHtmlPasteBlocks
 import com.darkrockstudios.texteditor.clipboard.htmlPasteDocument
+import com.darkrockstudios.texteditor.clipboard.settleLanded
 import com.darkrockstudios.texteditor.clipboard.withSizeForPasteAt
 import com.darkrockstudios.texteditor.html.HtmlDocument
 import com.darkrockstudios.texteditor.state.PreservedRichSpan
 import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.endWhenInsertedAt
-import com.darkrockstudios.texteditor.state.removeBlockLooksOffTheirBlocks
-import com.darkrockstudios.texteditor.state.removeLinkLookOutsideLinks
 import com.darkrockstudios.texteditor.state.screenInput
 
 /**
@@ -57,17 +55,17 @@ internal fun TextEditorState.dropText(
 	val dropped = editGroup {
 		// The earlier edit goes last, so the other's position still holds when it runs.
 		val insertAt = if (moveFrom != null && at >= moveFrom.end) {
-			insertAt(at, normalized, document, spans)
+			insertAt(at, normalized)
 			delete(moveFrom)
 			at.shiftedBack(moveFrom)
 		} else {
 			moveFrom?.let(::delete)
-			insertAt(at, normalized, document, spans)
+			insertAt(at, normalized)
 			at
 		}
+		// Once a move's source is gone, against the lines as they end up.
+		settleLanded(insertAt, normalized, spans, document)
 		val placed = TextEditorRange(insertAt, normalized.endWhenInsertedAt(insertAt))
-		// Judged once a move's source is gone, against the blocks the lines end up with.
-		removeBlockLooksOffTheirBlocks(placed.start, normalized)
 		selector.updateSelection(placed.start, placed.end)
 		placed
 	}
@@ -76,18 +74,10 @@ internal fun TextEditorState.dropText(
 	return dropped
 }
 
-private fun TextEditorState.insertAt(
-	at: CharLineOffset,
-	text: AnnotatedString,
-	document: HtmlDocument?,
-	richSpans: List<PreservedRichSpan>?,
-) {
+private fun TextEditorState.insertAt(at: CharLineOffset, text: AnnotatedString) {
 	selector.clearSelection()
 	cursor.updatePosition(at)
 	editManager.alreadyScreened { insertStringAtCursor(text) }
-	richSpans?.let { addPreservedRichSpans(at, it) }
-	document?.let { applyHtmlPasteBlocks(it, at, text) }
-	removeLinkLookOutsideLinks(at, text)
 }
 
 /** This position once [removed], which ends at or before it, is gone. */

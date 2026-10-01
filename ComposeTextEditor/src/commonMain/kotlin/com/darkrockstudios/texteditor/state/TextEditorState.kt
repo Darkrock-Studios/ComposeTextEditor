@@ -2601,10 +2601,19 @@ class TextEditorState private constructor(
 		clipboardCopyId: Long? = null,
 		requireCopyIdMatch: Boolean = false,
 	) = withAtomicEdit {
-		val copied = copiedRichSpans ?: return@withAtomicEdit
-		if (copied.text != pastedText.text) return@withAtomicEdit
-		if (requireCopyIdMatch && clipboardCopyId != copied.copyId) return@withAtomicEdit
-		addPreservedRichSpans(insertPosition, copied.spans)
+		copiedRichSpansFor(pastedText, clipboardCopyId, requireCopyIdMatch)?.let { addPreservedRichSpans(insertPosition, it) }
+	}
+
+	/** The rich spans [pasteRichSpans] would re-apply for [pastedText], or null. */
+	internal fun copiedRichSpansFor(
+		pastedText: AnnotatedString,
+		clipboardCopyId: Long?,
+		requireCopyIdMatch: Boolean,
+	): List<PreservedRichSpan>? {
+		val copied = copiedRichSpans ?: return null
+		if (copied.text != pastedText.text) return null
+		if (requireCopyIdMatch && clipboardCopyId != copied.copyId) return null
+		return copied.spans
 	}
 
 	/**

@@ -11,7 +11,10 @@ import com.darkrockstudios.texteditor.richstyle.LinkSpanStyle
 import com.darkrockstudios.texteditor.richstyle.RichSpan
 import com.darkrockstudios.texteditor.richstyle.applyDocumentBlocks
 import com.darkrockstudios.texteditor.state.LayoutUpdate
+import com.darkrockstudios.texteditor.state.PreservedRichSpan
 import com.darkrockstudios.texteditor.state.TextEditorState
+import com.darkrockstudios.texteditor.state.removeBlockLooksOffTheirBlocks
+import com.darkrockstudios.texteditor.state.removeLinkLookOutsideLinks
 import com.darkrockstudios.texteditor.state.takeOutOfOtherLinks
 
 /**
@@ -38,6 +41,24 @@ internal fun TextEditorState.htmlPasteDocument(
 	if (document.hasNoDecorations()) return null
 	if (document.text.text != pastedText.text) return null
 	return document
+}
+
+/**
+ * Settles [text], which a paste or drop has just put at [at], in its undo step: the rich
+ * spans this editor's own copy or drag carried ([richSpans]), then the blocks and links of
+ * its markup ([document]); then the link look comes off what no link holds, and each
+ * block look off a line that does not bake it, against the lines' blocks as they end up.
+ */
+internal fun TextEditorState.settleLanded(
+	at: CharLineOffset,
+	text: AnnotatedString,
+	richSpans: List<PreservedRichSpan>?,
+	document: HtmlDocument?,
+) = withAtomicEdit {
+	richSpans?.let { addPreservedRichSpans(at, it) }
+	document?.let { applyHtmlPasteBlocks(it, at, text) }
+	removeLinkLookOutsideLinks(at, text)
+	removeBlockLooksOffTheirBlocks(at, text)
 }
 
 /**

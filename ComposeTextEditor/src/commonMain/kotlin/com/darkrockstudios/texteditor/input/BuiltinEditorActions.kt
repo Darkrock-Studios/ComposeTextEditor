@@ -7,9 +7,9 @@ import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.annotatedstring.normalizeLineEndings
 import com.darkrockstudios.texteditor.clipboard.ClipboardHelper
-import com.darkrockstudios.texteditor.clipboard.applyHtmlPasteBlocks
 import com.darkrockstudios.texteditor.clipboard.htmlPasteDocument
 import com.darkrockstudios.texteditor.clipboard.readClipboardPaste
+import com.darkrockstudios.texteditor.clipboard.settleLanded
 import com.darkrockstudios.texteditor.clipboard.withSizeForPasteAt
 import com.darkrockstudios.texteditor.html.HtmlDocument
 import com.darkrockstudios.texteditor.html.selectionAsHtml
@@ -31,8 +31,6 @@ import com.darkrockstudios.texteditor.state.moveToNextWord
 import com.darkrockstudios.texteditor.state.moveToPreviousWord
 import com.darkrockstudios.texteditor.state.moveToPreviousWordStart
 import com.darkrockstudios.texteditor.state.moveToWordEnd
-import com.darkrockstudios.texteditor.state.removeBlockLooksOffTheirBlocks
-import com.darkrockstudios.texteditor.state.removeLinkLookOutsideLinks
 import com.darkrockstudios.texteditor.state.screenAtSelection
 import com.darkrockstudios.texteditor.state.toggleSpanStyle
 import kotlinx.coroutines.CoroutineStart
@@ -247,17 +245,12 @@ private fun TextEditorState.landPaste(
 				insertStringAtCursor(text)
 			}
 		}
-		if (!plainText && !screened) {
-			pasteRichSpans(
-				insertPosition,
-				text,
-				clipboardCopyId,
-				requireCopyIdMatch = ClipboardHelper.supportsCopyProvenance,
-			)
+		val richSpans = if (plainText || screened) {
+			null
+		} else {
+			copiedRichSpansFor(text, clipboardCopyId, requireCopyIdMatch = ClipboardHelper.supportsCopyProvenance)
 		}
-		if (!screened) htmlDocument?.let { applyHtmlPasteBlocks(it, insertPosition, text) }
-		removeLinkLookOutsideLinks(insertPosition, text)
-		removeBlockLooksOffTheirBlocks(insertPosition, text)
+		settleLanded(insertPosition, text, richSpans, htmlDocument.takeIf { !screened })
 	}
 	selector.clearSelection()
 	pasteLanded(text.text, TextEditorRange(insertPosition, text.endWhenInsertedAt(insertPosition)))
