@@ -112,6 +112,37 @@ class TouchToolbarTest {
 		}
 	}
 
+	/**
+	 * The platform's menu needs the input session's view, which a long press on an
+	 * unfocused editor starts only as it focuses it: iOS showed nothing when asked first
+	 * (roadmap 3.18). The menu comes once the session runs.
+	 */
+	@Test
+	fun `a long press on an unfocused editor shows the toolbar once its input session runs`() {
+		lateinit var editorState: TextEditorState
+		var sessionRanAtShow: Boolean? = null
+		val toolbar = object : androidx.compose.ui.platform.TextToolbar by RecordingTextToolbar() {
+			override fun showMenu(
+				rect: androidx.compose.ui.geometry.Rect,
+				onCopyRequested: (() -> Unit)?,
+				onPasteRequested: (() -> Unit)?,
+				onCutRequested: (() -> Unit)?,
+				onSelectAllRequested: (() -> Unit)?,
+			) {
+				sessionRanAtShow = editorState.inputSessionRunning
+			}
+		}
+		editorUiTest(initialText = document, textToolbar = toolbar, autoFocus = false) {
+			editorState = state
+			assertFalse(state.isFocused)
+
+			longPressAtCharacter(8)
+			waitForIdle()
+
+			assertEquals(true, sessionRanAtShow, "the menu came before the input session ran, or not at all")
+		}
+	}
+
 	@Test
 	fun `a double tap shows the toolbar`() {
 		val toolbar = RecordingTextToolbar()
@@ -137,6 +168,54 @@ class TouchToolbarTest {
 			assertNotNull(menu.onPaste)
 			assertNotNull(menu.onSelectAll)
 			assertEquals(8, cursorIndex)
+		}
+	}
+
+	/**
+	 * The release that ends a gesture also asks for the keyboard, after the canvas has
+	 * acted on it, and on iOS that request dismisses an edit menu shown during the
+	 * release: a tap on the caret handle showed nothing (roadmap 3.18). The toolbar comes
+	 * a frame after the release instead.
+	 */
+	@Test
+	fun `the toolbar comes a frame after the release that asks for it`() {
+		val toolbar = RecordingTextToolbar()
+		editorUiTest(initialText = document, textToolbar = toolbar) {
+			tapAtCharacter(8)
+			val handle = caretHandleCenter()
+
+			test.mainClock.autoAdvance = false
+			touch {
+				down(handle)
+				up()
+			}
+			assertNull(toolbar.menu, "not during the release")
+			test.mainClock.advanceTimeByFrame()
+			test.mainClock.autoAdvance = true
+			waitForIdle()
+
+			assertNotNull(toolbar.menu)
+		}
+	}
+
+	@Test
+	fun `a caret moved before the frame-late toolbar drops it`() {
+		val toolbar = RecordingTextToolbar()
+		editorUiTest(initialText = document, textToolbar = toolbar) {
+			tapAtCharacter(8)
+			val handle = caretHandleCenter()
+
+			test.mainClock.autoAdvance = false
+			touch {
+				down(handle)
+				up()
+			}
+			test.runOnIdle { state.cursor.updatePosition(CharLineOffset(0, 2)) }
+			test.mainClock.advanceTimeByFrame()
+			test.mainClock.autoAdvance = true
+			waitForIdle()
+
+			assertNull(toolbar.menu, "the menu was for a caret that has moved")
 		}
 	}
 

@@ -155,10 +155,14 @@ internal class TextEditorInputModifierNode(
 					if (!showKeyboard) launch { currentValueOf(LocalSoftwareKeyboardController)?.hide() }
 					// The platform's session: an InputConnection on Android, the shared
 					// skiko request elsewhere. See TextEditorTextInputService.
+					state.inputSessionRunning = true
 					TextEditorTextInputService(state).startInput(this)
 				}
 			} finally {
-				if (inputSessionJob === job) state.hasInputSession = false
+				if (inputSessionJob === job) {
+					state.hasInputSession = false
+					state.inputSessionRunning = false
+				}
 			}
 		}
 	}

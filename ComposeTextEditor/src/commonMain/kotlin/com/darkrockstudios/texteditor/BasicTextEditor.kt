@@ -238,8 +238,15 @@ fun BasicTextEditor(
 
 	val textToolbar = LocalTextToolbar.current
 	val nativeTextToolbar = LocalNativeTextToolbar.current
+	val takesInput by rememberUpdatedState(editable)
 	val touchToolbar = remember(state, textToolbar, nativeTextToolbar, contextMenuActions, menuPlacement) {
-		TouchToolbar(state, textToolbar.takeIf { nativeTextToolbar }, contextMenuActions, menuPlacement::showAtContent)
+		TouchToolbar(
+			state,
+			textToolbar.takeIf { nativeTextToolbar },
+			contextMenuActions,
+			menuPlacement::showAtContent,
+			takesInput = { takesInput },
+		)
 	}
 	LaunchedEffect(touchToolbar) { touchToolbar.watch() }
 	DisposableEffect(touchToolbar) { onDispose { touchToolbar.hide() } }

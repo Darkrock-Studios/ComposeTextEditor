@@ -665,6 +665,13 @@ class TextEditorState private constructor(
 	internal var hasInputSession = false
 
 	/**
+	 * Whether the platform's input session has started, which on iOS makes its input view
+	 * the first responder that hosts the edit menu. Snapshot state, so the touch toolbar
+	 * can wait for it; [hasInputSession] is set earlier, when a session is launched.
+	 */
+	internal var inputSessionRunning by mutableStateOf(false)
+
+	/**
 	 * The current IME composing region (for autocomplete preview).
 	 * When non-null, this text should be rendered with an underline.
 	 * This is set by the Android InputConnection during text composition.

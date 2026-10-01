@@ -1023,7 +1023,7 @@ Constraints that shape the order:
 
 ### First steps, in order
 
-- [ ] **3.18 The iOS edit menu misses the caret cases. R.** [Opus] [Lane B]
+- [x] **3.18 The iOS edit menu misses the caret cases. R.** [Opus] [Lane B]
   [Mac work] From the 3.8 simulator run (Mac queue): over a selection the
   UIKit menu works, but a long-press in an empty document calls `show()` with
   a zero-width caret rect and only Paste, and UIKit shows nothing; a tap on
@@ -1031,6 +1031,22 @@ Constraints that shape the order:
   Paste on a tap. Also a long-press past a line's end selects its last word
   instead of placing the caret, and the selection menu did not appear while
   the screen was shifted by 4.24.
+  Done. The empty document was not the cause: a long press on an editor that
+  was not yet focused asked for the menu before the input session it starts
+  ran, and iOS hosts the menu on that session's view. `TouchToolbar` now waits
+  for the session (`TextEditorState.inputSessionRunning`, set as the
+  platform's session starts) and shows a frame after it, dropping the wait
+  after a second or when the caret moves. The caret handle's tap did call
+  `show()`, but the editor's container then asked for the keyboard on the same
+  release, which on iOS dismisses an edit menu just shown; every gesture that
+  ends with the menu now shows it a frame after the release
+  (`showOnRelease`), dropped if the caret or selection moved in that frame.
+  A long press with no character under the finger, as past a row's end,
+  places the caret instead of selecting the row's last word. The shifted
+  screen no longer happens since 3.16. `TouchToolbarTest`, `TouchGesturesTest`;
+  on the iOS simulator a long press on an unfocused empty editor shows Paste
+  and Select All, a tap on the caret handle shows the menu, and a long press
+  past a line's end puts the caret there with the menu.
 - [x] **4.1 Compile and test iOS in CI.** [Opus] [Lane L] [Mac work] A macOS
   runner that builds the iOS targets and the iOS sample app. Without it every
   iOS change is a guess. Done: the `ios` job in `ci-build.yml`. There are no

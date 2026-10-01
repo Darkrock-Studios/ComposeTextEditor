@@ -11,6 +11,8 @@ import androidx.compose.ui.platform.TextToolbar
 import com.darkrockstudios.texteditor.contextmenu.ContextMenuActions
 import com.darkrockstudios.texteditor.input.EditorCommand
 import com.darkrockstudios.texteditor.state.TextEditorState
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.yield
 
@@ -36,15 +38,27 @@ internal val LocalNativeTextToolbar = staticCompositionLocalOf { hasNativeTextTo
  * a selection's menu stays a long press on the selection away. It dismisses itself, so
  * only the toolbar is tracked here.
  */
+/** How long a [TouchToolbar.show] waits for the editor's input session before it is dropped. */
+private const val PENDING_SHOW_TIMEOUT = 1_000L
+
 internal class TouchToolbar(
 	private val state: TextEditorState,
 	private val toolbar: TextToolbar?,
 	private val actions: ContextMenuActions,
 	private val fallback: (Offset) -> Unit,
+	/** Whether this editor runs an input session when focused: an editable one, not a view. */
+	private val takesInput: () -> Boolean = { false },
 ) {
 	private data class Anchor(val selection: TextEditorRange?, val caret: CharLineOffset, val scroll: Int)
 
 	private var shownFor: Anchor? = null
+
+	/**
+	 * What a [show] waits to be shown over: an editor that takes input, before its session
+	 * runs, as when a long press focuses it. The platform's menu needs the session's view (on iOS
+	 * the first responder that hosts the edit menu), and shows nothing without it.
+	 */
+	private var pendingFor: Anchor? = null
 
 	/** Whether there is a platform toolbar, which shows on release, rather than the modal menu. */
 	val isNative: Boolean get() = toolbar != null
@@ -54,6 +68,17 @@ internal class TouchToolbar(
 
 	/** Shows the items the editor can act on now, over the selection or the caret. */
 	fun show() {
+		if (toolbar != null && takesInput() && !state.inputSessionRunning) {
+			val pending = anchor()
+			pendingFor = pending
+			// A press that never focuses the editor must not leave a menu waiting for a later session.
+			state.scope.launch {
+				delay(PENDING_SHOW_TIMEOUT)
+				if (pendingFor == pending) pendingFor = null
+			}
+			return
+		}
+		pendingFor = null
 		if (toolbar == null) {
 			if (state.selector.selection == null) {
 				val caret = contentRect()
@@ -85,12 +110,31 @@ internal class TouchToolbar(
 		shownFor = anchor()
 	}
 
+	/**
+	 * [show] for a gesture that ends with the toolbar, as its finger lifts. The editor
+	 * asks for the keyboard on that same release, after the canvas has acted on it, and
+	 * on iOS that request dismisses an edit menu shown during the release, so the
+	 * platform's toolbar comes a frame later, if nothing has moved under it since. The
+	 * fallback menu opens at once.
+	 */
+	fun showOnRelease() {
+		if (toolbar == null) return show()
+		val at = anchor()
+		state.scope.launch {
+			if (coroutineContext[MonotonicFrameClock] != null) withFrameNanos { } else yield()
+			// A scroll in that frame moves the menu; only a moved caret or selection drops it.
+			val now = anchor()
+			if (now.caret == at.caret && now.selection == at.selection) show()
+		}
+	}
+
 	/** The context menu at the finger, for a long press on the selection where there is no toolbar. */
 	fun showMenuAt(finger: Offset) {
 		if (toolbar == null) fallback(finger)
 	}
 
 	fun hide() {
+		pendingFor = null
 		if (shownFor == null) return
 		shownFor = null
 		toolbar?.hide()
@@ -102,8 +146,18 @@ internal class TouchToolbar(
 	 * view included. Focus is [TextEditorState.hasFocus], the signal the handles and the
 	 * selection colour follow: a read-only editor or view is never `isFocused`.
 	 */
-	suspend fun watch() {
+	suspend fun watch(): Unit = coroutineScope {
+		launch {
+			snapshotFlow { state.inputSessionRunning }.collect { running ->
+				val pending = pendingFor ?: return@collect
+				if (!running) return@collect
+				// A frame, so the session's view has taken first responder.
+				if (coroutineContext[MonotonicFrameClock] != null) withFrameNanos { } else yield()
+				if (pendingFor == pending && anchor() == pending && state.hasFocus) show()
+			}
+		}
 		snapshotFlow { anchor() to state.hasFocus }.collect { (anchor, focused) ->
+			pendingFor?.let { pending -> if (!focused || anchor != pending) pendingFor = null }
 			val shown = shownFor ?: return@collect
 			when {
 				!focused || anchor.selection != shown.selection || anchor.caret != shown.caret -> hide()
