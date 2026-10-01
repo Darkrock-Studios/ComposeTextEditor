@@ -250,6 +250,16 @@ fun BasicTextEditor(
 			takesInput = { takesInput },
 		)
 	}
+	// A right-click's menu: the platform's edit menu at the pointer where it answers one
+	// (iOS), else the editor's. A span handler (spell check's suggestions) may already have
+	// opened the editor's menu with items of its own; that menu stays.
+	val pointerMenuIsTextToolbar = LocalPointerMenuIsTextToolbar.current
+	val openPointerMenu: (Offset) -> Unit = remember(touchToolbar, menuPlacement, effectiveContextMenuState, pointerMenuIsTextToolbar) {
+		{ at ->
+			val platformMenu = pointerMenuIsTextToolbar && !effectiveContextMenuState.isVisible
+			if (!(platformMenu && touchToolbar.showAtPointer(at))) menuPlacement.showAtContent(at)
+		}
+	}
 	LaunchedEffect(touchToolbar) { touchToolbar.watch() }
 	DisposableEffect(touchToolbar) { onDispose { touchToolbar.hide() } }
 
@@ -382,7 +392,7 @@ fun BasicTextEditor(
 						.textEditorPointerInputHandling(
 							state = state,
 							onSpanClick = spanClickProxy,
-							onContextMenuRequest = menuPlacement::showAtContent,
+							onContextMenuRequest = openPointerMenu,
 							links = linkClicks,
 							caretHandle = enabled,
 							contentOrigin = { contentOrigin },

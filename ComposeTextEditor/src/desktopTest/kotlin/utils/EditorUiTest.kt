@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.darkrockstudios.texteditor.BasicTextEditor
 import com.darkrockstudios.texteditor.LocalNativeTextToolbar
+import com.darkrockstudios.texteditor.LocalPointerMenuIsTextToolbar
 import com.darkrockstudios.texteditor.RichSpanClickEventListener
 import com.darkrockstudios.texteditor.handleCenter as drawnHandleCenter
 import com.darkrockstudios.texteditor.RichSpanClickListener
@@ -77,6 +78,8 @@ internal fun editorUiTest(
 	onLinkClick: ((String) -> Unit)? = null,
 	contextMenuState: TextEditorContextMenuState? = null,
 	contextMenuStrings: ContextMenuStrings = ContextMenuStrings.Default,
+	/** A right-click opens [textToolbar] at the pointer, as on iOS, rather than the context menu. */
+	pointerMenuIsTextToolbar: Boolean = false,
 	autoFocus: Boolean = enabled,
 	contentPadding: PaddingValues = PaddingValues(0.dp),
 	density: Float = 1f,
@@ -100,6 +103,7 @@ internal fun editorUiTest(
 			// for a platform toolbar, and without one the editor falls back to its menu.
 			LocalTextToolbar provides (textToolbar ?: LocalTextToolbar.current),
 			LocalNativeTextToolbar provides (textToolbar != null),
+			LocalPointerMenuIsTextToolbar provides pointerMenuIsTextToolbar,
 		) {
 			Column {
 				BasicTextEditor(

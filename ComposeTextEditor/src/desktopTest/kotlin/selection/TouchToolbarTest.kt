@@ -507,4 +507,92 @@ class TouchToolbarTest {
 			assertFalse(menuState.isVisible)
 		}
 	}
+
+	/**
+	 * On iOS a right-click, from a mouse or a trackpad, opens the edit menu at the pointer,
+	 * as a native text view does, rather than the editor's own menu (roadmap 4.8).
+	 */
+	@Test
+	fun `where the platform's menu answers a pointer, a right-click opens it at the pointer`() {
+		val toolbar = RecordingTextToolbar()
+		val menuState = TextEditorContextMenuState()
+		editorUiTest(
+			initialText = document,
+			textToolbar = toolbar,
+			contextMenuState = menuState,
+			pointerMenuIsTextToolbar = true,
+		) {
+			rightClickAtCharacter(8)
+			waitForIdle()
+
+			val menu = assertNotNull(toolbar.menu, "the platform's menu should open")
+			assertNotNull(menu.onPaste)
+			assertFalse(menuState.isVisible, "the editor's own menu stays shut")
+			val pointer = positionOfCharacter(8)
+			assertEquals(pointer.x, menu.rect.center.x, 1f, "the menu sits at the pointer, not the caret")
+			assertEquals(pointer.y, menu.rect.center.y, 1f)
+		}
+	}
+
+	@Test
+	fun `a right-click on an unfocused editor opens the platform's menu once its session runs`() {
+		lateinit var editorState: TextEditorState
+		var sessionRanAtShow: Boolean? = null
+		val toolbar = object : androidx.compose.ui.platform.TextToolbar by RecordingTextToolbar() {
+			override fun showMenu(
+				rect: androidx.compose.ui.geometry.Rect,
+				onCopyRequested: (() -> Unit)?,
+				onPasteRequested: (() -> Unit)?,
+				onCutRequested: (() -> Unit)?,
+				onSelectAllRequested: (() -> Unit)?,
+			) {
+				sessionRanAtShow = editorState.inputSessionRunning
+			}
+		}
+		editorUiTest(initialText = document, textToolbar = toolbar, autoFocus = false, pointerMenuIsTextToolbar = true) {
+			editorState = state
+			rightClickAtCharacter(8)
+			waitForIdle()
+
+			assertEquals(true, sessionRanAtShow, "the menu came before the input session ran, or not at all")
+		}
+	}
+
+	@Test
+	fun `a right-click that opened the editor's menu with items keeps it`() {
+		val toolbar = RecordingTextToolbar()
+		val menuState = TextEditorContextMenuState()
+		editorUiTest(
+			initialText = document,
+			textToolbar = toolbar,
+			contextMenuState = menuState,
+			pointerMenuIsTextToolbar = true,
+			onRichSpanClickEvent = { click ->
+				menuState.showMenuAtText(click.offset, listOf(com.darkrockstudios.texteditor.contextmenu.ContextMenuItem("Suggestion") {}))
+				true
+			},
+		) {
+			test.runOnIdle {
+				state.addRichSpan(0, 5, com.darkrockstudios.texteditor.richstyle.SpellCheckStyle)
+			}
+			rightClickAtCharacter(2)
+			waitForIdle()
+
+			assertTrue(menuState.isVisible, "the spell-check menu keeps its suggestions")
+			assertNull(toolbar.menu)
+		}
+	}
+
+	@Test
+	fun `elsewhere a right-click opens the editor's menu`() {
+		val toolbar = RecordingTextToolbar()
+		val menuState = TextEditorContextMenuState()
+		editorUiTest(initialText = document, textToolbar = toolbar, contextMenuState = menuState) {
+			rightClickAtCharacter(8)
+			waitForIdle()
+
+			assertTrue(menuState.isVisible)
+			assertNull(toolbar.menu)
+		}
+	}
 }

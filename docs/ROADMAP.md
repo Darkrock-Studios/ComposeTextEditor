@@ -1220,8 +1220,20 @@ Constraints that shape the order:
   typing Returns keeps the caret at the keyboard's top. Android reports
   `WindowInsets.ime` only to edge-to-edge windows, so this also covers 3.9
   there when the host has no `imePadding`; a window that resizes is still 3.9.
-- [ ] **4.8 Native edit menu. C.** [Opus] [Lane D] [Mac work] A Material
+- [x] **4.8 Native edit menu. C.** [Opus] [Lane D] [Mac work] A Material
   dropdown is used instead of the platform text toolbar.
+  Done. Touch has used the platform toolbar since 3.8 (with 3.18's fixes on
+  iOS). The rest was the pointer: on iOS a right-click, from a mouse or a
+  trackpad, now opens the edit menu at the pointer, as a native text view
+  does, through `TouchToolbar.show(pointer)`, which waits for the input
+  session like a long press's menu and keeps with the text under the pointer
+  when it scrolls (`pointerMenuIsTextToolbar`, overridable through
+  `LocalPointerMenuIsTextToolbar`). A span handler that opened the editor's
+  menu with items of its own, as spell check does with its suggestions, keeps
+  that menu. Android keeps the context menu for a mouse, as its text fields
+  do, and desktop and the web keep it too, as Compose's own text fields do.
+  `TouchToolbarTest`. A selectable `RichTextView` still opens the Material
+  menu for a right-click on iOS. The iPad check is in the Mac queue.
 - [x] **4.9 Rich clipboard. C.** [Opus] [Lane H] [Mac work] Plain text only
   (shared with 6.7).
   Done: a copy puts one `UIPasteboard` item holding the selection's
@@ -3688,3 +3700,4 @@ records results and removes entries that passed.
 | 6.12 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64`. `dragdrop/PlatformTextDrag.kt` adds four `internal expect` functions; the iOS actuals (`iosMain/.../dragdrop/PlatformTextDrag.ios.kt`) answer null and false. Then on the Mac's desktop sample app: select a word, drag it within the editor, then with Option held, then into TextEdit, and drag text from TextEdit into the editor | Compiles. The word moves (Option copies), arrives in TextEdit styled and leaves the editor, and TextEdit's text drops in at the drop caret || Compile part passed 2026-09-30 at `a53f285`. The drag part is not run: it needs a person driving the desktop sample app and TextEdit, which the tools here cannot |
 | 7.9, housekeeping | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64` and `:ComposeTextEditor:iosSimulatorArm64Test`. `skikoMain` changed: `SkikoTextEditorInputMethodRequest` folds `TextEditorState.textRevision` into its reads instead of the session collecting edits, and `DocumentTextLayout` keys on the line list and builds from `getAllPlainText()`. Then in the iOS sample app: type, forward delete with a hardware keyboard or the soft keyboard's delete after moving the caret, and use the spacebar trackpad over a long paragraph | Compiles and the tests pass. Typing and deletes reach the keyboard's mirror (autocorrect and suggestions follow the text), and the trackpad moves the caret through the current text || Partial, 2026-10-01 at `77d188b1`. Compiles and the tests pass. With the soft keyboard, typing reaches the keyboard's mirror ("helo" is offered "help" and autocorrects in place), and a delete after moving the caret leaves the suggestions on the word at the new caret. The spacebar trackpad starts at the caret and moves through the current text; its vertical steps are coarse, from the unstyled layout (4.6's follow-up). Left: a forward delete with a hardware keyboard (Fn+Delete), for a person |
 | 7.8, 7.48 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64` and `:ComposeTextEditor:iosSimulatorArm64Test` (commonMain changed how the lines, rows and spans are stored; no `iosMain` or `skikoMain` change). Then re-time the iOS simulator as 4.21 did (iPhone 17 Pro Max simulator, Debug framework, a 200,000-character document of 2,000 lines of 99 characters, temporary logging): the keyboard's `editText` block and the frames over 20 ms while typing twelve keys, then rotate the device and time the frame the rotation costs and how long the rows take to settle | Before (4.21, `f3b8d8f`): `editText` 9.4 ms median at 200k against 0.7 ms at 2k. A pass: `editText` within a few times the 2k figure, wherever the caret is (desktop went 837 µs to 174 µs, and 2,026 µs to 94 µs with a span on every line); a rotation that shapes only the visible lines at once and settles the rest in the background without the scroll jumping. Record the numbers here and in 7.8 and 7.48 || Partial, 2026-10-01 at `0063e6f6`: compiles, the tests pass, and `editText` is 1.1 ms median at the end of 200k and 1.3 ms at the start (recorded in 7.8). The rotation is left for a person: the simulator tools here cannot rotate the device |
+| 4.8 | On an iPad simulator or device with a mouse or trackpad (in the Simulator, I/O > Input > Send Pointer to Device, then Control-click for a right-click): right-click a word in the sample's editor, right-click in an unfocused editor, and right-click a misspelt word in the spell-check demo | Compiles. The system edit menu opens at the pointer with Cut, Copy, Paste and Select All as they apply, also on an editor not yet focused; on a misspelt word the editor's menu with its suggestions opens instead | |

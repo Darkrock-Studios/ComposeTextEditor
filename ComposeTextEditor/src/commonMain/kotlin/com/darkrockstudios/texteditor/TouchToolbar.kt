@@ -27,6 +27,17 @@ internal expect fun hasNativeTextToolbar(): Boolean
 internal val LocalNativeTextToolbar = staticCompositionLocalOf { hasNativeTextToolbar() }
 
 /**
+ * Whether a right-click opens the platform's text toolbar at the pointer rather than the
+ * editor's context menu: on iOS, where a text view answers a mouse or trackpad's secondary
+ * click with the same edit menu as a long press. Android keeps the context menu, as its
+ * text fields do for a mouse.
+ */
+internal expect fun pointerMenuIsTextToolbar(): Boolean
+
+/** [pointerMenuIsTextToolbar], overridable for tests. */
+internal val LocalPointerMenuIsTextToolbar = staticCompositionLocalOf { pointerMenuIsTextToolbar() }
+
+/**
  * The menu a finger reaches Cut, Copy, Paste and Select all through: the platform's text
  * [toolbar] where there is one, else the editor's context menu through [fallback]. It
  * shows once a long press or a double tap lifts, when a handle is tapped or dropped, and
@@ -53,12 +64,16 @@ internal class TouchToolbar(
 
 	private var shownFor: Anchor? = null
 
+	/** The pointer the toolbar was shown at, in canvas coordinates, for a right-click's; else null. */
+	private var shownAt: Offset? = null
+
 	/**
 	 * What a [show] waits to be shown over: an editor that takes input, before its session
 	 * runs, as when a long press focuses it. The platform's menu needs the session's view (on iOS
 	 * the first responder that hosts the edit menu), and shows nothing without it.
 	 */
 	private var pendingFor: Anchor? = null
+	private var pendingAt: Offset? = null
 
 	/** Whether there is a platform toolbar, which shows on release, rather than the modal menu. */
 	val isNative: Boolean get() = toolbar != null
@@ -66,11 +81,15 @@ internal class TouchToolbar(
 	/** Whether the platform toolbar is up. */
 	val isShown: Boolean get() = shownFor != null
 
-	/** Shows the items the editor can act on now, over the selection or the caret. */
-	fun show() {
+	/**
+	 * Shows the items the editor can act on now, over the selection or the caret, or at
+	 * [pointer] (canvas coordinates) for a right-click's menu.
+	 */
+	fun show(pointer: Offset? = null) {
 		if (toolbar != null && takesInput() && !state.inputSessionRunning) {
 			val pending = anchor()
 			pendingFor = pending
+			pendingAt = pointer
 			// A press that never focuses the editor must not leave a menu waiting for a later session.
 			state.scope.launch {
 				delay(PENDING_SHOW_TIMEOUT)
@@ -87,7 +106,7 @@ internal class TouchToolbar(
 			return
 		}
 		toolbar.showMenu(
-			rect = rootRect(contentRect()),
+			rect = rootRect(pointer?.let { Rect(it, it) } ?: contentRect()),
 			onCopyRequested = if (actions.canCopy()) ({ actions.copy(); hide() }) else null,
 			onPasteRequested = if (actions.canPaste()) ({ actions.paste(); hide() }) else null,
 			onCutRequested = if (actions.canCut()) ({ actions.cut(); hide() }) else null,
@@ -108,6 +127,7 @@ internal class TouchToolbar(
 			},
 		)
 		shownFor = anchor()
+		shownAt = pointer
 	}
 
 	/**
@@ -128,6 +148,17 @@ internal class TouchToolbar(
 		}
 	}
 
+	/**
+	 * The platform's toolbar at [point], in canvas coordinates, for a right-click where the
+	 * platform answers one with it ([pointerMenuIsTextToolbar]). False where there is no
+	 * platform toolbar, for the caller to open the context menu instead.
+	 */
+	fun showAtPointer(point: Offset): Boolean {
+		if (toolbar == null) return false
+		show(point)
+		return true
+	}
+
 	/** The context menu at the finger, for a long press on the selection where there is no toolbar. */
 	fun showMenuAt(finger: Offset) {
 		if (toolbar == null) fallback(finger)
@@ -137,6 +168,7 @@ internal class TouchToolbar(
 		pendingFor = null
 		if (shownFor == null) return
 		shownFor = null
+		shownAt = null
 		toolbar?.hide()
 	}
 
@@ -153,7 +185,7 @@ internal class TouchToolbar(
 				if (!running) return@collect
 				// A frame, so the session's view has taken first responder.
 				if (coroutineContext[MonotonicFrameClock] != null) withFrameNanos { } else yield()
-				if (pendingFor == pending && anchor() == pending && state.hasFocus) show()
+				if (pendingFor == pending && anchor() == pending && state.hasFocus) show(pendingAt)
 			}
 		}
 		snapshotFlow { anchor() to state.hasFocus }.collect { (anchor, focused) ->
@@ -161,7 +193,8 @@ internal class TouchToolbar(
 			val shown = shownFor ?: return@collect
 			when {
 				!focused || anchor.selection != shown.selection || anchor.caret != shown.caret -> hide()
-				anchor.scroll != shown.scroll -> show()
+				// A right-click's menu stays with the text under the pointer.
+				anchor.scroll != shown.scroll -> show(shownAt?.let { it.copy(y = it.y - (anchor.scroll - shown.scroll)) })
 			}
 		}
 	}
