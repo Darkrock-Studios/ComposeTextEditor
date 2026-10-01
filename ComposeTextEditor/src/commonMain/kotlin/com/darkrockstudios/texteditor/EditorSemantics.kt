@@ -72,6 +72,11 @@ import kotlin.math.abs
  *
  * An edit or action here is aimed at this editor, focused or not, so it follows this
  * [editor]'s line limit and default action rather than the focused one's.
+ *
+ * Nothing autofill reads is published (no content type, data type or `onFillData`), so
+ * password managers leave the editor alone. `ContentDataType.None` would not be quieter:
+ * Android's autofill structure would then carry the node with the whole document as its
+ * value.
  */
 internal fun Modifier.editorSemantics(
 	state: TextEditorState,
