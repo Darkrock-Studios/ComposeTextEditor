@@ -186,7 +186,7 @@ review.
 | D | Bindings, actions, menu | `input/KeyBindings.kt`, `input/EditorCommand.kt`, `input/BuiltinEditorActions.kt`, `contextmenu/` | 2.1, 2.2, 2.4, 2.5, 2.7 to 2.12, 4.8, 5.8, 7.58 |
 | E | Input sessions on desktop, iOS, web | `desktopMain`, `iosMain`, `wasmJsMain` under `input/` | 4.2 to 4.7, 4.10 to 4.12, 4.19, 4.21, 4.22, 4.24 to 4.26, 4.28, 4.29, 4.32, 4.33, 4.35, 7.37 |
 | F | Android input | `androidMain` | 0.4, 3.9 to 3.11, 3.14, 3.17, 4.16, 4.18, 4.20, 4.27, 4.30, 4.31, 4.34, 4.36, 7.40 |
-| G | Edit pipeline and undo | `state/TextEditManager.kt`, `state/TextEditHistory.kt`, `state/EditBehavior.kt`, `input/ImeEditLogic.kt` | 1.20, 5.1 to 5.5, 5.9 to 5.11, 6.1 to 6.6, 6.14, 6.15, 6.17, 6.22, 6.23, 6.28, 6.29 |
+| G | Edit pipeline and undo | `state/TextEditManager.kt`, `state/TextEditHistory.kt`, `state/EditBehavior.kt`, `input/ImeEditLogic.kt` | 1.20, 5.1 to 5.5, 5.9 to 5.11, 6.1 to 6.6, 6.14, 6.15, 6.17, 6.22, 6.23, 6.28, 6.29, 7.54, 7.55 |
 | H | Clipboard and HTML | `clipboard/`, `html/`, `dragdrop/` | 4.9, 4.13, 4.17, 6.7 to 6.13, 6.18 to 6.21, 5.12, 6.24 to 6.27, 6.30 to 6.32, 7.39, 7.46, 7.47, 7.49, 7.53, 7.63 |
 | I | Markdown and block model | `ComposeTextEditorMarkdown/`, `richstyle/`, `state/TextEditorStateBlockExt.kt` | 5.6, 7.14 to 7.16, 7.43, 7.45, 7.52, 7.64 |
 | J | Find addon | `ComposeTextEditorFind/` | 7.17 to 7.19, 7.26, 7.29, 7.42 |
@@ -2887,6 +2887,13 @@ Shaping is one line per keystroke. These still scale with document length:
   (`blocks/LineBreakContinuationTest.kt`). A rich HTML paste lays its own blocks
   over the continued ones afterwards, unrecorded, so a redo of it loses them
   (6.5).
+- [ ] **7.65 Find's scope does not come back on undo. S.** [Opus] [Lane J]
+  The find in selection scope lives only in its `FindScopeStyle` decoration
+  span (`FindState.scopeRange`). Since 7.54 undo restores no decorations, so
+  deleting the scoped text and undoing before find re-searches leaves no
+  scope, and find in selection searches the whole document; text restored at
+  the scope's start lands outside it. Keep the scope in `FindState` as well and
+  draw the span from it, or re-scope on the undo's edit.
 
 ### Spell check addon
 
@@ -3046,12 +3053,15 @@ Shaping is one line per keystroke. These still scale with document length:
   the merge; 6.24 here is the drop caret.) Done: `preservedRichSpans`, which a
   copy and a drag share, leaves decorations out, inside the copy or running past
   it (`spans/RichSpanClipboardTest.kt`). A delete's undo metadata is 7.54.
-- [ ] **7.54** [Opus] [Lane G] A delete whose metadata holds decoration spans (a
+- [x] **7.54** [Opus] [Lane G] A delete whose metadata holds decoration spans (a
   spell-check flag or find highlight on the deleted text) never joins a typing run
   (`TextEditHistory`'s delete merge and `isSingleTypedChar`), so backspacing
   through a flagged word leaves one undo step per character, and its undo puts the
   decoration back where its owner no longer tracks it. `withoutErasedRun` already
-  ignores decorations; the merge and the restore should too.
+  ignores decorations; the merge and the restore should too. Done: `recordEdit`
+  leaves decorations out of the spans it records, so the merge, the typing check,
+  the erased-run check and the restore all see content spans only
+  (`state/DecorationUndoTest.kt`).
 - [ ] **7.55** [Opus] [Lane G] `TextEditorState.replace` and `insertText` return
   nothing, so a caller cannot tell whether the input filter (7.13) refused or
   changed its text. Find (7.42) and spell check (7.44) infer it from the line

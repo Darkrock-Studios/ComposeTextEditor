@@ -32,10 +32,23 @@ class TextEditHistory(private val maxHistorySize: Int = 1000) {
 	 * shape (an IME commits whole words and rewrites its composition; a deleted
 	 * selection is not typing even when it is one character); null infers it, and
 	 * a single typed or backspaced character counts as typing on its own.
+	 *
+	 * Decorations (a spell-check flag, a find highlight) are left out of the
+	 * recorded spans: they are overlays their owner redraws, so they neither keep a
+	 * delete out of a typing run nor come back on undo where the owner no longer
+	 * tracks them.
 	 */
 	fun recordEdit(operation: TextEditOperation, metadata: OperationMetadata, typing: Boolean? = null) {
-		val entry = HistoryEntry.Edit(operation, metadata, typing ?: operation.isSingleTypedChar(metadata))
+		val content = metadata.withoutDecorations()
+		val entry = HistoryEntry.Edit(operation, content, typing ?: operation.isSingleTypedChar(content))
 		if (groupDepth > 0) staged += entry else push(entry)
+	}
+
+	private fun OperationMetadata.withoutDecorations(): OperationMetadata {
+		val deleted = deletedSpans.filterNot { it.style.isDecoration }
+		val preserved = preservedRichSpans.filterNot { it.style.isDecoration }
+		return if (deleted.size == deletedSpans.size && preserved.size == preservedRichSpans.size) this
+		else copy(deletedSpans = deleted, preservedRichSpans = preserved)
 	}
 
 	/** A run rewritten down to nothing, or a marked word rewritten back to itself. */
@@ -90,11 +103,9 @@ class TextEditHistory(private val maxHistorySize: Int = 1000) {
 	 */
 	private fun HistoryEntry.withoutErasedRun(): HistoryEntry? {
 		// A run that took rich spans with it (a link inside a rewritten word) did
-		// change something, and only its entry can bring them back. Decorations
-		// (a spell-check underline) are overlays their producer redraws.
+		// change something, and only its entry can bring them back.
 		fun HistoryEntry.Edit.erased() = operation.changesNothing() &&
-			metadata.deletedSpans.none { !it.style.isDecoration } &&
-			metadata.preservedRichSpans.none { !it.style.isDecoration }
+			metadata.deletedSpans.isEmpty() && metadata.preservedRichSpans.isEmpty()
 		return when (this) {
 			is HistoryEntry.Edit -> takeUnless { it.erased() }
 			is HistoryEntry.Group -> {

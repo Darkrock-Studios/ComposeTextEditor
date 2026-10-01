@@ -72,6 +72,8 @@ interface RichSpanStyle {
 	 * consumers watching the edit stream don't mistake an overlay for a real edit.
 	 * Nor does it travel with the text: copies, drags, saved state and loaded
 	 * snapshots leave it out.
+	 * Undo does not bring one back with the text it restores either: its owner draws
+	 * it again from the edit, so a span that holds state of its own should not be one.
 	 */
 	val isDecoration: Boolean get() = false
 
