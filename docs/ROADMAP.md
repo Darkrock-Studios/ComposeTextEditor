@@ -3463,8 +3463,10 @@ Shaping is one line per keystroke. These still scale with document length:
 
 ## Housekeeping
 
-- [ ] The README's "Work left to do" is stale: desktop copy and paste now
-  preserves formatting.
+- [x] The README's "Work left to do" is stale: desktop copy and paste now
+  preserves formatting. Now it lists right-to-left drawing and arrows (7.6,
+  7.7, 7.33) beside CommonMark; the rich clipboard (6.7, 4.9) and sentence
+  spell checking (7.20) are gone.
 - [x] `TextEditorScrollManager.scrollToCursor()` is public and bypasses
   `cursorScrollSuppressed` (1.23); only `ensureCursorVisible` honours it.
   Now it honours it too (`TextEditorScrollManagerTest`).
@@ -3474,9 +3476,10 @@ Shaping is one line per keystroke. These still scale with document length:
   the pixel `scrollToPosition`, which honours `animated` and without it now
   scrolls before returning rather than a dispatch later
   (`TextEditorScrollManagerTest`).
-- [ ] `imeSetComposingRegion` (`input/ImeEditLogic.kt`) clears the composition
+- [x] `imeSetComposingRegion` (`input/ImeEditLogic.kt`) clears the composition
   when an IME passes the bounds reversed; `BaseInputConnection` orders them.
-  Found in 4.27, whose expectation follows the contract.
+  Found in 4.27, whose expectation follows the contract. Now it orders them too
+  (`ImeEditLogicTest`).
 - [x] Stray `println` calls in `state/TextEditorState.kt` and
   `SpellCheckState.kt`. Removed.
 - [ ] The sample app's toolbar Link button attaches its own

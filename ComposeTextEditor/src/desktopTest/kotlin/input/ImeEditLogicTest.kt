@@ -7,6 +7,7 @@ import com.darkrockstudios.texteditor.input.imeCommitText
 import com.darkrockstudios.texteditor.input.imeDeleteSurroundingText
 import com.darkrockstudios.texteditor.input.imeDeleteSurroundingTextInCodePoints
 import com.darkrockstudios.texteditor.input.imeFinishComposing
+import com.darkrockstudios.texteditor.input.imeSetComposingRegion
 import com.darkrockstudios.texteditor.input.imeSetComposingText
 import com.darkrockstudios.texteditor.state.TextEditorState
 import io.mockk.mockk
@@ -252,5 +253,28 @@ class ImeEditLogicTest {
 		state.imeDeleteSurroundingText(beforeLength = 0, afterLength = Int.MAX_VALUE)
 
 		assertEquals("he", text())
+	}
+
+	/** `BaseInputConnection` orders the bounds; an IME may pass them reversed. */
+	@Test
+	fun `setComposingRegion takes reversed bounds in order`() {
+		state.setText("hello world")
+
+		state.imeSetComposingRegion(5, 0)
+
+		assertEquals(TextEditorRange(CharLineOffset(0, 0), CharLineOffset(0, 5)), state.composingRange)
+
+		state.imeSetComposingRegion(40, 6)
+
+		assertEquals(TextEditorRange(CharLineOffset(0, 6), CharLineOffset(0, 11)), state.composingRange)
+	}
+
+	@Test
+	fun `setComposingRegion re-anchoring a typed composition reversed keeps it typed`() {
+		state.imeSetComposingText("hello", newCursorPosition = 1)
+
+		state.imeSetComposingRegion(5, 0)
+
+		assertTrue(state.composingIsTyped)
 	}
 }

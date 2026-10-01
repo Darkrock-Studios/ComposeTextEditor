@@ -92,9 +92,9 @@ See the [roadmap](docs/ROADMAP.md) for what is planned.
 
 ### Work left to do:
 
-- Copy/Paste of rich text always strips the formatting (_this is a Compose MP bug_)
-- Right-to-Left text is probably broken
-- Sentence level spell checking is not working as expected
+- Right-to-left text: the selection and the underlines (spell check, composition,
+  links) are drawn as for left-to-right text, and arrow keys inside a mixed-direction
+  paragraph move logically
 - Full CommonMark Spec compliance (_tables, task lists, reference links, setext headings and nested quotes stay literal text_)
 
 ## Want to try it?
