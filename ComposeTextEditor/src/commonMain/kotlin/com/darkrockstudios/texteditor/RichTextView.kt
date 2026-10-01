@@ -38,6 +38,7 @@ import com.darkrockstudios.texteditor.contextmenu.TextEditorContextMenuState
 import com.darkrockstudios.texteditor.input.LocalKeyBindings
 import com.darkrockstudios.texteditor.input.TextEditorInputModifierElement
 import com.darkrockstudios.texteditor.input.selectionAsTextRange
+import com.darkrockstudios.texteditor.state.LendComposition
 import com.darkrockstudios.texteditor.state.TextEditorState
 
 /**
@@ -71,6 +72,7 @@ fun RichTextView(
 	onLinkClick: ((url: String) -> Unit)? = null,
 	contextMenuStrings: ContextMenuStrings = ContextMenuStrings.Default,
 ) {
+	LendComposition(state)
 	val currentOnLinkClick by rememberUpdatedState(onLinkClick)
 	val linkClicks = remember { LinkClicks.forReadOnly { currentOnLinkClick } }
 	val hasLinkClick = onLinkClick != null

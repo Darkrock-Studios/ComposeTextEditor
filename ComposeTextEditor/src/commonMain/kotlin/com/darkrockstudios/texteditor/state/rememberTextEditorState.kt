@@ -2,6 +2,7 @@ package com.darkrockstudios.texteditor.state
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.RememberObserver
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.Saver
@@ -13,6 +14,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.rememberTextMeasurer
 import com.darkrockstudios.texteditor.richstyle.RichSpanStyle
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.first
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
@@ -92,6 +94,38 @@ fun rememberSaveableTextEditorState(
 		state.restoredFirstVisible = null
 	}
 	return state
+}
+
+/**
+ * Lends a state made outside composition ([TextEditorState.borrowsComposition]) this
+ * composition's scope and measurer, before anything here reads them, and takes the
+ * scope back when the composition leaves. A state made with its own does nothing.
+ */
+@Composable
+internal fun LendComposition(state: TextEditorState) {
+	if (!state.borrowsComposition) return
+	val scope = rememberCoroutineScope()
+	val textMeasurer = rememberEditorTextMeasurer()
+	remember(state, scope, textMeasurer) { CompositionLender(state, scope, textMeasurer) }
+	FollowTextMeasurer(state, textMeasurer)
+}
+
+/**
+ * One composition's loan to a borrowing state: made, and bound, while composing, so the
+ * composition can read it at once; taken back when forgotten, or abandoned uncommitted.
+ */
+internal class CompositionLender(
+	private val state: TextEditorState,
+	val scope: CoroutineScope,
+	val measurer: TextMeasurer,
+) : RememberObserver {
+	init {
+		state.bindComposition(this)
+	}
+
+	override fun onRemembered() = Unit
+	override fun onForgotten() = state.unbindComposition(this)
+	override fun onAbandoned() = state.unbindComposition(this)
 }
 
 /**

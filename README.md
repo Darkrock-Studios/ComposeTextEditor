@@ -69,6 +69,8 @@ the [API reference & recipes](https://darkrock-studios.github.io/ComposeTextEdit
 - Word count, by the same word segmentation as word motion and spell check.
 - `rememberSaveableTextEditorState`: the document, caret, selection and scroll survive
   configuration changes and process death (the undo history does not).
+- `TextEditorState(initialText)`: a view model can create, load and edit the document
+  outside composition, and hand it to the editor later.
 - Editor configuration: read-only with a caret, sizing to the text between minimum
   and maximum lines, single line, maximum length and input filters. No soft-wrap
   toggle yet.

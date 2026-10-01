@@ -3269,8 +3269,30 @@ Shaping is one line per keystroke. These still scale with document length:
   styles unless the host's `richSpanStyleSaver` keeps them (the sample keeps
   images this way). Markdown was not used: it loses underline, colour and size
   (7.16) and needs the extension attached.
-- [ ] **7.24** [Opus] [Lane M] The state needs a `TextMeasurer` and a scope,
+- [x] **7.24** [Opus] [Lane M] The state needs a `TextMeasurer` and a scope,
   so it cannot be created outside composition.
+  Design: a second constructor, `TextEditorState(initialText)`, makes a state
+  that borrows both from the editor showing it. The model needs neither:
+  layout waits for a viewport, which only a composed editor sets, so the text,
+  spans, edits, undo and the format extensions all work before one is shown.
+  `scope` stays a `val`, but becomes a scope that forwards to the one bound
+  now, so what captured it (the scroll manager, the context menu, addons)
+  follows a re-bind. Unbound it is a cancelled scope, so a scroll asked for
+  with no editor showing is dropped. `textMeasurer` throws until bound.
+  `BasicTextEditor` and `RichTextView` bind a borrowing state to their own
+  composition's scope and measurer before reading either, re-bind it when a
+  new composition shows it (a view model's state across a configuration
+  change), and unbind it when the composition that bound it leaves. The
+  existing constructor is unchanged and never borrows.
+  Done as designed. Each composition's loan is a `RememberObserver` made
+  while composing (so the composition reads it at once) and taken back when
+  forgotten or abandoned; with two showing the state, the latest lends, and
+  the other takes over when it leaves. With none left the state drops the
+  measurer and the canvas coordinates, which would keep the departed
+  composition (an Android activity) alive, skips layout until lent another,
+  and hides the caret handle, whose timers ran on the departed scope
+  (`HostCreatedStateE2eTest`). A composable that reads `textMeasurer` before
+  the editor showing a borrowing state has composed throws, as documented.
 - [x] **7.25** [Opus] [Lane M] No word count, no programmatic focus beyond
   `autoFocus`, `cursorDataFlow` has no initial value.
   Done: `TextEditorState.wordCount` counts the word segments holding a letter

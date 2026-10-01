@@ -70,6 +70,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.onSubscription
 import kotlin.concurrent.Volatile
+import kotlin.coroutines.CoroutineContext
 import kotlin.math.ceil
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -101,18 +102,97 @@ import kotlinx.coroutines.yield
  *
  * Coordinates are [CharLineOffset]s and [TextEditorRange]s; convert to and from flat
  * character indices with [getCharacterIndex]/[getOffsetAtCharacter].
+ *
+ * Inside composition, [rememberTextEditorState] creates one. A host that holds the
+ * document outside composition (a view model) creates one with the constructor that
+ * takes only the text, loads and edits it there, and passes it to the editor later.
  */
-class TextEditorState(
-	val scope: CoroutineScope,
-	measurer: TextMeasurer,
-	initialText: AnnotatedString? = null
+class TextEditorState private constructor(
+	initialScope: CoroutineScope,
+	measurer: TextMeasurer?,
+	initialText: AnnotatedString?,
+	/** Whether the editor showing this state lends it its scope and measurer. */
+	internal val borrowsComposition: Boolean,
 ) {
-	var textMeasurer: TextMeasurer = measurer
+	/**
+	 * A state bound to [scope], which runs its scrolls and other work and should follow
+	 * the composition showing it (`rememberCoroutineScope`), and laid out by [measurer].
+	 */
+	constructor(
+		scope: CoroutineScope,
+		measurer: TextMeasurer,
+		initialText: AnnotatedString? = null,
+	) : this(scope, measurer, initialText, borrowsComposition = false)
+
+	/**
+	 * A state that can be created outside composition, as a view model holds one: the
+	 * text, styles, edits and undo all work before it is shown, on the main thread like
+	 * any Compose state. The editor or view that shows it lends it its composition's
+	 * scope and text measurer, and a later one, after a configuration change, lends its
+	 * own. With none showing it, [scope] is cancelled, so a scroll asked for then is
+	 * dropped, and [textMeasurer] throws.
+	 */
+	constructor(initialText: AnnotatedString? = null) :
+			this(UnboundScope, null, initialText, borrowsComposition = true)
+
+	/** The compositions lending a borrowing state their scope and measurer, the latest last. */
+	private val lenders = mutableListOf<CompositionLender>()
+
+	/**
+	 * Runs the state's scrolls and other work. For a state made outside composition,
+	 * this forwards to the scope of the latest composition showing it.
+	 */
+	val scope: CoroutineScope = if (!borrowsComposition) initialScope else object : CoroutineScope {
+		override val coroutineContext: CoroutineContext
+			get() = (lenders.lastOrNull()?.scope ?: UnboundScope).coroutineContext
+	}
+
+	private var boundMeasurer: TextMeasurer? = measurer
+
+	/**
+	 * Lays out the text. A state made outside composition has one only while an editor
+	 * or view shows it, lent as that composes, so a composable reading it before the
+	 * editor that shows the state has composed throws.
+	 */
+	var textMeasurer: TextMeasurer
+		get() = boundMeasurer
+			?: error("This TextEditorState borrows its TextMeasurer from the editor showing it, and none is showing it")
 		internal set(value) {
-			field = value
+			boundMeasurer = value
 			invalidateLayoutInputs()
 			updateBookKeeping(LayoutUpdate.Reshape)
 		}
+
+	/**
+	 * Lends a borrowing state the scope and measurer of a composition showing it, read
+	 * there at once; the layout the measurer changes follows on its next set.
+	 */
+	internal fun bindComposition(lender: CompositionLender) {
+		lenders.remove(lender)
+		lenders += lender
+		if (boundMeasurer !== lender.measurer) {
+			boundMeasurer = lender.measurer
+			invalidateLayoutInputs()
+		}
+	}
+
+	/**
+	 * Takes back what [lender] lent when its composition leaves: another composition
+	 * still showing the state lends its own, and with none left the state lets go of
+	 * what would keep the departed composition alive.
+	 */
+	internal fun unbindComposition(lender: CompositionLender) {
+		if (!lenders.remove(lender)) return
+		val next = lenders.lastOrNull()
+		if (next != null) {
+			if (boundMeasurer !== next.measurer) textMeasurer = next.measurer
+			return
+		}
+		boundMeasurer = null
+		canvasLayoutCoordinates = null
+		// Its watch and timeout ran on the departed scope.
+		selector.hideCaretHandle()
+	}
 
 	var textStyle: TextStyle = TextStyle.Default
 		internal set(value) {
@@ -1708,8 +1788,9 @@ class TextEditorState(
 		}
 
 		// Defer until the viewport has a real size; the 1×1 sentinel forces character-wide wraps.
+		// Likewise while a state made outside composition has no editor lending a measurer.
 		// The skipped pass leaves the rows behind the text, so the next one must be full.
-		if (viewportSize.width <= 1f || viewportSize.height <= 1f) {
+		if (viewportSize.width <= 1f || viewportSize.height <= 1f || boundMeasurer == null) {
 			invalidateLayoutInputs()
 			return
 		}
@@ -2500,6 +2581,9 @@ class TextEditorState(
 		setText(initialText ?: AnnotatedString(""))
 	}
 }
+
+/** The scope of a borrowing state no composition has lent one: cancelled, so what it launches never runs. */
+private val UnboundScope = CoroutineScope(Job().apply { cancel() })
 
 // Process-wide so two editors in one window can never mint the same id; copies
 // only happen on the UI thread, so a plain increment is race-free in practice.

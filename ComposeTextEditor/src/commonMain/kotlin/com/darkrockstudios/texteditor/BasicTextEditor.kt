@@ -64,6 +64,7 @@ import com.darkrockstudios.texteditor.state.LayoutUpdate
 import com.darkrockstudios.texteditor.state.LocalImeInsets
 import com.darkrockstudios.texteditor.richstyle.RichSpan
 import com.darkrockstudios.texteditor.scrollbar.TextEditorScrollbar
+import com.darkrockstudios.texteditor.state.LendComposition
 import com.darkrockstudios.texteditor.state.SpanClickType
 import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.measuresKeyboardCover
@@ -144,6 +145,8 @@ fun BasicTextEditor(
 	readOnly: Boolean = false,
 	lineLimits: EditorLineLimits = EditorLineLimits.Fill,
 ) {
+	LendComposition(state)
+
 	// Input, edits and the edit semantics follow this; the caret and navigation follow enabled.
 	val editable = enabled && !readOnly
 
