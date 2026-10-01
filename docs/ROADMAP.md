@@ -187,8 +187,8 @@ review.
 | D | Bindings, actions, menu | `input/KeyBindings.kt`, `input/EditorCommand.kt`, `input/BuiltinEditorActions.kt`, `contextmenu/` | 2.1, 2.2, 2.4, 2.5, 2.7 to 2.12, 4.8, 5.8, 7.58 |
 | E | Input sessions on desktop, iOS, web | `desktopMain`, `iosMain`, `wasmJsMain` under `input/` | 4.2 to 4.7, 4.10 to 4.12, 4.19, 4.21, 4.22, 4.24 to 4.26, 4.28, 4.29, 4.32, 4.33, 4.35, 4.37 to 4.40, 7.37 |
 | F | Android input | `androidMain` | 0.4, 0.12, 3.9 to 3.11, 3.14, 3.17, 4.16, 4.18, 4.20, 4.27, 4.30, 4.31, 4.34, 4.36, 4.41, 7.40 |
-| G | Edit pipeline and undo | `state/TextEditManager.kt`, `state/TextEditHistory.kt`, `state/EditBehavior.kt`, `input/ImeEditLogic.kt` | 1.20, 5.1 to 5.5, 5.9 to 5.11, 5.13 to 5.18, 6.1 to 6.6, 6.14, 6.15, 6.17, 6.22, 6.23, 6.28, 6.29, 6.33 to 6.35, 6.40, 6.45, 7.54, 7.55, 6.47 |
-| H | Clipboard and HTML | `clipboard/`, `html/`, `dragdrop/` | 4.9, 4.13, 4.17, 6.7 to 6.13, 6.18 to 6.21, 5.12, 6.24 to 6.27, 6.30 to 6.32, 6.36 to 6.39, 6.41 to 6.44, 6.46, 6.47, 7.39, 7.46, 7.47, 7.49, 7.53, 7.63, 6.48 |
+| G | Edit pipeline and undo | `state/TextEditManager.kt`, `state/TextEditHistory.kt`, `state/EditBehavior.kt`, `input/ImeEditLogic.kt` | 1.20, 5.1 to 5.5, 5.9 to 5.11, 5.13 to 5.18, 6.1 to 6.6, 6.14, 6.15, 6.17, 6.22, 6.23, 6.28, 6.29, 6.33 to 6.35, 6.40, 6.45, 6.49, 7.54, 7.55 |
+| H | Clipboard and HTML | `clipboard/`, `html/`, `dragdrop/` | 4.9, 4.13, 4.17, 6.7 to 6.13, 6.18 to 6.21, 5.12, 6.24 to 6.27, 6.30 to 6.32, 6.36 to 6.39, 6.41 to 6.44, 6.46 to 6.48, 7.39, 7.46, 7.47, 7.49, 7.53, 7.63 |
 | I | Markdown and block model | `ComposeTextEditorMarkdown/`, `richstyle/`, `state/TextEditorStateBlockExt.kt` | 5.6, 7.14 to 7.16, 7.43, 7.45, 7.52, 7.64, 7.67, 7.70 to 7.72, 7.79, 7.80, 7.83, 7.85 |
 | J | Find addon | `ComposeTextEditorFind/` | 7.17 to 7.19, 7.26, 7.29, 7.42, 7.68, 7.69 |
 | K | Spell check addon | `ComposeTextEditorSpellCheck/` | 7.20 to 7.22, 7.28, 7.30, 7.31, 7.34, 7.35, 7.38, 7.44, 7.50, 7.56, 7.61, 7.74, 7.76, 7.77, 7.81, 7.84 |
@@ -3020,7 +3020,7 @@ iOS Safari; browser tests run in CI (met: the `browser` job, 4.15).
   markup already did; a paste at a paragraph's start leaves the line its last
   line joins with that paragraph's blocks and format, where 6.33 and 6.34's
   tests had expected the copied ones (`clipboard/PastedBlockLookTest.kt`,
-  `state/ParagraphFormatTest.kt`, `state/JoinParagraphStyleTest.kt`). Found: 6.47.
+  `state/ParagraphFormatTest.kt`, `state/JoinParagraphStyleTest.kt`). Found: 6.49.
 - [x] **6.41 Part of a heading dropped into another line keeps the heading's
   look. S.** [Opus] [Lane H] A drop (`dragdrop/TextDrop.kt` `insertAt`) takes
   the link look off text no link covers, as a paste does, but not a block's
@@ -3041,7 +3041,7 @@ iOS Safari; browser tests run in CI (met: the `browser` job, 4.15).
   the edit manager inserts styled text, as `resolveInheritedStyle` does for a
   multi-line replace, so every path is covered.
 - [ ] **6.47 A paste or drop over a composition ends it unoffered. S.**
-  [Fable] [Lane H] The paste actions (`input/BuiltinEditorActions.kt`) and a
+  [Opus] [Lane H] The paste actions (`input/BuiltinEditorActions.kt`) and a
   drop (`dragdrop/TextDrop.kt`) end a live composition with a bare
   `clearComposingRange` before inserting, so a word the keyboard was still
   composing (Gboard's `don't`, a toolbar Paste tapped right after it) keeps
@@ -3060,7 +3060,7 @@ iOS Safari; browser tests run in CI (met: the `browser` job, 4.15).
   look of its own (a host's monospace), and the link look where no link holds it
   (yank after the kill took the link). A typed word that loses a look is a step of
   its own rather than joining the typing run (`state/InsertedBlockLookTest.kt`).
-- [ ] **6.47 A copied image or rule pasted inside a line leaves a space. C.**
+- [ ] **6.49 A copied image or rule pasted inside a line leaves a space. C.**
   [Opus] [Lane G] An image or horizontal rule line holds a one-space
   placeholder under its `BlockSpanStyle`. Copying the placeholder without its
   line break and pasting it inside or at the end of a text line lands the bare
