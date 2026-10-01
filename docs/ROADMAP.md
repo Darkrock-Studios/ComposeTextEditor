@@ -1316,11 +1316,12 @@ Also seen:
 
 ### Web
 
-- [ ] **4.11 Soft keyboard on mobile web. C.** [Opus] [Lane E] Compose creates
-  its backing DOM input inside `startInputMethod`, which is never called, so no
-  keyboard appears. Resolved by 4.3: the textarea now exists and is focused
-  on a tap, which is what raises the keyboard. Tick after a pass on Android
-  Chrome and iOS Safari (4.4); a headless browser cannot show one.
+- [ ] **4.11 Soft keyboard on mobile web. C.** [Opus] [Human] [Lane E]
+  Compose creates its backing DOM input inside `startInputMethod`, which is
+  never called, so no keyboard appears. Resolved by 4.3: the textarea now
+  exists and is focused on a tap, which is what raises the keyboard. Tick
+  after a pass on Android Chrome and iOS Safari (4.4); a headless browser
+  cannot show one.
   Gap: Compose sets `autocapitalize="off"` on every backing field, so phone
   keyboards never capitalise a sentence. The web session sets it to
   `sentences`, matching the Android and iOS sessions, from inside the
@@ -1339,10 +1340,30 @@ Also seen:
   needs a phone: the keyboard rising and staying up, suggestions, a tap on
   the canvas that Compose does not consume hiding the keyboard, and whether
   the keyboard covers the caret.
-- [ ] **4.12 Composition on desktop web. C.** [Opus] [Lane E] Dead keys and CJK
-  input. Also resolved by 4.3, and the event shape a browser IME sends is
-  verified with synthetic events. Tick after a pass with a real IME (fcitx or
-  ibus on Linux, the macOS Japanese keyboard) in Chrome, Firefox, and Safari.
+  Checklist for a person, on an Android phone in Chrome with Gboard and on an
+  iPhone in Safari:
+  1. Build with `./gradlew :sampleApp:wasmJsBrowserDistribution`; in
+     `sampleApp/build/dist/wasmJs/productionExecutable` run
+     `python3 -m http.server 8765 --bind 0.0.0.0` (Python 3.10 or later, for
+     the `.wasm` type); open `http://<computer's LAN address>:8765` on the
+     phone and choose Markdown Editor (Blank).
+  2. Tap the editor. Pass: the keyboard rises with Shift on, and stays up.
+  3. Type "teh cat. it is" and let autocorrect fix "teh". Pass: "The cat. It
+     is", the fix applied once, a capital after the full stop.
+  4. Tap a suggestion in the strip for the last word. Pass: it replaces the
+     word once.
+  5. Press Backspace three times. Pass: three characters go, one per press.
+  6. Press Enter until the caret is near the bottom of the screen. Pass: the
+     caret stays visible above the keyboard.
+  7. Tap the page below the editor's text, outside the editor, then the
+     editor again. Pass: the first tap hides the keyboard, and the second
+     raises it with the caret where tapped.
+  Record each phone's result here and in the QA plan (3.8, step 7).
+- [ ] **4.12 Composition on desktop web. C.** [Opus] [Human] [Lane E] Dead
+  keys and CJK input. Also resolved by 4.3, and the event shape a browser
+  IME sends is verified with synthetic events. Tick after a pass with a real
+  IME (fcitx or ibus on Linux, the macOS Japanese keyboard) in Chrome,
+  Firefox, and Safari.
   Rechecked with synthetic events in Chromium against the dev server: a dead
   key (`keydown` "Dead", `insertCompositionText` "´", then "é",
   `compositionend`) gives one "é" with no stray "Þ" or "´"; a Romaji
@@ -1352,6 +1373,25 @@ Also seen:
   a line lands at the caret. No code change was needed. Synthetic events
   leave the textarea's own text alone, which real input does not, so a real
   IME in Chrome, Firefox and Safari is still what ticks this.
+  Checklist for a person, in Chrome and Firefox on Linux or Windows and in
+  Chrome, Firefox and Safari on macOS:
+  1. Run `./gradlew :sampleApp:wasmJsBrowserDevelopmentRun`, open the page it
+     prints, choose Markdown Editor (Blank) and click in the editor.
+  2. Switch to a Japanese input method: fcitx5 or ibus with Mozc on Linux,
+     Microsoft IME on Windows, Japanese (Romaji) on macOS.
+  3. Type "nihongo", press Space to convert, Enter to commit. Pass: the
+     composing text is underlined, the candidate window sits at the caret,
+     and "日本語" is committed once with no new line.
+  4. Type "nihon", press Backspace twice, then commit. Pass: only what is
+     left of the composition is committed, once.
+  5. Back on a Latin layout, type "ab", press Left, switch to Japanese and
+     type "ka", then commit. Pass: "aかb". A "か" at the line end is 4.35.
+  6. Select a word and compose "ka" over it. Pass: the word is replaced by
+     the commit.
+  7. With a dead-key layout (US International on Linux or Windows; Option+E
+     on the macOS US layout), type the acute dead key then "e". Pass: one
+     "é", no stray "´".
+  Record each browser's result here and in the QA plan (3.8, step 6).
 - [x] **4.13 Clipboard. C.** [Opus] [Lane H] Plain text only through
   `navigator.clipboard`, failures swallowed silently (shared with 6.7). Done: a
   browser answers Ctrl/Cmd+C, X and V in the backing textarea with a `copy`,
