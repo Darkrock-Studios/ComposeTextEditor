@@ -3529,7 +3529,9 @@ iOS Safari; browser tests run in CI (met: the `browser` job, 4.15).
 
 ### Right-to-left and bidirectional text
 
-  Wanted for code editing; scheduled after the rest of the roadmap (owner's call).
+  Wanted for code editing, but kept off this branch: it is built on its own
+  branch, `soft-wrap`, and merges only if the owner judges it worth its
+  complexity. It does not block the rest of the roadmap.
 - [x] **7.5** [Fable] [Lane A] Arrow keys are logical, so visually inverted in
   right-to-left text. `BasicTextField` is logical too, so it is no reference
   here. Collapsing a selection with Left or Right (1.4) goes to its logical start
