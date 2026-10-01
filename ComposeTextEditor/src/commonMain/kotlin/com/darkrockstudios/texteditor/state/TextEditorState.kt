@@ -1027,7 +1027,7 @@ class TextEditorState private constructor(
 	private var targetEditor: FocusedEditor? = null
 
 	/** The editor whose line limit and default action answer: the target, else the focused one. */
-	private val answeringEditor: FocusedEditor? get() = targetEditor ?: focusedEditor
+	internal val answeringEditor: FocusedEditor? get() = targetEditor ?: focusedEditor
 
 	/**
 	 * Runs [block] with [editor]'s line limit and default action standing in for the

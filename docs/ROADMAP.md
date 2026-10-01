@@ -193,7 +193,7 @@ review.
 | J | Find addon | `ComposeTextEditorFind/` | 7.17 to 7.19, 7.26, 7.29, 7.42, 7.68, 7.69 |
 | K | Spell check addon | `ComposeTextEditorSpellCheck/` | 7.20 to 7.22, 7.28, 7.30, 7.31, 7.34, 7.35, 7.38, 7.44, 7.50, 7.56, 7.61, 7.74, 7.76, 7.77, 7.81 |
 | L | Tests and CI | test sources, `.github/workflows/` | 0.1 to 0.3, 0.5 to 0.11, 4.1, 4.15, 7.62, 7.65 |
-| M | Accessibility and host API | semantics in `BasicTextEditor.kt`, `RichTextView.kt`, `state/rememberTextEditorState.kt` | 7.1 to 7.4, 7.13, 7.23 to 7.25, 7.32, 7.36, 7.51, 7.57, 7.59, 7.60, 7.66, 7.73, 7.75 |
+| M | Accessibility and host API | semantics in `BasicTextEditor.kt`, `RichTextView.kt`, `state/rememberTextEditorState.kt` | 7.1 to 7.4, 7.13, 7.23 to 7.25, 7.32, 7.36, 7.51, 7.57, 7.59, 7.60, 7.66, 7.73, 7.75, 7.82 |
 | N | Core layout and performance | `state/TextEditorState.kt` | 5.7, 7.8 to 7.12, 7.48 |
 
 Housekeeping items are [Opus] and fit any lane that is already in the file.
@@ -4155,13 +4155,26 @@ Shaping is one line per keystroke. These still scale with document length:
   reads the focused editor alone. An accessibility `InsertTextAtCursor` of a
   lone line break that the limit refuses now reports failure
   (`SharedStateTargetE2eTest`, `DropTargetLineLimitTest`). Found 7.75.
-- [ ] **7.75 A paste aimed at an unfocused editor follows the focused one. S.**
+- [x] **7.75 A paste aimed at an unfocused editor follows the focused one. S.**
   [Opus] [Lane M] The paste action screens what it pasted inside a coroutine,
   after the clipboard read, so `TextEditorState.asEditor` (7.73) cannot reach
   it: an accessibility `PasteText` on an unfocused single-line editor beside a
   focused multi-line one on the same state pastes line breaks. Carry the
   target editor into the action (`EditorActionContext`) and screen with its
   limit once the read returns. Rare, as 7.73 is.
+  Done: an action run through an editor's menu or semantics
+  (`ContextMenuActions.perform`) runs as that editor (`asEditor`), and paste
+  takes the answering editor when it starts, so its screen after the read
+  follows the editor it was aimed at; a keyboard paste follows the editor
+  focused at the keypress, though focus moves while the read is suspended
+  (`SharedStateTargetE2eTest`). Found 7.82.
+- [ ] **7.82 A host action that edits after suspending follows the focused
+  editor. S.** [Opus] [Lane M] A host action registered through
+  `EditorActionRegistry` that suspends before it edits (fetching text, then
+  inserting it) runs its edit outside `asEditor`, and `EditorActionContext`
+  does not say which editor it was aimed at, so run on the unfocused editor
+  of two sharing a state it follows the focused one's line limit. Rare, as
+  7.73 is.
 
 ## Housekeeping
 

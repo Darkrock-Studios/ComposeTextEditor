@@ -229,7 +229,7 @@ fun BasicTextEditor(
 	val effectiveContextMenuState = contextMenuState ?: internalContextMenuState
 
 	val contextMenuActions = remember(state, clipboard, editable) {
-		ContextMenuActions(state, clipboard, state.scope, editable)
+		ContextMenuActions(state, clipboard, state.scope, editable, inputRequester::editor)
 	}
 	val latestOnLinkClick by rememberUpdatedState(onLinkClick)
 	val hasLinkClick = onLinkClick != null
