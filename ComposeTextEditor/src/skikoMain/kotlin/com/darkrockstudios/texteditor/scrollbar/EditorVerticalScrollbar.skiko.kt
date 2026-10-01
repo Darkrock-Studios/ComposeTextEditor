@@ -28,7 +28,7 @@ internal class TextEditorScrollbarAdapter(
 		get() = (scrollState.value - scrollState.minValue).toDouble()
 
 	override val viewportSize: Double
-		get() = scrollState.viewportHeight.toDouble()
+		get() = scrollState.viewportLength.toDouble()
 
 	override val contentSize: Double
 		get() = (scrollState.maxValue - scrollState.minValue) + viewportSize

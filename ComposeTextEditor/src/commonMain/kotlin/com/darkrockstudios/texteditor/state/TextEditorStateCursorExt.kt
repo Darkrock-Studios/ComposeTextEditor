@@ -1,6 +1,7 @@
 package com.darkrockstudios.texteditor.state
 
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.style.ResolvedTextDirection
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.LineWrap
@@ -106,14 +107,15 @@ internal fun LineWrap.caretX(char: Int, runSide: CaretAffinity? = null): Float {
  * The x past this row's last glyph, trailing spaces included: the line's own right
  * edge (left in a right-to-left paragraph) stops before them.
  */
-internal fun LineWrap.rowEndX(): Float {
-	val layout = textLayoutResult
-	val row = virtualLineIndex
-	val last = layout.getLineEnd(row) - 1
-	return if (layout.getParagraphDirection(0) == ResolvedTextDirection.Ltr) {
-		maxOf(layout.getLineRight(row), if (last >= 0) layout.getBoundingBox(last).right else 0f)
+internal fun LineWrap.rowEndX(): Float = textLayoutResult.rowEndX(virtualLineIndex)
+
+/** [LineWrap.rowEndX] of [row] in this layout. */
+internal fun TextLayoutResult.rowEndX(row: Int): Float {
+	val last = getLineEnd(row) - 1
+	return if (getParagraphDirection(0) == ResolvedTextDirection.Ltr) {
+		maxOf(getLineRight(row), if (last >= 0) getBoundingBox(last).right else 0f)
 	} else {
-		minOf(layout.getLineLeft(row), if (last >= 0) layout.getBoundingBox(last).left else 0f)
+		minOf(getLineLeft(row), if (last >= 0) getBoundingBox(last).left else 0f)
 	}
 }
 

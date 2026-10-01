@@ -219,6 +219,30 @@ class TextEditorState private constructor(
 			}
 		}
 
+	private var wraps by mutableStateOf(true)
+
+	/**
+	 * Whether lines wrap at the viewport's width; with wrapping off a line is one row and
+	 * the editor scrolls sideways ([horizontalScrollState]). The layout is the state's, so
+	 * this is off while any editor showing it has wrapping off ([noWrapEditors]).
+	 */
+	internal var softWrap: Boolean
+		get() = wraps
+		set(value) {
+			if (wraps != value) {
+				wraps = value
+				invalidateLayoutInputs()
+				updateBookKeeping(LayoutUpdate.Reshape)
+			}
+		}
+
+	/** How many composed editors show this state with wrapping off. */
+	internal var noWrapEditors: Int = 0
+		set(value) {
+			field = value
+			softWrap = value == 0
+		}
+
 	private var lineBreakWidthKey: Pair<TextMeasurer, TextStyle>? = null
 	private var lineBreakWidthPx = 0f
 
@@ -1121,6 +1145,15 @@ class TextEditorState private constructor(
 
 	/** The underlying scroll position, surfaced from [scrollManager]. */
 	val scrollState get() = scrollManager.scrollState
+
+	/**
+	 * The sideways scroll position, in pixels from the content's left edge. Its range is
+	 * empty unless an editor showing the state has wrapping off (`softWrap = false`), when
+	 * it runs to the widest line, plus room for the caret, less the viewport's width.
+	 * While a reshape settles (a width change, wrapping turned off) the lines not yet
+	 * shaped keep their old widths, as the content height keeps their old heights.
+	 */
+	val horizontalScrollState: TextEditorScrollState get() = scrollManager.horizontalScrollState
 
 	/**
 	 * The [CharLineOffset] currently at the top of the viewport. Compose-observable:
@@ -2082,6 +2115,8 @@ class TextEditorState private constructor(
 		_lineOffsets = laidOut
 		// Rounded up so the last row's fraction of a pixel is still in reach.
 		scrollManager.updateContentHeight(ceil(laidOut.lastRowBottom()).toInt())
+		// A space past the widest line leaves room for the caret and a selected line break.
+		scrollManager.updateContentWidth(if (softWrap) 0 else ceil(laidOut.contentWidth + lineBreakWidth).toInt())
 	}
 
 	/** The settling reshape under way, shaping the lines out of view a slice at a time. */
@@ -2241,8 +2276,8 @@ class TextEditorState private constructor(
 		if (isProvisional(current, line)) reshapeLines(line, line)
 	}
 
-	/** The inputs of one pass besides the shaping: density, viewport width and the paragraph spacing in pixels. */
-	private fun lineInputs() = LineInputs(density, viewportSize.width, density?.run { paragraphSpacing.toPx() } ?: 0f)
+	/** The inputs of one pass besides the shaping: density, viewport width, the paragraph spacing in pixels and the wrapping. */
+	private fun lineInputs() = LineInputs(density, viewportSize.width, density?.run { paragraphSpacing.toPx() } ?: 0f, softWrap)
 
 	/** A full pass: every line shaped, every fact derived in line order. */
 	private fun layoutAll(lines: LineList, spans: SpanIndex): RowList {
@@ -2325,15 +2360,18 @@ class TextEditorState private constructor(
 		private val measureStyle = if (needsIndentBaking) textStyle.copy(textIndent = TextIndent.None) else textStyle
 		private val bakedIndentStyle = if (needsIndentBaking) ParagraphStyle(textIndent = outerIndent) else null
 
+		private val softWrap = this@TextEditorState.softWrap
+
 		// Use a tight width constraint (minWidth == maxWidth) so the paragraph lays out
 		// at the full viewport width rather than shrinking to its natural content width.
 		// The shrinking behavior interacts badly with TextIndent: if the paragraph
 		// shrinks to its natural width W and then TextIndent consumes X pixels of
 		// first-line width, the first line has only W-X pixels available instead of
-		// viewportWidth-X, causing wraps that shouldn't happen.
+		// viewportWidth-X, causing wraps that shouldn't happen. Unwrapped, a line is at
+		// least the viewport wide, so it aligns within the viewport as a wrapped one does.
 		private val constraints = Constraints(
 			minWidth = maxOf(1, viewportSize.width.toInt()),
-			maxWidth = maxOf(1, viewportSize.width.toInt()),
+			maxWidth = if (softWrap) maxOf(1, viewportSize.width.toInt()) else Constraints.Infinity,
 			minHeight = 0,
 			maxHeight = Constraints.Infinity
 		)
@@ -2356,10 +2394,10 @@ class TextEditorState private constructor(
 				else -> line
 			}
 			return try {
-				textMeasurer.measure(text = measureLine, style = measureStyle, constraints = constraints)
+				textMeasurer.measure(text = measureLine, style = measureStyle, softWrap = softWrap, constraints = constraints)
 			} catch (_: IllegalArgumentException) {
 				// If measurement fails, create an empty layout result
-				textMeasurer.measure(text = AnnotatedString(""), style = measureStyle, constraints = constraints)
+				textMeasurer.measure(text = AnnotatedString(""), style = measureStyle, softWrap = softWrap, constraints = constraints)
 			}
 		}
 	}

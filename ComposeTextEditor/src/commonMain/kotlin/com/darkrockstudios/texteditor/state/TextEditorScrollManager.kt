@@ -26,6 +26,8 @@ class TextEditorScrollManager(
 	val scrollState: TextEditorScrollState,
 	/** Shapes a line still at an old shape while a reshape settles (7.48), so a scroll to it measures the real rows. */
 	private val ensureLineShaped: (line: Int) -> Unit = {},
+	/** The sideways scroll, whose range is empty while lines wrap (7.41). */
+	val horizontalScrollState: TextEditorScrollState = TextEditorScrollState(0),
 ) {
 	private var scrollJob: Job? = null
 
@@ -56,6 +58,12 @@ class TextEditorScrollManager(
 
 	val viewportHeight: Int
 		get() = getViewportSize().height.toInt()
+
+	private val viewportWidth: Int
+		get() = getViewportSize().width.toInt()
+
+	/** How wide the content is for sideways scrolling, in pixels; zero while lines wrap. */
+	private var contentWidth = 0
 
 	/**
 	 * How much of the viewport's bottom something drawn over the editor covers, in
@@ -97,9 +105,24 @@ class TextEditorScrollManager(
 		)
 
 	private fun applyScrollRange() {
-		scrollState.viewportHeight = viewportHeight
+		scrollState.viewportLength = viewportHeight
 		scrollState.minValue = -topContentPaddingPx
 		scrollState.maxValue = maxScroll
+		applyHorizontalRange()
+	}
+
+	private fun applyHorizontalRange() {
+		horizontalScrollState.viewportLength = viewportWidth
+		horizontalScrollState.maxValue = maxOf(0, contentWidth - viewportWidth)
+	}
+
+	/**
+	 * Sets how wide the content is for sideways scrolling: the widest line and room for
+	 * the caret past it, or zero while lines wrap, which leaves no sideways range.
+	 */
+	internal fun updateContentWidth(width: Int) {
+		contentWidth = width
+		applyHorizontalRange()
 	}
 
 	fun updateContentHeight(height: Int) {

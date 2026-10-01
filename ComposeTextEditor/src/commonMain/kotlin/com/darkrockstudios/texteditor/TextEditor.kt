@@ -52,6 +52,8 @@ private val DefaultContentPadding = PaddingValues(16.dp)
  *   custom items, or leave `null` for the default.
  * @param contentDescription The editor's label for accessibility services; see
  *   [BasicTextEditor].
+ * @param softWrap Whether lines wrap at the editor's width; with `false` a line stays one
+ *   row and the editor scrolls sideways. See [BasicTextEditor].
  */
 @Composable
 fun TextEditor(
@@ -70,6 +72,7 @@ fun TextEditor(
 	contentDescription: String? = null,
 	readOnly: Boolean = false,
 	lineLimits: EditorLineLimits = EditorLineLimits.Fill,
+	softWrap: Boolean = true,
 ) {
 	Surface(modifier = modifier.focusBorder(state.hasFocus && enabled, style)) {
 		BasicTextEditor(
@@ -88,6 +91,7 @@ fun TextEditor(
 			contentDescription = contentDescription,
 			readOnly = readOnly,
 			lineLimits = lineLimits,
+			softWrap = softWrap,
 		)
 	}
 }

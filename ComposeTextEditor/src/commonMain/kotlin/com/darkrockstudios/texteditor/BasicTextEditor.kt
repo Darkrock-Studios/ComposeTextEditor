@@ -134,6 +134,10 @@ private const val CURSOR_BLINK_SPEED_MS = 500L
  * @param contentDescription The editor's label for accessibility services, read with
  *   its text ("Notes, edit box, ..."). Set it here rather than through [modifier]'s
  *   semantics, which land on a container around the editable node.
+ * @param softWrap Whether lines wrap at the editor's width, as in `BasicTextField`. With
+ *   `false` a line stays one row however long, and the editor scrolls sideways
+ *   ([TextEditorState.horizontalScrollState]). The layout is the state's, so wrapping is
+ *   off while any editor showing the state has it off.
  */
 @Composable
 fun BasicTextEditor(
@@ -153,6 +157,7 @@ fun BasicTextEditor(
 	contentDescription: String? = null,
 	readOnly: Boolean = false,
 	lineLimits: EditorLineLimits = EditorLineLimits.Fill,
+	softWrap: Boolean = true,
 ) {
 	LendComposition(state)
 
@@ -209,6 +214,11 @@ fun BasicTextEditor(
 	DisposableEffect(state, singleLine) {
 		if (singleLine) state.singleLineEditors++
 		onDispose { if (singleLine) state.singleLineEditors-- }
+	}
+
+	DisposableEffect(state, softWrap) {
+		if (!softWrap) state.noWrapEditors++
+		onDispose { if (!softWrap) state.noWrapEditors-- }
 	}
 
 	LaunchedEffect(contentPadding, density) {
