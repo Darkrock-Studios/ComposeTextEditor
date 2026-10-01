@@ -192,7 +192,7 @@ review.
 | J | Find addon | `ComposeTextEditorFind/` | 7.17 to 7.19, 7.26, 7.29, 7.42, 7.68, 7.69 |
 | K | Spell check addon | `ComposeTextEditorSpellCheck/` | 7.20 to 7.22, 7.28, 7.30, 7.31, 7.34, 7.35, 7.38, 7.44, 7.61, 7.74 |
 | L | Tests and CI | test sources, `.github/workflows/` | 0.1 to 0.3, 0.5 to 0.11, 4.1, 4.15, 7.62, 7.65 |
-| M | Accessibility and host API | semantics in `BasicTextEditor.kt`, `RichTextView.kt`, `state/rememberTextEditorState.kt` | 7.1 to 7.4, 7.13, 7.23 to 7.25, 7.32, 7.36, 7.59, 7.60, 7.66, 7.73 |
+| M | Accessibility and host API | semantics in `BasicTextEditor.kt`, `RichTextView.kt`, `state/rememberTextEditorState.kt` | 7.1 to 7.4, 7.13, 7.23 to 7.25, 7.32, 7.36, 7.59, 7.60, 7.66, 7.73, 7.75 |
 | N | Core layout and performance | `state/TextEditorState.kt` | 5.7, 7.8 to 7.12 |
 
 Housekeeping items are [Opus] and fit any lane that is already in the file.
@@ -3489,7 +3489,7 @@ Shaping is one line per keystroke. These still scale with document length:
   shows as rows. With no editor focused, or a `RichTextView` focused, the
   host's edits are still screened while any single-line editor shows the
   state (`SingleLineEnterE2eTest`, `KeyboardSettingsTest`). Found 7.73.
-- [ ] **7.73 Edits that reach an unfocused editor follow the focused one. S.**
+- [x] **7.73 Edits that reach an unfocused editor follow the focused one. S.**
   [Opus] [Lane M] With two editors on one state (7.66), the input filter's
   single-line screen and the action key's default come from the editor
   holding focus. A drop on the other editor, or an accessibility `SetText`,
@@ -3498,6 +3498,22 @@ Shaping is one line per keystroke. These still scale with document length:
   focused editor). Pass the target editor's limit and default through those
   entry points (`dragdrop/`, `EditorSemantics.kt`) where they do not focus
   it first. Rare: one state shared by editors with different limits.
+  Done: each editor's input node keeps its own `FocusedEditor` record, which
+  the drop and the semantics reach through `TextInputRequester.editor`, and
+  `TextEditorState.asEditor` lets it stand in for the focused editor's for the
+  length of the call. Next and Previous aimed at an unfocused editor focus it
+  first, then move on from it; Done hides the keyboard as before. The keyboard's
+  own configuration (`EditorInfo`, the restart on a settings change) still
+  reads the focused editor alone. An accessibility `InsertTextAtCursor` of a
+  lone line break that the limit refuses now reports failure
+  (`SharedStateTargetE2eTest`, `DropTargetLineLimitTest`). Found 7.75.
+- [ ] **7.75 A paste aimed at an unfocused editor follows the focused one. S.**
+  [Opus] [Lane M] The paste action screens what it pasted inside a coroutine,
+  after the clipboard read, so `TextEditorState.asEditor` (7.73) cannot reach
+  it: an accessibility `PasteText` on an unfocused single-line editor beside a
+  focused multi-line one on the same state pastes line breaks. Carry the
+  target editor into the action (`EditorActionContext`) and screen with its
+  limit once the read returns. Rare, as 7.73 is.
 
 ## Housekeeping
 

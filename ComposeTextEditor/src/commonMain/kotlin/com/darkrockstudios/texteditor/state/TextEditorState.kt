@@ -1019,9 +1019,34 @@ class TextEditorState private constructor(
 	/** The composed editor holding focus, which the keyboard and keys reach; null when none holds it. */
 	internal var focusedEditor: FocusedEditor? by mutableStateOf(null)
 
+	/**
+	 * The editor an edit or action is aimed at while [asEditor] runs, which may not hold
+	 * focus (a drop, an accessibility service's edit); not snapshot state, since it lasts
+	 * only for that call.
+	 */
+	private var targetEditor: FocusedEditor? = null
+
+	/** The editor whose line limit and default action answer: the target, else the focused one. */
+	private val answeringEditor: FocusedEditor? get() = targetEditor ?: focusedEditor
+
+	/**
+	 * Runs [block] with [editor]'s line limit and default action standing in for the
+	 * focused editor's, for an edit aimed at [editor]. Null leaves the focused editor's.
+	 */
+	internal fun <T> asEditor(editor: FocusedEditor?, block: () -> T): T {
+		if (editor == null) return block()
+		val previous = targetEditor
+		targetEditor = editor
+		try {
+			return block()
+		} finally {
+			targetEditor = previous
+		}
+	}
+
 	/** Runs the action key's handler; false when there is none to run. */
 	internal fun performImeAction(action: ImeAction): Boolean {
-		val handler = onImeAction ?: focusedEditor?.defaultImeAction ?: return false
+		val handler = onImeAction ?: answeringEditor?.defaultImeAction ?: return false
 		handler(action)
 		return true
 	}
@@ -1040,12 +1065,16 @@ class TextEditorState private constructor(
 	internal var singleLineEditors by mutableIntStateOf(0)
 
 	/**
-	 * Whether the action key and edits follow a single line: the focused editor's limit,
-	 * or with none focused (or a view that takes no input), whether any composed editor is
-	 * single-line, so the host's own edits keep line breaks out of a lone single-line
-	 * editor. While true, [EditorInputFilter.SingleLine] screens ahead of [inputFilter].
+	 * Whether the action key and edits follow a single line: the limit of the editor an
+	 * edit is aimed at ([asEditor]) or else the focused one, or with neither (or a view that
+	 * takes no input), whether any composed editor is single-line, so the host's own edits
+	 * keep line breaks out of a lone single-line editor. While true,
+	 * [EditorInputFilter.SingleLine] screens ahead of [inputFilter].
 	 */
-	internal val isSingleLine: Boolean get() = focusedEditor?.singleLine ?: (singleLineEditors > 0)
+	internal val isSingleLine: Boolean get() = answeringEditor?.singleLine ?: (singleLineEditors > 0)
+
+	/** [isSingleLine] for the keyboard, which is always the focused editor's, whatever an edit is aimed at. */
+	internal val keyboardIsSingleLine: Boolean get() = focusedEditor?.singleLine ?: (singleLineEditors > 0)
 
 	internal val effectiveInputFilter: EditorInputFilter?
 		get() {

@@ -248,7 +248,7 @@ actual class ImeCursorSync internal constructor(
 	}
 
 	private fun keyboardRequest(): KeyboardRequest = state.keyboardSettings.let {
-		KeyboardRequest(it.androidInputType(state.isSingleLine), it.androidImeOptions(state.isSingleLine))
+		KeyboardRequest(it.androidInputType(state.keyboardIsSingleLine), it.androidImeOptions(state.keyboardIsSingleLine))
 	}
 
 	/** The selection and composing indices as the IME should currently see them. */

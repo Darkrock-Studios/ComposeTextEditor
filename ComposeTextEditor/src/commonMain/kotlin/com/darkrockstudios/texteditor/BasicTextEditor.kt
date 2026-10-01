@@ -229,7 +229,9 @@ fun BasicTextEditor(
 	val hasLinkClick = onLinkClick != null
 	val semanticsModifier = remember(state, enabled, editable, focusRequester, contextMenuActions, contentDescription, hasLinkClick, singleLine) {
 		val openLink: ((String) -> Unit)? = if (hasLinkClick) { url -> latestOnLinkClick?.invoke(url) } else null
-		Modifier.editorSemantics(state, enabled, editable, singleLine, focusRequester, contextMenuActions, contentDescription, openLink)
+		Modifier.editorSemantics(
+			state, enabled, editable, singleLine, inputRequester::editor, focusRequester, contextMenuActions, contentDescription, openLink,
+		)
 	}
 	val menuPlacement = remember(state, effectiveContextMenuState) {
 		ContextMenuPlacement(state, effectiveContextMenuState)
@@ -371,7 +373,7 @@ fun BasicTextEditor(
 				val linkClicks = remember(keyBindings) {
 					LinkClicks.forEditor(keyBindings) { currentOnLinkClick }
 				}
-				val dragAndDrop = remember(state) { TextDragAndDrop(state) }
+				val dragAndDrop = remember(state) { TextDragAndDrop(state, inputRequester::editor) }
 				dragAndDrop.enabled = editable
 				Canvas(
 					modifier = Modifier

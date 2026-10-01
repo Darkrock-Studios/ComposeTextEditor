@@ -2,7 +2,9 @@ package com.darkrockstudios.texteditor.input
 
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusEventModifierNode
+import androidx.compose.ui.focus.FocusRequesterModifierNode
 import androidx.compose.ui.focus.FocusState
+import androidx.compose.ui.focus.requestFocus
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyInputModifierNode
 import androidx.compose.ui.input.key.SoftKeyboardInterceptionModifierNode
@@ -44,24 +46,38 @@ internal class TextEditorInputModifierNode(
 	KeyInputModifierNode,
 	SoftKeyboardInterceptionModifierNode,
 	FocusEventModifierNode,
+	FocusRequesterModifierNode,
 	PlatformTextInputModifierNode,
 	CompositionLocalConsumerModifierNode {
 
 	private val keyCommandHandler = TextEditorKeyCommandHandler(keyBindings)
 
-	/** The soft keyboard's action key without a host handler, as Compose's text fields answer it. */
+	/**
+	 * The soft keyboard's action key without a host handler, as Compose's text fields answer
+	 * it. Next and Previous move from this editor, which an action aimed at it without
+	 * focus (accessibility's) focuses first.
+	 */
 	private val defaultImeAction: (ImeAction) -> Unit = { action ->
 		when (action) {
-			ImeAction.Next -> currentValueOf(LocalFocusManager).moveFocus(FocusDirection.Next)
-			ImeAction.Previous -> currentValueOf(LocalFocusManager).moveFocus(FocusDirection.Previous)
+			ImeAction.Next -> moveFocusFromHere(FocusDirection.Next)
+			ImeAction.Previous -> moveFocusFromHere(FocusDirection.Previous)
 			ImeAction.Done -> currentValueOf(LocalSoftwareKeyboardController)?.hide()
 			else -> Unit
 		}
 	}
 
+	private fun moveFocusFromHere(direction: FocusDirection) {
+		if (!isFocused && !requestFocus()) return
+		currentValueOf(LocalFocusManager).moveFocus(direction)
+	}
+
+	/** This editor's line limit and default action, for an edit aimed at it ([TextEditorState.asEditor]). */
+	internal var editor: FocusedEditor = FocusedEditor(defaultImeAction, singleLine)
+		private set
+
 	/** The focused editor is the one the keyboard types into, so its default and line limit answer. */
 	private fun holdFocus(state: TextEditorState) {
-		state.focusedEditor = FocusedEditor(defaultImeAction, singleLine)
+		state.focusedEditor = editor
 	}
 
 	private fun releaseFocus(state: TextEditorState) {
@@ -215,6 +231,7 @@ internal class TextEditorInputModifierNode(
 		}
 		this.state = state
 		this.singleLine = singleLine
+		if (singleLineChanged) editor = FocusedEditor(defaultImeAction, singleLine)
 		if (isFocused && (stateChanged || singleLineChanged)) holdFocus(state)
 		this.clipboard = clipboard
 		this.enabled = enabled

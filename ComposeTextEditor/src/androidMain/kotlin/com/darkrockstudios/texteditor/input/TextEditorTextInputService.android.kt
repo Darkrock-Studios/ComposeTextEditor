@@ -44,8 +44,8 @@ private const val SURROUNDING_TEXT_WINDOW = 2048
 
 private fun EditorInfo.populate(state: TextEditorState, connection: TextEditorInputConnection) {
 	val settings = state.keyboardSettings
-	inputType = settings.androidInputType(state.isSingleLine)
-	imeOptions = settings.androidImeOptions(state.isSingleLine)
+	inputType = settings.androidInputType(state.keyboardIsSingleLine)
+	imeOptions = settings.androidImeOptions(state.keyboardIsSingleLine)
 
 	val selection = state.selectionAsTextRange()
 	initialSelStart = selection.start
@@ -91,7 +91,7 @@ internal class TextEditorInputConnection(
 	private var isActive: Boolean = true
 
 	/** The action key the keyboard was opened with; a change restarts input with a new connection. */
-	private val imeAction = state.effectiveImeAction()
+	private val imeAction = state.effectiveImeAction(state.keyboardIsSingleLine)
 	private val actionKey = imeAction.androidEditorAction()
 
 	/** Batch levels this connection holds open on the state, released when it closes. */
