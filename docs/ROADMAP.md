@@ -188,7 +188,7 @@ review.
 | F | Android input | `androidMain` | 0.4, 3.9 to 3.11, 3.14, 3.17, 4.16, 4.18, 4.20, 4.27, 4.30, 4.31, 4.34, 4.36, 7.40 |
 | G | Edit pipeline and undo | `state/TextEditManager.kt`, `state/TextEditHistory.kt`, `state/EditBehavior.kt`, `input/ImeEditLogic.kt` | 1.20, 5.1 to 5.5, 5.9 to 5.11, 6.1 to 6.6, 6.14, 6.15, 6.17, 6.22, 6.23, 6.28, 6.29, 6.33, 6.34, 7.54, 7.55 |
 | H | Clipboard and HTML | `clipboard/`, `html/`, `dragdrop/` | 4.9, 4.13, 4.17, 6.7 to 6.13, 6.18 to 6.21, 5.12, 6.24 to 6.27, 6.30 to 6.32, 7.39, 7.46, 7.47, 7.49, 7.53, 7.63 |
-| I | Markdown and block model | `ComposeTextEditorMarkdown/`, `richstyle/`, `state/TextEditorStateBlockExt.kt` | 5.6, 7.14 to 7.16, 7.43, 7.45, 7.52, 7.64, 7.67, 7.70 |
+| I | Markdown and block model | `ComposeTextEditorMarkdown/`, `richstyle/`, `state/TextEditorStateBlockExt.kt` | 5.6, 7.14 to 7.16, 7.43, 7.45, 7.52, 7.64, 7.67, 7.72 |
 | J | Find addon | `ComposeTextEditorFind/` | 7.17 to 7.19, 7.26, 7.29, 7.42, 7.68, 7.69 |
 | K | Spell check addon | `ComposeTextEditorSpellCheck/` | 7.20 to 7.22, 7.28, 7.30, 7.31, 7.34, 7.35, 7.38, 7.44, 7.61 |
 | L | Tests and CI | test sources, `.github/workflows/` | 0.1 to 0.3, 0.5 to 0.11, 4.1, 4.15, 7.62, 7.65 |
@@ -2211,10 +2211,10 @@ iOS Safari; browser tests run in CI.
   current, leaving out its heading's look and any heading look, under the
   current or a retired configuration, that is not also an inline style of that
   configuration or the current one (text joined from another heading keeps that
-  heading's look, 7.70) (`RetiredStyles.headingLooks`). So "My *great* title" writes as
+  heading's look, 7.72) (`RetiredStyles.headingLooks`). So "My *great* title" writes as
   `<h2>My <em>great</em> title</h2>` and reads back the same
   (`html/HeadingInlineFormattingHtmlTest.kt`).
-  Found: 7.70.
+  Found: 7.72.
 - [x] **6.13 Plain paste reads the HTML flavor.** [Opus] [Lane H] On desktop,
   `Action.PasteAsPlainText` takes `ClipboardHelper.getText(...).text`, so a
   foreign paste that offers HTML yields the text of the parsed markup rather
@@ -2899,7 +2899,7 @@ Shaping is one line per keystroke. These still scale with document length:
   `MarkdownFuzzFixpointTest`) ends with an empty quoted list item after a
   fence; the first export's last line `> - ` ends in one more space than the
   second export's. Found in 6.28's seed sweep.
-- [ ] **7.70 Text joined onto a heading keeps the other heading's look. S.**
+- [ ] **7.72 Text joined onto a heading keeps the other heading's look. S.**
   [Opus] [Lane I] Deleting the line break between an h2 "Title" and an h3 "Sub"
   leaves "Sub" baked with the h3 look inside the h2 line, so the editor shows it
   at the h3 size and markdown export writes `## Title` and `### Sub` on lines
