@@ -194,42 +194,47 @@ private fun EditorActionContext.pasteClipboard(plainText: Boolean) {
 			ClipboardHelper.getPlainText(clipboard)?.let(::AnnotatedString)
 		} else {
 			ClipboardHelper.getText(clipboard, state.richTextStyles, state.allowedLinkSchemes)
+		}?.normalizeLineEndings() ?: return@launch
+		// Every clipboard read comes before the selection is read: a read can suspend
+		// for a while (the web's permission prompt), and the user can move the caret or
+		// edit meanwhile. Reading the HTML before mutating also lands the text, the
+		// in-editor rich spans and the pasted block structure as one revision.
+		val htmlDocument = if (plainText) null else state.readHtmlPasteDocument(clipboard, clipboardText)
+		val clipboardCopyId = if (plainText) null else ClipboardHelper.readCopyId(clipboard)
+
+		val curSelection = state.selector.selection
+		val insertPosition = curSelection?.start ?: state.cursorPosition
+		val sized = state.withSizeForPasteAt(insertPosition, clipboardText)
+		// Screened first: the copied spans and blocks are placed by the text's own
+		// layout, so text the filter changed pastes plain, and refused text not at all.
+		val text = state.screenAtSelection(sized) ?: return@launch
+		val screened = text != sized
+		// A composition's range would address the text as it stood before the paste.
+		if (state.composingRange != null) {
+			state.clearComposingRange()
+			state.requestImeResync()
 		}
-		clipboardText?.let {
-			val curSelection = state.selector.selection
-			val insertPosition = curSelection?.start ?: state.cursorPosition
-			val sized = state.withSizeForPasteAt(insertPosition, it.normalizeLineEndings())
-			// Screened first: the copied spans and blocks are placed by the text's own
-			// layout, so text the filter changed pastes plain, and refused text not at all.
-			val text = state.screenAtSelection(sized) ?: return@launch
-			val screened = text != sized
-			// Read the clipboard's HTML before mutating: the text, the in-editor
-			// rich spans and the pasted block structure then land as one revision.
-			val htmlDocument = if (plainText) null else state.readHtmlPasteDocument(clipboard, text)
-			val clipboardCopyId = if (plainText) null else ClipboardHelper.readCopyId(clipboard)
-			state.preserveCopiedRichSpansThroughNextEdit()
-			var pastedAt = insertPosition
-			state.withAtomicEdit {
-				// Where the text lands now: the caret may have moved while the clipboard was read.
-				pastedAt = curSelection?.start ?: state.cursorPosition
+		state.preserveCopiedRichSpansThroughNextEdit()
+		state.withAtomicEdit {
+			state.editManager.alreadyScreened {
 				if (curSelection != null) {
 					state.replace(curSelection, state.applyStyleForEditAt(curSelection.start, text))
 				} else {
 					state.insertStringAtCursor(text)
 				}
-				if (!plainText && !screened) {
-					state.pasteRichSpans(
-						insertPosition,
-						text,
-						clipboardCopyId,
-						requireCopyIdMatch = ClipboardHelper.supportsCopyProvenance,
-					)
-				}
-				if (!screened) htmlDocument?.let { state.applyHtmlPasteBlocks(it, insertPosition, text) }
 			}
-			state.selector.clearSelection()
-			state.pasteLanded(text.text, TextEditorRange(pastedAt, text.endWhenInsertedAt(pastedAt)))
+			if (!plainText && !screened) {
+				state.pasteRichSpans(
+					insertPosition,
+					text,
+					clipboardCopyId,
+					requireCopyIdMatch = ClipboardHelper.supportsCopyProvenance,
+				)
+			}
+			if (!screened) htmlDocument?.let { state.applyHtmlPasteBlocks(it, insertPosition, text) }
 		}
+		state.selector.clearSelection()
+		state.pasteLanded(text.text, TextEditorRange(insertPosition, text.endWhenInsertedAt(insertPosition)))
 	}
 }
 

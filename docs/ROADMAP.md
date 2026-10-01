@@ -2212,7 +2212,7 @@ iOS Safari; browser tests run in CI.
   plain flavor (`e2e/PlainPasteE2eTest.kt`). The iOS actual compiled and
   pasted in the simulator 2026-09-30: iOS's edit-menu Paste reads through it,
   and text on the general pasteboard pasted as is, 200k characters included.
-- [ ] **6.30 Paste reads the selection before it awaits the clipboard. C.**
+- [x] **6.30 Paste reads the selection before it awaits the clipboard. C.**
   [Opus] [Lane H] `pasteClipboard` (`input/BuiltinEditorActions.kt`) takes the
   selection and the insert position, then suspends on
   `readHtmlPasteDocument` and `ClipboardHelper.readCopyId` before it edits.
@@ -2220,7 +2220,14 @@ iOS Safari; browser tests run in CI.
   a click or edit in between leaves the paste replacing a stale selection and
   placing copied rich spans and HTML blocks at a stale position, or throwing
   when the lines are gone. Read the selection after the clipboard, or
-  revalidate it, as 5.4's paste seam does for its own range.
+  revalidate it, as 5.4's paste seam does for its own range. Done: every
+  clipboard read (the text, its HTML, the copy id) comes first, and the
+  selection, the insert position, the size and the screening are read after,
+  with no suspension before the edit, so the paste lands where the caret or
+  selection is when the clipboard answers. As a drop does, it ends a
+  composition begun meanwhile (resyncing the IME) and inserts the text it
+  screened without screening it again (`clipboard/PasteReadsSelectionLateTest.kt`).
+  A document loaded with `setText` meanwhile takes the paste at its caret.
 - [ ] **6.32 A link's look crosses into an editor that refuses its scheme. S.**
   [Opus] [Lane H] On desktop a paste or drop between two editors in one process
   takes the exact `AnnotatedString` flavor ahead of the markup, so a `myapp:`
