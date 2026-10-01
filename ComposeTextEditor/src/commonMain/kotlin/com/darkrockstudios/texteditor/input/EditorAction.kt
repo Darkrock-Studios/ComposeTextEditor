@@ -1,5 +1,6 @@
 package com.darkrockstudios.texteditor.input
 
+import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.platform.Clipboard
 import com.darkrockstudios.texteditor.state.TextEditorState
 import kotlinx.coroutines.CoroutineScope
@@ -7,13 +8,29 @@ import kotlinx.coroutines.CoroutineScope
 /**
  * What an action gets to work with. The clipboard and the scope belong to the
  * composition rather than to the editor, so they arrive per invocation instead
- * of being captured when the action is registered.
+ * of being captured when the action is registered. Build one per invocation: it
+ * also records the editor the action was run on.
  */
 class EditorActionContext(
 	val state: TextEditorState,
 	val clipboard: Clipboard,
 	val scope: CoroutineScope,
-)
+) {
+	/**
+	 * The editor the action was run on: the one whose menu or semantics ran it, else the
+	 * focused one. Not observed: building a context is no reason to recompose on focus.
+	 */
+	private val target = Snapshot.withoutReadObservation { state.answeringEditor }
+
+	/**
+	 * Runs [block] as aimed at the editor the action was run on, so its edits follow that
+	 * editor's line limit and default action, as the action's own call does. For an edit
+	 * made after the action suspends, by when focus can have moved to another editor
+	 * sharing [state]; call it on the dispatcher that edits the document. With no editor
+	 * focused when the action ran, the edit follows the one answering then.
+	 */
+	fun <T> asTarget(block: () -> T): T = state.asEditor(target, block)
+}
 
 /**
  * The implementation of one [EditorCommand.Action].

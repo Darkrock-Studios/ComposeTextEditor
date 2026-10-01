@@ -27,9 +27,13 @@ import androidx.compose.ui.unit.dp
 import com.darkrockstudios.texteditor.BasicTextEditor
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.EditorLineLimits
+import com.darkrockstudios.texteditor.input.EditorActionSpec
+import com.darkrockstudios.texteditor.input.EditorCommand
 import com.darkrockstudios.texteditor.input.KeyboardSettings
 import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.rememberTextEditorState
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.launch
 import utils.InMemoryClipboard
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -131,5 +135,48 @@ class SharedStateTargetE2eTest {
 
 		editors()[1].assertIsFocused()
 		onNodeWithTag("after").assertIsNotFocused()
+	}
+
+	/** Registers a paste that inserts what [fetched] gives it once it arrives. */
+	private fun TextEditorState.registerSuspendingPaste(fetched: CompletableDeferred<String>) {
+		actions.register(
+			EditorActionSpec(EditorCommand.Action.Paste) { context ->
+				context.scope.launch {
+					val text = fetched.await()
+					context.asTarget { context.state.insertStringAtCursor(text) }
+				}
+			}
+		)
+		cursor.updatePosition(CharLineOffset(0, 0))
+	}
+
+	@Test
+	fun `a host action that edits after suspending follows the unfocused editor it was run on`() = sharedTest { state ->
+		val fetched = CompletableDeferred<String>()
+		state.registerSuspendingPaste(fetched)
+
+		editors()[0].performSemanticsAction(SemanticsActions.PasteText)
+		waitForIdle()
+		fetched.complete("new\nline ")
+		waitForIdle()
+
+		assertEquals(1, state.textLines.size)
+		assertEquals("new line hello", state.getAllText().text)
+	}
+
+	@Test
+	fun `a host action that edits after suspending follows the editor it was run on, not the one focused since`() = sharedTest { state ->
+		val fetched = CompletableDeferred<String>()
+		state.registerSuspendingPaste(fetched)
+
+		editors()[1].performSemanticsAction(SemanticsActions.PasteText)
+		waitForIdle()
+		editors()[0].performSemanticsAction(SemanticsActions.OnClick)
+		waitForIdle()
+		editors()[0].assertIsFocused()
+		fetched.complete("new\nline ")
+		waitForIdle()
+
+		assertEquals("new\nline hello", state.getAllText().text)
 	}
 }

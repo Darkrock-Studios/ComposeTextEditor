@@ -4288,16 +4288,25 @@ Shaping is one line per keystroke. These still scale with document length:
   follows the editor it was aimed at; a keyboard paste follows the editor
   focused at the keypress, though focus moves while the read is suspended
   (`SharedStateTargetE2eTest`). Found 7.82.
-- [ ] **7.82 A host action that edits after suspending follows the focused
+- [x] **7.82 A host action that edits after suspending follows the focused
   editor. S.** [Opus] [Lane M] A host action registered through
   `EditorActionRegistry` that suspends before it edits (fetching text, then
   inserting it) runs its edit outside `asEditor`, and `EditorActionContext`
   does not say which editor it was aimed at, so run on the unfocused editor
   of two sharing a state it follows the focused one's line limit. Rare, as
   7.73 is.
+  Done: an `EditorActionContext` records the editor its action was run on
+  (the one whose menu or semantics ran it, else the focused one) and
+  `asTarget` runs an edit as that editor, after a suspend too, wherever focus
+  has moved since. A menu's enabled check is asked as its editor as well
+  (`SharedStateTargetE2eTest`; `docs/design/editor-actions.md`).
 
 ## Housekeeping
 
+- [ ] The built-in paste (`pasteClipboard` in `input/BuiltinEditorActions.kt`)
+  captures `answeringEditor` and replays it through `asEditor` by hand, as
+  `EditorActionContext.asTarget` (7.82) now does for any action; use it. Found
+  in 7.82's review.
 - [ ] Paste (`landPaste` in `input/BuiltinEditorActions.kt`) and drop
   (`insertAt` in `dragdrop/TextDrop.kt`) each settle the text they land by
   hand: rich spans, `applyHtmlPasteBlocks`, `removeLinkLookOutsideLinks`,

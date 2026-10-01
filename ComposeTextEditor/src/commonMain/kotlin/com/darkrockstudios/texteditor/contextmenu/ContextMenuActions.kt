@@ -51,8 +51,10 @@ class ContextMenuActions(
 	 * Whether [action] is available and currently has work to do; false disables its
 	 * menu item.
 	 */
-	fun canPerform(action: EditorCommand.Action): Boolean =
-		permitted(state.actions[action])?.isEnabled?.invoke(context()) == true
+	fun canPerform(action: EditorCommand.Action): Boolean {
+		val spec = permitted(state.actions[action]) ?: return false
+		return state.asEditor(editor()) { spec.isEnabled(context()) }
+	}
 
 	/**
 	 * Runs [action] if it is registered and allowed. The read-only check lives
