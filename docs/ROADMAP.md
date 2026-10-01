@@ -1429,9 +1429,10 @@ Also seen:
 - [x] **4.15 Browser tests.** [Opus] [Lane L] Automation against the built demo
   (0.7), with composition events.
   Done: `browserTests/` (Playwright, Chromium), run by the `browser` CI job,
-  pending its first run there; it passes here with Playwright's own Chromium
-  download. Key presses (typing, Enter, Backspace, arrows, Shift selection,
-  ';' and '=') and compositions through Chromium's input method over the
+  which passes there (run 36882012015 at `c838d224`: 9 passed, the two 4.35
+  cases skipped); it passes here with Playwright's own Chromium download.
+  Key presses (typing, Enter, Backspace, arrows, Shift selection, ';' and
+  '=') and compositions through Chromium's input method over the
   DevTools protocol, which fires the real `composition*` and `beforeinput`
   events: a dead key, a Japanese composition converted and committed once, a
   cancelled composition, typing after a commit. The editor's text is read
@@ -1565,7 +1566,7 @@ Also seen:
 
 Exit criteria: typing, composition, and clipboard work in current Chrome,
 Firefox, and Safari on desktop; the soft keyboard works on Android Chrome and
-iOS Safari; browser tests run in CI.
+iOS Safari; browser tests run in CI (met: the `browser` job, 4.15).
 
 - [x] **4.22 DOM focus left on the canvas. S.** [Opus] [Lane E] While the
   editor holds Compose focus, the browser's focus can stay on the canvas rather
