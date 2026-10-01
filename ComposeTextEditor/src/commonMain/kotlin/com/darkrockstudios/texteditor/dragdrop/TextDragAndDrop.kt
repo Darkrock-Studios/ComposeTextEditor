@@ -19,6 +19,7 @@ import androidx.compose.ui.node.DelegatingNode
 import androidx.compose.ui.node.LayoutAwareModifierNode
 import androidx.compose.ui.node.ModifierNodeElement
 import androidx.compose.ui.node.requireDensity
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
 import com.darkrockstudios.texteditor.CharLineOffset
@@ -99,7 +100,9 @@ internal class TextDragAndDrop(
 	var dropHit: PointerHit? by mutableStateOf(null)
 		private set
 
-	private class OutgoingDrag(val id: Long, val range: TextEditorRange, val text: String) {
+	private class OutgoingDrag(val id: Long, val range: TextEditorRange, val styled: AnnotatedString) {
+		val text: String get() = styled.text
+
 		var droppedHere = false
 	}
 
@@ -150,7 +153,7 @@ internal class TextDragAndDrop(
 			onEnded = ::onSourceEnded,
 		)
 		val rich = data(state.selectionAsHtml(selection)) ?: return
-		val drag = OutgoingDrag(id, selection, text.text)
+		val drag = OutgoingDrag(id, selection, text)
 		outgoing = drag
 		// A drag too large to carry its markup to another process (Android's binder
 		// limit) still drags its text.
@@ -193,9 +196,9 @@ internal class TextDragAndDrop(
 	}
 
 	/**
-	 * Drops [content] at [at]. A drag of this editor's own text ([dragId]) takes the rich
-	 * spans its markup cannot carry from its source, which it still holds, as a paste
-	 * takes them from the copy.
+	 * Drops [content] at [at]. A drag of this editor's own text ([dragId]) takes what its
+	 * markup cannot carry from its source, which it still holds, as a paste takes them
+	 * from the copy: the text as it was styled (markup has no font size) and its rich spans.
 	 */
 	internal fun dropAt(at: CharLineOffset, content: DroppedText, dragId: Long?, copy: Boolean): Boolean =
 		state.asEditor(editor()) { dropHere(at, content, dragId, copy) }
@@ -207,11 +210,13 @@ internal class TextDragAndDrop(
 		val moveFrom = source?.takeIf { !copy }?.range
 		// A copy of whole lines carries their markers and formats; a drop leaves them to
 		// the markup, which restores them.
-		val richSpans = source?.takeIf { content.text.text == it.text }
+		val intact = source?.takeIf { content.text.text == it.text }
+		val richSpans = intact
 			?.let { state.preservedRichSpans(it.range) }
 			?.filter { !it.style.stickyAtStart && it.style !is BlockSpanStyle }
+		val text = intact?.styled ?: content.text
 		// Refused, the drop is not taken, so a move leaves its source where it was.
-		return state.dropText(content.text, content.html, at, moveFrom, whole = !copy, richSpans, content.document) != null
+		return state.dropText(text, content.html, at, moveFrom, whole = !copy, richSpans, content.document) != null
 	}
 
 	private fun hitAt(positionInRoot: Offset): PointerHit? {
