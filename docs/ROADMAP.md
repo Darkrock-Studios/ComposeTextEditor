@@ -188,7 +188,7 @@ review.
 | E | Input sessions on desktop, iOS, web | `desktopMain`, `iosMain`, `wasmJsMain` under `input/` | 4.2 to 4.7, 4.10 to 4.12, 4.19, 4.21, 4.22, 4.24 to 4.26, 4.28, 4.29, 4.32, 4.33, 4.35, 4.37 to 4.40, 7.37 |
 | F | Android input | `androidMain` | 0.4, 0.12, 3.9 to 3.11, 3.14, 3.17, 4.16, 4.18, 4.20, 4.27, 4.30, 4.31, 4.34, 4.36, 7.40 |
 | G | Edit pipeline and undo | `state/TextEditManager.kt`, `state/TextEditHistory.kt`, `state/EditBehavior.kt`, `input/ImeEditLogic.kt` | 1.20, 5.1 to 5.5, 5.9 to 5.11, 5.13 to 5.17, 6.1 to 6.6, 6.14, 6.15, 6.17, 6.22, 6.23, 6.28, 6.29, 6.33 to 6.35, 6.40, 6.45, 7.54, 7.55 |
-| H | Clipboard and HTML | `clipboard/`, `html/`, `dragdrop/` | 4.9, 4.13, 4.17, 6.7 to 6.13, 6.18 to 6.21, 5.12, 6.24 to 6.27, 6.30 to 6.32, 6.36 to 6.39, 6.41 to 6.44, 7.39, 7.46, 7.47, 7.49, 7.53, 7.63 |
+| H | Clipboard and HTML | `clipboard/`, `html/`, `dragdrop/` | 4.9, 4.13, 4.17, 6.7 to 6.13, 6.18 to 6.21, 5.12, 6.24 to 6.27, 6.30 to 6.32, 6.36 to 6.39, 6.41 to 6.44, 6.46, 7.39, 7.46, 7.47, 7.49, 7.53, 7.63 |
 | I | Markdown and block model | `ComposeTextEditorMarkdown/`, `richstyle/`, `state/TextEditorStateBlockExt.kt` | 5.6, 7.14 to 7.16, 7.43, 7.45, 7.52, 7.64, 7.67, 7.70 to 7.72, 7.79, 7.80 |
 | J | Find addon | `ComposeTextEditorFind/` | 7.17 to 7.19, 7.26, 7.29, 7.42, 7.68, 7.69 |
 | K | Spell check addon | `ComposeTextEditorSpellCheck/` | 7.20 to 7.22, 7.28, 7.30, 7.31, 7.34, 7.35, 7.38, 7.44, 7.50, 7.56, 7.61, 7.74, 7.76, 7.77 |
@@ -2616,7 +2616,7 @@ iOS Safari; browser tests run in CI (met: the `browser` job, 4.15).
   copy); `uniformHeadingTag` is gone. The standalone `AnnotatedString.toHtml`,
   which has no blocks, still reads a run at a heading's size as that heading
   (`html/HeadingSizeBoldHtmlTest.kt`). Found: 6.31, 7.64.
-- [ ] **6.20 Drag and drop on Android, iOS and web. S.** [Opus] [Lane H]
+- [x] **6.20 Drag and drop on Android, iOS and web. S.** [Opus] [Lane H]
   `dragdrop/PlatformTextDrag` has desktop actuals only. Android: build the
   transfer from `ClipData.newHtmlText` with `View.DRAG_FLAG_GLOBAL`, read drops
   from `toAndroidDragEvent().clipData` and its `x`/`y`, and start a drag from a
@@ -2665,6 +2665,27 @@ iOS Safari; browser tests run in CI (met: the `browser` job, 4.15).
   Ctrl copied; an italic `text/html` drop from outside landed italic at the
   drop point, also after a refused `dragstart`, and plain text dropped after
   a drag of the selection left and ended elsewhere landed as itself.
+  iOS left as it was, no drags and no drops (Mac queue). Drops: Compose
+  1.12.1's iOS `DragAndDropEvent` exposes only its `UIDragItem`s, and where
+  the drop is (`positionInRoot`, the `UIDropSession`) is internal, so a drop
+  cannot be placed. Reading the items would be workable: iOS ignores what
+  `onDrop` answers, so their `NSItemProvider`s could load and insert later.
+  Drags: Compose's own `UIDragInteraction` on its overlay view starts them
+  from a long press, racing the editor's edit menu (3.8); it offers copy only
+  (`doesSessionAllowMoveOperation` is false), so a drag within the editor
+  could not move; and it is off by default on iPhone. Following up in 6.46.
+- [ ] **6.46 Drag and drop on iOS. M.** [Opus] [Lane H] [Mac work] 6.20 found
+  drops out of reach through Compose's `DragAndDropEvent` on iOS, which keeps
+  the drop's location internal. Once Compose exposes it (recheck on each
+  upgrade), drops can go through the existing path, loading the items'
+  `public.html` and plain text asynchronously in `onDrop` and dropping
+  through `TextDragAndDrop.dropAt`, an own drag known by its item's
+  `localObject`. Drags out through Compose's interaction can only copy, so a
+  move within the editor needs the drop to know its own drag. Installing the
+  editor's own interactions instead competes with Compose's on its overlay
+  view (`LocalUIView`), whose drop interaction is hit first and whose
+  gesture handling exempts only its own long press. Either way, the long
+  press inside the selection that lifts a drag must agree with the edit menu.
 - [ ] **6.42 A finger drag shows no picture of the text. S.** [Opus] [Lane H]
   The drag's decoration is 1 by 1 pixel, which suits desktop, where the
   platform's cursor shows the drag. On Android nothing follows the finger but
@@ -4220,4 +4241,4 @@ records results and removes entries that passed.
 | 4.38 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64`. `skikoMain` gains `input/DomLayoutKey.kt` (`layoutKeyFromCodePoint`, used by the web only; `UNICODE_KEY_CODE_BASE` moved there from desktop). Then the wasm demo in Safari and Chrome on macOS, with the US layout and again with French (AZERTY): Cmd+Z, Cmd+Shift+Z, Cmd+B, Ctrl+A and Ctrl+F (the Emacs chords), and Cmd+Option+Shift+V over copied bold text | Compiles. Under AZERTY, Cmd+Z undoes on the key that types z (QWERTY's W), not on QWERTY's Z; Cmd+B bolds; the Emacs chords move as in TextEdit; Cmd+Option+Shift+V pastes plain. Under US, all as before ||
 | 7.33 | In the iOS sample app with a hardware keyboard (the simulator's, or an iPad's), type `abc אבג def` and press Right from the start, then Left from the end; also Shift+Right. Compare a `UITextView` (Notes) with the same text. Then the same in the macOS desktop sample app against TextEdit. commonMain only, no `iosMain` change | Each press moves the caret one glyph further right (or left) on screen, through the Hebrew word, as Notes and TextEdit do. If iOS turns out logical, set `ARROW_KEYS_MOVE_VISUALLY` per platform in `state/VisualCaretMotion.kt`; if the arrows never reach the key handler on iOS (UIKit moving the caret through the input connection instead), file that ||
 | 6.37 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64`. `clipboard/ClipboardHtml.kt` adds `internal expect suspend fun readClipboardPaste`; the iOS actual (`iosMain/.../clipboard/ClipboardHtml.ios.kt`) goes through `ClipboardHelper.getText`, `readClipboardHtml` and `readCopyId` as the paste did. Then in the iOS sample app: copy a bulleted list in the editor and paste it, and paste a bulleted list copied from Notes | Compiles. Both paste as bulleted lists, with one paste prompt at most ||
-| 6.20 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64`. The `dragdrop/PlatformTextDrag.kt` expects changed: `textDragTransferData` takes a nullable `html`, and `droppedText` an `ownDrag` flag; the iOS actuals (`iosMain/.../dragdrop/PlatformTextDrag.ios.kt`) still answer null and false | Compiles ||
+| 6.20 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64` and `:ComposeTextEditor:iosSimulatorArm64Test`. The `dragdrop/PlatformTextDrag.kt` expects changed: `textDragTransferData` takes a nullable `html`, and `droppedText` an `ownDrag` flag; the iOS actuals (`iosMain/.../dragdrop/PlatformTextDrag.ios.kt`) still answer null and false, by choice (6.20 says why; 6.46 follows up). Common code changed a long press inside the selection while the platform toolbar is up (it tries to start a drag, which on iOS returns at once since `platformDragsText` is false) and a pointer press inside the selection (held through `holdPress`; the wider slop for a drag the platform starts is the web's only). Then on an iPad simulator in the sample app: select a word with a long press and long-press inside it again; with the pointer (I/O > Input > Send Pointer to Device), click inside the selection, and press inside it and drag; with Notes and then Safari beside the sample app in Split View, drag text from them over the editor and drop it | Compiles and the tests pass. The second long press shows the edit menu on lift and starts no drag; the click places the caret and the pointer drag selects from the press, as before; the drops from Notes and Safari land nothing, show no drop caret, and nothing crashes ||
