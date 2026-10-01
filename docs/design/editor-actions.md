@@ -195,11 +195,17 @@ too (CodeMirror's escape, for browsers that keep Ctrl+Tab). Escape arms Tab unti
 another key is pressed or focus changes. Alt+Tab still indents where the system
 lets it through, as Option+Tab does in Cocoa.
 
-Tab is list-aware. A list item has no indent level to take until nested lists
-exist (roadmap 5.6), and leading spaces in one do not survive a markdown round
-trip, so Tab at the start of a list item does nothing, and Tab over several
-lines indents all but the list items. Shift+Tab still strips leading spaces
-from any line, list items included.
+Tab is list-aware. At a list item's start it nests the item one level, never
+deeper than one below the item above (roadmap 5.6); inside the item's text it
+inserts the indent text. A list's first top-level item has nothing to nest
+under: Google Docs nests it anyway and Word indents the whole list, and the
+line model can do neither, so it takes the indent text, which survives a
+markdown round trip (7.45) and Shift+Tab takes back (7.58). A nested item
+already at its limit is left alone, since Shift+Tab there un-nests it and would
+leave the indent, and so is a blank first item, whose indent would keep Enter
+from ending the list. Tab over several lines treats each line as Tab alone
+does. Shift+Tab at the caret un-nests a nested item and otherwise strips the
+line's leading spaces, list items included; over several lines it does both.
 
 ### The kill ring
 
@@ -480,9 +486,8 @@ primitives stay `internal`.
 
 ## Known limitations and follow-ups
 
-- Tab cannot nest a list item, since the block model has no nesting (roadmap
-  5.6). A code-editor indent (to the next tab stop, or matching the line above)
-  is a host's own `editor.indent`.
+- A code-editor indent (to the next tab stop, or matching the line above) is a
+  host's own `editor.indent`.
 - Behaviors see typed text, pastes, newline, backspace and forward delete. A
   drop is not offered to `onPaste`. Nor is a typed composition the editor ends
   itself (a tap outside it, focus loss) offered to `onTextInput`, only one the

@@ -2967,11 +2967,21 @@ Shaping is one line per keystroke. These still scale with document length:
   request, since a `TextLayoutResult` cannot be put together from the editor's
   per-line layouts. Needs a semantics node or a platform accessibility hook that
   answers character bounds from the rows directly.
-- [ ] **7.58** [Opus] [Lane D] Tab at a list item's start where nesting is
+- [x] **7.58** [Opus] [Lane D] Tab at a list item's start where nesting is
   not allowed does nothing (`handleIndent` in `input/BuiltinEditorActions.kt`),
   because leading spaces in an item did not survive a markdown round trip.
   Since 7.45 they do (`- &nbsp;&nbsp;item`), so decide whether Tab there
   should insert the indent text, as it does inside an item's text.
+  Done: a list's first top-level item, which has nothing to nest under, takes
+  the indent text. Google Docs nests it anyway and Word indents the whole
+  list; the line model can do neither, and an indent of the item's text is
+  the nearest visible answer, survives a round trip and is taken back by
+  Shift+Tab. A nested item already one below the item above is left alone:
+  Shift+Tab there un-nests it, so an indent would be left behind. So is a
+  blank first item, whose indent would keep Enter from ending the list (and
+  would not round trip). A selection of the item's text is kept. Tab over
+  several lines treats each line as Tab alone does (`NestedListE2eTest`,
+  `TabE2eTest`; `docs/design/editor-actions.md`, "Tab").
 - [ ] **7.59** [Opus] [Lane M] The semantics offer `onImeAction` from
   `KeyboardSettings.imeAction` alone, so a single-line editor's default
   action key, Done since 7.40, is not offered to accessibility services and

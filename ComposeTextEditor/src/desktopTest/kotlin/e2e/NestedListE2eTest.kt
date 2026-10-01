@@ -30,10 +30,59 @@ class NestedListE2eTest {
 		state.cursor.updatePosition(CharLineOffset(1, 1))
 		press(Key.Tab, shift = true)
 		assertEquals("- a\n- b\n- c", markdown.exportAsMarkdown(), "shift+tab un-nests from anywhere in the item")
+	}
 
+	@Test
+	fun `tab at the first item's start indents its text, and shift+tab takes the indent back`() = editorUiTest {
+		markdown.importMarkdown("- a\n- b")
+		waitForIdle()
 		state.cursor.updatePosition(CharLineOffset(0, 0))
+
 		press(Key.Tab)
-		assertEquals("- a\n- b\n- c", markdown.exportAsMarkdown(), "the first item has nothing to nest under")
+		assertEquals(listOf("    a", "b"), lines, "the first item has nothing to nest under")
+		assertEquals(0, markdown.editorState.listLevel(0))
+		assertEquals(CharLineOffset(0, 4), state.cursorPosition)
+		val exported = markdown.exportAsMarkdown()
+		markdown.importMarkdown(exported)
+		waitForIdle()
+		assertEquals(listOf("    a", "b"), lines, "the indent survives a round trip: $exported")
+		assertEquals(0, markdown.editorState.listLevel(0))
+
+		state.cursor.updatePosition(CharLineOffset(0, 4))
+		press(Key.Tab, shift = true)
+		assertEquals("- a\n- b", markdown.exportAsMarkdown())
+		assertEquals(CharLineOffset(0, 0), state.cursorPosition)
+	}
+
+	@Test
+	fun `tab with the first item's text selected indents it and keeps the selection`() = editorUiTest {
+		markdown.importMarkdown("- hello\n- b")
+		waitForIdle()
+		state.selector.updateSelection(CharLineOffset(0, 0), CharLineOffset(0, 5))
+		press(Key.Tab)
+		assertEquals(listOf("    hello", "b"), lines)
+		assertEquals("hello", state.selector.getSelectedText().text)
+	}
+
+	@Test
+	fun `tab on an empty first item leaves it empty, so enter still ends the list`() = editorUiTest {
+		markdown.importMarkdown("- a")
+		waitForIdle()
+		state.selector.updateSelection(CharLineOffset(0, 0), CharLineOffset(0, 1))
+		press(Key.Backspace)
+		press(Key.Tab)
+		assertEquals(listOf(""), lines)
+		assertEquals(0, markdown.editorState.listLevel(0))
+	}
+
+	@Test
+	fun `tab at a nested item that cannot nest further does nothing`() = editorUiTest {
+		markdown.importMarkdown("- a\n  - b")
+		waitForIdle()
+		state.cursor.updatePosition(CharLineOffset(1, 0))
+		press(Key.Tab)
+		assertEquals(listOf("a", "b"), lines, "shift+tab would un-nest rather than take an indent back")
+		assertEquals("- a\n  - b", markdown.exportAsMarkdown())
 	}
 
 	@Test

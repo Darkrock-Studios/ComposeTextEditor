@@ -61,24 +61,24 @@ class TabE2eTest {
 	}
 
 	@Test
-	fun `tab at the start of a list item adds no leading space`() = editorUiTest(
+	fun `tab at the start of a list's first item indents its text`() = editorUiTest(
 		initialText = AnnotatedString("intro\nitem"),
 	) {
 		markdown.editorState.toggleBulletList(1..1)
 		waitForIdle()
 		state.cursor.updatePosition(CharLineOffset(1, 0))
 		press(Key.Tab)
-		assertEquals(listOf("intro", "item"), lines, "a list item has no indent level to take (5.6)")
+		assertEquals(listOf("intro", "    item"), lines, "the first item has nothing to nest under (7.58)")
 		assertEquals(listOf(1), state.linesWith(BulletListSpanStyle))
-		assertEquals("intro\n\n- item", markdown.exportAsMarkdown())
+		assertEquals("intro\n\n- &nbsp;&nbsp;&nbsp;&nbsp;item", markdown.exportAsMarkdown())
 
-		state.cursor.updatePosition(CharLineOffset(1, 4))
+		state.cursor.updatePosition(CharLineOffset(1, 8))
 		press(Key.Tab)
-		assertEquals("item    ", lines[1], "inside the item's text, tab still inserts")
+		assertEquals("    item    ", lines[1], "inside the item's text, tab still inserts")
 	}
 
 	@Test
-	fun `tab over several lines indents all but the list items, in one undo step`() = editorUiTest(
+	fun `tab over several lines nests the items it can and indents the rest, in one undo step`() = editorUiTest(
 		initialText = AnnotatedString("one\ntwo\nthree\nfour"),
 	) {
 		markdown.editorState.toggleBulletList(1..1)
@@ -86,8 +86,9 @@ class TabE2eTest {
 		waitForIdle()
 		press(Key.A, ctrl = true)
 		press(Key.Tab)
-		assertEquals(listOf("    one", "two", "three", "    four"), lines)
-		// The bullet has nothing to nest under; the numbered item nests under it (5.6).
+		// The bullet has nothing to nest under, so it takes the indent text (7.58);
+		// the numbered item nests under it (5.6).
+		assertEquals(listOf("    one", "    two", "three", "    four"), lines)
 		assertEquals(listOf(1), state.linesWith(BulletListSpanStyle))
 		assertEquals(listOf(2), state.linesWith(OrderedListSpanStyle.of(1)))
 

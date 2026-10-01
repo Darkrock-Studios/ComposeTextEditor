@@ -337,10 +337,16 @@ private fun TextEditorState.handleIndent() = editGroup {
 	} else {
 		val at = selection?.start ?: cursorPosition
 		// At a list item's start Tab nests the item one level (5.6); inside its
-		// text it still inserts, as Word has it. Leading spaces in an item do not
-		// survive a markdown round trip, so a nest that is not allowed does nothing.
+		// text it still inserts, as Word has it.
 		if (at.char == 0 && isListItem(at.line)) {
 			nestListItems(at.line..at.line)
+			if (!takesIndentForNest(at.line)) return@editGroup
+			// The indent goes before the item's text, keeping any selection of it.
+			val shift = tabSettings.indentText.length
+			val end = selection?.end ?: at
+			replace(TextEditorRange(at, at), tabSettings.indentText)
+			cursor.updatePosition(end.copy(char = end.char + shift))
+			selector.updateSelection(at.copy(char = shift), end.copy(char = end.char + shift))
 			return@editGroup
 		}
 		if (selection != null) {
@@ -351,6 +357,17 @@ private fun TextEditorState.handleIndent() = editGroup {
 }
 
 private fun TextEditorState.isListItem(line: Int): Boolean = listBlockAt(line) != null
+
+/**
+ * Whether the list item at [line], after a nest, is one that had nothing to nest
+ * under (a list's first top-level item) and takes the indent text instead: the
+ * nearest the line model has to Google Docs nesting it anyway or Word indenting
+ * the list, and Shift+Tab takes it back. A nested item at its limit takes none,
+ * since Shift+Tab there would un-nest it and leave the indent; nor does a blank
+ * item, whose indent would keep Enter from ending the list.
+ */
+private fun TextEditorState.takesIndentForNest(line: Int): Boolean =
+	listBlockAt(line)?.listLevel == 0 && textLines[line].isNotBlank()
 
 private fun TextEditorState.handleOutdent() = editGroup {
 	val selection = selector.selection
@@ -369,7 +386,7 @@ private fun TextEditorState.handleOutdent() = editGroup {
 /** Nests the list items in the range and indents the other lines, as Tab does on each alone. */
 private fun TextEditorState.indentLineRange(startLine: Int, endLine: Int) {
 	nestListItems(startLine..endLine)
-	val lines = (startLine..endLine).filterNot { isListItem(it) }
+	val lines = (startLine..endLine).filter { !isListItem(it) || takesIndentForNest(it) }
 	if (lines.isEmpty()) return
 	val prefix = tabSettings.indentText
 	for (line in lines) {
