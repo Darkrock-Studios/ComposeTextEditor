@@ -2783,8 +2783,20 @@ iOS Safari; browser tests run in CI.
   both directions and mixed text. Like the left-to-right sliver at the right
   edge, a right-to-left line that fills the row puts its sliver past the left
   edge, where it is clipped.
-- [ ] **7.7** [Opus] [Lane C] Underline boxes (spell check, composing, links)
+- [x] **7.7** [Opus] [Lane C] Underline boxes (spell check, composing, links)
   assume no bidi.
+  Done: the wavy and dotted underlines (`richstyle/Underlines.kt`, spell
+  check and its diagnostics), the highlight fill (`HighlightSpanStyle`, the
+  find addon's match and scope fills, both through the new public
+  `drawRangeHighlight`) and the IME composing underline mark each stretch of
+  the row their range covers, from 7.6's `getRunBoxes`
+  (`drawing/BidiDecorationTest.kt`). `getRunBoxes` leaves out the spaces a
+  soft wrap hangs past the row, as the old fills did with `getLineRight`, and
+  a row with no right-to-left character in a left-to-right paragraph skips
+  the path, reading two horizontal positions as before. Links need nothing:
+  their underline is a `TextDecoration` in the text, which the layout draws
+  per run itself. `getBoundingBoxes`, which assumed one direction, has no
+  callers left and is deprecated.
 
 Hit testing and caret x already delegate to Compose and should be correct.
 
