@@ -30,7 +30,8 @@ import androidx.compose.ui.text.input.TextEditorState as ComposeTextEditorState
 /**
  * Starts a Compose skiko input-method session bound to this editor. A platform's
  * `TextEditorTextInputService` hands it that platform's [imeOptions], whether the
- * platform needs a text layout to hit-test ([exposeTextLayout]), and [imeResync]; every
+ * platform needs a text layout to hit-test ([exposeTextLayout]), whether it moves the
+ * caret for a caret key itself ([echoesCaretKeys]), and [imeResync]; every
  * edit the platform delivers lands in [ImeEditLogic] through
  * [SkikoTextEditorInputMethodRequest].
  *
@@ -49,9 +50,15 @@ internal suspend fun TextEditorState.startSkikoInputSession(
 	session: PlatformTextInputSession,
 	imeOptions: ImeOptions,
 	exposeTextLayout: Boolean = false,
+	echoesCaretKeys: Boolean = false,
 	imeResync: SkikoImeResync = SkikoImeResync.None,
 ): Nothing = coroutineScope {
-	val request = SkikoTextEditorInputMethodRequest(this@startSkikoInputSession, imeOptions, exposeTextLayout)
+	val request = SkikoTextEditorInputMethodRequest(
+		this@startSkikoInputSession,
+		imeOptions,
+		exposeTextLayout,
+		echoesCaretKeys,
+	)
 	when (imeResync) {
 		SkikoImeResync.None -> Unit
 		is SkikoImeResync.Rewrite -> launch { onImeResync { imeResync.rewrite(request.value()) } }
@@ -120,11 +127,15 @@ internal sealed interface SkikoImeResync {
  *
  * @param exposeTextLayout Serve [textLayoutResult] from a whole-document layout. Only
  *   iOS reads it, for the spacebar trackpad; elsewhere it would be a cost for nothing.
+ * @param echoesCaretKeys The platform moves the caret for a caret key after the editor
+ *   has, and repeats a held one itself: UIKit does both. Its selection changes while
+ *   such a key is held go to [TextEditorState.heldCaretKey] instead of the selection.
  */
 internal class SkikoTextEditorInputMethodRequest(
 	private val editorState: TextEditorState,
 	override val imeOptions: ImeOptions,
 	exposeTextLayout: Boolean = false,
+	private val echoesCaretKeys: Boolean = false,
 ) : PlatformTextInputMethodRequest {
 
 	/** Live view of the editor as the CharSequence + selection + composition Compose expects. */
@@ -184,7 +195,7 @@ internal class SkikoTextEditorInputMethodRequest(
 	private val keyboardBackspace = KeyboardBackspace()
 
 	override val editText: (TextEditingScope.() -> Unit) -> Unit = { block ->
-		SkikoTextEditingScope(editorState, keyboardBackspace).block()
+		SkikoTextEditingScope(editorState, keyboardBackspace, echoesCaretKeys).block()
 	}
 
 	private fun attachedCoordinates(): LayoutCoordinates? {
@@ -304,19 +315,35 @@ private class KeyboardBackspace {
 private class SkikoTextEditingScope(
 	private val state: TextEditorState,
 	private val keyboardBackspace: KeyboardBackspace,
+	private val echoesCaretKeys: Boolean,
 ) : TextEditingScope {
 
 	override fun deleteSurroundingTextInCodePoints(lengthBeforeCursor: Int, lengthAfterCursor: Int) {
-		keyboardBackspace.forget()
+		platformEdited()
 		state.imeDeleteSurroundingTextInCodePoints(lengthBeforeCursor, lengthAfterCursor)
 	}
 
+	/**
+	 * Any other edit from the platform: it ends the keyboard's backspace, and a held caret
+	 * key too, since the keys Compose consumes before the editor sees them (Backspace,
+	 * Return) reach it only as edits.
+	 */
+	private fun platformEdited() {
+		keyboardBackspace.forget()
+		state.heldCaretKey.clear()
+	}
+
 	override fun setSelection(start: Int, end: Int) {
+		if (echoesCaretKeys && state.heldCaretKey.absorbSelection()) {
+			keyboardBackspace.forget()
+			return
+		}
 		keyboardBackspace.selecting(state, start, end)
 		state.imeSetSelection(start, end)
 	}
 
 	override fun commitText(text: CharSequence, newCursorPosition: Int) {
+		state.heldCaretKey.clear()
 		val backspace = keyboardBackspace.takeFor(state, text)
 		if (backspace != null) {
 			state.imeBackspaceOver(backspace)
@@ -326,17 +353,17 @@ private class SkikoTextEditingScope(
 	}
 
 	override fun setComposingRegion(start: Int, end: Int) {
-		keyboardBackspace.forget()
+		platformEdited()
 		state.imeSetComposingRegion(start, end)
 	}
 
 	override fun setComposingText(text: CharSequence, newCursorPosition: Int) {
-		keyboardBackspace.forget()
+		platformEdited()
 		state.imeSetComposingText(text.toString(), newCursorPosition)
 	}
 
 	override fun finishComposingText() {
-		keyboardBackspace.forget()
+		platformEdited()
 		state.imeFinishComposing()
 	}
 }

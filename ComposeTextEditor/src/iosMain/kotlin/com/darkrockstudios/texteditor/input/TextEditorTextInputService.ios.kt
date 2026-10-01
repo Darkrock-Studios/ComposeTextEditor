@@ -16,9 +16,10 @@ import com.darkrockstudios.texteditor.state.TextEditorState
 actual class TextEditorTextInputService actual constructor(
 	private val state: TextEditorState
 ) {
-	// UIKit's spacebar trackpad hit-tests the text through the request's layout.
+	// UIKit's spacebar trackpad hit-tests the text through the request's layout, and
+	// UIKit moves the caret for a hardware arrow key as well as the editor.
 	actual suspend fun startInput(session: PlatformTextInputSession): Nothing =
-		state.startSkikoInputSession(session, iosImeOptions, exposeTextLayout = true)
+		state.startSkikoInputSession(session, iosImeOptions, exposeTextLayout = true, echoesCaretKeys = true)
 }
 
 private val iosImeOptions = ImeOptions(

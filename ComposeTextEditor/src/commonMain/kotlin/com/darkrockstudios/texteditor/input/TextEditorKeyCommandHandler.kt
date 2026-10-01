@@ -61,28 +61,34 @@ internal class TextEditorKeyCommandHandler(
 		scope: CoroutineScope,
 		enabled: Boolean = true
 	): Boolean {
+		// A held caret key ends when it is let go, or when another key or a modifier changes
+		// what the platform's repeats mean; any repeats left are then the platform's own.
+		if (keyEvent.type == KeyEventType.KeyUp) {
+			if (keyEvent.key in modifierKeys) state.heldCaretKey.clear() else state.heldCaretKey.released(keyEvent.key)
+		}
 		if (keyEvent.type != KeyEventType.KeyDown) return false
+		state.heldCaretKey.clear()
 		// A key with no character (Escape, a function key) ends a dead key's accent, as a
 		// command does; a key with one settles it in handleCharacterInput.
 		if (keyEvent.utf16CodePoint == 0 && keyEvent.key !in modifierKeys) deadKeys.commitPending(state)
 		if (yieldsTabToFocus(keyEvent, state)) return false
 
 		val bound = keyBindings.commandFor(keyEvent) ?: return false
-		// The arrow keys are visual: in a right-to-left paragraph Left moves forward
-		// through the text, as the platform editors and BasicTextField do. Home, End,
-		// the Emacs chords and the deletes stay logical.
-		val command = if (bound is Motion && keyEvent.isHorizontalArrow && state.caretParagraphIsRtl()) {
-			bound.mirrored(keyBindings)
-		} else {
-			bound
-		}
+		val command = visualCommand(bound, keyEvent, state)
 		if (command !is Motion || !command.isVertical) state.cursor.forgetVerticalGoal()
 		if (command !is Action || !state.killRing.isKill(command)) state.killRing.interrupt()
 
 		return when (command) {
 			is Motion -> {
 				deadKeys.commitPending(state)
-				moveCursor(command, state, extendSelection = keyEvent.isShiftPressed)
+				val extend = keyEvent.isShiftPressed
+				moveCursor(command, state, extendSelection = extend)
+				state.heldCaretKey.pressed(keyEvent.key) {
+					// Resolved again each step: the caret may have crossed into a paragraph
+					// that runs the other way.
+					val step = visualCommand(bound, keyEvent, state)
+					if (step is Motion) moveCursor(step, state, extendSelection = extend)
+				}
 				true
 			}
 
@@ -98,6 +104,18 @@ internal class TextEditorKeyCommandHandler(
 			}
 		}
 	}
+
+	/**
+	 * The arrow keys are visual: in a right-to-left paragraph Left moves forward through
+	 * the text, as the platform editors and BasicTextField do. Home, End, the Emacs chords
+	 * and the deletes stay logical.
+	 */
+	private fun visualCommand(bound: EditorCommand, keyEvent: KeyEvent, state: TextEditorState): EditorCommand =
+		if (bound is Motion && keyEvent.isHorizontalArrow && state.caretParagraphIsRtl()) {
+			bound.mirrored(keyBindings)
+		} else {
+			bound
+		}
 
 	/**
 	 * Escape arms Tab to move focus until another key is pressed or focus changes. Tab
