@@ -434,7 +434,7 @@ fixes what users feel every minute.
   (`input/TextEditorKeyCommandHandler.kt`, `moveCursor`). Native collapses to
   the selection's start or end without moving further.
   Word motions and Up/Down still move from the caret, as `BasicTextField`'s do.
-- [ ] **1.5 Word motion and word selection. C, U.** [Opus] [Lane A]
+- [x] **1.5 Word motion and word selection. C, U.** [Opus] [Lane A]
   - Line end is not a boundary: Ctrl+Right from the last word of a line skips
     the first word of the next, and Ctrl+Delete deletes it
     (hammer-editor#852). Since 1.19 only Windows' next-word-start motion
@@ -463,6 +463,21 @@ fixes what users feel every minute.
   empty non-null selection is lane B's 1.21. Windows' Ctrl+Left still crosses
   a line break in one step (2.12). The Mac part (compile the shared `actual`
   for iOS) is in the queue; the checkbox waits on it.
+  Mac part done. On the iOS simulator with a hardware keyboard, Option+Left
+  and Option+Right stop at word starts and ends, keep "don’t" whole and stop
+  at the emoji in "a 😀 b", and a double-tap selects "don’t" or 😀 whole. But
+  skia's ICU on iOS has no CJK dictionary, so 日本語を勉強します broke one kanji
+  at a time. Fixed: `wordCursor` is no longer skia's on iOS for a line in a
+  dictionary script (CJK, Thai, Lao, Khmer, Myanmar): such a line takes iOS's
+  own breaks from `CFStringTokenizer` (`iosMain/.../state/WordBreaks.ios.kt`),
+  and other lines keep skia's, since the tokenizer is about ten times slower
+  over a scan of every line. Desktop and web keep skia's. iOS segments 日本語 as
+  日本 and 語, as `NSString`'s word enumeration does in any locale, where desktop
+  ICU keeps it whole; a double-tap on 勉 now selects 勉強
+  (`iosTest/.../WordBreaksIosTest.kt`). Left as they are: a line mixing a
+  dictionary script with Latin text takes iOS's breaks for its Latin words
+  too, and a document mostly in a dictionary script still pays the tokenizer
+  per line (about 0.3 to 0.5 ms) when word count or spell check scans it all.
 - [x] **1.6 End on a wrapped row, and caret affinity. R, C.** [Fable] [Lane A]
   End goes to `nextWrapStart - 1`. That is right when the row ends in a space,
   one character short when the wrap falls mid-word or in CJK, and past the
@@ -3275,7 +3290,6 @@ records results and removes entries that passed.
 
 | Item | What to do | A pass looks like | Result |
 | --- | --- | --- | --- |
-| 1.5 | The same iOS compile as 1.1 covers `wordCursor`. In the iOS sample app: Option+Left and Option+Right with a hardware keyboard through "don’t stop", "日本語を勉強します" and "a 😀 b"; double-tap "don’t" and an emoji | Option arrows stop at word ends and starts only, keeping "don’t" whole, stepping Japanese by dictionary word and stopping at the emoji; a double-tap selects the whole contraction or the whole emoji |  Partial, same run. Double-tap selects "don’t" whole and 😀 whole. **Fails:** double-tap on 勉 in 日本語を勉強します selects only 強, so iOS word breaks split kanji per character. Desktop, on the same skia `actual`, segments 勉強 (`TextEditorWordSegmentationTest`), so skia's ICU on iOS seems to lack the CJK dictionary; `NSString` word enumeration or `CFStringTokenizer` would have it. Option+Left and Option+Right not run: hardware keyboard, left for a person Then 2026-09-30, after the 4.6 fix: Option+Left and Option+Right with a hardware keyboard keep "don’t" whole and stop at word starts and ends. On "日本語を勉強します" they step per kanji, the same word-break failure as the double-tap. "a 😀 b" not yet stepped through |
 | 2.6 | In Safari and Chrome on macOS, open the wasm demo and press Ctrl+A, E, F, B, N, P, D, H and K in a paragraph. The page's hidden text area has the same Cocoa Emacs bindings, so a chord could act twice | Each chord moves or deletes once, as in the desktop sample app | Not run: needs a person at a real keyboard. Browser automation injects key events below the Cocoa text system, so it cannot reproduce a chord acting twice |
 | 2.9 | In the iOS sample app with a hardware keyboard: press Tab, Ctrl+Tab, then Escape followed by Tab; then set `state.tabSettings = TabSettings(movesFocus = true)` on the demo editor and press Tab | Tab indents by four spaces; Ctrl+Tab, Escape then Tab, and Tab under `movesFocus` either move focus to another control or do nothing, and never type a tab character (4.28) || Not run: hardware keyboard, left for a person |
 | 3.8 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64`. 3.8 added `internal expect fun hasNativeTextToolbar()` (commonMain `TouchToolbar.kt`) with `iosMain/.../TouchToolbar.ios.kt` answering true. Then in the simulator: long-press a word, double-tap a word, long-press empty space, tap the caret handle, and drag a selection handle | Compiles. UIKit's edit menu appears over the selection or caret with Cut, Copy, Paste and Select all as applicable (Paste and Select all alone at a bare caret), hides while a handle is dragged and returns when it drops, and goes when the caret moves or the text is scrolled. If no menu appears, the input connection has no toolbar: fall back to `false` in `TouchToolbar.ios.kt` so the context menu stands in |  Partial, same run. Compiles. The UIKit menu works over a selection: double-tap or long-press a word shows Cut, Copy, Paste, Select All, and each works. **Fails:** long-press in an empty document calls `show()` with a zero-width caret rect and only Paste, and UIKit shows nothing (the toolbar reports Hidden right after `showMenu`); a tap on the caret handle never calls `show()`. Native reference: a tap in Safari's focused empty field shows Paste. Also: a long-press past a line's end selects the line's last word instead of placing the caret; with a selection ending at the document end, a long-press below the text counts as on the selection. When the screen was shifted by 4.24 the selection menu did not appear either. Did not fall back to `false`, since the menu works for selections |
