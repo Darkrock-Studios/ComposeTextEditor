@@ -151,7 +151,7 @@ fun SpellCheckingTextEditor(
 	LaunchedEffect(state) {
 		state.textState.editOperations.debounceUntilQuiescentWithBatch(500.milliseconds)
 			.collect { operations ->
-				val rangesToCheck = computeAffectedRanges(operations, state.textState)
+				val rangesToCheck = computeAffectedRanges(operations)
 				val computedAgainst = state.textState.textLines
 				rangesToCheck.forEach { range ->
 					state.runPartialSpellCheck(range, computedAgainst)
@@ -376,19 +376,16 @@ private fun dpToPx(dp: Dp): Float {
 	return dp.value * density
 }
 
-private fun computeAffectedRanges(
-	operations: List<TextEditOperation>,
-	state: TextEditorState
-): List<TextEditorRange> {
+/** The ranges the batch's [operations] left to check, as the text stands after them. */
+internal fun computeAffectedRanges(operations: List<TextEditOperation>): List<TextEditorRange> {
 	return operations.fold(mutableListOf<TextEditorRange>()) { ranges, op ->
 		val opRange = when (op) {
-			is TextEditOperation.Insert -> TextEditorRange(
-				op.position,
-				op.position.copy(char = op.position.char + op.text.length)
-			)
-
+			is TextEditOperation.Insert -> TextEditorRange(op.position, op.text.text.endWhenInsertedAt(op.position))
 			is TextEditOperation.Delete -> op.range
-			is TextEditOperation.Replace -> op.range
+			is TextEditOperation.Replace ->
+				if (op.newText.isEmpty()) op.range
+				else TextEditorRange(op.range.start, op.newText.text.endWhenInsertedAt(op.range.start))
+
 			else -> null
 		}
 		opRange?.let { newRange ->
@@ -399,6 +396,13 @@ private fun computeAffectedRanges(
 		}
 		ranges
 	}
+}
+
+/** Where this text ends once inserted at [start], on the line its last line break leads to. */
+private fun String.endWhenInsertedAt(start: CharLineOffset): CharLineOffset {
+	val lastBreak = lastIndexOf('\n')
+	if (lastBreak < 0) return start.copy(char = start.char + length)
+	return CharLineOffset(start.line + count { it == '\n' }, length - lastBreak - 1)
 }
 
 /**

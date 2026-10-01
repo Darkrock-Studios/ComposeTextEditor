@@ -1,6 +1,7 @@
 package com.darkrockstudios.texteditor.spellcheck
 
 import androidx.compose.ui.text.AnnotatedString
+import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.richstyle.RichSpan
 import com.darkrockstudios.texteditor.richstyle.SpellCheckStyle
@@ -357,7 +358,9 @@ class SpellCheckState(
 	}
 
 	/**
-	 * Run sentence-level spell check on sentences that intersect the given range.
+	 * Run sentence-level spell check on the lines the given range touches. A sentence
+	 * ends with its line, so whole lines hold whole sentences, and replacing their flags
+	 * leaves none of an edited sentence's behind.
 	 */
 	private suspend fun runPartialSentenceCheck(
 		range: TextEditorRange,
@@ -365,7 +368,7 @@ class SpellCheckState(
 	) {
 		val sp = spellChecker ?: return
 		settlePartialCheck(
-			range = range,
+			range = range.wholeLines(computedAgainst),
 			computedAgainst = computedAgainst,
 			scan = { region ->
 				val sentences = textState.sentenceSegmentsInRange(region)
@@ -558,6 +561,14 @@ private fun TextEditorRange.acrossDots(lines: List<AnnotatedString>): TextEditor
 	val from = if (startLine.dotsOnToLetter(start.char - 1, -1)) start.copy(char = start.char - 2) else start
 	val to = if (endLine.dotsOnToLetter(end.char, 1)) end.copy(char = end.char + 2) else end
 	return TextEditorRange(from, to)
+}
+
+/** The range widened to the start of its first line and the end of its last, within [lines]. */
+private fun TextEditorRange.wholeLines(lines: List<AnnotatedString>): TextEditorRange {
+	if (lines.isEmpty()) return this
+	val lastLine = end.line.coerceAtMost(lines.lastIndex)
+	val firstLine = start.line.coerceAtMost(lastLine)
+	return TextEditorRange(CharLineOffset(firstLine, 0), CharLineOffset(lastLine, lines[lastLine].length))
 }
 
 /** Whether a period at [index] leads, one more step in [direction], to a letter. */

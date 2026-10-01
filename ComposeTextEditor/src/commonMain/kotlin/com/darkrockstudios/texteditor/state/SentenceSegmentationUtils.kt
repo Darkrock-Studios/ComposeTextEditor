@@ -6,6 +6,10 @@ import com.darkrockstudios.texteditor.TextEditorRange
 /**
  * Extension function to segment the entire document into sentences.
  *
+ * A line is a paragraph, so a sentence never runs past the end of its line. Each
+ * sentence's text is the line's text over its range, from its first non-whitespace
+ * character to its last.
+ *
  * Sentence boundaries are determined by:
  * - Period (.) followed by whitespace or end of text (but not in abbreviations)
  * - Question mark (?) and exclamation mark (!)
@@ -19,105 +23,66 @@ import com.darkrockstudios.texteditor.TextEditorRange
  */
 fun TextEditorState.sentenceSegments(): Sequence<SentenceSegment> = sequence {
 	// The line list is immutable, so an edit during a scan cannot pull lines out from under it.
-	val lines = textLines
-	if (lines.isEmpty()) return@sequence
-
-	var sentenceStartLine = 0
-	var sentenceStartChar = 0
-	val sentenceBuilder = StringBuilder()
-
-	// Track position within the accumulated sentence for multi-line handling
-	var currentLineInSentence = 0
-	var currentCharInLine = 0
-
-	for ((lineIndex, line) in lines.withIndex()) {
-		val text = line.text
-		var charIndex = 0
-
-		while (charIndex < text.length) {
-			val char = text[charIndex]
-			sentenceBuilder.append(char)
-			currentCharInLine = charIndex
-
-			if (isSentenceEndingPunctuation(char)) {
-				val accumulated = sentenceBuilder.toString()
-				if (isTrueSentenceEnd(text, charIndex, accumulated, lines, lineIndex)) {
-					// Found a sentence end
-					val sentenceText = accumulated.trim()
-					if (sentenceText.isNotEmpty()) {
-						yield(
-							SentenceSegment(
-								text = sentenceText,
-								range = TextEditorRange(
-									start = CharLineOffset(sentenceStartLine, sentenceStartChar),
-									end = CharLineOffset(lineIndex, charIndex + 1)
-								)
-							)
-						)
-					}
-
-					sentenceBuilder.clear()
-
-					// Skip trailing whitespace to find next sentence start
-					charIndex++
-					while (charIndex < text.length && text[charIndex].isWhitespace()) {
-						charIndex++
-					}
-
-					// Set new sentence start
-					if (charIndex < text.length) {
-						sentenceStartLine = lineIndex
-						sentenceStartChar = charIndex
-					} else {
-						// Sentence starts on next line
-						sentenceStartLine = lineIndex + 1
-						sentenceStartChar = 0
-					}
-					continue
-				}
-			}
-			charIndex++
-		}
-
-		// Add newline to sentence builder for multi-line sentences (preserves spacing)
-		if (lineIndex < lines.lastIndex && sentenceBuilder.isNotEmpty()) {
-			sentenceBuilder.append('\n')
-		}
-	}
-
-	// Yield any remaining text as a final sentence
-	val remainingText = sentenceBuilder.toString().trim()
-	if (remainingText.isNotEmpty()) {
-		val lastLine = lines.lastIndex
-		val lastLineLength = lines[lastLine].text.length
-		yield(
-			SentenceSegment(
-				text = remainingText,
-				range = TextEditorRange(
-					start = CharLineOffset(sentenceStartLine, sentenceStartChar),
-					end = CharLineOffset(lastLine, lastLineLength)
-				)
-			)
-		)
+	for ((lineIndex, line) in textLines.withIndex()) {
+		yieldAll(lineSentences(lineIndex, line.text))
 	}
 }
 
 /**
- * Find all sentences that intersect with the given range.
+ * Find all sentences that intersect with the given range, segmenting only its lines.
  */
 fun TextEditorState.sentenceSegmentsInRange(range: TextEditorRange): List<SentenceSegment> {
-	return sentenceSegments()
-		.filter { it.range.intersects(range) }
-		.toList()
+	val lines = textLines
+	val first = range.start.line.coerceAtLeast(0)
+	val last = range.end.line.coerceAtMost(lines.lastIndex)
+	return (first..last).flatMap { lineIndex ->
+		lineSentences(lineIndex, lines[lineIndex].text).filter { it.range.intersects(range) }
+	}
 }
 
 /**
  * Find the sentence containing the given position.
  */
 fun TextEditorState.findSentenceSegmentAt(position: CharLineOffset): SentenceSegment? {
-	return sentenceSegments().find { segment ->
+	val line = textLines.getOrNull(position.line) ?: return null
+	return lineSentences(position.line, line.text).find { segment ->
 		position >= segment.range.start && position <= segment.range.end
 	}
+}
+
+/** The sentences of one line, [lineIndex], whose text is [text]. */
+private fun lineSentences(lineIndex: Int, text: String): List<SentenceSegment> {
+	val sentences = mutableListOf<SentenceSegment>()
+	fun add(start: Int, end: Int) {
+		var trimmedEnd = end
+		while (trimmedEnd > start && text[trimmedEnd - 1].isWhitespace()) trimmedEnd--
+		if (trimmedEnd > start) {
+			sentences += SentenceSegment(
+				text = text.substring(start, trimmedEnd),
+				range = TextEditorRange(CharLineOffset(lineIndex, start), CharLineOffset(lineIndex, trimmedEnd)),
+			)
+		}
+	}
+
+	var sentenceStart = text.skipWhitespace(0)
+	var charIndex = sentenceStart
+	while (charIndex < text.length) {
+		if (isSentenceEndingPunctuation(text[charIndex]) && isTrueSentenceEnd(text, charIndex, sentenceStart)) {
+			add(sentenceStart, charIndex + 1)
+			sentenceStart = text.skipWhitespace(charIndex + 1)
+			charIndex = sentenceStart
+		} else {
+			charIndex++
+		}
+	}
+	add(sentenceStart, text.length)
+	return sentences
+}
+
+private fun String.skipWhitespace(from: Int): Int {
+	var index = from
+	while (index < length && this[index].isWhitespace()) index++
+	return index
 }
 
 private fun isSentenceEndingPunctuation(char: Char): Boolean {
@@ -127,15 +92,10 @@ private fun isSentenceEndingPunctuation(char: Char): Boolean {
 /**
  * Determines if a punctuation mark is a true sentence end,
  * handling abbreviations like "U.S.A.", "Mr.", "Dr.", etc.
+ * [sentenceStart] is where the current sentence starts in [lineText].
  */
-private fun isTrueSentenceEnd(
-	currentLineText: String,
-	position: Int,
-	accumulatedSentence: String,
-	allLines: List<androidx.compose.ui.text.AnnotatedString>,
-	currentLineIndex: Int
-): Boolean {
-	val char = currentLineText[position]
+private fun isTrueSentenceEnd(lineText: String, position: Int, sentenceStart: Int): Boolean {
+	val char = lineText[position]
 
 	// Question marks and exclamation marks are always sentence ends
 	if (char == '?' || char == '!') {
@@ -144,40 +104,35 @@ private fun isTrueSentenceEnd(
 
 	// Ellipsis character is a sentence end if followed by whitespace + capital
 	if (char == '…') {
-		val nextChar = getNextNonWhitespaceChar(currentLineText, position, allLines, currentLineIndex)
+		val nextChar = nextNonWhitespaceChar(lineText, position)
 		return nextChar == null || nextChar.isUpperCase()
 	}
 
 	// For periods, check for abbreviations
 	if (char == '.') {
 		// Check for ellipsis pattern (...)
-		if (isEllipsis(currentLineText, position)) {
-			val nextChar = getNextNonWhitespaceChar(currentLineText, position + 2, allLines, currentLineIndex)
+		if (isEllipsis(lineText, position)) {
+			val nextChar = nextNonWhitespaceChar(lineText, position)
 			return nextChar == null || nextChar.isUpperCase()
 		}
 
 		// Check for single-letter abbreviations (U.S.A.)
-		if (isSingleLetterAbbreviation(currentLineText, position)) {
+		if (isSingleLetterAbbreviation(lineText, position)) {
 			return false
 		}
 
 		// Check common abbreviations
-		val wordBeforePeriod = extractWordBeforePeriod(accumulatedSentence)
-		if (isCommonAbbreviation(wordBeforePeriod)) {
+		if (isCommonAbbreviation(wordBeforePeriod(lineText, position, sentenceStart))) {
 			return false
 		}
 
-		// Check for number followed by period (ordinals in some languages)
-		if (position > 0 && currentLineText[position - 1].isDigit()) {
-			val nextChar = getNextNonWhitespaceChar(currentLineText, position, allLines, currentLineIndex)
-			// If followed by lowercase, probably not sentence end
-			if (nextChar?.isLowerCase() == true) {
-				return false
-			}
-		}
+		val nextChar = nextNonWhitespaceChar(lineText, position)
 
-		// Check what follows the period
-		val nextChar = getNextNonWhitespaceChar(currentLineText, position, allLines, currentLineIndex)
+		// Check for number followed by period (ordinals in some languages):
+		// if followed by lowercase, probably not sentence end
+		if (position > 0 && lineText[position - 1].isDigit() && nextChar?.isLowerCase() == true) {
+			return false
+		}
 
 		// If followed by nothing or uppercase letter, it's a sentence end
 		// If followed by lowercase letter, likely an abbreviation
@@ -189,32 +144,9 @@ private fun isTrueSentenceEnd(
 	return false
 }
 
-/**
- * Gets the next non-whitespace character after the given position,
- * potentially looking into subsequent lines.
- */
-private fun getNextNonWhitespaceChar(
-	currentLineText: String,
-	position: Int,
-	allLines: List<androidx.compose.ui.text.AnnotatedString>,
-	currentLineIndex: Int
-): Char? {
-	// Check rest of current line
-	for (i in (position + 1) until currentLineText.length) {
-		val c = currentLineText[i]
-		if (!c.isWhitespace()) return c
-	}
-
-	// Check subsequent lines
-	for (lineIdx in (currentLineIndex + 1) until allLines.size) {
-		val lineText = allLines[lineIdx].text
-		for (c in lineText) {
-			if (!c.isWhitespace()) return c
-		}
-	}
-
-	return null
-}
+/** The next non-whitespace character after [position] on the line, or null at its end. */
+private fun nextNonWhitespaceChar(lineText: String, position: Int): Char? =
+	lineText.getOrNull(lineText.skipWhitespace(position + 1))
 
 /**
  * Checks if the period at the given position is part of an ellipsis (...)
@@ -253,15 +185,25 @@ private fun isSingleLetterAbbreviation(text: String, position: Int): Boolean {
 	return false
 }
 
-private fun extractWordBeforePeriod(text: String): String {
-	val trimmed = text.trimEnd('.', ' ', '\n', '\t')
-	val lastSpace = trimmed.lastIndexOfAny(charArrayOf(' ', '\n', '\t'))
-	return if (lastSpace >= 0) {
-		trimmed.substring(lastSpace + 1)
-	} else {
-		trimmed
-	}
+/**
+ * The word ending at the period at [position], without trailing periods or spaces, read
+ * back no further than [sentenceStart]. Each of the two runs read back is cut off at
+ * [ABBREVIATION_LOOKBACK] characters, and a word cut off is empty, so a run of periods
+ * with no space scans in linear time.
+ */
+private fun wordBeforePeriod(lineText: String, position: Int, sentenceStart: Int): String {
+	val trimLimit = maxOf(sentenceStart, position - ABBREVIATION_LOOKBACK)
+	var end = position + 1
+	while (end > trimLimit && (lineText[end - 1] == '.' || lineText[end - 1].isWhitespace())) end--
+	val wordLimit = maxOf(sentenceStart, end - ABBREVIATION_LOOKBACK)
+	var start = end
+	while (start > wordLimit && !lineText[start - 1].isWhitespace()) start--
+	if (start == wordLimit && start > sentenceStart && !lineText[start - 1].isWhitespace()) return ""
+	return lineText.substring(start, end)
 }
+
+/** Longer than any abbreviation below, with its periods. */
+private const val ABBREVIATION_LOOKBACK = 16
 
 // Common abbreviations for Latin scripts
 private val COMMON_ABBREVIATIONS = setOf(

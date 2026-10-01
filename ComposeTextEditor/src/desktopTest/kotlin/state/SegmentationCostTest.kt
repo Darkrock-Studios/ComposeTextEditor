@@ -6,6 +6,7 @@ import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.state.BreakCursor
 import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.sentenceSegments
+import com.darkrockstudios.texteditor.state.sentenceSegmentsInRange
 import com.darkrockstudios.texteditor.state.wordCursor
 import com.darkrockstudios.texteditor.state.wordSegments
 import kotlinx.coroutines.test.TestScope
@@ -18,9 +19,8 @@ import kotlin.test.assertTrue
 
 /**
  * The spell checker's scans read the immutable line list they start on in place, with
- * no copy of it first, so one that stops early reads only the lines it reached (and,
- * for sentences, the line it looks ahead to). Counted by the line list, which tallies
- * every line it hands out.
+ * no copy of it first, so one that stops early reads only the lines it reached.
+ * Counted by the line list, which tallies every line it hands out.
  */
 class SegmentationCostTest {
 
@@ -50,14 +50,25 @@ class SegmentationCostTest {
 		var sentence = ""
 		val reads = editor().readsDuring { sentence = sentenceSegments().first().text }
 		assertEquals("Line 0 has words.", sentence)
-		assertTrue(reads in 1..2, "read $reads of $lineCount lines")
+		assertEquals(1, reads, "read $reads of $lineCount lines")
 	}
 
 	@Test
-	fun `a whole scan reads each line once, a sentence scan also its look-ahead`() = runTest {
+	fun `a whole scan reads each line once`() = runTest {
 		val state = editor()
 		assertEquals(lineCount, state.readsDuring { wordSegments().count() })
-		assertTrue(state.readsDuring { sentenceSegments().count() } <= 2 * lineCount)
+		assertEquals(lineCount, state.readsDuring { sentenceSegments().count() })
+	}
+
+	/** Roadmap 7.20: a partial sentence check scans only the lines it was given. */
+	@Test
+	fun `a range's sentences read only its lines`() = runTest {
+		val state = editor()
+		val range = TextEditorRange(CharLineOffset(200, 3), CharLineOffset(201, 3))
+		var sentences = 0
+		val reads = state.readsDuring { sentences = sentenceSegmentsInRange(range).size }
+		assertEquals(3, sentences)
+		assertEquals(2, reads, "read $reads of $lineCount lines")
 	}
 
 	@Test

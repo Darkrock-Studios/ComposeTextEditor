@@ -190,7 +190,7 @@ review.
 | H | Clipboard and HTML | `clipboard/`, `html/`, `dragdrop/` | 4.9, 4.13, 4.17, 6.7 to 6.13, 6.18 to 6.21, 5.12, 6.24 to 6.27, 6.30 to 6.32, 7.39, 7.46, 7.47, 7.49, 7.53, 7.63 |
 | I | Markdown and block model | `ComposeTextEditorMarkdown/`, `richstyle/`, `state/TextEditorStateBlockExt.kt` | 5.6, 7.14 to 7.16, 7.43, 7.45, 7.52, 7.64, 7.67, 7.70 to 7.72 |
 | J | Find addon | `ComposeTextEditorFind/` | 7.17 to 7.19, 7.26, 7.29, 7.42, 7.68, 7.69 |
-| K | Spell check addon | `ComposeTextEditorSpellCheck/` | 7.20 to 7.22, 7.28, 7.30, 7.31, 7.34, 7.35, 7.38, 7.44, 7.61 |
+| K | Spell check addon | `ComposeTextEditorSpellCheck/` | 7.20 to 7.22, 7.28, 7.30, 7.31, 7.34, 7.35, 7.38, 7.44, 7.61, 7.71 |
 | L | Tests and CI | test sources, `.github/workflows/` | 0.1 to 0.3, 0.5 to 0.11, 4.1, 4.15, 7.62, 7.65 |
 | M | Accessibility and host API | semantics in `BasicTextEditor.kt`, `RichTextView.kt`, `state/rememberTextEditorState.kt` | 7.1 to 7.4, 7.13, 7.23 to 7.25, 7.32, 7.36, 7.59, 7.60, 7.66, 7.70 |
 | N | Core layout and performance | `state/TextEditorState.kt` | 5.7, 7.8 to 7.12 |
@@ -3160,11 +3160,33 @@ Shaping is one line per keystroke. These still scale with document length:
 
 ### Spell check addon
 
-- [ ] **7.20** [Opus] [Lane K] Sentence mode: sentences run across line
+- [x] **7.20** [Opus] [Lane K] Sentence mode: sentences run across line
   boundaries, offsets shift on indented lines, and each partial check rescans
   the whole document. Tested only against fakes. Also: each period copies the
   sentence built so far (`sentenceBuilder.toString()`) to test for an
   abbreviation, so a long run of periods that end no sentence scans in O(n²).
+  Done: a line is a paragraph, so `sentenceSegments` ends every sentence with
+  its line and looks ahead no further; each sentence's text is the line's text
+  over its range, from its first non-whitespace character to its last, so a
+  checker's offsets land on indented lines. `sentenceSegmentsInRange` and
+  `findSentenceSegmentAt` segment only their lines. The abbreviation test reads
+  the word before the period from the line, at most 16 characters back. A
+  partial sentence check covers the whole lines it touches, so an edit in part
+  of a sentence no longer leaves a second flag on the rest of it. The ranges an
+  edit batch leaves to check now reach every line an insert or replacement
+  wrote (a line break, a pasted paragraph), where they stopped on its first
+  line. An ellipsis before a capital ends a sentence; its look-ahead started
+  two characters late (`SentenceSegmentationTest`, `SegmentationCostTest`,
+  `ComputeAffectedRangesTest`, and `SentenceModeSymSpellTest` against a real
+  SymSpell checker). Found 7.71.
+- [ ] **7.71 A batch's earlier ranges are not moved by its later edits. C.**
+  [Opus] [Lane K] `SpellCheckingTextEditor`'s `computeAffectedRanges` merges
+  the ranges of one debounced batch of edits, each in the coordinates the
+  text had when its edit ran, and never moves an earlier range by a later
+  edit. A line inserted above an earlier edit in the same batch (Enter on a
+  line above, then typing below within the debounce) leaves that range a line
+  short of its text, so the check runs on the wrong line. Move each range by
+  the edits after it, as `TextEditOperation.transformOffset` does.
 - [x] **7.21** [Opus] [Lane K] No ignore list or language API in
   `EditorSpellChecker`; add to dictionary exists only as a host menu extension
   (hammer-editor#861).
