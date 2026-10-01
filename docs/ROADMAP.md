@@ -1092,7 +1092,7 @@ fixes what users feel every minute.
   Returns keep the caret at the keyboard's top, and the keyboard goes and
   comes back without the text jumping.
 - [ ] **3.17 Rich content, autofill, and stylus handwriting on Android. C.**
-  [Fable] [Lane F] From 3.11: `commitContent` returns false, so a keyboard's
+  [Opus] [Lane F] From 3.11: `commitContent` returns false, so a keyboard's
   GIFs and stickers are refused; the editor offers nothing to autofill; and
   there is no stylus handwriting (`View.setAutoHandwritingEnabled` and
   `EditorInfo.setStylusHandwritingEnabled`, API 33 and 35). Each needs a host
