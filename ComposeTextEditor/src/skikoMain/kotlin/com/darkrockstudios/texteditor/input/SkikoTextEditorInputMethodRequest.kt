@@ -49,7 +49,8 @@ internal fun TextEditorState.skikoImeOptions(): ImeOptions {
  * Starts a Compose skiko input-method session bound to this editor. A platform's
  * `TextEditorTextInputService` hands it that platform's [imeOptions], read as snapshot
  * state: when they change, the input method starts again with the new ones, as Android
- * restarts its input for new settings, calling [onRun] with them for each run. It also
+ * restarts its input for new settings, calling [onRun] with them for each run, just
+ * before the run starts the platform's input method and in the same dispatch. It also
  * hands whether the
  * platform needs a text layout to hit-test ([exposeTextLayout]), whether it acts on a
  * hardware key itself as well ([echoesKeys]), and [imeResync]; every

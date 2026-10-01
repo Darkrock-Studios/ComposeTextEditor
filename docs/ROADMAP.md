@@ -185,7 +185,7 @@ review.
 | B | Pointer and touch | `textEditorPointerInputHandling.kt`, `state/TextEditorSelectionManager.kt`, `DrawSelectionHandles.kt` | 1.9, 1.12 to 1.16, 1.21 to 1.24, 3.1, 3.2, 3.4 to 3.8, 3.13, 3.15, 3.18, 4.23, 6.16 |
 | C | Drawing and geometry | `Draw*.kt`, `cursor/`, `scrollbar/`, `state/TextEditorScrollState.kt`, hit testing | 1.8, 1.10, 1.11, 1.17, 1.18, 1.25, 3.3, 3.12, 3.16, 4.14, 7.6, 7.7, 7.27, 7.41, 7.78 |
 | D | Bindings, actions, menu | `input/KeyBindings.kt`, `input/EditorCommand.kt`, `input/BuiltinEditorActions.kt`, `contextmenu/` | 2.1, 2.2, 2.4, 2.5, 2.7 to 2.12, 4.8, 5.8, 7.58 |
-| E | Input sessions on desktop, iOS, web | `desktopMain`, `iosMain`, `wasmJsMain` under `input/` | 4.2 to 4.7, 4.10 to 4.12, 4.19, 4.21, 4.22, 4.24 to 4.26, 4.28, 4.29, 4.32, 4.33, 4.35, 4.37 to 4.39, 7.37 |
+| E | Input sessions on desktop, iOS, web | `desktopMain`, `iosMain`, `wasmJsMain` under `input/` | 4.2 to 4.7, 4.10 to 4.12, 4.19, 4.21, 4.22, 4.24 to 4.26, 4.28, 4.29, 4.32, 4.33, 4.35, 4.37 to 4.40, 7.37 |
 | F | Android input | `androidMain` | 0.4, 0.12, 3.9 to 3.11, 3.14, 3.17, 4.16, 4.18, 4.20, 4.27, 4.30, 4.31, 4.34, 4.36, 7.40 |
 | G | Edit pipeline and undo | `state/TextEditManager.kt`, `state/TextEditHistory.kt`, `state/EditBehavior.kt`, `input/ImeEditLogic.kt` | 1.20, 5.1 to 5.5, 5.9 to 5.11, 5.13 to 5.15, 6.1 to 6.6, 6.14, 6.15, 6.17, 6.22, 6.23, 6.28, 6.29, 6.33 to 6.35, 7.54, 7.55 |
 | H | Clipboard and HTML | `clipboard/`, `html/`, `dragdrop/` | 4.9, 4.13, 4.17, 6.7 to 6.13, 6.18 to 6.21, 5.12, 6.24 to 6.27, 6.30 to 6.32, 6.36 to 6.38, 7.39, 7.46, 7.47, 7.49, 7.53, 7.63 |
@@ -1323,11 +1323,11 @@ Also seen:
   Chrome and iOS Safari (4.4); a headless browser cannot show one.
   Gap: Compose sets `autocapitalize="off"` on every backing field, so phone
   keyboards never capitalise a sentence. The web session sets it to
-  `sentences`, matching the Android and iOS sessions, but only once the
-  field exists, after Compose has focused it; whether a keyboard already up
-  honours the change is for the phone pass, and if not the fix belongs in
-  Compose (its `DomInputStrategy` ignores `ImeOptions.capitalization`,
-  which the session now passes). Verified in Chromium
+  `sentences`, matching the Android and iOS sessions, from inside the
+  field's first `focus()` call since 4.40, so a keyboard rising for it should
+  see it; that a phone does is for the phone pass, and if not the fix belongs
+  in Compose (its `DomInputStrategy` ignores `ImeOptions.capitalization`,
+  which the session passes). Verified in Chromium
   with the pane's Pixel 8 emulation (Android user agent, touch points): a
   synthetic touch tap on the unfocused Blank editor focuses the textarea
   (`inputmode="text"`, `enterkeyhint="enter"`, `autocorrect="on"`,
@@ -1504,6 +1504,24 @@ Also seen:
   cannot pair them either. Fix upstream (expose the DOM `key`, or a code
   point of 0 for a named key), or pair the events by their order. Found in
   4.38.
+- [x] **4.40 Ask for sentence capitals before the phone keyboard rises. S.**
+  [Opus] [Lane E] From 4.11's gap: the web session set the backing field's
+  `autocapitalize` once it found the field, a frame or more after Compose had
+  created it with "off" and focused it, which is when a phone keyboard reads
+  it. Done: as each run starts, in the dispatch that has Compose create the
+  field, the session listens for `focusin` on the viewport's shadow root (a
+  focus move inside a shadow tree is reported only there; the root holding
+  the focused canvas, else every open root) and sets the attribute on the
+  first backing field focused, inside that `focus()` call. The listener goes
+  on that first hit, when the session finds the field, or as the run is
+  cancelled, so it cannot reach the next text field's. Finding the field
+  still sets the attribute too, for a field in a root it missed. Verified in
+  Chromium against the dev server with `HTMLElement.prototype.focus` wrapped
+  to read the attribute as each field's first call returns: "off" before,
+  "sentences" after; the Find demo's search field, a `BasicTextField`
+  focused from the editor, keeps "off". `browserTests/tests/keyboard.spec.ts`
+  checks both, pending its first CI run. Whether a phone keyboard then
+  capitalises is 4.11's phone pass.
 
 Exit criteria: typing, composition, and clipboard work in current Chrome,
 Firefox, and Safari on desktop; the soft keyboard works on Android Chrome and
