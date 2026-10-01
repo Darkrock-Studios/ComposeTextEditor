@@ -1809,8 +1809,14 @@ iOS Safari; browser tests run in CI.
   typing run keeps the selection it began from, and an edit that replaces a
   selection starts a step of its own (`state/UndoSelectionTest.kt`,
   `e2e/UndoRedoE2eTest.kt`). A touch selection comes back without its handles.
-- [ ] **6.5 Pasted HTML blocks are unrecorded. C.** [Opus] [Lane G] Redo should
-  restore the text without its blocks. Inferred; no test covers it.
+- [x] **6.5 Pasted HTML blocks are unrecorded. C.** [Opus] [Lane G] Redo should
+  restore the text without its blocks. Inferred; no test covers it. Confirmed:
+  redo of an HTML paste gave back its text with no list, rule, link or paragraph
+  format. Done: the blocks, links and formats a paste or a drop of foreign HTML
+  places are recorded in its undo step (`TextEditManager.recordLineChanges`: the
+  lines' content and blocks as a LineBlock step, each other span that came or went
+  as a RichSpan step), so redo replays them with the text
+  (`e2e/HtmlPasteUndoE2eTest.kt`).
 - [ ] **6.6 Time-based coalescing breaks,** [Opus] [Lane G] and a configurable
   history cap.
 - [x] **6.14 An IME composition inherits the style it touches. R.** [Opus]
@@ -1903,6 +1909,13 @@ iOS Safari; browser tests run in CI.
   with a fenced line whose paragraph runs are `[0-2, 7-22]`, and an Enter there
   then throws "Paragraph overlap not allowed". A joined line should carry one
   paragraph style run, the one its kept marker wants.
+- [ ] **6.31 Undoing a multi-line insert at a paragraph's start drops its
+  format. R.** [Opus] [Lane G] A paragraph format (`ParagraphFormatSpanStyle`)
+  stays on the first line of a multi-line insert at its paragraph's start
+  (`RichSpanManager.handleInsert`), so "target" centred, with "new\nx" pasted
+  at its start, leaves the format on "new" and none on "xtarget"; undo deletes
+  the first line with its format and "target" comes back plain. Enter at the
+  same place keeps the format on both lines. Found in 6.5.
 
 ### Clipboard
 

@@ -44,17 +44,30 @@ internal suspend fun TextEditorState.readHtmlPasteDocument(
  * Call inside the paste's transaction, after the insert and after
  * [TextEditorState.pasteRichSpans], which covers copies made inside the editor. Images
  * are left out: reconstructing one needs an `ImageProvider`, which lives on the import
- * extensions rather than here.
+ * extensions rather than here. Recorded as part of the paste's undo step, so a redo,
+ * which replays the text, puts them back too.
  */
 internal fun TextEditorState.applyHtmlPasteBlocks(
 	document: HtmlDocument,
 	insertPosition: CharLineOffset,
 	pastedText: AnnotatedString,
 ) {
+	val pastedLines = insertPosition.line..insertPosition.line + pastedText.text.count { it == '\n' }
+	editManager.recordLineChanges(pastedLines) {
+		placeHtmlPasteBlocks(document, insertPosition, pastedText, pastedLines)
+	}
+}
+
+private fun TextEditorState.placeHtmlPasteBlocks(
+	document: HtmlDocument,
+	insertPosition: CharLineOffset,
+	pastedText: AnnotatedString,
+	pastedLines: IntRange,
+) {
 	// Links are inline, so unlike blocks they hold on the spliced first and last lines
 	// too. One the in-editor span buffer already restored is not added again, as a
 	// second span split per line would overlap it.
-	val restored = (insertPosition.line..insertPosition.line + pastedText.text.count { it == '\n' })
+	val restored = pastedLines
 		.flatMap { richSpanManager.getRichSpansStartingOn(it) }
 		.filter { it.style is LinkSpanStyle }
 	val links = pastedLinkSpans(document.links, insertPosition).filterNot { link ->
@@ -69,9 +82,9 @@ internal fun TextEditorState.applyHtmlPasteBlocks(
 	// point stays on the first pasted line and whatever followed it joins the
 	// last. Those two lines are part of the document, not of the source, so a
 	// block from the source is not applied to them.
-	val pastedLineBreaks = pastedText.text.count { it == '\n' }
+	val pastedLineBreaks = pastedLines.last - pastedLines.first
 	val tail = pastedText.text.substringAfterLast('\n')
-	val lastLine = insertPosition.line + pastedLineBreaks
+	val lastLine = pastedLines.last
 	val tailIsWholeLine = textLines.getOrNull(lastLine)?.length ==
 		if (pastedLineBreaks == 0) insertPosition.char + tail.length else tail.length
 

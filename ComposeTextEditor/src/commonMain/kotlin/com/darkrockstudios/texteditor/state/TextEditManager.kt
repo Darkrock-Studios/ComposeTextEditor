@@ -14,6 +14,7 @@ import com.darkrockstudios.texteditor.input.isWithinDocument
 import com.darkrockstudios.texteditor.richstyle.LineBlockEditBehavior
 import com.darkrockstudios.texteditor.richstyle.LineBlockStyle
 import com.darkrockstudios.texteditor.richstyle.LineBlockWrite
+import com.darkrockstudios.texteditor.richstyle.RichSpan
 import com.darkrockstudios.texteditor.richstyle.RichSpanStyle
 import com.darkrockstudios.texteditor.richstyle.allowedOn
 import com.darkrockstudios.texteditor.richstyle.atListLevel
@@ -929,10 +930,21 @@ class TextEditManager(private val state: TextEditorState) {
 	 */
 	internal fun recordLineBlockChanges(lines: Collection<Int>, mutate: () -> Unit) = state.withAtomicEdit {
 		val cursorBefore = state.cursorPosition
-		val before = lines.distinct().filter { it in state.textLines.indices }.map { line ->
+		val before = lineBlocksOf(lines)
+		mutate()
+		recordLineBlocksSince(before, cursorBefore)
+	}
+
+	private fun lineBlocksOf(lines: Collection<Int>): List<Triple<Int, AnnotatedString, List<RichSpanStyle>>> =
+		lines.distinct().filter { it in state.textLines.indices }.map { line ->
 			Triple(line, state.getLine(line), state.lineBlockSpanStyles(line))
 		}
-		mutate()
+
+	/** Records, as one LineBlock entry, how the lines [before] captured have changed since. */
+	private fun recordLineBlocksSince(
+		before: List<Triple<Int, AnnotatedString, List<RichSpanStyle>>>,
+		cursorBefore: CharLineOffset,
+	) {
 		val changes = before.mapNotNull { (line, content, spans) ->
 			val contentAfter = state.getLine(line)
 			val spansAfter = state.lineBlockSpanStyles(line)
@@ -945,7 +957,7 @@ class TextEditManager(private val state: TextEditorState) {
 				blockSpansAfter = spansAfter,
 			)
 		}
-		if (changes.isEmpty()) return@withAtomicEdit
+		if (changes.isEmpty()) return
 		applyOperation(
 			TextEditOperation.LineBlock(
 				lines = changes,
@@ -953,6 +965,34 @@ class TextEditManager(private val state: TextEditorState) {
 				cursorAfter = cursorBefore,
 			)
 		)
+	}
+
+	/**
+	 * Records what [mutate] does to [lines] as steps of the edit group it runs in: their
+	 * content and block spans as one LineBlock step, and each other content span starting
+	 * on them that went or came (a link, a rule, a paragraph format) as a RichSpan step
+	 * before or after it, so undo puts a removed span back onto the content it was on.
+	 * [mutate] changes them through the direct path, so the RichSpan steps are recorded
+	 * and announced as they landed rather than applied again.
+	 */
+	internal fun recordLineChanges(lines: IntRange, mutate: () -> Unit) = state.withAtomicEdit {
+		fun otherSpans(): Set<RichSpan> = lines.filter { it in state.textLines.indices }.flatMapTo(LinkedHashSet()) { line ->
+			val blockStyles = state.lineBlockSpanStyles(line)
+			state.richSpanManager.getRichSpansStartingOn(line).filter { !it.style.isDecoration && it.style !in blockStyles }
+		}
+		val caret = state.cursorPosition
+		val blocksBefore = lineBlocksOf(lines.toList())
+		val before = otherSpans()
+		mutate()
+		val after = otherSpans()
+		fun record(span: RichSpan, isAdd: Boolean) {
+			val operation = TextEditOperation.RichSpan(span.range, span.style, isAdd, cursorBefore = caret, cursorAfter = caret)
+			history.recordEdit(operation, OperationMetadata(), typing = false)
+			state.onCommit { _editOperations.tryEmit(operation) }
+		}
+		(before - after).forEach { record(it, isAdd = false) }
+		recordLineBlocksSince(blocksBefore, caret)
+		(after - before).forEach { record(it, isAdd = true) }
 	}
 
 	fun undo() {

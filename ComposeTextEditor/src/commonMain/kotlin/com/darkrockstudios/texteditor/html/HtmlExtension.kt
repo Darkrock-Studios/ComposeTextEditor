@@ -127,8 +127,9 @@ internal fun DocumentSnapshot.paragraphFormats(lines: IntRange): Map<Int, Paragr
 
 /**
  * Gives each line in [formats] its paragraph format, in place of any it had (a pasted
- * paragraph's own replaces the one a paste at a line's start leaves on it), off the undo
- * history as the blocks are.
+ * paragraph's own replaces the one a paste at a line's start leaves on it), through the
+ * direct path as the blocks are; a paste records both in its step
+ * (`TextEditManager.recordLineChanges`).
  */
 internal fun TextEditorState.addParagraphFormats(formats: Map<Int, ParagraphFormatSpanStyle>) {
 	val replaced = mutableListOf<RichSpan>()
