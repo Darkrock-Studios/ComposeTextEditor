@@ -922,18 +922,19 @@ class TextEditorState(
 	 */
 	var onImeAction: ((ImeAction) -> Unit)? = null
 
-	/** The action key's default, supplied by the composed editor, which can move focus. */
-	internal var defaultImeAction: ((ImeAction) -> Unit)? = null
+	/** The composed editor holding focus, which the keyboard and keys reach; null when none holds it. */
+	internal var focusedEditor: FocusedEditor? by mutableStateOf(null)
 
 	/** Runs the action key's handler; false when there is none to run. */
 	internal fun performImeAction(action: ImeAction): Boolean {
-		val handler = onImeAction ?: defaultImeAction ?: return false
+		val handler = onImeAction ?: focusedEditor?.defaultImeAction ?: return false
 		handler(action)
 		return true
 	}
 
 	/** The action key the keyboard shows, which a single line's Enter presses too. */
-	internal fun effectiveImeAction(): ImeAction = keyboardSettings.imeActionFor(isSingleLine)
+	internal fun effectiveImeAction(singleLine: Boolean = isSingleLine): ImeAction =
+		keyboardSettings.imeActionFor(singleLine)
 
 	/**
 	 * Screens every edit that adds text, from the user or the editing functions, but not
@@ -941,13 +942,16 @@ class TextEditorState(
 	 */
 	var inputFilter: EditorInputFilter? by mutableStateOf(null)
 
-	/**
-	 * How many composed editors show this state with a single-line limit; while any does,
-	 * [EditorInputFilter.SingleLine] screens ahead of [inputFilter].
-	 */
+	/** How many composed editors show this state with a single-line limit. */
 	internal var singleLineEditors by mutableIntStateOf(0)
 
-	internal val isSingleLine: Boolean get() = singleLineEditors > 0
+	/**
+	 * Whether the action key and edits follow a single line: the focused editor's limit,
+	 * or with none focused (or a view that takes no input), whether any composed editor is
+	 * single-line, so the host's own edits keep line breaks out of a lone single-line
+	 * editor. While true, [EditorInputFilter.SingleLine] screens ahead of [inputFilter].
+	 */
+	internal val isSingleLine: Boolean get() = focusedEditor?.singleLine ?: (singleLineEditors > 0)
 
 	internal val effectiveInputFilter: EditorInputFilter?
 		get() {
@@ -2495,3 +2499,9 @@ class TextEditorState(
 // Starts at random because an id leaves the process on the clipboard, and another
 // app embedding the editor must not mint the one this copy carries.
 private var nextCopyId: Long = kotlin.random.Random.nextLong()
+
+/**
+ * What the focused editor lends its state: the action key's [defaultImeAction], which can
+ * move focus from that editor, and its line limit, null for a view that takes no input.
+ */
+internal data class FocusedEditor(val defaultImeAction: (ImeAction) -> Unit, val singleLine: Boolean?)

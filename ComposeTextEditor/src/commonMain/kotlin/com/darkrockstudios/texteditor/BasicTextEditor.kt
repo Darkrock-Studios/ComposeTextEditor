@@ -161,8 +161,9 @@ fun BasicTextEditor(
 	val overscrollEffect = rememberOverscrollEffect()
 
 	val inputRequester = remember { TextInputRequester() }
-	val inputModifierElement = remember(state, clipboard, editable, keyBindings) {
-		TextEditorInputModifierElement(state, clipboard, editable, keyBindings, inputRequester)
+	val singleLine = lineLimits == EditorLineLimits.SingleLine
+	val inputModifierElement = remember(state, clipboard, editable, keyBindings, singleLine) {
+		TextEditorInputModifierElement(state, clipboard, editable, keyBindings, inputRequester, singleLine)
 	}
 
 	val horizontalPadding = remember(contentPadding, layoutDirection) {
@@ -192,8 +193,7 @@ fun BasicTextEditor(
 		Modifier.editorLineLimits(lineLimits, verticalPaddingPx, rowHeightPx) { contentHeightPx.value }
 	}
 
-	DisposableEffect(state, lineLimits) {
-		val singleLine = lineLimits == EditorLineLimits.SingleLine
+	DisposableEffect(state, singleLine) {
 		if (singleLine) state.singleLineEditors++
 		onDispose { if (singleLine) state.singleLineEditors-- }
 	}
@@ -224,9 +224,9 @@ fun BasicTextEditor(
 	}
 	val latestOnLinkClick by rememberUpdatedState(onLinkClick)
 	val hasLinkClick = onLinkClick != null
-	val semanticsModifier = remember(state, enabled, editable, focusRequester, contextMenuActions, contentDescription, hasLinkClick) {
+	val semanticsModifier = remember(state, enabled, editable, focusRequester, contextMenuActions, contentDescription, hasLinkClick, singleLine) {
 		val openLink: ((String) -> Unit)? = if (hasLinkClick) { url -> latestOnLinkClick?.invoke(url) } else null
-		Modifier.editorSemantics(state, enabled, editable, focusRequester, contextMenuActions, contentDescription, openLink)
+		Modifier.editorSemantics(state, enabled, editable, singleLine, focusRequester, contextMenuActions, contentDescription, openLink)
 	}
 	val menuPlacement = remember(state, effectiveContextMenuState) {
 		ContextMenuPlacement(state, effectiveContextMenuState)

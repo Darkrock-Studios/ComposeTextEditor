@@ -63,14 +63,15 @@ import kotlin.math.abs
  * nothing that edits.
  *
  * `onImeAction` is offered only for an action key other than Enter, the one the
- * keyboard shows ([TextEditorState.effectiveImeAction]): a multi-line editor's default
- * is Enter, a new line, where `BasicTextField`'s default action does nothing either,
- * and a single line's is Done.
+ * keyboard shows ([TextEditorState.effectiveImeAction]) for this editor's own line limit:
+ * a multi-line editor's default is Enter, a new line, where `BasicTextField`'s default
+ * action does nothing either, and a single line's is Done.
  */
 internal fun Modifier.editorSemantics(
 	state: TextEditorState,
 	enabled: Boolean,
 	editable: Boolean,
+	singleLine: Boolean,
 	focusRequester: FocusRequester,
 	actions: ContextMenuActions,
 	contentDescription: String?,
@@ -90,7 +91,7 @@ internal fun Modifier.editorSemantics(
 		clipboardActions(actions)
 		longPressOpensMenu(focusRequester, actions)
 		editorSemanticsEdits(state, enabled, editable)
-		val imeAction = state.effectiveImeAction()
+		val imeAction = state.effectiveImeAction(singleLine)
 		if (editable && !imeAction.startsLine) {
 			onImeAction(imeAction) { state.performImeAction(imeAction) }
 		}

@@ -192,7 +192,7 @@ review.
 | J | Find addon | `ComposeTextEditorFind/` | 7.17 to 7.19, 7.26, 7.29, 7.42, 7.68, 7.69 |
 | K | Spell check addon | `ComposeTextEditorSpellCheck/` | 7.20 to 7.22, 7.28, 7.30, 7.31, 7.34, 7.35, 7.38, 7.44, 7.61 |
 | L | Tests and CI | test sources, `.github/workflows/` | 0.1 to 0.3, 0.5 to 0.11, 4.1, 4.15, 7.62, 7.65 |
-| M | Accessibility and host API | semantics in `BasicTextEditor.kt`, `RichTextView.kt`, `state/rememberTextEditorState.kt` | 7.1 to 7.4, 7.13, 7.23 to 7.25, 7.32, 7.36, 7.59, 7.60, 7.66 |
+| M | Accessibility and host API | semantics in `BasicTextEditor.kt`, `RichTextView.kt`, `state/rememberTextEditorState.kt` | 7.1 to 7.4, 7.13, 7.23 to 7.25, 7.32, 7.36, 7.59, 7.60, 7.66, 7.70 |
 | N | Core layout and performance | `state/TextEditorState.kt` | 5.7, 7.8 to 7.12 |
 
 Housekeeping items are [Opus] and fit any lane that is already in the file.
@@ -3372,7 +3372,7 @@ Shaping is one line per keystroke. These still scale with document length:
   Done: both `setText` overloads reset as `setDocument` does (one helper): the
   selection and composing region are dropped and the cursor is coerced into
   the new text.
-- [ ] **7.66 The single-line action key is the state's, not the editor's. C.**
+- [x] **7.66 The single-line action key is the state's, not the editor's. C.**
   [Opus] [Lane M] `TextEditorState.isSingleLine` is true while any composed
   editor shows the state with `EditorLineLimits.SingleLine`, and
   `effectiveImeAction()` reads it, so a multi-line editor showing the same
@@ -3380,6 +3380,24 @@ Shaping is one line per keystroke. These still scale with document length:
   Enter presses the action key instead of starting a line. Pass each editor's
   own line limit to the semantics, the key handler and the Android
   `EditorInfo`, or document one state per line limit. Found in 7.59's review.
+  Done: the action key is each editor's, as with `BasicTextField`'s per-field
+  `lineLimits`. The semantics read their own editor's; the focused editor's
+  input node lends the state its limit with its default action
+  (`TextEditorState.focusedEditor`), which Enter, the Android `EditorInfo` and
+  the single-line input filter follow, so a multi-line editor beside a
+  single-line one keeps Enter and adds lines, which the single-line editor
+  shows as rows. With no editor focused, or a `RichTextView` focused, the
+  host's edits are still screened while any single-line editor shows the
+  state (`SingleLineEnterE2eTest`, `KeyboardSettingsTest`). Found 7.70.
+- [ ] **7.70 Edits that reach an unfocused editor follow the focused one. S.**
+  [Opus] [Lane M] With two editors on one state (7.66), the input filter's
+  single-line screen and the action key's default come from the editor
+  holding focus. A drop on the other editor, or an accessibility `SetText`,
+  `InsertTextAtCursor` or `OnImeAction` on it, is screened by the focused
+  editor's line limit and runs its default (Next moves focus from the
+  focused editor). Pass the target editor's limit and default through those
+  entry points (`dragdrop/`, `EditorSemantics.kt`) where they do not focus
+  it first. Rare: one state shared by editors with different limits.
 
 ## Housekeeping
 
