@@ -1854,18 +1854,46 @@ iOS Safari; browser tests run in CI.
   IME, typed text, paste and drop still normalise where they need the landed
   length or spot an Enter (`state/OperationLineEndingsTest.kt`).
 
-- [ ] **6.28 Undo to origin fails under fuzz seed 777. R.** [Opus] [Lane G]
+- [x] **6.28 Undo to origin fails under fuzz seed 777. R.** [Opus] [Lane G]
   `FUZZ_SEED=777 ./gradlew :ComposeTextEditor:desktopTest --rerun --tests
   'e2e.torture.*'` fails `EditorStateFuzzTest` "undo to origin" (the character
   styles differ) and `EditorFuzzE2eTest` "ui undo to origin" (a blockquote span is
   left on line 0) at `5bde800` already, so no recent chunk caused it. Shrink the
   script to the op that breaks the round trip and fix it; add 777 to the fixed
-  seeds.
+  seeds. Done: 777 shrank to typing over a selection from a plain line into a
+  quote line. The replace moved the quote's marker onto the joined line, where a
+  delete of the same range drops it (the joined line is the plain line's), and
+  undo put the quote back on its own line while the moved one stayed. A
+  line-anchored marker whose tail a replace joins onto an earlier line's kept
+  head now goes unless that line has the same marker, and a placeholder block
+  (a rule, an image) likewise (`state/ReplaceAcrossLinesSpansTest.kt`). A sweep
+  of seeds 1 to 3000 found two more undo causes, both fixed: a join wrote a
+  style's runs on each side as two overlapping spans, and merged runs a
+  character apart, styling the gap (`buildAnnotatedStringWithSpans`); and
+  undoing a join split the joined line again, which carries the first line's
+  marker and paragraph style over the second's text whenever that marker
+  reached past the join point (a character deleted and restored there, a block
+  toggle in between). A recorded delete or replace that joins lines now keeps
+  the first and last lines as they were, and one that breaks a line keeps that
+  line (`OperationMetadata.linesBefore`); undo writes them back exactly
+  (`state/UndoLineJoinTest.kt`). Seeds 777, 38, 185 and 359 are in the fixed
+  seeds; undo to origin holds for seeds 1 to 3000. What the sweep found besides
+  is 6.30 and 7.64.
 - [ ] **6.29 Nesting a long selection writes per line. S.** [Opus] [Lane G]
   `nestListItems` and `relevelListFollowers` (`richstyle/ListNesting.kt`) move each
   item with `setListLevelRaw`, a line splice and two span-index publishes per item,
   so Tab over a 400-item selection costs 400 splices where 6.17's toggle costs two.
   Collect the moves and write them with `writeLineBlocks`.
+- [ ] **6.30 A join leaves a block's indent over part of a line. R.** [Opus]
+  [Lane G] Deleting or replacing across a quote line and a plain line keeps one
+  line's marker (or none) but carries the other's `ParagraphStyle` over its part
+  of the joined line (`handleMultiLineDelete`, `handleMultiLineReplace`), so
+  Compose lays out that part as a separate, indented paragraph with no marker;
+  a quote line joined onto a plain one leaves "seed econd line" with the indent
+  over "econd line". Fuzz seed 246 (`EditorStateFuzzTest` markdown fixpoint) ends
+  with a fenced line whose paragraph runs are `[0-2, 7-22]`, and an Enter there
+  then throws "Paragraph overlap not allowed". A joined line should carry one
+  paragraph style run, the one its kept marker wants.
 
 ### Clipboard
 
@@ -2761,6 +2789,11 @@ Shaping is one line per keystroke. These still scale with document length:
   word at 24 sp exports as `a ` and `## BIG` on lines of their own. HTML takes a
   line's heading from its block alone since 6.26; markdown export should too,
   writing such a run as bold with its size.
+- [ ] **7.64 An empty quoted list item at the end is not a fixpoint. R.** [Opus]
+  [Lane I] Fuzz seed 2482 (`FUZZ_SEED=2482`, `EditorStateFuzzTest` markdown
+  fixpoint) ends with an empty quoted list item after a fence; the first
+  export's last line `> - ` ends in one more space than the second export's.
+  Found in 6.28's seed sweep.
 
 ### Find and replace addon
 

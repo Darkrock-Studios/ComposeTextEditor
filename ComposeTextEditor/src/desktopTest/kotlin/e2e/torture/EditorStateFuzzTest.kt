@@ -64,4 +64,16 @@ class EditorStateFuzzTest {
 
 	@Test
 	fun `undo to origin seed 20260801`() = undoToOrigin(20260801)
+
+	@Test
+	fun `undo to origin seed 777`() = undoToOrigin(777)
+
+	@Test
+	fun `undo to origin seed 38`() = undoToOrigin(38)
+
+	@Test
+	fun `undo to origin seed 185`() = undoToOrigin(185)
+
+	@Test
+	fun `undo to origin seed 359`() = undoToOrigin(359)
 }

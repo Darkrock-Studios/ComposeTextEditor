@@ -110,7 +110,8 @@ span re-anchoring, and the edit stream all at once.
 
 `TextEditHistory` holds the undo and redo stacks. An entry is one recorded
 operation paired with the `OperationMetadata` needed to reverse it (deleted
-text, deleted spans), or a group of them. Consecutive single-character typing
+text, deleted spans, and the lines it joined or broke, which undo writes back
+whole), or a group of them. Consecutive single-character typing
 and backspacing coalesce into wordwise runs, so undo peels words, not
 keystrokes. IME commits and composition updates are recorded as typing
 whatever their length, so a composed word and its commit fold into the run

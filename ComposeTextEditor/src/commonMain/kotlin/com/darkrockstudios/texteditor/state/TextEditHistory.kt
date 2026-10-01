@@ -362,6 +362,21 @@ data class OperationMetadata(
 	 * than applying a blind inverse over the range.
 	 */
 	val spanStylesBefore: Map<Int, List<AnnotatedString.Range<SpanStyle>>> = emptyMap(),
+	/**
+	 * For a delete or replace that joins or breaks lines: the first and last lines of
+	 * its range as they stood before. A joined line keeps the first line's blocks and
+	 * paragraph styles over the last's text, and a broken one carries them onto both
+	 * halves, so undo writes these back rather than trusting the inverse edit to
+	 * recover them.
+	 */
+	val linesBefore: List<LineBefore> = emptyList(),
+)
+
+/** A line's content and block span styles before an edit, [offset] lines after the edit's first. */
+data class LineBefore(
+	val offset: Int,
+	val content: AnnotatedString,
+	val blockSpans: List<RichSpanStyle>,
 )
 
 /** One undo step: a single recorded operation, or every operation of one [TextEditorState.editGroup]. */

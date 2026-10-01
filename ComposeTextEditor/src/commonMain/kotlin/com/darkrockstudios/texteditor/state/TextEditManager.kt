@@ -177,7 +177,7 @@ class TextEditManager(private val state: TextEditorState) {
 		state.withAtomicEdit {
 			val metadata = when (operation) {
 				is TextEditOperation.Insert -> applyInsert(operation)
-				is TextEditOperation.Delete -> applyDelete(operation)
+				is TextEditOperation.Delete -> applyDelete(addToHistory, operation)
 				is TextEditOperation.Replace -> applyReplace(addToHistory, operation)
 				is TextEditOperation.StyleSpan -> applyStyleOperation(addToHistory, operation)
 				is TextEditOperation.RichSpan -> applyRichSpanOperation(operation)
@@ -277,7 +277,7 @@ class TextEditManager(private val state: TextEditorState) {
 		operation: TextEditOperation.Replace
 	): OperationMetadata? {
 		val metadata = if (addToHistory) {
-			state.captureMetadata(operation.range)
+			state.captureMetadata(operation.range).withLinesBefore(operation.range, operation.newText.contains('\n'))
 		} else {
 			null
 		}
@@ -311,12 +311,14 @@ class TextEditManager(private val state: TextEditorState) {
 		return metadata
 	}
 
-	private fun applyDelete(operation: TextEditOperation.Delete): OperationMetadata {
+	private fun applyDelete(addToHistory: Boolean, operation: TextEditOperation.Delete): OperationMetadata {
 		// Captured whether or not this delete is recorded: the rich span transformer
 		// needs the deleted text to re-anchor spans, and the two non-recording paths
 		// (undo of an insert, redo of a delete) are exactly where spans would
 		// otherwise be dropped.
-		val metadata = state.captureMetadata(operation.range)
+		val metadata = state.captureMetadata(operation.range).let {
+			if (addToHistory) it.withLinesBefore(operation.range, breaks = false) else it
+		}
 
 		when {
 			operation.range.isSingleLine() -> {
@@ -339,6 +341,38 @@ class TextEditManager(private val state: TextEditorState) {
 			}
 		}
 		return metadata
+	}
+
+	/**
+	 * Records the first and last lines of [range] when the edit joins them, or its one
+	 * line when the edit [breaks] it. The lines between are deleted whole, and the
+	 * deleted text brings them back as they were.
+	 */
+	private fun OperationMetadata.withLinesBefore(range: TextEditorRange, breaks: Boolean): OperationMetadata {
+		val lines = when {
+			!range.isSingleLine() -> listOf(range.start.line, range.end.line)
+			breaks -> listOf(range.start.line)
+			else -> return this
+		}
+		return copy(
+			linesBefore = lines.filter { it in state.textLines.indices }.map {
+				LineBefore(it - range.start.line, state.textLines[it], state.lineBlockSpanStyles(it))
+			}
+		)
+	}
+
+	/**
+	 * Writes back [lines], recorded by an edit starting on line [first] that is now
+	 * undone: each whose text is back as it was gets its content and blocks exactly.
+	 */
+	private fun restoreLinesBefore(lines: List<LineBefore>, first: Int) {
+		state.writeLineBlocks(
+			lines.mapNotNull { before ->
+				val line = first + before.offset
+				if (state.textLines.getOrNull(line)?.text != before.content.text) return@mapNotNull null
+				LineBlockWrite(line, before.content, before.blockSpans)
+			}
+		)
 	}
 
 	/**
@@ -1000,6 +1034,7 @@ class TextEditManager(private val state: TextEditorState) {
 				entry.metadata.preservedRichSpans,
 				operation.range.start
 			)
+			restoreLinesBefore(entry.metadata.linesBefore, operation.range.start.line)
 		}
 	}
 
@@ -1021,6 +1056,7 @@ class TextEditManager(private val state: TextEditorState) {
 					entry.metadata.preservedRichSpans,
 					operation.range.start
 				)
+				restoreLinesBefore(entry.metadata.linesBefore, operation.range.start.line)
 			}
 		}
 	}
