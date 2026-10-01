@@ -7,6 +7,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
+import com.darkrockstudios.texteditor.state.EditorInputFilter
 import com.darkrockstudios.texteditor.state.TextEditorState
 import io.mockk.mockk
 import kotlinx.coroutines.test.TestScope
@@ -14,6 +15,7 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 
 class FindReplaceTest {
 
@@ -174,5 +176,92 @@ class FindReplaceTest {
 
 		assertEquals("cat cat\ncat", textState.text)
 		assertEquals(false, textState.canUndo)
+	}
+
+	@Test
+	fun `replace all counts and keeps the matches the input filter refused`() = runTest {
+		val textState = editor("cat cat cat")
+		// Refuses an edit at the line's start only.
+		textState.inputFilter = EditorInputFilter { _, range, text -> text.takeIf { range.start.char != 0 } }
+		val find = FindState(textState, backgroundScope)
+		find.search("cat")
+
+		assertEquals(2, find.replaceAll("dog"))
+
+		assertEquals("cat dog dog", textState.text)
+		assertEquals(listOf(TextEditorRange(CharLineOffset(0, 0), CharLineOffset(0, 3))), find.matches)
+		assertEquals(0, find.currentMatchIndex)
+	}
+
+	@Test
+	fun `a refused match after replacements moves with them`() = runTest {
+		val textState = editor("cat cat cat")
+		// Refuses an edit at the line's end only.
+		textState.inputFilter = EditorInputFilter { _, range, text -> text.takeIf { range.end.char != 11 } }
+		val find = FindState(textState, backgroundScope)
+		find.search("cat")
+
+		assertEquals(2, find.replaceAll("doggo"))
+
+		assertEquals("doggo doggo cat", textState.text)
+		assertEquals(listOf(TextEditorRange(CharLineOffset(0, 12), CharLineOffset(0, 15))), find.matches)
+	}
+
+	@Test
+	fun `replace all refused everywhere replaces nothing`() = runTest {
+		val textState = editor("cat cat")
+		textState.inputFilter = EditorInputFilter.SingleLine
+		val find = FindState(textState, backgroundScope)
+		find.search("cat")
+
+		assertEquals(0, find.replaceAll("\n"))
+
+		assertEquals("cat cat", textState.text)
+		assertEquals(2, find.matchCount)
+	}
+
+	@Test
+	fun `a refused replace current keeps its match`() = runTest {
+		val textState = editor("cat cat")
+		textState.inputFilter = EditorInputFilter.SingleLine
+		val find = FindState(textState, backgroundScope)
+		find.search("cat")
+		val before = find.matches[find.currentMatchIndex]
+
+		assertFalse(find.replaceCurrent("\n"))
+
+		assertEquals("cat cat", textState.text)
+		assertEquals(before, find.matches[find.currentMatchIndex])
+		assertEquals(2, find.matchCount)
+	}
+
+	@Test
+	fun `a refused replace current after an edit keeps the match it was asked to replace`() = runTest {
+		val textState = editor("cat cat")
+		textState.inputFilter = EditorInputFilter.SingleLine
+		val find = FindState(textState, backgroundScope)
+		find.search("cat")
+		find.findNext()
+
+		// An edit whose debounced refresh has not run yet.
+		textState.replace(TextEditorRange(CharLineOffset(0, 0), CharLineOffset(0, 0)), "0123456789")
+
+		assertFalse(find.replaceCurrent("\n"))
+
+		assertEquals(TextEditorRange(CharLineOffset(0, 14), CharLineOffset(0, 17)), find.matches[find.currentMatchIndex])
+	}
+
+	@Test
+	fun `a refused match the other replacements broke is dropped`() = runTest {
+		val textState = editor("cat cat dog")
+		textState.inputFilter = EditorInputFilter { _, range, text -> text.takeIf { range.start.char != 0 } }
+		val find = FindState(textState, backgroundScope)
+		find.toggleRegex(true)
+		find.search("cat(?= (cat|dog))")
+
+		assertEquals(1, find.replaceAll("x"))
+
+		assertEquals("cat x dog", textState.text)
+		assertEquals(0, find.matchCount)
 	}
 }

@@ -410,7 +410,8 @@ class FindState(
 	 * @param replaceText The text to replace with. With [useRegex], `$1`, `${name}` and the
 	 * other group references of Kotlin's `Regex.replace` are expanded, and `\n` and `\t`
 	 * insert a line break and a tab; see the module docs.
-	 * @return true if a replacement was made, false if no current match
+	 * @return true if a replacement was made, false if there is no current match or the editor's
+	 * input filter refused the replacement, which leaves the match current
 	 */
 	fun replaceCurrent(replaceText: String): Boolean {
 		if (currentMatchIndex < 0 || currentMatchIndex >= _matches.size) return false
@@ -420,7 +421,8 @@ class FindState(
 		val highlighted = textState.richSpanManager.getAllRichSpans()
 			.firstOrNull { it.style === currentMatchStyle }?.range
 			?: _matches[currentMatchIndex]
-		val match = highlighted.takeIf { it in findMatches() }
+		val current = findMatches()
+		val match = highlighted.takeIf { it in current }
 		if (match == null) {
 			refreshSearch()
 			return false
@@ -429,7 +431,14 @@ class FindState(
 		// Clear highlights before replacement
 		clearHighlights()
 
-		replaceRanges(listOf(match), replaceText)
+		if (replaceRanges(listOf(match), replaceText).isNotEmpty()) {
+			// The input filter refused it, so the document is as it was: the match stays current.
+			_matches.clear()
+			_matches.addAll(current)
+			currentMatchIndex = current.indexOf(match)
+			updateHighlights()
+			return false
+		}
 
 		// Re-run the search to update matches
 		// The debounced search will also run, but we do it immediately for responsiveness
@@ -459,7 +468,8 @@ class FindState(
 	 * it replaces. Matches are found afresh in the current text; where matches overlap, only the
 	 * first is replaced.
 	 * @param replaceText The text to replace with, group references expanded as in [replaceCurrent]
-	 * @return The number of replacements made
+	 * @return The number of replacements made. Matches the editor's input filter refused are not
+	 * counted and stay as the matches, the first of them current.
 	 */
 	fun replaceAll(replaceText: String): Int {
 		if (query.isEmpty()) return 0
@@ -471,13 +481,17 @@ class FindState(
 
 		clearHighlights()
 
-		replaceRanges(targets, replaceText)
+		val refused = replaceRanges(targets, replaceText)
 
-		// Clear matches since they're all replaced
+		// What the input filter refused stays a match, as long as the other replacements left it one.
+		val stillMatching = if (refused.isEmpty()) emptyList() else refused.intersect(findMatches().toSet()).toList()
 		_matches.clear()
-		currentMatchIndex = -1
+		_matches.addAll(stillMatching)
+		currentMatchIndex = if (stillMatching.isEmpty()) -1 else 0
+		updateHighlights()
+		goToCurrentMatch()
 
-		return targets.size
+		return targets.size - refused.size
 	}
 
 	/**
@@ -485,9 +499,10 @@ class FindState(
 	 * replacement leaves the earlier ranges where they were, as one undo step. With [useRegex],
 	 * group references in [replaceText] are expanded for each match. An edit at the edge of the
 	 * find in selection scope would shrink it, so the scope is re-laid over what it covered, and
-	 * the selection from before the search is carried along the same way.
+	 * the selection from before the search is carried along the same way. Returns the targets the
+	 * input filter refused, in document order, where they are once the rest have landed.
 	 */
-	private fun replaceRanges(targets: List<TextEditorRange>, replaceText: String) {
+	private fun replaceRanges(targets: List<TextEditorRange>, replaceText: String): List<TextEditorRange> {
 		val replacements = if (useRegex) {
 			textState.regexReplacements(targets, query, caseSensitive, wholeWord, replaceText)
 		} else {
@@ -495,19 +510,24 @@ class FindState(
 		}
 		rememberOwnSelection()
 		val before = currentSelectionBeforeSearch()?.let(::flatRange)
-		textState.editGroup { replaceInGroup(targets.zip(replacements), before) }
+		val refused = textState.editGroup { replaceInGroup(targets.zip(replacements), before) }
 		rememberSelectionBeforeSearch(before?.toRange())
+		return refused.mapNotNull { it.toRange() }
 	}
 
-	private fun replaceInGroup(replacements: List<Pair<TextEditorRange, String>>, before: FlatRange?) {
+	/** Returns the matches the input filter refused, where they are once the rest have landed. */
+	private fun replaceInGroup(replacements: List<Pair<TextEditorRange, String>>, before: FlatRange?): List<FlatRange> {
 		val scope = scopeRange()?.let(::flatRange)
+		val refused = mutableListOf<FlatRange>()
 		replacements.asReversed().forEach { (match, replacement) ->
 			val matchStart = textState.getCharacterIndex(match.start)
 			val matchEnd = textState.getCharacterIndex(match.end)
 			// What landed, which line ending normalization or the input filter can make differ
 			// from the replacement; a refused one leaves the match.
-			val landed = textState.replace(match, styledReplacement(match, replacement))
-				?.let { textState.getCharacterIndex(it.end) - matchStart } ?: (matchEnd - matchStart)
+			val landedRange = textState.replace(match, styledReplacement(match, replacement))
+			val landed = landedRange?.let { textState.getCharacterIndex(it.end) - matchStart } ?: (matchEnd - matchStart)
+			refused.forEach { it.follow(matchStart, matchEnd, landed) }
+			if (landedRange == null) refused += FlatRange(matchStart, matchEnd)
 			scope?.follow(matchStart, matchEnd, landed)
 			before?.follow(matchStart, matchEnd, landed)
 		}
@@ -517,6 +537,7 @@ class FindState(
 				add = listOfNotNull(scope.toRange()?.let { RichSpan(it, scopeStyle) }),
 			)
 		}
+		return refused.asReversed()
 	}
 
 	private fun flatRange(range: TextEditorRange) =

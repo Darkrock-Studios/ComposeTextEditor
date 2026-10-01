@@ -3054,12 +3054,16 @@ Shaping is one line per keystroke. These still scale with document length:
   now is. An undo after the deletion turned find in selection off turns it
   back on; turning it off yourself, closing, or replacing the document
   forgets the history (`FindInSelectionTest`).
-- [ ] **7.69 Find counts a replacement the input filter refused. S.** [Opus]
+- [x] **7.69 Find counts a replacement the input filter refused. S.** [Opus]
   [Lane J] `replaceAll` returns every target and clears every match, and
   `replaceCurrent` returns true, even when the input filter (a full
   `maxLength`, `SingleLine` against a replacement with a line break) refused
   some or all of them, so the refused matches stay in the text unhighlighted.
   `replace` now returns null for a refused edit (7.55); count and keep those.
+  Done: `replaceAll` counts only what landed and keeps the refused matches
+  that are still matches as the matches, where the other replacements moved
+  them, the first current and selected; a refused `replaceCurrent` returns
+  false and keeps its match current (`FindReplaceTest`; the module docs).
 
 ### Spell check addon
 
