@@ -229,14 +229,14 @@ removed outright; the deprecated names live in the module alone.
 
 The markdown suite (`markdown/` in core's desktop tests: round trip, fuzz,
 fixpoint, escaping, tables, links, images, rules, fences, paragraphs, nesting)
-moves with the code to the module's desktop tests, together with the markdown
-round-trip torture test, the import relayout cost test and the typed body
-style test, whose subject is what the importer lays down. Those tests reach
-into core internals today (`Blockquote` and the other `LineBlockStyle`
-instances, `headerBlock`, `updateBookKeeping`, `getRichSpansStartingOn`);
-they are rewritten onto the public API (the span styles, the block API, the
-snapshot) while the package still lives in core, in the same chunk as the
-markdown code is, so the move is a move.
+moves with the code to the module's desktop tests, the import relayout cost
+test and the typed body style test with it. Those tests reached into core
+internals (`Blockquote` and the other `LineBlockStyle` instances,
+`headerBlock`, `getRichSpansStartingOn`); they were rewritten onto the public
+API (the span styles, the block API, the snapshot) while the package still
+lived in core, so the move was a move. The markdown round-trip torture test
+stays in core: it drives the `editorUiTest` harness, which uses internals, and
+core's tests see the module.
 
 Core's block-model tests build their documents and read their results through
 markdown text (`importMarkdown("- a\n  - b")`, `assertEquals("- a\n  - b",

@@ -11,8 +11,9 @@ fences, images), efficient long-form rendering, and a per-edit change stream.
 implementation("com.darkrockstudios:composetexteditor:2.0.0")
 ```
 
-The find/replace and spell-check features live in separate add-on modules; see the
-**Find & Replace** and **Spell Check** modules.
+Markdown, find and replace, and spell check live in separate add-on modules; see the
+**Markdown**, **Find & Replace** and **Spell Check** modules. The editor is rich text;
+installing the markdown module on a state is how it is used as a markdown editor.
 
 ## Getting started
 
@@ -66,40 +67,26 @@ decoration, drop down to
 rendering of the same content, use
 [RichTextView][com.darkrockstudios.texteditor.RichTextView].
 
-## Markdown
+## Styles and blocks
 
-Wrap a state with [withMarkdown][com.darkrockstudios.texteditor.markdown.withMarkdown]
-to import and export GitHub-flavored Markdown and toggle block styles (lists,
-blockquotes, code fences):
+The character styles rich text formatting uses (bold, italic, code, links, the
+heading sizes, the body text) are one bundle,
+[RichTextStyles][com.darkrockstudios.texteditor.RichTextStyles], on
+[TextEditorState.richTextStyles][com.darkrockstudios.texteditor.state.TextEditorState.richTextStyles].
+The built-in formatting actions, HTML, the clipboard and the format addons all read
+it; assign it before loading content:
 
 ```kotlin
 val state = rememberTextEditorState()
-val markdown = remember(state) { state.withMarkdown() }
-
-// Import handles both inline (**bold**, *italic*, `code`) and block elements
-// (headings, lists, blockquotes, code fences, horizontal rules):
-LaunchedEffect(markdown) {
-    markdown.importMarkdown(
-        """
-        # Title
-
-        Some **bold** and *italic* text.
-
-        - one
-        - two
-        """.trimIndent()
-    )
-}
-
-TextEditor(state = state)
-
-// Export the current document back to a Markdown string:
-val source: String = markdown.exportAsMarkdown()
+state.richTextStyles = RichTextStyles.DEFAULT_DARK
 ```
 
-To render only inline Markdown into an `AnnotatedString` (no block handling), use
-[String.toAnnotatedStringFromMarkdown][com.darkrockstudios.texteditor.markdown.toAnnotatedStringFromMarkdown]
-— but prefer `importMarkdown` whenever the source contains block elements.
+Lists, blockquotes, code fences, headings and links are toggled and queried on the
+state: [toggleBulletList][com.darkrockstudios.texteditor.state.toggleBulletList],
+[toggleHeader][com.darkrockstudios.texteditor.state.toggleHeader],
+[headerLevel][com.darkrockstudios.texteditor.state.headerLevel],
+[setLink][com.darkrockstudios.texteditor.state.setLink] and the rest of the block
+API in `com.darkrockstudios.texteditor.state`.
 
 ## HTML
 
@@ -131,8 +118,8 @@ strikethrough, inline code, lists, blockquotes, code fences, horizontal rules
 and images. The output is a fragment — no `<html>` or `<body>` wrapper — so it
 can be embedded directly.
 
-Import and export can share a state with `withMarkdown`, which is how a
-document is converted between the two formats:
+Import and export can share a state with the markdown module's `withMarkdown`,
+which is how a document is converted between the two formats:
 
 ```kotlin
 val markdown = remember(state) { state.withMarkdown() }
@@ -146,8 +133,8 @@ Images are only reconstructed on import when an
 [ImageProvider][com.darkrockstudios.texteditor.richstyle.ImageProvider] is
 supplied (`state.withHtml(imageProvider = myProvider)`); without one every
 `<img>` is dropped. Custom heading sizes only survive a round trip when the
-same [MarkdownConfiguration][com.darkrockstudios.texteditor.markdown.MarkdownConfiguration]
-is used in both directions, since heading levels are matched by font size.
+state's [RichTextStyles][com.darkrockstudios.texteditor.RichTextStyles] are the
+same in both directions, since a spanless heading is matched by font size.
 
 To convert an `AnnotatedString` alone, without block structure, use
 [AnnotatedString.toHtml][com.darkrockstudios.texteditor.html.toHtml] and
@@ -191,7 +178,8 @@ lines are clamped onto them.
 The editor composables ([TextEditor][com.darkrockstudios.texteditor.TextEditor],
 [BasicTextEditor][com.darkrockstudios.texteditor.BasicTextEditor],
 [RichTextView][com.darkrockstudios.texteditor.RichTextView]), styling
-([TextEditorStyle][com.darkrockstudios.texteditor.TextEditorStyle]), and the core
+([TextEditorStyle][com.darkrockstudios.texteditor.TextEditorStyle],
+[RichTextStyles][com.darkrockstudios.texteditor.RichTextStyles]), and the core
 coordinate types ([CharLineOffset][com.darkrockstudios.texteditor.CharLineOffset],
 [TextEditorRange][com.darkrockstudios.texteditor.TextEditorRange]) used throughout the API.
 
@@ -208,13 +196,6 @@ factory, and the extension functions for editing and querying it.
 Rich span styles: the [RichSpanStyle][com.darkrockstudios.texteditor.richstyle.RichSpanStyle]
 contract and the built-in decorations (bullet/ordered lists, blockquotes, code fences,
 horizontal rules, images, and highlights). Implement `RichSpanStyle` to draw your own.
-
-# Package com.darkrockstudios.texteditor.markdown
-
-Markdown import/export and configuration:
-[withMarkdown][com.darkrockstudios.texteditor.markdown.withMarkdown],
-[MarkdownConfiguration][com.darkrockstudios.texteditor.markdown.MarkdownConfiguration],
-and the `AnnotatedString` ⇄ Markdown converters.
 
 # Package com.darkrockstudios.texteditor.html
 

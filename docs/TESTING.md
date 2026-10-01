@@ -5,6 +5,7 @@
 | Suite | Command | What it covers |
 | --- | --- | --- |
 | Editor, desktop JVM | `./gradlew :ComposeTextEditor:desktopTest` | Unit tests and headless end-to-end tests of the real composable |
+| Markdown addon | `./gradlew :ComposeTextEditorMarkdown:desktopTest` | Markdown import and export: round trip, escaping, tables, links, images, nesting; no layout, so no font |
 | Find addon | `./gradlew :ComposeTextEditorFind:desktopTest` | Find and replace, through the find bar |
 | Spell check addon | `./gradlew :ComposeTextEditorSpellCheck:desktopTest` | Spell check and diagnostics |
 | Android host tests | `./gradlew :ComposeTextEditor:testAndroidHostTest` | Android input logic on the JVM |
@@ -15,6 +16,8 @@
 
 Narrow a run while iterating with `--tests`, for example
 `./gradlew :ComposeTextEditor:desktopTest --tests 'e2e.NavigationE2eTest'`.
+Core's desktop tests depend on the markdown module: the block tests build and
+read their documents as markdown text (`docs/design/modules.md`, "Tests").
 
 Each desktop suite runs in one JVM with a 1 GB heap (the root
 `build.gradle.kts`); the core suite's heap stays under 200 MB after a
@@ -165,8 +168,8 @@ that need load).
 | Job | Runner | Runs |
 | --- | --- | --- |
 | `build` | Ubuntu | `./gradlew check`, the goldens included |
-| `desktop-macos` | macOS | The three desktop suites, Mac key bindings |
-| `desktop-windows` | Windows | The three desktop suites |
+| `desktop-macos` | macOS | The four desktop suites, Mac key bindings |
+| `desktop-windows` | Windows | The four desktop suites |
 | `android-emulator` | Ubuntu, API 35 emulator | The Android smoke test |
 | `browser` | Ubuntu, Chromium | The browser tests, typing and composition, against a production build of the demo |
 | `ios` | macOS | The iOS compile, the iOS tests, and the sample app build |

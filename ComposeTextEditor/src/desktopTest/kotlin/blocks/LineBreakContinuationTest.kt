@@ -18,7 +18,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
-import markdown.linesWith
+import utils.linesWith
 
 /**
  * Line breaks inserted into a line block by anything but Enter (a replace, a paste, a

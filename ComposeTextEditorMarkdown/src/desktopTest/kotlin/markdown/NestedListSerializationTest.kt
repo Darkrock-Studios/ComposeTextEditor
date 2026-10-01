@@ -14,6 +14,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
+import utils.linesWith
 
 /**
  * Nested lists in markdown: a nested item is indented to its ancestor's

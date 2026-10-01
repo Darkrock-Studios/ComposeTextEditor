@@ -2497,6 +2497,11 @@ Shaping is one line per keystroke. These still scale with document length:
     reads the state's styles and forwards its block members, deprecated, to
     the state. The markdown package and its tests use core's public API
     only. The sample app's plain rich text demo installs nothing.
+  - Module: done. `ComposeTextEditorMarkdown` (`composetexteditor-markdown`,
+    package unchanged) holds the markdown package, its tests and the parser
+    dependency; core depends on no markdown. Core's desktop tests depend on
+    the module for their fixtures (`docs/design/modules.md`, "Tests").
+    `SpellCheckState.withMarkdown` is gone: `textState.withMarkdown()`.
 
 ### Find and replace addon
 

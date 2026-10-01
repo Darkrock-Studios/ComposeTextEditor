@@ -14,7 +14,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
-import markdown.linesWith
+import utils.linesWith
 
 /**
  * A style or block edit over many lines, and its undo and redo, writes the line

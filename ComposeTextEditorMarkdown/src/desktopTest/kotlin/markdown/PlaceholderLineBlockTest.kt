@@ -19,6 +19,8 @@ import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import utils.linesWith
+import utils.imageLines
 
 /**
  * Placeholder lines own their content through a placeholder character and a

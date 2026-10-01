@@ -19,6 +19,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
+import utils.linesWith
 
 /**
  * Multi-line block toggles act on every selected line that can carry the style:

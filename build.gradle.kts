@@ -18,9 +18,10 @@ subprojects {
 	tasks.withType<Test>().matching { it.name == "desktopTest" }.configureEach { maxHeapSize = "1g" }
 }
 
-// Aggregates the three published library modules into a single API doc site.
+// Aggregates the four published library modules into a single API doc site.
 dependencies {
 	dokka(project(":ComposeTextEditor"))
+	dokka(project(":ComposeTextEditorMarkdown"))
 	dokka(project(":ComposeTextEditorFind"))
 	dokka(project(":ComposeTextEditorSpellCheck"))
 }

@@ -21,7 +21,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
-import markdown.linesWith
+import utils.linesWith
 
 /**
  * Enter at a heading's end starts body text, as in Word and Google Docs; a split
