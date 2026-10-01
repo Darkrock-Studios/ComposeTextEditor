@@ -5,5 +5,5 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import com.darkrockstudios.texteditor.state.TextEditorState
 
-internal actual fun Modifier.textMagnifier(state: TextEditorState): Modifier =
+internal actual fun Modifier.textMagnifier(state: TextEditorState, style: TextEditorStyle): Modifier =
 	magnifier(sourceCenter = { state.selector.magnifierCenter ?: Offset.Unspecified })

@@ -985,13 +985,24 @@ fixes what users feel every minute.
   landing outside the editor's node never reaches its handlers.
 - [ ] **3.14 Italics invisible on Android. U.** [Opus] [Human] [Lane F] Saved and
   exported correctly but not drawn (hammer-editor#956). Not reproduced.
-- [ ] **3.15 Magnifier on iOS and mobile web. C.** [Opus] [Lane B]
+- [x] **3.15 Magnifier on iOS and mobile web. C.** [Opus] [Lane B]
   [Mac work] Compose has no magnifier outside Android (3.6). iOS text views
   show a loupe while the caret or a handle is dragged; matching it means
   drawing our own: an enlarged copy of the canvas around
   `TextEditorSelectionManager.magnifierCenter` in a popup above the finger,
   fed from the `skikoMain` `textMagnifier`. Mobile browsers show none for
   canvas content. Desktop needs none: a mouse does not hide the text.
+  Done, drawn in the canvas rather than a popup: the `skikoMain`
+  `textMagnifier` records the canvas into a graphics layer while a handle or a
+  long press is dragged and draws a capsule loupe (120 by 44 dp, 1.25 times)
+  a little above `magnifierCenter`, or below it where there is no room above,
+  kept inside the editor's bounds, on the editor's background or a white or
+  near-black backdrop the text reads on (`TextEditorStyle.loupeBackdrop`). With
+  no drag nothing is recorded and the layer is let go. It covers desktop too,
+  where a touch screen hides the text a finger drags over as on a phone.
+  `DrawnMagnifierTest`; on the iOS simulator a long-press drag shows the
+  enlarged text above the finger. The loupe cannot leave the editor's bounds,
+  unlike iOS's, which floats over anything.
 - [x] **3.16 The keyboard cover is measured against the last frame's canvas.
   C.** [Opus] [Lane C] `BasicTextEditor` measures the cover (4.24) when the
   keyboard's inset changes, from the canvas's bounds as last laid out. Under

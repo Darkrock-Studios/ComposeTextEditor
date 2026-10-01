@@ -221,7 +221,7 @@ private fun RichTextViewBody(
 				.padding(contentPadding)
 				// The touch toolbar is placed in root coordinates, from the canvas's.
 				.onGloballyPositioned { state.canvasLayoutCoordinates = it }
-				.textMagnifier(state)
+				.textMagnifier(state, style)
 		} else {
 			Modifier
 				.textEditorPointerIcon(state, linkClicks, default = null, contentOrigin = { contentOrigin })

@@ -390,7 +390,7 @@ fun BasicTextEditor(
 							selectionDrag = dragAndDrop::startSelectionDrag,
 						)
 						.padding(horizontalPadding)
-						.textMagnifier(state)
+						.textMagnifier(state, style)
 						.background(style.backgroundColor)
 						.onSizeChanged { size -> state.onViewportSizeChange(size.toSize()) }
 						.measuresKeyboardCover(state, imeInsetsProvider)
