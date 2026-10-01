@@ -238,7 +238,7 @@ class TextEditorState private constructor(
 			}
 		}
 
-	/** How many composed editors show this state with wrapping off. */
+	/** How many composed editors show this state with wrapping off, single lines among them. */
 	internal var noWrapEditors: Int = 0
 		set(value) {
 			field = value
@@ -1152,8 +1152,9 @@ class TextEditorState private constructor(
 
 	/**
 	 * The sideways scroll position, in pixels from the content's left edge. Its range is
-	 * empty unless an editor showing the state has wrapping off (`softWrap = false`), when
-	 * it runs to the widest line, plus room for the caret, less the viewport's width.
+	 * empty unless an editor showing the state has wrapping off (`softWrap = false`, or a
+	 * single line), when it runs to the widest line, plus room for the caret, less the
+	 * viewport's width.
 	 * While a reshape settles (a width change, wrapping turned off) the lines not yet
 	 * shaped keep their old widths, as the content height keeps their old heights.
 	 */

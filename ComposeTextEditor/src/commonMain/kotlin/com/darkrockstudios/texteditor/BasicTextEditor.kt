@@ -112,8 +112,9 @@ private const val CURSOR_BLINK_SPEED_MS = 500L
  * @param lineLimits How tall the editor is: [EditorLineLimits.Fill], the default, takes
  *   the height it is given; [EditorLineLimits.MultiLine] grows with the text between a
  *   minimum and maximum number of lines, then scrolls; [EditorLineLimits.SingleLine]
- *   keeps the text to one paragraph. For a maximum length or other rules on what may be
- *   entered, set [TextEditorState.inputFilter].
+ *   keeps the text to one paragraph, one row that scrolls sideways, whatever [softWrap]
+ *   says. For a maximum length or other rules on what may be entered, set
+ *   [TextEditorState.inputFilter].
  * @param autoFocus Requests focus once when first composed, if [enabled]. For focus at
  *   any other time, see [modifier].
  * @param style Colors and text style for the editor and its gutter markers.
@@ -132,8 +133,8 @@ private const val CURSOR_BLINK_SPEED_MS = 500L
  * @param decorateLine Optional per-line decorator drawn behind each line, keyed by
  *   line index — useful for gutters, current-line highlights, or diff markers. It
  *   draws in the text canvas's coordinates, unclipped, and its offset is where the
- *   line's text is drawn, which with [softWrap] off moves with the sideways scroll: a
- *   gutter places itself by its own x.
+ *   line's text is drawn, which with wrapping off ([softWrap], or a single line) moves
+ *   with the sideways scroll: a gutter places itself by its own x.
  * @param keyBindings Chord-to-command mapping, defaulting to [LocalKeyBindings].
  *   Bind chords to actions registered on [TextEditorState.actions] to add
  *   shortcuts of your own.
@@ -224,9 +225,11 @@ fun BasicTextEditor(
 		onDispose { if (singleLine) state.singleLineEditors-- }
 	}
 
-	DisposableEffect(state, softWrap) {
-		if (!softWrap) state.noWrapEditors++
-		onDispose { if (!softWrap) state.noWrapEditors-- }
+	// A single line is one row that scrolls sideways, as BasicTextField's is.
+	val wraps = softWrap && !singleLine
+	DisposableEffect(state, wraps) {
+		if (!wraps) state.noWrapEditors++
+		onDispose { if (!wraps) state.noWrapEditors-- }
 	}
 
 	LaunchedEffect(contentPadding, density) {

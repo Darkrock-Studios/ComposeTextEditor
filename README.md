@@ -72,8 +72,9 @@ the [API reference & recipes](https://darkrock-studios.github.io/ComposeTextEdit
 - `TextEditorState(initialText)`: a view model can create, load and edit the document
   outside composition, and hand it to the editor later.
 - Editor configuration: read-only with a caret, sizing to the text between minimum
-  and maximum lines, single line, maximum length and input filters. No soft-wrap
-  toggle yet.
+  and maximum lines, single line (one row that scrolls sideways), maximum length and
+  input filters, and wrapping off (`softWrap = false`) for code: each line one row,
+  the editor scrolling sideways.
 - Opt-in writer conveniences: smart punctuation (curly quotes and apostrophes, em
   and en dashes, ellipses), each substitution switchable, and auto-linking of typed
   and pasted URLs, each undone in one step

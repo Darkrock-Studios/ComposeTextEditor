@@ -15,12 +15,13 @@ sealed interface EditorLineLimits {
 	data object Fill : EditorLineLimits
 
 	/**
-	 * One paragraph, as tall as its rows: Enter adds no line, and line breaks arriving
-	 * in text (a paste, a dictated phrase) become spaces, by
-	 * [com.darkrockstudios.texteditor.state.EditorInputFilter.SingleLine]. A long line
-	 * wraps and the editor grows with it, since the editor cannot yet scroll sideways as
-	 * `BasicTextField`'s single line does. A document the host loads with line breaks
-	 * keeps them.
+	 * One paragraph on one row: Enter adds no line, and line breaks arriving in text (a
+	 * paste, a dictated phrase) become spaces, by
+	 * [com.darkrockstudios.texteditor.state.EditorInputFilter.SingleLine]. A long line does
+	 * not wrap: the editor scrolls sideways to follow the caret, as `BasicTextField`'s
+	 * single line does, with no scrollbar. A document the host loads with line breaks
+	 * keeps them, a row each, and the editor is as tall as those rows. The layout is the
+	 * state's, so other editors showing the same state stop wrapping too.
 	 *
 	 * The action key and Enter are the editor's own: a multi-line editor showing the same
 	 * state keeps its Enter key. Edits follow the editor holding focus, so that one adds
