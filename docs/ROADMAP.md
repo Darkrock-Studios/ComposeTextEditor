@@ -2257,7 +2257,7 @@ iOS Safari; browser tests run in CI (met: the `browser` job, 4.15).
   counts as focus loss) leaves the composition to the connection's close,
   since what is offered mid-batch is dropped with the batch when the keyboard
   never ends it. The behavior's edit stays its own undo step and asks the IME
-  to resync. Paste and drop still end a composition unoffered: 6.47.
+  to resync. Paste and drop finish one too (6.47).
 - [x] **5.10 Text typed at a link's end joins the link. R.** [Opus] [Lane G]
   Typing right after a link (`setLink`, a pasted or auto-made one) takes its
   link style and grows its `LinkSpanStyle` over the new text, and after Enter
@@ -3127,15 +3127,6 @@ iOS Safari; browser tests run in CI (met: the `browser` job, 4.15).
   that look on a plain line, as paste did before 6.38. Strip the looks where
   the edit manager inserts styled text, as `resolveInheritedStyle` does for a
   multi-line replace, so every path is covered.
-- [ ] **6.47 A paste or drop over a composition ends it unoffered. S.**
-  [Opus] [Lane H] The paste actions (`input/BuiltinEditorActions.kt`) and a
-  drop (`dragdrop/TextDrop.kt`) end a live composition with a bare
-  `clearComposingRange` before inserting, so a word the keyboard was still
-  composing (Gboard's `don't`, a toolbar Paste tapped right after it) keeps
-  its straight apostrophe where a tap, focus loss or the connection's close
-  would have offered it (5.9). Go through `TextEditorState.finishComposition`
-  there, keeping the resync they request; the behaviors' edit then precedes
-  the paste's own `onPaste` offer and the paste lands at the mapped caret.
   Done, at the entry points rather than in the edit manager or the public
   `insertStringAtCursor` and `replace`: those also re-insert the document's own
   text (outdent, find's replace, a paste before its blocks land), and a host's
@@ -3147,6 +3138,26 @@ iOS Safari; browser tests run in CI (met: the `browser` job, 4.15).
   look of its own (a host's monospace), and the link look where no link holds it
   (yank after the kill took the link). A typed word that loses a look is a step of
   its own rather than joining the typing run (`state/InsertedBlockLookTest.kt`).
+- [x] **6.47 A paste or drop over a composition ends it unoffered. S.**
+  [Opus] [Lane H] The paste actions (`input/BuiltinEditorActions.kt`) and a
+  drop (`dragdrop/TextDrop.kt`) end a live composition with a bare
+  `clearComposingRange` before inserting, so a word the keyboard was still
+  composing (Gboard's `don't`, a toolbar Paste tapped right after it) keeps
+  its straight apostrophe where a tap, focus loss or the connection's close
+  would have offered it (5.9). Go through `TextEditorState.finishComposition`
+  there, keeping the resync they request; the behaviors' edit then precedes
+  the paste's own `onPaste` offer and the paste lands at the mapped caret.
+  Done: a paste or drop finishes the composition
+  (`finishCompositionBeforeInsert`) before it reads where it lands, so the
+  behaviors' edit of the word is its own undo step, offered before the paste's
+  `onPaste`, and the paste goes at the caret or selection mapped through it. A drop
+  follows the pointer, as a tap does: its position is read again on the substituted
+  text. A paste or drop the filter refuses still ends the composition, as a tap
+  would. Known limits: a move whose source a substitution shifted drops as a copy,
+  which needs a composition alive through a drag of the editor's own selection;
+  other edits the keyboard did not make (cut, yank, a host's `insertTypedString`)
+  still end one unoffered, all needing a composition alive beside a selection or
+  a host edit mid-word (`clipboard/PasteOverCompositionTest.kt`).
 - [ ] **6.49 A copied image or rule pasted inside a line leaves a space. C.**
   [Opus] [Lane G] An image or horizontal rule line holds a one-space
   placeholder under its `BlockSpanStyle`. Copying the placeholder without its

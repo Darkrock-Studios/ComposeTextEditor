@@ -224,6 +224,8 @@ private fun TextEditorState.landPaste(
 	clipboardCopyId: Long?,
 	plainText: Boolean,
 ) {
+	// Before the selection is read: the behaviors' edit of the word moves the caret.
+	finishCompositionBeforeInsert()
 	val curSelection = selector.selection
 	val insertPosition = curSelection?.start ?: cursorPosition
 	val sized = withSizeForPasteAt(insertPosition, clipboardText)
@@ -231,11 +233,6 @@ private fun TextEditorState.landPaste(
 	// layout, so text the filter changed pastes plain, and refused text not at all.
 	val text = screenAtSelection(sized) ?: return
 	val screened = text != sized
-	// A composition's range would address the text as it stood before the paste.
-	if (composingRange != null) {
-		clearComposingRange()
-		requestImeResync()
-	}
 	preserveCopiedRichSpansThroughNextEdit()
 	withAtomicEdit {
 		editManager.alreadyScreened {

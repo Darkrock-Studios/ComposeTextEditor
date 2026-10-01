@@ -84,7 +84,7 @@ class DraggedTextStyleTest {
 	@Test
 	fun `a move keeps the dragged text's size and family`() = runTest {
 		val drag = draggingTwo()
-		drag.dnd.dropAt(CharLineOffset(0, 13), drag.content, drag.id, copy = false)
+		drag.dnd.dropAt({ CharLineOffset(0, 13) }, drag.content, drag.id, copy = false)
 
 		assertEquals("one threetwo ", drag.state.getAllText().text)
 		assertEquals(30.sp to FontFamily.Monospace, drag.state.lookAt(9))
@@ -94,7 +94,7 @@ class DraggedTextStyleTest {
 	@Test
 	fun `a copy keeps the dragged text's size and family`() = runTest {
 		val drag = draggingTwo()
-		drag.dnd.dropAt(CharLineOffset(0, 0), drag.content, drag.id, copy = true)
+		drag.dnd.dropAt({ CharLineOffset(0, 0) }, drag.content, drag.id, copy = true)
 
 		assertEquals("two one two three", drag.state.getAllText().text)
 		assertEquals(30.sp to FontFamily.Monospace, drag.state.lookAt(0))
@@ -104,7 +104,7 @@ class DraggedTextStyleTest {
 	@Test
 	fun `a drop from elsewhere takes the size where it lands`() = runTest {
 		val drag = draggingTwo()
-		drag.dnd.dropAt(CharLineOffset(0, 0), drag.content, dragId = null, copy = true)
+		drag.dnd.dropAt({ CharLineOffset(0, 0) }, drag.content, dragId = null, copy = true)
 
 		assertEquals("two one two three", drag.state.getAllText().text)
 		assertEquals(12.sp, drag.state.lookAt(0).first)

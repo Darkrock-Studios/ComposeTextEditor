@@ -98,7 +98,7 @@ class AndroidPastedTextSizeTest {
 		}
 		val content = DragAndDropEvent(drag).droppedText(RichTextStyles.DEFAULT, state.allowedLinkSchemes, ownDrag = false, target = null)!!
 
-		assertTrue(dnd.dropAt(CharLineOffset(0, 16), content, dragId = null, copy = false))
+		assertTrue(dnd.dropAt({ CharLineOffset(0, 16) }, content, dragId = null, copy = false))
 
 		assertEquals("In the world of worlddigital typography", state.getAllText().text)
 		assertEquals(TextUnit.Unspecified, state.sizeAt(16))

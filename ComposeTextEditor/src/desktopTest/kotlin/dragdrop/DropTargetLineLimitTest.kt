@@ -19,7 +19,7 @@ class DropTargetLineLimitTest {
 
 	private fun drop(state: TextEditorState, targetSingleLine: Boolean) {
 		val dnd = TextDragAndDrop(state) { FocusedEditor(defaultImeAction = {}, singleLine = targetSingleLine) }
-		dnd.dropAt(CharLineOffset(0, 2), DroppedText(AnnotatedString("x\ny"), html = null), dragId = null, copy = true)
+		dnd.dropAt({ CharLineOffset(0, 2) }, DroppedText(AnnotatedString("x\ny"), html = null), dragId = null, copy = true)
 	}
 
 	@Test

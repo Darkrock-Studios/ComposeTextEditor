@@ -22,6 +22,9 @@ import com.darkrockstudios.texteditor.state.screenInput
  * The input filter screens the text; with [whole], as for a move, which deletes the
  * source whatever lands, text it would change is refused rather than dropped in part.
  *
+ * The caller finishes any composition ([TextEditorState.finishCompositionBeforeInsert])
+ * before it reads [at] and [moveFrom], since the behaviors' edit of it can move the text
+ * under them, as [TextDragAndDrop.dropAt] does.
  * Once it has committed, a drop that is not a move is offered to the behaviors as a
  * paste ([TextEditorState.pasteLanded]), so a behavior's edit is a step of its own.
  *
@@ -38,6 +41,7 @@ internal fun TextEditorState.dropText(
 	richSpans: List<PreservedRichSpan>? = null,
 	parsed: HtmlDocument? = null,
 ): TextEditorRange? {
+	check(composingRange == null) { "A drop's position is read once the composition is finished" }
 	if (moveFrom != null && at > moveFrom.start && at < moveFrom.end) return null
 	val sized = withSizeForPasteAt(at, text.normalizeLineEndings())
 	// Screened as replacing what a move takes away, which it does in length. Text the
@@ -46,11 +50,6 @@ internal fun TextEditorState.dropText(
 	if (normalized.isEmpty() || (whole && normalized != sized)) return null
 	val document = htmlPasteDocument(html?.takeIf { normalized == sized }, normalized, parsed)
 	val spans = richSpans?.takeIf { normalized == sized }
-	// A composition's range would address the text as it stood before the drop.
-	if (composingRange != null) {
-		clearComposingRange()
-		requestImeResync()
-	}
 
 	val dropped = editGroup {
 		// The earlier edit goes last, so the other's position still holds when it runs.

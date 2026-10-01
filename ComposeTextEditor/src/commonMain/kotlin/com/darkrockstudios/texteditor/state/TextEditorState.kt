@@ -1379,6 +1379,18 @@ class TextEditorState private constructor(
 	}
 
 	/**
+	 * [finishComposition] ahead of an edit the keyboard did not make (a paste, a drop),
+	 * so the behaviors' edit of the word lands first and the edit's position is read
+	 * after it. The keyboard is resynced, since its composition is gone.
+	 */
+	internal fun finishCompositionBeforeInsert() {
+		if (composingRange == null) return
+		val generation = imeResyncGeneration
+		finishComposition()
+		if (imeResyncGeneration == generation) requestImeResync()
+	}
+
+	/**
 	 * Updates the IME composing region.
 	 * Called by the Android InputConnection when composing text changes.
 	 * @param startIndex Character index of composing start, or -1 to clear

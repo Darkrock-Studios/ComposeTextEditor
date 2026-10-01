@@ -100,6 +100,9 @@ internal class TextDragAndDrop(
 	var dropHit: PointerHit? by mutableStateOf(null)
 		private set
 
+	/** Where the drag last hovered, for a drop that reports no position of its own. */
+	private var hoverAt: Offset? = null
+
 	private class OutgoingDrag(val id: Long, val range: TextEditorRange, val styled: AnnotatedString) {
 		val text: String get() = styled.text
 
@@ -173,17 +176,20 @@ internal class TextDragAndDrop(
 	internal fun accepts(event: DragAndDropEvent): Boolean = enabled && event.carriesText()
 
 	internal fun hover(positionInRoot: Offset?) {
+		hoverAt = positionInRoot
 		dropHit = positionInRoot?.let(::hitAt)
 		if (dropHit != null) DropCarets.shown(this) else DropCarets.hidden(this)
 	}
 
 	internal fun endHover() {
+		hoverAt = null
 		dropHit = null
 		DropCarets.hidden(this)
 	}
 
 	internal fun drop(event: DragAndDropEvent, positionInRoot: Offset?, target: DelegatableNode?): Boolean {
-		val at = positionInRoot?.let(::hitAt)?.position ?: dropHit?.position ?: return false
+		val hit = positionInRoot?.let(::hitAt) ?: dropHit ?: return false
+		val pointer = positionInRoot ?: hoverAt
 		endHover()
 		val dragId = event.dragId()
 		val content = event.droppedText(
@@ -192,16 +198,28 @@ internal class TextDragAndDrop(
 			ownDrag = dragId != null && dragId == outgoing?.id,
 			target = target,
 		) ?: return false
+		val revision = state.revision
+		val at = {
+			// A behavior's edit of the composition moved the text under the pointer.
+			if (state.revision == revision) hit.position else pointer?.let(::hitAt)?.position
+		}
 		return dropAt(at, content, dragId, event.requestsCopy())
 	}
 
 	/**
-	 * Drops [content] at [at]. A drag of this editor's own text ([dragId]) takes what its
-	 * markup cannot carry from its source, which it still holds, as a paste takes them
-	 * from the copy: the text as it was styled (markup has no font size) and its rich spans.
+	 * Drops [content] where [at] reads. The pointer owns the caret, as for a tap: a
+	 * composition is finished before [at] is read, so the behaviors' edit of it lands
+	 * first and the drop goes where the pointer is on the substituted text. A drag of
+	 * this editor's own text ([dragId]) takes what its markup cannot carry from its
+	 * source, which it still holds, as a paste takes them from the copy: the text as it
+	 * was styled (markup has no font size) and its rich spans.
 	 */
-	internal fun dropAt(at: CharLineOffset, content: DroppedText, dragId: Long?, copy: Boolean): Boolean =
-		state.asEditor(editor()) { dropHere(at, content, dragId, copy) }
+	internal fun dropAt(at: () -> CharLineOffset?, content: DroppedText, dragId: Long?, copy: Boolean): Boolean =
+		state.asEditor(editor()) {
+			state.finishCompositionBeforeInsert()
+			val position = at() ?: return@asEditor false
+			dropHere(position, content, dragId, copy)
+		}
 
 	private fun dropHere(at: CharLineOffset, content: DroppedText, dragId: Long?, copy: Boolean): Boolean {
 		val ours = outgoing?.takeIf { it.id == dragId }
