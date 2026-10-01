@@ -848,6 +848,17 @@ class TextEditorState(
 	/** What Tab and Shift+Tab do: the indent size and character, or moving focus. */
 	var tabSettings: TabSettings by mutableStateOf(TabSettings())
 
+	/** How many undo steps are kept, and how long a pause in typing ends an undo step. */
+	var undoSettings: UndoSettings
+		get() = undoSettingsState
+		set(value) {
+			undoSettingsState = value
+			editManager.history.settings = value
+			// Inside a transaction, its commit refreshes canUndo and canRedo.
+			if (!editManager.history.isGrouping) refreshHistoryFlags()
+		}
+	private var undoSettingsState by mutableStateOf(UndoSettings())
+
 	/** What the soft keyboard is asked for: capitalisation, autocorrect, layout, and the action key. */
 	var keyboardSettings: KeyboardSettings by mutableStateOf(KeyboardSettings())
 

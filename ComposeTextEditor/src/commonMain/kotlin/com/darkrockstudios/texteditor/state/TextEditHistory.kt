@@ -6,6 +6,8 @@ import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.richstyle.RichSpan
 import com.darkrockstudios.texteditor.richstyle.RichSpanStyle
+import kotlin.time.TimeMark
+import kotlin.time.TimeSource
 
 /**
  * The undo and redo stacks.
@@ -15,12 +17,26 @@ import com.darkrockstudios.texteditor.richstyle.RichSpanStyle
  * every edit inside one transaction is one undo step. A group of a single edit
  * is recorded as that edit, so typing keeps coalescing.
  */
-class TextEditHistory(private val maxHistorySize: Int = 1000) {
-	private val undoQueue = ArrayDeque<HistoryEntry>(maxHistorySize)
-	private val redoQueue = ArrayDeque<HistoryEntry>(maxHistorySize)
+class TextEditHistory(maxHistorySize: Int = 1000) {
+	private val undoQueue = ArrayDeque<HistoryEntry>()
+	private val redoQueue = ArrayDeque<HistoryEntry>()
+
+	/** How many steps are kept and how long a pause ends a typing run. */
+	var settings: UndoSettings = UndoSettings(maxSteps = maxHistorySize)
+		set(value) {
+			field = value
+			// Inside a group the trim waits for its commit, so a rollback loses no steps.
+			if (groupDepth == 0) trimTo(value.maxSteps)
+		}
+
+	internal var timeSource: TimeSource = TimeSource.Monotonic
+
+	/** When the last step was recorded or grown, or null when no run may continue. */
+	private var lastRecordedAt: TimeMark? = null
 
 	private var groupDepth = 0
 	private val staged = mutableListOf<HistoryEntry.Edit>()
+	private var stagedRewritesComposition = false
 	private var groupSelectionBefore: TextEditorRange? = null
 
 	fun hasUndoLevels(): Boolean = undoQueue.isNotEmpty()
@@ -39,11 +55,24 @@ class TextEditHistory(private val maxHistorySize: Int = 1000) {
 	 * recorded spans: they are overlays their owner redraws, so they neither keep a
 	 * delete out of a typing run nor come back on undo where the owner no longer
 	 * tracks them.
+	 *
+	 * [rewritesComposition] says the edit rewrites the word an input method is
+	 * composing, which joins its run however long the pause before it.
 	 */
-	fun recordEdit(operation: TextEditOperation, metadata: OperationMetadata, typing: Boolean? = null) {
+	fun recordEdit(
+		operation: TextEditOperation,
+		metadata: OperationMetadata,
+		typing: Boolean? = null,
+		rewritesComposition: Boolean = false,
+	) {
 		val content = metadata.withoutDecorations()
 		val entry = HistoryEntry.Edit(operation, content, typing ?: operation.isSingleTypedChar(content))
-		if (groupDepth > 0) staged += entry else push(entry)
+		if (groupDepth > 0) {
+			staged += entry
+			stagedRewritesComposition = stagedRewritesComposition || rewritesComposition
+		} else {
+			push(entry, rewritesComposition)
+		}
 	}
 
 	private fun OperationMetadata.withoutDecorations(): OperationMetadata {
@@ -83,29 +112,47 @@ class TextEditHistory(private val maxHistorySize: Int = 1000) {
 		staged.clear()
 		val before = groupSelectionBefore
 		groupSelectionBefore = null
+		val rewritesComposition = stagedRewritesComposition
+		stagedRewritesComposition = false
 		if (!commit) return
 		when (entries.size) {
 			0 -> Unit
-			1 -> push(entries.single().copy(selectionBefore = before, selectionAfter = selection))
-			else -> push(HistoryEntry.Group(entries, selectionBefore = before, selectionAfter = selection))
+			1 -> push(entries.single().copy(selectionBefore = before, selectionAfter = selection), rewritesComposition)
+			else -> push(HistoryEntry.Group(entries, selectionBefore = before, selectionAfter = selection), rewritesComposition)
+		}
+		trimTo(settings.maxSteps)
+	}
+
+	/**
+	 * Records [entry], growing the typing run on top when it continues it. A pause ends
+	 * a run, unless [rewritesComposition]: an input method takes what time it needs over
+	 * the word it composes.
+	 */
+	private fun push(entry: HistoryEntry, rewritesComposition: Boolean) {
+		val paused = lastRecordedAt?.let { it.elapsedNow() >= settings.typingPause } ?: true
+		// A run that grows keeps the selection it started from; an edit that replaced a
+		// selection starts a step of its own, which undo selects it again from.
+		val merged = if (entry.selectionBefore != null || (paused && !rewritesComposition)) null
+		else coalesceWithLast(entry)?.withSelections(undoQueue.last().selectionBefore, entry.selectionAfter)
+		redoQueue.clear()
+		if (merged != null) {
+			undoQueue.removeLast()
+			val kept = merged.withoutErasedRun()
+			if (kept != null) undoQueue.addLast(kept)
+			// A run erased to nothing leaves an older step on top, which no run continues.
+			lastRecordedAt = if (kept != null) timeSource.markNow() else null
+		} else {
+			undoQueue.addLast(entry)
+			trimTo(settings.maxSteps)
+			lastRecordedAt = timeSource.markNow()
 		}
 	}
 
-	private fun push(entry: HistoryEntry) {
-		// A run that grows keeps the selection it started from; an edit that replaced a
-		// selection starts a step of its own, which undo selects it again from.
-		val merged = if (entry.selectionBefore != null) null
-		else coalesceWithLast(entry)?.withSelections(undoQueue.last().selectionBefore, entry.selectionAfter)
-		if (merged != null) {
-			undoQueue.removeLast()
-			merged.withoutErasedRun()?.let(undoQueue::addLast)
-		} else {
-			if (undoQueue.size >= maxHistorySize) {
-				undoQueue.removeFirstOrNull()
-			}
-			undoQueue.addLast(entry)
+	/** Drops steps past [maxSteps], undo and redo together: the oldest undo steps first. */
+	private fun trimTo(maxSteps: Int) {
+		while (undoQueue.size + redoQueue.size > maxSteps) {
+			if (undoQueue.isNotEmpty()) undoQueue.removeFirst() else redoQueue.removeFirst()
 		}
-		redoQueue.clear() // Clear redo queue when new edit is made
 	}
 
 	/**
@@ -316,12 +363,19 @@ class TextEditHistory(private val maxHistorySize: Int = 1000) {
 		else -> false
 	}
 
+	// A run never continues across an undo or a redo.
 	fun undo(): HistoryEntry? {
+		endRun()
 		return undoQueue.removeLastOrNull()?.also { redoQueue.addLast(it) }
 	}
 
 	fun redo(): HistoryEntry? {
+		endRun()
 		return redoQueue.removeLastOrNull()?.also { undoQueue.addLast(it) }
+	}
+
+	private fun endRun() {
+		lastRecordedAt = null
 	}
 
 	/** Empties both queues and whatever the open group has staged. */
@@ -329,6 +383,8 @@ class TextEditHistory(private val maxHistorySize: Int = 1000) {
 		undoQueue.clear()
 		redoQueue.clear()
 		staged.clear()
+		stagedRewritesComposition = false
+		endRun()
 		// A document load drops the selection the open group began with.
 		groupSelectionBefore = null
 	}
@@ -339,8 +395,10 @@ class TextEditHistory(private val maxHistorySize: Int = 1000) {
 		val redo = redoQueue.toList()
 		val pending = staged.toList()
 		val selectionBefore = groupSelectionBefore
+		val recordedAt = lastRecordedAt
 		clear()
 		return {
+			lastRecordedAt = recordedAt
 			undoQueue.clear()
 			undoQueue.addAll(undo)
 			redoQueue.clear()

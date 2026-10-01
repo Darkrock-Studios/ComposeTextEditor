@@ -1817,8 +1817,15 @@ iOS Safari; browser tests run in CI.
   lines' content and blocks as a LineBlock step, each other span that came or went
   as a RichSpan step), so redo replays them with the text
   (`e2e/HtmlPasteUndoE2eTest.kt`).
-- [ ] **6.6 Time-based coalescing breaks,** [Opus] [Lane G] and a configurable
-  history cap.
+- [x] **6.6 Time-based coalescing breaks,** [Opus] [Lane G] and a configurable
+  history cap. Done: `TextEditorState.undoSettings` (`UndoSettings`) holds
+  `maxSteps` (default 1000, as before; lowering it drops the oldest steps) and
+  `typingPause` (default 2 seconds; `Duration.INFINITE` turns it off). A typed
+  or deleted character after a pause that long starts a new step; an input
+  method's rewrites of the word it composes are never split, and no run
+  continues across an undo or a redo. `BasicTextField` instead ends a run 5
+  seconds after it began, typing or not, and keeps 100 steps
+  (`state/UndoSettingsTest.kt`).
 - [x] **6.14 An IME composition inherits the style it touches. R.** [Opus]
   [Lane G] A composition replace runs with `inheritStyle`, which takes every
   span merely touching the replaced range (`TextEditManager`, the resolve of

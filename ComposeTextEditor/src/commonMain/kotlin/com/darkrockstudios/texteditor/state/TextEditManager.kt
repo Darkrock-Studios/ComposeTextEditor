@@ -55,6 +55,20 @@ class TextEditManager(private val state: TextEditorState) {
 	/** Whether edits are being recorded as typing; null lets the history infer it. */
 	private var typingOverride: Boolean? = null
 
+	/** Whether edits rewrite the word an input method is composing. */
+	private var rewritingComposition = false
+
+	/** Records the edits [block] makes as rewriting the word an input method composes, when [rewriting]. */
+	internal fun <T> rewritingComposition(rewriting: Boolean, block: () -> T): T {
+		val previous = rewritingComposition
+		rewritingComposition = rewriting
+		try {
+			return block()
+		} finally {
+			rewritingComposition = previous
+		}
+	}
+
 	/**
 	 * Records the edits [block] makes as [typing] or not, whatever their shape:
 	 * an IME commit is a word the user typed, a deleted selection is not typing
@@ -203,7 +217,12 @@ class TextEditManager(private val state: TextEditorState) {
 			state.invalidateCopiedRichSpans()
 			state.richSpanManager.updateSpans(operation, metadata)
 			if (addToHistory && !isDecoration) {
-				history.recordEdit(operation, metadata ?: OperationMetadata(), typing = typingOverride)
+				history.recordEdit(
+					operation,
+					metadata ?: OperationMetadata(),
+					typing = typingOverride,
+					rewritesComposition = rewritingComposition,
+				)
 			}
 
 			// Requested inside the transaction so it merges with any layout work the
