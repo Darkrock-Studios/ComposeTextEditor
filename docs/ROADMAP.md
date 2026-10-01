@@ -2000,8 +2000,9 @@ iOS Safari; browser tests run in CI.
   its text, a host adding or removing a block span on the public span API. Also
   fixed by it: emptying a quote line dropped its indent while the marker
   stayed, so text typed there again had none (`state/JoinParagraphStyleTest.kt`;
-  seed 246 is in the markdown fixed seeds; seeds 1 to 1500 of that test keep
-  every paragraph run whole). `RowListCostTest`'s span removal now reshapes the
+  seed 246 is in the markdown fixed seeds, and UI fuzz seed 27, whose Backspace
+  threw the same overlap, in `EditorFuzzE2eTest`'s; seeds 1 to 1500 of the
+  markdown test keep every paragraph run whole). `RowListCostTest`'s span removal now reshapes the
   one line that loses its indent.
 - [x] **6.34 Undoing a multi-line insert at a paragraph's start drops its
   format. R.** [Opus] [Lane G] A paragraph format (`ParagraphFormatSpanStyle`)
