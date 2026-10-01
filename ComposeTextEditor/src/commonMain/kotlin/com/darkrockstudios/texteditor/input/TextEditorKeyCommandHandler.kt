@@ -61,13 +61,13 @@ internal class TextEditorKeyCommandHandler(
 		scope: CoroutineScope,
 		enabled: Boolean = true
 	): Boolean {
-		// A held caret key ends when it is let go, or when another key or a modifier changes
+		// A held key ends when it is let go, or when another key or a modifier changes
 		// what the platform's repeats mean; any repeats left are then the platform's own.
 		if (keyEvent.type == KeyEventType.KeyUp) {
-			if (keyEvent.key in modifierKeys) state.heldCaretKey.clear() else state.heldCaretKey.released(keyEvent.key)
+			if (keyEvent.key in modifierKeys) state.heldKey.clear() else state.heldKey.released(keyEvent.key)
 		}
 		if (keyEvent.type != KeyEventType.KeyDown) return false
-		state.heldCaretKey.clear()
+		state.heldKey.clear()
 		// A key with no character (Escape, a function key) ends a dead key's accent, as a
 		// command does; a key with one settles it in handleCharacterInput.
 		if (keyEvent.utf16CodePoint == 0 && keyEvent.key !in modifierKeys) deadKeys.commitPending(state)
@@ -83,7 +83,7 @@ internal class TextEditorKeyCommandHandler(
 				deadKeys.commitPending(state)
 				val extend = keyEvent.isShiftPressed
 				moveCursor(command, state, extendSelection = extend)
-				state.heldCaretKey.pressed(keyEvent.key) {
+				state.heldKey.pressed(keyEvent.key, HeldKey.Echo.Selection) {
 					// Resolved again each step: the caret may have crossed into a paragraph
 					// that runs the other way.
 					val step = visualCommand(bound, keyEvent, state)
@@ -100,6 +100,12 @@ internal class TextEditorKeyCommandHandler(
 				if (spec.editsDocument && !enabled) return false
 				deadKeys.commitPending(state)
 				spec.perform(EditorActionContext(state, clipboard, scope))
+				// UIKit types a tab for a plain Tab the editor has already handled.
+				if (keyEvent.key == Key.Tab && !keyEvent.isCtrlPressed && !keyEvent.isAltPressed && !keyEvent.isMetaPressed) {
+					state.heldKey.pressed(keyEvent.key, HeldKey.Echo.Text("\t")) {
+						spec.perform(EditorActionContext(state, clipboard, scope))
+					}
+				}
 				true
 			}
 		}

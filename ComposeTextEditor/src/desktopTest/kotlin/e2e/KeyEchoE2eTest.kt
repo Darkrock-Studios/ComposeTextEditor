@@ -20,18 +20,18 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 /**
- * UIKit moves the caret for a hardware arrow key itself, through `UITextInput`, after
- * the editor has moved it, and repeats a held key on its own without sending the editor
- * another key event. Each of UIKit's moves arrives as a `setSelection`. On iOS the
- * editor drops UIKit's echo of the press and runs its own move again for each repeat,
- * so a press moves once and a held key follows the editor's rows and word stops
- * (roadmap 1.1, 4.6).
+ * UIKit acts on a hardware key itself, through `UITextInput`, after the editor has: it
+ * moves the caret for an arrow key, each move arriving as a `setSelection`, and types a
+ * tab for Tab, arriving as a commit of "\t". It repeats a held key on its own without
+ * sending the editor another key event. On iOS the editor drops UIKit's echo of the
+ * press and runs its own command again for each repeat, so a press acts once and a held
+ * key follows the editor's rows, word stops and indent (roadmap 1.1, 4.6, 2.9).
  */
-class CaretKeyEchoE2eTest {
+class KeyEchoE2eTest {
 	private val doc = AnnotatedString("a😀bc\nsecond line\nthird line")
 
 	private fun EditorUiTestScope.iosRequest() =
-		SkikoTextEditorInputMethodRequest(state, ImeOptions.Default, echoesCaretKeys = true)
+		SkikoTextEditorInputMethodRequest(state, ImeOptions.Default, echoesKeys = true)
 
 	private fun EditorUiTestScope.hold(key: Key, shift: Boolean = false) {
 		test.onRoot().performKeyInput {
@@ -176,5 +176,91 @@ class CaretKeyEchoE2eTest {
 		platformSelects(request, 5)
 		assertEquals(TextRange(5), test.runOnIdle { state.selectionAsTextRange() })
 		release(Key.DirectionRight)
+	}
+
+	/** What UIKit does for a hardware Tab: types a tab character. */
+	private fun EditorUiTestScope.platformTypesTab(request: SkikoTextEditorInputMethodRequest) {
+		test.runOnIdle { request.editText { commitText("\t", 1) } }
+		test.waitForIdle()
+	}
+
+	@Test
+	fun `the platform's tab after Tab indents is dropped`() = editorUiTest(initialText = doc) {
+		val request = iosRequest()
+		moveCaretTo(CharLineOffset(1, 0))
+
+		hold(Key.Tab)
+		val indented = text
+		assertEquals(false, '\t' in indented, "Tab indents with spaces")
+		platformTypesTab(request)
+		assertEquals(indented, text, "UIKit's tab for the same press must not land")
+		release(Key.Tab)
+	}
+
+	@Test
+	fun `a held Tab repeats the indent`() = editorUiTest(initialText = doc) {
+		val request = iosRequest()
+		moveCaretTo(CharLineOffset(1, 0))
+		val before = text.length
+
+		hold(Key.Tab)
+		val step = text.length - before
+		platformTypesTab(request)
+		platformTypesTab(request)
+		assertEquals(before + 2 * step, text.length)
+		assertEquals(false, '\t' in text)
+		release(Key.Tab)
+	}
+
+	@Test
+	fun `a tab committed after Tab is released is typed`() = editorUiTest(initialText = doc) {
+		val request = iosRequest()
+		moveCaretTo(CharLineOffset(1, 0))
+
+		hold(Key.Tab)
+		release(Key.Tab)
+		platformTypesTab(request)
+		assertEquals(true, '\t' in text)
+	}
+
+	@Test
+	fun `a tab committed while an arrow is held is typed`() = editorUiTest(initialText = doc) {
+		val request = iosRequest()
+		moveCaretTo(CharLineOffset(1, 0))
+
+		hold(Key.DirectionRight)
+		platformTypesTab(request)
+		assertEquals(true, '\t' in text)
+		release(Key.DirectionRight)
+	}
+
+	@Test
+	fun `other text committed while Tab is held is typed`() = editorUiTest(initialText = doc) {
+		val request = iosRequest()
+		moveCaretTo(CharLineOffset(1, 0))
+
+		hold(Key.Tab)
+		test.runOnIdle { request.editText { commitText("x", 1) } }
+		test.waitForIdle()
+		assertEquals(true, 'x' in text)
+		release(Key.Tab)
+	}
+
+	@Test
+	fun `Ctrl+Tab does not hold the platform's tab`() = editorUiTest(initialText = doc) {
+		val request = iosRequest()
+		moveCaretTo(CharLineOffset(1, 0))
+
+		test.onRoot().performKeyInput {
+			keyDown(Key.CtrlLeft)
+			keyDown(Key.Tab)
+		}
+		test.waitForIdle()
+		platformTypesTab(request)
+		assertEquals(true, '\t' in text, "Ctrl+Tab is not bound, so a tab from the platform is its own")
+		test.onRoot().performKeyInput {
+			keyUp(Key.Tab)
+			keyUp(Key.CtrlLeft)
+		}
 	}
 }

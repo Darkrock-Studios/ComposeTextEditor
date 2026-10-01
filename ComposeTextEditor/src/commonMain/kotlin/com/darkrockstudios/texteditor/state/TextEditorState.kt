@@ -41,7 +41,7 @@ import com.darkrockstudios.texteditor.lastRowAtOrAbove
 import com.darkrockstudios.texteditor.rowAt
 import com.darkrockstudios.texteditor.rowIndexOf
 import com.darkrockstudios.texteditor.input.EditorActionRegistry
-import com.darkrockstudios.texteditor.input.HeldCaretKey
+import com.darkrockstudios.texteditor.input.HeldKey
 import com.darkrockstudios.texteditor.input.KeyboardSettings
 import com.darkrockstudios.texteditor.input.KillRing
 import com.darkrockstudios.texteditor.input.imeActionFor
@@ -894,8 +894,8 @@ class TextEditorState(
 	/** What the kill actions deleted, for a yank. */
 	internal val killRing = KillRing()
 
-	/** The caret key held down, for a platform that repeats it on its own. */
-	internal val heldCaretKey = HeldCaretKey()
+	/** The key held down that the editor acted on, for a platform that acts on it as well. */
+	internal val heldKey = HeldKey()
 
 	/** What Tab and Shift+Tab do: the indent size and character, or moving focus. */
 	var tabSettings: TabSettings by mutableStateOf(TabSettings())

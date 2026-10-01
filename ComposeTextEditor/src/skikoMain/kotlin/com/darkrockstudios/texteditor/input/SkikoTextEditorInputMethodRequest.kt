@@ -30,8 +30,8 @@ import androidx.compose.ui.text.input.TextEditorState as ComposeTextEditorState
 /**
  * Starts a Compose skiko input-method session bound to this editor. A platform's
  * `TextEditorTextInputService` hands it that platform's [imeOptions], whether the
- * platform needs a text layout to hit-test ([exposeTextLayout]), whether it moves the
- * caret for a caret key itself ([echoesCaretKeys]), and [imeResync]; every
+ * platform needs a text layout to hit-test ([exposeTextLayout]), whether it acts on a
+ * hardware key itself as well ([echoesKeys]), and [imeResync]; every
  * edit the platform delivers lands in [ImeEditLogic] through
  * [SkikoTextEditorInputMethodRequest].
  *
@@ -50,14 +50,14 @@ internal suspend fun TextEditorState.startSkikoInputSession(
 	session: PlatformTextInputSession,
 	imeOptions: ImeOptions,
 	exposeTextLayout: Boolean = false,
-	echoesCaretKeys: Boolean = false,
+	echoesKeys: Boolean = false,
 	imeResync: SkikoImeResync = SkikoImeResync.None,
 ): Nothing = coroutineScope {
 	val request = SkikoTextEditorInputMethodRequest(
 		this@startSkikoInputSession,
 		imeOptions,
 		exposeTextLayout,
-		echoesCaretKeys,
+		echoesKeys,
 	)
 	when (imeResync) {
 		SkikoImeResync.None -> Unit
@@ -127,15 +127,16 @@ internal sealed interface SkikoImeResync {
  *
  * @param exposeTextLayout Serve [textLayoutResult] from a whole-document layout. Only
  *   iOS reads it, for the spacebar trackpad; elsewhere it would be a cost for nothing.
- * @param echoesCaretKeys The platform moves the caret for a caret key after the editor
- *   has, and repeats a held one itself: UIKit does both. Its selection changes while
- *   such a key is held go to [TextEditorState.heldCaretKey] instead of the selection.
+ * @param echoesKeys The platform acts on a hardware key after the editor has, moving
+ *   the caret for a caret key and typing a tab for Tab, and repeats a held one itself:
+ *   UIKit does. Its edits while such a key is held go to [TextEditorState.heldKey]
+ *   instead of the document.
  */
 internal class SkikoTextEditorInputMethodRequest(
 	private val editorState: TextEditorState,
 	override val imeOptions: ImeOptions,
 	exposeTextLayout: Boolean = false,
-	private val echoesCaretKeys: Boolean = false,
+	private val echoesKeys: Boolean = false,
 ) : PlatformTextInputMethodRequest {
 
 	/** Live view of the editor as the CharSequence + selection + composition Compose expects. */
@@ -195,7 +196,7 @@ internal class SkikoTextEditorInputMethodRequest(
 	private val keyboardBackspace = KeyboardBackspace()
 
 	override val editText: (TextEditingScope.() -> Unit) -> Unit = { block ->
-		SkikoTextEditingScope(editorState, keyboardBackspace, echoesCaretKeys).block()
+		SkikoTextEditingScope(editorState, keyboardBackspace, echoesKeys).block()
 	}
 
 	private fun attachedCoordinates(): LayoutCoordinates? {
@@ -315,7 +316,7 @@ private class KeyboardBackspace {
 private class SkikoTextEditingScope(
 	private val state: TextEditorState,
 	private val keyboardBackspace: KeyboardBackspace,
-	private val echoesCaretKeys: Boolean,
+	private val echoesKeys: Boolean,
 ) : TextEditingScope {
 
 	override fun deleteSurroundingTextInCodePoints(lengthBeforeCursor: Int, lengthAfterCursor: Int) {
@@ -330,11 +331,11 @@ private class SkikoTextEditingScope(
 	 */
 	private fun platformEdited() {
 		keyboardBackspace.forget()
-		state.heldCaretKey.clear()
+		state.heldKey.clear()
 	}
 
 	override fun setSelection(start: Int, end: Int) {
-		if (echoesCaretKeys && state.heldCaretKey.absorbSelection()) {
+		if (echoesKeys && state.heldKey.absorbSelection()) {
 			keyboardBackspace.forget()
 			return
 		}
@@ -343,7 +344,11 @@ private class SkikoTextEditingScope(
 	}
 
 	override fun commitText(text: CharSequence, newCursorPosition: Int) {
-		state.heldCaretKey.clear()
+		if (echoesKeys && state.heldKey.absorbText(text)) {
+			keyboardBackspace.forget()
+			return
+		}
+		state.heldKey.clear()
 		val backspace = keyboardBackspace.takeFor(state, text)
 		if (backspace != null) {
 			state.imeBackspaceOver(backspace)
