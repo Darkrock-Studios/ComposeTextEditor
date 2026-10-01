@@ -1,6 +1,5 @@
 package com.darkrockstudios.texteditor
 
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
@@ -11,6 +10,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
@@ -239,22 +239,22 @@ private fun RichTextViewBody(
 				.padding(contentPadding)
 		}
 
-		Canvas(
+		// The canvas: a box, so the handles' popups are placed from its content.
+		Box(
 			modifier = pointerModifier
 				.fillMaxWidth()
 				.height(with(density) { contentHeightPx.toDp() })
 				.graphicsLayer { clip = false }
+				.drawBehind {
+					try {
+						DrawEditorText(state, style, decorateLine = null)
+					} catch (_: IllegalArgumentException) {
+						// Mid-resize layout race; the next frame will recover, mirrors BasicTextEditor.
+					}
+					if (isSelectable) DrawSelection(state, style.selectionColorFor(state.hasFocus))
+				}
 		) {
-			try {
-				DrawEditorText(state, style, decorateLine = null)
-			} catch (_: IllegalArgumentException) {
-				// Mid-resize layout race; the next frame will recover, mirrors BasicTextEditor.
-			}
-
-			if (isSelectable) {
-				DrawSelection(state, style.selectionColorFor(state.hasFocus))
-				if (state.hasFocus) DrawSelectionHandles(state, style.effectiveHandleColor, style.handleShape.look)
-			}
+			if (isSelectable) TouchHandlePopups(state, style.handleShape.look, style.effectiveHandleColor, touchToolbar)
 		}
 	}
 }

@@ -1,6 +1,5 @@
 package com.darkrockstudios.texteditor
 
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.overscroll
@@ -27,9 +26,11 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.isSecondaryPressed
@@ -410,7 +411,8 @@ fun BasicTextEditor(
 				}
 				val dragAndDrop = remember(state) { TextDragAndDrop(state, inputRequester::editor) }
 				dragAndDrop.enabled = editable
-				Canvas(
+				// The canvas: a box, so the handles' popups are placed from its content.
+				Box(
 					modifier = Modifier
 						.textDragAndDrop(dragAndDrop)
 						.textEditorPointerIcon(state, linkClicks, contentOrigin = { contentOrigin })
@@ -442,32 +444,40 @@ fun BasicTextEditor(
 						.graphicsLayer {
 							clip = false
 						}
+						.drawBehind { drawEditorCanvas(state, style, decorateLine, enabled, dragAndDrop) }
 				) {
-					if (state.isEmpty() && style.placeholderText.isNotEmpty()) {
-						DrawPlaceholderText(state, style)
-					}
-
-					try {
-						DrawEditorText(state, style, decorateLine)
-					} catch (e: IllegalArgumentException) {
-						// Handle resize exception gracefully
-					}
-
-					DrawSelection(state, style.selectionColorFor(state.hasFocus))
-
-					// Like native editors, an editor without focus shows no touch handles.
-					if (state.hasFocus) DrawSelectionHandles(state, style.effectiveHandleColor, handles)
-
-					// A read-only editor holds focus without taking input, and still shows its caret.
-					if (enabled && state.hasFocus) {
-						DrawCursor(state, style.cursorColor, style.cursorWidth)
-					}
-
-					DrawDropCaret(dragAndDrop, state, style.cursorColor, style.cursorWidth)
+					TouchHandlePopups(state, handles, style.effectiveHandleColor, touchToolbar)
 				}
 			}
 		}
 	}
+}
+
+private fun DrawScope.drawEditorCanvas(
+	state: TextEditorState,
+	style: TextEditorStyle,
+	decorateLine: LineDecorator?,
+	enabled: Boolean,
+	dragAndDrop: TextDragAndDrop,
+) {
+	if (state.isEmpty() && style.placeholderText.isNotEmpty()) {
+		DrawPlaceholderText(state, style)
+	}
+
+	try {
+		DrawEditorText(state, style, decorateLine)
+	} catch (e: IllegalArgumentException) {
+		// Handle resize exception gracefully
+	}
+
+	DrawSelection(state, style.selectionColorFor(state.hasFocus))
+
+	// A read-only editor holds focus without taking input, and still shows its caret.
+	if (enabled && state.hasFocus) {
+		DrawCursor(state, style.cursorColor, style.cursorWidth)
+	}
+
+	DrawDropCaret(dragAndDrop, state, style.cursorColor, style.cursorWidth)
 }
 
 /**

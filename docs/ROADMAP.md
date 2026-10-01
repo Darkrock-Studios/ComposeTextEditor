@@ -1201,7 +1201,7 @@ Constraints that shape the order:
   each handle drags from its dot or its bar; a placed caret drags from
   itself with no knob under it; a double tap selects the word. Not compared
   side by side with Notes, which the simulator lacks.
-- [ ] **3.20 Touch handles past the editor's edge can be grabbed. S.** [Opus]
+- [x] **3.20 Touch handles past the editor's edge can be grabbed. S.** [Opus]
   [Lane B] Compose draws its handles in popups, so a handle hanging past the
   editor's edge is drawn and grabbed outside it: a teardrop below a selection
   on the last visible row, or a bar's dot above one on the first. The editor
@@ -1211,6 +1211,29 @@ Constraints that shape the order:
   handles, or at least take their touches, in a popup or an overlay that can
   extend past the editor, or scroll the row up when a selection is made on
   it. Found in 3.19.
+  Done: each handle that draws is a `Popup` at its end (`TouchHandlePopups.kt`),
+  placed from the canvas and covering its drawing and its touch target, as
+  `BasicTextField`'s `HandlePopup` is, so a teardrop under the last visible row
+  or a bar's dot over the first draws past the editor and any clipping
+  ancestor, and takes a finger there. A handle whose end (its x and row bottom,
+  Compose's handle position) is outside the canvas's visible bounds is hidden,
+  as Compose's are. The popup runs the editor's own handle drag, following the
+  finger by its moves, since the popup moves with the handle; the grab point,
+  the magnifier, the toolbar and auto-scroll are unchanged, except that a
+  handle grabbed past an edge scrolls that way only once the finger goes
+  further out than it started. The iOS caret, which draws nothing, keeps its
+  target on the canvas. A popup a finger holds stays until the finger lifts,
+  so a drag that crosses the other end and then scrolls it away goes on, and
+  only one handle takes a finger at a time. The test harness sends key input
+  to the window's root, since the handles add roots. Tests:
+  `HandlesPastEdgeTest`. On the API 36 emulator, selecting the last visible
+  word with the keyboard up puts both teardrops below the editor, over the
+  keyboard's strip; dragging the end one moves the end with no touch reaching
+  the keyboard, dragging it down scrolls, and the start handle hides once its
+  row scrolls away. Known limits: a mouse press on a handle drags it rather
+  than reaching the editor, so a right-click there opens no menu; a second
+  finger on the text while a handle is held starts a gesture of its own; a
+  handle popup shown again stacks above the editor's own menu if that is open.
 - [ ] **3.21 Touch handles at a bidi run's edge. S.** [Opus] [Lane B]
   Compose places a selection handle at the edge of the bidi run the selected
   character is in (`getHorizontalPosition(offset, isStart, ...)`) and hangs it
@@ -4704,3 +4727,4 @@ records results and removes entries that passed.
 | 7.8, 7.48 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64` and `:ComposeTextEditor:iosSimulatorArm64Test` (commonMain changed how the lines, rows and spans are stored; no `iosMain` or `skikoMain` change). Then re-time the iOS simulator as 4.21 did (iPhone 17 Pro Max simulator, Debug framework, a 200,000-character document of 2,000 lines of 99 characters, temporary logging): the keyboard's `editText` block and the frames over 20 ms while typing twelve keys, then rotate the device and time the frame the rotation costs and how long the rows take to settle | Before (4.21, `f3b8d8f`): `editText` 9.4 ms median at 200k against 0.7 ms at 2k. A pass: `editText` within a few times the 2k figure, wherever the caret is (desktop went 837 µs to 174 µs, and 2,026 µs to 94 µs with a span on every line); a rotation that shapes only the visible lines at once and settles the rest in the background without the scroll jumping. Record the numbers here and in 7.8 and 7.48 || Partial, 2026-10-01 at `0063e6f6`: compiles, the tests pass, and `editText` is 1.1 ms median at the end of 200k and 1.3 ms at the start (recorded in 7.8). The rotation is left for a person: the simulator tools here cannot rotate the device |
 | 6.20 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64` and `:ComposeTextEditor:iosSimulatorArm64Test`. The `dragdrop/PlatformTextDrag.kt` expects changed: `textDragTransferData` takes a nullable `html`, and `droppedText` an `ownDrag` flag; the iOS actuals (`iosMain/.../dragdrop/PlatformTextDrag.ios.kt`) still answer null and false, by choice (6.20 says why; 6.46 follows up). Common code changed a long press inside the selection while the platform toolbar is up (it tries to start a drag, which on iOS returns at once since `platformDragsText` is false) and a pointer press inside the selection (held through `holdPress`; the wider slop for a drag the platform starts is the web's only). Then on an iPad simulator in the sample app: select a word with a long press and long-press inside it again; with the pointer (I/O > Input > Send Pointer to Device), click inside the selection, and press inside it and drag; with Notes and then Safari beside the sample app in Split View, drag text from them over the editor and drop it | Compiles and the tests pass. The second long press shows the edit menu on lift and starts no drag; the click places the caret and the pointer drag selects from the press, as before; the drops from Notes and Safari land nothing, show no drop caret, and nothing crashes | Compile part passed 2026-10-01 at `0a4ca7ed`, with the iOS tests passing. The rest is for a person |
 | 4.26 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64` and `:ComposeTextEditor:iosSimulatorArm64Test`. `skikoMain` changed: `SkikoTextEditorInputMethodRequest` runs each `editText` block and each `onEditCommand` list as one IME batch (`TextEditorState.imeBatch`), so the edit behaviors are offered what landed once the block ends. No `iosMain` change. Then in the iOS sample app with `SmartPunctuation` added to the editor's `editBehaviors`: type `a--`, `"hi"`, `it's` and `...` with the soft keyboard, with autocorrect on, and undo once after the dash | Compiles and the tests pass. The dash, the curly quotes, the apostrophe and the ellipsis appear as the character is typed, the keyboard's suggestions follow the substituted text (no stray characters, nothing doubled or lost when autocorrect rewrites the word before), and one undo gives `a--` back | Compile and tests passed 2026-10-01 at `e6001af2`. The typing check is for a person, with `SmartPunctuation` added to the sample |
+| 3.20 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64` and `:ComposeTextEditor:iosSimulatorArm64Test`. No `iosMain` or `skikoMain` change, but common code now draws the bars in a `Popup` each (`TouchHandlePopups.kt`), which on iOS takes the place of the canvas drawing. Then in the iOS sample app on the simulator: scroll so a line sits on the editor's top edge, double tap a word on it, and drag the start bar by its dot (above the editor) to the left; select a word on the last wholly visible line and drag the end bar by its dot (below the editor) to the right; then scroll the selection out of view and back | Compiles and the tests pass. Each dot draws past the editor's edge and drags its end, with no scroll while the finger stays level; the bars hide once their row's bottom leaves the view and come back with it, leaving no stray bar | |

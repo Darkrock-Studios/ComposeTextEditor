@@ -16,10 +16,6 @@ import com.darkrockstudios.texteditor.state.CaretAffinity
 import com.darkrockstudios.texteditor.state.TextEditorState
 import kotlin.math.sqrt
 
-internal fun DrawScope.DrawSelectionHandles(state: TextEditorState, handleColor: Color, look: HandleLook) {
-	for (handle in state.visibleHandles()) look.draw(this, handle, handleColor)
-}
-
 /** Which handle: a selection's start or end, or the caret's. */
 internal enum class HandleRole { Start, End, Caret }
 
@@ -45,19 +41,32 @@ internal class TouchHandle(
 			HandleRole.End -> rtl
 			HandleRole.Caret -> false
 		}
+
+	/** The point it hangs from, which must be in view for it to show, as Compose's handle position. */
+	val anchor: Offset get() = Offset(at.position.x, at.lineBottom)
 }
 
 /** The touch handles up now: [touchHandles], while the editor has focus. */
 internal fun TextEditorState.visibleHandles(): List<TouchHandle> = if (hasFocus) touchHandles() else emptyList()
 
 /** The touch handles the editor has, focused or not: the caret's, or a touch selection's start and end. */
-internal fun TextEditorState.touchHandles(): List<TouchHandle> {
-	if (selector.isCaretHandleVisible) return listOf(handleAt(HandleRole.Caret, cursorPosition, cursor.affinity))
-	val selection = selector.selection?.takeIf { selector.isTouchSelection } ?: return emptyList()
-	return listOf(
-		handleAt(HandleRole.Start, selection.start, handleAffinity(isStart = true)),
-		handleAt(HandleRole.End, selection.end, handleAffinity(isStart = false)),
-	)
+internal fun TextEditorState.touchHandles(): List<TouchHandle> = touchHandleRoles().mapNotNull { touchHandle(it) }
+
+/** Which of [touchHandles] the editor has, read without laying them out. */
+internal fun TextEditorState.touchHandleRoles(): List<HandleRole> = when {
+	selector.isCaretHandleVisible -> listOf(HandleRole.Caret)
+	selector.selection != null && selector.isTouchSelection -> listOf(HandleRole.Start, HandleRole.End)
+	else -> emptyList()
+}
+
+/** The handle in [role], if the editor has it now. */
+internal fun TextEditorState.touchHandle(role: HandleRole): TouchHandle? {
+	if (role == HandleRole.Caret) {
+		return if (selector.isCaretHandleVisible) handleAt(HandleRole.Caret, cursorPosition, cursor.affinity) else null
+	}
+	val selection = selector.selection?.takeIf { selector.isTouchSelection } ?: return null
+	val isStart = role == HandleRole.Start
+	return handleAt(role, if (isStart) selection.start else selection.end, handleAffinity(isStart))
 }
 
 /**
@@ -89,6 +98,9 @@ internal val SelectionHandleShape.look: HandleLook
 
 /** One look for the touch handles: what each draws, where a finger takes it, and the point a drag of it starts from. */
 internal sealed class HandleLook {
+	/** Whether a handle in [role] draws anything. */
+	abstract fun draws(role: HandleRole): Boolean
+
 	abstract fun draw(scope: DrawScope, handle: TouchHandle, color: Color)
 
 	/** What [draw] covers, which the touch toolbar keeps clear of; null when it draws nothing. */
@@ -101,16 +113,35 @@ internal sealed class HandleLook {
 	abstract fun grabPoint(density: Density, handle: TouchHandle): Offset
 
 	/**
+	 * What the handle's popup covers, its drawing and its touch target, which may reach past
+	 * the editor; null for a handle that draws nothing, whose target lies on the text and
+	 * is the editor's own.
+	 */
+	fun popupBounds(density: Density, handle: TouchHandle): Rect? {
+		val drawn = drawnBounds(density, handle) ?: return null
+		val target = touchTarget(density, handle)
+		return Rect(
+			minOf(drawn.left, target.left),
+			minOf(drawn.top, target.top),
+			maxOf(drawn.right, target.right),
+			maxOf(drawn.bottom, target.bottom),
+		)
+	}
+
+	/**
 	 * Whether the caret's target lies on the caret's own text, where a double tap's second
 	 * tap lands, so taps there are counted and a double tap still selects the word.
 	 */
 	abstract val caretTargetOnText: Boolean
 }
 
-/** The handle up at [position] (in canvas coordinates) under [look], the nearest where targets overlap. */
+/**
+ * The handle up at [position] (in canvas coordinates) under [look], the nearest where
+ * targets overlap; only those that draw nothing, as one that draws takes its own in its popup.
+ */
 internal fun Density.touchedHandle(position: Offset, state: TextEditorState, look: HandleLook): TouchHandle? =
 	state.visibleHandles()
-		.filter { look.touchTarget(this, it).contains(position) }
+		.filter { !look.draws(it.role) && look.touchTarget(this, it).contains(position) }
 		.minByOrNull { (position - look.grabPoint(this, it)).getDistance() }
 
 /**
@@ -130,6 +161,8 @@ internal data object TeardropHandles : HandleLook() {
 	val MinTouchTarget: Dp = 40.dp
 
 	private val sqrt2 = sqrt(2f)
+
+	override fun draws(role: HandleRole): Boolean = true
 
 	private fun Density.radius(handle: TouchHandle): Float = when (handle.role) {
 		HandleRole.Caret -> CaretHeight.toPx() / (1 + sqrt2)
@@ -222,8 +255,10 @@ internal data object BarHandles : HandleLook() {
 	val DotPadding: Dp = 5.dp
 	val CaretTargetWidth: Dp = 24.dp
 
+	override fun draws(role: HandleRole): Boolean = role != HandleRole.Caret
+
 	override fun draw(scope: DrawScope, handle: TouchHandle, color: Color) {
-		if (handle.role == HandleRole.Caret) return
+		if (!draws(handle.role)) return
 		val at = handle.at
 		val dot = grabPoint(scope, handle)
 		val dotRadius = with(scope) { DotDiameter.toPx() / 2f }
@@ -260,7 +295,7 @@ internal data object BarHandles : HandleLook() {
 	}
 
 	override fun drawnBounds(density: Density, handle: TouchHandle): Rect? {
-		if (handle.role == HandleRole.Caret) return null
+		if (!draws(handle.role)) return null
 		val at = handle.at
 		val dotRadius = with(density) { DotDiameter.toPx() / 2f }
 		val x = at.position.x
