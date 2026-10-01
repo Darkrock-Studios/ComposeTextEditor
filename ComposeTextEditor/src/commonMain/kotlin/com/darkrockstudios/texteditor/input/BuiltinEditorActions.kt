@@ -30,6 +30,7 @@ import com.darkrockstudios.texteditor.state.moveToNextWord
 import com.darkrockstudios.texteditor.state.moveToPreviousWord
 import com.darkrockstudios.texteditor.state.moveToPreviousWordStart
 import com.darkrockstudios.texteditor.state.moveToWordEnd
+import com.darkrockstudios.texteditor.state.removeBlockLooksOffTheirBlocks
 import com.darkrockstudios.texteditor.state.removeLinkLookOutsideLinks
 import com.darkrockstudios.texteditor.state.screenAtSelection
 import com.darkrockstudios.texteditor.state.toggleSpanStyle
@@ -252,6 +253,7 @@ private fun TextEditorState.landPaste(
 		}
 		if (!screened) htmlDocument?.let { applyHtmlPasteBlocks(it, insertPosition, text) }
 		removeLinkLookOutsideLinks(insertPosition, text)
+		removeBlockLooksOffTheirBlocks(insertPosition, text)
 	}
 	selector.clearSelection()
 	pasteLanded(text.text, TextEditorRange(insertPosition, text.endWhenInsertedAt(insertPosition)))

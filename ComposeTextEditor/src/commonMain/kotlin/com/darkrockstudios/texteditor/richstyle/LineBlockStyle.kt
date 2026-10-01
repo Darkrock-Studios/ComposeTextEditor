@@ -189,6 +189,9 @@ private class LineBlockRegistry(styles: RichTextStyles) {
 	fun bakedLooks(blocks: List<LineBlockStyle>): List<SpanStyle> =
 		blocks.mapNotNull { it.textStyle }.filter { it !in inlineStyles }.distinct()
 
+	/** Every look [bakedLooks] can answer. */
+	val everyBakedLook: Set<SpanStyle> by lazy { bakedLooks(allBlocks).toSet() }
+
 	/** See [blockStylesRepair]. */
 	fun withBlockStyles(text: AnnotatedString, spans: List<RichSpan>): AnnotatedString? {
 		val blocks = blocksOf(spans)
@@ -488,6 +491,10 @@ internal fun TextEditorState.bakedLooks(line: Int): Set<SpanStyle> {
 	val registry = registryFor(richTextStyles)
 	return registry.bakedLooks(registry.blocksOf(richSpanManager.getRichSpansStartingOn(line))).toSet()
 }
+
+/** Every look [bakedLooks] can answer for a line under this state's styles. */
+internal val TextEditorState.everyBakedLook: Set<SpanStyle>
+	get() = registryFor(richTextStyles).everyBakedLook
 
 /** The line blocks currently attached to [line], in [allBlockRegistry] order. */
 internal fun TextEditorState.lineBlocks(line: Int): List<LineBlockStyle> =
