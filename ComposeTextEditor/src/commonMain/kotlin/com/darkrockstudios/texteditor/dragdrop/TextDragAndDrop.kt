@@ -226,15 +226,18 @@ internal class TextDragAndDrop(
 		ours?.droppedHere = true
 		val source = ours?.takeIf { state.holds(it.range, it.text) }
 		val moveFrom = source?.takeIf { !copy }?.range
+		// A move onto its own text or either edge is taken, and changes nothing.
+		if (moveFrom != null && at >= moveFrom.start && at <= moveFrom.end) return true
 		// A copy of whole lines carries their markers and formats; a drop leaves them to
 		// the markup, which restores them.
-		val intact = source?.takeIf { content.text.text == it.text }
-		val richSpans = intact
-			?.let { state.preservedRichSpans(it.range) }
+		val richSpans = source?.let { state.preservedRichSpans(it.range) }
 			?.filter { !it.style.stickyAtStart && it.style !is BlockSpanStyle }
-		val text = intact?.styled ?: content.text
+		// The text as it was dragged, which the markup does not carry exactly (it has no font size).
+		val text = source?.styled ?: content.text
 		// Refused, the drop is not taken, so a move leaves its source where it was.
-		return state.dropText(text, content.html, at, moveFrom, whole = !copy, richSpans, content.document) != null
+		return state.dropText(
+			text, content.html, at, moveFrom, whole = !copy, richSpans, content.document, asItWas = source != null,
+		) != null
 	}
 
 	private fun hitAt(positionInRoot: Offset): PointerHit? {

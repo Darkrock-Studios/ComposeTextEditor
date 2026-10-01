@@ -3166,7 +3166,7 @@ iOS Safari; browser tests run in CI (met: the `browser` job, 4.15).
   model has no inline image. Paste such a block onto a line of its own (split
   the line, as Word puts a pasted picture in its own paragraph when it cannot sit
   inline), or leave the placeholder out. Found in 6.40's review.
-- [ ] **6.48 A moved run without formatting takes the formatting where it lands.
+- [x] **6.48 A moved run without formatting takes the formatting where it lands.
   R.** [Opus] [Lane H] A drop inserts its text through `insertStringAtCursor`,
   which gives text with no span styles of its own the caret's style there, so
   moving an unformatted "plain" next to bold text makes it bold. Even dropped at
@@ -3175,6 +3175,13 @@ iOS Safari; browser tests run in CI (met: the `browser` job, 4.15).
   Word moves the run as it was. Refuse a move onto either edge of its source, and
   insert this editor's own drag with its styles as they were rather than
   inheriting. Found in the housekeeping that shared `settleLanded`.
+  Done: a drag of this editor's own text drops the source's characters with exactly
+  their styles: no typing style, no destination size, and a run it lands inside
+  (bold, a host's size) stays off it, except the line's block look, which the line
+  bakes over it, and a link's look, which follows the link. A move dropped on its
+  own text or either edge is taken and changes nothing. Text from elsewhere still
+  takes the styling where it lands, as a paste does
+  (`dragdrop/MovedRunStylesTest.kt`).
 
 ## Phase 7: reach
 

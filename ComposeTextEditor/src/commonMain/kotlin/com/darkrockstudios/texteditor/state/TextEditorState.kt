@@ -1583,10 +1583,16 @@ class TextEditorState private constructor(
 	 * normalization can make differ from [text] (collapsed when none did), or null when
 	 * the filter refused it.
 	 */
-	fun insertStringAtCursor(text: AnnotatedString): TextEditorRange? {
+	fun insertStringAtCursor(text: AnnotatedString): TextEditorRange? = insertWithOwnStylesAtCursor(cursor.applyCursorStyle(text))
+
+	/**
+	 * Inserts [text], which carries no paragraph styles (the line has its own), at the
+	 * cursor with its own span styles, taking no typing style.
+	 */
+	internal fun insertWithOwnStylesAtCursor(text: AnnotatedString): TextEditorRange? {
 		val operation = TextEditOperation.Insert(
 			position = cursorPosition,
-			text = cursor.applyCursorStyle(text),
+			text = text,
 			cursorBefore = cursorPosition,
 			cursorAfter = text.endWhenInsertedAt(cursorPosition),
 		)
