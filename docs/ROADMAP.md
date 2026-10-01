@@ -186,10 +186,10 @@ review.
 | D | Bindings, actions, menu | `input/KeyBindings.kt`, `input/EditorCommand.kt`, `input/BuiltinEditorActions.kt`, `contextmenu/` | 2.1, 2.2, 2.4, 2.5, 2.7 to 2.12, 4.8, 5.8, 7.58 |
 | E | Input sessions on desktop, iOS, web | `desktopMain`, `iosMain`, `wasmJsMain` under `input/` | 4.2 to 4.7, 4.10 to 4.12, 4.19, 4.21, 4.22, 4.24 to 4.26, 4.28, 4.29, 4.32, 4.33, 4.35, 7.37 |
 | F | Android input | `androidMain` | 0.4, 3.9 to 3.11, 3.14, 3.17, 4.16, 4.18, 4.20, 4.27, 4.30, 4.31, 4.34, 4.36, 7.40 |
-| G | Edit pipeline and undo | `state/TextEditManager.kt`, `state/TextEditHistory.kt`, `state/EditBehavior.kt`, `input/ImeEditLogic.kt` | 1.20, 5.1 to 5.5, 5.9 to 5.11, 6.1 to 6.6, 6.14, 6.15, 6.17, 6.22, 6.23, 6.28, 6.29, 7.54, 7.55 |
+| G | Edit pipeline and undo | `state/TextEditManager.kt`, `state/TextEditHistory.kt`, `state/EditBehavior.kt`, `input/ImeEditLogic.kt` | 1.20, 5.1 to 5.5, 5.9 to 5.11, 6.1 to 6.6, 6.14, 6.15, 6.17, 6.22, 6.23, 6.28, 6.29, 6.33, 6.34, 7.54, 7.55 |
 | H | Clipboard and HTML | `clipboard/`, `html/`, `dragdrop/` | 4.9, 4.13, 4.17, 6.7 to 6.13, 6.18 to 6.21, 5.12, 6.24 to 6.27, 6.30 to 6.32, 7.39, 7.46, 7.47, 7.49, 7.53, 7.63 |
-| I | Markdown and block model | `ComposeTextEditorMarkdown/`, `richstyle/`, `state/TextEditorStateBlockExt.kt` | 5.6, 7.14 to 7.16, 7.43, 7.45, 7.52, 7.64 |
-| J | Find addon | `ComposeTextEditorFind/` | 7.17 to 7.19, 7.26, 7.29, 7.42 |
+| I | Markdown and block model | `ComposeTextEditorMarkdown/`, `richstyle/`, `state/TextEditorStateBlockExt.kt` | 5.6, 7.14 to 7.16, 7.43, 7.45, 7.52, 7.64, 7.67 |
+| J | Find addon | `ComposeTextEditorFind/` | 7.17 to 7.19, 7.26, 7.29, 7.42, 7.68, 7.69 |
 | K | Spell check addon | `ComposeTextEditorSpellCheck/` | 7.20 to 7.22, 7.28, 7.30, 7.31, 7.34, 7.35, 7.38, 7.44, 7.61 |
 | L | Tests and CI | test sources, `.github/workflows/` | 0.1 to 0.3, 0.5 to 0.11, 4.1, 4.15, 7.62, 7.65 |
 | M | Accessibility and host API | semantics in `BasicTextEditor.kt`, `RichTextView.kt`, `state/rememberTextEditorState.kt` | 7.1 to 7.4, 7.13, 7.23 to 7.25, 7.32, 7.36, 7.59, 7.60, 7.66 |
@@ -1900,7 +1900,7 @@ iOS Safari; browser tests run in CI.
   line (`OperationMetadata.linesBefore`); undo writes them back exactly
   (`state/UndoLineJoinTest.kt`). Seeds 777, 38, 185 and 359 are in the fixed
   seeds; undo to origin holds for seeds 1 to 3000. What the sweep found besides
-  is 6.30 and 7.64.
+  is 6.33 and 7.67.
 - [x] **6.29 Nesting a long selection writes per line. S.** [Opus] [Lane G]
   `nestListItems` and `relevelListFollowers` (`richstyle/ListNesting.kt`) move each
   item with `setListLevelRaw`, a line splice and two span-index publishes per item,
@@ -1914,17 +1914,18 @@ iOS Safari; browser tests run in CI.
   quote of a nested item left the items it lifted past its sibling where they
   were lifted to, since the lines recorded came from a walk that stopped at the
   sibling; they now come from the planned moves (`blocks/NestedListEditingTest.kt`).
-- [ ] **6.30 A join leaves a block's indent over part of a line. R.** [Opus]
+- [ ] **6.33 A join leaves a block's indent over part of a line. R.** [Opus]
   [Lane G] Deleting or replacing across a quote line and a plain line keeps one
   line's marker (or none) but carries the other's `ParagraphStyle` over its part
   of the joined line (`handleMultiLineDelete`, `handleMultiLineReplace`), so
-  Compose lays out that part as a separate, indented paragraph with no marker;
-  a quote line joined onto a plain one leaves "seed econd line" with the indent
-  over "econd line". Fuzz seed 246 (`EditorStateFuzzTest` markdown fixpoint) ends
-  with a fenced line whose paragraph runs are `[0-2, 7-22]`, and an Enter there
-  then throws "Paragraph overlap not allowed". A joined line should carry one
-  paragraph style run, the one its kept marker wants.
-- [ ] **6.31 Undoing a multi-line insert at a paragraph's start drops its
+  Compose lays out that part as a separate, indented paragraph with no marker:
+  deleting from column 5 of "seed line" to column 1 of a quote line "second
+  line" leaves "seed econd line" with the indent over "econd line". Fuzz seed 246 (the markdown module's
+  `MarkdownFuzzFixpointTest`) ends with a fenced line whose paragraph runs are
+  `[0-2, 7-22]`, and an Enter there then throws "Paragraph overlap not
+  allowed". A joined line should carry one paragraph style run, the one its
+  kept marker wants.
+- [ ] **6.34 Undoing a multi-line insert at a paragraph's start drops its
   format. R.** [Opus] [Lane G] A paragraph format (`ParagraphFormatSpanStyle`)
   stays on the first line of a multi-line insert at its paragraph's start
   (`RichSpanManager.handleInsert`), so "target" centred, with "new\nx" pasted
@@ -2826,11 +2827,11 @@ Shaping is one line per keystroke. These still scale with document length:
   word at 24 sp exports as `a ` and `## BIG` on lines of their own. HTML takes a
   line's heading from its block alone since 6.26; markdown export should too,
   writing such a run as bold with its size.
-- [ ] **7.64 An empty quoted list item at the end is not a fixpoint. R.** [Opus]
-  [Lane I] Fuzz seed 2482 (`FUZZ_SEED=2482`, `EditorStateFuzzTest` markdown
-  fixpoint) ends with an empty quoted list item after a fence; the first
-  export's last line `> - ` ends in one more space than the second export's.
-  Found in 6.28's seed sweep.
+- [ ] **7.67 An empty quoted list item at the end is not a fixpoint. R.** [Opus]
+  [Lane I] Fuzz seed 2482 (`FUZZ_SEED=2482`, the markdown module's
+  `MarkdownFuzzFixpointTest`) ends with an empty quoted list item after a
+  fence; the first export's last line `> - ` ends in one more space than the
+  second export's. Found in 6.28's seed sweep.
 
 ### Find and replace addon
 
@@ -2924,14 +2925,14 @@ Shaping is one line per keystroke. These still scale with document length:
   (`blocks/LineBreakContinuationTest.kt`). A rich HTML paste lays its own blocks
   over the continued ones afterwards, unrecorded, so a redo of it loses them
   (6.5).
-- [ ] **7.65 Find's scope does not come back on undo. S.** [Opus] [Lane J]
+- [ ] **7.68 Find's scope does not come back on undo. S.** [Opus] [Lane J]
   The find in selection scope lives only in its `FindScopeStyle` decoration
   span (`FindState.scopeRange`). Since 7.54 undo restores no decorations, so
   deleting the scoped text and undoing before find re-searches leaves no
   scope, and find in selection searches the whole document; text restored at
   the scope's start lands outside it. Keep the scope in `FindState` as well and
   draw the span from it, or re-scope on the undo's edit.
-- [ ] **7.66 Find counts a replacement the input filter refused. S.** [Opus]
+- [ ] **7.69 Find counts a replacement the input filter refused. S.** [Opus]
   [Lane J] `replaceAll` returns every target and clears every match, and
   `replaceCurrent` returns true, even when the input filter (a full
   `maxLength`, `SingleLine` against a replacement with a line break) refused

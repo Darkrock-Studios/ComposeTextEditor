@@ -29,9 +29,9 @@ class MultiLineEditCostTest {
 	private val selected = 800..1_199
 	private val bold = SpanStyle(fontWeight = FontWeight.Bold)
 
-	private fun TestScope.editor(): TextEditorState {
+	private fun TestScope.editor(line: (Int) -> String = { "line $it" }): TextEditorState {
 		val state = TextEditorState(scope = this, measurer = mockk(relaxed = true))
-		state.setBlockLines((0 until documentLines).joinToString("\n") { "line $it" })
+		state.setBlockLines((0 until documentLines).joinToString("\n", transform = line))
 		assertEquals(documentLines, state.textLines.size)
 		return state
 	}
@@ -96,9 +96,7 @@ class MultiLineEditCostTest {
 
 	@Test
 	fun `nesting and un-nesting many list items, and lifting their followers, stay bounded`() = runTest {
-		val e = MarkdownExtension(TextEditorState(scope = this, measurer = mockk(relaxed = true)))
-		e.importMarkdown((0 until documentLines).joinToString("\n") { "- item $it" })
-		val state = e.editorState
+		val state = editor { "- item $it" }
 		val nested = selected.first + 1..selected.last
 
 		var before = state.writes()

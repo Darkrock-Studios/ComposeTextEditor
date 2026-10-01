@@ -16,6 +16,7 @@ import io.mockk.mockk
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
@@ -24,8 +25,8 @@ import utils.setBlockLines
 
 /**
  * Nesting and un-nesting list items, what happens to the items under them,
- * and undo of each. Documents are loaded from markdown and checked as
- * markdown, the shortest way to state a nesting.
+ * and undo of each. Documents are loaded and checked as block lines, the
+ * shortest way to state a nesting.
  */
 class NestedListEditingTest {
 
@@ -108,13 +109,13 @@ class NestedListEditingTest {
 
 	@Test
 	fun `undoing a clear gives back the items lifted past its sibling`() = runTest {
-		val markdown = "- a\n  - b\n    - c\n    - d\n      - e\n- f"
+		val origin = "- a\n  - b\n    - c\n    - d\n      - e\n- f"
 		for (toggle in listOf<TextEditorState.() -> Unit>({ toggleBulletList(2..2) }, { toggleBlockquote(2..2) })) {
-			val e = extension(markdown)
-			val origin = e.exportAsMarkdown()
-			e.state.toggle()
-			e.state.undo()
-			assertEquals(origin, e.exportAsMarkdown())
+			val state = editor(origin)
+			state.toggle()
+			assertNotEquals(origin, state.blockLines())
+			state.undo()
+			assertEquals(origin, state.blockLines())
 		}
 	}
 

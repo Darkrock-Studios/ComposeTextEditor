@@ -65,7 +65,7 @@ class HtmlPasteUndoE2eTest {
 		assertEquals(listOf(TextAlign.Right), aligned())
 
 		// The line's own format does not come back: a multi-line insert at a paragraph's
-		// start loses it on undo, pasted HTML or not (6.31).
+		// start loses it on undo, pasted HTML or not (6.34).
 		press(Key.Z, ctrl = true)
 		assertEquals("target", text)
 		assertEquals(emptyList(), aligned())
