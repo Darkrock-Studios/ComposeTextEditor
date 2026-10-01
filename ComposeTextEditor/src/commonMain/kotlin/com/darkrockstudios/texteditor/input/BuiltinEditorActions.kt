@@ -26,6 +26,7 @@ import com.darkrockstudios.texteditor.state.endWhenInsertedAt
 import com.darkrockstudios.texteditor.state.linksAtSelection
 import com.darkrockstudios.texteditor.state.unlink
 import com.darkrockstudios.texteditor.state.insertTypedNewline
+import com.darkrockstudios.texteditor.state.landingOutsideText
 import com.darkrockstudios.texteditor.state.moveToNextWord
 import com.darkrockstudios.texteditor.state.moveToPreviousWord
 import com.darkrockstudios.texteditor.state.moveToPreviousWordStart
@@ -317,10 +318,12 @@ private fun TextEditorState.yank() {
 	val text = killRing.text ?: return
 	editManager.recordingAsTyping(false) {
 		val selection = selector.selection
-		if (selection != null) {
-			replace(selection, applyStyleForEditAt(selection.start, text))
-		} else {
-			insertStringAtCursor(text)
+		landingOutsideText(text) {
+			if (selection != null) {
+				replace(selection, applyStyleForEditAt(selection.start, text))
+			} else {
+				insertStringAtCursor(text)
+			}
 		}
 	}
 	selector.clearSelection()

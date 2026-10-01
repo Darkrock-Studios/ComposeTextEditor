@@ -3007,7 +3007,7 @@ iOS Safari; browser tests run in CI (met: the `browser` job, 4.15).
   restored any whole lines' blocks and a move's source is gone, so against the
   blocks the lines end up with; a move back into its own heading keeps the
   look (`dragdrop/DroppedBlockLookTest.kt`). Found: 6.45.
-- [ ] **6.45 Styled text inserted outside paste and drop keeps a block's look.
+- [x] **6.45 Styled text inserted outside paste and drop keeps a block's look.
   S.** [Opus] [Lane G] `TextEditorState.insertTypedString(AnnotatedString)`
   (`state/TextEditorStateExt.kt`) and the accessibility insert
   (`insertAtCursor` in `EditorSemantics.kt`) put an `AnnotatedString` in
@@ -3025,6 +3025,17 @@ iOS Safari; browser tests run in CI (met: the `browser` job, 4.15).
   would have offered it (5.9). Go through `TextEditorState.finishComposition`
   there, keeping the resync they request; the behaviors' edit then precedes
   the paste's own `onPaste` offer and the paste lands at the mapped caret.
+  Done, at the entry points rather than in the edit manager or the public
+  `insertStringAtCursor` and `replace`: those also re-insert the document's own
+  text (outdent, find's replace, a paste before its blocks land), and a host's
+  monospace text equals a fence's look, so stripping there took a code editor's
+  font off every outdented line. Text from outside the document
+  (`insertTypedString(AnnotatedString)`, the accessibility insert and set text,
+  yank) lands through `landingOutsideText`, which in the same undo step takes off
+  each block look its line does not bake, unless the text beside it carries that
+  look of its own (a host's monospace), and the link look where no link holds it
+  (yank after the kill took the link). A typed word that loses a look is a step of
+  its own rather than joining the typing run (`state/InsertedBlockLookTest.kt`).
 - [ ] **6.47 A copied image or rule pasted inside a line leaves a space. C.**
   [Opus] [Lane G] An image or horizontal rule line holds a one-space
   placeholder under its `BlockSpanStyle`. Copying the placeholder without its

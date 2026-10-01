@@ -127,6 +127,44 @@ internal class BodyStyleScan(
 	}
 }
 
+/**
+ * Runs [insert] of [text], then takes off what landed, in the same undo step, the looks
+ * styled text from outside the document brings without what gives them: each block look
+ * (a heading's, a fence's monospace) its line does not bake, and the link look where no
+ * link holds it (yanked text whose link went with the kill, an assistive service's text).
+ * A block look the text beside what landed carries of its own (a host's monospace text)
+ * stays, so text matching its neighbours keeps their look. Paste and drop place blocks
+ * and links of their own and settle after.
+ */
+internal inline fun TextEditorState.landingOutsideText(
+	text: AnnotatedString,
+	crossinline insert: () -> TextEditorRange?,
+): TextEditorRange? {
+	val looks = blockLooksIn(text)
+	val linkLook = carriesLinkLook(text)
+	if (looks.isEmpty() && !linkLook) return insert()
+	return editGroup {
+		insert()?.also { landed ->
+			if (looks.isNotEmpty()) removeBlockLooksOffTheirBlocks(landed, looks - ownLooksBeside(landed))
+			if (linkLook) removeLinkLookOutsideLinks(landed)
+		}
+	}
+}
+
+/**
+ * The styles the characters either side of [range] carry that their lines' blocks do not
+ * bake into them.
+ */
+internal fun TextEditorState.ownLooksBeside(range: TextEditorRange): Set<SpanStyle> {
+	val before = when {
+		range.start.char > 0 -> range.start.copy(char = range.start.char - 1)
+		range.start.line > 0 -> CharLineOffset(range.start.line - 1, textLines[range.start.line - 1].length - 1)
+		else -> null
+	}?.takeIf { it.char >= 0 }
+	val after = range.end.takeIf { it.char < (textLines.getOrNull(it.line)?.length ?: 0) }
+	return listOfNotNull(before, after).flatMapTo(HashSet()) { getSpanStylesAtPosition(it) - bakedLooks(it.line) }
+}
+
 /** The styles a heading or code block on [line] gives it. */
 internal fun TextEditorState.lineStyles(line: Int): Set<SpanStyle> =
 	lineBlocks(line).mapNotNullTo(mutableSetOf()) { it.textStyle }
@@ -137,10 +175,19 @@ internal fun TextEditorState.lineStyles(line: Int): Set<SpanStyle> =
  * link's look but not its destination) would otherwise look like a link and go nowhere.
  */
 internal fun TextEditorState.removeLinkLookOutsideLinks(at: CharLineOffset, text: AnnotatedString) {
+	if (!carriesLinkLook(text)) return
+	removeLinkLookOutsideLinks(TextEditorRange(at, text.endWhenInsertedAt(at)))
+}
+
+/** Whether [text]'s own spans carry the link style. */
+internal fun TextEditorState.carriesLinkLook(text: AnnotatedString): Boolean =
+	text.spanStyles.any { it.item == richTextStyles.linkStyle }
+
+/** Takes the link style off the parts of [range] that no link covers, as above. */
+internal fun TextEditorState.removeLinkLookOutsideLinks(range: TextEditorRange) {
 	val linkStyle = richTextStyles.linkStyle
-	if (text.spanStyles.none { it.item == linkStyle }) return
-	val range = TextEditorRange(at, text.endWhenInsertedAt(at))
-	// Part of the paste, so it keeps the copied rich spans the paste kept.
+	if (linkStyle !in getSpanStylesInRange(range)) return
+	// Inside a paste, it keeps the copied rich spans the paste kept.
 	keepingCopiedRichSpans {
 		if (richSpanManager.getSpansInRange(range).none { it.style is LinkSpanStyle }) {
 			removeStyleSpan(range, linkStyle)
@@ -159,12 +206,20 @@ internal fun TextEditorState.removeLinkLookOutsideLinks(at: CharLineOffset, text
  * goes too: pasted text cannot tell the user's own from one a block baked, and a drop,
  * even of this editor's own text, takes the same rule.
  */
-internal fun TextEditorState.removeBlockLooksOffTheirBlocks(at: CharLineOffset, text: AnnotatedString) {
+internal fun TextEditorState.removeBlockLooksOffTheirBlocks(at: CharLineOffset, text: AnnotatedString) =
+	removeBlockLooksOffTheirBlocks(TextEditorRange(at, text.endWhenInsertedAt(at)), blockLooksIn(text))
+
+/** The block looks [text]'s own spans carry. */
+internal fun TextEditorState.blockLooksIn(text: AnnotatedString): Set<SpanStyle> {
+	if (text.spanStyles.isEmpty()) return emptySet()
 	val everyLook = everyBakedLook
-	val looks = text.spanStyles.mapNotNullTo(HashSet()) { run -> run.item.takeIf { it in everyLook } }
+	return text.spanStyles.mapNotNullTo(HashSet()) { run -> run.item.takeIf { it in everyLook } }
+}
+
+/** [looks] taken off [range] wherever its line does not bake them, as above. */
+internal fun TextEditorState.removeBlockLooksOffTheirBlocks(range: TextEditorRange, looks: Set<SpanStyle>) {
 	if (looks.isEmpty()) return
-	val range = TextEditorRange(at, text.endWhenInsertedAt(at))
-	// Part of the paste, so it keeps the copied rich spans the paste kept.
+	// Inside a paste, it keeps the copied rich spans the paste kept.
 	keepingCopiedRichSpans {
 		forEachLineSegment(range) { lineIndex, start, end ->
 			val own = bakedLooks(lineIndex)
