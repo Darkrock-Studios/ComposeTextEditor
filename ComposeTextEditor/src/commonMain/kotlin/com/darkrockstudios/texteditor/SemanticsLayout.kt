@@ -32,11 +32,13 @@ import kotlin.math.abs
  *
  * What cannot match: the layout starts at the first row's top and the text's left
  * edge (iOS's input session places it there), so it leaves out the content padding, the space above the first paragraph and
- * in the editor the scroll offset (Compose has no way to move a layout, and moving the
+ * in the editor the scroll offsets (Compose has no way to move a layout, and moving the
  * semantics node would move the field's bounds with it; [CharacterBounds] answers from
  * the rows where a platform bridge can ask for it instead); a block shorter than its
  * line's text, a block on any row but its line's last, and a block on the last line
- * (which has no line break to carry a placeholder) keep the text's height.
+ * (which has no line break to carry a placeholder) keep the text's height. With
+ * wrapping off, a right-to-left or centred paragraph aligns within the widest line
+ * rather than within the viewport.
  */
 internal class SemanticsLayout(private val state: TextEditorState) {
 	private var layoutInput: LayoutInput? = null
@@ -53,9 +55,11 @@ internal class SemanticsLayout(private val state: TextEditorState) {
 		val style: TextStyle,
 		val measurer: TextMeasurer,
 		val density: Density?,
+		val softWrap: Boolean,
 	) {
 		fun same(other: LayoutSources?): Boolean = other != null && content === other.content && rows === other.rows &&
-			width == other.width && style == other.style && measurer === other.measurer && density == other.density
+			width == other.width && style == other.style && measurer === other.measurer && density == other.density &&
+			softWrap == other.softWrap
 	}
 
 	/** What the semantics layout is measured from; an equal one measures the same. */
@@ -66,6 +70,8 @@ internal class SemanticsLayout(private val state: TextEditorState) {
 		/** For each placeholder, the line whose last row it stretches and how far below that row's top the next line starts. */
 		val steps: List<RowStep>,
 		val width: Int,
+		/** Unwrapped as the editor's lines are (7.41): at least [width] wide, and as wide as the widest line. */
+		val softWrap: Boolean,
 		val measurer: TextMeasurer,
 		val density: Density?,
 	)
@@ -75,7 +81,7 @@ internal class SemanticsLayout(private val state: TextEditorState) {
 	/** The layout, measured again only when the text or the rows' inputs changed; null when it cannot be measured. */
 	fun get(): TextLayoutResult? {
 		val content = state.snapshot()
-		val sources = LayoutSources(content, state.lineOffsets, state.viewportSize.width, state.textStyle, state.textMeasurer, state.density)
+		val sources = LayoutSources(content, state.lineOffsets, state.viewportSize.width, state.textStyle, state.textMeasurer, state.density, state.softWrap)
 		val current = layout?.takeIf { sources.same(layoutSources) } ?: run {
 			val input = layoutInput(content)
 			// A text edit always measures again, so only a span change is worth comparing.
@@ -113,7 +119,7 @@ internal class SemanticsLayout(private val state: TextEditorState) {
 			}
 		}
 		if (outerIndent == null && placeholders.isEmpty() && shaped.none { it.paragraphStyles.isNotEmpty() }) {
-			return LayoutInput(content.getAllText(), measureStyle, placeholders, steps, width, state.textMeasurer, density)
+			return LayoutInput(content.getAllText(), measureStyle, placeholders, steps, width, state.softWrap, state.textMeasurer, density)
 		}
 		// Every line becomes its own paragraph, with the style it was measured with or the
 		// baked indent. A paragraph style already breaks the line, so the line break
@@ -128,7 +134,7 @@ internal class SemanticsLayout(private val state: TextEditorState) {
 				}
 			}
 		}
-		return LayoutInput(text, measureStyle, placeholders, steps, width, state.textMeasurer, density)
+		return LayoutInput(text, measureStyle, placeholders, steps, width, state.softWrap, state.textMeasurer, density)
 	}
 
 	/**
@@ -179,7 +185,8 @@ internal class SemanticsLayout(private val state: TextEditorState) {
 		input.measurer.measure(
 			text = input.text,
 			style = input.style,
-			constraints = Constraints.fixedWidth(input.width),
+			softWrap = input.softWrap,
+			constraints = if (input.softWrap) Constraints.fixedWidth(input.width) else Constraints(minWidth = input.width),
 			placeholders = placeholders,
 			skipCache = true,
 		)

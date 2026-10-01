@@ -115,9 +115,14 @@ with its vertical jump.
 
 ## Platforms
 
-The skiko input method's text origin subtracts the scroll; its document layout
-(iOS's floating cursor) and the semantics text layout are measured unwrapped.
-Neither carries the scroll offset, as neither carries the vertical one.
+The skiko input method's text origin subtracts the scroll; its caret rectangle
+is measured in view space when asked for, and as for a vertical scroll, a scroll
+alone does not ask the platform to read it again. Its document layout (iOS's
+floating cursor) and the semantics text layout are measured unwrapped, at least
+the viewport wide, as the lines are. Neither carries the scroll offset, as
+neither carries the vertical one. Android's cursor anchor is watched through the
+caret's view position, so a sideways scroll resends it. The touch toolbar moves
+with a sideways scroll as with a vertical one.
 
 ## Known limits
 

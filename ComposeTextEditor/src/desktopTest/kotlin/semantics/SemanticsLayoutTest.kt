@@ -62,6 +62,17 @@ class SemanticsLayoutTest {
 	}
 
 	@Test
+	fun `with wrapping off the rows are the editor's unwrapped lines`() = editorUiTest(
+		initialText = AnnotatedString(paragraphs),
+		width = 200.dp,
+		softWrap = false,
+	) {
+		assertEquals(3, state.lineOffsets.size, "precondition: one row per line")
+
+		assertRowsMatch(semanticsLayout())
+	}
+
+	@Test
 	fun `rows below a rule sit where the editor draws them`() = editorUiTest(
 		initialText = AnnotatedString("above\n \nbelow\nand more"),
 	) {

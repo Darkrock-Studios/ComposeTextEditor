@@ -234,14 +234,14 @@ internal class SkikoTextEditorInputMethodRequest(
 
 	/**
 	 * Where [textLayoutResult]'s origin sits, in root coordinates: the canvas origin less
-	 * the scroll, down to the first row's top, where that layout starts. Compose's
+	 * both scrolls, down to the first row's top, where that layout starts. Compose's
 	 * native text input places its caret and selection rectangles by it; the legacy
 	 * input the editor runs on reads it only to know the geometry changed.
 	 */
 	override val unclippedTextOffsetInRoot: () -> Offset? = {
 		attachedCoordinates()?.let { coords ->
 			val origin = coords.positionInRoot()
-			Offset(origin.x, origin.y - editorState.scrollState.value + editorState.firstRowTop())
+			Offset(origin.x - editorState.scrollX, origin.y - editorState.scrollState.value + editorState.firstRowTop())
 		}
 	}
 
