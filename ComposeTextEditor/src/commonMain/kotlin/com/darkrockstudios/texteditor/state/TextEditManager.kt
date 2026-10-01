@@ -213,7 +213,13 @@ class TextEditManager(private val state: TextEditorState) {
 		val screened = if (addToHistory) screen(normalized)?.withNormalizedLineEndings() ?: return null else normalized
 		// Resolved before anything reads it, so what is applied, recorded, and
 		// announced is one and the same operation.
-		val operation = if (screened is TextEditOperation.Replace) resolveInheritedStyle(screened) else screened
+		val operation = when {
+			screened !is TextEditOperation.Replace -> screened
+			screened.inheritStyle -> resolveInheritedStyle(screened)
+			// A replay carries the look it was recorded with.
+			addToHistory -> withLookOfLinkAround(screened)
+			else -> screened
+		}
 		// An edit of no characters (an IME committing "", an empty selection
 		// deleted) changes nothing, so nothing is applied, recorded, or announced.
 		if (operation.isNoOp()) return operation
@@ -601,6 +607,33 @@ class TextEditManager(private val state: TextEditorState) {
 			}
 		}
 		return operation.copy(newText = styled, inheritStyle = false)
+	}
+
+	/**
+	 * A replace that does not inherit styles, its text looking linked nowhere, strictly
+	 * inside one link stays inside it (see [RichSpanManager]'s placing of a link a replace
+	 * changes), so its text takes the link's look where it lands, as letters typed there
+	 * do. Over a link's first or last characters it leaves the link instead, and over its
+	 * whole word drops it.
+	 */
+	private fun withLookOfLinkAround(operation: TextEditOperation.Replace): TextEditOperation.Replace {
+		val range = operation.range
+		val newText = operation.newText
+		if (newText.isEmpty() || !range.isSingleLine() || newText.contains('\n')) return operation
+		if (newText.spanStyles.any { state.isLinkStyle(it.item) }) return operation
+		val inLink = state.richSpanManager.getSpansInRange(range).any {
+			it.style is LinkSpanStyle && it.range.start < range.start && range.end < it.range.end
+		}
+		if (!inLink) return operation
+		// The link's character before the replace, else the one after it, as typing reads.
+		val line = state.textLines[range.start.line]
+		val beside = if (range.start.char > 0) range.start.char - 1 else range.end.char
+		val look = line.spanStyles.firstOrNull { state.isLinkStyle(it.item) && beside in it.start until it.end }?.item
+			?: state.richTextStyles.linkStyle
+		return operation.copy(newText = buildAnnotatedString {
+			append(newText)
+			addStyle(look, 0, newText.length)
+		})
 	}
 
 	/**

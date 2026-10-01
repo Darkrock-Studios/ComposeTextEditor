@@ -2391,7 +2391,7 @@ iOS Safari; browser tests run in CI (met: the `browser` job, 4.15).
   letters it leaves as they were, and a composition merged over its end keeps
   it on redo. A replace on a line between keeps the general handling, which
   keeps the link whole (`state/LinkComposingTest.kt`). Found 5.18.
-- [ ] **5.18 A plain replace inside a link joins it without its look. S.**
+- [x] **5.18 A plain replace inside a link joins it without its look. S.**
   [Opus] [Lane G] A replace that does not inherit styles (`replace` with
   `inheritStyle = false`, the host's) of letters inside a link, say "nk" of
   "link" by "NK", leaves the link over "liNK" (the general handling bridges
@@ -2399,6 +2399,12 @@ iOS Safari; browser tests run in CI (met: the `browser` job, 4.15).
   letters leaves the link instead, and over its whole word drops it. Either
   the look should follow, or the link should leave the plain letters,
   splitting around them. Found in 5.17's review.
+  Done: the look follows, as typing there and native editors have it: plain text a
+  replace puts strictly inside a link, on its line or a later line of one spanning
+  lines, takes the look of the link's character before it (after it at a line's
+  start), baked into the replace so undo and redo carry it. A replace reaching a
+  link's first or last characters still leaves the link, and one covering the whole
+  link drops it, even when it changes only letters inside (`state/LinkComposingTest.kt`).
 
 ## Phase 6: undo and clipboard fidelity
 
