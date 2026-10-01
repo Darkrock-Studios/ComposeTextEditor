@@ -114,11 +114,11 @@ internal class TextDragAndDrop(private val state: TextEditorState) {
 		ours?.droppedHere = true
 		val source = ours?.takeIf { state.holds(it.range, it.text) }
 		val moveFrom = source?.takeIf { !copy }?.range
-		// Overlays belong to the passes that draw them, and line markers and formats to
-		// whole lines, which the markup restores.
+		// A copy of whole lines carries their markers and formats; a drop leaves them to
+		// the markup, which restores them.
 		val richSpans = source?.takeIf { content.text.text == it.text }
 			?.let { state.preservedRichSpans(it.range) }
-			?.filter { !it.style.isDecoration && !it.style.stickyAtStart && it.style !is BlockSpanStyle }
+			?.filter { !it.style.stickyAtStart && it.style !is BlockSpanStyle }
 		// Refused, the drop is not taken, so a move leaves its source where it was.
 		return state.dropText(content.text, content.html, at, moveFrom, whole = !copy, richSpans) != null
 	}

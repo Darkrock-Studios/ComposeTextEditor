@@ -2844,13 +2844,15 @@ Shaping is one line per keystroke. These still scale with document length:
   (`SemanticsLinksCostTest`). Still per revision with a link present: the whole
   text is copied into the published string with its links, as `getAllText`'s
   splice copies it, and an undo back to an older revision rescans its chunks.
-- [ ] **7.53** [Opus] [Lane H] `TextEditorState.copyRichSpans` keeps decoration
+- [x] **7.53** [Opus] [Lane H] `TextEditorState.copyRichSpans` keeps decoration
   spans, so a copy carries spell-check flags, find highlights and find's scope to
   the clipboard, and a paste lays them over the pasted text, where their owners
   do not expect them (a second find scope, a stale flag). Drop decorations there,
   as the saver does and a drag's carried spans do (6.21): leave `isDecoration`
   spans out of `preservedRichSpans`. (Filed as 6.24 on the lane H branch before
-  the merge; 6.24 here is the drop caret.)
+  the merge; 6.24 here is the drop caret.) Done: `preservedRichSpans`, which a
+  copy and a drag share, leaves decorations out, inside the copy or running past
+  it (`spans/RichSpanClipboardTest.kt`). A delete's undo metadata is 7.54.
 - [ ] **7.54** [Opus] [Lane G] A delete whose metadata holds decoration spans (a
   spell-check flag or find highlight on the deleted text) never joins a typing run
   (`TextEditHistory`'s delete merge and `isSingleTypedChar`), so backspacing

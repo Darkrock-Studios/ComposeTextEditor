@@ -1,9 +1,12 @@
 package spans
 
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
+import com.darkrockstudios.texteditor.richstyle.HighlightSpanStyle
 import com.darkrockstudios.texteditor.richstyle.OrderedListSpanStyle
+import com.darkrockstudios.texteditor.richstyle.SpellCheckStyle
 import com.darkrockstudios.texteditor.state.TextEditorState
 import io.mockk.mockk
 import kotlinx.coroutines.test.TestScope
@@ -167,5 +170,27 @@ class RichSpanClipboardTest {
 		state.pasteRichSpans(CharLineOffset(1, 0), external)
 
 		assertEquals(listOf(0), state.orderedLines())
+	}
+
+	@Test
+	fun `a copy leaves decorations behind and carries content spans`() = runTest {
+		val state = createState("one two three\nfour\n")
+		val highlight = HighlightSpanStyle(Color.Yellow)
+		state.addRichSpan(CharLineOffset(0, 0), CharLineOffset(0, 3), highlight)
+		state.addRichSpan(CharLineOffset(0, 4), CharLineOffset(0, 7), SpellCheckStyle)
+		// Running past the copy, as a find scope does, so the copy would clamp it.
+		state.addRichSpan(CharLineOffset(0, 8), CharLineOffset(1, 2), SpellCheckStyle)
+
+		val copyRange = TextEditorRange(CharLineOffset(0, 0), CharLineOffset(0, 13))
+		val copiedText = state.getTextInRange(copyRange)
+		state.copyRichSpans(copyRange)
+
+		state.cursor.updatePosition(CharLineOffset(2, 0))
+		state.preserveCopiedRichSpansThroughNextEdit()
+		state.insertStringAtCursor(copiedText)
+		state.pasteRichSpans(CharLineOffset(2, 0), copiedText)
+
+		val pasted = state.richSpanManager.getAllRichSpans().filter { it.range.start.line == 2 }
+		assertEquals(listOf(highlight), pasted.map { it.style })
 	}
 }

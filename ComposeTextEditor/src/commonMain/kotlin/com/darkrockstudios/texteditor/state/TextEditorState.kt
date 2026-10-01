@@ -2080,7 +2080,10 @@ class TextEditorState(
 		return copyId
 	}
 
-	/** The rich spans within [range], placed relative to its start, as a copy of it carries them. */
+	/**
+	 * The rich spans within [range], placed relative to its start, as a copy of it carries
+	 * them. Decorations stay with the passes that draw them (spell check, find).
+	 */
 	internal fun preservedRichSpans(range: TextEditorRange): List<PreservedRichSpan> {
 		// getSpansInRange returns spans that merely OVERLAP the copy range. A span
 		// starting before range.start (partial selection of a list item, or a
@@ -2088,6 +2091,7 @@ class TextEditorState(
 		// offset and a corrupt span on paste, so clamp each span to the copy range
 		// and drop any that collapse to empty/inverted.
 		return richSpanManager.getSpansInRange(range).mapNotNull { span ->
+			if (span.style.isDecoration) return@mapNotNull null
 			// A line marker or placeholder block belongs to its line, not to the
 			// characters copied out of it: a fragment of an item's text pastes as
 			// plain text, only a copy covering the whole span carries the marker.
