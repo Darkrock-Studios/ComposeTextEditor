@@ -126,6 +126,27 @@ internal class RetiredStyles(
 	fun isLinkStyle(style: SpanStyle): Boolean =
 		style == styles.linkStyle || (style in retiredLinkStyles && style !in current)
 
+	private val headingLooks = HashMap<HtmlTag, Set<SpanStyle>>()
+
+	/**
+	 * The spans a [heading] line leaves out, since the heading element stands for them:
+	 * the look it is baked with, and another level's (text joined from another heading
+	 * keeps that heading's look) unless it is also an inline style, under [styles] and
+	 * each retired configuration.
+	 */
+	fun headingLooks(heading: HtmlTag): Set<SpanStyle> = headingLooks.getOrPut(heading) {
+		val configs = newestFirst + styles
+		val inline = CONFIGURED_STYLES.mapTo(HashSet()) { it(styles) }
+		buildSet {
+			HtmlTag.entries.filter { it.isHeading }.forEach { level ->
+				configs.forEach { config ->
+					val look = level.spanStyle(config)
+					if (level == heading || look !in inline) add(look)
+				}
+			}
+		}
+	}
+
 	fun asCurrent(style: SpanStyle): SpanStyle {
 		if (newestFirst.isEmpty() || style in current) return style
 		return read.getOrPut(style) {

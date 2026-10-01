@@ -1,6 +1,7 @@
 package com.darkrockstudios.texteditor.html
 
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.clipboard.withBodyStyleBeneath
@@ -279,7 +280,9 @@ private fun lineHtml(
 			" alt=\"${image.alt.escapeHtmlAttribute()}\">"
 
 		heading != null -> "<${heading.tag}${format.styleAttribute()}>" +
-			"${AnnotatedString(line.text).toHtml(styles, links, allowedLinkSchemes = allowedLinkSchemes, headingsBySize = false)}</${heading.tag}>"
+			line.withoutSpanStyles(retired.headingLooks(heading))
+				.toHtml(styles, links, retired, allowedLinkSchemes, headingsBySize = false) +
+			"</${heading.tag}>"
 		else -> line.toHtml(styles, links, retired, allowedLinkSchemes, headingsBySize = false)
 	}
 
@@ -292,6 +295,12 @@ private fun lineHtml(
 		isRule || image != null || heading != null -> content
 		else -> "<p${format.styleAttribute()}>$content</p>"
 	}
+}
+
+/** This line with every span whose style is one of [looks] dropped. */
+private fun AnnotatedString.withoutSpanStyles(looks: Set<SpanStyle>): AnnotatedString {
+	if (spanStyles.none { it.item in looks }) return this
+	return AnnotatedString(text, spanStyles.filter { it.item !in looks }, paragraphStyles)
 }
 
 private fun ParagraphFormatSpanStyle?.styleAttribute(): String =
