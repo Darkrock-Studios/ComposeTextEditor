@@ -320,6 +320,15 @@ class MarkdownExtension(
 		val content = editorState.snapshot()
 		val styles = editorState.richTextStyles
 		val retiredStyles = editorState.retiredRichTextStyles
+		// A heading's baked display style, under this configuration or a retired one, is the
+		// block's look, not bold text at a size. A retired look that is an inline style of
+		// its own configuration or of this one is that style, as HTML export reads it.
+		val bakedHeadingLooks = (1..6).map { level ->
+			retiredStyles
+				.map { it.headingLook(level) to it }
+				.filterNot { (look, retired) -> isConfiguredInlineStyle(look, retired) || isConfiguredInlineStyle(look, styles) }
+				.map { it.first } + styles.headingLook(level)
+		}
 		// A line-anchored span starts on the line it decorates.
 		val spansByLine = content.richSpans.groupBy { it.range.start.line }
 		fun stylesOn(line: Int): List<RichSpanStyle> = spansByLine[line].orEmpty().map { it.style }
@@ -433,11 +442,7 @@ class MarkdownExtension(
 				isFenceLine -> text.substring(cursor, end)
 
 				else -> {
-					// A heading's baked display style, under this configuration or a
-					// retired one, is the block's look, not bold text at a size.
-					val baked = headingLevel
-						?.let { level -> (retiredStyles + styles).map { it.headingLook(level) } }
-						.orEmpty()
+					val baked = headingLevel?.let { bakedHeadingLooks[it.coerceIn(1, 6) - 1] }.orEmpty()
 					// Link spans live on the state, not in the AnnotatedString, so
 					// the serializer is handed this line's links in line-local
 					// character offsets.
