@@ -1449,7 +1449,7 @@ Also seen:
   from its node in the accessibility tree Compose mirrors into the page.
   Found 4.35, marked `test.fixme`. A real IME in each browser (4.12) is still
   a person's check.
-- [ ] **4.35 A browser composition can land at a stale offset. R.** [Fable]
+- [ ] **4.35 A browser composition can land at a stale offset. R.** [Opus]
   [Lane E] With Chromium's own input method events (4.15), a composition
   started after moving the caret by key can land away from the caret: in
   "ab" after Left, "か" landed at the line end in three runs of five (one in
@@ -1465,6 +1465,7 @@ Also seen:
   `browserTests/tests/composition.spec.ts`, "a composition lands at the caret
   in the middle of a line" and "a composition after Home lands at the line
   start", both `test.fixme`.
+  Deferred: Hammer has no web target.
 - [x] **4.21 Whole-document mirror per edit. S.** [Opus] [Lane E] Compose's web
   session copies `request.value().text` into the backing `<textarea>` after
   every edit, and iOS snapshots `state.text` the same way, so each keystroke
