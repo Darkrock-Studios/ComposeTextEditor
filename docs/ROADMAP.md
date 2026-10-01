@@ -182,7 +182,7 @@ review.
 | Lane | Area | Main files | Items |
 | --- | --- | --- | --- |
 | A | Caret motion | `state/TextEditorCursorState.kt`, `state/TextEditorStateCursorExt.kt`, `state/WordSegmentationUtils.kt`, `input/TextEditorKeyCommandHandler.kt` | 1.1 to 1.7, 1.19, 2.3, 2.6, 7.5, 7.33 |
-| B | Pointer and touch | `textEditorPointerInputHandling.kt`, `state/TextEditorSelectionManager.kt`, `DrawSelectionHandles.kt` | 1.9, 1.12 to 1.16, 1.21 to 1.24, 3.1, 3.2, 3.4 to 3.8, 3.13, 3.15, 3.18, 3.19, 4.23, 6.16 |
+| B | Pointer and touch | `textEditorPointerInputHandling.kt`, `state/TextEditorSelectionManager.kt`, `DrawSelectionHandles.kt` | 1.9, 1.12 to 1.16, 1.21 to 1.24, 3.1, 3.2, 3.4 to 3.8, 3.13, 3.15, 3.18 to 3.21, 4.23, 6.16 |
 | C | Drawing and geometry | `Draw*.kt`, `cursor/`, `scrollbar/`, `state/TextEditorScrollState.kt`, hit testing | 1.8, 1.10, 1.11, 1.17, 1.18, 1.25, 3.3, 3.12, 3.16, 4.14, 7.6, 7.7, 7.27, 7.41, 7.78 |
 | D | Bindings, actions, menu | `input/KeyBindings.kt`, `input/EditorCommand.kt`, `input/BuiltinEditorActions.kt`, `contextmenu/` | 2.1, 2.2, 2.4, 2.5, 2.7 to 2.12, 4.8, 5.8, 7.58 |
 | E | Input sessions on desktop, iOS, web | `desktopMain`, `iosMain`, `wasmJsMain` under `input/` | 4.2 to 4.7, 4.10 to 4.12, 4.19, 4.21, 4.22, 4.24 to 4.26, 4.28, 4.29, 4.32, 4.33, 4.35, 4.37 to 4.40, 7.37 |
@@ -1136,7 +1136,7 @@ Constraints that shape the order:
   on the iOS simulator a long press on an unfocused empty editor shows Paste
   and Select All, a tap on the caret handle shows the menu, and a long press
   past a line's end puts the caret there with the menu.
-- [ ] **3.19 Selection handles look like the platform's. S.** [Opus] [Lane B]
+- [x] **3.19 Selection handles look like the platform's. S.** [Opus] [Lane B]
   [Mac work] `DrawSelectionHandles.kt` draws every handle the same way on every
   platform: a 20 dp circle 19 dp below the row, joined to the row's top by a
   2 dp stem. Native handles look different:
@@ -1155,6 +1155,53 @@ Constraints that shape the order:
   geometry. Check against `BasicTextField` side by side, with a golden
   screenshot per shape. Requested by the owner: the current handles look
   wrong next to native ones.
+  Done: `DrawSelectionHandles.kt` holds two looks, each giving a handle's
+  drawing, touch target, grab point and drawn bounds. `TeardropHandles` copies
+  Compose's Android `SelectionHandle` and `CursorHandle`: a 25 dp disc with a
+  square corner on the end, hanging from the row's bottom, and a 25 dp tall
+  teardrop under the caret; each takes a finger in a 40 dp box below the row
+  on its disc's side, `BasicTextField`'s `MinTouchTargetSizeForHandles` (from
+  `TextView`, not 48 dp), so a tap on the line under the caret within 20 dp of
+  it is the handle's, as natively. `BarHandles` copies Compose's iOS 17+
+  handle: a 2 dp bar the row's height, a 16.7 dp dot above the start and below
+  the end, with its shadow; no caret knob, the caret itself takes a finger
+  (24 dp wide on its row) while the caret handle is up, and taps there still
+  count toward a double tap, which selects the word. A bar takes a finger
+  where Compose's iOS handle does: the dot and bar, 5 dp wider than the dot.
+  In a right-to-left paragraph each handle hangs on the other side, as
+  Compose's `isLeftSelectionHandle` has it. The touch
+  toolbar's rect reaches over the drawn handles, as `TextView` adds its handle
+  height (the editor's own fallback menu still opens at the caret's row). An `expect val platformSelectionHandleShape` picks Bar on iOS
+  and Teardrop elsewhere; `TextEditorStyle.handleShape` lets a host pick either
+  (`SelectionHandleShape`). On desktop, Compose's own `BasicTextField` draws
+  iOS-like lollipops (`SelectionHandles.skiko.kt`) and no caret handle, so
+  desktop touch and the web follow Android's, as asked, rather than it. Tests:
+  `drawing/SelectionHandleShapeTest`, the handle cases in `GeometryTest`,
+  `HandleDensityTest`, `TouchCaretHandleTest`; goldens `handles-teardrop`,
+  `handles-teardrop-caret`, `handles-bar`. On the API 36 emulator, beside a
+  `BasicTextField` and an `EditText` showing the same text, the selection and
+  caret handles match `BasicTextField`'s in size, shape and place (`EditText`'s
+  drawables are a little smaller). The iOS compile and a simulator
+  pass are in the Mac queue. Found: 3.20, 3.21.
+- [ ] **3.20 Touch handles past the editor's edge can be grabbed. S.** [Opus]
+  [Lane B] Compose draws its handles in popups, so a handle hanging past the
+  editor's edge is drawn and grabbed outside it: a teardrop below a selection
+  on the last visible row, or a bar's dot above one on the first. The editor
+  draws its handles on its own canvas: past its edges they are drawn only
+  where no ancestor clips, and the pointer input, bounded by the editor's
+  node, never sees a finger there. Draw the
+  handles, or at least take their touches, in a popup or an overlay that can
+  extend past the editor, or scroll the row up when a selection is made on
+  it. Found in 3.19.
+- [ ] **3.21 Touch handles at a bidi run's edge. S.** [Opus] [Lane B]
+  Compose places a selection handle at the edge of the bidi run the selected
+  character is in (`getHorizontalPosition(offset, isStart, ...)`) and hangs it
+  by that run's direction. The editor places it at the caret's x for the
+  offset, by the paragraph's direction, and hangs it by the paragraph's
+  direction. Selecting the Hebrew word in "abc אבג def" puts the start handle
+  on the Hebrew word's left edge, where "abc " ends, rather than on its right
+  edge, where its first letter is. Place and hang each end as Compose does,
+  and check the selection highlight agrees. Found in 3.19.
 - [x] **4.1 Compile and test iOS in CI.** [Opus] [Lane L] [Mac work] A macOS
   runner that builds the iOS targets and the iOS sample app. Without it every
   iOS change is a guess. Done: the `ios` job in `ci-build.yml`. There are no
@@ -4579,3 +4626,4 @@ records results and removes entries that passed.
 | 4.26 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64` and `:ComposeTextEditor:iosSimulatorArm64Test`. `skikoMain` changed: `SkikoTextEditorInputMethodRequest` runs each `editText` block and each `onEditCommand` list as one IME batch (`TextEditorState.imeBatch`), so the edit behaviors are offered what landed once the block ends. No `iosMain` change. Then in the iOS sample app with `SmartPunctuation` added to the editor's `editBehaviors`: type `a--`, `"hi"`, `it's` and `...` with the soft keyboard, with autocorrect on, and undo once after the dash | Compiles and the tests pass. The dash, the curly quotes, the apostrophe and the ellipsis appear as the character is typed, the keyboard's suggestions follow the substituted text (no stray characters, nothing doubled or lost when autocorrect rewrites the word before), and one undo gives `a--` back | |
 | 6.44 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64`. The `dragdrop/PlatformTextDrag.kt` expect `droppedText` takes a `target: DelegatableNode?` (the node taking the drop, for Android to read content URIs through its activity); the iOS actual (`iosMain/.../dragdrop/PlatformTextDrag.ios.kt`) takes and ignores it, still answering null | Compiles | |
 | 6.39 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64` and `:ComposeTextEditor:iosSimulatorArm64Test`. `clipboard/ClipboardHtml.kt` drops the `readClipboardHtml` expect; the iOS `readClipboardPaste` actual (`iosMain/.../clipboard/ClipboardHtml.ios.kt`) builds the paste from one `readStyled`, which now parses the markup once (`parsePasteHtml`), carries it as `document`, and leaves off markup it rejected; `ClipboardHelper.readCopyId` reads the pasteboard itself and the `lastReadHtml`/`lastReadCopyId` stashes are gone (`ClipboardHelper.ios.kt`). Then in the iOS sample app: copy a bulleted list in the editor and paste it, and paste a bulleted list copied from Notes | Compiles and the tests pass. Both paste as bulleted lists, with one paste prompt at most | |
+| 3.19 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64` and `:ComposeTextEditor:iosSimulatorArm64Test`. `DrawSelectionHandles.kt` adds `internal expect val platformSelectionHandleShape`; the iOS actual (`iosMain/.../SelectionHandles.ios.kt`) answers `SelectionHandleShape.Bar`. Then in the iOS sample app: select a word by double tap and compare its handles with Notes' (iOS 26) side by side; drag the start handle by its dot and then by its bar, the same for the end; tap to place the caret, wait a second, press on the caret and drag it; double-tap the word the caret sits in | Compiles and the tests pass. Bars the row's height at each end with a dot above the start and below the end, in the handle colour with a soft shadow, sized like Notes' (record any difference: dot size, bar width, shadow); no knob under the caret. Each handle drags from its dot or bar; the caret drags from itself; the double tap selects the word | |

@@ -113,8 +113,15 @@ fun RichTextView(
 		PrimarySelectionEffect(state)
 		val textToolbar = LocalTextToolbar.current
 		val nativeTextToolbar = LocalNativeTextToolbar.current
+		val handles by rememberUpdatedState(style.handleShape.look)
 		val touchToolbar = remember(state, textToolbar, nativeTextToolbar, contextMenuActions, menuPlacement) {
-			TouchToolbar(state, textToolbar.takeIf { nativeTextToolbar }, contextMenuActions, menuPlacement::showAtContent)
+			TouchToolbar(
+				state,
+				textToolbar.takeIf { nativeTextToolbar },
+				contextMenuActions,
+				menuPlacement::showAtContent,
+				handles = { handles },
+			)
 		}
 		LaunchedEffect(touchToolbar) { touchToolbar.watch() }
 		DisposableEffect(touchToolbar) { onDispose { touchToolbar.hide() } }
@@ -219,6 +226,7 @@ private fun RichTextViewBody(
 					links = linkClicks,
 					contentOrigin = { contentOrigin },
 					touchToolbar = touchToolbar,
+					handles = style.handleShape.look,
 				)
 				.padding(contentPadding)
 				// The touch toolbar is placed in root coordinates, from the canvas's.
@@ -245,7 +253,7 @@ private fun RichTextViewBody(
 
 			if (isSelectable) {
 				DrawSelection(state, style.selectionColorFor(state.hasFocus))
-				if (state.hasFocus) DrawSelectionHandles(state, style.effectiveHandleColor)
+				if (state.hasFocus) DrawSelectionHandles(state, style.effectiveHandleColor, style.handleShape.look)
 			}
 		}
 	}

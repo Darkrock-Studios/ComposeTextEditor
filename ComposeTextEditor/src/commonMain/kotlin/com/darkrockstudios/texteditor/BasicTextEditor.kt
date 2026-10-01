@@ -247,6 +247,7 @@ fun BasicTextEditor(
 	val textToolbar = LocalTextToolbar.current
 	val nativeTextToolbar = LocalNativeTextToolbar.current
 	val takesInput by rememberUpdatedState(editable)
+	val handles by rememberUpdatedState(style.handleShape.look)
 	val touchToolbar = remember(state, textToolbar, nativeTextToolbar, contextMenuActions, menuPlacement) {
 		TouchToolbar(
 			state,
@@ -254,6 +255,7 @@ fun BasicTextEditor(
 			contextMenuActions,
 			menuPlacement::showAtContent,
 			takesInput = { takesInput },
+			handles = { handles },
 		)
 	}
 	// A right-click's menu: the platform's edit menu at the pointer where it answers one
@@ -422,6 +424,7 @@ fun BasicTextEditor(
 							touchToolbar = touchToolbar,
 							selectionDrag = dragAndDrop,
 							primaryPaste = primaryPaste,
+							handles = handles,
 						)
 						.padding(horizontalPadding)
 						.textMagnifier(state, style)
@@ -453,7 +456,7 @@ fun BasicTextEditor(
 					DrawSelection(state, style.selectionColorFor(state.hasFocus))
 
 					// Like native editors, an editor without focus shows no touch handles.
-					if (state.hasFocus) DrawSelectionHandles(state, style.effectiveHandleColor)
+					if (state.hasFocus) DrawSelectionHandles(state, style.effectiveHandleColor, handles)
 
 					// A read-only editor holds focus without taking input, and still shows its caret.
 					if (enabled && state.hasFocus) {

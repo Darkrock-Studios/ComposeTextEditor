@@ -7,6 +7,7 @@ import androidx.compose.ui.text.AnnotatedString
 import com.darkrockstudios.texteditor.contextmenu.TextEditorContextMenuState
 import com.darkrockstudios.texteditor.richstyle.SpellCheckStyle
 import utils.editorUiTest
+import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -105,18 +106,27 @@ class TouchCaretHandleTest {
 		assertFalse(state.selector.isCaretHandleVisible)
 	}
 
+	/** The handle's 40 dp target covers the line under it, as Compose's does; beside it, the line takes the tap. */
 	@Test
-	fun `a tap on the line under the caret handle still places the caret`() = editorUiTest(
+	fun `a tap on the line under the caret goes to the handle only inside its target`() = editorUiTest(
 		initialText = AnnotatedString("alpha beta\ngamma delta\nepsilon zeta\neta theta\niota kappa"),
 	) {
 		tapAtCharacter(3)
-		val below = positionOfCharacter(14)
-		// Past the double-tap window, so this is a second single tap.
+		val under = positionOfCharacter(14)
+		val beside = positionOfCharacter(19)
+		val caretX = positionOfCharacter(3).x
+		assertTrue(abs(under.x - caretX) < 20f && beside.x - caretX > 20f, "precondition: 'm' under the handle, 'l' beside it")
+		// Past the double-tap window, so these are single taps.
 		test.mainClock.advanceTimeBy(1_000)
 
-		tapAt(below)
+		tapAt(beside)
+		assertEquals(19, cursorIndex)
 
-		assertEquals(14, cursorIndex)
+		test.mainClock.advanceTimeBy(1_000)
+		tapAtCharacter(3)
+		test.mainClock.advanceTimeBy(1_000)
+		tapAt(under)
+		assertEquals(3, cursorIndex, "the handle's")
 	}
 
 	@Test

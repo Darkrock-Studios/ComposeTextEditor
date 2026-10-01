@@ -46,12 +46,14 @@ fun EditorUiTestScope.drawnCaret(width: Dp = TextEditorStyle().cursorWidth): Rec
 fun EditorUiTestScope.drawnSelection(): List<Rect> =
 	recordDrawing(state.viewportSize, test.density) { DrawSelection(state, Color.Blue) }.map { it.bounds.sorted() }
 
-/** The centres of the touch handles' knobs [DrawSelectionHandles] draws: start then end, or the caret's. */
+/**
+ * What [DrawSelectionHandles] draws now in the editor's handle look and colour, start
+ * handle first, or the caret's; a shadow, drawn in other colours, is left out.
+ */
 @OptIn(ExperimentalTestApi::class)
-fun EditorUiTestScope.drawnHandleCenters(): List<Offset> =
-	recordDrawing(state.viewportSize, test.density) { DrawSelectionHandles(state, Color.Red) }
-		.filter { it.kind == ShapeKind.Circle }
-		.map { it.bounds.center }
+fun EditorUiTestScope.drawnHandles(): List<DrawnShape> =
+	recordDrawing(state.viewportSize, test.density) { DrawSelectionHandles(state, Color.Red, handles) }
+		.filter { it.color == Color.Red }
 
 /** The box of the editor's visual row [row] in the canvas: its layout's top and height, the viewport wide. */
 fun EditorUiTestScope.rowBox(row: Int): Rect {

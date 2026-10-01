@@ -11,8 +11,7 @@ import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.style.TextIndent
 import com.darkrockstudios.texteditor.CharLineOffset
-import com.darkrockstudios.texteditor.SelectionHandleDiameter
-import com.darkrockstudios.texteditor.SelectionHandleGap
+import com.darkrockstudios.texteditor.TeardropHandles
 import com.darkrockstudios.texteditor.TextEditorStyle
 import com.darkrockstudios.texteditor.richstyle.ParagraphFormatSpanStyle
 import com.darkrockstudios.texteditor.state.TextEditorState
@@ -21,13 +20,14 @@ import utils.EditorUiTestScope
 import utils.assertOffsetEquals
 import utils.assertRectEquals
 import utils.drawnCaret
-import utils.drawnHandleCenters
+import utils.drawnHandles
 import utils.drawnSelection
 import utils.editorUiTest
 import utils.independentLayout
 import utils.measureLineWidth
 import utils.rowBox
 import kotlin.math.ceil
+import kotlin.math.sqrt
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -65,9 +65,9 @@ class GeometryTest {
 	private val EditorUiTestScope.space: Float
 		get() = ceil(measureLineWidth(" ", state.textStyle.copy(textIndent = TextIndent.None), test.density))
 
-	/** How far below its row's bottom a touch handle's knob is centred. */
-	private val EditorUiTestScope.handleDrop: Float
-		get() = with(test.density) { SelectionHandleGap.toPx() + SelectionHandleDiameter.toPx() / 2f }
+	/** A teardrop selection handle's box, from the row's bottom down. */
+	private val EditorUiTestScope.handleSize: Float
+		get() = with(test.density) { TeardropHandles.SelectionSize.toPx() }
 
 	private fun EditorUiTestScope.wrappingLayout(): TextLayoutResult = independentLayout(WRAPPING).also {
 		assertTrue(it.lineCount >= 3, "precondition: the paragraph wraps to at least three rows, not ${it.lineCount}")
@@ -322,14 +322,16 @@ class GeometryTest {
 		val (start, end) = state.flatSelection()
 		assertEquals(word, start, "precondition: the long press selected the second row's first word")
 
-		val centers = drawnHandleCenters()
-		assertEquals(2, centers.size)
-		assertOffsetEquals(Offset(reference.x(start), reference.rowBottom(1) + handleDrop), centers[0], message = "start")
-		assertOffsetEquals(Offset(reference.x(end), reference.rowBottom(1) + handleDrop), centers[1], message = "end")
+		val handles = drawnHandles().map { it.bounds }
+		assertEquals(2, handles.size)
+		val bottom = reference.rowBottom(1)
+		// Each corner sits on its end of the selection at the row's bottom, its disc outside.
+		assertRectEquals(Rect(reference.x(start) - handleSize, bottom, reference.x(start), bottom + handleSize), handles[0], message = "start")
+		assertRectEquals(Rect(reference.x(end), bottom, reference.x(end) + handleSize, bottom + handleSize), handles[1], message = "end")
 
-		// The gesture tests grab handles at handleCenter, in node coordinates.
-		assertOffsetEquals(canvasToNode(centers[0]), handleCenter(isStart = true), 0.01f, "the harness grabs the drawn start handle")
-		assertOffsetEquals(canvasToNode(centers[1]), handleCenter(isStart = false), 0.01f, "the harness grabs the drawn end handle")
+		// The gesture tests grab handles at handleCenter, in node coordinates: the discs' centres.
+		assertOffsetEquals(canvasToNode(handles[0].center), handleCenter(isStart = true), 0.01f, "the harness grabs the drawn start handle")
+		assertOffsetEquals(canvasToNode(handles[1].center), handleCenter(isStart = false), 0.01f, "the harness grabs the drawn end handle")
 	}
 
 	@Test
@@ -340,10 +342,14 @@ class GeometryTest {
 		assertNull(state.selector.selection)
 
 		val two = independentLayout("two")
-		val top = rowBox(1).top
-		val center = drawnHandleCenters().single()
-		assertOffsetEquals(Offset(two.x(state.cursorPosition.char), top + two.rowBottom(0) + handleDrop), center)
-		assertOffsetEquals(canvasToNode(center), caretHandleCenter(), 0.01f, "the harness grabs the drawn caret handle")
+		val bottom = rowBox(1).top + two.rowBottom(0)
+		val x = two.x(state.cursorPosition.char)
+		val handle = drawnHandles().single().bounds
+		// Compose's caret handle: its point on the caret's bottom, 25 dp tall, 2 / (1 + sqrt 2) as wide.
+		val width = handleSize * 2f / (1f + sqrt(2f))
+		assertRectEquals(Rect(x - width / 2f, bottom, x + width / 2f, bottom + handleSize), handle)
+		val discCenter = Offset(x, bottom + width / 2f * sqrt(2f))
+		assertOffsetEquals(canvasToNode(discCenter), caretHandleCenter(), 0.01f, "the harness grabs the drawn caret handle's disc")
 	}
 
 	/** The selection's start and (exclusive) end as flat indices. */
