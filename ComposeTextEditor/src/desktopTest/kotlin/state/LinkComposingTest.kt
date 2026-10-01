@@ -1,6 +1,8 @@
 package state
 
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.input.imeCommitText
@@ -180,6 +182,71 @@ class LinkComposingTest {
 
 		assertEquals("see link here", state.getAllText().text)
 		assertEquals(listOf("link" to url), state.links())
+	}
+
+	@Test
+	fun `redo of a composition that moved a link's end keeps the link`() {
+		val state = linked()
+		state.cursor.updatePosition(CharLineOffset(0, 8))
+
+		state.imeSetComposingRegion(4, 8)
+		state.imeSetComposingText("lin", 1)
+		state.imeSetComposingText("linx", 1)
+		state.imeCommitText("linx", 1)
+		assertEquals(listOf("lin" to url), state.links())
+
+		state.undo()
+		assertEquals("see link here", state.getAllText().text)
+		assertEquals(listOf("link" to url), state.links())
+		assertEquals("link", state.linkLooking())
+
+		state.redo()
+		assertEquals("see linx here", state.getAllText().text)
+		assertEquals(listOf("lin" to url), state.links())
+		assertEquals("lin", state.linkLooking())
+	}
+
+	@Test
+	fun `redo of a composition that retyped a link's last letter past its end keeps the link`() {
+		val state = linked()
+		state.cursor.updatePosition(CharLineOffset(0, 8))
+
+		state.imeSetComposingRegion(4, 8)
+		state.imeSetComposingText("lin", 1)
+		state.imeCommitText("links", 1)
+		assertEquals(listOf("lin" to url), state.links())
+
+		state.undo()
+		assertEquals(listOf("link" to url), state.links())
+
+		state.redo()
+		assertEquals("see links here", state.getAllText().text)
+		assertEquals(listOf("lin" to url), state.links())
+		assertEquals("lin", state.linkLooking())
+	}
+
+	@Test
+	fun `a replace whose plain change is a link's first letter keeps the linked letters after it`() {
+		val state = linked()
+		val new = buildAnnotatedString {
+			append(" x")
+			withStyle(state.richTextStyles.linkStyle) { append("i") }
+		}
+
+		state.replace(TextEditorRange(CharLineOffset(0, 3), CharLineOffset(0, 6)), new)
+
+		assertEquals("see xink here", state.getAllText().text)
+		assertEquals(listOf("ink" to url), state.links())
+		assertEquals("ink", state.linkLooking())
+	}
+
+	@Test
+	fun `plain text over a link's word with its own letters is no link`() {
+		val state = linked()
+
+		state.replace(TextEditorRange(CharLineOffset(0, 4), CharLineOffset(0, 8)), "linx")
+
+		assertEquals(emptyList(), state.links())
 	}
 
 	@Test

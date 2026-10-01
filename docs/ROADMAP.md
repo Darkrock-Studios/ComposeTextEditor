@@ -2262,7 +2262,7 @@ iOS Safari; browser tests run in CI (met: the `browser` job, 4.15).
   markup link that a link to the same place already covers, the buffer's
   (compared through `sanitizeLinkUrl`, as the copy wrote it) or the one the
   paste landed in, is not added again (`clipboard/PastedLinkInLinkTest.kt`).
-- [ ] **5.16 Redo of a composition over a link's end loses the link. S.**
+- [x] **5.16 Redo of a composition over a link's end loses the link. S.**
   [Opus] [Lane G] Composing over the linked "link" of "see link here" as "lin"
   and then "linx" lands "lin" linked and the "x" out of it, one key at a time
   (5.13). The history merges the run into one replace of "link" by "linx",
@@ -2270,6 +2270,14 @@ iOS Safari; browser tests run in CI (met: the `browser` job, 4.15).
   without the link's look, so on redo `linkAfterReplace` hands it to the
   general handling, which drops the link the replace covers. Undo and redo
   leave no link. Found in 5.14's review.
+  Done: a change at a link's first or last characters, not both, whose new
+  text does not look linked takes them out of the link, as one typed there
+  does, and when the replace's text looks linked anywhere, a character the
+  link holds counts as left as it was only when its new one looks linked
+  (`sharedEnds` takes a comparison). So the merged "link" to "linx", and
+  "lin" then "links" (whose shared "k" lost the look), redo to "lin" linked,
+  and a replace of " li" by a plain " x" and a linked "i" leaves "ink"
+  (`state/LinkComposingTest.kt`). Plain text over a whole link still drops it.
 - [ ] **5.17 A replace across the edge of a link spanning lines leaves its
   look outside it. S.** [Opus] [Lane G] `linkAfterReplace` places only a link
   on one line; a link across lines gets the general handling, which cuts it at
