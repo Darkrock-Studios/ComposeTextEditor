@@ -15,6 +15,8 @@ import com.darkrockstudios.texteditor.lastRowAtOrAbove
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlin.math.ceil
+import kotlin.math.floor
 
 class TextEditorScrollManager(
 	private val scope: CoroutineScope,
@@ -28,6 +30,10 @@ class TextEditorScrollManager(
 	private val ensureLineShaped: (line: Int) -> Unit = {},
 	/** The sideways scroll, whose range is empty while lines wrap (7.41). */
 	val horizontalScrollState: TextEditorScrollState = TextEditorScrollState(0),
+	/** The content x of a caret drawn at a position on the row an affinity picks, or null with no row for it. */
+	private val getCaretX: (CharLineOffset, CaretAffinity) -> Float? = { _, _ -> null },
+	/** How much room a caret takes past its x, which a sideways scroll keeps in view with it. */
+	private val getCaretRoom: () -> Float = { 0f },
 ) {
 	private var scrollJob: Job? = null
 
@@ -84,12 +90,25 @@ class TextEditorScrollManager(
 	private var obscuredBottom by mutableIntStateOf(0)
 
 	/**
+	 * How much of the viewport's bottom the sideways scrollbar covers, in pixels, which
+	 * like [obscuredBottomPx] the caret is kept above and the scroll range grows by.
+	 */
+	internal var scrollbarBottomPx: Int = 0
+		set(value) {
+			val covered = value.coerceAtLeast(0)
+			if (field != covered) {
+				field = covered
+				applyScrollRange()
+			}
+		}
+
+	/**
 	 * The height a caret row of [rowHeight] is kept inside: the viewport above
-	 * [obscuredBottomPx], or the whole viewport when that leaves no room for the row, and
-	 * only the platform moving the editor can show it.
+	 * [obscuredBottomPx] and the sideways scrollbar, or the whole viewport when that leaves
+	 * no room for the row, and only the platform moving the editor can show it.
 	 */
 	private fun caretViewportHeight(rowHeight: Int): Int {
-		val uncovered = viewportHeight - obscuredBottomPx
+		val uncovered = viewportHeight - obscuredBottomPx - scrollbarBottomPx
 		return if (uncovered >= rowHeight) uncovered else viewportHeight
 	}
 
@@ -101,7 +120,7 @@ class TextEditorScrollManager(
 	private val maxScroll: Int
 		get() = maxOf(
 			-topContentPaddingPx,
-			contentHeight + bottomContentPaddingPx + obscuredBottomPx - viewportHeight,
+			contentHeight + bottomContentPaddingPx + obscuredBottomPx + scrollbarBottomPx - viewportHeight,
 		)
 
 	private fun applyScrollRange() {
@@ -161,6 +180,10 @@ class TextEditorScrollManager(
 		}
 	}
 
+	/** Scrolls to [y] at once, and sideways as far as shows the caret: a page move's scroll. */
+	internal fun scrollToKeepingCaret(y: Int) =
+		scrollTo(y.coerceIn(scrollState.minValue, maxScroll), scrollXShowing(getCursorPosition(), getCursorAffinity()), animated = false)
+
 	/** Scrolls to [position]; without [animated], at once, before this returns. */
 	fun scrollToPosition(position: Int, animated: Boolean = true) {
 		stopScrolling()
@@ -213,11 +236,44 @@ class TextEditorScrollManager(
 		}
 
 		val targetScroll = scrollShowing(offset, affinity)
+		val targetX = scrollXShowing(offset, affinity)
 		when {
-			targetScroll != scrollState.value -> scrollToPosition(targetScroll, animated = animated)
+			targetScroll != scrollState.value || targetX != horizontalScrollState.value ->
+				scrollTo(targetScroll, targetX, animated)
 			// In view now: an immediate request keeps it there rather than let a scroll carry it off.
 			!animated -> stopScrolling()
 		}
+	}
+
+	/** Scrolls both ways at once, in one job when [animated], so stopping it stops both. */
+	private fun scrollTo(y: Int, x: Int, animated: Boolean) {
+		stopScrolling()
+		if (!animated) {
+			scrollState.scrollTo(y)
+			horizontalScrollState.scrollTo(x)
+			return
+		}
+		scrollJob = scope.launch {
+			if (x != horizontalScrollState.value) launch { horizontalScrollState.animateScrollTo(x) }
+			if (y != scrollState.value) scrollState.animateScrollTo(y)
+		}
+	}
+
+	/**
+	 * The sideways scroll that shows the caret at [offset] and the room it takes, moving
+	 * just far enough, as `BasicTextField` does; the current one with no sideways range.
+	 */
+	private fun scrollXShowing(offset: CharLineOffset, affinity: CaretAffinity): Int {
+		val sideways = horizontalScrollState
+		if (sideways.maxValue == 0) return sideways.value
+		val x = getCaretX(offset, affinity) ?: return sideways.value
+		val left = sideways.value
+		val right = x + getCaretRoom()
+		return when {
+			x < left -> floor(x).toInt()
+			right > left + viewportWidth -> ceil(right - viewportWidth).toInt()
+			else -> left
+		}.coerceIn(0, sideways.maxValue)
 	}
 
 	/** The scroll that shows [offset]'s whole row, moving just far enough, as native editors scroll. */
@@ -274,9 +330,11 @@ class TextEditorScrollManager(
 		ensureLineShaped(getCursorPosition().line)
 		if (isOffsetVisible(getCursorPosition(), getCursorAffinity())) return
 		scrollState.scrollTo(scrollShowing(getCursorPosition(), getCursorAffinity()))
+		horizontalScrollState.scrollTo(scrollXShowing(getCursorPosition(), getCursorAffinity()))
 	}
 
 	private fun isOffsetVisible(offset: CharLineOffset, affinity: CaretAffinity): Boolean {
+		if (scrollXShowing(offset, affinity) != horizontalScrollState.value) return false
 		val cursorTop = calculateOffsetYPosition(offset, affinity).toInt()
 		val cursorHeight = calculateLineHeight(offset, affinity)
 		val cursorBottom = cursorTop + cursorHeight

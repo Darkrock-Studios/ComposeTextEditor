@@ -3556,7 +3556,14 @@ iOS Safari; browser tests run in CI (met: the `browser` job, 4.15).
     and the handwriting gesture layout (commonMain `input/HandwritingGestureLayout.kt`,
     beside 3.22's previews) add the scroll. The draw recorder follows
     translations (`softwrap/SoftWrapGeometryTest`).
-  - Caret visibility, scrolling input, the scrollbar: not started.
+  - Caret visibility, scrolling input, the scrollbar: done. The caret's x is kept
+    in view with its row, moving just far enough, in the one scroll job, and
+    `scrollToPosition(offset)` (find) reveals x too; a horizontal `scrollable`
+    on the editor (wheel, trackpad, touch); a selection drag past a side edge
+    auto-scrolls sideways; desktop and web lay Compose's `HorizontalScrollbar`
+    over the bottom of the text while there is a sideways range, through a new
+    internal `expect` (`EditorHorizontalScrollbar`; none on Android and iOS)
+    (`softwrap/SoftWrapScrollingTest`).
   - Input method rectangles, handles, toolbar, magnifier, semantics: not started.
   - `SingleLine` scrolls sideways: not started.
   - The sample app's switch: not started.

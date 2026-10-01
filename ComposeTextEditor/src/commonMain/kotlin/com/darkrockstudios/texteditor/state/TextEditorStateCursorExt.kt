@@ -7,7 +7,6 @@ import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.LineWrap
 import com.darkrockstudios.texteditor.effectiveHeight
 import com.darkrockstudios.texteditor.lastRowAtOrAbove
-import com.darkrockstudios.texteditor.cursor.getWrapForDrawing
 import com.darkrockstudios.texteditor.rowAt
 
 // The layout can lag the text (it is skipped while the viewport is collapsed), so the
@@ -50,7 +49,7 @@ private inline fun TextEditorState.keepingVerticalGoal(edgeMove: () -> Unit) {
 
 /** The x the vertical run under way aims for, or the caret's own x when one starts; content x, which no scroll moves. */
 private fun TextEditorState.verticalGoalOrCaretX(): Float =
-	cursor.verticalGoalX ?: lineOffsets.getWrapForDrawing(cursorPosition, cursor.affinity)?.caretX(cursorPosition.char, cursor.runSide) ?: 0f
+	cursor.verticalGoalX ?: caretContentX(cursorPosition, cursor.affinity) ?: 0f
 
 /**
  * Moves the caret onto the visual row at [rowIndex] in [lineOffsets], at the x the
@@ -288,5 +287,5 @@ private fun TextEditorState.moveCursorByPage(direction: Int) {
 		scrollManager.totalContentHeight - pageHeight + scrollManager.bottomContentPaddingPx,
 	)
 	val target = keepsScreenPlace.coerceIn(showsRowFrom, newTop).coerceIn(scrollState.minValue, maxScroll)
-	scrollManager.scrollToPosition(target, animated = false)
+	scrollManager.scrollToKeepingCaret(target)
 }

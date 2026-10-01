@@ -102,10 +102,16 @@ right-to-left layout, and bare `scrollable` (unlike `horizontalScroll`) does not
 flip for one, so the direction is not reversed.
 
 On desktop and the web Compose's `HorizontalScrollbar` lies over the bottom
-edge of the text while the content is wider than the viewport; a single line
-has none, as `BasicTextField` has none. Android and iOS show no sideways
-indicator. A selection drag past the left or right edge auto-scrolls sideways at
-the vertical one's speed, with the dragged point held inside the viewport.
+edge of the text while the content is wider than the viewport, unmirrored in a
+right-to-left layout; a single line has none, as `BasicTextField` has none. It
+sits beside the editor's box rather than in it, so a press on it neither focuses
+the editor nor places the caret, and like a soft keyboard's strip
+(`obscuredBottomPx`) the height it covers is kept clear of the caret and added
+to the vertical range. Android and iOS show no sideways indicator. A selection
+drag past the left or right edge auto-scrolls sideways at the vertical one's
+speed, while there is room that way, with the dragged point held inside the
+viewport short of the caret's room. A page move scrolls sideways to the caret
+with its vertical jump.
 
 ## Platforms
 
