@@ -8,7 +8,8 @@ import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.annotatedstring.normalizeLineEndings
 import com.darkrockstudios.texteditor.clipboard.ClipboardHelper
 import com.darkrockstudios.texteditor.clipboard.applyHtmlPasteBlocks
-import com.darkrockstudios.texteditor.clipboard.readHtmlPasteDocument
+import com.darkrockstudios.texteditor.clipboard.htmlPasteDocument
+import com.darkrockstudios.texteditor.clipboard.readClipboardPaste
 import com.darkrockstudios.texteditor.clipboard.withSizeForPasteAt
 import com.darkrockstudios.texteditor.html.HtmlDocument
 import com.darkrockstudios.texteditor.html.selectionAsHtml
@@ -192,18 +193,17 @@ private fun EditorActionContext.writeSelection(selection: TextEditorRange): susp
  */
 private fun EditorActionContext.pasteClipboard(plainText: Boolean) {
 	scope.launch {
-		val clipboardText = if (plainText) {
-			ClipboardHelper.getPlainText(clipboard)?.let(::AnnotatedString)
-		} else {
-			ClipboardHelper.getText(clipboard, state.richTextStyles, state.allowedLinkSchemes)
-		}?.normalizeLineEndings() ?: return@launch
-		// Every clipboard read comes before the selection is read: a read can suspend
-		// for a while (the web's permission prompt), and the user can move the caret or
-		// edit meanwhile. Reading the HTML before mutating also lands the text, the
-		// in-editor rich spans and the pasted block structure as one revision.
-		val htmlDocument = if (plainText) null else state.readHtmlPasteDocument(clipboard, clipboardText)
-		val clipboardCopyId = if (plainText) null else ClipboardHelper.readCopyId(clipboard)
-		state.landPaste(clipboardText, htmlDocument, clipboardCopyId, plainText)
+		// The clipboard is read before the selection is: a read can suspend for a while
+		// (the web's permission prompt), and the user can move the caret or edit
+		// meanwhile. Reading the HTML before mutating also lands the text, the in-editor
+		// rich spans and the pasted block structure as one revision.
+		if (plainText) {
+			ClipboardHelper.getPlainText(clipboard)?.let { state.pastePlainText(it) }
+			return@launch
+		}
+		val paste = readClipboardPaste(clipboard, state.richTextStyles, state.allowedLinkSchemes) ?: return@launch
+		val clipboardText = paste.text.normalizeLineEndings()
+		state.landPaste(clipboardText, state.htmlPasteDocument(paste.html, clipboardText), paste.copyId, plainText = false)
 	}
 }
 

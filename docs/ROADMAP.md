@@ -2687,7 +2687,7 @@ iOS Safari; browser tests run in CI (met: the `browser` job, 4.15).
   Found investigating 4.17. Done: the desktop clipboard reads
   (`ClipboardHelper` and the HTML read) take a clipboard that cannot be read as
   empty and say so on stderr (`ClipboardReadFailureTest`).
-- [ ] **6.37 Desktop paste reads the clipboard three times. S.** [Opus] [Lane H]
+- [x] **6.37 Desktop paste reads the clipboard three times. S.** [Opus] [Lane H]
   `pasteClipboard` (`input/BuiltinEditorActions.kt`) reads the text, then the
   HTML (`readClipboardHtml`), then the copy id, each through its own
   `getClipEntry`, on the UI thread. AWT's `getContents` fetches every format
@@ -2697,6 +2697,11 @@ iOS Safari; browser tests run in CI (met: the `browser` job, 4.15).
   text without its blocks. Read the content once per paste, off the UI thread
   as the primary selection's read is (4.23), and hand it to the three readers,
   as Android's `pasteClip` does. Found reviewing 6.36.
+  Done: a paste reads through `readClipboardPaste` (`clipboard/ClipboardHtml.kt`),
+  which answers the text, markup and copy id together. On desktop that is one
+  AWT read, of the system clipboard off the UI thread; Android, iOS and the web
+  keep handing what their `getText` read to the other two readers
+  (`PasteReadsClipboardOnceTest`). Found: 6.39.
 - [ ] **6.38 Part of a heading pasted into another line keeps the heading's
   look. R.** [Opus] [Lane H] Copying "itl" out of an h2 "Title" and pasting it
   into a plain line "hello" leaves "itl" baked with the h2 look (24 sp), though
@@ -2709,6 +2714,18 @@ iOS Safari; browser tests run in CI (met: the `browser` job, 4.15).
   leaves the pasted one's). HTML export already leaves a foreign heading look
   out of a heading line (6.31). A drop of the same text likely lands the same
   way (not probed). Found in 6.35.
+- [ ] **6.39 A paste's clipboard read still passes through global stashes off
+  desktop. S.** [Opus] [Lane H] `readClipboardPaste` (6.37) answers a paste's text,
+  markup and copy id together, but Android, iOS and the web build it from
+  `ClipboardHelper.getText`, which leaves what it read in a field on the helper
+  (`pasteClip`, `lastReadHtml`, `lastReadCopyId`) for `readClipboardHtml` and
+  `readCopyId` to take. A clip with no text leaves Android's `pasteClip` set
+  until the next paste, and a later call of either reader answers from it. Each
+  actual could build `ClipboardPaste` from its one read (iOS's `readStyled`
+  already returns that shape) and drop the stashes. The paste also parses
+  foreign markup twice, once for the text and again for its blocks
+  (`htmlPasteDocument`); `ClipboardPaste` could carry the parsed document. Found
+  in 6.37's review.
 
 ## Phase 7: reach
 
@@ -4053,3 +4070,4 @@ records results and removes entries that passed.
 | 2.7 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64`. `input/LayoutKey.kt` adds the public `expect val KeyEvent.layoutKey`; the iOS actual (`iosMain/.../input/LayoutKey.ios.kt`) answers `key`. Then in the macOS desktop sample app, with the US layout and again with "Dvorak" and "Dvorak - QWERTY ⌘" input sources: Cmd+Z, Cmd+X, Cmd+B, Ctrl+A and Ctrl+F | Compiles. Record which keys the chords land on under each source, against TextEdit. The desktop `layoutKey` answers `key` on macOS (`hostKeyCodeMayMissLayout`); if Dvorak's chords sit on the QWERTY keys where TextEdit's follow the Dvorak letters, turn it on for macOS and check "Dvorak - QWERTY ⌘" still matches TextEdit ||
 | 4.38 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64`. `skikoMain` gains `input/DomLayoutKey.kt` (`layoutKeyFromCodePoint`, used by the web only; `UNICODE_KEY_CODE_BASE` moved there from desktop). Then the wasm demo in Safari and Chrome on macOS, with the US layout and again with French (AZERTY): Cmd+Z, Cmd+Shift+Z, Cmd+B, Ctrl+A and Ctrl+F (the Emacs chords), and Cmd+Option+Shift+V over copied bold text | Compiles. Under AZERTY, Cmd+Z undoes on the key that types z (QWERTY's W), not on QWERTY's Z; Cmd+B bolds; the Emacs chords move as in TextEdit; Cmd+Option+Shift+V pastes plain. Under US, all as before ||
 | 7.33 | In the iOS sample app with a hardware keyboard (the simulator's, or an iPad's), type `abc אבג def` and press Right from the start, then Left from the end; also Shift+Right. Compare a `UITextView` (Notes) with the same text. Then the same in the macOS desktop sample app against TextEdit. commonMain only, no `iosMain` change | Each press moves the caret one glyph further right (or left) on screen, through the Hebrew word, as Notes and TextEdit do. If iOS turns out logical, set `ARROW_KEYS_MOVE_VISUALLY` per platform in `state/VisualCaretMotion.kt`; if the arrows never reach the key handler on iOS (UIKit moving the caret through the input connection instead), file that ||
+| 6.37 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64`. `clipboard/ClipboardHtml.kt` adds `internal expect suspend fun readClipboardPaste`; the iOS actual (`iosMain/.../clipboard/ClipboardHtml.ios.kt`) goes through `ClipboardHelper.getText`, `readClipboardHtml` and `readCopyId` as the paste did. Then in the iOS sample app: copy a bulleted list in the editor and paste it, and paste a bulleted list copied from Notes | Compiles. Both paste as bulleted lists, with one paste prompt at most ||

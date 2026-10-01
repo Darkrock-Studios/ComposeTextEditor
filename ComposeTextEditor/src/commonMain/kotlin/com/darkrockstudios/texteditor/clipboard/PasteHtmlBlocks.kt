@@ -1,6 +1,5 @@
 package com.darkrockstudios.texteditor.clipboard
 
-import androidx.compose.ui.platform.Clipboard
 import androidx.compose.ui.text.AnnotatedString
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.html.HtmlDocument
@@ -13,24 +12,23 @@ import com.darkrockstudios.texteditor.state.LayoutUpdate
 import com.darkrockstudios.texteditor.state.TextEditorState
 
 /**
- * Reads and parses the clipboard's HTML flavor, or null when it holds nothing usable.
+ * Parses a paste's [html], or null when it holds nothing usable.
  *
- * Separate from [applyHtmlPasteBlocks] so the clipboard read, which suspends, happens
- * before the paste mutates anything. Awaiting between the insert and the block
- * structure would publish the pasted text as unadorned lines for as long as the read
- * takes, and an export sampling the document in that window would serialize it that
- * way.
+ * Done before the paste mutates anything, as the clipboard read is. Awaiting between
+ * the insert and the block structure would publish the pasted text as unadorned lines
+ * for as long as the read takes, and an export sampling the document in that window
+ * would serialize it that way.
  *
  * Null when the re-parse does not reproduce [pastedText], the clipboard's text as read:
- * the paste then came from somewhere else, a plain-text flavor or a clipboard that
- * changed underneath us, and the line numbers describe a document that was never
- * pasted. Text the input filter changes takes no blocks either; the caller checks that.
+ * the text then came from another flavor (plain text, or an in-process copy that
+ * differs), and the line numbers describe a document that was never pasted. Text the
+ * input filter changes takes no blocks either; the caller checks that.
  */
-internal suspend fun TextEditorState.readHtmlPasteDocument(
-	clipboard: Clipboard,
+internal fun TextEditorState.htmlPasteDocument(
+	html: String?,
 	pastedText: AnnotatedString,
 ): HtmlDocument? {
-	val html = readClipboardHtml(clipboard) ?: return null
+	html ?: return null
 	val document = parseHtmlDocument(html, richTextStyles, allowedLinkSchemes = allowedLinkSchemes)
 	if (document.hasNoDecorations()) return null
 	if (document.text.text != pastedText.text) return null

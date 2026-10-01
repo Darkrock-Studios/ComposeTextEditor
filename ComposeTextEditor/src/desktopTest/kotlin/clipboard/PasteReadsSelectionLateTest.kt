@@ -24,12 +24,11 @@ import utils.ForeignHtmlTransferable
 @OptIn(ExperimentalComposeUiApi::class)
 class PasteReadsSelectionLateTest {
 
-	/** Answers the first read at once and holds every later one until [gate] completes. */
+	/** Holds every read until [gate] completes. */
 	private class SlowClipboard(private val entry: ClipEntry) : Clipboard {
 		val gate = CompletableDeferred<Unit>()
-		private var reads = 0
 		override suspend fun getClipEntry(): ClipEntry? {
-			if (reads++ > 0) gate.await()
+			gate.await()
 			return entry
 		}
 		override suspend fun setClipEntry(clipEntry: ClipEntry?) = Unit
