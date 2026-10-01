@@ -45,6 +45,7 @@ class AndroidRichClipboardTest {
 	private fun item(text: String?, html: String?): ClipData.Item = mockk {
 		every { this@mockk.text } returns text
 		every { htmlText } returns html
+		every { uri } returns null
 	}
 
 	private fun clipboardHolding(vararg items: ClipData.Item, copyId: Long? = null): Clipboard {

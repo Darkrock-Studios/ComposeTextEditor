@@ -167,6 +167,7 @@ class AndroidTextDragTest {
 		// Markup that re-parses to other text (collapsing the double space) is not taken.
 		val drop = event(clip(item("a  b", "a  <b>b</b>")), localState = 5L)
 		assertEquals(AnnotatedString("a  b"), drop.droppedText(styles, schemes, ownDrag = true, target = null)!!.text)
+		assertNull(drop.droppedText(styles, schemes, ownDrag = true, target = null)!!.html)
 		// Another editor has no rich spans of its own to put back, so it takes the markup.
 		assertEquals("a b", drop.droppedText(styles, schemes, ownDrag = false, target = null)!!.text.text)
 	}
@@ -228,6 +229,7 @@ class AndroidTextDragTest {
 
 		assertEquals("one", dropped.text.text)
 		assertEquals("<ul><li>one</li></ul>", dropped.html)
+		assertEquals(dropped.text, dropped.document?.text)
 	}
 
 	@Test

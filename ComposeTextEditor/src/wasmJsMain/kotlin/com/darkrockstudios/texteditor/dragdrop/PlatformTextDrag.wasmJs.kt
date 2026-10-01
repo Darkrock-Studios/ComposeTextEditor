@@ -11,7 +11,7 @@ import androidx.compose.ui.node.DelegatableNode
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.Density
 import com.darkrockstudios.texteditor.RichTextStyles
-import com.darkrockstudios.texteditor.html.toAnnotatedStringFromHtml
+import com.darkrockstudios.texteditor.clipboard.parsePasteHtml
 import com.darkrockstudios.texteditor.input.MacKeyBindings
 import com.darkrockstudios.texteditor.input.platformKeyBindings
 import org.w3c.dom.DataTransfer
@@ -136,12 +136,11 @@ internal actual fun DragAndDropEvent.droppedText(
 	val transfer = dataTransfer ?: return null
 	val plain = getTransferData(transfer, "text/plain")?.takeIf { it.isNotEmpty() }
 	val html = getTransferData(transfer, "text/html")?.takeIf { it.isNotEmpty() }
-	val styled = html
-		?.toAnnotatedStringFromHtml(styles, allowedLinkSchemes)
-		?.takeIf { it.text.isNotEmpty() && (!ownDrag || it.text == plain) }
-		?: plain?.let(::AnnotatedString)
-		?: return null
-	return DroppedText(styled, html)
+	val document = html
+		?.let { parsePasteHtml(it, styles, allowedLinkSchemes) }
+		?.takeIf { !ownDrag || it.text.text == plain }
+	val text = document?.text ?: plain?.let(::AnnotatedString) ?: return null
+	return DroppedText(text, html.takeIf { document != null }, document)
 }
 
 /** Compose's own reckoning: the CSS pixels from the canvas's corner, scaled by the density. */

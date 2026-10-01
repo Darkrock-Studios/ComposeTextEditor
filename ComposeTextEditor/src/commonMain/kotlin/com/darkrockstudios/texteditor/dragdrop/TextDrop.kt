@@ -5,9 +5,9 @@ import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.annotatedstring.normalizeLineEndings
 import com.darkrockstudios.texteditor.clipboard.applyHtmlPasteBlocks
+import com.darkrockstudios.texteditor.clipboard.htmlPasteDocument
 import com.darkrockstudios.texteditor.clipboard.withSizeForPasteAt
 import com.darkrockstudios.texteditor.html.HtmlDocument
-import com.darkrockstudios.texteditor.html.parseHtmlDocument
 import com.darkrockstudios.texteditor.state.PreservedRichSpan
 import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.endWhenInsertedAt
@@ -18,8 +18,8 @@ import com.darkrockstudios.texteditor.state.screenInput
 /**
  * Drops [text] at [at] and selects it, as one undo step. [moveFrom] is where the text
  * was dragged from in this editor: it is taken from there too. [html], the markup the
- * drag carried, restores the blocks of whole dropped lines as a paste does, and
- * [richSpans], those of this editor's own text, the rest.
+ * drag carried ([parsed] where it is already parsed), restores the blocks of whole
+ * dropped lines as a paste does, and [richSpans], those of this editor's own text, the rest.
  *
  * The input filter screens the text; with [whole], as for a move, which deletes the
  * source whatever lands, text it would change is refused rather than dropped in part.
@@ -38,6 +38,7 @@ internal fun TextEditorState.dropText(
 	moveFrom: TextEditorRange?,
 	whole: Boolean = false,
 	richSpans: List<PreservedRichSpan>? = null,
+	parsed: HtmlDocument? = null,
 ): TextEditorRange? {
 	if (moveFrom != null && at > moveFrom.start && at < moveFrom.end) return null
 	val sized = withSizeForPasteAt(at, text.normalizeLineEndings())
@@ -45,10 +46,7 @@ internal fun TextEditorState.dropText(
 	// filter changed drops plain, as a paste does, since the blocks follow its lines.
 	val normalized = screenInput(moveFrom ?: TextEditorRange(at, at), sized) ?: return null
 	if (normalized.isEmpty() || (whole && normalized != sized)) return null
-	val document = html
-		?.takeIf { normalized == sized }
-		?.let { parseHtmlDocument(it, richTextStyles, allowedLinkSchemes = allowedLinkSchemes) }
-		?.takeIf { !it.hasNoDecorations() && it.text.text == normalized.text }
+	val document = htmlPasteDocument(html?.takeIf { normalized == sized }, normalized, parsed)
 	val spans = richSpans?.takeIf { normalized == sized }
 	// A composition's range would address the text as it stood before the drop.
 	if (composingRange != null) {

@@ -30,35 +30,13 @@ actual object ClipboardHelper {
 		allowedLinkSchemes: Set<String>,
 	): AnnotatedString? = clipboard.getClipEntry()?.clipData?.let { readPaste(it, styles, allowedLinkSchemes) }?.text
 
-	/**
-	 * [clip] as a paste reads it: each item's markup, or its text where it has none, one
-	 * item per line, the first item's markup, and the copy id.
-	 */
+	/** [clip] as a paste reads it ([readStyledItems]), with the copy id. */
 	internal fun readPaste(clip: ClipData, styles: RichTextStyles, allowedLinkSchemes: Set<String>): ClipboardPaste? {
-		val items = clip.items()
-		// This editor's own copy must paste the characters it copied, which the in-editor
-		// span buffer matches against; markup that re-parses to other text loses its
-		// styling rather than change them.
 		val copyId = clip.copyId()
-		var document: HtmlDocument? = null
-		val styled = items.mapNotNull { item ->
-			val text = item.text?.toString()
-			item.htmlText
-				?.let { parsePasteHtml(it, styles, allowedLinkSchemes) }
-				?.takeIf { copyId == null || it.text.text == text }
-				?.also { if (items.size == 1) document = it }
-				?.text
-				?: text?.let(::AnnotatedString)
-		}
-		if (styled.isEmpty()) return null
-		val joined = styled.singleOrNull() ?: buildAnnotatedString {
-			styled.forEachIndexed { index, text ->
-				if (index > 0) append('\n')
-				append(text)
-			}
-		}
-		// Markup the text did not come from describes other text, so its blocks cannot apply.
-		return ClipboardPaste(joined, document?.let { items.first().htmlText }, copyId, document)
+		// This editor's own copy must paste the characters it copied, which the in-editor
+		// span buffer matches against.
+		val read = clip.readStyledItems(styles, allowedLinkSchemes, ours = copyId != null) ?: return null
+		return ClipboardPaste(read.text, read.html, copyId, read.document)
 	}
 
 	actual suspend fun getPlainText(clipboard: Clipboard): String? {
@@ -106,5 +84,48 @@ actual object ClipboardHelper {
 		return if (extras.containsKey(COPY_ID_EXTRA)) extras.getLong(COPY_ID_EXTRA, 0L) else null
 	}
 
-	private fun ClipData.items(): List<ClipData.Item> = (0 until itemCount).map(::getItemAt)
 }
+
+internal fun ClipData.items(): List<ClipData.Item> = (0 until itemCount).map(::getItemAt)
+
+/** What a clip's items read as: the text, and the markup it came from, parsed. */
+internal class StyledItems(val text: AnnotatedString, val html: String?, val document: HtmlDocument?)
+
+/**
+ * The items of a clip pasted or dropped: each item's markup, or its text where it has none,
+ * or what [readUri] reads of an item that has only a URI (a dropped file), one item per
+ * line, as `TextView` takes them. [ours], this editor's own copy or drag, takes an item's
+ * markup only where it re-parses to the item's text, since its rich spans are matched
+ * against that. The markup comes along only where the text came from it: other markup
+ * describes other text, so its blocks cannot apply.
+ */
+internal fun ClipData.readStyledItems(
+	styles: RichTextStyles,
+	allowedLinkSchemes: Set<String>,
+	ours: Boolean,
+	readUri: (ClipData.Item) -> ItemContent? = { null },
+): StyledItems? {
+	val read = items().mapNotNull { item ->
+		val text = item.text?.toString()
+		val markup = item.htmlText?.takeIf { it.isNotEmpty() }
+		val fromUri = if (text == null && markup == null && item.uri != null) readUri(item) else null
+		val html = markup ?: fromUri?.html
+		val document = html
+			?.let { parsePasteHtml(it, styles, allowedLinkSchemes) }
+			?.takeIf { !ours || text == null || it.text.text == text }
+		val styled = document?.text ?: (text ?: fromUri?.text)?.let(::AnnotatedString) ?: return@mapNotNull null
+		StyledItems(styled, html.takeIf { document != null }, document)
+	}
+	read.singleOrNull()?.let { return it }
+	if (read.isEmpty()) return null
+	val joined = buildAnnotatedString {
+		read.forEachIndexed { index, item ->
+			if (index > 0) append('\n')
+			append(item.text)
+		}
+	}
+	return StyledItems(joined, html = null, document = null)
+}
+
+/** What an item that is neither text nor markup holds: markup, or else text. */
+internal class ItemContent(val text: String?, val html: String?)

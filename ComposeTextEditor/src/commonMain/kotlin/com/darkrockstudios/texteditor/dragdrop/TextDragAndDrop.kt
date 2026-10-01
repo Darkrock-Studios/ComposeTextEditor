@@ -211,7 +211,7 @@ internal class TextDragAndDrop(
 			?.let { state.preservedRichSpans(it.range) }
 			?.filter { !it.style.stickyAtStart && it.style !is BlockSpanStyle }
 		// Refused, the drop is not taken, so a move leaves its source where it was.
-		return state.dropText(content.text, content.html, at, moveFrom, whole = !copy, richSpans) != null
+		return state.dropText(content.text, content.html, at, moveFrom, whole = !copy, richSpans, content.document) != null
 	}
 
 	private fun hitAt(positionInRoot: Offset): PointerHit? {

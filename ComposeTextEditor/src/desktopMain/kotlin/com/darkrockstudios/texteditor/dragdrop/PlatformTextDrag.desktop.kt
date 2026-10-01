@@ -63,7 +63,7 @@ internal actual fun DragAndDropEvent.droppedText(
 ): DroppedText? {
 	val transferable = runCatching { awtTransferable }.getOrNull() ?: return null
 	val paste = transferable.readPaste(styles, allowedLinkSchemes) ?: return null
-	return DroppedText(paste.text, paste.html)
+	return DroppedText(paste.text, paste.html, paste.document)
 }
 
 /** AWT reports the location in the root's points, which Compose scales by the density. */

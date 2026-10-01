@@ -4437,10 +4437,14 @@ Shaping is one line per keystroke. These still scale with document length:
   (Compose's `previousDragEventIsStart`), and the window listener standing in
   for the drop's `DataTransfer`, position and modifiers and for `onExited` and
   `onEnded`. Drop each once Compose covers it.
-- [ ] Android reads a clip's items into styled text twice: `ClipboardHelper.getText`
+- [x] Android reads a clip's items into styled text twice: `ClipboardHelper.getText`
   and the drop's `droppedText` (`dragdrop/PlatformTextDrag.android.kt`), each
   preferring an item's markup unless it is this app's own and re-parses to
   other characters. Share one helper. Found in 6.20.
+  Now both read through `readStyledItems` (`clipboard/ClipboardHelper.android.kt`),
+  the drop adding the files of URI-only items (6.44). A drop carries its markup as
+  parsed (`DroppedText.document`) on Android, desktop and the web, which `dropText`
+  takes through `htmlPasteDocument` as a paste does instead of parsing it again.
 - [x] The README's "Work left to do" is stale: desktop copy and paste now
   preserves formatting. Now it lists right-to-left drawing and arrows (7.6,
   7.7, 7.33) beside CommonMark; the rich clipboard (6.7, 4.9) and sentence

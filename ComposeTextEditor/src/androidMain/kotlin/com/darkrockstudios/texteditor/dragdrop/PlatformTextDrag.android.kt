@@ -16,10 +16,10 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.node.DelegatableNode
 import androidx.compose.ui.node.requireView
 import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.unit.Density
 import com.darkrockstudios.texteditor.RichTextStyles
-import com.darkrockstudios.texteditor.html.toAnnotatedStringFromHtml
+import com.darkrockstudios.texteditor.clipboard.ItemContent
+import com.darkrockstudios.texteditor.clipboard.readStyledItems
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import java.nio.charset.Charset
@@ -74,48 +74,20 @@ internal fun DragEvent.droppedText(
 	val grant = lazy { activity()?.let { it to it.requestDragAndDropPermissions(this) } }
 	var budget = MAX_DROPPED_FILE_BYTES
 	try {
-		return clip.droppedText(styles, allowedLinkSchemes, ownDrag) { item ->
-			val (context, permissions) = grant.value ?: return@droppedText null
+		val read = clip.readStyledItems(styles, allowedLinkSchemes, ours = ownDrag) { item ->
+			val (context, permissions) = grant.value ?: return@readStyledItems null
 			// Only what the drag grants is read, never through this app's own access.
-			if (permissions == null) return@droppedText null
-			item.uriContent(context, clipDescription, budget)?.also { budget -= it.bytes }
-		}
+			if (permissions == null) return@readStyledItems null
+			item.uriContent(context, clipDescription, budget)?.also { budget -= it.bytes }?.content
+		} ?: return null
+		return DroppedText(read.text, read.html, read.document)
 	} finally {
 		if (grant.isInitialized()) grant.value?.second?.release()
 	}
 }
 
-private fun ClipData.droppedText(
-	styles: RichTextStyles,
-	allowedLinkSchemes: Set<String>,
-	ownDrag: Boolean,
-	readUri: (ClipData.Item) -> UriContent?,
-): DroppedText? {
-	val items = (0 until itemCount).map(::getItemAt)
-	var firstHtml: String? = null
-	val styled = items.mapIndexedNotNull { index, item ->
-		val text = item.text?.toString()
-		val html = item.htmlText?.takeIf { it.isNotEmpty() }
-		val fromUri = if (text == null && html == null && item.uri != null) readUri(item) else null
-		val markup = html ?: fromUri?.html
-		if (index == 0) firstHtml = markup
-		markup
-			?.toAnnotatedStringFromHtml(styles, allowedLinkSchemes)
-			?.takeIf { it.text.isNotEmpty() && (!ownDrag || it.text == text) }
-			?: (text ?: fromUri?.text)?.let(::AnnotatedString)
-	}
-	if (styled.isEmpty()) return null
-	val joined = styled.singleOrNull() ?: buildAnnotatedString {
-		styled.forEachIndexed { index, text ->
-			if (index > 0) append('\n')
-			append(text)
-		}
-	}
-	return DroppedText(joined, firstHtml)
-}
-
-/** What a dropped file held, its markup for an HTML file, else its text, and its size. */
-internal class UriContent(val text: String?, val html: String?, val bytes: Int)
+/** What a dropped file held, and its size. */
+internal class UriContent(val content: ItemContent, val bytes: Int)
 
 /**
  * The content of the file [ClipData.Item.getUri] names, when it is text no larger than
@@ -138,7 +110,8 @@ internal fun ClipData.Item.uriContent(context: Context, description: ClipDescrip
 			return null
 		}
 		val content = bytes.decodeText(charsetOf(type)).ifEmpty { return null }
-		if (mime == "text/html") UriContent(null, content, bytes.size) else UriContent(content, null, bytes.size)
+		val held = if (mime == "text/html") ItemContent(text = null, html = content) else ItemContent(text = content, html = null)
+		UriContent(held, bytes.size)
 	} catch (e: Exception) {
 		// A provider that refuses the read (no permission, a file gone) drops nothing.
 		Log.w(TAG, "Could not read a dropped file", e)

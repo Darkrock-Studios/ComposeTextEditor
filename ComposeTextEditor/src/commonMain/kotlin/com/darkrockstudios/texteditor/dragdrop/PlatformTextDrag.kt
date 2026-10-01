@@ -7,9 +7,13 @@ import androidx.compose.ui.node.DelegatableNode
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.Density
 import com.darkrockstudios.texteditor.RichTextStyles
+import com.darkrockstudios.texteditor.html.HtmlDocument
 
-/** Text a drag carried: its styled characters and, when it offered them, its markup. */
-internal class DroppedText(val text: AnnotatedString, val html: String?)
+/**
+ * Text a drag carried: its styled characters and, when they came from it, its markup and
+ * [document], the markup as parsed for them.
+ */
+internal class DroppedText(val text: AnnotatedString, val html: String?, val document: HtmlDocument? = null)
 
 /**
  * The editors drawing a drop caret, for a platform that does not tell a drop target its
