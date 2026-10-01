@@ -1665,7 +1665,7 @@ iOS Safari; browser tests run in CI.
   restarted once, as the rule says. So 5.2's "--" to a dash still restarts
   when the dash leaves the caret where the keyboard last heard it; a
   substitution of the same length, such as curly quotes, does not.
-- [ ] **4.28 A Tab left to the focus system on iOS and the web. C.** [Opus]
+- [x] **4.28 A Tab left to the focus system on iOS and the web. C.** [Opus]
   [Lane E] Since 2.9 the editor leaves some Tabs unconsumed: Ctrl+Tab, a Tab
   after Escape, and every Tab under `TabSettings.movesFocus`. On desktop the
   Compose focus system moves focus. On iOS an unconsumed Tab may reach UIKit's
@@ -1689,6 +1689,13 @@ iOS Safari; browser tests run in CI.
   there brought focus back to the editor with a new session, and a Tab in a
   read-only editor was prevented and handled by Compose. The iOS half stays in
   the Mac queue (2.9's row).
+  iOS done, in 2.9's run on the simulator with a hardware keyboard and every
+  edit logged: Ctrl+Tab, Escape then Tab, and Tab under `movesFocus` typed no
+  tab character, and the last two moved focus off the editor to the demo's
+  switches. With nowhere for focus to go, Compose's focus search clears focus
+  rather than keeping it (seen on desktop, from the same common code), so the
+  session ends and UIKit's tab reaches no editor. The handled Tab's own echo
+  was the bug found there, fixed in 2.9.
 
 ## Phase 5: writer conveniences
 
