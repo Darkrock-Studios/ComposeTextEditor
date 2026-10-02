@@ -138,7 +138,7 @@ class OrderedListSerializationTest {
 	@Test
 	fun `roundtrip preserves ordered list alongside bullet and blockquote`() = runTest {
 		val extension = createMarkdownExtension()
-		val original = "> quoted\n- bullet\n1. ordered"
+		val original = "> quoted\n\n- bullet\n1. ordered"
 		extension.importMarkdown(original)
 		assertEquals(original, extension.exportAsMarkdown())
 	}

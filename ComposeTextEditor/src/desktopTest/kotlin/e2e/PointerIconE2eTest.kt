@@ -3,11 +3,13 @@ package e2e
 import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.PointerKeyboardModifiers
 import androidx.compose.ui.text.AnnotatedString
+import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.LinkClicks
 import com.darkrockstudios.texteditor.input.CtrlKeyBindings
 import com.darkrockstudios.texteditor.pointerIconAt
 import com.darkrockstudios.texteditor.richstyle.LinkSpanStyle
 import utils.editorUiTest
+import utils.positionOfCharacter as canvasPositionOfCharacter
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -85,6 +87,31 @@ class PointerIconE2eTest {
 			PointerIcon.Hand,
 			pointerIconAt(state, positionOfCharacter(nextRow.wrapStartsAtIndex + 1), none, links, PointerIcon.Text),
 		)
+	}
+
+	/** The row under the pointer is found by its height in the document, scrolled or not. */
+	@Test
+	fun `a hand over a link on a later line of a scrolled document`() = editorUiTest(
+		initialText = AnnotatedString((0 until 60).joinToString("\n") { "line $it has a link here" }),
+	) {
+		// "line 40 has a link here": the link is characters 14 to 18.
+		val link = state.getCharacterIndex(CharLineOffset(40, 14))
+		state.addRichSpan(link, link + 4, LinkSpanStyle("https://example.com"))
+		state.scrollState.scrollTo(state.lineOffsets.first { it.line == 35 }.offset.y.toInt())
+		waitForIdle()
+		val links = LinkClicks.forReadOnly { opener }
+		fun iconAt(line: Int, char: Int) = pointerIconAt(
+			state,
+			state.canvasPositionOfCharacter(state.getCharacterIndex(CharLineOffset(line, char))),
+			none,
+			links,
+			PointerIcon.Text,
+		)
+
+		assertEquals(PointerIcon.Hand, iconAt(40, 15))
+		assertEquals(PointerIcon.Text, iconAt(39, 15))
+		assertEquals(PointerIcon.Text, iconAt(41, 15))
+		assertEquals(PointerIcon.Text, iconAt(40, 2))
 	}
 
 	/** The hand covers the link's characters, not the caret positions around them. */

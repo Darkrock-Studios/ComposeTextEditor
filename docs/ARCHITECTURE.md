@@ -17,8 +17,8 @@ index plus a character offset within that line. `TextEditorRange` is an ordered
 pair of them. Every selection, span, edit, and cursor position speaks these two
 types. The alternate coordinate is the flat character index over the whole
 document (used by IMEs and find); `TextEditorState` converts between the two
-using a per-revision line-start table, so conversion is an array read, not a
-walk over the document.
+through the line list's running character totals, so conversion is a binary
+search over a few dozen chunks and an array read, not a walk over the document.
 
 The other axis is logical versus visual lines: a logical line (one entry in the
 document) may wrap into several visual rows. Visual rows exist only in layout
@@ -27,8 +27,10 @@ output (`LineWrap`, below); the document model never sees them.
 ### `TextEditorState`: the beating heart
 
 The single source of truth for one editor: document content, cursor, selection,
-scroll, undo history. Apps hoist one via `rememberTextEditorState` and drive
-the editor through it; everything else in the system either feeds it or reads
+scroll, undo history. Apps hoist one via `rememberTextEditorState` (or
+`rememberSaveableTextEditorState`, which saves the text, styles, built-in rich
+spans, caret, selection and top line, but not the undo history) and drive the
+editor through it; everything else in the system either feeds it or reads
 it. It is deliberately a facade: related concerns are delegated to focused
 sub-objects (`cursor`, `selector`, `scrollManager`, `editManager`,
 `richSpanManager`), and the state's own job is to hold the document, run the
@@ -38,10 +40,19 @@ layout pass, and enforce the transaction rules that keep the two consistent.
 
 The document is an immutable value: one `AnnotatedString` per logical line plus
 a flat set of `RichSpan`s, published wholesale on every mutation (see
-"Document model and transactions" below). The snapshot also memoizes the
-indices derived from it (line-start offsets, spans grouped by start line), so
-hot queries stay cheap and survive across revisions that did not invalidate
-them.
+"Document model and transactions" below). The lines are held chunked
+(`LineList`, chunks of 32 to 64 lines with a directory of each chunk's first
+line and first character), so an edit copies the chunk or two it touches and
+shares the rest with the previous revision, and a line's flat character index
+is a prefix total rather than a table rebuilt per revision. The rich spans are
+held the same way (`SpanIndex`: each line's spans by their columns, chunked
+by line, plus a loose set for the few that cross a line break), so an edit
+re-anchors the spans on its own lines and splices the index, and the spans on
+every other line move with their chunk; the whole set is built on first read
+per revision. The whole text as one string is built
+only for the readers that need it (semantics, the skiko input request,
+Android's extracted text), spliced from the last built revision; everything
+else reads characters in place through `chars`.
 
 ### Two span systems
 
@@ -82,7 +93,12 @@ redo restore the caret exactly), and knows how to transform any
 survives an edit.
 
 `TextEditManager.applyOperation` is the single choke point through which every
-operation passes, and it owns the invariant sequencing: clear a selection the
+operation passes, and so the one place the state's `inputFilter` screens an
+edit that adds text (a maximum length, a single line, the host's own rules)
+before it is applied; undo and redo, which replay accepted edits, skip it, and
+so does an entry point that screened first over the whole range it replaces
+(typing over a selection, the IME, paste). It also owns the invariant
+sequencing: clear a selection the
 edit would invalidate, apply the text change inside a transaction, move the
 cursor, re-anchor rich spans, record undo history, derive the layout pass, and
 announce the operation on `editOperations`. Code that mutates lines without
@@ -112,9 +128,11 @@ How positions (cursor, selection, spans, history) are carried across edits:
 ### `RichSpanManager`: keeping spans anchored
 
 The bookkeeper for the document's rich spans. Its two jobs: publish span
-mutations copy-on-write into the snapshot, and re-anchor every span across each
-edit using the operation's own offset transform. It also serves the
-line-indexed queries layout and drawing rely on.
+mutations copy-on-write into the snapshot's per-line index, and re-anchor the
+spans on an edit's own lines (and the loose ones) across each edit using the
+operation's own offset transform, splicing the index so the rest move with
+their lines. It also serves the line-indexed queries layout and drawing rely
+on.
 
 ### The delegates: cursor, selection, scroll
 
@@ -161,7 +179,15 @@ The layout pass (`updateBookKeeping`, see below) turns the document into
 paragraph's shaping result, its resolved rich spans, and precomputed draw facts
 (ordered-list numeral, code-fence edge, block height). `LineWrap` is the
 contract between state and view: drawing, hit testing, cursor placement, and
-scrolling consume it and never re-measure text themselves.
+scrolling consume it and never re-measure text themselves. Behind the list is
+a `RowList`: one `LineLayout` per logical line (the shaping result and the
+facts derived for it), chunked like the line list with running row counts and
+heights, so an edit splices the layouts of the lines it touched and every
+other line moves with its chunk; a `LineWrap` is built when it is read. The
+rows run line by line, each line's by wrap start, and top to bottom with no
+gaps, so finding the row that holds a position or sits at a height is a binary
+search (`RowSearch.kt`, answered from the `RowList`'s directory without
+building a row), and a frame reads only the rows in view.
 
 ### The view layer
 
@@ -174,13 +200,38 @@ selection changes, or `TextEditOperation`s. The view renders what `lineOffsets`
 says and holds no document state of its own. Content padding belongs to the
 editor: the top and bottom padding are scroll range, and the start and end
 padding are applied inside the canvas, below its pointer input, so a press
-anywhere in the padding reaches the nearest row.
+anywhere in the padding reaches the nearest row. The editor fills its height
+unless its `lineLimits` size it to its laid-out rows, read from `lineOffsets`
+in a layout modifier on its outer node.
+
+Accessibility services see the editor through its semantics
+(`EditorSemantics.kt`), modelled on `BasicTextField`'s: the whole text as an
+editable field, the selection, and the actions a screen reader or test drives.
+A disabled editor reports itself disabled and offers no edit actions; a
+read-only one (`readOnly`) shows and moves its caret but is gated exactly as a
+disabled one is for input, menus and edit semantics, and reports itself not
+editable rather than disabled. `isFocused` means focused and taking input;
+`hasFocus` means focused. Its
+`setText` is an edit, not a document load: it replaces only the part of the
+text that differs, as one undo step, so the rest keeps its spans. Copy, cut,
+paste and the long-press menu run through the action registry, as the keyboard
+and context menu do, so a read-only editor refuses the same edits; links ride
+in the text as URL links. `getTextLayoutResult` is a whole-document layout
+measured on request, because the editor has no single one. `RichTextView`
+publishes the same text and layout as a read-only text (and, when selectable,
+the selection and copy). The
+document is not snapshot state, so the semantics block reads the state's
+`revision`, a snapshot-state counter every published revision advances, to stay
+current; the word count does the same.
 
 ### Observation and extensions
 
 The state exposes a small reactive surface: `editOperations` streams applied
 operations, `cursorDataFlow` snapshots caret position, styles, and selection
-for toolbars, and `snapshot()` hands any thread a coherent document revision.
+for toolbars (starting with the current one), `wordCount` counts words through
+the same ICU segmentation as word motion and spell check, recounting only the
+lines an edit replaced, and `snapshot()` hands any thread a coherent document
+revision.
 Extensions build on exactly this surface plus the public span API: the markdown
 module converts to and from markdown text, and the spell-check and find modules
 (separate artifacts) watch `editOperations` and paint their results as
@@ -310,9 +361,17 @@ Text shaping is by far the most expensive work per edit, so the layout pass
 
 - **Shape only the lines whose content changed.** A `LayoutUpdate` describes
   each pass's dirty range, derived centrally from the edit operation itself;
-  unchanged lines reuse their previous shaping result and only their offsets,
-  spans, and numbering are recomputed. Span overlays (spell-check underlines,
-  find highlights) shape nothing at all.
+  unchanged lines keep their layouts in place, and only the lines whose
+  neighbour-derived facts (list numbering, fence edges) change are touched,
+  the walk stopping at the first line that keeps both its facts and its list
+  counters. Span overlays (spell-check underlines, find highlights) shape
+  nothing at all and re-resolve only their lines, and neither does a viewport
+  that changes only its height (a soft keyboard): rows depend on the width
+  alone. A width change, or a style, measurer or density change, shapes the
+  lines around the viewport at once and the rest in the background between
+  frames, each line keeping its old shape until then, with the scroll
+  anchored to the line at the top of the viewport; drawing and a scroll to
+  the caret shape what they need first.
 - **One pass per logical operation.** Relayouts requested inside a transaction
   merge and flush as a single pass at commit, in a fixed order: publish the
   revision, flush the layout, scroll the cursor against the fresh offsets,

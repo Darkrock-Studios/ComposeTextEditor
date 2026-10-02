@@ -91,7 +91,7 @@ class ImageBlockSerializationTest {
 	fun `export emits image markdown for image span line`() = runTest {
 		val extension = createMarkdownExtension()
 		extension.importMarkdown("before\n![alt](url.png)\nafter")
-		assertEquals("before\n![alt](url.png)\nafter", extension.exportAsMarkdown())
+		assertEquals("before\n\n![alt](url.png)\n\nafter", extension.exportAsMarkdown())
 	}
 
 	@Test
@@ -105,7 +105,7 @@ class ImageBlockSerializationTest {
 	@Test
 	fun `roundtrip preserves multiple images`() = runTest {
 		val extension = createMarkdownExtension()
-		val original = "![a](u1.png)\nbody\n![b](u2.png)"
+		val original = "![a](u1.png)\n\nbody\n\n![b](u2.png)"
 		extension.importMarkdown(original)
 		assertEquals(original, extension.exportAsMarkdown())
 	}
@@ -113,7 +113,7 @@ class ImageBlockSerializationTest {
 	@Test
 	fun `roundtrip preserves image alongside HR`() = runTest {
 		val extension = createMarkdownExtension()
-		val original = "---\n![alt](url.png)\n---"
+		val original = "---\n\n![alt](url.png)\n\n---"
 		extension.importMarkdown(original)
 		assertEquals(original, extension.exportAsMarkdown())
 	}
@@ -121,7 +121,7 @@ class ImageBlockSerializationTest {
 	@Test
 	fun `roundtrip preserves bold text alongside image`() = runTest {
 		val extension = createMarkdownExtension()
-		val original = "**bold** text\n![pic](u.png)\nmore **bold**"
+		val original = "**bold** text\n\n![pic](u.png)\n\nmore **bold**"
 		extension.importMarkdown(original)
 		assertEquals(original, extension.exportAsMarkdown())
 	}

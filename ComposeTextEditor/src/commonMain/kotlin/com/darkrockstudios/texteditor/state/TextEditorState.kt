@@ -3,6 +3,7 @@ package com.darkrockstudios.texteditor.state
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.referentialEqualityPolicy
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -21,7 +22,6 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
 import com.darkrockstudios.texteditor.CharLineOffset
-import com.darkrockstudios.texteditor.CodeFenceBoundary
 import com.darkrockstudios.texteditor.LineWrap
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.annotatedstring.normalizeLineEndings
@@ -33,15 +33,16 @@ import com.darkrockstudios.texteditor.cursor.CursorMetrics
 import com.darkrockstudios.texteditor.cursor.getWrapForDrawing
 import com.darkrockstudios.texteditor.cursor.getWrappedLineIndex
 import com.darkrockstudios.texteditor.effectiveHeight
+import com.darkrockstudios.texteditor.lastRowAtOrAbove
+import com.darkrockstudios.texteditor.rowAt
+import com.darkrockstudios.texteditor.rowIndexOf
 import com.darkrockstudios.texteditor.input.EditorActionRegistry
 import com.darkrockstudios.texteditor.input.KeyboardSettings
 import com.darkrockstudios.texteditor.input.KillRing
 import com.darkrockstudios.texteditor.input.TabSettings
 import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
 import com.darkrockstudios.texteditor.richstyle.BlockSpanStyle
-import com.darkrockstudios.texteditor.richstyle.CodeFenceSpanStyle
 import com.darkrockstudios.texteditor.richstyle.LineBlockEditBehavior
-import com.darkrockstudios.texteditor.richstyle.OrderedListSpanStyle
 import com.darkrockstudios.texteditor.richstyle.RichSpan
 import com.darkrockstudios.texteditor.richstyle.RichSpanStyle
 import com.darkrockstudios.texteditor.richstyle.normalizeLineBlocks
@@ -50,9 +51,16 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.onSubscription
 import kotlin.concurrent.Volatile
 import kotlin.math.ceil
 import kotlin.math.min
+import kotlin.math.roundToInt
+import androidx.compose.runtime.MonotonicFrameClock
+import androidx.compose.runtime.withFrameNanos
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.yield
 
 /**
  * The single source of truth for a [com.darkrockstudios.texteditor.TextEditor]:
@@ -86,7 +94,7 @@ class TextEditorState(
 		internal set(value) {
 			field = value
 			invalidateLayoutInputs()
-			updateBookKeeping()
+			updateBookKeeping(LayoutUpdate.Reshape)
 		}
 
 	var textStyle: TextStyle = TextStyle.Default
@@ -94,7 +102,7 @@ class TextEditorState(
 			if (field != value) {
 				field = value
 				invalidateLayoutInputs()
-				updateBookKeeping()
+				updateBookKeeping(LayoutUpdate.Reshape)
 			}
 		}
 
@@ -173,7 +181,54 @@ class TextEditorState(
 	 */
 	@Volatile
 	internal var content = DocumentSnapshot(emptyList(), emptySet())
-		private set
+		private set(value) {
+			// The edit that replaced the lines re-anchors the spans in the same transaction.
+			check(value.spanIndex.lineCount == value.lines.size) { "spans indexed for ${value.spanIndex.lineCount} of ${value.lines.size} lines" }
+			val textChanged = value.lines !== field.lines
+			field = value
+			_revision.intValue++
+			if (textChanged) _textRevision.intValue++
+		}
+
+	/**
+	 * The lines mutated since the last publish, as how many at each end are untouched,
+	 * narrowed by every mutation (the same composition as the whole-text base's), and
+	 * whether a span was added, removed or lost, or a line came or went. Normalization
+	 * examines only those lines.
+	 */
+	private var untouchedBefore = Int.MAX_VALUE
+	private var untouchedAfter = Int.MAX_VALUE
+	private var spansChanged = false
+
+	private fun markChanged(unchangedBefore: Int, unchangedAfter: Int) {
+		untouchedBefore = minOf(untouchedBefore, unchangedBefore)
+		untouchedAfter = minOf(untouchedAfter, unchangedAfter)
+	}
+
+	/** [snapshot] with the line-block invariants repaired over the lines changed since the last publish. */
+	private fun normalized(snapshot: DocumentSnapshot): DocumentSnapshot {
+		val lines = snapshot.lines.size
+		val first = minOf(untouchedBefore, lines)
+		val end = lines - minOf(untouchedAfter, lines)
+		val result = normalizeLineBlocks(snapshot, markdownConfiguration, first until end, spansChanged)
+		untouchedBefore = Int.MAX_VALUE
+		untouchedAfter = Int.MAX_VALUE
+		spansChanged = false
+		return result
+	}
+
+	private val _revision = mutableIntStateOf(0)
+	private val _textRevision = mutableIntStateOf(0)
+
+	/**
+	 * Advances with every published [content], as snapshot state: the document itself
+	 * is not, so a derived value (semantics, the word count) reads this to be recomputed
+	 * after an edit.
+	 */
+	internal val revision: Int get() = _revision.intValue
+
+	/** [revision], advancing only when the text changes: a rich-span change leaves it alone. */
+	internal val textRevision: Int get() = _textRevision.intValue
 
 	/**
 	 * Content staged by an open [withAtomicEdit] transaction, or null when none is
@@ -269,7 +324,7 @@ class TextEditorState(
 			// transaction that mutated nothing skips the scan and the republish.
 			draft?.let {
 				if (it !== content) {
-					val normalized = normalizeLineBlocks(it, markdownConfiguration)
+					val normalized = normalized(it)
 					// Normalization can rewrite lines no operation declared dirty,
 					// so a rewrite invalidates any deferred partial relayout.
 					if (normalized !== it) invalidateLayoutInputs()
@@ -305,6 +360,9 @@ class TextEditorState(
 			pendingCursorScroll = false
 			pendingCommitActions.clear()
 			if (!committed) {
+				untouchedBefore = Int.MAX_VALUE
+				untouchedAfter = Int.MAX_VALUE
+				spansChanged = false
 				val rollbacks = pendingRollbackActions.asReversed().toList()
 				pendingRollbackActions.clear()
 				rollbacks.forEach { it() }
@@ -371,7 +429,7 @@ class TextEditorState(
 			draft = transform(workingContent)
 		} else {
 			val transformed = transform(content)
-			val normalized = normalizeLineBlocks(transformed, markdownConfiguration)
+			val normalized = normalized(transformed)
 			if (normalized !== transformed) invalidateLayoutInputs()
 			content = normalized
 		}
@@ -393,14 +451,19 @@ class TextEditorState(
 	val cursorPosition: CharLineOffset
 		get() = cursor.position
 
-	/** Whether the editor currently holds keyboard focus. */
+	/**
+	 * Whether the editor holds focus and takes input. False while it is disabled or
+	 * read-only even when focused; [hasFocus] says whether it holds focus at all.
+	 */
 	var isFocused by mutableStateOf(false)
 
 	/**
-	 * Whether the editor holds focus, enabled or not. [isFocused] also requires it
-	 * enabled, as it means the editor takes input; a read-only view is never that.
+	 * Whether the editor holds focus, whether or not it takes input: a disabled or
+	 * read-only editor, or a selectable `RichTextView`, still takes focus to select and
+	 * copy. Use this for focus chrome such as a border.
 	 */
-	internal var hasFocus by mutableStateOf(false)
+	var hasFocus by mutableStateOf(false)
+		internal set
 
 	/**
 	 * The current IME composing region (for autocomplete preview).
@@ -443,7 +506,12 @@ class TextEditorState(
 	 */
 	internal var canvasPositionInRoot by mutableStateOf(Offset.Unspecified)
 
-	private var _lineOffsets by mutableStateOf(emptyList<LineWrap>())
+	// Referential: every pass publishes a new list, and comparing two by content would
+	// build every row of both.
+	private var _lineOffsets by mutableStateOf<List<LineWrap>>(emptyList(), referentialEqualityPolicy())
+
+	/** The laid-out rows, the same object [_lineOffsets] holds once a pass has run. */
+	private var rows: RowList? = null
 
 	/**
 	 * Guards partial relayout. [layoutInputGeneration] advances whenever an input that
@@ -453,7 +521,12 @@ class TextEditorState(
 	 */
 	private var layoutInputGeneration = 0
 	private var lastLayoutGeneration = -1
-	private var lastLayoutLineCount = -1
+
+	/** The viewport width the last completed pass shaped to; rows depend on no other viewport dimension. */
+	private var lastLayoutWidth = -1f
+
+	/** The lines the last completed pass laid out. */
+	private var lastLayoutLines: List<AnnotatedString>? = null
 
 	internal fun invalidateLayoutInputs() {
 		layoutInputGeneration++
@@ -466,25 +539,38 @@ class TextEditorState(
 	 */
 	val lineOffsets: List<LineWrap> get() = _lineOffsets
 
+	/** The caret's position, its typing styles, and the selection, as they are now. */
+	val cursorData: CursorData
+		get() = CursorData(position = cursor.position, styles = cursor.styles, selection = selector.selection)
+
 	/**
-	 * Emits a [CursorData] snapshot (active styles, position, selection) whenever the
-	 * caret moves, the typing style changes, or the selection changes. Collect this to
-	 * keep a toolbar or status display in sync with the editor.
+	 * Emits a [CursorData] snapshot (active styles, position, selection) at once on
+	 * collection, then whenever the caret moves, the typing style changes, or the
+	 * selection changes. Collect this to keep a toolbar or status display in sync with
+	 * the editor.
 	 */
 	val cursorDataFlow: Flow<CursorData>
-		get() {
-			return cursor.stylesFlow
-				.combine(cursor.positionFlow) { styles, position ->
-					Pair(styles, position)
-				}
-				.combine(selector.selectionRangeFlow) { (styles, position), selectionRange ->
-					CursorData(
-						styles = styles,
-						position = position,
-						selection = selectionRange,
-					)
-				}
+		get() = combine(
+			// On subscription, not on start: a change between the two would be lost.
+			cursor.stylesFlow.onSubscription { emit(cursor.styles) },
+			cursor.positionFlow.onSubscription { emit(cursor.position) },
+			selector.selectionRangeFlow.onSubscription { emit(selector.selection) },
+		) { styles, position, selectionRange ->
+			CursorData(position = position, styles = styles, selection = selectionRange)
 		}
+
+	/** The line a restored state scrolls to the top once it is laid out; see [rememberSaveableTextEditorState]. */
+	internal var restoredFirstVisible: CharLineOffset? = null
+
+	internal val wordCounter = WordCounter(this)
+
+	/**
+	 * The number of words in the document, as word motion and spell check segment them
+	 * (the platform's ICU word breaks; a word holds a letter or digit). Observable in
+	 * composition, and cheap to read after an edit: only the lines that changed are
+	 * segmented again. [wordCount] with a range counts part of the document.
+	 */
+	val wordCount: Int get() = wordCounter.count
 
 	private var _canUndo by mutableStateOf(false)
 	private var _canRedo by mutableStateOf(false)
@@ -506,7 +592,7 @@ class TextEditorState(
 			if (field != value) {
 				field = value
 				invalidateLayoutInputs()
-				updateBookKeeping()
+				updateBookKeeping(LayoutUpdate.Reshape)
 			}
 		}
 
@@ -519,6 +605,7 @@ class TextEditorState(
 		getCursorPosition = { cursorPosition },
 		getCursorAffinity = { cursor.affinity },
 		getLineOffsets = { _lineOffsets },
+		ensureLineShaped = ::ensureLineShaped,
 	)
 
 	/** The text selection: its [TextEditorRange], gestures, and selected-content queries. */
@@ -656,6 +743,24 @@ class TextEditorState(
 	}
 
 	/**
+	 * Screens every edit that adds text, from the user or the editing functions, but not
+	 * undo, redo or a document load; see [EditorInputFilter]. Null lets everything in.
+	 */
+	var inputFilter: EditorInputFilter? by mutableStateOf(null)
+
+	/**
+	 * How many composed editors show this state with a single-line limit; while any does,
+	 * [EditorInputFilter.SingleLine] screens ahead of [inputFilter].
+	 */
+	internal var singleLineEditors by mutableIntStateOf(0)
+
+	internal val effectiveInputFilter: EditorInputFilter?
+		get() {
+			if (singleLineEditors == 0) return inputFilter
+			return inputFilter?.let { EditorInputFilter.SingleLine then it } ?: EditorInputFilter.SingleLine
+		}
+
+	/**
 	 * How to open the context menu of each composable showing this state, which adds its
 	 * own while composed. The last opens.
 	 */
@@ -723,6 +828,9 @@ class TextEditorState(
 		// An already-clean snapshot is published as is; it is immutable, and sharing
 		// it keeps its memoized indexes.
 		val clean = lines === document.lines && spans == document.richSpans
+		// A load is a change to every line.
+		markChanged(0, 0)
+		spansChanged = true
 		mutateContent { if (clean) document else DocumentSnapshot(lines, spans) }
 		announceReplacement()
 
@@ -813,6 +921,10 @@ class TextEditorState(
 	 * [EditBehavior] claims the edit first.
 	 */
 	fun insertNewlineAtCursor() {
+		// Asked before the behaviors, which would otherwise mark a line the split never made.
+		if (screenInput(TextEditorRange(cursorPosition, cursorPosition), AnnotatedString("\n")) == null) {
+			return requestImeResync()
+		}
 		if (claimedByBehavior { it.onNewline(this) }) return
 		insertNewlineRaw()
 	}
@@ -836,35 +948,31 @@ class TextEditorState(
 	 * [backspaceStart]), merging with the previous line when at column 0, unless an
 	 * [EditBehavior] claims the edit first.
 	 */
-	fun backspaceAtCursor() {
+	fun backspaceAtCursor() = backspaceAtCursor(from = null)
+
+	/**
+	 * [backspaceAtCursor], deleting back to [from] when an [EditBehavior] leaves the
+	 * edit alone, rather than to the editor's own backspace unit. A platform whose
+	 * keyboard picks the unit itself (iOS's, which takes a whole cluster) passes it.
+	 */
+	internal fun backspaceAtCursor(from: CharLineOffset?) {
 		if (claimedByBehavior { it.onBackspace(this) }) return
 
-		if (cursorPosition.char > 0) {
-			val start = textLines[cursorPosition.line].text.backspaceStart(cursorPosition.char)
-			val deleteRange = TextEditorRange(
-				CharLineOffset(cursorPosition.line, start),
-				cursorPosition
-			)
-
-			val operation = TextEditOperation.Delete(
-				range = deleteRange,
-				cursorBefore = cursorPosition,
-				cursorAfter = CharLineOffset(cursorPosition.line, start)
-			)
+		val caret = cursorPosition
+		val start = from?.takeIf { it isBefore caret } ?: when {
+			caret.char > 0 -> CharLineOffset(caret.line, textLines[caret.line].text.backspaceStart(caret.char))
+			caret.line > 0 -> CharLineOffset(caret.line - 1, textLines[caret.line - 1].length)
+			else -> return
+		}
+		val operation = TextEditOperation.Delete(
+			range = TextEditorRange(start, caret),
+			cursorBefore = caret,
+			cursorAfter = start,
+		)
+		if (start.line == caret.line) {
 			// Typing whatever the cluster's length, so an emoji joins the backspace run.
 			editManager.recordingAsTyping(true) { editManager.applyOperation(operation) }
-		} else if (cursorPosition.line > 0) {
-			val previousLineLength = textLines[cursorPosition.line - 1].length
-			val deleteRange = TextEditorRange(
-				CharLineOffset(cursorPosition.line - 1, previousLineLength),
-				cursorPosition
-			)
-
-			val operation = TextEditOperation.Delete(
-				range = deleteRange,
-				cursorBefore = cursorPosition,
-				cursorAfter = CharLineOffset(cursorPosition.line - 1, previousLineLength)
-			)
+		} else {
 			editManager.applyOperation(operation)
 		}
 	}
@@ -1053,19 +1161,18 @@ class TextEditorState(
 	}
 
 	/**
-	 * Replaces lines [first] through [last] with [replacement] in one new list, so a
-	 * splice of many lines copies the document once. [last] of `first - 1` inserts
+	 * Replaces lines [first] through [last] with [replacement], splicing the line list so
+	 * only the chunks holding those lines are copied. [last] of `first - 1` inserts
 	 * before [first]. A document left with no lines gets one empty line.
 	 */
 	internal fun replaceLines(first: Int, last: Int, replacement: List<AnnotatedString>) {
-		val lines = textLines
+		val lines = workingContent.lineList
 		val from = first.coerceIn(0, lines.size)
 		val to = last.coerceIn(from - 1, lines.lastIndex)
-		val updated = ArrayList<AnnotatedString>(lines.size - (to - from + 1) + replacement.size)
-		updated.addAll(lines.subList(0, from))
-		updated.addAll(replacement)
-		updated.addAll(lines.subList(to + 1, lines.size))
-		setLines(updated.ifEmpty { listOf(AnnotatedString("")) })
+		val updated = lines.splice(from, to + 1, replacement)
+		if (updated.isEmpty()) return setLines(listOf(AnnotatedString("")))
+		linesWritten += replacement.size
+		setLines(updated, LineSplice(unchangedBefore = from, unchangedAfter = lines.size - (to + 1)))
 	}
 
 	/**
@@ -1076,25 +1183,57 @@ class TextEditorState(
 	 * would draw over the first character of the line.
 	 */
 	private fun replaceContent(lines: List<AnnotatedString>) {
+		markChanged(0, 0)
+		spansChanged = true
 		mutateContent { DocumentSnapshot(lines, emptySet()) }
 		announceReplacement()
 	}
 
-	/** How many lines [setLines] has been handed; the cost tests read it to catch a list rebuilt per line. */
+	/**
+	 * How many lines have been written: [replaceLines]' replacements and the whole of any
+	 * list [setLines] is handed that is not the spliced line list itself. The cost tests
+	 * read it to catch a list rebuilt per line.
+	 */
 	internal var linesWritten = 0L
 		private set
 
-	internal fun setLines(lines: List<AnnotatedString>) {
-		linesWritten += lines.size
-		mutateContent { it.withLines(lines) }
+	/** Publishes [lines]; [splice] says which lines changed, when the caller knows. */
+	internal fun setLines(lines: List<AnnotatedString>, splice: LineSplice? = null) {
+		if (lines !is LineList) linesWritten += lines.size
+		if (splice != null) markChanged(splice.unchangedBefore, splice.unchangedAfter) else markChanged(0, 0)
+		mutateContent { it.withLines(lines, splice) }
 	}
 
 	internal fun setLine(index: Int, text: AnnotatedString) {
-		setLines(workingContent.lines.toMutableList().also { it[index] = text })
+		val lineCount = workingContent.lines.size
+		if (index !in 0 until lineCount) throw IndexOutOfBoundsException("line $index of $lineCount")
+		replaceLines(index, index, listOf(text))
 	}
 
+	/** Replaces every span, as a document load does. */
 	internal fun setRichSpans(richSpans: Set<RichSpan>) {
+		markChanged(0, 0)
+		spansChanged = true
 		mutateContent { it.withRichSpans(richSpans) }
+	}
+
+	/** Publishes [index], whose spans on [first] through [last] differ from the current one's. */
+	internal fun setSpanIndex(index: SpanIndex, first: Int, last: Int, spansChanged: Boolean = true) {
+		val lines = workingContent.lines.size
+		markChanged(first.coerceAtLeast(0), (lines - 1 - last).coerceAtLeast(0))
+		if (spansChanged) this.spansChanged = true
+		mutateContent { it.withSpanIndex(index) }
+	}
+
+	/** Publishes [index], which differs from the current one by [spans]. */
+	internal fun setSpanIndex(index: SpanIndex, spans: Collection<RichSpan>) {
+		var first = Int.MAX_VALUE
+		var last = -1
+		for (span in spans) {
+			first = minOf(first, span.range.start.line)
+			last = maxOf(last, span.range.end.line)
+		}
+		setSpanIndex(index, first, last)
 	}
 
 	/** True when the document holds a single empty line. */
@@ -1114,11 +1253,7 @@ class TextEditorState(
 	 * Returns the index into [lineOffsets] of the wrapped (visual) line containing
 	 * [position], or -1 if none matches.
 	 */
-	fun getWrappedLineIndex(position: CharLineOffset): Int {
-		return _lineOffsets.indexOfLast { lineOffset ->
-			lineOffset.line == position.line && lineOffset.wrapStartsAtIndex <= position.char
-		}
-	}
+	fun getWrappedLineIndex(position: CharLineOffset): Int = _lineOffsets.rowIndexOf(position)
 
 	/**
 	 * The index into [lineOffsets] of the row the caret is drawn on, or -1 if none
@@ -1128,11 +1263,8 @@ class TextEditorState(
 	internal fun cursorRowIndex(): Int = _lineOffsets.getWrappedLineIndex(cursorPosition, cursor.affinity)
 
 	/** Returns the [LineWrap] (visual line) that contains [position]. */
-	fun getWrappedLine(position: CharLineOffset): LineWrap {
-		return _lineOffsets.last { lineOffset ->
-			lineOffset.line == position.line && lineOffset.wrapStartsAtIndex <= position.char
-		}
-	}
+	fun getWrappedLine(position: CharLineOffset): LineWrap =
+		_lineOffsets.rowAt(position) ?: throw NoSuchElementException("No row holds $position")
 
 	/** Returns the [LineWrap] at visual-line index [vLineIndex] in [lineOffsets]. */
 	fun getWrappedLine(vLineIndex: Int): LineWrap {
@@ -1140,20 +1272,38 @@ class TextEditorState(
 	}
 
 	/**
-	 * Records the editor's new viewport [size] and re-wraps the document to fit. When a
-	 * focused editor gets shorter, as when the window shrinks for a soft keyboard, a caret
+	 * Records the editor's new viewport [size] and re-wraps the document to fit a new
+	 * width. A change of height alone, as when a soft keyboard opens or closes, shapes
+	 * nothing: it only moves the scroll range. When a focused editor gets shorter, a caret
 	 * in view (or on its way there) stays in view.
 	 */
 	fun onViewportSizeChange(size: Size) {
-		val keepCaret = isFocused && lineOffsets.isNotEmpty() &&
+		val collapsed = size.width <= 1f || size.height <= 1f
+		val keepCaret = isFocused && lineOffsets.isNotEmpty() && !collapsed &&
 				size.width == viewportSize.width && size.height < viewportSize.height &&
 				scrollManager.isCursorInViewOrScrolling()
 		viewportSize = size
-		invalidateLayoutInputs()
-		updateBookKeeping()
+		when {
+			!rowsAreCurrent(size.width) -> {
+				invalidateLayoutInputs()
+				updateBookKeeping(LayoutUpdate.Reshape)
+			}
+			// The rows wait, unchanged, for the viewport to open again.
+			collapsed -> Unit
+			else -> scrollManager.onViewportHeightChange()
+		}
 		// After the relayout, which an open transaction holds until it commits.
 		if (keepCaret) onCommit { scrollManager.snapCursorVisible() }
 	}
+
+	/**
+	 * Whether the last completed pass laid out the current lines at [width] against the
+	 * current layout inputs, outside any transaction. A pass the collapsed viewport
+	 * skipped leaves the rows behind the text, which the generation records.
+	 */
+	private fun rowsAreCurrent(width: Float): Boolean =
+		draft == null && _lineOffsets.isNotEmpty() && width == lastLayoutWidth &&
+				lastLayoutGeneration == layoutInputGeneration && lastLayoutLines === textLines
 
 	/**
 	 * Returns the [CursorMetrics] (pixel position and line height) for the caret at
@@ -1185,10 +1335,11 @@ class TextEditorState(
 	 * that row either way, as native text fields do.
 	 */
 	fun getOffsetAtPosition(offset: Offset): CharLineOffset {
-		if (_lineOffsets.isEmpty()) return CharLineOffset(0, 0)
+		val rows = _lineOffsets
+		if (rows.isEmpty()) return CharLineOffset(0, 0)
 
 		val contentY = offset.y + scrollState.value
-		val row = _lineOffsets[rowIndexAtY(contentY)]
+		val row = rows[rows.lastRowAtOrAbove(contentY).coerceAtLeast(0)]
 		val lineLength = textLines.getOrNull(row.line)?.length
 			?: return CharLineOffset(textLines.lastIndex, textLines.last().length)
 
@@ -1219,45 +1370,20 @@ class TextEditorState(
 		return findSpanAtPosition(getOffsetAtPosition(offset))
 	}
 
-	/** Index of the last row whose top is at or above content-space [y], or 0 above them all. */
-	private fun rowIndexAtY(y: Float): Int {
-		var low = 0
-		var high = _lineOffsets.lastIndex
-		while (low < high) {
-			val mid = (low + high + 1) ushr 1
-			if (_lineOffsets[mid].offset.y <= y) low = mid else high = mid - 1
-		}
-		return low
-	}
-
 	/**
 	 * Converts a flat character [index] into the document to its [CharLineOffset].
-	 * The inverse of [getCharacterIndex]; clamps to the document end when out of range.
+	 * The inverse of [getCharacterIndex]; clamps to the document start or end when out of range.
 	 */
 	fun getOffsetAtCharacter(index: Int): CharLineOffset {
-		val starts = workingContent.lineStartOffsets
-		val lineCount = textLines.size
-		if (index < 0) return CharLineOffset(0, index)
-		if (index >= starts[lineCount]) {
-			return CharLineOffset(textLines.lastIndex, textLines.last().length)
+		val content = workingContent
+		val lineCount = content.lines.size
+		if (index < 0 || lineCount == 0) return CharLineOffset(0, 0)
+		if (index > content.textLength) {
+			return CharLineOffset(lineCount - 1, content.lines[lineCount - 1].length)
 		}
 
-		val line = lineOfCharacter(starts, lineCount, index)
-		return CharLineOffset(line, index - starts[line])
-	}
-
-	/**
-	 * Index of the line containing flat character [index], by binary search over the
-	 * snapshot's line starts. [index] must be within the document.
-	 */
-	private fun lineOfCharacter(starts: IntArray, lineCount: Int, index: Int): Int {
-		var low = 0
-		var high = lineCount - 1
-		while (low < high) {
-			val mid = (low + high + 1) ushr 1
-			if (starts[mid] <= index) low = mid else high = mid - 1
-		}
-		return low
+		val line = content.lineOfCharacter(index)
+		return CharLineOffset(line, index - content.lineStart(line))
 	}
 
 	/**
@@ -1270,15 +1396,10 @@ class TextEditorState(
 		// Belt-and-braces: applyOperation already clears stale selections, but
 		// any future flow-emit-before-coerce path would crash here without this.
 		val safe = offset.coerceInto(textLines)
-		if (safe != offset) {
-			println("TextEditor warning: getCharacterIndex clamped $offset to $safe (textLines.size=${textLines.size})")
-		}
-
-		return workingContent.lineStartOffsets[safe.line] + safe.char
+		return workingContent.lineStart(safe.line) + safe.char
 	}
 
-	fun CharLineOffset.toCharacterIndex(): Int =
-		workingContent.lineStartOffsets[line] + char
+	fun CharLineOffset.toCharacterIndex(): Int = getCharacterIndex(this)
 
 	// Convert character index to CharLineOffset
 	fun Int.toCharLineOffset(): CharLineOffset = getOffsetAtCharacter(this)
@@ -1294,7 +1415,7 @@ class TextEditorState(
 		require(lineIndex >= 0) { "Line index must be non-negative" }
 		require(lineIndex < textLines.size) { "Line index $lineIndex out of bounds for ${textLines.size} lines" }
 
-		return workingContent.lineStartOffsets[lineIndex]
+		return workingContent.lineStart(lineIndex)
 	}
 
 	internal fun updateBookKeeping(update: LayoutUpdate = LayoutUpdate.Full) {
@@ -1306,56 +1427,287 @@ class TextEditorState(
 		}
 
 		// Defer until the viewport has a real size; the 1×1 sentinel forces character-wide wraps.
-		if (viewportSize.width <= 1f || viewportSize.height <= 1f) return
+		// The skipped pass leaves the rows behind the text, so the next one must be full.
+		if (viewportSize.width <= 1f || viewportSize.height <= 1f) {
+			invalidateLayoutInputs()
+			return
+		}
+
+		val content = content
+		val lines = content.lineList
+		val spans = content.spanIndex
+		val previous = rows
 
 		// A partial pass is only sound against the exact layout the last pass produced.
 		// Degrade to full when the cache is missing, a full invalidator (style, measurer,
 		// density, viewport, normalization) fired since, or the line count disagrees
 		// with the update's own delta; reusing stale layouts corrupts every consumer.
 		val partial = (update as? LayoutUpdate.Partial)?.takeIf {
-			_lineOffsets.isNotEmpty() &&
+			previous != null &&
 					lastLayoutGeneration == layoutInputGeneration &&
-					lastLayoutLineCount == textLines.size - it.lineDelta
+					previous.lineCount == lines.size - it.lineDelta &&
+					(it.lineDelta == 0 || it.remeasureFirst <= it.remeasureLast)
 		}
 
-		val previousLayouts: Map<Int, TextLayoutResult>? = if (partial != null) {
-			HashMap<Int, TextLayoutResult>(lastLayoutLineCount * 2).also { map ->
-				for (wrap in _lineOffsets) {
-					if (!map.containsKey(wrap.line)) map[wrap.line] = wrap.textLayoutResult
-				}
+		// A reshape stands on the rows as they are while the lines settle; rows laid
+		// out for other lines or spans (a pass skipped while the viewport was
+		// collapsed) cannot stand in, so everything shapes now.
+		if (update is LayoutUpdate.Reshape && previous != null && lastLayoutLines === lines && previous.spans === spans) {
+			reshapeLazily(previous)
+			return
+		}
+
+		val laidOut = if (partial == null) layoutAll(lines, spans) else layoutPartial(previous!!, partial, lines, spans)
+		if (laidOut === previous) return
+		if (partial == null) {
+			settleJob?.cancel()
+		} else if (partial.lineDelta != 0) {
+			// The settling walks continue past the edit, whose lines moved.
+			if (settleAbove >= partial.remeasureFirst) settleAbove += partial.lineDelta
+			if (settleBelow > partial.remeasureLast) settleBelow += partial.lineDelta
+		}
+		publishRows(laidOut)
+		lastLayoutGeneration = layoutInputGeneration
+		lastLayoutWidth = viewportSize.width
+		lastLayoutLines = lines
+	}
+
+	private fun publishRows(laidOut: RowList) {
+		rows = laidOut
+		_lineOffsets = laidOut
+		// Rounded up so the last row's fraction of a pixel is still in reach.
+		scrollManager.updateContentHeight(ceil(laidOut.lastRowBottom()).toInt())
+	}
+
+	/** The settling reshape under way, shaping the lines out of view a slice at a time. */
+	private var settleJob: Job? = null
+
+	/** How many lines a settling slice shapes before yielding to the frame. */
+	private val settleSlice = 32
+
+	/** Where the settling walks continue from: the next lines to try above and below the viewport. */
+	private var settleAbove = -1
+	private var settleBelow = Int.MAX_VALUE
+
+	/**
+	 * Reshapes lazily (7.48): the lines with a row in the viewport, and a viewport's
+	 * worth beyond each edge, are shaped now; every other line keeps its layout at the
+	 * old shape until the settling job reaches it. The scroll stays anchored to the
+	 * line at the top of the viewport, at its offset within it.
+	 */
+	private fun reshapeLazily(previous: RowList) {
+		settleJob?.cancel()
+		// An animated scroll's target was measured against rows about to change.
+		scrollManager.stopScrolling()
+		val keepCaret = isFocused && scrollManager.isCursorInViewOrScrolling()
+		val scroll = scrollState.value.toFloat()
+		val viewportHeight = viewportSize.height
+		val anchorLine = previous.lineOfRow(previous.searchLastRowAtOrAbove(scroll).coerceAtLeast(0))
+		val anchorOffset = scroll - previous.lineTop(anchorLine)
+		val first = previous.lineOfRow(previous.searchFirstRowEndingAtOrBelow(scroll - viewportHeight).coerceAtMost(previous.size - 1))
+		val last = previous.lineOfRow(previous.searchLastRowAtOrAbove(scroll + 2 * viewportHeight).coerceAtLeast(0))
+		lastLayoutGeneration = layoutInputGeneration
+		lastLayoutWidth = viewportSize.width
+		lastLayoutLines = content.lineList
+		reshapeLines(first, last)
+		val settled = rows ?: return
+		// Kept in the top padding when it was there, else within the anchor line.
+		val within = anchorOffset.toDouble().coerceIn(minOf(anchorOffset.toDouble(), 0.0), (settled.layoutOf(anchorLine).height - 1).coerceAtLeast(0f).toDouble())
+		scrollState.scrollTo((settled.lineTop(anchorLine) + within).roundToInt())
+		settleAbove = first - 1
+		settleBelow = last + 1
+		if (first > 0 || last < previous.lineCount - 1) {
+			// Between slices the frame gets to run: yield alone would not reach it on
+			// Compose's dispatchers, which drain what a task enqueues in the same pass.
+			settleJob = scope.launch {
+				while (settleStep()) if (coroutineContext[MonotonicFrameClock] != null) withFrameNanos {} else yield()
+				// The caret's row was measured against provisional rows; it may have left the view.
+				if (keepCaret && isFocused) scrollManager.ensureCursorVisible()
 			}
-		} else null
+		}
+	}
 
-		val offsets = mutableListOf<LineWrap>()
-		var yOffset = 0f
+	/** Whether [line]'s layout was shaped under older inputs than the current ones. */
+	private fun isProvisional(rows: RowList, line: Int): Boolean = rows.layoutOf(line).generation != layoutInputGeneration
 
-		// Pre-collect ordered-list line indices so we can number each item by its
-		// position within a contiguous run without re-scanning the span set per line.
-		val orderedListLines = richSpanManager.getAllRichSpans()
-			.asSequence()
-			.filter { it.style === OrderedListSpanStyle }
-			.map { it.range.start.line }
-			.toHashSet()
-		var orderedListRunPosition = 0
+	/**
+	 * Shapes lines [first] through [last] at the current inputs, keeping their facts,
+	 * and splices them in. The scroll moves by whatever that moved the top of the line
+	 * at the top of the viewport, so what is on screen stays where it is; an animated
+	 * scroll under way would write over that, so it is stopped.
+	 */
+	private fun reshapeLines(first: Int, last: Int) {
+		val current = rows ?: return
+		val content = content
+		val lines = content.lineList
+		val spans = content.spanIndex
+		val shaper = LineShaper()
+		val width = viewportSize.width
+		val scrollBefore = scrollState.value
+		val topLine = if (current.size == 0) 0 else current.lineOfRow(current.searchLastRowAtOrAbove(scrollBefore.toFloat()).coerceIn(0, current.size - 1))
+		val topBefore = current.lineTop(topLine)
+		val layouts = ArrayList<LineLayout>(last - first + 1)
+		for (line in first..last) {
+			layouts += current.layoutOf(line).reshaped(shaper.shape(lines[line]), line, spans.spansOn(line), density, width, layoutInputGeneration)
+		}
+		val settled = current.splice(first, last + 1, layouts, spans)
+		publishRows(settled)
+		val shift = (settled.lineTop(topLine) - topBefore).roundToInt()
+		if (shift != 0) {
+			scrollManager.stopScrolling()
+			scrollState.scrollTo(scrollBefore + shift)
+		}
+	}
 
-		// Pre-collect code-fence line indices so each line can compute its boundary
-		// (top/middle/bottom/only) by checking neighbors — driving which edges of
-		// the card border `CodeFenceSpanStyle` paints.
-		val codeFenceLines = richSpanManager.getAllRichSpans()
-			.asSequence()
-			.filter { it.style === CodeFenceSpanStyle }
-			.map { it.range.start.line }
-			.toHashSet()
+	/**
+	 * Shapes the next slice of provisional lines: those with a row in the viewport
+	 * first, else the nearer of the two walks continuing above and below it. Returns
+	 * whether provisional lines remain.
+	 */
+	private fun settleStep(): Boolean {
+		val current = rows ?: return false
+		if (viewportSize.width <= 1f || viewportSize.height <= 1f || current.size == 0) return false
+		val lineCount = current.lineCount
+		val scroll = scrollState.value.toFloat()
+		val topLine = current.lineOfRow(current.searchLastRowAtOrAbove(scroll).coerceIn(0, current.size - 1))
+		val bottomLine = current.lineOfRow(current.searchLastRowAtOrAbove(scroll + viewportSize.height).coerceIn(0, current.size - 1))
 
+		val inView = (topLine..bottomLine).firstOrNull { isProvisional(current, it) }
+		if (inView != null) {
+			var last = inView
+			while (last < bottomLine && last - inView < settleSlice - 1 && isProvisional(current, last + 1)) last++
+			reshapeLines(inView, last)
+			return true
+		}
+		var above = settleAbove.coerceAtMost(lineCount - 1)
+		while (above >= 0 && !isProvisional(current, above)) above--
+		var below = settleBelow.coerceAtLeast(0)
+		while (below < lineCount && !isProvisional(current, below)) below++
+		if (above < 0 && below >= lineCount) {
+			// A viewport that jumped leaves a band behind the walks: one sweep finds it.
+			below = (0 until lineCount).firstOrNull { isProvisional(current, it) } ?: return false
+		}
+		val takeAbove = below >= lineCount || (above >= 0 && topLine - above <= below - bottomLine)
+		if (takeAbove) {
+			var first = above
+			while (first > 0 && above - first < settleSlice - 1 && isProvisional(current, first - 1)) first--
+			reshapeLines(first, above)
+			settleAbove = first - 1
+		} else {
+			var last = below
+			while (last < lineCount - 1 && last - below < settleSlice - 1 && isProvisional(current, last + 1)) last++
+			reshapeLines(below, last)
+			settleBelow = last + 1
+		}
+		return true
+	}
+
+	/** Finishes a settling reshape now, for tests and benchmarks. */
+	internal fun settleLayout() {
+		settleJob?.cancel()
+		settleJob = null
+		while (settleStep()) Unit
+	}
+
+	/**
+	 * Shapes the provisional lines with a row between content-space [minY] and [maxY],
+	 * before they are drawn, until none is left there: shaping moves the rows after it.
+	 */
+	internal fun shapeRowsInView(minY: Float, maxY: Float) {
+		if (lastLayoutGeneration != layoutInputGeneration) return
+		while (true) {
+			val current = rows ?: return
+			if (current.size == 0) return
+			val first = current.lineOfRow(current.searchFirstRowEndingAtOrBelow(minY).coerceAtMost(current.size - 1))
+			val last = current.lineOfRow(current.searchLastRowAtOrAbove(maxY).coerceAtLeast(0))
+			val line = (first..last).firstOrNull { isProvisional(current, it) } ?: return
+			var end = line
+			while (end < last && isProvisional(current, end + 1)) end++
+			reshapeLines(line, end)
+		}
+	}
+
+	/** Shapes [line] now when it is provisional, so a scroll to it measures the real rows. */
+	private fun ensureLineShaped(line: Int) {
+		val current = rows ?: return
+		if (line !in 0 until current.lineCount || lastLayoutGeneration != layoutInputGeneration) return
+		if (isProvisional(current, line)) reshapeLines(line, line)
+	}
+
+	/** A full pass: every line shaped, every fact derived in line order. */
+	private fun layoutAll(lines: LineList, spans: SpanIndex): RowList {
+		val shaper = LineShaper()
+		val facts = LineFacts(spans)
+		val width = viewportSize.width
+		val layouts = ArrayList<LineLayout>(lines.size)
+		for (line in 0 until lines.size) {
+			facts.next(line)
+			layouts += LineLayout.of(shaper.shape(lines[line]), line, spans.spansOn(line), density, width, facts, layoutInputGeneration)
+		}
+		return RowList.of(layouts, spans)
+	}
+
+	/**
+	 * A partial pass: [update]'s lines shaped or re-resolved, with a line each side for
+	 * the fence edges, then the lines after them walked until one keeps its layout and
+	 * its list counters, past which nothing can change; the result is spliced over
+	 * [previous]. Every other line keeps its layout and moves with its chunk.
+	 */
+	private fun layoutPartial(
+		previous: RowList,
+		update: LayoutUpdate.Partial,
+		lines: LineList,
+		spans: SpanIndex,
+	): RowList {
+		val lastLine = lines.size - 1
+		val shapeFirst = update.remeasureFirst
+		val shapeLast = minOf(update.remeasureLast, lastLine)
+		val spansFirst = update.spansFirst.coerceAtLeast(0)
+		val spansLast = minOf(update.spansLast, lastLine)
+		val shapes = shapeFirst <= shapeLast
+		val respans = spansFirst <= spansLast
+		if (!shapes && !respans) return previous.withSpans(spans)
+
+		val first = (minOf(if (shapes) shapeFirst else Int.MAX_VALUE, if (respans) spansFirst else Int.MAX_VALUE) - 1).coerceAtLeast(0)
+		val end = (maxOf(if (shapes) shapeLast else -1, if (respans) spansLast else -1) + 1).coerceAtMost(lastLine)
+		// A line after the shaped range had its layout at its pre-edit index.
+		fun oldIndex(line: Int) = if (shapes && line > shapeLast) line - update.lineDelta else line
+
+		val facts = LineFacts(spans)
+		if (first > 0) facts.resume(previous.layoutOf(oldIndex(first - 1)).counters)
+		val shaper = LineShaper()
+		val width = viewportSize.width
+		val layouts = ArrayList<LineLayout>(end - first + 2)
+		var line = first
+		while (line <= lastLine) {
+			facts.next(line)
+			val old = if (line in shapeFirst..shapeLast) null else previous.layoutOf(oldIndex(line))
+			val layout = when {
+				old == null -> LineLayout.of(shaper.shape(lines[line]), line, spans.spansOn(line), density, width, facts, layoutInputGeneration)
+				line in spansFirst..spansLast -> old.withSpans(line, spans.spansOn(line), density, width, facts)
+				else -> old.withFacts(facts)
+			}
+			layouts += layout
+			if (line >= end && layout === old) break
+			line++
+		}
+		// The walk never stops inside the shaped range, whose old lines end at its last line's pre-edit index.
+		val stop = minOf(line, lastLine)
+		val oldEnd = if (shapes && stop >= shapeLast) stop - update.lineDelta + 1 else stop + 1
+		return previous.splice(first, oldEnd, layouts, spans)
+	}
+
+	/** Shapes lines with the style, indent baking and width of one layout pass. */
+	private inner class LineShaper {
 		// Compose Android doesn't reliably honor per-paragraph ParagraphStyle
 		// .textIndent overriding an editor-wide TextStyle.textIndent, so we
 		// sidestep the merge: strip the indent from the outer style and bake it
-		// into plain lines as their own ParagraphStyle below. Block lines
+		// into plain lines as their own ParagraphStyle. Block lines
 		// already carry a ParagraphStyle from `applyLineBlock`.
-		val outerIndent = textStyle.textIndent
-		val needsIndentBaking = outerIndent != null && outerIndent != TextIndent.None
-		val measureStyle = if (needsIndentBaking) textStyle.copy(textIndent = TextIndent.None) else textStyle
-		val bakedIndentStyle = if (needsIndentBaking) ParagraphStyle(textIndent = outerIndent) else null
+		private val outerIndent = textStyle.textIndent
+		private val needsIndentBaking = outerIndent != null && outerIndent != TextIndent.None
+		private val measureStyle = if (needsIndentBaking) textStyle.copy(textIndent = TextIndent.None) else textStyle
+		private val bakedIndentStyle = if (needsIndentBaking) ParagraphStyle(textIndent = outerIndent) else null
 
 		// Use a tight width constraint (minWidth == maxWidth) so the paragraph lays out
 		// at the full viewport width rather than shrinking to its natural content width.
@@ -1363,115 +1715,28 @@ class TextEditorState(
 		// shrinks to its natural width W and then TextIndent consumes X pixels of
 		// first-line width, the first line has only W-X pixels available instead of
 		// viewportWidth-X, causing wraps that shouldn't happen.
-		val lineConstraints = Constraints(
+		private val constraints = Constraints(
 			minWidth = maxOf(1, viewportSize.width.toInt()),
 			maxWidth = maxOf(1, viewportSize.width.toInt()),
 			minHeight = 0,
 			maxHeight = Constraints.Infinity
 		)
 
-		textLines.forEachIndexed { lineIndex, line ->
-			// Lines outside the dirty range kept their content; only their position
-			// changed, so their previous shaping result is reused as-is.
-			val cachedLayout: TextLayoutResult? = when {
-				partial == null -> null
-				lineIndex < partial.remeasureFirst -> previousLayouts?.get(lineIndex)
-				lineIndex > partial.remeasureLast -> previousLayouts?.get(lineIndex - partial.lineDelta)
-				else -> null
-			}
-
-			val textLayoutResult = cachedLayout ?: run {
-				// Skip if the line already has a ParagraphStyle (block line):
-				// Compose forbids overlapping ParagraphStyle ranges.
-				val measureLine = if (bakedIndentStyle != null && line.paragraphStyles.isEmpty()) {
-					buildAnnotatedString { withStyle(bakedIndentStyle) { append(line) } }
-				} else {
-					line
-				}
-				try {
-					textMeasurer.measure(
-						text = measureLine,
-						style = measureStyle,
-						constraints = lineConstraints
-					)
-				} catch (e: IllegalArgumentException) {
-					println(e)
-					// If measurement fails, create an empty layout result
-					textMeasurer.measure(
-						text = AnnotatedString(""),
-						style = measureStyle,
-						constraints = lineConstraints
-					)
-				}
-			}
-
-			val virtualLineCount = textLayoutResult.multiParagraph.lineCount
-			val paragraphTop = yOffset
-
-			val orderedListNumber: Int? = if (lineIndex in orderedListLines) {
-				orderedListRunPosition += 1
-				orderedListRunPosition
+		fun shape(line: AnnotatedString): TextLayoutResult {
+			// Skip if the line already has a ParagraphStyle (block line):
+			// Compose forbids overlapping ParagraphStyle ranges.
+			val measureLine = if (bakedIndentStyle != null && line.paragraphStyles.isEmpty()) {
+				buildAnnotatedString { withStyle(bakedIndentStyle) { append(line) } }
 			} else {
-				orderedListRunPosition = 0
-				null
+				line
 			}
-
-			val codeFenceBoundary: CodeFenceBoundary? = if (lineIndex in codeFenceLines) {
-				val prevIn = (lineIndex - 1) in codeFenceLines
-				val nextIn = (lineIndex + 1) in codeFenceLines
-				when {
-					!prevIn && !nextIn -> CodeFenceBoundary.Only
-					!prevIn -> CodeFenceBoundary.First
-					!nextIn -> CodeFenceBoundary.Last
-					else -> CodeFenceBoundary.Middle
-				}
-			} else null
-
-			for (virtualLineIndex in 0 until virtualLineCount) {
-				val lineWrapsAt = textLayoutResult.getLineStart(virtualLineIndex)
-
-				val lineLength =
-					textLayoutResult.getLineEnd(virtualLineIndex) - textLayoutResult.getLineStart(
-						virtualLineIndex
-					)
-
-				val lineWrap = LineWrap(
-					line = lineIndex,
-					wrapStartsAtIndex = lineWrapsAt,
-					virtualLength = lineLength,
-					virtualLineIndex = virtualLineIndex,
-					offset = Offset(0f, yOffset),
-					textLayoutResult = textLayoutResult,
-					paragraphTop = paragraphTop,
-				)
-
-				// Spans are re-resolved even for reused layouts: after a line-shifting
-				// edit the span set holds re-anchored copies, so a cached list would
-				// carry pre-edit ranges into drawing and hit testing.
-				val richSpans = richSpanManager.getSpansForLineWrap(lineWrap)
-
-				val blockHeight = density?.let { d ->
-					richSpans.firstNotNullOfOrNull { span ->
-						(span.style as? BlockSpanStyle)?.blockHeight(d, viewportSize.width)
-					}
-				}
-
-				val resolved = lineWrap.copy(
-					richSpans = richSpans,
-					blockHeight = blockHeight,
-					orderedListNumber = orderedListNumber,
-					codeFenceBoundary = codeFenceBoundary,
-				)
-				offsets.add(resolved)
-				yOffset += resolved.effectiveHeight
+			return try {
+				textMeasurer.measure(text = measureLine, style = measureStyle, constraints = constraints)
+			} catch (_: IllegalArgumentException) {
+				// If measurement fails, create an empty layout result
+				textMeasurer.measure(text = AnnotatedString(""), style = measureStyle, constraints = constraints)
 			}
 		}
-
-		_lineOffsets = offsets
-		// Rounded up so the last row's fraction of a pixel is still in reach.
-		scrollManager.updateContentHeight(ceil(yOffset).toInt())
-		lastLayoutLineCount = textLines.size
-		lastLayoutGeneration = layoutInputGeneration
 	}
 
 	/**
@@ -1532,10 +1797,21 @@ class TextEditorState(
 		// the removals and the additions sees the batch half-applied.
 		withAtomicEdit {
 			richSpanManager.removeRichSpans(remove)
-			richSpanManager.addRichSpansClamped(add)
-			// Span overlays don't move text, so the flushed pass re-resolves spans
-			// and offsets without shaping a single line.
-			updateBookKeeping(LayoutUpdate.SpansOnly)
+			val added = richSpanManager.addRichSpansClamped(add)
+			// Span overlays don't move text, so the flushed pass re-resolves the
+			// lines they touch (the added ones where they landed) without shaping a
+			// single line.
+			var first = Int.MAX_VALUE
+			var last = -1
+			for (span in remove) {
+				first = minOf(first, span.range.start.line)
+				last = maxOf(last, span.range.end.line)
+			}
+			for (span in added) {
+				first = minOf(first, span.range.start.line)
+				last = maxOf(last, span.range.end.line)
+			}
+			updateBookKeeping(LayoutUpdate.Spans(first, last))
 		}
 	}
 
@@ -1553,9 +1829,7 @@ class TextEditorState(
 	 */
 	fun findSpanAtPosition(position: CharLineOffset): RichSpan? {
 		// Find the line wrap that contains our position
-		val lineWrap = _lineOffsets.lastOrNull { wrap ->
-			wrap.line == position.line && position.char >= wrap.wrapStartsAtIndex
-		} ?: return null
+		val lineWrap = _lineOffsets.rowAt(position) ?: return null
 
 		return lineWrap.richSpans
 			.filter { it.style.isHitTestable && it.containsPosition(position) }
@@ -1808,11 +2082,17 @@ class TextEditorState(
 	 */
 	fun getAllText(): AnnotatedString = workingContent.getAllText()
 
+	/** [getAllText] without its styles, for a reader that needs the whole text as a string. */
+	internal fun getAllPlainText(): String = workingContent.plainText
+
+	/**
+	 * The document's characters read in place, for a reader that needs a few of them (an
+	 * input method looking around the caret) and must not build the whole text.
+	 */
+	internal val documentChars: CharSequence get() = workingContent.chars
+
 	/** Returns the total character count of the document, counting newlines between lines. */
-	fun getTextLength(): Int {
-		val starts = workingContent.lineStartOffsets
-		return starts[starts.lastIndex] - 1
-	}
+	fun getTextLength(): Int = workingContent.textLength
 
 	/**
 	 * Returns a hash of the document text and inline character spans, suitable for

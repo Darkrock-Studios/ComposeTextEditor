@@ -25,10 +25,10 @@ class FindCloseTest {
 	}
 
 	@Test
-	fun `Ctrl+F in the bar closes it and clears the highlights`() = findUiTest("cat and cat") {
+	fun `Ctrl or Cmd+F in the bar closes it and clears the highlights`() = findUiTest("cat and cat") {
 		typeQuery("cat")
 
-		press(Key.F, ctrl = true)
+		press(Key.F, primary = true)
 
 		assertFalse(barVisible)
 		assertEquals(0, highlightCount)
@@ -57,8 +57,8 @@ class FindCloseTest {
 	}
 
 	@Test
-	fun `Ctrl+F in the editor opens the bar`() = findUiTest("cat", barInitiallyVisible = false) {
-		press(Key.F, ctrl = true)
+	fun `Ctrl or Cmd+F in the editor opens the bar`() = findUiTest("cat", barInitiallyVisible = false) {
+		press(Key.F, primary = true)
 
 		assertTrue(barVisible)
 	}

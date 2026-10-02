@@ -170,12 +170,12 @@ class MarkdownConverterTest {
 	fun `test unsupported style is dropped`() {
 		val input = buildAnnotatedString {
 			append("Hello ")
-			withStyle(SpanStyle(color = androidx.compose.ui.graphics.Color.Red)) {
-				append("red")
+			withStyle(SpanStyle(letterSpacing = 2.sp)) {
+				append("spaced")
 			}
 			append(" world")
 		}
-		assertEquals("Hello red world", input.toMarkdown())
+		assertEquals("Hello spaced world", input.toMarkdown())
 	}
 
 	@Test
@@ -202,10 +202,11 @@ class MarkdownConverterTest {
 		val specialChars =
 			listOf('*', '_', '`', '#', '+', '-', '!', '[', ']', '(', ')', '{', '}', '<', '>', '|', '\\')
 
+		// Between spaces only a backtick can start syntax (any run may pair up).
 		specialChars.forEach { char ->
 			val input = AnnotatedString("Text with $char character")
-			val expected = "Text with \\$char character"
-			assertEquals(expected, input.toMarkdown(), "Failed to escape character: $char")
+			val expected = if (char == '`') "Text with \\` character" else "Text with $char character"
+			assertEquals(expected, input.toMarkdown(), "Wrong escaping for character: $char")
 		}
 	}
 
@@ -221,8 +222,9 @@ class MarkdownConverterTest {
 		val input1 = AnnotatedString("*At the beginning")
 		assertEquals("\\*At the beginning", input1.toMarkdown())
 
+		// A star between spaces can neither open nor close emphasis.
 		val input2 = AnnotatedString("In the middle * of text")
-		assertEquals("In the middle \\* of text", input2.toMarkdown())
+		assertEquals("In the middle * of text", input2.toMarkdown())
 
 		val input3 = AnnotatedString("At the end*")
 		assertEquals("At the end\\*", input3.toMarkdown())
@@ -241,7 +243,7 @@ class MarkdownConverterTest {
 			}
 		}
 		assertEquals(
-			"Text with **bold \\*with\\* special chars** and *italic \\[with\\] special chars*",
+			"Text with **bold \\*with\\* special chars** and *italic [with] special chars*",
 			input.toMarkdown()
 		)
 	}

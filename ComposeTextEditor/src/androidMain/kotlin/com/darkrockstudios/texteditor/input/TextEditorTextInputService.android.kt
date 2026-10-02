@@ -37,6 +37,9 @@ private class TextEditorInputMethodRequest(
 	}
 }
 
+/** Characters on each side of the selection handed to the keyboard up front, for the platform to trim to its 2048. */
+private const val SURROUNDING_TEXT_WINDOW = 2048
+
 private fun EditorInfo.populate(state: TextEditorState, connection: TextEditorInputConnection) {
 	val settings = state.keyboardSettings
 	inputType = settings.androidInputType()
@@ -49,9 +52,17 @@ private fun EditorInfo.populate(state: TextEditorState, connection: TextEditorIn
 	initialCapsMode = capsModesOf(inputType).let { if (it == 0) 0 else connection.getCursorCapsMode(it) }
 
 	// Saves the keyboard reading the text around the caret back before it can suggest.
-	// The platform trims it around the selection without splitting a surrogate pair.
+	// The platform keeps at most 2048 characters around the selection, so it is handed a
+	// window of that much on each side rather than the document, and trims it itself.
 	if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-		setInitialSurroundingText(state.getAllText().text)
+		val length = state.getTextLength()
+		var start = (selection.min - SURROUNDING_TEXT_WINDOW).coerceAtLeast(0)
+		var end = (selection.max + SURROUNDING_TEXT_WINDOW).coerceAtMost(length)
+		val chars = state.documentChars
+		// Never split a surrogate pair at either edge.
+		if (start > 0 && chars[start].isLowSurrogate()) start--
+		if (end < length && chars[end].isLowSurrogate()) end++
+		setInitialSurroundingSubText(chars.subSequence(start, end), start)
 	}
 }
 
@@ -120,13 +131,13 @@ internal class TextEditorInputConnection(
 	override fun getTextBeforeCursor(n: Int, flags: Int): CharSequence {
 		val end = state.selectionAsTextRange().min
 		val start = end - n.coerceIn(0, end)
-		return if (start < end) state.getAllText().subSequence(start, end) else ""
+		return state.imeSubSequence(start, end)
 	}
 
 	override fun getTextAfterCursor(n: Int, flags: Int): CharSequence {
 		val start = state.selectionAsTextRange().max
 		val end = start + minOf(n.coerceAtLeast(0), (state.getTextLength() - start).coerceAtLeast(0))
-		return if (start < end) state.getAllText().subSequence(start, end) else ""
+		return state.imeSubSequence(start, end)
 	}
 
 	override fun getSelectedText(flags: Int): CharSequence? {
@@ -135,7 +146,7 @@ internal class TextEditorInputConnection(
 	}
 
 	override fun getCursorCapsMode(reqModes: Int): Int {
-		return TextUtils.getCapsMode(state.getAllText(), state.selectionAsTextRange().min, reqModes)
+		return TextUtils.getCapsMode(state.documentChars, state.selectionAsTextRange().min, reqModes)
 	}
 
 	override fun getExtractedText(request: ExtractedTextRequest?, flags: Int): ExtractedText {
@@ -158,7 +169,7 @@ internal class TextEditorInputConnection(
 		val selEnd = selection.max
 		val start = selStart - beforeLength.coerceIn(0, selStart)
 		val end = selEnd + minOf(afterLength.coerceAtLeast(0), (state.getTextLength() - selEnd).coerceAtLeast(0))
-		val text = state.getAllText().subSequence(start, end).toString()
+		val text = state.imeSubSequence(start, end).toString()
 		return SurroundingText(text, selStart - start, selEnd - start, start)
 	}
 
@@ -358,7 +369,8 @@ internal class TextEditorInputConnection(
  */
 internal fun TextEditorState.toExtractedText(): ExtractedText {
 	val res = ExtractedText()
-	val all = getAllText()
+	// The whole text, as EditText extracts it.
+	val all = getAllPlainText()
 	res.text = all
 	res.startOffset = 0
 	res.partialStartOffset = -1 // -1 means full text

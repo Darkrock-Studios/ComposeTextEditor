@@ -9,6 +9,8 @@ data class MarkdownStyles(
 	val CODE = config.codeStyle
 	val LINK = config.linkStyle
 	val STRIKETHROUGH = config.strikethroughStyle
+	val UNDERLINE = config.underlineStyle
+	val HIGHLIGHT = config.highlightStyle
 	val BLOCKQUOTE = config.blockquoteStyle
 
 	fun header(level: Int) = config.getHeaderStyle(level)

@@ -13,6 +13,7 @@ import com.darkrockstudios.texteditor.richstyle.HR_PLACEHOLDER
 import com.darkrockstudios.texteditor.richstyle.IMAGE_PLACEHOLDER
 import com.darkrockstudios.texteditor.richstyle.LineBlockStyle
 import com.darkrockstudios.texteditor.richstyle.OrderedList
+import com.darkrockstudios.texteditor.richstyle.isList
 import com.darkrockstudios.texteditor.richstyle.headerBlock
 import com.fleeksoft.ksoup.Ksoup
 import com.fleeksoft.ksoup.nodes.Element
@@ -223,7 +224,7 @@ private class HtmlSpanBuilder(
 			// An empty block still owns the line it sits on: `<li></li>` is a
 			// bulleted blank line, not a block with nowhere to attach.
 			val last = if (end > first) end - 1 else first
-			val isList = range.block === BulletList || range.block === OrderedList
+			val isList = range.block.isList
 			val target = blockLines.getOrPut(range.block) { mutableSetOf() }
 			for (line in lines[first]..lines[last]) {
 				if (isList && !listClaimed.add(line)) continue

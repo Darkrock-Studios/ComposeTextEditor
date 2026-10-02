@@ -4,6 +4,7 @@ import android.os.Handler
 import android.os.Looper
 import android.view.inputmethod.InputMethodManager
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.text.AnnotatedString
 import com.darkrockstudios.texteditor.state.CursorAnchor
 import com.darkrockstudios.texteditor.state.TextEditorState
 import kotlinx.coroutines.CoroutineScope
@@ -64,7 +65,7 @@ actual class ImeCursorSync internal constructor(
 
 	// Weak so a whole superseded document is not kept alive just to compare against. A
 	// cleared reference still means "changed": the current text is strongly reachable.
-	private var lastExtractedText: WeakReference<CharSequence>? = null
+	private var lastExtractedLines: WeakReference<List<AnnotatedString>>? = null
 
 	actual fun startSync() {
 		attach()
@@ -116,7 +117,7 @@ actual class ImeCursorSync internal constructor(
 		}
 		lastSelection = null
 		lastAnchor = null
-		lastExtractedText = null
+		lastExtractedLines = null
 	}
 
 	/** Schedules a flush for after the current change; repeated requests share one. */
@@ -163,10 +164,10 @@ actual class ImeCursorSync internal constructor(
 		val selectionChanged = selection != lastSelection
 
 		if (extensions.extractedTextMonitorEnabled) {
-			// Identity is enough: the flattened text is memoized per text revision.
-			val text = state.getAllText()
-			if (selectionChanged || lastExtractedText?.get() !== text) {
-				lastExtractedText = WeakReference(text)
+			// Identity is enough: every text edit publishes a new line list.
+			val lines = state.textLines
+			if (selectionChanged || lastExtractedLines?.get() !== lines) {
+				lastExtractedLines = WeakReference(lines)
 				sink.updateExtractedText(extensions.extractedTextMonitorToken)
 			}
 		}

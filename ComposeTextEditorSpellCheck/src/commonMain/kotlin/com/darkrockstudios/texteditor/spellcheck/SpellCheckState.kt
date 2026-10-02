@@ -76,8 +76,14 @@ class SpellCheckState(
 	var ignoredWords: Set<String> = emptySet()
 		private set
 
-	/** Words treated as correct this session: [ignoredWords] and words added to a dictionary. */
+	/**
+	 * Words treated as correct this session, [ignoredWords] and words added to a dictionary,
+	 * each in its [acceptedForm].
+	 */
 	private var acceptedWords: Set<String> = emptySet()
+
+	/** The same, as flagged: a sentence issue is matched exactly. */
+	private var acceptedTexts: Set<String> = emptySet()
 
 	/** Whether spell checking is currently active. Toggle via [setSpellCheckingEnabled]. */
 	var spellCheckingEnabled: Boolean = enableSpellChecking
@@ -154,7 +160,6 @@ class SpellCheckState(
 		val doomed = textState.getRichSpansInRange(segment.range)
 			.filter { it.style is SpellCheckStyle }
 		textState.updateRichSpans(remove = doomed, add = emptyList())
-		println("Correcting spelling for $segment, correcting to: $correction")
 		textState.replace(segment.range, correction, true)
 	}
 
@@ -165,14 +170,16 @@ class SpellCheckState(
 		val doomed = textState.getRichSpansInRange(correction.range)
 			.filter { it.style is SpellCheckStyle }
 		textState.updateRichSpans(remove = doomed, add = emptyList())
-		println("Applying sentence correction: ${correction.originalText} -> $selectedSuggestion")
 		textState.replace(correction.range, selectedSuggestion, true)
 	}
 
 	/**
 	 * Stop flagging [word] for the rest of this session, whichever checker is in use, and clear
-	 * its current flags. Matches the flagged text exactly: the word, or a sentence issue's
-	 * [Correction.originalText].
+	 * its current flags. [word] is the flagged text: the word, or a sentence issue's
+	 * [Correction.originalText], which is matched exactly. A word in lowercase also clears
+	 * capitalised and in capitals, as a dictionary matches case; one capitalised only at its
+	 * start is taken for a sentence's first word and matched as its lowercase. One with other
+	 * capitals, such as "NASA" or "iPhone", clears only as written.
 	 */
 	fun ignoreWord(word: String) {
 		ignoredWords = ignoredWords + word
@@ -181,20 +188,27 @@ class SpellCheckState(
 
 	/** Treats [word] as correct for the rest of this session and clears its current flags. */
 	internal fun accept(word: String) {
-		acceptedWords = acceptedWords + word
+		acceptedWords = acceptedWords + word.acceptedForm()
+		acceptedTexts = acceptedTexts + word
 		val doomed = textState.richSpanManager.getAllRichSpans().filter { span ->
 			when (val style = span.style) {
-				is MisspelledWordStyle -> textState.getStringInRange(span.range) == word
-				is SentenceIssueStyle -> style.correction.originalText == word
+				is MisspelledWordStyle -> isAcceptedWord(textState.getStringInRange(span.range))
+				is SentenceIssueStyle -> style.correction.originalText in acceptedTexts
 				else -> false
 			}
 		}
 		if (doomed.isNotEmpty()) textState.updateRichSpans(remove = doomed, add = emptyList())
 	}
 
-	private fun isAccepted(segment: WordSegment): Boolean = segment.text in acceptedWords
+	private fun isAcceptedWord(text: String): Boolean {
+		if (acceptedWords.isEmpty()) return false
+		val form = text.acceptedForm()
+		return form in acceptedWords || (form.isAllCapitals() && form.lowercase() in acceptedWords)
+	}
 
-	private fun isAccepted(correction: Correction): Boolean = correction.originalText in acceptedWords
+	private fun isAccepted(segment: WordSegment): Boolean = isAcceptedWord(segment.text)
+
+	private fun isAccepted(correction: Correction): Boolean = correction.originalText in acceptedTexts
 
 	private fun clearSpellCheck() {
 		val doomed = textState.richSpanManager.getAllRichSpans()
@@ -325,7 +339,7 @@ class SpellCheckState(
 	) {
 		val sp = spellChecker ?: return
 		settlePartialCheck(
-			range = range,
+			range = range.acrossDots(computedAgainst),
 			computedAgainst = computedAgainst,
 			scan = { region ->
 				val candidates = textState.wordSegmentsInRange(region).filter(::shouldSpellCheck).filterNot(::isAccepted)
@@ -434,7 +448,8 @@ class SpellCheckState(
 
 			// Resolve the async lookup first; only mutate spans afterward so a
 			// cancellation can't leave the word's span removed-but-not-restored.
-			val isSpelledCorrectly = isAccepted(segment) || sp.isCorrectWord(segment.lookupText)
+			val isSpelledCorrectly = !shouldSpellCheck(segment) || isAccepted(segment) ||
+				sp.isCorrectWord(segment.lookupText)
 
 			if (spellCheckingEnabled) {
 				val diff = LineDiff(computedAgainst, textState.textLines)
@@ -455,9 +470,19 @@ class SpellCheckState(
 		}
 	}
 
+	/**
+	 * Numbers, single letters and two letters a period joins to another letter are not
+	 * checked. Words break at a period, so "U.S.A." arrives as three letters and "Ph.D." as
+	 * "Ph" and "D". Longer words stay checked, so a missing space in "mat.Teh" still flags
+	 * the typo.
+	 */
 	private fun shouldSpellCheck(segment: WordSegment): Boolean {
-		// Skip segments that are purely numeric
-		return !segment.text.all { it.isDigit() }
+		val text = segment.text
+		if (text.all { it.isDigit() } || text.length == 1) return false
+		if (text.length > 2) return true
+		val line = textState.textLines.getOrNull(segment.range.start.line) ?: return true
+		return !line.dotsOnToLetter(segment.range.start.char - 1, -1) &&
+			!line.dotsOnToLetter(segment.range.end.char, 1)
 	}
 
 	/** The segment's text as the dictionary spells it: with a straight apostrophe. */
@@ -524,6 +549,35 @@ class SpellCheckState(
 		return combined
 	}
 }
+
+/**
+ * Reaches over a period at either end into the word beyond, whose check depends on this
+ * range's text: typing the "D" of "Ph.D" clears the flag on "Ph".
+ */
+private fun TextEditorRange.acrossDots(lines: List<AnnotatedString>): TextEditorRange {
+	val startLine = lines.getOrNull(start.line)?.text ?: return this
+	val endLine = lines.getOrNull(end.line)?.text ?: return this
+	val from = if (startLine.dotsOnToLetter(start.char - 1, -1)) start.copy(char = start.char - 2) else start
+	val to = if (endLine.dotsOnToLetter(end.char, 1)) end.copy(char = end.char + 2) else end
+	return TextEditorRange(from, to)
+}
+
+/** Whether a period at [index] leads, one more step in [direction], to a letter. */
+private fun CharSequence.dotsOnToLetter(index: Int, direction: Int): Boolean =
+	getOrNull(index) == '.' && getOrNull(index + direction)?.isLetter() == true
+
+/**
+ * How an accepted word is kept: as the dictionary spells it, and lowercased when it is in
+ * lowercase or capitalised only at its start, which may just be a sentence's first word.
+ */
+private fun String.acceptedForm(): String {
+	val word = forLookup()
+	val afterFirstLetter = word.substring(word.indexOfFirst(Char::isLetter) + 1)
+	val lowercaseAfterFirstLetter = afterFirstLetter.any(Char::isLowerCase) && afterFirstLetter.none(Char::isUpperCase)
+	return if (lowercaseAfterFirstLetter) word.lowercase() else word
+}
+
+private fun String.isAllCapitals(): Boolean = any(Char::isLetter) && none(Char::isLowerCase)
 
 /** Marks a span as a misspelled word; the word is whatever text the span covers. */
 internal object MisspelledWordStyle : SpellCheckStyle()

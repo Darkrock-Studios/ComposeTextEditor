@@ -38,6 +38,8 @@ import com.darkrockstudios.texteditor.input.startSkikoInputSession
 import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
 import com.darkrockstudios.texteditor.markdown.MarkdownExtension
 import com.darkrockstudios.texteditor.richstyle.BulletListSpanStyle
+import com.darkrockstudios.texteditor.richstyle.RichSpan
+import com.darkrockstudios.texteditor.richstyle.SpellCheckStyle
 import com.darkrockstudios.texteditor.state.EditBehavior
 import com.darkrockstudios.texteditor.state.TextEditorState
 import io.mockk.every
@@ -242,6 +244,136 @@ class SkikoInputMethodRequestTest {
 		assertTrue(state.richSpanManager.getAllRichSpans().none { it.style === BulletListSpanStyle })
 	}
 
+	// --- the iOS soft keyboard's backspace (roadmap 4.33) ---
+	// UIKit deletes backward by selecting the composed character before the caret, then
+	// deleting the selection: two edits, a setSelection and a commit of nothing.
+
+	private fun SkikoTextEditorInputMethodRequest.keyboardBackspace(start: Int, end: Int) {
+		editText { setSelection(start, end) }
+		editText { commitText("", 0) }
+	}
+
+	@Test
+	fun `the iOS keyboard backspace at the start of a bullet demotes it`() = runTest {
+		val state = TextEditorState(scope = this, measurer = mockk(relaxed = true))
+		MarkdownExtension(state, MarkdownConfiguration.DEFAULT).importMarkdown("plain\n- item")
+		val request = SkikoTextEditorInputMethodRequest(state, ImeOptions.Default)
+		state.cursor.updatePosition(CharLineOffset(1, 0))
+
+		request.keyboardBackspace(5, 6)
+
+		assertEquals(listOf("plain", "item"), state.textLines.map { it.text })
+		assertTrue(state.richSpanManager.getAllRichSpans().none { it.style === BulletListSpanStyle })
+		assertNull(state.selector.selection)
+		assertEquals(CharLineOffset(1, 0), state.cursorPosition)
+	}
+
+	@Test
+	fun `the iOS keyboard backspace reaches edit behaviors mid-line`() {
+		var offered = 0
+		state.editBehaviors += object : EditBehavior {
+			override fun onBackspace(state: TextEditorState): Boolean {
+				offered++
+				return false
+			}
+		}
+		typeViaCommit("abc")
+
+		request.keyboardBackspace(2, 3)
+
+		assertEquals(1, offered)
+		assertEquals("ab", text())
+		assertEquals(2, cursorCharIndex())
+	}
+
+	/** Native iOS removes the cluster the keyboard selected, a decomposed é included. */
+	@Test
+	fun `the iOS keyboard backspace removes the range the keyboard selected`() {
+		typeViaCommit("xé")
+
+		request.keyboardBackspace(1, 3)
+
+		assertEquals("x", text())
+		assertNull(state.selector.selection)
+	}
+
+	@Test
+	fun `the iOS keyboard backspace at a line start joins the lines`() {
+		typeViaCommit("ab")
+		request.editText { commitText("\n", 1) }
+		typeViaCommit("cd")
+		moveCursorToCharIndex(3)
+
+		request.keyboardBackspace(2, 3)
+
+		assertEquals("abcd", text())
+		assertEquals(2, cursorCharIndex())
+	}
+
+	@Test
+	fun `iOS keyboard backspaces undo as the hardware key's do`() {
+		val hardware = TextEditorState(scope = TestScope(), measurer = mockk(relaxed = true))
+		val hardwareRequest = SkikoTextEditorInputMethodRequest(hardware, ImeOptions.Default)
+		for (s in listOf(state to request, hardware to hardwareRequest)) {
+			s.second.editText { commitText("one two", 1) }
+		}
+		hardware.backspaceAtCursor()
+		hardware.backspaceAtCursor()
+		request.keyboardBackspace(6, 7)
+		request.keyboardBackspace(5, 6)
+		assertEquals(hardware.getAllText().text, text())
+
+		hardware.undo()
+		state.undo()
+		assertEquals(hardware.getAllText().text, text())
+	}
+
+	@Test
+	fun `a selection the keyboard did not take from the caret is deleted as a selection`() {
+		var offered = 0
+		state.editBehaviors += object : EditBehavior {
+			override fun onBackspace(state: TextEditorState): Boolean {
+				offered++
+				return true
+			}
+		}
+		typeViaCommit("abcd")
+
+		// Selected away from the caret, as a keyboard's own selection gesture would.
+		request.keyboardBackspace(0, 2)
+		assertEquals("cd", text())
+
+		// Already selected before the keyboard deleted: the selection is what goes.
+		request.editText { setSelection(0, 1) }
+		request.editText { setSelection(0, 2) }
+		request.editText { commitText("", 0) }
+		assertEquals("", text())
+		assertEquals(0, offered)
+	}
+
+	/** A trackpad or Shift selection back from the caret, then Backspace, deletes the selection. */
+	@Test
+	fun `a wider selection taken back from the caret is deleted as a selection`() = runTest {
+		val state = TextEditorState(scope = this, measurer = mockk(relaxed = true))
+		MarkdownExtension(state, MarkdownConfiguration.DEFAULT).importMarkdown("plain\n- item")
+		val request = SkikoTextEditorInputMethodRequest(state, ImeOptions.Default)
+		state.cursor.updatePosition(CharLineOffset(1, 0))
+
+		request.keyboardBackspace(3, 6)
+
+		assertEquals(listOf("plaitem"), state.textLines.map { it.text })
+	}
+
+	@Test
+	fun `a commit of text over the keyboard's selection still replaces it`() {
+		typeViaCommit("abc")
+
+		request.editText { setSelection(2, 3) }
+		request.editText { commitText("x", 1) }
+
+		assertEquals("abx", text())
+	}
+
 	@Test
 	fun `move cursor and delete all`() {
 		typeViaCommit("abcd")
@@ -391,6 +523,91 @@ class SkikoInputMethodRequestTest {
 		assertEquals(listOf("abc", "bc"), seen)
 		observer.cancel()
 		sessionJob.cancel()
+	}
+
+	/**
+	 * The request reads the state's own revision, which advances in the same apply as the
+	 * caret, so a keystroke re-runs a session's observer once.
+	 */
+	@Test
+	fun `a keystroke re-evaluates a session's value observer once`() = runTest {
+		val state = TextEditorState(scope = this, measurer = mockk(relaxed = true), initialText = AnnotatedString("abc"))
+		val captured = CompletableDeferred<PlatformTextInputMethodRequest>()
+		val session = object : PlatformTextInputSession {
+			override suspend fun startInputMethod(request: PlatformTextInputMethodRequest): Nothing {
+				captured.complete(request)
+				awaitCancellation()
+			}
+		}
+		val sessionJob = launch { state.startSkikoInputSession(session, ImeOptions.Default) }
+		val request = captured.await()
+		state.cursor.updatePosition(CharLineOffset(0, 3))
+		var evaluations = 0
+		val seen = mutableListOf<String>()
+		val observer = launch {
+			snapshotFlow {
+				evaluations++
+				request.value().text
+			}.collect { seen += it }
+		}
+		Snapshot.sendApplyNotifications()
+		testScheduler.runCurrent()
+		evaluations = 0
+
+		state.insertCharacterAtCursor('d')
+		repeat(3) {
+			Snapshot.sendApplyNotifications()
+			testScheduler.runCurrent()
+		}
+
+		assertEquals(1, evaluations)
+		assertEquals(listOf("abc", "abcd"), seen)
+		observer.cancel()
+		sessionJob.cancel()
+	}
+
+	/** An edit that moves no caret still reaches an observer of a request no session wraps. */
+	@Test
+	fun `a request alone makes an edit without a caret move visible`() = runTest {
+		val state = TextEditorState(scope = this, measurer = mockk(relaxed = true), initialText = AnnotatedString("abc"))
+		val request = SkikoTextEditorInputMethodRequest(state, ImeOptions.Default)
+		val seen = mutableListOf<String>()
+		val observer = launch { snapshotFlow { request.value().text }.collect { seen += it } }
+		state.cursor.updatePosition(CharLineOffset(0, 0))
+		Snapshot.sendApplyNotifications()
+		testScheduler.runCurrent()
+
+		state.deleteAtCursor()
+		Snapshot.sendApplyNotifications()
+		testScheduler.runCurrent()
+
+		assertEquals(listOf("abc", "bc"), seen)
+		observer.cancel()
+	}
+
+	/** An overlay pass (spell check, find) changes no text, so it re-runs no observer. */
+	@Test
+	fun `a rich span change does not re-evaluate a value observer`() = runTest {
+		val state = TextEditorState(scope = this, measurer = mockk(relaxed = true), initialText = AnnotatedString("abc"))
+		val request = SkikoTextEditorInputMethodRequest(state, ImeOptions.Default)
+		var evaluations = 0
+		val observer = launch {
+			snapshotFlow {
+				evaluations++
+				request.value()
+			}.collect {}
+		}
+		Snapshot.sendApplyNotifications()
+		testScheduler.runCurrent()
+		evaluations = 0
+
+		val range = TextEditorRange(CharLineOffset(0, 0), CharLineOffset(0, 2))
+		state.updateRichSpans(remove = emptyList(), add = listOf(RichSpan(range, SpellCheckStyle)))
+		Snapshot.sendApplyNotifications()
+		testScheduler.runCurrent()
+
+		assertEquals(0, evaluations)
+		observer.cancel()
 	}
 
 	// --- resync ---

@@ -12,6 +12,7 @@ import com.darkrockstudios.texteditor.richstyle.InMemoryImageProvider
 import com.darkrockstudios.texteditor.richstyle.LineBlockStyle
 import com.darkrockstudios.texteditor.richstyle.OrderedList
 import com.darkrockstudios.texteditor.richstyle.applyDocumentBlocks
+import com.darkrockstudios.texteditor.richstyle.atListLevel
 import com.darkrockstudios.texteditor.state.TextEditorState
 import io.mockk.mockk
 import kotlinx.coroutines.test.TestScope
@@ -100,26 +101,52 @@ class LineBlockRoundTripPropertyTest {
 				},
 			blockLines = mapOf(
 				Blockquote to lines.withIndex().filter { it.value.quote }.map { it.index },
-				BulletList to lines.withIndex()
-					.filter { it.value.list === BulletList }.map { it.index },
-				OrderedList to lines.withIndex()
-					.filter { it.value.list === OrderedList }.map { it.index },
-			),
+			) + lines.withIndex()
+				.filter { it.value.list != null }
+				.groupBy({ it.value.list!! }, { it.index }),
 		)
 		return extension
 	}
 
 	private fun MarkdownExtension.blockPlacement(): Map<String, List<Int>> {
 		val spans = editorState.richSpanManager.getAllRichSpans()
-		return spans.groupBy { it.style::class.simpleName ?: "?" }
+		// By the style's own name, which carries a list's level; the level-0 list
+		// styles are companion objects whose class name is only "Companion".
+		return spans.groupBy { it.style.toString() }
 			.mapValues { (_, group) -> group.map { it.range.start.line }.sorted() }
+	}
+
+	/**
+	 * Gives each list line a nesting level the text form can hold: at most one
+	 * deeper than the list line before it, blank lines transparent, a quote
+	 * change or any other line resetting to the top. An orphaned deeper level
+	 * is the one model state export rewrites (see `docs/design/line-blocks.md`,
+	 * "Nested lists"), so the generator does not produce it.
+	 */
+	private fun withValidLevels(lines: List<GeneratedLine>, random: Random): List<GeneratedLine> {
+		var allowed = 0
+		var previousQuote = false
+		return lines.map { line ->
+			val blank = line.list == null && !line.isRule && !line.isImage && line.text.isBlank()
+			if (line.quote != previousQuote) allowed = 0
+			val result = if (line.list != null) {
+				val level = random.nextInt(0, minOf(allowed, 3) + 1)
+				allowed = level + 1
+				line.copy(list = line.list.atListLevel(level))
+			} else {
+				if (!blank) allowed = 0
+				line
+			}
+			previousQuote = line.quote
+			result
+		}
 	}
 
 	@Test
 	fun `export then import preserves text and blocks over generated documents`() = runTest {
 		val random = Random(20260801)
 		repeat(200) { iteration ->
-			val lines = List(random.nextInt(1, 10)) { generateLine(random) }
+			val lines = withValidLevels(List(random.nextInt(1, 10)) { generateLine(random) }, random)
 			val extension = buildDocument(lines)
 
 			val expectedText = extension.editorState.getAllText().text

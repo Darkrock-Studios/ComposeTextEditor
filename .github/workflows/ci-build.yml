@@ -48,6 +48,42 @@ jobs:
         with:
           arguments: ${{ matrix.target }}
 
+  # The desktop suites on macOS, where the editor takes the Mac key bindings and
+  # the system fonts differ from Linux; the Ubuntu `check` covers everything else.
+  desktop-macos:
+    runs-on: macos-26
+    # A hung UI test would otherwise hold a macOS runner for the six-hour default.
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v6
+      - name: Validate Gradle Wrapper
+        uses: gradle/wrapper-validation-action@v3
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v5
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+      - name: Run the desktop test suites
+        run: >
+          ./gradlew --stacktrace
+          :ComposeTextEditor:desktopTest
+          :ComposeTextEditorFind:desktopTest
+          :ComposeTextEditorSpellCheck:desktopTest
+      - name: Keep the test reports
+        # macOS-only failures cannot be reproduced on Linux, so keep what they said.
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-macos-test-results
+          path: |
+            */build/test-results/desktopTest/
+            */build/reports/tests/desktopTest/
+
   # Kotlin/Native iOS targets only compile on macOS, so the Ubuntu `check` never
   # builds iosMain. This job compiles the libraries for device and simulator, runs
   # any iOS tests, and builds the sample app the same way Xcode does.

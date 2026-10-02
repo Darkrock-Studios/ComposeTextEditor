@@ -35,8 +35,19 @@ class EscapedCharactersTest {
 
 		assertEquals(expectedString, annotatedString.text)
 
+		// The emphasis and code delimiters would be read as markup and stay
+		// escaped, as does a backslash ending a line (a hard break); the hash
+		// mid-line is prose.
+		val canonical = """
+            This is not \*bold\* and not \_italic\_ and not \`code\`.
+            
+            This is a literal backslash: \\
+            
+            This is a literal # hash.
+        """.trimIndent()
 		val reconverted = annotatedString.toMarkdown()
-		assertEquals(markdownText, reconverted)
+		assertEquals(canonical, reconverted)
+		assertEquals(expectedString, reconverted.toAnnotatedStringFromMarkdown().text)
 	}
 
 	@Test
@@ -62,8 +73,17 @@ class EscapedCharactersTest {
 
 		assertEquals(expectedString, annotatedString.text)
 
+		// A backslash before a space, a hyphen and a hash mid-line are prose.
+		val canonical = """
+            This is *bold with \ escaped - characters* and not \_italic\_ and not \`code\`.
+            
+            This is a **literal backslash: \ inside italics**
+            
+            This is a literal # hash.
+        """.trimIndent()
 		val reconverted = annotatedString.toMarkdown()
-		assertEquals(markdownText, reconverted)
+		assertEquals(canonical, reconverted)
+		assertEquals(expectedString, reconverted.toAnnotatedStringFromMarkdown().text)
 	}
 
 	@Test
@@ -74,8 +94,10 @@ class EscapedCharactersTest {
 		val expectedString = "This has < angle > brackets and a | pipe."
 		assertEquals(expectedString, annotatedString.text, "Unescape failed for <, >, |")
 
+		// Beside spaces none of them starts syntax, so none is written escaped.
 		val reconverted = annotatedString.toMarkdown()
-		assertEquals(markdownText, reconverted, "Round-trip failed for <, >, |")
+		assertEquals(expectedString, reconverted, "Round-trip failed for <, >, |")
+		assertEquals(expectedString, reconverted.toAnnotatedStringFromMarkdown().text)
 	}
 
 	@Test

@@ -28,7 +28,7 @@ internal fun TextEditorState.selectionAsHtml(range: TextEditorRange): String {
 	val coveredLines = range.start.line..range.end.line
 	// The span index lists a span on every line it covers, so these are all the spans
 	// that can reach the selection.
-	val spansOnLines = coveredLines.flatMap { content.richSpansByLine[it].orEmpty() }
+	val spansOnLines = coveredLines.flatMap { content.spansOn(it) }
 	val links = linksByLine(spansOnLines.toSet()) { content.lines.getOrNull(it)?.length ?: 0 }
 	val lines = coveredLines.mapNotNull { docLine ->
 		val line = content.lines.getOrNull(docLine) ?: return@mapNotNull null

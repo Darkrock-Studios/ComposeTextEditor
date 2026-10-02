@@ -67,6 +67,64 @@ it, then rebuilds the line with the new indent. The per-line toggle and the
 importers both resolve through it, so a stack of blocks produces the same line
 whether the user typed it or an import placed it.
 
+## Nested lists
+
+A list line carries its nesting level in its span style: `BulletListSpanStyle.of(level)`
+and `OrderedListSpanStyle.of(level)` are per-level singletons (identity-compared,
+like heading levels), levels 0 to `MAX_LIST_LEVEL` (7), and the bare names
+`BulletListSpanStyle`, `OrderedListSpanStyle`, `BulletList` and `OrderedList`
+are level 0. The registry holds a `LineBlockStyle` per kind and level; the
+paragraph indent grows by one gutter per level, and the marker anchors to the
+text's left edge as before, so drawing follows the indent. Bullets cycle disc,
+circle, square by level, as browsers and Google Docs draw them; numbers are
+decimal at every level, as CommonMark renderers show them, and count per
+level: a level-k item continues its level's run, restarts every deeper level,
+and a bullet or a non-list line at a level ends the run at and below it.
+
+A line has one list block at one level (the stacking rule "the two list
+styles exclude each other" holds across levels). **Orphans:** markdown can
+place a level-k item only after, skipping blank lines, a list line at level
+k − 1 or deeper with the same quote status; any other line, or a change of
+quote status, ends the nesting. The model does not enforce this, on purpose:
+deleting a parent line leaves its children where they are, as Google Docs and
+Word do, and a normalization clamp would sit outside undo history, so undoing
+that delete could not bring the children's levels back (the one repair that
+was tried and rejected). An orphan is therefore the one state the model
+allows that the text form cannot hold, a deliberate exception to rule 1:
+export writes it at the level its predecessor allows, so it reloads one
+level shallower, a mild and visible change rather than a silent one. The
+edit paths keep followers valid inside their own undo step so the exception
+is rarely reached (`recordListEdit` in `richstyle/ListNesting.kt`, one undo
+step with the followers it touches): nesting a line (Tab) leaves its
+followers where they are, its former children now its siblings, as Google
+Docs does; un-nesting a line (Shift+Tab), making it body text (toggle,
+heading, Backspace at level 0), re-quoting it or exiting the list brings the
+items nested under it up to what it now allows, the subtree moving together
+and ending at its first sibling. A selection moves only its own items, as in
+Docs; the items under the last of them follow it.
+
+**Markdown.** Export indents a level-k item by the content offset of its
+level-(k − 1) ancestor: two columns after `- `, the marker's width after
+`1. `, tracked down the walk, so a child of `10. ` starts four columns in.
+Import peels the quote, reads the leading spaces (a tab counts four), and
+resolves a marker's level from the open ancestors: the level is the number of
+enclosing items whose content offset the indent reaches, the item's own
+content offset is its indent plus its marker and one space, a deeper indent
+than the maximum clamps, and a non-list non-blank line or a change of quote
+status closes every open item. A marker shape at the start of an item's body
+(`- 1990. plans`) stays literal, one marker per line, as before.
+
+**Editing** (Google Docs, Word, Notion and Apple Notes agree on these): Tab
+at the start of a list item nests it one level, never deeper than one below
+the item above it, and a multi-line selection nests each selected item where
+allowed; Shift+Tab un-nests one level; Enter continues the list at the same
+level; Enter on an empty nested item un-nests it, and on an empty top-level
+item ends the list; Backspace at the start of a nested item un-nests it, and
+at a top-level item makes it body text. Tab inside an item's text keeps lane
+D's rule (2.9) and inserts the indent text, as Word does. Toggling a list
+kind onto a line that is the other kind keeps its level; onto body text
+starts at level 0.
+
 ## Line kinds and validity
 
 Lines come in three kinds: **content**, **blank**, and **placeholder**. A
@@ -86,9 +144,11 @@ A document is valid when every block span sits on a line that can carry it:
   no serialized form.
 
 Enforcement is `normalizeLineBlocks`, a pure snapshot-to-snapshot repair run on
-every publish at the `withAtomicEdit` commit boundary. It removes disallowed
-block spans from placeholder lines and rebuilds those lines without the
-orphaned indent. Because it runs at the one point every revision passes
+every publish at the `withAtomicEdit` commit boundary, over the lines the
+revision changed since the last publish (the state narrows that range with
+every mutation) and, when a span was added, removed or lost or a line came or
+went, the fence runs those lines touch. It removes disallowed block spans from
+placeholder lines and rebuilds those lines without the orphaned indent. Because it runs at the one point every revision passes
 through, the invariant holds no matter which path attached the span: a toggle,
 either importer, smart Enter, a host app on the public span API, or span
 re-anchoring after an edit. The repair is deterministic and outside undo
@@ -99,8 +159,16 @@ ever discard is a marker on empty content.
 
 **Export** walks lines from one snapshot, prepending each block's
 `markdownPrefix` in emission order, then converting the body with markdown
-escaping. Escaping is the safety net for plain text: a literal `- ` at the
-start of a plain paragraph exports as `\- ` and survives.
+escaping. Escaping is the safety net for plain text, applied only where a
+character would start or end syntax in its position (`markdownEscapes`): a
+literal `- ` at the start of a plain paragraph exports as `\- ` and survives,
+`*not*` in dialogue is escaped by CommonMark's flanking rules, and an
+apostrophe, a hyphen mid-sentence, an underscore inside a word or an asterisk
+between spaces is written as typed. Line-start rules read the body, so a
+marker shape at the start of a list item's body (`- 1990. plans`) is escaped
+as well, since it would otherwise nest a list. Unsupported syntax kept as
+literal text on import (a table, a task list's `[ ]`) is written back as it
+was, and a table's rows are kept together.
 
 **Import** runs peel-then-classify on each raw line, after fence stripping:
 
@@ -117,6 +185,58 @@ start of a plain paragraph exports as `\- ` and survives.
 HTML import and export share the same block attachment path and derive their
 container nesting from the same snapshot walk, so both serializers agree on
 what a line's blocks are.
+
+### Paragraphs
+
+An editor line is a markdown paragraph. CommonMark joins adjacent lines into
+one paragraph and reads a line after a list item or a quote as its
+continuation, so writing lines with single newlines, though the editor's own
+importer reads them back, makes every other renderer merge them. Under
+`MarkdownConfiguration.paragraphSeparator = BLANK_LINE` (the default) export
+puts one blank line after every block (a paragraph, heading, rule, image, or
+the last line of a list or fence) except between the items of one list and
+the lines of one fence, which stay together; inside a quote the blank line is
+a bare `>` so the quote continues. An editor's own blank line is then written
+as itself after that separator, so k blank editor lines between two blocks
+are k + 1 blank lines in the file, and none is one. Import is the inverse:
+after each block (a fenced line, or any line that is not blank; a bare `>`
+line is blank) the one blank line export would have written there is left
+out, and the rest are the editor's. Import reads the same line kinds as
+export, so it leaves out only what export writes: nothing between two fenced
+lines or two list items, a bare `>` only between two quoted lines, an empty
+line otherwise; and it keeps a blank line before a line indented like code,
+which the editor never writes and whose block needs it. The mapping is a
+bijection on the editor's own output, so the round trip is exact; a foreign
+file's single blank line between two fences, list items or quotes stays and
+keeps them apart, its single soft break still imports as two lines and is
+written back as two paragraphs, and its extra blank lines beyond the first
+are kept as editor blank lines. A blank line is a line with blank text and no
+block but a quote: an empty list item, heading or fenced line is a block.
+`NEWLINE` keeps the old rule, a line per source line, for documents that
+must not change on the next save; `importMarkdown` also takes the rule to
+read one file by, for a host opening files written under the other.
+
+### Fence languages
+
+A fence's info string (` ```kotlin `) is not a line block: it belongs to the
+run, and the text form holds exactly one per fence. It lives in a
+`CodeFenceLanguageSpanStyle` span on every line of the run, as the fence
+marker itself does, attached by import off the undo history like the blocks,
+written after the opening marker by export from the run's first line, and read
+or set (for the whole run, one undo step) through
+`MarkdownExtension.codeFenceLanguage` and `setCodeFenceLanguage`. One span per
+line is what lets the language survive whatever the fence survives: a split at
+the run's first line, a join with the line above, fencing the line above,
+un-fencing the first line, splitting a run in two. Each leaves some line of
+the run with the language, and normalization gives the run's language (its
+first line's, or the first found down the run) to every line without one and
+drops any span off a fence; undoing the edit leaves it likewise, and a
+toggle's undo snapshot includes the line's language span. A line already
+holding a different language keeps it: the text form holds one info string
+per fence, so joining two runs writes the first run's, but undoing the join
+gives the second run its own back, and un-fencing the first run's lines makes
+the second's the run's. A language holding a backtick or a line break cannot
+be written and is dropped.
 
 ## Toggle semantics
 
@@ -161,10 +281,16 @@ consequences of its own.
 
 ## Known limitations
 
-- Nested blocks are unsupported: indented list items do not parse, and a
-  nested `> > ` quote collapses one level per import pass.
+- A nested `> > ` quote collapses one level per import pass; only lists nest.
+- HTML export writes a nested list item as a sibling and HTML import reads a
+  nested `<ul>` at the top level (roadmap 7.47).
 - Exporting a document whose last line is a heading appends a trailing blank
   line that survives re-import (stable at one extra line).
 - Toggling a style off after a blanket apply does not restore the styles lines
   carried before the apply; undo does. This matches conventional toolbar
   behavior.
+- A table is literal text: import unescapes a `\|` inside a cell and export
+  writes the pipe bare, so such a cell splits in two for other renderers.
+- A fence language filled in by normalization is outside undo history: joining
+  a fence that has a language with one that has none tags the second with the
+  first's, and undoing the join leaves that tag in place.

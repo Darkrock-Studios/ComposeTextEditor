@@ -361,7 +361,7 @@ class ImeLineBlockParityTest {
 
 	@Test
 	fun `backspace merging two plain lines is unchanged`() = runTest {
-		val state = editorWith("one\n\ntwo")
+		val state = editorWith("one\n\n\ntwo")
 		state.cursor.updatePosition(CharLineOffset(2, 0))
 
 		state.imeDeleteSurroundingText(1, 0)

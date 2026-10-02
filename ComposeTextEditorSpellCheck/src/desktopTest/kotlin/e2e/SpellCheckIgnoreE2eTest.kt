@@ -127,6 +127,70 @@ class SpellCheckIgnoreE2eTest {
 		}
 	}
 
+	@Test
+	fun `ignoring a lowercase word clears it capitalised and in capitals`() {
+		spellCheckUiTest(
+			spellChecker = CountingSpellChecker(correctWords = setOf("fine")),
+			initialText = "Kotlinx fine kotlinx fine KOTLINX fine kOtlinx",
+		) {
+			rightClickAtCharacter(15)
+			awaitMenuItem(ignore)
+			clickMenuItem(ignore)
+
+			assertEquals(listOf("kOtlinx"), flaggedWords, "only a spelling with other capitals stays flagged")
+
+			state.textState.cursor.updatePosition(CharLineOffset(0, 0))
+			typeText("Kotlinx ")
+			letSpellCheckSettle()
+			assertEquals(listOf("kOtlinx"), flaggedWords)
+		}
+	}
+
+	@Test
+	fun `ignoring a word capitalised at a sentence start clears it in lowercase`() {
+		spellCheckUiTest(
+			spellChecker = CountingSpellChecker(correctWords = setOf("fine")),
+			initialText = "Kotlinx fine kotlinx",
+		) {
+			rightClickAtCharacter(2)
+			awaitMenuItem(ignore)
+			clickMenuItem(ignore)
+
+			assertEquals(emptyList(), flaggedWords)
+		}
+	}
+
+	@Test
+	fun `ignoring an acronym keeps its capitals`() {
+		spellCheckUiTest(
+			spellChecker = CountingSpellChecker(correctWords = setOf("fine")),
+			initialText = "NASA fine nasa fine Nasa",
+		) {
+			rightClickAtCharacter(1)
+			awaitMenuItem(ignore)
+			clickMenuItem(ignore)
+
+			assertEquals(listOf("nasa", "Nasa"), flaggedWords)
+		}
+	}
+
+	@Test
+	fun `a dictionary word clears capitalised too, and the host gets it as flagged`() {
+		val added = mutableListOf<String>()
+		spellCheckUiTest(
+			spellChecker = CountingSpellChecker(correctWords = setOf("fine")),
+			initialText = "zorp fine Zorp",
+			onAddToDictionary = { added += it },
+		) {
+			rightClickAtCharacter(1)
+			awaitMenuItem(addToDictionary)
+			clickMenuItem(addToDictionary)
+
+			assertEquals(listOf("zorp"), added)
+			assertEquals(emptyList(), flaggedWords)
+		}
+	}
+
 	/** A checker that knows only [words], standing in for one language's dictionary. */
 	private class Dictionary(private val words: Set<String>) : EditorSpellChecker {
 		override suspend fun isCorrectWord(word: String) = word in words

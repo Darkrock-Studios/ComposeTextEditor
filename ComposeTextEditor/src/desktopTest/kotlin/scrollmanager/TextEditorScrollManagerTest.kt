@@ -559,4 +559,63 @@ class TextEditorScrollManagerTest {
 		assertEquals(60f, manager.calculateOffsetYPosition(CharLineOffset(4, 0)))
 		assertEquals(30, manager.calculateLineHeight(CharLineOffset(4, 0)))
 	}
+
+	@Test
+	fun `test scrollToPosition with animated false scrolls just far enough without animation`() = testScope.runTest {
+		val scrollState = createMockScrollState()
+		val lineWraps = createTestLineWraps(5)
+
+		val manager = TextEditorScrollManager(
+			scope = testScope,
+			scrollState = scrollState,
+			getLines = { List(5) { AnnotatedString("Line $it") } },
+			getViewportSize = { Size(100f, 60f) }, // Shows 3 lines
+			getCursorPosition = { CharLineOffset(0, 0) },
+			getLineOffsets = { lineWraps }
+		)
+		manager.updateContentHeight(100)
+
+		every { scrollState.value } returns 0
+		every { scrollState.minValue } returns 0
+
+		val scrollSlot = slot<Int>()
+		every { scrollState.scrollTo(capture(scrollSlot)) } returns Unit
+
+		manager.scrollToPosition(CharLineOffset(4, 0), animated = false)
+
+		// At once, and to line 4's bottom (80..100) at the viewport's bottom.
+		assertTrue(scrollSlot.isCaptured)
+		assertEquals(40, scrollSlot.captured)
+		coVerify(exactly = 0) { scrollState.animateScrollTo(any()) }
+	}
+
+	@Test
+	fun `test scrollToCursor does nothing while cursor scrolls are suppressed`() = testScope.runTest {
+		val scrollState = createMockScrollState()
+		val lineWraps = createTestLineWraps(5)
+
+		val manager = TextEditorScrollManager(
+			scope = testScope,
+			scrollState = scrollState,
+			getLines = { List(5) { AnnotatedString("Line $it") } },
+			getViewportSize = { Size(100f, 60f) }, // Shows 3 lines
+			getCursorPosition = { CharLineOffset(4, 0) },
+			getLineOffsets = { lineWraps }
+		)
+		manager.updateContentHeight(100)
+		every { scrollState.value } returns 0
+
+		manager.cursorScrollSuppressed = true
+		manager.scrollToCursor()
+		testScope.advanceUntilIdle()
+
+		coVerify(exactly = 0) { scrollState.animateScrollTo(any()) }
+		verify(exactly = 0) { scrollState.scrollTo(any()) }
+
+		manager.cursorScrollSuppressed = false
+		manager.scrollToCursor()
+		testScope.advanceUntilIdle()
+
+		coVerify(exactly = 1) { scrollState.animateScrollTo(40) }
+	}
 }

@@ -732,6 +732,21 @@ Guards #89, #90, #65, #83.
    looked up as "don't".
 7. Scroll a long spell-checked document quickly. **Expect:** smooth scrolling; squiggles
    render correctly deep in the document, not just near the top (#65).
+8. Make a link with the toolbar over a word, then misspell the word. Ctrl+click it
+   (Cmd+click on macOS). **Expect:** the link opens. Right-click it. **Expect:** the
+   word's suggestions, not the standard menu alone.
+9. Pass `readOnly = true` to the demo's `SpellCheckingTextEditor` and right-click a
+   misspelled word. **Expect:** Ignore (and Add to dictionary where offered), no
+   suggestions; Ignore clears the squiggle and the text is unchanged.
+10. On Android, tap a misspelled word near the start of a line. **Expect:** the menu opens
+    just below the word, not shifted left of it by the editor's padding.
+11. Desktop, Windows or Linux key bindings: put the caret in a misspelled word and press
+    Shift+F10, then the Menu key. **Expect:** the word's suggestions and Ignore under the
+    caret. With the caret in a correct word: the standard menu.
+12. Type "kotlinx Kotlinx KOTLINX NASA nasa" and choose Ignore on "kotlinx", then on
+    "NASA". **Expect:** the three kotlinx squiggles clear together; "nasa" stays flagged.
+13. Type "the U.S.A. and the U.S.'s, e.g. a Ph.D." **Expect:** no squiggles on any part of
+    the abbreviations.
 
 ## 8. Performance and smoke pass
 
@@ -783,6 +798,123 @@ Android unless a step says otherwise.
    the thumb pages toward the pointer (and keeps paging while held), and no thumb
    once the document fits (delete most of it).
 
+## 8b1. Read-only with a caret (7.13)
+
+Rich Text Editor demo, turn the Read only switch (under the title) on.
+
+1. Desktop and web: click in the text. **Expect:** the caret shows and blinks; the
+   arrows, Home, End, word and page motions move it; Shift with them selects; Ctrl+A
+   (Cmd+A) and Ctrl+C (Cmd+C) work. Typing, Enter, Backspace, Delete, Tab, paste, cut
+   and the formatting chords change nothing; Tab moves focus on. The context menu
+   offers Copy and Select All only.
+2. Android and iOS: tap in the text. **Expect:** the caret shows, no soft keyboard
+   rises, and a hardware keyboard moves the caret. Long-press selects a word; the
+   toolbar offers Copy and Select All only.
+3. TalkBack and VoiceOver: the editor is announced as a text field that cannot be
+   edited, not as disabled, and its actions offer no paste, cut or set text.
+
+### 8b1a. Growing with the text (7.13)
+
+Rich Text Editor demo, Grow switch on (3 to 8 lines).
+
+1. Empty the document. **Expect:** the editor is three lines tall.
+2. Type line after line. **Expect:** it grows a line at a time from the fourth,
+   stops at eight, then scrolls, with the caret kept in view. Delete lines: it
+   shrinks back to three.
+3. Resize the window narrower (desktop) or rotate (phone). **Expect:** the height
+   follows the new wrapping.
+
+### 8b1b. Maximum length and single line (7.13)
+
+Rich Text Editor demo.
+
+1. Turn on 280 max. Type, paste a long text, dictate (Android, iOS), and on Android
+   type with Gboard's suggestions. **Expect:** the document stops at 280 characters; a
+   paste that does not fit is cut to what fits; the keyboard's own view of the text
+   stays right (no doubled or lost letters after the cut); one undo removes a cut
+   paste. TalkBack reads the limit ("280 characters maximum" or similar).
+2. Turn on Single line. Press Enter, paste two lines. **Expect:** Enter adds nothing;
+   the pasted line break becomes a space; the editor is one line tall and grows as the
+   line wraps.
+
+## 8b2. Saved state (Android)
+
+Markdown Editor (Blank) demo, which uses `rememberSaveableTextEditorState`. Enable
+Developer options > Don't keep activities.
+
+1. Type a few paragraphs; make a heading, a bullet list, a quote, a code fence, bold,
+   italic, underline and a link; add an image if the toolbar offers one. Scroll so the
+   top line is mid-document, place the caret, and select a word.
+2. Rotate the device, then switch to another app and back (the activity is destroyed).
+   **Expect:** after each, the text, every style and block, the link, the image, the
+   caret, the selection and the top line come back. Undo does nothing: the history
+   starts afresh.
+
+## 8c. Accessibility
+
+Screen readers: TalkBack on Android, VoiceOver on iOS and macOS, NVDA on Windows,
+Orca on Linux. Compose publishes the editor's semantics to each of them; the steps
+below say what each must find. Desktop screen readers reach Compose through the Java
+Access Bridge (Windows) or the AT-SPI bridge (Linux), which must be enabled first.
+
+### 8c.1 A disabled editor
+
+1. Rich Text Editor demo, turn the Enabled switch (under the title) off (the toolbar hides with it,
+   since it edits the state directly).
+2. TalkBack and VoiceOver (iOS): move accessibility focus to the editor. **Expect:**
+   the text is read, and the editor is announced as disabled (TalkBack: "disabled";
+   VoiceOver: "dimmed"). The actions menu (TalkBack) or rotor (VoiceOver) offers no
+   paste, cut or set text, and double-tap does not raise a keyboard.
+3. VoiceOver (macOS), NVDA, Orca: Tab to the editor. **Expect:** the text is read
+   and announced as unavailable or read-only; typing does nothing; Ctrl+A (Cmd+A)
+   then Ctrl+C (Cmd+C) copies it.
+4. Turn Enabled back on. **Expect:** the editor is announced as an editable text
+   field again and typing works.
+
+### 8c.2 Replacing the text by voice or autofill
+
+1. Rich Text Editor demo. Android with Voice Access: say "type hello" into the
+   editor, then use a text replacement command on one word; or on any platform with
+   a password manager or autofill service, let it fill the editor.
+2. **Expect:** only the changed words change; bold, lists and headings elsewhere
+   survive; one undo (Ctrl+Z or the toolbar) reverts the whole replacement, and a
+   second undo reaches the edits made before it.
+
+### 8c.3 Reading, selecting and the clipboard
+
+Rich Text Editor demo (its editor is labelled "Document"), with a link added from the
+toolbar's Link button over a word.
+
+1. TalkBack: move accessibility focus to the editor. **Expect:** "Document, edit box",
+   then the text. Swipe with the reading control set to Lines, then Words, then
+   Characters: each step moves by one drawn row, word or character. Double-tap and
+   hold: the context menu opens. With a selection made through TalkBack's text
+   selection mode, the actions menu offers Copy, Cut and Paste, and each works. The
+   Links menu lists the link and opens it.
+2. VoiceOver (iOS): swipe to the editor: "Document, text field", then the text.
+   Rotor set to Lines, Words, Characters: swipe up and down moves by each. Rotor Edit
+   offers Copy, Cut, Paste and Select All, and each works.
+3. VoiceOver (macOS), NVDA, Orca: Tab to the editor. **Expect:** the label and the text
+   are read; arrow keys read the character, word (Ctrl or Option with the arrows) or
+   line the caret moves over; Shift with the arrows reads what is selected.
+4. Turn Enabled off and repeat 1 and 2. **Expect:** Copy only; no Cut, Paste or Set
+   text.
+
+### 8c.4 RichTextView
+
+RichTextView demo: the top view is selectable and opens links; the cards below are
+selectable but pass no `onLinkClick`, so they offer no links to screen readers.
+
+1. TalkBack: swipe onto the top view. **Expect:** its text is read as text, not as an
+   edit box; reading by Lines follows the drawn rows; the Links menu lists its link
+   and opens it. Enter text selection mode, select a word, and the actions menu
+   offers Copy (never Cut, Paste or Set text); Copy works. On a card, the Links
+   menu is empty.
+2. VoiceOver (iOS): swipe onto the view: the text is read as static text; rotor Lines
+   and Words step through it; the link is reachable with the rotor's Links.
+3. VoiceOver (macOS), NVDA, Orca: Tab to the selectable view. **Expect:** the text is
+   read; Ctrl+A (Cmd+A) then Ctrl+C (Cmd+C) copies it; typing does nothing.
+
 ## 9. Consumer API sanity
 
 Guards #82, #48, #87, #90. Not strictly manual UI testing, but worth one pass before
@@ -801,6 +933,9 @@ tagging, since these change what downstream code compiles against.
    `resumeSpellChecking` (#90). None of it shipped in a release, so no migration note
    is needed, but confirm nothing in the sample app or docs still references them.
 5. Run `./gradlew updateDocs` and confirm Dokka generates cleanly with the new symbols.
+6. Rich Text Editor demo: the header's word count follows typing, paste, cut and undo
+   at once, and typing in a pasted document of a few thousand lines stays as smooth
+   with the count showing as without (7.25).
 
 ## Sign-off
 
@@ -813,3 +948,4 @@ tagging, since these change what downstream code compiles against.
 | §6 Undo / redo | | | | | | |
 | §7 Spell check | | | | | | |
 | §8 Perf / smoke | | | | | | |
+| §8c Accessibility | | | | | | |

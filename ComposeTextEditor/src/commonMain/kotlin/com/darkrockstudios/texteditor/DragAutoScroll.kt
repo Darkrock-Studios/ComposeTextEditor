@@ -99,15 +99,14 @@ internal class DragAutoScroll(
 		val top = state.scrollState.value.toFloat()
 		val bottom = top + state.viewportSize.height
 		val rows = state.lineOffsets
-		// Rows run top to bottom, so both searches are binary; neither comparison returns 0,
-		// so each result is -(first row past the boundary) - 1.
+		// Rows run top to bottom, so both searches are binary.
 		val row = if (overflow > 0f) {
 			val last = rows.lastOrNull() ?: return position
 			if (last.offset.y + last.effectiveHeight <= bottom) {
 				// With the last row in view, far right of it is the document's end.
 				return Offset(DOCUMENT_EDGE_X, last.offset.y + last.effectiveHeight / 2f - top)
 			}
-			val pastBottom = -rows.binarySearch { if (it.offset.y + it.effectiveHeight <= bottom) -1 else 1 } - 1
+			val pastBottom = rows.firstRowWhere { it.offset.y + it.effectiveHeight > bottom }
 			// A row taller than the viewport is never wholly inside it; take the one at the edge.
 			rows.getOrNull(pastBottom - 1)?.takeIf { it.offset.y >= top } ?: rows.getOrNull(pastBottom)
 		} else {
@@ -116,7 +115,7 @@ internal class DragAutoScroll(
 				// With the first row in view, far left of it is the document's start.
 				return Offset(-DOCUMENT_EDGE_X, firstRow.offset.y + firstRow.effectiveHeight / 2f - top)
 			}
-			val firstBelowTop = -rows.binarySearch { if (it.offset.y < top) -1 else 1 } - 1
+			val firstBelowTop = rows.firstRowWhere { it.offset.y >= top }
 			val first = rows.getOrNull(firstBelowTop)
 			first?.takeIf { it.offset.y + it.effectiveHeight <= bottom } ?: rows.getOrNull(firstBelowTop - 1)
 		}

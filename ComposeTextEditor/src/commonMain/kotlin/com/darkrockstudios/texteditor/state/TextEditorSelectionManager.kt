@@ -89,7 +89,7 @@ class TextEditorSelectionManager(
 			val anchor = caretHandle ?: return false
 			// The document is not snapshot state, so a change to it is caught here; the
 			// watcher in showCaretHandle drops the anchor for everything else.
-			return _selection == null && state.isFocused &&
+			return _selection == null && state.hasFocus &&
 					anchor.position == state.cursorPosition && anchor.content === state.content
 		}
 
@@ -107,7 +107,7 @@ class TextEditorSelectionManager(
 			// The tap focuses the editor after this runs, unless it opened a popup instead,
 			// and then there is no caret to handle. A frame later the focus has settled.
 			if (coroutineContext[MonotonicFrameClock] != null) withFrameNanos { } else yield()
-			snapshotFlow { CaretHandleWatch(state.cursorPosition, _selection, state.isFocused, caretHandle) }
+			snapshotFlow { CaretHandleWatch(state.cursorPosition, _selection, state.hasFocus, caretHandle) }
 				.first { (caret, selection, focused, anchor) ->
 					anchor == null || caret != anchor.position || selection != null || !focused
 				}

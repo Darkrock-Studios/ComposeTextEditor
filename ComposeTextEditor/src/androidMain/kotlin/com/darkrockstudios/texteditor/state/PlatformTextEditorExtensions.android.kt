@@ -13,6 +13,7 @@ import com.darkrockstudios.texteditor.input.ImeCursorSync
 import com.darkrockstudios.texteditor.input.TextEditorInputConnection
 import com.darkrockstudios.texteditor.input.composingAsTextRange
 import com.darkrockstudios.texteditor.input.imeCaretInRoot
+import com.darkrockstudios.texteditor.input.imeSubSequence
 import com.darkrockstudios.texteditor.input.selectionAsTextRange
 
 /**
@@ -156,7 +157,7 @@ actual class PlatformTextEditorExtensions actual constructor(
 		if (composing != null && composing.start < composing.end && composing.end <= state.getTextLength()) {
 			builder.setComposingText(
 				composing.start,
-				state.getAllText().subSequence(composing.start, composing.end)
+				state.imeSubSequence(composing.start, composing.end)
 			)
 		}
 

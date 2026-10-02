@@ -32,6 +32,13 @@ class InMemoryClipboard : Clipboard {
 		entry = clipEntry
 	}
 
+	/** The clipboard's string flavor, or null when it holds none. */
+	fun plainText(): String? {
+		val transferable = entry?.nativeClipEntry as? java.awt.datatransfer.Transferable ?: return null
+		val flavor = java.awt.datatransfer.DataFlavor.stringFlavor
+		return if (transferable.isDataFlavorSupported(flavor)) transferable.getTransferData(flavor) as String else null
+	}
+
 	/** Offers [value] on the string flavor only, as an external application would. */
 	fun setPlainText(value: String) {
 		seed(ClipEntry(java.awt.datatransfer.StringSelection(value)))

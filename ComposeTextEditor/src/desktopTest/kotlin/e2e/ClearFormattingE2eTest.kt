@@ -62,7 +62,7 @@ class ClearFormattingE2eTest {
 		waitForIdle()
 		press(Key.A, ctrl = true)
 		press(Key.Backslash, ctrl = true)
-		assertEquals("# Title\nbold and it [site](https://example.com)", markdown.exportAsMarkdown())
+		assertEquals("# Title\n\nbold and it [site](https://example.com)", markdown.exportAsMarkdown())
 	}
 
 	@Test

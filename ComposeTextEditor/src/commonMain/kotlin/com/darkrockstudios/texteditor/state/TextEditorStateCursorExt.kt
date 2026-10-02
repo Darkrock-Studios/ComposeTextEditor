@@ -5,6 +5,8 @@ import androidx.compose.ui.text.style.ResolvedTextDirection
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.LineWrap
 import com.darkrockstudios.texteditor.effectiveHeight
+import com.darkrockstudios.texteditor.lastRowAtOrAbove
+import com.darkrockstudios.texteditor.rowAt
 
 // The layout can lag the text (it is skipped while the viewport is collapsed), so the
 // cursor may be missing from lineOffsets, and a wrap's line may be missing from the
@@ -191,7 +193,7 @@ private fun TextEditorState.wordStartBefore(line: Int, char: Int): Int? =
 
 /** Whether the caret's paragraph runs right to left; a paragraph the layout has not reached counts as left to right. */
 internal fun TextEditorState.caretParagraphIsRtl(): Boolean {
-	val row = lineOffsets.getOrNull(getWrappedLineIndex(cursorPosition)) ?: return false
+	val row = lineOffsets.rowAt(cursorPosition) ?: return false
 	return row.textLayoutResult.getParagraphDirection(0) == ResolvedTextDirection.Rtl
 }
 
@@ -257,7 +259,7 @@ private fun TextEditorState.moveCursorByPage(direction: Int) {
 	val pageHeight = scrollManager.viewportHeight
 	val targetY = row.offset.y + row.effectiveHeight / 2f + direction * pageHeight
 	val lastRow = lineOffsets.last()
-	val targetIndex = lineOffsets.indexOfLast { it.offset.y <= targetY }.let {
+	val targetIndex = lineOffsets.lastRowAtOrAbove(targetY).let {
 		if (it == index) index + direction else it
 	}
 	when {

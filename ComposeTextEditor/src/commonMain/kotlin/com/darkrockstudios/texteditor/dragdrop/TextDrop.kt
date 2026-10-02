@@ -10,27 +10,41 @@ import com.darkrockstudios.texteditor.html.HtmlDocument
 import com.darkrockstudios.texteditor.html.parseHtmlDocument
 import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.endWhenInsertedAt
+import com.darkrockstudios.texteditor.state.screenInput
 
 /**
  * Drops [text] at [at] and selects it, as one undo step. [moveFrom] is where the text
  * was dragged from in this editor: it is taken from there too. [html], the markup the
  * drag carried, restores the blocks of whole dropped lines as a paste does.
  *
+ * The input filter screens the text; with [whole], as for a move, which deletes the
+ * source whatever lands, text it would change is refused rather than dropped in part.
+ *
  * Returns the dropped range, or null when nothing changed: a move dropped inside the
- * text it moves.
+ * text it moves, or text the filter refused.
  */
 internal fun TextEditorState.dropText(
 	text: AnnotatedString,
 	html: String?,
 	at: CharLineOffset,
 	moveFrom: TextEditorRange?,
+	whole: Boolean = false,
 ): TextEditorRange? {
 	if (moveFrom != null && at > moveFrom.start && at < moveFrom.end) return null
-	val normalized = withSizeForPasteAt(at, text.normalizeLineEndings())
-	if (normalized.isEmpty()) return null
+	val sized = withSizeForPasteAt(at, text.normalizeLineEndings())
+	// Screened as replacing what a move takes away, which it does in length. Text the
+	// filter changed drops plain, as a paste does, since the blocks follow its lines.
+	val normalized = screenInput(moveFrom ?: TextEditorRange(at, at), sized) ?: return null
+	if (normalized.isEmpty() || (whole && normalized != sized)) return null
 	val document = html
+		?.takeIf { normalized == sized }
 		?.let { parseHtmlDocument(it, markdownConfiguration) }
 		?.takeIf { !it.hasNoDecorations() && it.text.text == normalized.text }
+	// A composition's range would address the text as it stood before the drop.
+	if (composingRange != null) {
+		clearComposingRange()
+		requestImeResync()
+	}
 
 	return editGroup {
 		// The earlier edit goes last, so the other's position still holds when it runs.
@@ -52,7 +66,7 @@ internal fun TextEditorState.dropText(
 private fun TextEditorState.insertAt(at: CharLineOffset, text: AnnotatedString, document: HtmlDocument?) {
 	selector.clearSelection()
 	cursor.updatePosition(at)
-	insertStringAtCursor(text)
+	editManager.alreadyScreened { insertStringAtCursor(text) }
 	document?.let { applyHtmlPasteBlocks(it, at, text) }
 }
 

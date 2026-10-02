@@ -120,7 +120,7 @@ class LineEndingsTest {
 	fun `markdown import splits on CRLF`() = runTest {
 		val state = createState()
 		state.withMarkdown().importMarkdown("**bold**\r\nplain\r\n\r\n- item\r\n")
-		assertEquals(listOf("bold", "plain", "", "item", ""), state.lines)
+		assertEquals(listOf("bold", "plain", "item"), state.lines)
 		state.assertNoCarriageReturns()
 	}
 

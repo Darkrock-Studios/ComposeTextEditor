@@ -12,34 +12,34 @@ class RichSpanManager(
 	private val state: TextEditorState
 ) {
 	/**
-	 * Copy-on-write: every mutation publishes a brand new set rather than editing the
-	 * previous one, so the sets handed out by [getAllRichSpans] and iterated by the
-	 * queries below can never be modified underneath a reader.
+	 * The revision's spans keyed by line. Copy-on-write: every mutation publishes a new
+	 * index rather than editing this one in place, so the sets handed out by
+	 * [getAllRichSpans] and the lists the queries below read can never be modified
+	 * underneath a reader.
 	 */
-	private var spans: Set<RichSpan>
-		get() = state.workingContent.richSpans
-		set(value) = state.setRichSpans(value)
+	private val index: SpanIndex get() = state.workingContent.spanIndex
 
 	/**
 	 * Every rich span in the document, as an immutable snapshot. Safe to hold onto and
-	 * to iterate from any thread; it will not reflect later edits.
+	 * to iterate from any thread; it will not reflect later edits. Built from the
+	 * per-line index on first read per revision, so a reader that wants one line's
+	 * spans should ask for that line.
 	 */
-	fun getAllRichSpans(): Set<RichSpan> = spans
+	fun getAllRichSpans(): Set<RichSpan> = state.workingContent.richSpans
 
 	/**
-	 * Every span anchored to (starting on) [line]. Reads a per-revision index rather
+	 * Every span anchored to (starting on) [line]. Reads the per-line index rather
 	 * than scanning the whole set, so the line-block queries stay cheap on documents
 	 * carrying thousands of spans.
 	 */
 	internal fun getRichSpansStartingOn(line: Int): List<RichSpan> =
 		spansOnLine(line).filter { it.range.start.line == line }
 
-	/** Every span covering [line], from the snapshot's memoized per-line index. */
-	private fun spansOnLine(line: Int): List<RichSpan> =
-		state.workingContent.richSpansByLine[line] ?: emptyList()
+	/** Every span covering [line], from the snapshot's per-line index. */
+	private fun spansOnLine(line: Int): List<RichSpan> = index.spansOn(line)
 
 	internal fun addRichSpan(range: TextEditorRange, style: RichSpanStyle) {
-		spans = spans + RichSpan(range, style)
+		addRichSpans(listOf(RichSpan(range, style)))
 	}
 
 	/**
@@ -48,29 +48,36 @@ class RichSpanManager(
 	 * paste replay recorded offsets; the document they land in may have shifted.
 	 */
 	internal fun addRichSpanClamped(range: TextEditorRange, style: RichSpanStyle) {
-		clampSpanToLines(RichSpan(range, style), state.textLines)?.let { spans = spans + it }
+		clampSpanToLines(RichSpan(range, style), state.textLines)?.let { addRichSpans(listOf(it)) }
 	}
 
 	internal fun addRichSpan(start: CharLineOffset, end: CharLineOffset, style: RichSpanStyle) {
 		addRichSpan(TextEditorRange(start, end), style)
 	}
 
-	/** Adds every span in [newSpans] in one publish, for bulk callers like an import. */
+	/**
+	 * Adds every span in [newSpans] in one publish, for bulk callers like an import.
+	 * Same-line duplicates of a line-anchored style fold into one span, so a line
+	 * carries one gutter marker of a kind.
+	 */
 	internal fun addRichSpans(newSpans: Collection<RichSpan>) {
 		if (newSpans.isEmpty()) return
-		spans = spans + newSpans
+		state.setSpanIndex(index.plus(newSpans), newSpans)
 	}
 
 	/**
 	 * Adds every span in [newSpans] in one publish, each coerced onto the current
-	 * document like [clampAllToDocument] does after an edit. Batched overlay callers
-	 * (spell check, find) compute ranges asynchronously, so a range can arrive
-	 * pointing past a document that shrank in the meantime; unclamped, such a span is
-	 * invisible, uncollectable by range queries, and still counted by span scans.
+	 * document like the re-anchoring after an edit does, and returns the spans as
+	 * they landed. Batched overlay callers (spell check, find) compute ranges
+	 * asynchronously, so a range can arrive pointing past a document that shrank in
+	 * the meantime; unclamped, such a span is invisible, uncollectable by range
+	 * queries, and still counted by span scans.
 	 */
-	internal fun addRichSpansClamped(newSpans: Collection<RichSpan>) {
+	internal fun addRichSpansClamped(newSpans: Collection<RichSpan>): List<RichSpan> {
 		val lines = state.textLines
-		addRichSpans(newSpans.mapNotNull { clampSpanToLines(it, lines) })
+		val clamped = newSpans.mapNotNull { clampSpanToLines(it, lines) }
+		addRichSpans(clamped)
+		return clamped
 	}
 
 	internal fun removeRichSpan(start: CharLineOffset, end: CharLineOffset, style: RichSpanStyle) {
@@ -78,13 +85,13 @@ class RichSpanManager(
 	}
 
 	internal fun removeRichSpan(span: RichSpan) {
-		spans = spans - span
+		removeRichSpans(listOf(span))
 	}
 
 	/** Drops every span in [doomed] in one publish. */
 	internal fun removeRichSpans(doomed: Collection<RichSpan>) {
 		if (doomed.isEmpty()) return
-		spans = spans - doomed.toSet()
+		state.setSpanIndex(index.minus(doomed), doomed)
 	}
 
 	fun getSpansForLineWrap(lineWrap: LineWrap): List<RichSpan> {
@@ -93,39 +100,74 @@ class RichSpanManager(
 		return spansOnLine(lineWrap.line).filter { it.intersectsWith(lineWrap) }
 	}
 
+	/**
+	 * Re-anchors the spans across [operation], which the lines already reflect: the
+	 * spans on the edit's pre-edit lines and the loose ones (crossing a line break, or
+	 * beyond the lines) are run through the operation's transform, folded, clamped
+	 * onto the new lines and written back over the edit's post-edit lines; every other
+	 * line's spans move with their chunk of the index, which is spliced to the new
+	 * line count. Span-only operations move no text, so every span keeps its range
+	 * verbatim.
+	 */
 	fun updateSpans(operation: TextEditOperation, metadata: OperationMetadata?) {
-		// Span-only operations move no text, so every existing span keeps its range
-		// verbatim; only the shared clamp and duplicate-merge passes apply.
-		val updatedSpans = when (operation) {
+		val (first, last) = when (operation) {
+			is TextEditOperation.Insert -> operation.position.line to operation.position.line
+			is TextEditOperation.Delete -> operation.range.start.line to operation.range.end.line
+			is TextEditOperation.Replace -> operation.range.start.line to operation.range.end.line
 			is TextEditOperation.StyleSpan,
 			is TextEditOperation.RichSpan,
-			is TextEditOperation.LineBlock -> spans
+			is TextEditOperation.LineBlock -> return
+		}
+		val before = index
+		val oldCount = before.lineCount
+		val from = first.coerceIn(0, oldCount)
+		val to = (last + 1).coerceIn(from, oldCount)
 
-			is TextEditOperation.Insert,
-			is TextEditOperation.Delete,
-			is TextEditOperation.Replace -> {
-				val transformed = mutableSetOf<RichSpan>()
-				spans.forEach { span ->
-					span.range.apply {
-						when (operation) {
-							is TextEditOperation.Insert ->
-								handleInsert(operation, transformed, span)
-
-							is TextEditOperation.Delete ->
-								handleDelete(metadata, operation, transformed, span)
-
-							is TextEditOperation.Replace ->
-								handleReplace(operation, transformed, span)
-
-							else -> error("unreachable")
-						}
-					}
-				}
-				transformed
+		val transformed = LinkedHashSet<RichSpan>()
+		var candidates = 0
+		fun transform(span: RichSpan) = span.range.run {
+			candidates++
+			when (operation) {
+				is TextEditOperation.Insert -> handleInsert(operation, transformed, span)
+				is TextEditOperation.Delete -> handleDelete(metadata, operation, transformed, span)
+				is TextEditOperation.Replace -> handleReplace(operation, transformed, span)
+				else -> error("unreachable")
 			}
 		}
+		for (line in from until to) before.ownSpansOn(line).forEach(::transform)
+		before.loose.forEach(::transform)
 
-		spans = clampAllToDocument(mergeLineAnchoredDuplicates(updatedSpans))
+		val results = clampAllToDocument(mergeLineAnchoredDuplicates(transformed))
+		val replaced = state.textLines.size - (oldCount - (to - from))
+		val perLine = arrayOfNulls<MutableList<LineSpan>>(replaced)
+		val loose = LinkedHashSet<RichSpan>()
+		val elsewhere = ArrayList<RichSpan>()
+		for (span in results) {
+			val line = span.range.start.line - from
+			when {
+				span.range.start.line != span.range.end.line -> loose += span
+				line in 0 until replaced -> {
+					val onLine = perLine[line] ?: ArrayList<LineSpan>(1).also { perLine[line] = it }
+					val lineSpan = LineSpan(span.range.start.char, span.range.end.char, span.style)
+					if (lineSpan !in onLine) onLine += lineSpan
+				}
+				else -> elsewhere += span
+			}
+		}
+		var after = before.splice(from, to, List(replaced) { perLine[it] ?: emptyList() }, loose)
+		var landedFirst = from
+		var landedLast = from + replaced - 1
+		if (elsewhere.isNotEmpty()) {
+			// A loose span clamped onto a line lands where the edit did not reach.
+			after = after.plus(elsewhere)
+			for (span in elsewhere) {
+				landedFirst = minOf(landedFirst, span.range.start.line)
+				landedLast = maxOf(landedLast, span.range.end.line)
+			}
+		}
+		// Which lines carry which spans changes only when a span died, landed, or a line came or went.
+		val structureChanged = results.size != candidates || replaced != to - from || elsewhere.isNotEmpty()
+		state.setSpanIndex(after, landedFirst, landedLast, spansChanged = structureChanged)
 	}
 
 	/**
@@ -135,12 +177,12 @@ class RichSpanManager(
 	 */
 	private fun clampAllToDocument(updatedSpans: Set<RichSpan>): Set<RichSpan> {
 		val lines = state.textLines
-		return updatedSpans.mapNotNullTo(mutableSetOf()) { clampSpanToLines(it, lines) }
+		return updatedSpans.mapNotNullTo(LinkedHashSet()) { clampSpanToLines(it, lines) }
 	}
 
 	/**
-	 * Collapses any same-line duplicates of line-anchored (sticky-at-start) styles
-	 * — bullet, blockquote, etc. — into a single span covering the union range.
+	 * Collapses any same-line duplicates of line-anchored (sticky-at-start) styles,
+	 * bullet, blockquote and so on, into a single span covering the union range.
 	 * A multi-line merge that joins two same-style line-anchored lines naturally
 	 * produces two adjacent spans on the joined line; this fold gives us the
 	 * "one gutter marker per line" invariant those styles assume.
@@ -163,7 +205,7 @@ class RichSpanManager(
 					)
 				}
 			}
-		return (others + merged).toSet()
+		return (others + merged).toCollection(LinkedHashSet())
 	}
 
 	private fun TextEditorRange.handleInsert(
@@ -375,8 +417,8 @@ class RichSpanManager(
 		updatedSpans: MutableSet<RichSpan>,
 		span: RichSpan
 	) {
-		// updateSpans rebuilds the whole set from what these handlers contribute, so a
-		// handler that adds nothing erases the span. With no metadata to transform
+		// updateSpans rebuilds the touched lines from what these handlers contribute, so
+		// a handler that adds nothing erases the span. With no metadata to transform
 		// against, a stale position beats deleting the span outright.
 		if (metadata == null) {
 			updatedSpans.add(span)
@@ -389,8 +431,9 @@ class RichSpanManager(
 				// The marker was pulled off column 0: its line was consumed by a join.
 				// It survives only onto a receiving line that is already the same kind
 				// of item (rejoining split halves); otherwise the receiving line keeps
-				// its own identity and the marker dies with its line.
-				val receivingLineHasSameStyle = spans.any { other ->
+				// its own identity and the marker dies with its line. The receiving line
+				// is the join's own line, at the same index before and after the edit.
+				val receivingLineHasSameStyle = spansOnLine(newStart.line).any { other ->
 					other.style == span.style &&
 						other.range.start.line == newStart.line &&
 						other.range.start.char == 0
