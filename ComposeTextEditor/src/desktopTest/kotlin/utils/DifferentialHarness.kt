@@ -160,7 +160,7 @@ private val UNWRAPPED_REFERENCE_WIDTH = 20_000.dp
 /**
  * Harness for differential tests: composes [BasicTextEditor] beside Compose's own
  * `BasicTextField(TextFieldState)`, the desktop reference for native behaviour
- * ("The reference rule" in docs/ROADMAP.md), and replays one [Stroke] script
+ * ("The reference rule" in docs/TESTING.md), and replays one [Stroke] script
  * through both.
  *
  * Both widgets lay text out in [TestFontFamily], otherwise in the default text

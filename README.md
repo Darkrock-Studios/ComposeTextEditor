@@ -89,11 +89,10 @@ the [API reference & recipes](https://darkrock-studios.github.io/ComposeTextEdit
 | iOS | Experimental: typing, autocorrect, and CJK composition work in the simulator; the edit menu and a device pass are pending |
 | WASM | Experimental: typing, backspace, and IME composition run through the browser input session; the soft keyboard and real-browser IME passes are pending |
 
-See the [roadmap](docs/ROADMAP.md) for what is planned.
-
 ### Work left to do:
 
 - Full CommonMark Spec compliance (_tables, task lists, reference links, setext headings and nested quotes stay literal text_)
+- Drag and drop on iOS (_Compose does not expose where a drop lands there yet_)
 
 ## Want to try it?
 

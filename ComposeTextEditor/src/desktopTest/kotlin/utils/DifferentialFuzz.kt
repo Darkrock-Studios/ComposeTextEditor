@@ -181,7 +181,7 @@ private fun String.icuSegment(offset: Int): Pair<Int, Int> {
 /**
  * Names the `BasicTextField` quirk, if any, behind a divergence where the editor
  * is the one that behaves natively. Each is a place where the reference rule does
- * not hold, recorded in docs/ROADMAP.md under "The reference rule".
+ * not hold, listed in docs/TESTING.md under "The reference rule".
  */
 fun referenceQuirk(
 	before: EditSnapshot,

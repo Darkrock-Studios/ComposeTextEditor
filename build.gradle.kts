@@ -13,7 +13,7 @@ plugins {
 }
 
 // Each desktop suite runs in one JVM. Room above Gradle's 512 MB default for tests
-// that build long documents on mocks, which record every call (docs/ROADMAP.md, 0.10).
+// that build long documents on mocks, which record every call (docs/TESTING.md).
 // Selecting text in a test must not replace the desktop's X11 primary selection.
 subprojects {
 	tasks.withType<Test>().matching { it.name == "desktopTest" }.configureEach {

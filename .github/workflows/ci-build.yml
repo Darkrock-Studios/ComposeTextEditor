@@ -9,7 +9,7 @@ name: CI Build
 
 on:
   push:
-    # native-parity is the shared roadmap branch (docs/ROADMAP.md); drop it once merged.
+    # native-parity is a long-running work branch bound for main; drop it once merged.
     branches: [ "main", "native-parity" ]
   pull_request:
     branches: [ "main" ]
