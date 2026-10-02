@@ -1,5 +1,6 @@
 package golden
 
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextAlign
@@ -8,6 +9,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.SelectionHandleShape
+import com.darkrockstudios.texteditor.TextEditorRange
+import com.darkrockstudios.texteditor.decoration.Decoration
+import com.darkrockstudios.texteditor.decoration.DecorationLayer
+import com.darkrockstudios.texteditor.decoration.DecorationUnderline
+import com.darkrockstudios.texteditor.decoration.UnderlineShape
+import com.darkrockstudios.texteditor.decoration.setDecorations
+import com.darkrockstudios.texteditor.richstyle.RichSpan
 import com.darkrockstudios.texteditor.richstyle.ParagraphFormatSpanStyle
 import com.darkrockstudios.texteditor.richstyle.SpellCheckStyle
 import com.darkrockstudios.texteditor.state.setParagraphFormat
@@ -63,6 +71,25 @@ class GoldenScreenshotTest {
 		state.addRichSpan(CharLineOffset(0, 0), CharLineOffset(0, 7), SpellCheckStyle)
 		state.addRichSpan(CharLineOffset(0, 23), CharLineOffset(0, 28), SpellCheckStyle)
 		caretAt(0, 0)
+	}
+
+	@Test
+	fun decorations() = golden("decorations", "val total = sum(1, 2)\n// a comment") {
+		val layer = DecorationLayer("golden")
+		fun on(line: Int, start: Int, end: Int, style: Decoration) =
+			RichSpan(TextEditorRange(CharLineOffset(line, start), CharLineOffset(line, end)), style)
+		state.setDecorations(
+			layer,
+			listOf(
+				on(0, 0, 3, Decoration(layer, textColor = Color(0xFFCC7832))),
+				on(0, 4, 9, Decoration(layer, background = Color(0x6000BCD4))),
+				on(0, 12, 15, Decoration(layer, underline = DecorationUnderline(Color.Blue))),
+				on(0, 16, 17, Decoration(layer, textColor = Color(0xFF6897BB), underline = DecorationUnderline(Color.Red, UnderlineShape.Wavy))),
+				on(0, 19, 20, Decoration(layer, textColor = Color(0xFF6897BB), underline = DecorationUnderline(Color.Magenta, UnderlineShape.Dotted))),
+				on(1, 0, 12, Decoration(layer, textColor = Color(0xFF808080))),
+			),
+		)
+		caretAt(1, 12)
 	}
 
 	@Test

@@ -52,6 +52,7 @@ import com.darkrockstudios.texteditor.input.isWithinDocument
 import com.darkrockstudios.texteditor.RichTextStyles
 import com.darkrockstudios.texteditor.richstyle.BlockSpanStyle
 import com.darkrockstudios.texteditor.richstyle.anchorsToLine
+import com.darkrockstudios.texteditor.richstyle.paintsOnly
 import com.darkrockstudios.texteditor.richstyle.HeaderSpanStyle
 import com.darkrockstudios.texteditor.richstyle.LineBlockEditBehavior
 import com.darkrockstudios.texteditor.richstyle.LinkSpanStyle
@@ -2488,6 +2489,10 @@ class TextEditorState private constructor(
 	 */
 	fun updateRichSpans(remove: Collection<RichSpan>, add: Collection<RichSpan>) {
 		if (remove.isEmpty() && add.isEmpty()) return
+		if (remove.all { it.style.paintsOnly } && add.all { it.style.paintsOnly }) {
+			swapPaintOnlySpans(remove, add)
+			return
+		}
 		// One revision as well as one relayout: published per span, a reader between
 		// the removals and the additions sees the batch half-applied.
 		withAtomicEdit {
@@ -2510,6 +2515,20 @@ class TextEditorState private constructor(
 				reshapes = reshapes || span.style.reshapesLine
 			}
 			updateBookKeeping(if (reshapes) LayoutUpdate.Partial(first, last, 0) else LayoutUpdate.Spans(first, last))
+		}
+	}
+
+	/**
+	 * [updateRichSpans] for spans that only paint: the lines are neither normalized nor
+	 * resolved again, and the rows are pointed at the new spans, so a whole document's
+	 * worth costs the span index's rewrite and no layout.
+	 */
+	internal fun swapPaintOnlySpans(remove: Collection<RichSpan>, add: Collection<RichSpan>) {
+		withAtomicEdit {
+			val lines = textLines
+			val added = add.mapNotNull { clampSpanToLines(it, lines) }
+			setSpanIndex(workingContent.spanIndex.swapping(remove, added), first = Int.MAX_VALUE, last = -1, spansChanged = false)
+			updateBookKeeping(LayoutUpdate.Spans(0, -1))
 		}
 	}
 

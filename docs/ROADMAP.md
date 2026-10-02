@@ -192,10 +192,10 @@ review.
 | G | Edit pipeline and undo | `state/TextEditManager.kt`, `state/TextEditHistory.kt`, `state/EditBehavior.kt`, `input/ImeEditLogic.kt` | 1.20, 5.1 to 5.5, 5.9 to 5.11, 5.13 to 5.18, 6.1 to 6.6, 6.14, 6.15, 6.17, 6.22, 6.23, 6.28, 6.29, 6.33 to 6.35, 6.40, 6.45, 6.49, 7.54, 7.55 |
 | H | Clipboard and HTML | `clipboard/`, `html/`, `dragdrop/` | 4.9, 4.13, 4.17, 6.7 to 6.13, 6.18 to 6.21, 5.12, 6.24 to 6.27, 6.30 to 6.32, 6.36 to 6.39, 6.41 to 6.44, 6.46 to 6.48, 7.39, 7.46, 7.47, 7.49, 7.53, 7.63 |
 | I | Markdown and block model | `ComposeTextEditorMarkdown/`, `richstyle/`, `state/TextEditorStateBlockExt.kt` | 5.6, 7.14 to 7.16, 7.43, 7.45, 7.52, 7.64, 7.67, 7.70 to 7.72, 7.79, 7.80, 7.83, 7.85 |
-| J | Find addon | `ComposeTextEditorFind/` | 7.17 to 7.19, 7.26, 7.29, 7.42, 7.68, 7.69 |
-| K | Spell check addon | `ComposeTextEditorSpellCheck/` | 7.20 to 7.22, 7.28, 7.30, 7.31, 7.34, 7.35, 7.38, 7.44, 7.50, 7.56, 7.61, 7.74, 7.76, 7.77, 7.81, 7.84 |
+| J | Find addon | `ComposeTextEditorFind/` | 7.17 to 7.19, 7.26, 7.29, 7.42, 7.68, 7.69, 7.88 |
+| K | Spell check addon | `ComposeTextEditorSpellCheck/` | 7.20 to 7.22, 7.28, 7.30, 7.31, 7.34, 7.35, 7.38, 7.44, 7.50, 7.56, 7.61, 7.74, 7.76, 7.77, 7.81, 7.84, 7.88 |
 | L | Tests and CI | test sources, `.github/workflows/` | 0.1 to 0.3, 0.5 to 0.11, 4.1, 4.15, 7.62, 7.65 |
-| M | Accessibility and host API | semantics in `BasicTextEditor.kt`, `RichTextView.kt`, `state/rememberTextEditorState.kt` | 7.1 to 7.4, 7.13, 7.23 to 7.25, 7.32, 7.36, 7.51, 7.57, 7.59, 7.60, 7.66, 7.73, 7.75, 7.82 |
+| M | Accessibility and host API | semantics in `BasicTextEditor.kt`, `RichTextView.kt`, `state/rememberTextEditorState.kt` | 7.1 to 7.4, 7.13, 7.23 to 7.25, 7.32, 7.36, 7.51, 7.57, 7.59, 7.60, 7.66, 7.73, 7.75, 7.82, 7.86 |
 | N | Core layout and performance | `state/TextEditorState.kt` | 5.7, 7.8 to 7.12, 7.48 |
 
 Housekeeping items are [Opus] and fit any lane that is already in the file.
@@ -4811,6 +4811,40 @@ Shaping is one line per keystroke. These still scale with document length:
   `asTarget` runs an edit as that editor, after a suspend too, wherever focus
   has moved since. A menu's enabled check is asked as its editor as well
   (`SharedStateTargetE2eTest`; `docs/design/editor-actions.md`).
+- [x] **7.86 Decorations as a public API. S.** [Opus] [Lane M] Spell check and
+  find keep their overlays out of undo, copies and exports by marking their
+  styles `isDecoration` and filtering `getAllRichSpans()` by style to replace
+  them; a host has no way to do the same for its own (syntax colours, lint
+  marks) without that bookkeeping, no way to colour text without making the
+  colour part of it, and every `updateRichSpans` re-resolves the lines it
+  touches. Give hosts decoration layers: keyed by owner, set, replaced by
+  lines or range and cleared without touching another's, with a text colour,
+  background and underline, cheap for a whole file.
+  Done: `DecorationLayer`, `DecorationStyle` (a `textColor` beside the usual
+  drawing) and the ready-made `Decoration`, with `setDecorations`,
+  `replaceDecorations`, `clearDecorations` and `decorations`
+  (`com.darkrockstudios.texteditor.decoration`). Setting a layer rewrites the
+  span index once and lays out, normalizes and re-resolves no line;
+  `updateRichSpans` takes the same path when every span only paints. A text
+  colour is a `SrcAtop` tint over the drawn text in a layer, so no line is
+  shaped for it; emoji, and text with a background of its own, are left out
+  of the tint. The text is drawn in a pass of its own, between the host's
+  `decorateLine` (drawn behind every line, as documented, rather than
+  interleaved) and the foreground spans, so the layer neither clips nor tints
+  anything else. Over 5,000 lines with 45,000 colour spans a whole layer
+  sets in about 10 ms, one line's replace takes 17 us, a keystroke is
+  unchanged, and a frame of tinted code takes 3.6 ms against 1 ms on the
+  software canvas (`DecorationBenchmark`; `DecorationLayerTest`,
+  `DecorationCostTest`, `DecorationDrawingTest`, the `decorations` golden;
+  `docs/design/decorations.md`, `docs/MIGRATION.md`).
+  Spell check and find stay on `updateRichSpans`: moving them is 7.88.
+- [ ] **7.88 Spell check and find on decoration layers. S.** [Opus] [Lanes J,
+  K] Both find their own overlays by filtering `getAllRichSpans()` by style,
+  which builds the whole span set each time, and both public style classes
+  (`FindMatchStyle`, `SpellCheckStyle`, `DiagnosticStyle`) would need a layer
+  to become `DecorationStyle`s, a change to their constructors. Each state
+  owning a `DecorationLayer` would let them read and replace their own by line
+  (`decorations(layer, lines)`) and drop the scans. Found in 7.86.
 
 ## Housekeeping
 

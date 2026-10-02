@@ -37,8 +37,8 @@ internal fun DrawScope.DrawEditorText(
 	// Pass 1: paint backgrounds for every visible virtual line BEFORE any text
 	// is drawn. Opaque fills (e.g. a code-fence card) need to land here so the
 	// text painted in pass 3 sits on top instead of being covered. Foreground
-	// rich-span decorations (bullets, borders, underlines) still run in pass 3
-	// after the text so they overlay correctly.
+	// rich-span decorations (bullets, borders, underlines) run in pass 4, after
+	// all the text, so they overlay it.
 	inContentSpace(state) {
 		for (virtualLine in visible) {
 			drawRichSpans(virtualLine, state, phase = RichSpanDrawPhase.Background)
@@ -55,9 +55,11 @@ internal fun DrawScope.DrawEditorText(
 	}
 
 	inContentSpace(state) {
-		var lastLine = -1
-		for (virtualLine in visible) {
-			if (startsParagraph(virtualLine, lastLine, state)) {
+		// Pass 3: the text, alone in the layer decorations tint it in when any colours it.
+		val tints = TextTints.of(visible)
+		tints?.begin(this)
+		try {
+			forEachParagraph(visible, state) { virtualLine ->
 				val blockReplacesText = virtualLine.richSpans.any {
 					(it.style as? BlockSpanStyle)?.replacesText() == true
 				}
@@ -65,16 +67,21 @@ internal fun DrawScope.DrawEditorText(
 					// drawText paints from sub-line 0 down; anchor at the paragraph top so a
 					// mid-paragraph entry (earlier sub-lines culled above the viewport) doesn't
 					// shift the whole paragraph down by one wrap-line.
+					val offset = Offset(virtualLine.offset.x, virtualLine.paragraphTop - scrollY)
 					drawText(
 						textLayoutResult = virtualLine.textLayoutResult,
 						color = style.textColor,
-						topLeft = Offset(virtualLine.offset.x, virtualLine.paragraphTop - scrollY),
+						topLeft = offset,
 					)
+					tints?.paint(this, virtualLine.line, offset)
 				}
-
-				lastLine = virtualLine.line
 			}
+		} finally {
+			tints?.end(this)
+		}
 
+		// Pass 4: what overlays the text.
+		for (virtualLine in visible) {
 			drawRichSpans(virtualLine, state, phase = RichSpanDrawPhase.Foreground)
 
 			// Draw composing underline if this line intersects the composing region
