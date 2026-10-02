@@ -245,7 +245,8 @@ fun BasicTextEditor(
 	}
 
 	// A soft keyboard drawn over the window covers the bottom of the viewport: measured
-	// on the canvas (measuresKeyboardCover), and again when it moves (onGloballyPositioned).
+	// on the canvas's frame (measuresKeyboardCover), and again when the canvas moves
+	// (onGloballyPositioned).
 	// The local is static and unset outside tests, so the call order stays fixed.
 	val imeInsets by rememberUpdatedState(LocalImeInsets.current ?: WindowInsets.ime)
 	val imeInsetsProvider = remember { { imeInsets } }
@@ -411,6 +412,8 @@ fun BasicTextEditor(
 						.focusable(enabled = true, interactionSource = interactionSource)
 						.then(semanticsModifier)
 						.fillMaxSize()
+						// Outside the overscroll, which can move the canvas.
+						.measuresKeyboardCover(state, imeInsetsProvider)
 						.overscroll(overscrollEffect)
 						.scrollable(
 							orientation = Orientation.Vertical,
@@ -481,7 +484,6 @@ fun BasicTextEditor(
 							.textMagnifier(state, style)
 							.background(style.backgroundColor)
 							.onSizeChanged { size -> state.onViewportSizeChange(size.toSize()) }
-							.measuresKeyboardCover(state, imeInsetsProvider)
 							// The content canvas's position, below the padding: the desktop IME places
 							// its candidate window by it, and the touch toolbar its menu.
 							.onGloballyPositioned {

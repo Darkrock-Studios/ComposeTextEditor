@@ -2,6 +2,9 @@
 
 package e2e
 
+import androidx.compose.foundation.LocalOverscrollFactory
+import androidx.compose.foundation.OverscrollEffect
+import androidx.compose.foundation.OverscrollFactory
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
@@ -15,13 +18,22 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.layout.Measurable
+import androidx.compose.ui.layout.MeasureResult
+import androidx.compose.ui.layout.MeasureScope
+import androidx.compose.ui.node.DelegatableNode
+import androidx.compose.ui.node.LayoutModifierNode
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SkikoComposeUiTest
 import androidx.compose.ui.test.runSkikoComposeUiTest
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import com.darkrockstudios.texteditor.BasicTextEditor
 import com.darkrockstudios.texteditor.CharLineOffset
@@ -50,24 +62,51 @@ class KeyboardInsetE2eTest {
 		override fun getBottom(density: Density) = bottom
 	}
 
+	/** An overscroll effect that moves what it wraps by [offset] pixels, as iOS's rubber band does. */
+	private class Bounce : OverscrollEffect, OverscrollFactory {
+		var offset by mutableIntStateOf(0)
+
+		override fun applyToScroll(delta: Offset, source: NestedScrollSource, performScroll: (Offset) -> Offset): Offset =
+			performScroll(delta)
+
+		override suspend fun applyToFling(velocity: Velocity, performFling: suspend (Velocity) -> Velocity) {
+			performFling(velocity)
+		}
+
+		override val isInProgress: Boolean get() = offset != 0
+
+		override val node: DelegatableNode = object : Modifier.Node(), LayoutModifierNode {
+			override fun MeasureScope.measure(measurable: Measurable, constraints: Constraints): MeasureResult {
+				val placeable = measurable.measure(constraints)
+				return layout(placeable.width, placeable.height) { placeable.place(0, offset) }
+			}
+		}
+
+		override fun createOverscrollEffect(): OverscrollEffect = this
+		override fun hashCode(): Int = System.identityHashCode(this)
+		override fun equals(other: Any?): Boolean = other === this
+	}
+
 	private class Editor(
 		val test: SkikoComposeUiTest,
 		val state: TextEditorState,
 		val ime: FakeIme,
 		val editor: FocusRequester,
 		val elsewhere: FocusRequester,
+		val bounce: Bounce,
 	)
 
 	/** An editor filling a 400 by 300 window, padded above the keyboard when [imePadding]. */
 	private fun editorTest(imePadding: Boolean, block: Editor.() -> Unit) =
 		runSkikoComposeUiTest(size = Size(400f, 300f), density = Density(1f)) {
 			val ime = FakeIme()
+			val bounce = Bounce()
 			val editor = FocusRequester()
 			val elsewhere = FocusRequester()
 			lateinit var state: TextEditorState
 			setContent {
 				state = rememberTextEditorState(initialText = doc)
-				CompositionLocalProvider(LocalImeInsets provides ime) {
+				CompositionLocalProvider(LocalImeInsets provides ime, LocalOverscrollFactory provides bounce) {
 					val host = if (imePadding) Modifier.fillMaxSize().windowInsetsPadding(ime) else Modifier.fillMaxSize()
 					Box(host) {
 						BasicTextEditor(state = state, modifier = Modifier.fillMaxSize().focusRequester(editor), autoFocus = true)
@@ -77,7 +116,7 @@ class KeyboardInsetE2eTest {
 			}
 			waitForIdle()
 			waitUntil(timeoutMillis = 5_000) { state.isFocused }
-			Editor(this, state, ime, editor, elsewhere).block()
+			Editor(this, state, ime, editor, elsewhere, bounce).block()
 		}
 
 	private fun Editor.rowHeight(): Float = test.runOnIdle { state.getPositionForOffset(CharLineOffset(0, 0)).height }
@@ -199,5 +238,32 @@ class KeyboardInsetE2eTest {
 		}
 		test.waitForIdle()
 		assertEquals(50, state.scrollManager.obscuredBottomPx, "the keyboard's top is at 250")
+	}
+
+	/**
+	 * A fling to the end on iOS finishes in the rubber band, which lifts the editor's
+	 * content and lets it back. Measured on the lifted canvas the cover shrank, the scroll
+	 * range with it, and the scroll was left short of the end: the last line under the
+	 * keyboard.
+	 */
+	@Test
+	fun `the rubber band at the end does not shorten the cover or the scroll`() = editorTest(imePadding = false) {
+		raiseKeyboard()
+		assertEquals(120, test.runOnIdle { state.scrollManager.obscuredBottomPx })
+		val end = test.runOnIdle {
+			kotlinx.coroutines.runBlocking { state.scrollState.scrollTo(state.scrollState.maxValue) }
+			state.scrollState.value
+		}
+		test.waitForIdle()
+
+		for (lift in listOf(-30, -12, 0)) {
+			test.runOnIdle { bounce.offset = lift }
+			test.waitForIdle()
+			assertEquals(120, test.runOnIdle { state.scrollManager.obscuredBottomPx }, "the cover with the content lifted by $lift")
+		}
+
+		assertEquals(end, test.runOnIdle { state.scrollState.value }, "the scroll stays at the end")
+		val last = rowBottom(doc.text.lines().lastIndex)
+		assertTrue(last <= state.viewportSize.height - 120 + 0.5f, "the last row ends at $last, under the keyboard's top at ${state.viewportSize.height - 120}")
 	}
 }

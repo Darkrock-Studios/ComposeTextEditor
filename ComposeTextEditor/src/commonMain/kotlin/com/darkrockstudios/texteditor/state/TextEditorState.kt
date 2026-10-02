@@ -196,6 +196,7 @@ class TextEditorState private constructor(
 		}
 		boundMeasurer = null
 		canvasLayoutCoordinates = null
+		canvasFrameCoordinates = null
 		// It holds the departed composition's measurer and a whole-document layout.
 		cachedSemanticsLayout = null
 		// Its watch and timeout ran on the departed scope.
@@ -760,6 +761,13 @@ class TextEditorState private constructor(
 	 */
 	var canvasLayoutCoordinates: LayoutCoordinates? = null
 		internal set
+
+	/**
+	 * The frame the canvas rests in: the editor's box outside its overscroll effect,
+	 * which the canvas fills. The keyboard's cover is measured on it, since an overscroll
+	 * effect that moves its content (iOS's rubber band) moves the canvas, not the frame.
+	 */
+	internal var canvasFrameCoordinates: LayoutCoordinates? = null
 
 	/**
 	 * Where the canvas sits in the root, as snapshot state. [canvasLayoutCoordinates] is

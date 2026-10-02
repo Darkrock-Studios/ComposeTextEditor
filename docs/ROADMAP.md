@@ -1504,6 +1504,14 @@ Constraints that shape the order:
   edit brings it back (`KeyboardCoverE2eTest`). An editor focused without a
   tap while its caret is out of view no longer scrolls to it as the keyboard
   rises.
+  The growth itself was the rubber band: the overscroll effect lifts the
+  canvas at the end of a fling and lets it back, and the cover, measured on
+  the canvas, shrank by the lift (26 px there) and the scroll range with it,
+  so the scroll was left short of the end and the last line sat under the
+  keyboard's edge. The cover is measured on the canvas's frame now, the
+  editor's box outside the overscroll (`TextEditorState.canvasFrameCoordinates`,
+  `KeyboardInsetE2eTest`); on the simulator the last line rests a content
+  padding above the keyboard after a hard fling.
 - [x] **4.8 Native edit menu. C.** [Opus] [Lane D] [Mac work] A Material
   dropdown is used instead of the platform text toolbar.
   Done. Touch has used the platform toolbar since 3.8 (with 3.18's fixes on
