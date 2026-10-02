@@ -368,8 +368,8 @@ On every desktop platform, and in a browser (where Ctrl+Tab switches browser tab
 | Keys | Expected |
 | --- | --- |
 | Tab / Shift+Tab on a body line | Four spaces in / one level of leading spaces or a tab out |
-| Tab over several lines, some of them list items | Every line but the list items is indented; one undo reverts it |
-| Tab at the start of a bullet or numbered item | Nothing; the item keeps its marker and gains no leading spaces |
+| Tab over several lines, some of them list items | Body lines are indented and each list item nests one level where it can; one undo reverts it |
+| Tab at the start of a bullet or numbered item | The item nests one level, never deeper than one below the item above; on a list's first item it gains the indent text instead; Shift+Tab takes either back |
 | Ctrl+Tab / Ctrl+Shift+Tab (on macOS, Control+Tab) | Focus moves to the next / previous control; the text is unchanged |
 | Escape, then Tab | Focus moves to the next control; any other key between the two cancels this, and so does leaving the editor and coming back |
 | A host with `TabSettings(movesFocus = true)` | Tab and Shift+Tab move focus and never indent |
