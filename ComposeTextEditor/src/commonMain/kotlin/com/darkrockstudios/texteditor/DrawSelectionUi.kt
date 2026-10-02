@@ -5,12 +5,19 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import com.darkrockstudios.texteditor.state.TextEditorState
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.text.style.ResolvedTextDirection
+import com.darkrockstudios.texteditor.state.rowEndX
+import com.darkrockstudios.texteditor.utils.RUN_GAP
+import com.darkrockstudios.texteditor.utils.getRunBoxes
 import com.darkrockstudios.texteditor.utils.lineTextLeft
 
 /**
- * Draws one rectangle per selected row in view. A selected line break shows as a sliver
- * a space wide after its line's text, trailing spaces included, so an empty line inside
- * the selection is visible, as native editors draw it; a soft wrap has none.
+ * Draws the selected rows in view, a rectangle per stretch of each row the selection
+ * covers: one in plain text, several where it crosses between left-to-right and
+ * right-to-left runs. A selected line break shows as a sliver a space wide past its
+ * line's text (to the left in a right-to-left paragraph), trailing spaces included, so an
+ * empty line inside the selection is visible, as native editors draw it; a soft wrap has none.
  */
 internal fun DrawScope.DrawSelection(
 	state: TextEditorState,
@@ -44,23 +51,46 @@ internal fun DrawScope.DrawSelection(
 		val selectsLineBreak = endsLine && wrap.line < selection.end.line
 		if (!hasText && !selectsLineBreak) continue
 
-		val lineEndX = if (endsLine) {
-			maxOf(layout.getHorizontalPosition(rowEnd, usePrimaryDirection = true), layout.lineTextLeft(row, this))
-		} else {
-			0f
+		val boxes = if (hasText) layout.getRunBoxes(row, from, to) else emptyList()
+		val stretches = if (selectsLineBreak) withLineBreak(boxes, wrap, state.lineBreakWidth) else boxes
+		for (stretch in stretches) {
+			drawRect(
+				color = selectionColor,
+				topLeft = Offset(stretch.left, top),
+				size = Size(stretch.width, wrap.effectiveHeight),
+			)
 		}
-		val startX = if (hasText) layout.getHorizontalPosition(from, usePrimaryDirection = true) else lineEndX
-		var endX = when {
-			!hasText || (endsLine && to == rowEnd) -> lineEndX
-			!endsLine && to >= layout.getLineEnd(row, visibleEnd = false) -> layout.getLineRight(row)
-			else -> layout.getHorizontalPosition(to, usePrimaryDirection = true)
-		}
-		if (selectsLineBreak) endX += state.lineBreakWidth
+	}
+}
 
-		drawRect(
-			color = selectionColor,
-			topLeft = Offset(startX, top),
-			size = Size(endX - startX, wrap.effectiveHeight),
-		)
+/**
+ * [boxes], left to right, with a line break's sliver [width] wide added past where the
+ * line's text ends visually: its right end in a left-to-right paragraph, its left end in a
+ * right-to-left one, trailing spaces included. Only the boxes' left and right are kept.
+ */
+private fun DrawScope.withLineBreak(boxes: List<Rect>, wrap: LineWrap, width: Float): List<Rect> {
+	val layout = wrap.textLayoutResult
+	val row = wrap.virtualLineIndex
+	val rowStart = layout.getLineStart(row)
+	val rtl = layout.multiParagraph.getParagraphDirection(rowStart) == ResolvedTextDirection.Rtl
+	val edge = when {
+		layout.getLineEnd(row) > rowStart -> wrap.rowEndX()
+		rtl -> layout.getHorizontalPosition(rowStart, usePrimaryDirection = true)
+		else -> layout.lineTextLeft(row, this)
+	}
+	return if (rtl) {
+		val first = boxes.firstOrNull()
+		if (first != null && first.left <= edge + RUN_GAP) {
+			listOf(Rect(edge - width, 0f, first.right, 0f)) + boxes.drop(1)
+		} else {
+			listOf(Rect(edge - width, 0f, edge, 0f)) + boxes
+		}
+	} else {
+		val last = boxes.lastOrNull()
+		if (last != null && last.right >= edge - RUN_GAP) {
+			boxes.dropLast(1) + Rect(last.left, 0f, edge + width, 0f)
+		} else {
+			boxes + Rect(edge, 0f, edge + width, 0f)
+		}
 	}
 }

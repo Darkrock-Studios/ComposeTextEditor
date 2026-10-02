@@ -24,7 +24,6 @@ import utils.drawnCaret
 import utils.drawnHandleCenters
 import utils.drawnSelection
 import utils.editorUiTest
-import utils.failsUntil
 import utils.independentLayout
 import utils.measureLineWidth
 import utils.rowBox
@@ -216,13 +215,22 @@ class GeometryTest {
 		val first = drawnSelection()[0]
 		assertEquals(state.viewportSize.width, first.right, 0.5f, "the selection starts at the paragraph's right edge")
 
-		// Today the sliver is added to the right, eating a space's width off the text.
-		failsUntil("7.6") {
-			assertRectEquals(
-				Rect(reference.getLineLeft(0) - space, reference.rowTop(0), state.viewportSize.width, reference.rowBottom(0)),
-				first,
-			)
-		}
+		assertRectEquals(
+			Rect(reference.getLineLeft(0) - space, reference.rowTop(0), state.viewportSize.width, reference.rowBottom(0)),
+			first,
+		)
+	}
+
+	@Test
+	fun `the caret inside a right-to-left word that starts a left-to-right paragraph is drawn inside it`() = editorUiTest(
+		initialText = AnnotatedString(MIXED_START),
+	) {
+		val reference = independentLayout(MIXED_START)
+		placeCaret(0, 2)
+
+		val caret = drawnCaret()
+		assertTrue(caret != null && caret.left < reference.x(0) - 1f, "precondition and claim: left of the word's right end, at ${reference.x(2)}: $caret")
+		assertRectEquals(caretAt(reference.x(2), reference.rowTop(0), reference.rowBottom(0)), caret)
 	}
 
 	@Test
@@ -233,17 +241,46 @@ class GeometryTest {
 		// "c", the space, and the first two Hebrew letters: visually the Hebrew run's
 		// right two thirds, with its third letter (ג) left out between them.
 		select(CharLineOffset(0, 2), CharLineOffset(0, 6))
-		val unselected = reference.getBoundingBox(MIXED.indexOf('ג')).center
-		val rects = drawnSelection()
-		assertTrue(rects.any { it.contains(reference.getBoundingBox(2).center) }, "the selected \"c\" is covered by $rects")
 
-		// Today one box runs from x(2) to x(6): over "c", the space and ג, missing א and ב.
-		failsUntil("7.6") {
-			assertTrue(rects.none { it.contains(unselected) }, "the unselected ג at $unselected is covered by $rects")
-			for (selected in 2 until 6) {
-				val glyph = reference.getBoundingBox(selected).center
-				assertTrue(rects.any { it.contains(glyph) }, "the selected character $selected at $glyph is not covered by $rects")
-			}
+		val rects = drawnSelection()
+		assertEquals(2, rects.size, "one box per stretch: $rects")
+		assertCoversExactly(reference, rects, 2 until 6)
+	}
+
+	@Test
+	fun `a selection over an English word in a right-to-left paragraph covers only the selected glyphs`() = editorUiTest(
+		initialText = AnnotatedString(MIXED_RTL),
+		textStyle = TextStyle(textDirection = TextDirection.Content),
+	) {
+		val reference = independentLayout(MIXED_RTL)
+		assertEquals(state.viewportSize.width, reference.x(0), 0.5f, "precondition: the paragraph is right-to-left")
+		// "ום", the space and "ab": the Hebrew word's left end and the English word's left end.
+		select(CharLineOffset(0, 2), CharLineOffset(0, 7))
+
+		val rects = drawnSelection()
+		assertEquals(2, rects.size, "one box per stretch: $rects")
+		assertCoversExactly(reference, rects, 2 until 7)
+	}
+
+	@Test
+	fun `the line break's sliver follows a trailing right-to-left run in a left-to-right paragraph`() = editorUiTest(
+		initialText = AnnotatedString("$MIXED_END\nx"),
+	) {
+		val reference = independentLayout(MIXED_END)
+		press(Key.A, ctrl = true)
+
+		assertRectEquals(
+			Rect(0f, reference.rowTop(0), reference.getLineRight(0) + space, reference.rowBottom(0)),
+			drawnSelection()[0],
+		)
+	}
+
+	/** Every glyph of [reference]'s text in [selected] is under one of [rects], and no other is. */
+	private fun assertCoversExactly(reference: TextLayoutResult, rects: List<Rect>, selected: IntRange) {
+		for (offset in 0 until reference.layoutInput.text.length) {
+			val glyph = reference.getBoundingBox(offset).center
+			val covered = rects.any { it.contains(glyph) }
+			assertEquals(offset in selected, covered, "character $offset at $glyph against $rects")
 		}
 	}
 
@@ -319,5 +356,8 @@ class GeometryTest {
 		const val WRAPPING = "alpha beta gamma delta epsilon zeta eta theta"
 		const val HEBREW = "שלום עולם"
 		const val MIXED = "abc אבג def"
+		const val MIXED_RTL = "שלום abc עולם"
+		const val MIXED_END = "abc אבג"
+		const val MIXED_START = "שלום abc"
 	}
 }

@@ -1,0 +1,99 @@
+# hammer-editor#930: Japanese input with Gboard's Japanese keyboard (romaji, QWERTY).
+# Written by hand from how that keyboard drives an InputConnection, not captured: replace
+# it with a recording from a device (roadmap 0.4). Typing "nihongo" composes a reading
+# that grows and changes in place, one batch per key; space converts it, Enter confirms
+# it. The editor must report the composition after each batch and never as gone while
+# the keyboard is composing, or the keyboard finishes it on every key.
+keyboard-trace 1
+note hand-written
+device hand-written
+text "メモ: "
+select 4 4
+compose none
+open 1 0x24001 0x6 "com.google.android.inputmethod.latin/com.android.inputmethod.latin.LatinIME ja-JP"
+? 1 getTextBeforeCursor 1000 0 = "メモ: "
+? 1 getSelectedText 0 = null
+? 1 getTextAfterCursor 1000 0 = ""
+> 1 requestCursorUpdates 3 = true
+# n: the romaji letter shows full width until it makes a kana.
+> 1 beginBatchEdit = true
+> 1 setComposingText "ｎ" 1 = true
+> 1 endBatchEdit = false
+< selection 5 5 4 5
+# i: "ni" becomes に, the same length, so there is nothing to report.
+> 1 beginBatchEdit = true
+> 1 setComposingText "に" 1 = true
+> 1 endBatchEdit = false
+# The keyboard sends the same composition again after an update.
+> 1 beginBatchEdit = true
+> 1 setComposingText "に" 1 = true
+> 1 endBatchEdit = false
+> 1 beginBatchEdit = true
+> 1 setComposingText "にｈ" 1 = true
+? 1 getTextBeforeCursor 2 0 = "にｈ"
+> 1 endBatchEdit = false
+< selection 6 6 4 6
+> 1 beginBatchEdit = true
+> 1 setComposingText "にほ" 1 = true
+> 1 endBatchEdit = false
+> 1 beginBatchEdit = true
+> 1 setComposingText "にほｎ" 1 = true
+> 1 endBatchEdit = false
+< selection 7 7 4 7
+> 1 beginBatchEdit = true
+> 1 setComposingText "にほんｇ" 1 = true
+> 1 endBatchEdit = false
+< selection 8 8 4 8
+> 1 beginBatchEdit = true
+> 1 setComposingText "にほんご" 1 = true
+> 1 endBatchEdit = false
+# Space converts the reading to its first candidate, still composing.
+> 1 beginBatchEdit = true
+> 1 setComposingText "日本語" 1 = true
+> 1 endBatchEdit = false
+< selection 7 7 4 7
+# Enter confirms the candidate.
+> 1 beginBatchEdit = true
+> 1 commitText "日本語" 1 = true
+> 1 endBatchEdit = false
+< selection 7 7 -1 -1
+> 1 finishComposingText = true
+? 1 getTextBeforeCursor 3 0 = "日本語"
+# "wo" composes を; Enter confirms the reading as it is.
+> 1 beginBatchEdit = true
+> 1 setComposingText "ｗ" 1 = true
+> 1 endBatchEdit = false
+< selection 8 8 7 8
+> 1 beginBatchEdit = true
+> 1 setComposingText "を" 1 = true
+> 1 endBatchEdit = false
+> 1 beginBatchEdit = true
+> 1 finishComposingText = true
+> 1 endBatchEdit = false
+< selection 8 8 -1 -1
+# "ka" composes か; Backspace empties the composition.
+> 1 beginBatchEdit = true
+> 1 setComposingText "ｋ" 1 = true
+> 1 endBatchEdit = false
+< selection 9 9 8 9
+> 1 beginBatchEdit = true
+> 1 setComposingText "か" 1 = true
+> 1 endBatchEdit = false
+> 1 beginBatchEdit = true
+> 1 setComposingText "" 1 = true
+> 1 endBatchEdit = false
+< selection 8 8 -1 -1
+# Enter with nothing composing is a key event, which starts a line.
+> 1 sendKeyEvent 0 66 0 0 = true
+> 1 sendKeyEvent 1 66 0 0 = true
+~ replace 8 8 "\n"
+~ select 9 9
+< selection 9 9 -1 -1
+# A tap back inside the converted word; the keyboard reads around the new caret.
+~ select 6 6
+< selection 6 6 -1 -1
+? 1 getTextBeforeCursor 1000 0 = "メモ: 日本"
+? 1 getTextAfterCursor 1000 0 = "語を\n"
+= text "メモ: 日本語を\n"
+= select 6 6
+= compose none

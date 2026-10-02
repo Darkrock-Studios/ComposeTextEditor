@@ -39,6 +39,6 @@ class ImeActionE2eTest {
 
 	@Test
 	fun `an unfocused editor has no default`() = editorUiTest(autoFocus = false) {
-		assertEquals(null, state.defaultImeAction)
+		assertEquals(null, state.focusedEditor)
 	}
 }

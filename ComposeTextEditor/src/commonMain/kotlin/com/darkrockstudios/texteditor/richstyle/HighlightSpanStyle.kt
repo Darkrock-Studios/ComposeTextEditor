@@ -9,7 +9,7 @@ import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextRange
 import com.darkrockstudios.texteditor.LineWrap
 import com.darkrockstudios.texteditor.state.TextEditorState
-import com.darkrockstudios.texteditor.utils.lineTextLeft
+import com.darkrockstudios.texteditor.utils.getRunBoxes
 
 /**
  * A [RichSpanStyle] that paints a solid rectangle behind its text. Used for
@@ -25,31 +25,27 @@ class HighlightSpanStyle(
 		lineWrap: LineWrap,
 		textRange: TextRange,
 		state: TextEditorState,
-	) {
-		val lineHeight = layoutResult.multiParagraph.getLineHeight(lineWrap.virtualLineIndex)
+	) = drawRangeHighlight(layoutResult, lineWrap, textRange, color)
+}
 
-		val lineStartOffset = layoutResult.getLineStart(lineWrap.virtualLineIndex)
-		val startX = if (textRange.start <= lineStartOffset) {
-			layoutResult.lineTextLeft(lineWrap.virtualLineIndex, this)
-		} else {
-			try {
-				layoutResult.getHorizontalPosition(textRange.start, usePrimaryDirection = true)
-			} catch (e: Exception) {
-				error(e)
-			}
-		}
-
-		val lineEndOffset = layoutResult.getLineEnd(lineWrap.virtualLineIndex, false)
-		val endX = if (textRange.end >= lineEndOffset) {
-			layoutResult.getLineRight(lineWrap.virtualLineIndex)
-		} else {
-			layoutResult.getHorizontalPosition(textRange.end, usePrimaryDirection = true)
-		}
-
+/**
+ * Fills the row's full height in [color] behind [textRange] on one wrapped line, for a
+ * [RichSpanStyle]'s [RichSpanStyle.drawCustomStyle] or [RichSpanStyle.drawBackground], as
+ * [HighlightSpanStyle] does. A range crossing between left-to-right and right-to-left text
+ * gets a box for each stretch of the row it covers.
+ */
+fun DrawScope.drawRangeHighlight(
+	layoutResult: TextLayoutResult,
+	lineWrap: LineWrap,
+	textRange: TextRange,
+	color: Color,
+) {
+	val lineHeight = layoutResult.multiParagraph.getLineHeight(lineWrap.virtualLineIndex)
+	for (box in layoutResult.getRunBoxes(lineWrap.virtualLineIndex, textRange.start, textRange.end)) {
 		drawRect(
 			color = color,
-			topLeft = Offset(x = startX, y = 0f),
-			size = Size(width = endX - startX, height = lineHeight)
+			topLeft = Offset(x = box.left, y = 0f),
+			size = Size(width = box.width, height = lineHeight)
 		)
 	}
 }

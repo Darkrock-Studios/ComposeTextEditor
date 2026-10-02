@@ -20,6 +20,18 @@ interface EditBehavior {
 	/** Called before a line break is inserted at the caret. */
 	fun onNewline(state: TextEditorState): Boolean = false
 
+	/**
+	 * Called once a line break [onNewline] was offered has landed (the Enter key, an
+	 * IME committing a lone line break, a host's [TextEditorState.insertNewlineAtCursor]),
+	 * after the Enter's own undo step, so an edit a behavior makes here is a step of
+	 * its own: one undo takes it back and keeps the line break. [range] runs from
+	 * where the break went in, at the end of its line, to where it left the caret.
+	 * Not called when the Enter made no plain line break, as on an empty list item
+	 * the line block behavior takes out of its list. As with [onTextInput], a
+	 * behavior that changes the text ends the chain whether or not it claims.
+	 */
+	fun onNewlineLanded(state: TextEditorState, range: TextEditorRange): Boolean = false
+
 	/** Called before the character preceding the caret is deleted. */
 	fun onBackspace(state: TextEditorState): Boolean = false
 
@@ -45,11 +57,11 @@ interface EditBehavior {
 	fun onTextInput(state: TextEditorState, text: String, range: TextEditorRange): Boolean = false
 
 	/**
-	 * Called once pasted [text] has landed in the document at [range], after the
-	 * paste committed as its own undo step, so an edit a behavior makes here is a
-	 * step of its own: one undo takes it back and keeps the paste. As with
+	 * Called once pasted or dropped [text] has landed in the document at [range],
+	 * after the paste committed as its own undo step, so an edit a behavior makes
+	 * here is a step of its own: one undo takes it back and keeps the paste. As with
 	 * [onTextInput], a behavior that changes the text ends the chain whether or not
-	 * it claims.
+	 * it claims. A host's own paste is offered through [TextEditorState.pasteLanded].
 	 */
 	fun onPaste(state: TextEditorState, text: String, range: TextEditorRange): Boolean = false
 }

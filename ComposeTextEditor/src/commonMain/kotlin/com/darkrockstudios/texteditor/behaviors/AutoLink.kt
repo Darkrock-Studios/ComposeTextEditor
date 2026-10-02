@@ -23,11 +23,10 @@ import com.darkrockstudios.texteditor.state.setLink
  * address. Only a destination [sanitizeLinkUrl] allows is linked.
  *
  * The link is [setLink]'s, in the state's link style. Opt-in: add it to
- * [TextEditorState.editBehaviors] ahead of the line block behavior, with
- * `add(0, AutoLink())`, so Enter on a list item or quote links too. A typed or
- * pasted link is its own undo step, so one undo takes the link off and keeps the
- * text; one made by Enter shares the Enter's step. Text in inline code or a code
- * block, and text already linked, is left alone.
+ * [TextEditorState.editBehaviors], anywhere in the chain. A link is its own undo
+ * step after the text, paste or line break that completed it, so one undo takes
+ * the link off and keeps the text. Text in inline code or a code block, and text
+ * already linked, is left alone.
  */
 data class AutoLink(
 	val typed: Boolean = true,
@@ -58,13 +57,17 @@ data class AutoLink(
 		return false
 	}
 
-	override fun onNewline(state: TextEditorState): Boolean {
-		if (!typed || state.selector.selection != null) return false
-		val caret = state.cursorPosition
-		val lineText = state.textLines[caret.line].text
-		if (caret.char < lineText.length && !lineText[caret.char].isWhitespace()) return false
-		urlIn(lineText, tokenStart(lineText, caret.char), caret.char)?.let { link(state, listOf(caret.line to it)) }
-		// The line break still goes in, through the rest of the chain.
+	override fun onNewlineLanded(state: TextEditorState, range: TextEditorRange): Boolean {
+		if (!typed) return false
+		val line = range.start.line
+		val lineText = state.textLines.getOrNull(line)?.text ?: return false
+		val end = range.start.char
+		// Only the token the break ended: the line must end there, and a break inside a
+		// word leaves its first half no URL.
+		if (end != lineText.length) return false
+		val after = state.textLines.getOrNull(range.end.line)?.text ?: return false
+		if (range.end.char < after.length && !after[range.end.char].isWhitespace()) return false
+		urlIn(lineText, tokenStart(lineText, end), end)?.let { link(state, listOf(line to it)) }
 		return false
 	}
 

@@ -21,11 +21,14 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.EditorLineLimits
 import com.darkrockstudios.texteditor.TextEditor
+import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.RichTextStyles
 import com.darkrockstudios.texteditor.behaviors.AutoLink
 import com.darkrockstudios.texteditor.behaviors.SmartPunctuation
+import com.darkrockstudios.texteditor.markdown.MarkdownShortcuts
 import com.darkrockstudios.texteditor.markdown.withMarkdown
 import com.darkrockstudios.texteditor.rememberTextEditorStyle
 import com.darkrockstudios.texteditor.richstyle.ImageBlockSpanStyle
@@ -78,12 +81,12 @@ fun TextEditorDemoUi(
 			rememberSaveableTextEditorState(richSpanStyleSaver = imageSaver)
 		}
 	}
-	// The plain rich text demo is a rich text editor with nothing installed, its
-	// default styles included; the others are markdown editors with the theme's.
+	// Every demo takes the theme's styles; the plain rich text demo is a rich text editor
+	// with nothing installed, and the others are markdown editors.
+	remember(state, styles) { state.richTextStyles = styles }
 	val markdownExtension = if (demoContent == DemoContent.Rich) {
 		null
 	} else {
-		remember(state, styles) { state.richTextStyles = styles }
 		remember(state, imageProvider) { state.withMarkdown(imageProvider = imageProvider) }
 	}
 
@@ -98,10 +101,11 @@ fun TextEditorDemoUi(
 	LaunchedEffect(Unit) {
 		if (demoContent == DemoContent.Rich) {
 			//state.selector.updateSelection(CharLineOffset(0, 10), CharLineOffset(0, 20))
-			state.addRichSpan(6, 11, HIGHLIGHT)
+			state.addStyleSpan(
+				TextEditorRange(CharLineOffset(0, 6), CharLineOffset(0, 11)),
+				state.richTextStyles.highlightStyle,
+			)
 			state.addRichSpan(16, 31, SpellCheckStyle)
-
-			//state.addRichSpan(30, 35, HIGHLIGHT)
 		}
 
 		state.editOperations.collect { operation ->
@@ -128,6 +132,12 @@ fun TextEditorDemoUi(
 		state.editBehaviors.removeAll { it is AutoLink }
 		// Ahead of the line block behavior, so Enter on a list item links too.
 		if (autoLink.typed || autoLink.pasted) state.editBehaviors.add(0, autoLink)
+	}
+	var markdownShortcuts by remember { mutableStateOf(false) }
+	LaunchedEffect(state, markdownShortcuts) {
+		state.editBehaviors.removeAll { it is MarkdownShortcuts }
+		// Ahead of the line block behavior, so Enter on a fence line reaches it.
+		if (markdownShortcuts) state.editBehaviors.add(0, MarkdownShortcuts())
 	}
 
 	Column(modifier = modifier) {
@@ -178,6 +188,9 @@ fun TextEditorDemoUi(
 			LabeledSwitch("... ellipsis", punctuation.ellipses) { punctuation = punctuation.copy(ellipses = it) }
 			LabeledSwitch("Link typed URLs", autoLink.typed) { autoLink = autoLink.copy(typed = it) }
 			LabeledSwitch("Link pasted URLs", autoLink.pasted) { autoLink = autoLink.copy(pasted = it) }
+			if (markdownExtension != null) {
+				LabeledSwitch("Markdown shortcuts", markdownShortcuts) { markdownShortcuts = it }
+			}
 		}
 
 		if (editable) {

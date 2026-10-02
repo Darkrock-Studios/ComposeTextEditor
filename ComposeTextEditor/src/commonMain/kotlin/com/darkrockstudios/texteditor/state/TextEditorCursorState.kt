@@ -42,6 +42,16 @@ class TextEditorCursorState(
 	/** The row the caret draws on at a wrap offset; every move resets it to [CaretAffinity.Downstream]. */
 	val affinity: CaretAffinity get() = _affinity
 
+	private var _runSide by mutableStateOf<CaretAffinity?>(null)
+
+	/**
+	 * Which character's edge the caret draws against after a visual arrow move (7.33): the
+	 * one before its position ([CaretAffinity.Upstream]) or after it. Between runs of
+	 * opposite direction the two are apart on screen. Null, as every other move leaves it,
+	 * draws the caret where the layout puts its position.
+	 */
+	internal val runSide: CaretAffinity? get() = _runSide
+
 	private var _isVisible by mutableStateOf(true)
 	val isVisible: Boolean get() = _isVisible
 
@@ -104,12 +114,22 @@ class TextEditorCursorState(
 	internal fun updatePosition(position: CharLineOffset, affinity: CaretAffinity) =
 		updatePosition(position, affinity, updateStyles = true)
 
-	private fun updatePosition(position: CharLineOffset, affinity: CaretAffinity, updateStyles: Boolean) {
+	/** [updatePosition], drawn against the character on [runSide] of it: a visual arrow move's. */
+	internal fun updatePosition(position: CharLineOffset, affinity: CaretAffinity, runSide: CaretAffinity) =
+		updatePosition(position, affinity, updateStyles = true, runSide = runSide)
+
+	private fun updatePosition(
+		position: CharLineOffset,
+		affinity: CaretAffinity,
+		updateStyles: Boolean,
+		runSide: CaretAffinity? = null,
+	) {
 		val oldPosition = _position
 		val newPosition = position.coerceInto(editorState.textLines)
 		verticalGoal = null
 		// Before the scroll request below, which reads the row the caret is on.
 		_affinity = affinity
+		_runSide = runSide
 		_position = newPosition
 		_cursorPositionFlow.tryEmit(newPosition)
 

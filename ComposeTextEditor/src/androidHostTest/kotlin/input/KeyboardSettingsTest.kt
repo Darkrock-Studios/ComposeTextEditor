@@ -14,6 +14,7 @@ import com.darkrockstudios.texteditor.input.TextEditorInputConnection
 import com.darkrockstudios.texteditor.input.androidImeOptions
 import com.darkrockstudios.texteditor.input.androidInputType
 import com.darkrockstudios.texteditor.state.CursorAnchor
+import com.darkrockstudios.texteditor.state.FocusedEditor
 import com.darkrockstudios.texteditor.state.TextEditorState
 import io.mockk.mockk
 import kotlinx.coroutines.test.TestScope
@@ -103,7 +104,7 @@ class KeyboardSettingsTest {
 	@Test
 	fun `without a host handler the action key takes the editor's default`() {
 		val defaulted = mutableListOf<ImeAction>()
-		state.defaultImeAction = { defaulted += it }
+		state.focusedEditor = FocusedEditor(defaultImeAction = { defaulted += it }, singleLine = false)
 		state.keyboardSettings = KeyboardSettings(imeAction = ImeAction.Next)
 		val connection = TextEditorInputConnection(state, mockk<View>(relaxed = true))
 
@@ -168,6 +169,23 @@ class KeyboardSettingsTest {
 		sync.flush()
 
 		assertEquals(listOf("restart", "restart"), events)
+	}
+
+	/** Roadmap 7.66: a multi-line editor holding focus beside a single-line one keeps Enter. */
+	@Test
+	fun `the focused editor's line limit decides the keyboard`() {
+		val events = mutableListOf<String>()
+		val sync = ImeCursorSync(state, restartRecorder(events)) {}
+		sync.attach()
+		sync.flush()
+
+		state.singleLineEditors = 1
+		sync.flush()
+		state.focusedEditor = FocusedEditor(defaultImeAction = {}, singleLine = false)
+		sync.flush()
+
+		assertEquals(listOf("restart", "restart"), events)
+		assertEquals(ImeAction.Default, state.effectiveImeAction())
 	}
 
 	private fun restartRecorder(events: MutableList<String>) = object : ImeUpdateSink {

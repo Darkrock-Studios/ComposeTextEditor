@@ -10,6 +10,7 @@ import com.darkrockstudios.texteditor.richstyle.HorizontalRuleSpanStyle
 import com.darkrockstudios.texteditor.richstyle.LinkSpanStyle
 import com.darkrockstudios.texteditor.richstyle.ParagraphFormatSpanStyle
 import com.darkrockstudios.texteditor.state.TextEditorState
+import com.darkrockstudios.texteditor.state.paragraphFormat
 import com.darkrockstudios.texteditor.state.setParagraphFormat
 import io.mockk.mockk
 import kotlinx.coroutines.test.TestScope
@@ -61,14 +62,13 @@ class HtmlPasteUndoE2eTest {
 		press(Key.MoveHome, ctrl = true)
 		pasteHtml("<p style=\"text-align: right\">new</p><p>x</p>")
 		val pasted = state.exact()
-		fun aligned() = state.richSpanManager.getAllRichSpans().mapNotNull { (it.style as? ParagraphFormatSpanStyle)?.textAlign }
-		assertEquals(listOf(TextAlign.Right), aligned())
+		fun aligned() = (0 until state.textLines.size).map { state.paragraphFormat(it)?.textAlign }
+		// The last pasted paragraph runs into the line's own text, which keeps its format.
+		assertEquals(listOf(TextAlign.Right, TextAlign.Center), aligned())
 
-		// The line's own format does not come back: a multi-line insert at a paragraph's
-		// start loses it on undo, pasted HTML or not (6.34).
 		press(Key.Z, ctrl = true)
 		assertEquals("target", text)
-		assertEquals(emptyList(), aligned())
+		assertEquals(listOf(TextAlign.Center), aligned())
 
 		press(Key.Z, ctrl = true, shift = true)
 		assertEquals(pasted, state.exact())

@@ -1,5 +1,24 @@
 # Migration
 
+## Chords matched on `layoutKey`
+
+From the first release after 2.8.0, the built-in key bindings match letter
+chords on `KeyEvent.layoutKey` (`com.darkrockstudios.texteditor.input`)
+rather than `KeyEvent.key`. On desktop Linux, `key` names a letter by the
+first keyboard layout installed, not the active one, so on BÉPO or Dvorak the
+two can name different letters for the same key. A host's own `KeyBindings`
+that tests `event.key` and delegates the rest to `platformKeyBindings()` should
+test `event.layoutKey` instead, or its chords and the built-in ones land on
+different keys:
+
+```kotlin
+// Before
+if (event.key == Key.D && event.isCtrlShortcut) InsertDate else platformKeyBindings().commandFor(event)
+
+// After
+if (event.layoutKey == Key.D && event.isCtrlShortcut) InsertDate else platformKeyBindings().commandFor(event)
+```
+
 ## Markdown as a module
 
 From the first release after 2.8.0, markdown import and export are out of
@@ -72,13 +91,15 @@ imports. The reasoning is in `docs/design/modules.md`.
    `RichTextStyles`; `AnnotatedString.toMarkdown(configuration, links,
    styles)` keeps the syntax choices first and takes the styles last.
 
-7. **HTML headings come from blocks.** `HtmlExtension.exportAsHtml` and copy
-   write a line as a heading only when it carries a heading block
-   (`HeaderSpanStyle`, which the importers and `toggleHeader` give it), not
-   when its text is bold at a heading's size; text loaded with `setText` from
-   `toAnnotatedStringFromHtml` or `toAnnotatedStringFromMarkdown` has no blocks,
-   so load documents through `importHtml` or `importMarkdown`. The standalone
-   `AnnotatedString.toHtml` still reads a heading's size as the heading.
+7. **Headings come from blocks.** `HtmlExtension.exportAsHtml`, copy and
+   `MarkdownExtension.exportAsMarkdown` write a line as a heading only when it
+   carries a heading block (`HeaderSpanStyle`, which the importers and
+   `toggleHeader` give it), not when its text is bold at a heading's size
+   (markdown writes that as bold with its size); text loaded with `setText`
+   from `toAnnotatedStringFromHtml` or `toAnnotatedStringFromMarkdown` has no
+   blocks, so load documents through `importHtml` or `importMarkdown`. The
+   standalone `AnnotatedString.toHtml` and `AnnotatedString.toMarkdown` still
+   read a heading's size as the heading.
 
 8. **Spell check.** `SpellCheckState.withMarkdown()` is gone (spell check does
    not depend on markdown): use `spellCheckState.textState.withMarkdown()`.

@@ -70,6 +70,10 @@ editors, `\n` and `\t` insert a line break and a tab. A reference to a group the
 not have is inserted as written. With regular expressions off, the replacement is always
 literal.
 
+A replacement the editor's input filter refuses is not made: `replaceCurrent` returns false
+and keeps the match current, and `replaceAll` counts only what it replaced and leaves the
+refused matches as the matches.
+
 For a headless, one-shot search with no state object, use
 [TextEditorState.findAll][com.darkrockstudios.texteditor.find.findAll], which returns the
 matching [TextEditorRange][com.darkrockstudios.texteditor.TextEditorRange]s in document

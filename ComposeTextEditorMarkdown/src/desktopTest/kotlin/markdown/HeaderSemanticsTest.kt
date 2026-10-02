@@ -7,6 +7,8 @@ import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.RichTextStyles
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.markdown.MarkdownExtension
+import com.darkrockstudios.texteditor.markdown.toAnnotatedStringFromMarkdown
+import com.darkrockstudios.texteditor.markdown.toMarkdown
 import com.darkrockstudios.texteditor.richstyle.HeaderSpanStyle
 import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.headerLevel
@@ -143,7 +145,7 @@ class HeaderSemanticsTest {
 	}
 
 	@Test
-	fun `a raw font size heading with no span still exports through the legacy path`() {
+	fun `a line bold at a heading's size with no heading block exports as bold with its size`() {
 		val e = editor()
 		val state = e.editorState
 		state.setText("Title")
@@ -153,6 +155,66 @@ class HeaderSemanticsTest {
 		)
 
 		assertNull(e.editorState.headerLevel(0), "precondition: no heading span, only the raw style")
-		assertTrue(e.exportAsMarkdown().startsWith("# "))
+		val exported = e.exportAsMarkdown()
+		assertEquals("<span style=\"font-size:32px\">**Title**</span>", exported)
+
+		e.importMarkdown(exported)
+		assertNull(e.editorState.headerLevel(0))
+		assertEquals(exported, e.exportAsMarkdown())
+	}
+
+	@Test
+	fun `a bold word at a heading's size mid line stays in its line`() {
+		val e = editor()
+		val state = e.editorState
+		state.setText("a BIG b\nnext")
+		state.addStyleSpan(
+			TextEditorRange(CharLineOffset(0, 2), CharLineOffset(0, 5)),
+			SpanStyle(fontSize = 24.sp, fontWeight = FontWeight.Bold),
+		)
+
+		val exported = e.exportAsMarkdown()
+		assertEquals("a <span style=\"font-size:24px\">**BIG**</span> b\n\nnext", exported)
+
+		e.importMarkdown(exported)
+		assertEquals("a BIG b\nnext", e.editorState.getAllText().text)
+		assertNull(e.editorState.headerLevel(0))
+		assertEquals(exported, e.exportAsMarkdown())
+	}
+
+	@Test
+	fun `a bold word at another heading's size inside a heading stays in the heading`() {
+		val e = editor("## a BIG b")
+		e.editorState.addStyleSpan(
+			TextEditorRange(CharLineOffset(0, 2), CharLineOffset(0, 5)),
+			RichTextStyles.DEFAULT.header1Style,
+		)
+
+		val exported = e.exportAsMarkdown()
+		assertEquals("## a <span style=\"font-size:32px\">**BIG**</span> b", exported)
+
+		e.importMarkdown(exported)
+		assertEquals(2, e.editorState.headerLevel(0))
+		assertEquals(exported, e.exportAsMarkdown())
+	}
+
+	@Test
+	fun `a heading's bake from a retired configuration is not written as inline style`() {
+		val e = editor("## Title")
+		e.editorState.richTextStyles = RichTextStyles.DEFAULT.copy(
+			header2Style = SpanStyle(fontSize = 28.sp, fontWeight = FontWeight.Bold),
+		)
+		e.editorState.addStyleSpan(
+			TextEditorRange(CharLineOffset(0, 0), CharLineOffset(0, 5)),
+			RichTextStyles.DEFAULT.header2Style,
+		)
+
+		assertEquals("## Title", e.exportAsMarkdown())
+	}
+
+	@Test
+	fun `the standalone converter still reads a run at a heading's size as that heading`() {
+		val text = "# Title".toAnnotatedStringFromMarkdown()
+		assertEquals("# Title\n", text.toMarkdown())
 	}
 }

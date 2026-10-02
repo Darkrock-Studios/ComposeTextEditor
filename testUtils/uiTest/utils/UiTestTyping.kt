@@ -12,7 +12,7 @@ import androidx.compose.ui.test.performKeyInput
 /**
  * Types [text] into the focused editor by replaying the event sequence a real
  * desktop keystroke produces: KeyDown, then a KEY_TYPED-style Unknown event
- * carrying the character, then KeyUp. `performKeyInput` cannot do this — it
+ * carrying the character, then KeyUp. `performKeyInput` cannot do this; it
  * only synthesizes KeyDown/KeyUp, and on desktop printable characters are
  * consumed exclusively from the KEY_TYPED event (see
  * PlatformCharacterInput.desktop.kt).

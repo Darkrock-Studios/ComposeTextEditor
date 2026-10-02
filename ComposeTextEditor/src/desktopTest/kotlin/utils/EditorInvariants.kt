@@ -2,7 +2,12 @@ package utils
 
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.Dp
+import com.darkrockstudios.texteditor.cursor.calculateCursorPosition
+import com.darkrockstudios.texteditor.state.caretParagraphIsRtl
+import com.darkrockstudios.texteditor.utils.hasRightToLeft
+import kotlin.math.abs
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 import kotlin.test.fail
 
 /**
@@ -27,7 +32,11 @@ enum class EditorInvariant(vararg val needs: String) {
 	 */
 	DownMovesOneRow("1.2"),
 
-	/** Without a selection and away from the document start, Left then Right puts the caret back. */
+	/**
+	 * Without a selection and away from the document start, Left then Right puts the
+	 * caret back: to the same offset, or in a line with right-to-left text to the same
+	 * place on screen, unless Left found nothing further left.
+	 */
 	LeftThenRightReturns,
 	;
 
@@ -67,9 +76,24 @@ fun EditorUiTestScope.checkInvariants(invariants: Set<EditorInvariant>) {
 	}
 	if (snapshot.hasSelection) return
 	if (EditorInvariant.LeftThenRightReturns in invariants && snapshot.caret > 0) {
+		val line = state.textLines[state.cursorPosition.line].text
+		val visual = line.hasRightToLeft(0, line.length) || state.caretParagraphIsRtl()
+		val drawn = state.calculateCursorPosition().position
 		send(Left)
+		// At the first row's left edge Left has nowhere to go, wherever that is in the text.
+		val stuckAtLeftEdge = state.calculateCursorPosition().position == drawn && state.cursorRowIndex() == 0
 		send(Right)
-		assertEquals(snapshot.caret, cursorIndex, "LeftThenRightReturns: from $snapshot")
+		if (visual) {
+			// The arrows are visual (7.33): back to the same place on screen, which between
+			// runs of opposite direction two offsets share.
+			val back = state.calculateCursorPosition().position
+			assertTrue(
+				stuckAtLeftEdge || (abs(back.x - drawn.x) <= 0.5f && back.y == drawn.y),
+				"LeftThenRightReturns: from $snapshot drawn at $drawn, back at $back",
+			)
+		} else {
+			assertEquals(snapshot.caret, cursorIndex, "LeftThenRightReturns: from $snapshot")
+		}
 	}
 	if (EditorInvariant.DownMovesOneRow in invariants) {
 		val position = state.cursorPosition

@@ -14,8 +14,12 @@ plugins {
 
 // Each desktop suite runs in one JVM. Room above Gradle's 512 MB default for tests
 // that build long documents on mocks, which record every call (docs/ROADMAP.md, 0.10).
+// Selecting text in a test must not replace the desktop's X11 primary selection.
 subprojects {
-	tasks.withType<Test>().matching { it.name == "desktopTest" }.configureEach { maxHeapSize = "1g" }
+	tasks.withType<Test>().matching { it.name == "desktopTest" }.configureEach {
+		maxHeapSize = "1g"
+		systemProperty("composetexteditor.primarySelection", "false")
+	}
 }
 
 // Aggregates the four published library modules into a single API doc site.

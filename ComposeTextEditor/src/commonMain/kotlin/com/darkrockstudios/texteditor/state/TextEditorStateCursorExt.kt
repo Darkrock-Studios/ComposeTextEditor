@@ -91,11 +91,13 @@ internal fun LineWrap.caretAtX(x: Float): Pair<Int, CaretAffinity> {
 /**
  * The x of a caret at [char] drawn on this row. At the wrap that ends the row (an
  * upstream caret) it is the row's end, where the layout would otherwise answer
- * with the start of the next row.
+ * with the start of the next row. With a [runSide], a visual arrow move's, it is
+ * the edge of the character on that side.
  */
-internal fun LineWrap.caretX(char: Int): Float {
+internal fun LineWrap.caretX(char: Int, runSide: CaretAffinity? = null): Float {
 	val layout = textLayoutResult
 	val safe = char.coerceIn(0, layout.layoutInput.text.length)
+	if (runSide != null) layout.runEdgeX(safe, runSide)?.let { return it }
 	val atWrap = wrapsToNextRow && safe == layout.getLineEnd(virtualLineIndex)
 	return if (atWrap) rowEndX() else layout.getHorizontalPosition(safe, usePrimaryDirection = true)
 }
@@ -104,7 +106,7 @@ internal fun LineWrap.caretX(char: Int): Float {
  * The x past this row's last glyph, trailing spaces included: the line's own right
  * edge (left in a right-to-left paragraph) stops before them.
  */
-private fun LineWrap.rowEndX(): Float {
+internal fun LineWrap.rowEndX(): Float {
 	val layout = textLayoutResult
 	val row = virtualLineIndex
 	val last = layout.getLineEnd(row) - 1

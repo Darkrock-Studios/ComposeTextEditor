@@ -12,6 +12,7 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.toComposeRect
 import com.darkrockstudios.texteditor.input.ImeCaretGeometry
 import com.darkrockstudios.texteditor.input.ImeCursorSync
+import com.darkrockstudios.texteditor.input.KeyboardTraceRecorder
 import com.darkrockstudios.texteditor.input.TextEditorInputConnection
 import com.darkrockstudios.texteditor.input.composingAsTextRange
 import com.darkrockstudios.texteditor.input.imeCaretInRoot
@@ -50,6 +51,9 @@ actual class PlatformTextEditorExtensions actual constructor(
 	/** Token supplied alongside the monitor request; echoed back in `updateExtractedText`. */
 	@Volatile
 	var extractedTextMonitorToken: Int = 0
+
+	/** Where the keyboard's calls are traced, set through [TextEditorState.keyboardTrace]. */
+	internal var keyboardTrace: KeyboardTraceRecorder? = null
 
 	/**
 	 * The running input session's notifier. Ending the outermost batch edit flushes it,

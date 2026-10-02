@@ -2,6 +2,7 @@
 
 package e2e
 
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.size
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.Key
@@ -136,5 +137,50 @@ class SingleLineEnterE2eTest {
 			editorNode().assert(SemanticsMatcher.keyNotDefined(SemanticsActions.OnImeAction))
 
 			assertEquals(listOf(ImeAction.Done, ImeAction.Search), actions)
+		}
+
+	/** Roadmap 7.66: the line limit is each editor's, not the state's. */
+	@Test
+	fun `a multi-line editor sharing a state with a single-line one keeps its Enter`() =
+		runSkikoComposeUiTest(density = Density(1f)) {
+			lateinit var state: TextEditorState
+			setContent {
+				state = rememberTextEditorState(initialText = AnnotatedString("hello"))
+				Column {
+					BasicTextEditor(
+						state = state,
+						modifier = Modifier.size(300.dp, 100.dp),
+						lineLimits = EditorLineLimits.SingleLine,
+					)
+					BasicTextEditor(
+						state = state,
+						modifier = Modifier.size(300.dp, 100.dp),
+						autoFocus = true,
+						lineLimits = EditorLineLimits.MultiLine(),
+					)
+				}
+			}
+			waitForIdle()
+			waitUntil(timeoutMillis = 5_000) { state.isFocused }
+			val actions = mutableListOf<ImeAction>()
+			state.onImeAction = { actions += it }
+
+			val editors = onAllNodes(SemanticsMatcher.keyIsDefined(SemanticsProperties.EditableText), useUnmergedTree = true)
+			editors[0].assert(SemanticsMatcher.expectValue(SemanticsProperties.ImeAction, ImeAction.Done))
+			editors[1].assert(SemanticsMatcher.keyNotDefined(SemanticsActions.OnImeAction))
+			assertEquals(ImeAction.Default, state.effectiveImeAction())
+
+			pressEnter()
+
+			assertEquals(emptyList(), actions)
+			assertEquals(2, state.textLines.size)
+
+			editors[0].performSemanticsAction(SemanticsActions.RequestFocus)
+			waitForIdle()
+			assertEquals(ImeAction.Done, state.effectiveImeAction())
+			pressEnter()
+
+			assertEquals(listOf(ImeAction.Done), actions)
+			assertEquals(2, state.textLines.size)
 		}
 }

@@ -2,6 +2,7 @@ package com.darkrockstudios.texteditor.utils
 
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.PathSegment
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.style.ResolvedTextDirection
 import androidx.compose.ui.unit.Density
@@ -29,6 +30,11 @@ fun TextLayoutResult.lineTextLeft(lineIndex: Int, density: Density?): Float {
 	if (multiParagraph.getParagraphDirection(lineStart) != ResolvedTextDirection.Ltr) {
 		return getLineLeft(lineIndex)
 	}
+	// A row that starts with right-to-left text starts at that run's right end, not its
+	// left: take the row's leftmost glyph, which keeps the indent as the first glyph does.
+	if (lineStart < layoutInput.text.length && getBidiRunDirection(lineStart) == ResolvedTextDirection.Rtl) {
+		return getPathForRange(lineStart, getLineEnd(lineIndex, visibleEnd = true)).getBounds().left
+	}
 
 	val measured = max(
 		getLineLeft(lineIndex),
@@ -40,6 +46,112 @@ fun TextLayoutResult.lineTextLeft(lineIndex: Int, density: Density?): Float {
 		?: layoutInput.style.textIndent?.firstLine
 		?: return measured
 	return max(measured, with(density) { indent.toPx() })
+}
+
+/**
+ * The boxes the characters in [start, end) cover on row [lineIndex], left to right, as
+ * Compose's own selection path ([TextLayoutResult.getPathForRange], what `BasicTextField`
+ * draws) has them: a range that crosses between left-to-right and right-to-left text
+ * covers separate stretches of the row, and gets a box for each. Boxes that touch are
+ * merged. Each box is the row's full height, from [getLineTop] to [getLineBottom] in the
+ * layout's coordinates (measured from the paragraph's top, not the row's). The range is
+ * clipped to the row's text, which leaves out the spaces a soft wrap hangs past the
+ * row's end.
+ *
+ * A row of left-to-right text in a left-to-right paragraph has a single stretch, read
+ * from two horizontal positions without building the path.
+ */
+fun TextLayoutResult.getRunBoxes(lineIndex: Int, start: Int, end: Int): List<Rect> {
+	val wraps = lineIndex < lineCount - 1
+	val rowStart = getLineStart(lineIndex)
+	val rowEnd = getLineEnd(lineIndex, visibleEnd = wraps)
+	val from = start.coerceIn(rowStart, rowEnd)
+	val to = end.coerceIn(from, rowEnd)
+	if (to <= from) return emptyList()
+
+	val rowTop = getLineTop(lineIndex)
+	val rowBottom = getLineBottom(lineIndex)
+	val toWrap = wraps && to == getLineEnd(lineIndex)
+	val rowLeft = getLineLeft(lineIndex)
+	val rowRight = getLineRight(lineIndex)
+
+	val text = layoutInput.text
+	if (multiParagraph.getParagraphDirection(from) == ResolvedTextDirection.Ltr && !text.hasRightToLeft(rowStart, rowEnd)) {
+		val left = if (from == rowStart) lineTextLeft(lineIndex, density = null) else getHorizontalPosition(from, usePrimaryDirection = true)
+		// At a soft wrap the position of [to] is the next row's start.
+		val right = if (toWrap) rowRight else getHorizontalPosition(to, usePrimaryDirection = true)
+		return if (right > left) listOf(Rect(left, rowTop, right, rowBottom)) else emptyList()
+	}
+
+	val boxes = mutableListOf<Rect>()
+	val points = FloatArray(8)
+	var left = Float.POSITIVE_INFINITY
+	var top = Float.POSITIVE_INFINITY
+	var right = Float.NEGATIVE_INFINITY
+	var bottom = Float.NEGATIVE_INFINITY
+	fun include(x: Float, y: Float) {
+		left = min(left, x)
+		top = min(top, y)
+		right = max(right, x)
+		bottom = max(bottom, y)
+	}
+	fun closeBox() {
+		val onRow = (top + bottom) / 2f in rowTop..rowBottom
+		// Android's path for a range that ends at a soft wrap adds a box from the row's end
+		// to the layout's edge, as if a line break were selected.
+		val pastRow = toWrap && (left >= rowRight - RUN_GAP || right <= rowLeft + RUN_GAP)
+		if (right > left && onRow && !pastRow) boxes += Rect(left, rowTop, right, rowBottom)
+		left = Float.POSITIVE_INFINITY
+		top = Float.POSITIVE_INFINITY
+		right = Float.NEGATIVE_INFINITY
+		bottom = Float.NEGATIVE_INFINITY
+	}
+
+	val iterator = getPathForRange(from, to).iterator()
+	while (iterator.hasNext()) {
+		when (iterator.next(points)) {
+			PathSegment.Type.Move -> {
+				closeBox()
+				include(points[0], points[1])
+			}
+			PathSegment.Type.Line -> include(points[2], points[3])
+			PathSegment.Type.Close, PathSegment.Type.Done -> closeBox()
+			else -> {}
+		}
+	}
+	closeBox()
+
+	boxes.sortBy { it.left }
+	val merged = ArrayList<Rect>(boxes.size)
+	for (box in boxes) {
+		val last = merged.lastOrNull()
+		if (last != null && box.left <= last.right + RUN_GAP) {
+			merged[merged.lastIndex] = Rect(last.left, rowTop, max(last.right, box.right), rowBottom)
+		} else {
+			merged += box
+		}
+	}
+	return merged
+}
+
+/** How far apart two boxes may be and still count as touching: rounding between runs. */
+internal const val RUN_GAP = 0.5f
+
+/**
+ * Whether [start, end) holds a character that can start right-to-left text: a Hebrew,
+ * Arabic, Syriac, Thaana, N'Ko or other right-to-left letter, their presentation forms, a
+ * right-to-left supplementary-plane script (judged by its high surrogate), or a
+ * right-to-left mark, embedding, override or isolate (a first strong isolate counts).
+ */
+internal fun CharSequence.hasRightToLeft(start: Int, end: Int): Boolean {
+	for (i in start until end) {
+		when (this[i].code) {
+			in 0x0590..0x08FF, in 0xFB1D..0xFDFF, in 0xFE70..0xFEFF,
+			0x200F, 0x202B, 0x202E, 0x2067, 0x2068,
+			in 0xD802..0xD803, in 0xD83A..0xD83B -> return true
+		}
+	}
+	return false
 }
 
 /**
@@ -55,6 +167,7 @@ fun TextLayoutResult.lineTextLeft(lineIndex: Int, density: Density?): Float {
  * @param flattenForFullParagraphs whether to return bounds for entire paragraphs instead of separate lines.
  * @return the list of bounds for the given range.
  */
+@Deprecated("Assumes the range holds no right-to-left text. Use getRunBoxes, row by row.")
 fun TextLayoutResult.getBoundingBoxes(
 	startOffset: Int,
 	endOffset: Int,

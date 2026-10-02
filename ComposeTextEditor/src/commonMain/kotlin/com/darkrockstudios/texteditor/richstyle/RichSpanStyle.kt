@@ -90,8 +90,9 @@ interface RichSpanStyle {
 	 * Whether a span of this style belongs to one paragraph: it covers its line and no
 	 * other, an Enter at the paragraph's start or end carries a copy onto the new
 	 * paragraph (an Enter inside it splits it), and a multi-line insert inside it keeps
-	 * it on its own line. A paragraph's format is one; a block marker is not, since the
-	 * block behavior continues it with its indent.
+	 * it on its own line; one at the paragraph's start keeps it on the first line and
+	 * the paragraph's own text after the last. A paragraph's format is one; a block
+	 * marker is not, since the block behavior continues it with its indent.
 	 */
 	val boundToParagraph: Boolean get() = false
 

@@ -9,6 +9,7 @@ import com.darkrockstudios.texteditor.behaviors.urlIn
 import com.darkrockstudios.texteditor.behaviors.urlsIn
 import com.darkrockstudios.texteditor.input.imeCommitText
 import com.darkrockstudios.texteditor.richstyle.LinkSpanStyle
+import com.darkrockstudios.texteditor.state.EditBehavior
 import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.getSpanStylesAtPosition
 import com.darkrockstudios.texteditor.state.insertTypedCharacter
@@ -161,6 +162,92 @@ class AutoLinkTest {
 
 		assertEquals(listOf("https://example.com" to "https://example.com"), state.links())
 		assertTrue(state.isBulletList(1), "the line block behavior still ran")
+	}
+
+	@Test
+	fun `one undo after Enter takes the link off and keeps the line break`() {
+		val state = editor("https://example.com")
+
+		state.insertTypedNewline()
+		state.undo()
+
+		assertEquals("https://example.com\n", state.text())
+		assertEquals(emptyList(), state.links())
+		state.undo()
+		assertEquals("https://example.com", state.text())
+		state.redo()
+		state.redo()
+		assertEquals(listOf("https://example.com" to "https://example.com"), state.links())
+	}
+
+	@Test
+	fun `Enter on a list item links when installed after the line block behavior`() {
+		val state = TextEditorState(scope = TestScope(), measurer = mockk(relaxed = true), initialText = AnnotatedString("https://example.com"))
+		state.editBehaviors.add(AutoLink())
+		state.toggleBulletList(0..0)
+		state.cursor.updatePosition(CharLineOffset(0, 19))
+
+		state.insertTypedNewline()
+
+		assertEquals(listOf("https://example.com" to "https://example.com"), state.links())
+		assertTrue(state.isBulletList(1))
+		state.undo()
+		assertEquals(emptyList(), state.links())
+		assertTrue(state.isBulletList(1), "the first undo leaves the continued item")
+	}
+
+	@Test
+	fun `an Enter a behavior takes without a line break links nothing`() {
+		val state = editor("https://example.com")
+		state.editBehaviors.add(0, object : EditBehavior {
+			override fun onNewline(state: TextEditorState): Boolean = true
+		})
+
+		state.insertTypedNewline()
+
+		assertEquals("https://example.com", state.text())
+		assertEquals(emptyList(), state.links())
+	}
+
+	@Test
+	fun `an Enter inside a host's own edit group links within it, as typed text does`() {
+		val state = editor("https://example.com")
+
+		state.editGroup {
+			state.insertTypedNewline()
+			state.insertTypedString("Next")
+		}
+		assertEquals(listOf("https://example.com" to "https://example.com"), state.links())
+
+		state.undo()
+		assertEquals("https://example.com", state.text())
+		assertEquals(emptyList(), state.links())
+	}
+
+	@Test
+	fun `a behavior that makes Enter's line break itself still has it offered`() {
+		val state = editor("https://example.com")
+		state.editBehaviors.add(0, object : EditBehavior {
+			override fun onNewline(state: TextEditorState): Boolean {
+				state.insertNewlineAtCursor()
+				state.insertStringAtCursor("  ")
+				return true
+			}
+		})
+
+		state.insertTypedNewline()
+
+		assertEquals("https://example.com\n  ", state.text())
+		assertEquals(listOf("https://example.com" to "https://example.com"), state.links())
+	}
+
+	@Test
+	fun `a host's own line break links too`() {
+		val state = editor("https://example.com")
+
+		state.insertNewlineAtCursor()
+
+		assertEquals(listOf("https://example.com" to "https://example.com"), state.links())
 	}
 
 	@Test

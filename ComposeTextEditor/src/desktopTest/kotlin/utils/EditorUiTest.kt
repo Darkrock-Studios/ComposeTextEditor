@@ -37,10 +37,13 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.darkrockstudios.texteditor.BasicTextEditor
 import com.darkrockstudios.texteditor.LocalNativeTextToolbar
+import com.darkrockstudios.texteditor.LocalPointerMenuIsTextToolbar
 import com.darkrockstudios.texteditor.RichSpanClickEventListener
 import com.darkrockstudios.texteditor.handleCenter as drawnHandleCenter
 import com.darkrockstudios.texteditor.RichSpanClickListener
 import com.darkrockstudios.texteditor.rememberTextEditorStyle
+import com.darkrockstudios.texteditor.clipboard.LocalPrimarySelection
+import com.darkrockstudios.texteditor.clipboard.PrimarySelection
 import com.darkrockstudios.texteditor.contextmenu.ContextMenuStrings
 import com.darkrockstudios.texteditor.contextmenu.TextEditorContextMenuState
 import com.darkrockstudios.texteditor.input.CtrlKeyBindings
@@ -56,7 +59,8 @@ import com.darkrockstudios.texteditor.state.rememberTextEditorState
  * data-level assertions. Character-index-based helpers ([clickAtCharacter],
  * [dragSelect]) resolve pixel positions through the editor's own layout, so
  * tests never hard-code coordinates. Clipboard operations go through an
- * isolated [InMemoryClipboard], never the OS clipboard.
+ * isolated [InMemoryClipboard], never the OS clipboard, and the X11 primary selection
+ * through [primarySelection], none by default.
  *
  * [keyBindings] is pinned rather than taken from the host, so the same shortcuts
  * are exercised no matter which OS runs the suite; pass [MacKeyBindings] to test
@@ -77,6 +81,8 @@ internal fun editorUiTest(
 	onLinkClick: ((String) -> Unit)? = null,
 	contextMenuState: TextEditorContextMenuState? = null,
 	contextMenuStrings: ContextMenuStrings = ContextMenuStrings.Default,
+	/** A right-click opens [textToolbar] at the pointer, as on iOS, rather than the context menu. */
+	pointerMenuIsTextToolbar: Boolean = false,
 	autoFocus: Boolean = enabled,
 	contentPadding: PaddingValues = PaddingValues(0.dp),
 	density: Float = 1f,
@@ -85,6 +91,7 @@ internal fun editorUiTest(
 	trailingFocusable: Boolean = false,
 	contentDescription: String? = null,
 	readOnly: Boolean = false,
+	primarySelection: PrimarySelection? = null,
 	block: EditorUiTestScope.() -> Unit,
 ) = runSkikoComposeUiTest(density = Density(density)) {
 	val clipboard = InMemoryClipboard()
@@ -100,6 +107,8 @@ internal fun editorUiTest(
 			// for a platform toolbar, and without one the editor falls back to its menu.
 			LocalTextToolbar provides (textToolbar ?: LocalTextToolbar.current),
 			LocalNativeTextToolbar provides (textToolbar != null),
+			LocalPointerMenuIsTextToolbar provides pointerMenuIsTextToolbar,
+			LocalPrimarySelection provides primarySelection,
 		) {
 			Column {
 				BasicTextEditor(
@@ -142,10 +151,10 @@ class FocusFlag {
 @OptIn(ExperimentalTestApi::class)
 class EditorUiTestScope(
 	val test: SkikoComposeUiTest,
-	val state: TextEditorState,
+	override val state: TextEditorState,
 	val clipboard: InMemoryClipboard,
 	private val trailing: FocusFlag = FocusFlag(),
-) {
+) : FuzzUiDriver {
 	/** Whether the focusable placed after the editor by `trailingFocusable` holds focus. */
 	val trailingFocused: Boolean get() = trailing.focused
 
@@ -166,7 +175,7 @@ class EditorUiTestScope(
 	val cursorIndex: Int get() = state.getCharacterIndex(state.cursorPosition)
 
 	/** Types printable characters through real desktop key events; `\n` and `\t` become Enter/Tab. */
-	fun typeText(text: String) = test.typeText(text)
+	override fun typeText(text: String) = test.typeText(text)
 
 	/** Types [char] as a macOS Option chord over [key], the way Option+8 composes '{'. */
 	fun typeWithOption(key: Key, char: Char) = test.typeWithOption(key, char)
@@ -192,6 +201,8 @@ class EditorUiTestScope(
 		}
 		test.waitForIdle()
 	}
+
+	override fun sendKey(key: Key, ctrl: Boolean) = press(key, ctrl = ctrl)
 
 	/** Taps [position] with a finger: down and up in the same place, no buttons. */
 	fun tapAt(position: Offset) {
@@ -434,7 +445,7 @@ class EditorUiTestScope(
 	 * Seeds the clipboard with unstyled text, as an external application or a
 	 * plain-text-only platform clipboard would leave it.
 	 */
-	fun setPlainClipboardText(value: String) {
+	override fun setPlainClipboardText(value: String) {
 		clipboard.setPlainText(value)
 		test.waitForIdle()
 	}
@@ -445,7 +456,7 @@ class EditorUiTestScope(
 			.filter { charIndex >= it.start && charIndex < it.end }
 			.map { it.item }
 
-	fun waitForIdle() = test.waitForIdle()
+	override fun waitForIdle() = test.waitForIdle()
 }
 
 /** Gap between the presses of a multi-click: well inside any double-click timeout. */

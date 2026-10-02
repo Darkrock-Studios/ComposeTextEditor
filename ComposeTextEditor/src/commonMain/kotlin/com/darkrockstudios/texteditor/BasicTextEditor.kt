@@ -23,6 +23,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
@@ -44,6 +45,8 @@ import androidx.compose.ui.text.style.TextIndent
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.toSize
 import com.darkrockstudios.texteditor.clipboard.ClipboardEventsEffect
+import com.darkrockstudios.texteditor.clipboard.LocalPrimarySelection
+import com.darkrockstudios.texteditor.clipboard.PrimarySelectionEffect
 import com.darkrockstudios.texteditor.contextmenu.ContextMenuActions
 import com.darkrockstudios.texteditor.contextmenu.ContextMenuOpener
 import com.darkrockstudios.texteditor.contextmenu.ContextMenuPlacement
@@ -59,11 +62,13 @@ import com.darkrockstudios.texteditor.input.KeyBindings
 import com.darkrockstudios.texteditor.input.LocalKeyBindings
 import com.darkrockstudios.texteditor.input.TextEditorInputModifierElement
 import com.darkrockstudios.texteditor.input.TextInputRequester
+import com.darkrockstudios.texteditor.input.pastePlainText
 import com.darkrockstudios.texteditor.richstyle.BlockSpanStyle
 import com.darkrockstudios.texteditor.state.LayoutUpdate
 import com.darkrockstudios.texteditor.state.LocalImeInsets
 import com.darkrockstudios.texteditor.richstyle.RichSpan
 import com.darkrockstudios.texteditor.scrollbar.TextEditorScrollbar
+import com.darkrockstudios.texteditor.state.LendComposition
 import com.darkrockstudios.texteditor.state.SpanClickType
 import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.measuresKeyboardCover
@@ -73,6 +78,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.merge
+import kotlinx.coroutines.launch
 import kotlin.math.ceil
 import kotlin.time.Duration.Companion.milliseconds
 
@@ -144,12 +150,15 @@ fun BasicTextEditor(
 	readOnly: Boolean = false,
 	lineLimits: EditorLineLimits = EditorLineLimits.Fill,
 ) {
+	LendComposition(state)
+
 	// Input, edits and the edit semantics follow this; the caret and navigation follow enabled.
 	val editable = enabled && !readOnly
 
 	// Capture platform view for IME cursor synchronization (Android only)
 	CaptureViewForIme(state)
 	ClipboardEventsEffect(state)
+	PrimarySelectionEffect(state)
 
 	val focusRequester = remember { FocusRequester() }
 	val interactionSource = remember { MutableInteractionSource() }
@@ -161,8 +170,9 @@ fun BasicTextEditor(
 	val overscrollEffect = rememberOverscrollEffect()
 
 	val inputRequester = remember { TextInputRequester() }
-	val inputModifierElement = remember(state, clipboard, editable, keyBindings) {
-		TextEditorInputModifierElement(state, clipboard, editable, keyBindings, inputRequester)
+	val singleLine = lineLimits == EditorLineLimits.SingleLine
+	val inputModifierElement = remember(state, clipboard, editable, keyBindings, singleLine) {
+		TextEditorInputModifierElement(state, clipboard, editable, keyBindings, inputRequester, singleLine)
 	}
 
 	val horizontalPadding = remember(contentPadding, layoutDirection) {
@@ -192,8 +202,7 @@ fun BasicTextEditor(
 		Modifier.editorLineLimits(lineLimits, verticalPaddingPx, rowHeightPx) { contentHeightPx.value }
 	}
 
-	DisposableEffect(state, lineLimits) {
-		val singleLine = lineLimits == EditorLineLimits.SingleLine
+	DisposableEffect(state, singleLine) {
 		if (singleLine) state.singleLineEditors++
 		onDispose { if (singleLine) state.singleLineEditors-- }
 	}
@@ -224,9 +233,11 @@ fun BasicTextEditor(
 	}
 	val latestOnLinkClick by rememberUpdatedState(onLinkClick)
 	val hasLinkClick = onLinkClick != null
-	val semanticsModifier = remember(state, enabled, editable, focusRequester, contextMenuActions, contentDescription, hasLinkClick) {
+	val semanticsModifier = remember(state, enabled, editable, focusRequester, contextMenuActions, contentDescription, hasLinkClick, singleLine) {
 		val openLink: ((String) -> Unit)? = if (hasLinkClick) { url -> latestOnLinkClick?.invoke(url) } else null
-		Modifier.editorSemantics(state, enabled, editable, focusRequester, contextMenuActions, contentDescription, openLink)
+		Modifier.editorSemantics(
+			state, enabled, editable, singleLine, inputRequester::editor, focusRequester, contextMenuActions, contentDescription, openLink,
+		)
 	}
 	val menuPlacement = remember(state, effectiveContextMenuState) {
 		ContextMenuPlacement(state, effectiveContextMenuState)
@@ -235,8 +246,25 @@ fun BasicTextEditor(
 
 	val textToolbar = LocalTextToolbar.current
 	val nativeTextToolbar = LocalNativeTextToolbar.current
+	val takesInput by rememberUpdatedState(editable)
 	val touchToolbar = remember(state, textToolbar, nativeTextToolbar, contextMenuActions, menuPlacement) {
-		TouchToolbar(state, textToolbar.takeIf { nativeTextToolbar }, contextMenuActions, menuPlacement::showAtContent)
+		TouchToolbar(
+			state,
+			textToolbar.takeIf { nativeTextToolbar },
+			contextMenuActions,
+			menuPlacement::showAtContent,
+			takesInput = { takesInput },
+		)
+	}
+	// A right-click's menu: the platform's edit menu at the pointer where it answers one
+	// (iOS), else the editor's. A span handler (spell check's suggestions) may already have
+	// opened the editor's menu with items of its own; that menu stays.
+	val pointerMenuIsTextToolbar = LocalPointerMenuIsTextToolbar.current
+	val openPointerMenu: (Offset) -> Unit = remember(touchToolbar, menuPlacement, effectiveContextMenuState, pointerMenuIsTextToolbar) {
+		{ at ->
+			val platformMenu = pointerMenuIsTextToolbar && !effectiveContextMenuState.isVisible
+			if (!(platformMenu && touchToolbar.showAtPointer(at))) menuPlacement.showAtContent(at)
+		}
 	}
 	LaunchedEffect(touchToolbar) { touchToolbar.watch() }
 	DisposableEffect(touchToolbar) { onDispose { touchToolbar.hide() } }
@@ -361,7 +389,24 @@ fun BasicTextEditor(
 				val linkClicks = remember(keyBindings) {
 					LinkClicks.forEditor(keyBindings) { currentOnLinkClick }
 				}
-				val dragAndDrop = remember(state) { TextDragAndDrop(state) }
+				val primarySelection = LocalPrimarySelection.current
+				val primaryPasteScope = rememberCoroutineScope()
+				val primaryPaste: (() -> Unit)? = remember(state, editable, primarySelection, primaryPasteScope) {
+					if (editable && primarySelection != null) {
+						{
+							// Taken at the click: focus can move between editors sharing the state
+							// while the read is suspended, and the paste keeps to this one's limit.
+							val target = inputRequester.editor
+							primaryPasteScope.launch {
+								val text = primarySelection.readText()?.takeIf { it.isNotEmpty() } ?: return@launch
+								state.asEditor(target) { state.pastePlainText(text) }
+							}
+						}
+					} else {
+						null
+					}
+				}
+				val dragAndDrop = remember(state) { TextDragAndDrop(state, inputRequester::editor) }
 				dragAndDrop.enabled = editable
 				Canvas(
 					modifier = Modifier
@@ -370,15 +415,16 @@ fun BasicTextEditor(
 						.textEditorPointerInputHandling(
 							state = state,
 							onSpanClick = spanClickProxy,
-							onContextMenuRequest = menuPlacement::showAtContent,
+							onContextMenuRequest = openPointerMenu,
 							links = linkClicks,
 							caretHandle = enabled,
 							contentOrigin = { contentOrigin },
 							touchToolbar = touchToolbar,
 							selectionDrag = dragAndDrop::startSelectionDrag,
+							primaryPaste = primaryPaste,
 						)
 						.padding(horizontalPadding)
-						.textMagnifier(state)
+						.textMagnifier(state, style)
 						.background(style.backgroundColor)
 						.onSizeChanged { size -> state.onViewportSizeChange(size.toSize()) }
 						.measuresKeyboardCover(state, imeInsetsProvider)

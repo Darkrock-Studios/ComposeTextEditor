@@ -176,6 +176,21 @@ class TouchGesturesTest {
 		assertEquals("beta", selectedText)
 	}
 
+	/**
+	 * Past a row's end there is no word under the finger, so a long press puts the caret
+	 * at the row's end, as iOS and Android text fields do, rather than selecting the
+	 * row's last word (roadmap 3.18).
+	 */
+	@Test
+	fun `a long press past a line's end places the caret there`() = editorUiTest(initialText = AnnotatedString("alpha beta\ngamma")) {
+		val endOfFirst = positionOfCharacter(10)
+		longPressAt(Offset(endOfFirst.x + 80f, endOfFirst.y))
+		touch { up() }
+
+		assertNull(state.selector.selection, "selected '$selectedText'")
+		assertEquals(CharLineOffset(0, 10), state.cursorPosition)
+	}
+
 	@Test
 	fun `a long press then drag extends by word`() = editorUiTest(initialText = document) {
 		longPressDragToCharacter(fromChar = 8, toChar = 16)

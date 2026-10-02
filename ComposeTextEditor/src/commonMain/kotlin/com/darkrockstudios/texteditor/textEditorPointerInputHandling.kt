@@ -53,13 +53,16 @@ internal fun Modifier.textEditorPointerInputHandling(
 	contentOrigin: () -> Offset,
 	touchToolbar: TouchToolbar? = null,
 	selectionDrag: ((Offset) -> Boolean)? = null,
+	primaryPaste: (() -> Unit)? = null,
 ): Modifier {
 	return this
 		.handleHandleDrag(state, contentOrigin, touchToolbar)
 		.handleTouchInteractions(
 			state, onSpanClick, onContextMenuRequest, readOnly, links, caretHandle, contentOrigin, touchToolbar,
 		)
-		.handleMouseInput(state, onSpanClick, onContextMenuRequest, readOnly, links, contentOrigin, touchToolbar, selectionDrag)
+		.handleMouseInput(
+			state, onSpanClick, onContextMenuRequest, readOnly, links, contentOrigin, touchToolbar, selectionDrag, primaryPaste,
+		)
 }
 
 /**
@@ -183,7 +186,8 @@ internal val DOUBLE_TAP_SLOP = 100.dp
  * whatever unit the press selected. A plain press inside the selection is held instead:
  * moving past the slop hands the selection to [selectionDrag], and coming up in place
  * puts the caret there, as native editors do. The secondary button opens the context
- * menu; any other button does nothing.
+ * menu. The middle button places the caret and runs [primaryPaste], where there is one;
+ * any other button does nothing.
  */
 private fun Modifier.handleMouseInput(
 	state: TextEditorState,
@@ -194,7 +198,8 @@ private fun Modifier.handleMouseInput(
 	contentOrigin: () -> Offset,
 	touchToolbar: TouchToolbar?,
 	selectionDrag: ((Offset) -> Boolean)?,
-): Modifier = pointerInput(state, links, touchToolbar, selectionDrag) {
+	primaryPaste: (() -> Unit)?,
+): Modifier = pointerInput(state, links, touchToolbar, selectionDrag, primaryPaste) {
 	val clickCounter = ClickCounter(viewConfiguration)
 	val touchSlop = viewConfiguration.touchSlop
 	coroutineScope {
@@ -260,6 +265,12 @@ private fun Modifier.handleMouseInput(
 					readOnly,
 				)
 				onContextMenuRequest?.invoke(downAt)
+			}
+
+			buttons.isTertiaryPressed && primaryPaste != null -> {
+				clickCounter.reset()
+				PointerSelection.press(state, downAt, SelectionGranularity.Character)
+				primaryPaste()
 			}
 
 			else -> clickCounter.reset()
@@ -549,12 +560,12 @@ private fun Modifier.handleHandleDrag(
 					val wasShown = touchToolbar?.isShown == true
 					touchToolbar?.hide()
 					val tapped = dragCaretHandle(state, down, origin, autoScrollScope)
-					if (tapped && !wasShown) touchToolbar?.show()
+					if (tapped && !wasShown) touchToolbar?.showOnRelease()
 				} else {
 					val handle = findHandleAtPosition(downAt, state) ?: return@awaitEachGesture
 					touchToolbar?.hide()
 					dragSelectionHandle(state, handle, down, origin, autoScrollScope)
-					if (state.selector.hasSelection()) touchToolbar?.show()
+					if (state.selector.hasSelection()) touchToolbar?.showOnRelease()
 				}
 			}
 		}
@@ -814,7 +825,7 @@ private fun Modifier.handleTouchInteractions(
 					touchToolbar?.hide()
 					val selection = PointerSelection.press(state, downAt, SelectionGranularity.Word, isTouch = true)
 					dragTouchSelection(state, selection, down, origin, autoScrollScope)
-					touchToolbar?.show()
+					touchToolbar?.showOnRelease()
 					return@awaitEachGesture
 				}
 
@@ -841,9 +852,15 @@ private fun Modifier.handleTouchInteractions(
 							else -> touchToolbar.showMenuAt(downAt)
 						}
 					} else {
-						// Off any word this selects nothing and leaves the caret at the press.
-						longPressSelection =
-							PointerSelection.press(state, downAt, SelectionGranularity.Word, isTouch = true)
+						// Off any word this selects nothing and leaves the caret at the press. Past
+						// a row's end nothing is under the finger, though the nearest character is
+						// the row's last, so the caret goes to the row's end.
+						val granularity = if (state.characterAt(downAt) == null) {
+							SelectionGranularity.Character
+						} else {
+							SelectionGranularity.Word
+						}
+						longPressSelection = PointerSelection.press(state, downAt, granularity, isTouch = true)
 						showToolbarOnRelease = true
 					}
 
@@ -856,7 +873,7 @@ private fun Modifier.handleTouchInteractions(
 						val change = event.changes.firstOrNull { it.id == down.id } ?: break
 						if (!change.pressed) {
 							if (didLongPress || wasDrag) tapCounter.reset() else tapCounter.released(change)
-							if (showToolbarOnRelease) touchToolbar?.show()
+							if (showToolbarOnRelease) touchToolbar?.showOnRelease()
 							if (!didLongPress && !wasDrag) {
 								touchToolbar?.hide()
 								val releasedAt = change.inContent(origin)
@@ -882,7 +899,7 @@ private fun Modifier.handleTouchInteractions(
 						if (selection != null) {
 							tapCounter.reset()
 							dragTouchSelection(state, selection, down, origin, autoScrollScope, first = change)
-							touchToolbar?.show()
+							touchToolbar?.showOnRelease()
 							break
 						}
 						// Only a move past touch slop is a drag, so a high-precision touch screen's

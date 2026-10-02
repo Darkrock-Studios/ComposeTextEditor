@@ -2,7 +2,9 @@ package com.darkrockstudios.texteditor.input
 
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusEventModifierNode
+import androidx.compose.ui.focus.FocusRequesterModifierNode
 import androidx.compose.ui.focus.FocusState
+import androidx.compose.ui.focus.requestFocus
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyInputModifierNode
 import androidx.compose.ui.input.key.SoftKeyboardInterceptionModifierNode
@@ -16,6 +18,7 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.PlatformTextInputModifierNode
 import androidx.compose.ui.platform.establishTextInputSession
 import androidx.compose.ui.text.input.ImeAction
+import com.darkrockstudios.texteditor.state.FocusedEditor
 import com.darkrockstudios.texteditor.state.TextEditorState
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -38,27 +41,47 @@ internal class TextEditorInputModifierNode(
 	var enabled: Boolean,
 	keyBindings: KeyBindings,
 	private var inputRequester: TextInputRequester?,
+	private var singleLine: Boolean?,
 ) : androidx.compose.ui.Modifier.Node(),
 	KeyInputModifierNode,
 	SoftKeyboardInterceptionModifierNode,
 	FocusEventModifierNode,
+	FocusRequesterModifierNode,
 	PlatformTextInputModifierNode,
 	CompositionLocalConsumerModifierNode {
 
 	private val keyCommandHandler = TextEditorKeyCommandHandler(keyBindings)
 
-	/** The soft keyboard's action key without a host handler, as Compose's text fields answer it. */
+	/**
+	 * The soft keyboard's action key without a host handler, as Compose's text fields answer
+	 * it. Next and Previous move from this editor, which an action aimed at it without
+	 * focus (accessibility's) focuses first.
+	 */
 	private val defaultImeAction: (ImeAction) -> Unit = { action ->
 		when (action) {
-			ImeAction.Next -> currentValueOf(LocalFocusManager).moveFocus(FocusDirection.Next)
-			ImeAction.Previous -> currentValueOf(LocalFocusManager).moveFocus(FocusDirection.Previous)
+			ImeAction.Next -> moveFocusFromHere(FocusDirection.Next)
+			ImeAction.Previous -> moveFocusFromHere(FocusDirection.Previous)
 			ImeAction.Done -> currentValueOf(LocalSoftwareKeyboardController)?.hide()
 			else -> Unit
 		}
 	}
 
-	private fun releaseDefaultImeAction(state: TextEditorState) {
-		if (state.defaultImeAction === defaultImeAction) state.defaultImeAction = null
+	private fun moveFocusFromHere(direction: FocusDirection) {
+		if (!isFocused && !requestFocus()) return
+		currentValueOf(LocalFocusManager).moveFocus(direction)
+	}
+
+	/** This editor's line limit and default action, for an edit aimed at it ([TextEditorState.asEditor]). */
+	internal var editor: FocusedEditor = FocusedEditor(defaultImeAction, singleLine)
+		private set
+
+	/** The focused editor is the one the keyboard types into, so its default and line limit answer. */
+	private fun holdFocus(state: TextEditorState) {
+		state.focusedEditor = editor
+	}
+
+	private fun releaseFocus(state: TextEditorState) {
+		if (state.focusedEditor?.defaultImeAction === defaultImeAction) state.focusedEditor = null
 	}
 
 	private var inputSessionJob: Job? = null
@@ -71,7 +94,7 @@ internal class TextEditorInputModifierNode(
 
 	override fun onDetach() {
 		if (inputRequester?.node === this) inputRequester?.node = null
-		releaseDefaultImeAction(state)
+		releaseFocus(state)
 		stopTextInputSession()
 		if (isFocused) state.hasFocus = false
 		isFocused = false
@@ -84,10 +107,9 @@ internal class TextEditorInputModifierNode(
 		if (focusState.isFocused == isFocused) return
 		isFocused = focusState.isFocused
 		state.hasFocus = isFocused
-		// The focused editor is the one the keyboard types into, so its default answers.
-		if (isFocused) state.defaultImeAction = defaultImeAction else releaseDefaultImeAction(state)
+		if (isFocused) holdFocus(state) else releaseFocus(state)
 		keyCommandHandler.onFocusChanged()
-		state.heldCaretKey.clear()
+		state.heldKey.clear()
 		syncInputSession(startSession = true)
 	}
 
@@ -149,10 +171,14 @@ internal class TextEditorInputModifierNode(
 					if (!showKeyboard) launch { currentValueOf(LocalSoftwareKeyboardController)?.hide() }
 					// The platform's session: an InputConnection on Android, the shared
 					// skiko request elsewhere. See TextEditorTextInputService.
+					state.inputSessionRunning = true
 					TextEditorTextInputService(state).startInput(this)
 				}
 			} finally {
-				if (inputSessionJob === job) state.hasInputSession = false
+				if (inputSessionJob === job) {
+					state.hasInputSession = false
+					state.inputSessionRunning = false
+				}
 			}
 		}
 	}
@@ -186,9 +212,11 @@ internal class TextEditorInputModifierNode(
 		enabled: Boolean,
 		keyBindings: KeyBindings,
 		inputRequester: TextInputRequester?,
+		singleLine: Boolean?,
 	) {
 		val stateChanged = state !== this.state
 		val enabledChanged = enabled != this.enabled
+		val singleLineChanged = singleLine != this.singleLine
 		// A session is bound to its state, so a swapped state needs a new one. Only a live
 		// session carries over: turning input back on must not raise the keyboard unasked,
 		// so where the platform can, it starts one that keeps the keyboard down.
@@ -199,10 +227,12 @@ internal class TextEditorInputModifierNode(
 			this.state.updateFocus(false)
 			this.state.hasFocus = false
 			state.hasFocus = true
-			releaseDefaultImeAction(this.state)
-			state.defaultImeAction = defaultImeAction
+			releaseFocus(this.state)
 		}
 		this.state = state
+		this.singleLine = singleLine
+		if (singleLineChanged) editor = FocusedEditor(defaultImeAction, singleLine)
+		if (isFocused && (stateChanged || singleLineChanged)) holdFocus(state)
 		this.clipboard = clipboard
 		this.enabled = enabled
 		keyCommandHandler.keyBindings = keyBindings
@@ -225,15 +255,17 @@ internal data class TextEditorInputModifierElement(
 	val clipboard: Clipboard,
 	val enabled: Boolean,
 	val keyBindings: KeyBindings,
-	val inputRequester: TextInputRequester? = null,
+	val inputRequester: TextInputRequester?,
+	/** The editor's line limit; null for a view that takes no input and so sets none. */
+	val singleLine: Boolean?,
 ) : ModifierNodeElement<TextEditorInputModifierNode>() {
 
 	override fun create(): TextEditorInputModifierNode {
-		return TextEditorInputModifierNode(state, clipboard, enabled, keyBindings, inputRequester)
+		return TextEditorInputModifierNode(state, clipboard, enabled, keyBindings, inputRequester, singleLine)
 	}
 
 	override fun update(node: TextEditorInputModifierNode) {
-		node.update(state, clipboard, enabled, keyBindings, inputRequester)
+		node.update(state, clipboard, enabled, keyBindings, inputRequester, singleLine)
 	}
 
 	override fun InspectorInfo.inspectableProperties() {

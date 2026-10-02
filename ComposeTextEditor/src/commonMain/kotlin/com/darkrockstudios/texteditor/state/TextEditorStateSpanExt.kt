@@ -5,6 +5,7 @@ import androidx.compose.ui.text.SpanStyle
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.annotatedstring.withInheritedStyles
+import com.darkrockstudios.texteditor.richstyle.LinkSpanStyle
 
 /**
  * Returns all unique SpanStyles that are active at the given position.
@@ -38,7 +39,9 @@ fun TextEditorState.getSpanStylesAtPosition(position: CharLineOffset): Set<SpanS
  * the styles installed falls back to the body style rather than leaving the text
  * unstyled.
  * Across a line break, the text style a block bakes into its line (a heading's
- * size) comes from [position]'s own line, not from the line above.
+ * size) comes from [position]'s own line, not from the line above. A link holds only
+ * its own characters, as in word processors: text typed past its end (on its line or
+ * the next) or before its start leaves its style out, current or retired.
  */
 internal fun TextEditorState.getSpanStylesForEditAt(position: CharLineOffset): Set<SpanStyle> {
 	val preceding = precedingCharacter(position)
@@ -48,8 +51,25 @@ internal fun TextEditorState.getSpanStylesForEditAt(position: CharLineOffset): S
 		val own = lineStyles(position.line)
 		if (baked.isNotEmpty() || own.isNotEmpty()) styles = styles - baked + own
 	}
+	val linkStyles = styles.filterTo(HashSet()) { isLinkStyle(it) }
+	if (linkStyles.isNotEmpty() && outsideLinkOf(preceding ?: position, position)) styles = styles - linkStyles
 	if (styles.isNotEmpty()) return styles
 	return setOfNotNull(bodyStyle)
+}
+
+/** Whether [style] is the link style, or one a configuration before this one gave links. */
+private fun TextEditorState.isLinkStyle(style: SpanStyle): Boolean =
+	style == richTextStyles.linkStyle || retiredRichTextStyles.any { it.linkStyle == style }
+
+/**
+ * Whether the character at [source], beside [position], is a link's while [position]
+ * lies outside that link: at its end, on the line after it, or at its start.
+ */
+private fun TextEditorState.outsideLinkOf(source: CharLineOffset, position: CharLineOffset): Boolean {
+	val range = if (source < position) TextEditorRange(source, position) else TextEditorRange(position, source)
+	val links = richSpanManager.getSpansInRange(range).filter { it.style is LinkSpanStyle }
+	return links.any { it.range.start <= source && source < it.range.end } &&
+		links.none { it.range.start < position && position < it.range.end }
 }
 
 /**

@@ -28,9 +28,10 @@ internal val LocalImeInsets = staticCompositionLocalOf<WindowInsets?> { null }
  * above the keyboard, with `imePadding` or a window that resizes, or when the editor is
  * not focused: the keyboard is someone else's then.
  *
- * The keyboard's inset is taken from the bottom of the root, which is the window's
- * bottom for an editor in the main content; inside a dialog or popup that does not
- * reach the bottom of the window the measure is off.
+ * The keyboard's inset is taken from the window's bottom ([TextEditorState.windowBottomInRoot]):
+ * on Android the bottom of the window the view is in, so a `ComposeView` embedded in
+ * views measures it right; elsewhere the bottom of the root, which is off inside a root
+ * that does not reach the window's bottom.
  */
 internal fun TextEditorState.updateKeyboardCover(keyboardHeight: Int) {
 	keyboardCoverFor(keyboardHeight)?.let(::onObscuredBottomChange)
@@ -39,11 +40,11 @@ internal fun TextEditorState.updateKeyboardCover(keyboardHeight: Int) {
 /** The cover [updateKeyboardCover] records, or null before the canvas is attached. */
 private fun TextEditorState.keyboardCoverFor(keyboardHeight: Int): Int? {
 	val canvas = canvasLayoutCoordinates?.takeIf { it.isAttached } ?: return null
-	if (!isFocused) return 0
+	if (!isFocused || keyboardHeight <= 0) return 0
 	return keyboardCover(
 		canvasBottomInRoot = canvas.localToRoot(Offset(0f, canvas.size.height.toFloat())).y,
 		canvasHeight = canvas.size.height,
-		rootHeight = canvas.findRootCoordinates().size.height,
+		windowBottomInRoot = windowBottomInRoot?.invoke() ?: canvas.findRootCoordinates().size.height.toFloat(),
 		keyboardHeight = keyboardHeight,
 	)
 }
@@ -115,12 +116,12 @@ private class KeyboardCoverNode(
 
 /**
  * How many pixels at the bottom of a canvas a keyboard [keyboardHeight] pixels tall
- * covers, when the keyboard rises from the bottom of a root [rootHeight] pixels tall.
- * No keyboard covers nothing, even where the canvas runs past the root's bottom.
+ * covers, when the keyboard rises from [windowBottomInRoot]. No keyboard covers nothing,
+ * even where the canvas runs past the window's bottom.
  */
-internal fun keyboardCover(canvasBottomInRoot: Float, canvasHeight: Int, rootHeight: Int, keyboardHeight: Int): Int {
+internal fun keyboardCover(canvasBottomInRoot: Float, canvasHeight: Int, windowBottomInRoot: Float, keyboardHeight: Int): Int {
 	if (keyboardHeight <= 0) return 0
-	val keyboardTop = rootHeight - keyboardHeight
+	val keyboardTop = windowBottomInRoot - keyboardHeight
 	return (canvasBottomInRoot - keyboardTop).roundToInt().coerceIn(0, canvasHeight)
 }
 

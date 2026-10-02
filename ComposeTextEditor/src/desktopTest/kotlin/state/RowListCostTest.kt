@@ -175,7 +175,8 @@ class RowListCostTest {
 		state.removeRichSpan(CharLineOffset(104, 0), CharLineOffset(104, 4), OrderedListSpanStyle)
 
 		val after = state.rows()
-		assertEquals(0, counter.calls)
+		// The line that left the list loses its indent; no other line shapes again.
+		assertEquals(1, counter.calls)
 		assertTrue(after.layoutsNotIn(before) <= 8, "a span change rebuilt ${after.layoutsNotIn(before)} layouts")
 		assertEquals(listOf(1, 2, 3, 4, null, 1, 2, 3, 4, 5), (100 until 110).map { after[after.firstRowOf(it)].orderedListNumber })
 	}

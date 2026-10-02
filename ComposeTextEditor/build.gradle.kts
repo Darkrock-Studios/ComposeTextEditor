@@ -99,6 +99,7 @@ kotlin {
             kotlin.srcDir(rootDir.resolve("testUtils/blockLines"))
             kotlin.srcDir(rootDir.resolve("testUtils/stateFuzz"))
             kotlin.srcDir(rootDir.resolve("testUtils/uiTest"))
+            kotlin.srcDir(rootDir.resolve("testUtils/uiFuzz"))
             kotlin.srcDir(rootDir.resolve("testUtils/testFont/kotlin"))
             resources.srcDir(rootDir.resolve("testUtils/testFont/resources"))
             dependencies {
