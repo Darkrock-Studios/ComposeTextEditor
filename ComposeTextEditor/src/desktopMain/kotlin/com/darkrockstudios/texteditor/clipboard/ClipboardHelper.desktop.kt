@@ -42,7 +42,7 @@ actual object ClipboardHelper {
 		true
 	} catch (e: CancellationException) {
 		throw e
-	} catch (e: Exception) {
+	} catch (e: IllegalStateException) {
 		// AWT cannot open the system clipboard while another application holds it.
 		System.err.println("ComposeTextEditor: could not write the clipboard: $e")
 		false
@@ -67,6 +67,7 @@ private val awtSystemClipboard: java.awt.datatransfer.Clipboard? by lazy {
  * thread: an X11 transfer waits on the owner, for seconds if it hangs.
  */
 @OptIn(ExperimentalComposeUiApi::class)
+@Suppress("TooGenericExceptionCaught")
 internal suspend fun <T> Clipboard.readClipboard(decode: (Transferable) -> T?): T? = try {
 	if (nativeClipboard === awtSystemClipboard) {
 		withContext(Dispatchers.IO) { getClipEntry()?.asAwtTransferable?.let(decode) }

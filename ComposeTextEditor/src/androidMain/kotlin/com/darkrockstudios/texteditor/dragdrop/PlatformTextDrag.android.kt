@@ -95,6 +95,7 @@ internal class UriContent(val content: ItemContent, val bytes: Int)
  * of file, or one that cannot be read. [description] gives the type where the provider
  * does not.
  */
+@Suppress("TooGenericExceptionCaught")
 internal fun ClipData.Item.uriContent(context: Context, description: ClipDescription?, budget: Int): UriContent? {
 	val uri = uri?.takeIf { it.scheme == ContentResolver.SCHEME_CONTENT } ?: return null
 	return try {

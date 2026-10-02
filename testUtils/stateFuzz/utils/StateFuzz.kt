@@ -144,6 +144,7 @@ fun checkCheapInvariants(state: TextEditorState) {
 }
 
 /** Runs [applyOp] over [script], decorating any failure with a replayable transcript. */
+@Suppress("TooGenericExceptionCaught")
 fun runFuzzScript(
 	seed: Long,
 	script: List<FuzzOp>,
