@@ -3604,7 +3604,8 @@ iOS Safari; browser tests run in CI (met: the `browser` job, 4.15).
     on the editor (wheel, trackpad, touch); a selection drag past a side edge
     auto-scrolls sideways; desktop and web lay Compose's `HorizontalScrollbar`
     over the bottom of the text while there is a sideways range, through a new
-    internal `expect` (`EditorHorizontalScrollbar`; none on Android and iOS)
+    internal `expect` (`EditorHorizontalScrollbar`; on Android and iOS a thumb
+    that takes no room, below)
     (`softwrap/SoftWrapScrollingTest`).
   - Input method rectangles, handles, toolbar, magnifier, semantics: done. The
     caret rectangle, Android's cursor anchor (whose watch reads the caret, so a
@@ -3641,7 +3642,7 @@ iOS Safari; browser tests run in CI (met: the `browser` job, 4.15).
   is not saved with the state; `RichTextView` always wraps; scroll 0 is the
   left edge, so an unfocused right-to-left line wider than the field shows its
   end; a line wider than 262,142 pixels wraps there; a visible line is drawn
-  whole; Android and iOS show no sideways indicator; a scroll alone does not ask
+  whole; a scroll alone does not ask
   the desktop and web input method to read the caret rectangle again, as with
   the vertical scroll.
 
@@ -3660,6 +3661,15 @@ iOS Safari; browser tests run in CI (met: the `browser` job, 4.15).
   frame 723 and 743 against 733 and 746 us, idle frame 686 and 676 against 672
   and 677 us, a width change 2,460 and 2,595 against 2,500 and 2,582 us; within
   the noise.
+  Added on the Mac (2026-10-01): Android and iOS showed no sideways indicator,
+  where a native scroll view shows one for either axis. Both now draw the
+  thumb they draw for the vertical scroll along the bottom edge while the
+  text scrolls sideways, fading when it stops, in their own colours
+  (`HorizontalScrollIndicator` in `scrollbar/ScrollIndicator.kt`,
+  `HorizontalScrollIndicatorTest`). It is display-only and reports no height,
+  so `scrollbarBottomPx` stays 0 and nothing is kept clear of it. Seen on the
+  iPhone 17 Pro Max simulator; the Android side compiles and its host tests
+  pass, not seen on a device.
   **Fails on the Mac** (2026-10-01, `3ab4bfd0`, macOS desktop JVM, with or
   without the Mac's own changes): `EditorInvariantFuzzTest`, "sideways
   invariant fuzz seed 42", after stroke 51, `Type("é")`. "stylus area does
@@ -5108,5 +5118,5 @@ records results and removes entries that passed.
 | Item | What to do | A pass looks like | Result |
 | --- | --- | --- | --- |
 | 3.17 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64` and `:ComposeTextEditor:iosSimulatorArm64Test`. A new `expect`, `Modifier.stylusHandwriting` (commonMain `input/StylusHandwriting.kt`), has its non-Android actual in `skikoMain` (returns the modifier unchanged); `BasicTextEditor` applies it. No `iosMain` change | Compiles and the tests pass; an Apple Pencil on an iPad simulator or device still places the caret and selects as before | |
-| 7.41 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64` and `:ComposeTextEditor:iosSimulatorArm64Test`. A new internal `expect`, `EditorHorizontalScrollbar` (commonMain `scrollbar/TextEditorScrollbar.kt`), has an empty `iosMain` actual; `skikoMain` changed: the input method's `unclippedTextOffsetInRoot` subtracts the sideways scroll (after 7.57's first row's top), its `textLayoutResult` is the state's `SemanticsLayout` (7.57), which with wrapping off is measured unwrapped and as wide as the widest line, and `EditorVerticalScrollbar.skiko.kt` gained the horizontal bar (used by desktop and web only). Then in the iOS sample app: turn on Single line and type past the right edge; turn it off, turn off Soft wrap, and on a long line drag sideways, then hold the spacebar and move the floating cursor along the line; give a long line an indent (a list item, or a paragraph format with an indent) and do the same along it | Compiles and the tests pass. The single line stays one row and follows the caret sideways; the unwrapped text scrolls sideways under a drag with no scrollbar drawn; the floating cursor tracks the finger along the unwrapped line, the indented one included (it stays on its row), and the edit menu and handles sit on the text after a sideways scroll | |
+| 7.41 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64` and `:ComposeTextEditor:iosSimulatorArm64Test`. A new internal `expect`, `EditorHorizontalScrollbar` (commonMain `scrollbar/TextEditorScrollbar.kt`), has an `iosMain` actual that draws a display-only thumb (added on the Mac, below); `skikoMain` changed: the input method's `unclippedTextOffsetInRoot` subtracts the sideways scroll (after 7.57's first row's top), its `textLayoutResult` is the state's `SemanticsLayout` (7.57), which with wrapping off is measured unwrapped and as wide as the widest line, and `EditorVerticalScrollbar.skiko.kt` gained the horizontal bar (used by desktop and web only). Then in the iOS sample app: turn on Single line and type past the right edge; turn it off, turn off Soft wrap, and on a long line drag sideways, then hold the spacebar and move the floating cursor along the line; give a long line an indent (a list item, or a paragraph format with an indent) and do the same along it | Compiles and the tests pass. The single line stays one row and follows the caret sideways; the unwrapped text scrolls sideways under a drag with a thin thumb along the bottom edge that fades when the scroll stops; the floating cursor tracks the finger along the unwrapped line, the indented one included (it stays on its row), and the edit menu and handles sit on the text after a sideways scroll | Partly passed 2026-10-01 on the iPhone 17 Pro Max simulator (iOS 26): compiles and the iOS tests pass; Single line stays one row and follows the caret; unwrapped text scrolls sideways under a drag, the thumb showing and fading; the floating cursor keeps its place on screen a row up in text scrolled sideways (7.57). Left for a person: the floating cursor along an indented long line, and the edit menu and handles after a sideways scroll |
 | 7.57 | On an iOS device, with VoiceOver on, note what its caret outline shows on the focused editor (the simulator has no VoiceOver) | VoiceOver's outline is expected unchanged (the legacy text input view answers no caret rectangle); record what it shows | The rest passed 2026-10-01 at `4d0a7cae` on the iPhone 17 Pro Max simulator (iOS 26); see 7.57 |

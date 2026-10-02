@@ -5,6 +5,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
@@ -18,6 +19,7 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.darkrockstudios.texteditor.state.TextEditorScrollState
@@ -106,6 +108,52 @@ internal fun BoxScope.ScrollIndicator(
 			color = thumbColor,
 			topLeft = Offset(0f, thumb.offset),
 			size = Size(size.width, thumb.length),
+			cornerRadius = corner,
+			alpha = opacity,
+		)
+	}
+}
+
+/**
+ * The display-only indicator of a sideways scroll on a touch platform, along the bottom
+ * edge: a thumb as long as the share of the widest line in view, over an optional
+ * [trackColor], that fades when scrolling stops, as [ScrollIndicator] does for the
+ * vertical scroll and a native scroll view for both. It takes no input and no room: [modifier] places a strip of no height
+ * at the bottom edge and the thumb is drawn just above it, over the text, so nothing is
+ * kept clear of it.
+ */
+@Composable
+internal fun HorizontalScrollIndicator(
+	scrollState: TextEditorScrollState,
+	modifier: Modifier,
+	thumbColor: Color,
+	thickness: Dp,
+	trackColor: Color? = null,
+	minThumbLength: Dp = 24.dp,
+) {
+	val alpha = rememberScrollIndicatorAlpha(scrollState)
+	val inset = 2.dp
+	Canvas(
+		modifier = modifier
+			.layout { measurable, constraints ->
+				val placeable = measurable.measure(constraints)
+				layout(placeable.width, 0) { placeable.place(0, -placeable.height) }
+			}
+			.padding(inset)
+			.height(thickness)
+	) {
+		val opacity = alpha.value
+		if (opacity <= 0f) return@Canvas
+		val viewport = scrollState.viewportLength.takeIf { it > 0 }?.toFloat() ?: (size.width + 2 * inset.toPx())
+		val thumb = scrollThumb(scrollState, size.width, viewport, minThumbLength.toPx()) ?: return@Canvas
+		val corner = CornerRadius(size.height / 2f)
+		if (trackColor != null) {
+			drawRoundRect(color = trackColor, cornerRadius = corner, alpha = opacity)
+		}
+		drawRoundRect(
+			color = thumbColor,
+			topLeft = Offset(thumb.offset, 0f),
+			size = Size(thumb.length, size.height),
 			cornerRadius = corner,
 			alpha = opacity,
 		)
