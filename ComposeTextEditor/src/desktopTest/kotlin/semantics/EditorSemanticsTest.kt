@@ -78,7 +78,7 @@ class EditorSemanticsTest {
 	}
 
 	/**
-	 * Roadmap 3.17: Compose's autofill enters a node with `onFillData` and describes one
+	 * Compose's autofill enters a node with `onFillData` and describes one
 	 * with a content or data type. A prose editor is neither, and declaring
 	 * `ContentDataType.None` would hand the whole document to the autofill service.
 	 */

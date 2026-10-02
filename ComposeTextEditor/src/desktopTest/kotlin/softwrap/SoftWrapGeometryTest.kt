@@ -27,7 +27,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * With wrapping off (7.41) what is drawn and what a pointer hits move with the sideways
+ * With wrapping off what is drawn and what a pointer hits move with the sideways
  * scroll: the selection, the caret, a block's background and a line decorator's offset,
  * and the position a click lands on.
  */

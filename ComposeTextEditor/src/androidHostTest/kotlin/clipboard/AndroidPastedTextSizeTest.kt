@@ -33,7 +33,7 @@ import kotlin.test.assertTrue
 
 /**
  * A word copied or dragged out of text the document left at the host's size, in an editor
- * with the styles installed (the sample's rich text demo), lands at that size (6.43).
+ * with the styles installed (the sample's rich text demo), lands at that size.
  */
 class AndroidPastedTextSizeTest {
 

@@ -6,7 +6,7 @@ import androidx.compose.ui.graphics.drawscope.withTransform
 import com.darkrockstudios.texteditor.state.TextEditorState
 
 /**
- * Runs [block] in the content's x, where rows are laid out (7.41): moved by the sideways
+ * Runs [block] in the content's x, where rows are laid out: moved by the sideways
  * scroll, its `size` as wide as the content so what spans the full width spans the widest
  * line, and clipped sideways to the canvas, which is otherwise unclipped. Y is left as
  * the canvas's. While lines wrap there is nothing to scroll, and [block] runs as it is.

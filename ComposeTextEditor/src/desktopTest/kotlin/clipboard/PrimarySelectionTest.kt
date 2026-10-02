@@ -45,7 +45,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
-/** The X11 primary selection (4.23): selecting offers it, a middle click pastes it. */
+/** The X11 primary selection: selecting offers it, a middle click pastes it. */
 @OptIn(ExperimentalTestApi::class)
 class PrimarySelectionTest {
 
@@ -287,7 +287,7 @@ class PrimarySelectionTest {
 		}
 	}
 
-	/** Roadmap 7.73: a paste follows the line limit of the editor it lands in. */
+	/** A paste follows the line limit of the editor it lands in. */
 	@Test
 	fun `middle-click paste into a single-line editor sharing a state keeps to one line`() = runComposeUiTest {
 		val primary = Primary()

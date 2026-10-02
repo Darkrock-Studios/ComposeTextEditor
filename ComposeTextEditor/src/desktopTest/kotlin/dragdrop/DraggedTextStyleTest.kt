@@ -32,7 +32,7 @@ import kotlin.test.assertNotNull
  * A drop arrives as markup, which carries no font size or family, so a word dragged
  * within the editor landed in the size of the text it was dropped into. The editor still
  * holds the text it dragged, and drops that, as a paste of its own copy keeps its styles
- * (6.12, found on macOS).
+ * (found on macOS).
  */
 @OptIn(ExperimentalComposeUiApi::class)
 class DraggedTextStyleTest {

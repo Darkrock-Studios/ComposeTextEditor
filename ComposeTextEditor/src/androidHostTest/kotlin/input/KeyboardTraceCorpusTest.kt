@@ -6,7 +6,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * Replays every keyboard trace in `resources/keyboard-traces` (roadmap 0.4). A trace that
+ * Replays every keyboard trace in `resources/keyboard-traces`. A trace that
  * parts from the editor fails with each place it does; `docs/TESTING.md` ("Keyboard
  * traces") says how to add one.
  */

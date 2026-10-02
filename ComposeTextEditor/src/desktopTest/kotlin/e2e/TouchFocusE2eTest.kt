@@ -247,7 +247,7 @@ class TouchFocusE2eTest {
 	}
 
 	/**
-	 * Touch handles go with focus (1.18), so there is none to drag on an unfocused
+	 * Touch handles go with focus, so there is none to drag on an unfocused
 	 * editor: a finger where one stood is a tap, and taps focus.
 	 */
 	@Test

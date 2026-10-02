@@ -29,7 +29,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-/** Sizing to the text: minimum and maximum lines, and auto-grow (7.13). */
+/** Sizing to the text: minimum and maximum lines, and auto-grow. */
 @OptIn(ExperimentalTestApi::class)
 class LineLimitsE2eTest {
 
@@ -89,7 +89,7 @@ class LineLimitsE2eTest {
 		assertHeight(row.rows(1), "and shrinks back")
 	}
 
-	/** As `BasicTextField`'s single line: one row however long, following the caret sideways (7.41). */
+	/** As `BasicTextField`'s single line: one row however long, following the caret sideways. */
 	@Test
 	fun `a single line stays one row and scrolls sideways to the caret`() = runComposeUiTest {
 		val state = editor("short", EditorLineLimits.SingleLine)

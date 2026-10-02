@@ -46,10 +46,10 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * The keyboard's inset drives the covered strip (4.24), measured against the canvas as
+ * The keyboard's inset drives the covered strip, measured against the canvas as
  * laid out for that inset. Under a host's `imePadding` the padding shrinks the editor in
  * the same frame the inset grows, so nothing is covered, and the caret row ends at the
- * shrunk viewport's bottom rather than a strip above it (roadmap 3.16).
+ * shrunk viewport's bottom rather than a strip above it.
  */
 class KeyboardInsetE2eTest {
 	private val doc = AnnotatedString((0 until 60).joinToString("\n") { "Line $it" })
@@ -222,7 +222,7 @@ class KeyboardInsetE2eTest {
 	}
 
 	/**
-	 * Roadmap 4.36: a root that does not reach the window's bottom, as a `ComposeView`
+	 * A root that does not reach the window's bottom, as a `ComposeView`
 	 * embedded in Android views, measures the keyboard from the window's bottom, which
 	 * the platform reports in the root's coordinates.
 	 */

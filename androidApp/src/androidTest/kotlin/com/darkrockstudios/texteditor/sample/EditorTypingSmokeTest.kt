@@ -21,7 +21,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * Smoke test on a real Android device or emulator (0.7): typing reaches the editor
+ * Smoke test on a real Android device or emulator: typing reaches the editor
  * through the platform's key event dispatch, and an input method's edits through the
  * editor's own InputConnection. The emulator CI job runs it.
  */

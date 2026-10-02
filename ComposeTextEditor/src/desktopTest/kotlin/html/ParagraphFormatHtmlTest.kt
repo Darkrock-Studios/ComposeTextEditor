@@ -25,8 +25,8 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
 
 /**
- * A paragraph's format (5.7) travels through HTML as inline CSS on the paragraph's own
- * element (7.49): `margin-top` and `margin-bottom` for the space around it, `text-align`,
+ * A paragraph's format travels through HTML as inline CSS on the paragraph's own
+ * element: `margin-top` and `margin-bottom` for the space around it, `text-align`,
  * `margin-left` for its indent, `text-indent` for its first line's, and `line-height`.
  */
 class ParagraphFormatHtmlTest {

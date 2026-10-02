@@ -17,9 +17,9 @@ import com.darkrockstudios.texteditor.richstyle.RichSpan
  * character bounds and tops, read from the [layout] once, the block height of each
  * row, the ordered-list numeral, the code-fence edge, the ordered-list counters as
  * they stand after the line, so a pass can resume the numbering walk from any line,
- * the paragraph spacing above and below its rows (5.7), its [width] with wrapping off
- * (7.41), and the [generation] of layout inputs it was shaped under: a line shaped under
- * an older one is provisional until the settling reshape reaches it (7.48).
+ * the paragraph spacing above and below its rows, its [width] with wrapping off, and
+ * the [generation] of layout inputs it was shaped under: a line shaped under an older
+ * one is provisional until the settling reshape reaches it.
  * The rows a [RowList] hands out are built from this on read.
  */
 internal class LineLayout(

@@ -19,7 +19,7 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 /**
- * With wrapping off (7.41) what the platform is told about the text follows the sideways
+ * With wrapping off what the platform is told about the text follows the sideways
  * scroll: the input method's caret and text origin, the touch toolbar and handles, and
  * the whole-document layout iOS's floating cursor reads.
  */

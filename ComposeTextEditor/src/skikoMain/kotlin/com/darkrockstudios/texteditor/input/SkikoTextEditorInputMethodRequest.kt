@@ -66,7 +66,8 @@ internal fun TextEditorState.skikoImeOptions(): ImeOptions {
  *
  * A resync ([TextEditorState.requestImeResync]) is handed to [imeResync], which says how
  * this platform makes its input method drop what it assumed. It defaults to
- * [SkikoImeResync.None], which iOS relies on until the device pass decides (roadmap 4.29).
+ * [SkikoImeResync.None], which iOS keeps: UIKit reads the text live through `UITextInput`,
+ * so a restart would only reset the keyboard.
  */
 internal suspend fun TextEditorState.startSkikoInputSession(
 	session: PlatformTextInputSession,
@@ -342,7 +343,7 @@ internal class SkikoTextEditorInputMethodRequest(
  * before the caret, then deletes the selection, which Compose sends as a commit of
  * nothing. Seen as edits, that is a selection replaced, which no backspace behavior
  * hears. This remembers a selection the keyboard took back from a collapsed caret, so
- * the commit that empties it next can be run as the backspace it is (roadmap 4.33).
+ * the commit that empties it next can be run as the backspace it is.
  * Any other edit in between forgets it.
  */
 private class KeyboardBackspace {

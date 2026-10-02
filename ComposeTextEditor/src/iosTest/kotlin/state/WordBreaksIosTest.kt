@@ -6,7 +6,7 @@ import kotlin.test.assertEquals
 /**
  * iOS word breaks, on the simulator: the words of a line as iOS itself finds them, CJK
  * by dictionary word included, and otherwise the segments the editor gets from ICU on
- * the other platforms (roadmap 1.5).
+ * the other platforms.
  */
 class WordBreaksIosTest {
 	private fun words(text: String): List<String> =

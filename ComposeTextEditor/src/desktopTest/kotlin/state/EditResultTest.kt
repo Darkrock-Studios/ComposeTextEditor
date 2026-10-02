@@ -11,7 +11,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
-/** `replace` and `insertStringAtCursor` report the range their text landed in, or null when refused (7.55). */
+/** `replace` and `insertStringAtCursor` report the range their text landed in, or null when refused. */
 class EditResultTest {
 
 	private fun editor(text: String, filter: EditorInputFilter? = null) = TextEditorState(

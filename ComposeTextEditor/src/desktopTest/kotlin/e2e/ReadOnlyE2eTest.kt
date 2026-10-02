@@ -27,7 +27,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/** `readOnly`: a caret to navigate and select with, and no edits (7.13). */
+/** `readOnly`: a caret to navigate and select with, and no edits. */
 @OptIn(ExperimentalTestApi::class)
 class ReadOnlyE2eTest {
 

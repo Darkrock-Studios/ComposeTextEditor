@@ -24,7 +24,7 @@ import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import utils.InMemoryClipboard
 
-/** Cut deletes only once the clipboard holds the text, so a refused write loses nothing (6.19). */
+/** Cut deletes only once the clipboard holds the text, so a refused write loses nothing. */
 @OptIn(ExperimentalComposeUiApi::class)
 class CutWriteTest {
 

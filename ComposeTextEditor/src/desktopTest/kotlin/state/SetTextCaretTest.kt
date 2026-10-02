@@ -11,7 +11,7 @@ import kotlin.test.assertNull
 
 /**
  * `setText` with a shorter text keeps the caret inside it and drops the selection, so
- * the next typed character lands in the new text (7.60).
+ * the next typed character lands in the new text.
  */
 @OptIn(ExperimentalTestApi::class)
 class SetTextCaretTest {

@@ -26,9 +26,9 @@ class TextEditorScrollManager(
 	private val getCursorPosition: () -> CharLineOffset,
 	private val getCursorAffinity: () -> CaretAffinity = { CaretAffinity.Downstream },
 	val scrollState: TextEditorScrollState,
-	/** Shapes a line still at an old shape while a reshape settles (7.48), so a scroll to it measures the real rows. */
+	/** Shapes a line still at an old shape while a reshape settles, so a scroll to it measures the real rows. */
 	private val ensureLineShaped: (line: Int) -> Unit = {},
-	/** The sideways scroll, whose range is empty while lines wrap (7.41). */
+	/** The sideways scroll, whose range is empty while lines wrap. */
 	val horizontalScrollState: TextEditorScrollState = TextEditorScrollState(0),
 	/** The content x of a caret drawn at a position on the row an affinity picks, or null with no row for it. */
 	private val getCaretX: (CharLineOffset, CaretAffinity) -> Float? = { _, _ -> null },

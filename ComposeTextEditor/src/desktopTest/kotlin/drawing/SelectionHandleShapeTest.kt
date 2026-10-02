@@ -34,7 +34,7 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 /**
- * The two handle looks (3.19): Compose's Android teardrops, which `BasicTextField` draws,
+ * The two handle looks: Compose's Android teardrops, which `BasicTextField` draws,
  * and iOS's bars, each drawn, grabbed, and kept clear by the touch toolbar.
  */
 @OptIn(ExperimentalTestApi::class)

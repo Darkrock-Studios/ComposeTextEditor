@@ -30,8 +30,8 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * A host extends the link allowlist with its own schemes; the dangerous ones stay refused
- * (6.25). Markdown import's case is the markdown module's `MarkdownLinkSafetyTest`.
+ * A host extends the link allowlist with its own schemes; the dangerous ones stay
+ * refused. Markdown import's case is the markdown module's `MarkdownLinkSafetyTest`.
  */
 class HostLinkSchemesTest {
 

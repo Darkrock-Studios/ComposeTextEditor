@@ -20,7 +20,7 @@ import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import utils.ForeignHtmlTransferable
 
-/** Paste reads the selection and its position once the clipboard has been read (6.30). */
+/** Paste reads the selection and its position once the clipboard has been read. */
 @OptIn(ExperimentalComposeUiApi::class)
 class PasteReadsSelectionLateTest {
 

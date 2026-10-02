@@ -12,7 +12,7 @@ import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertNull
 
-/** AWT's `getContents` throws while another application holds the clipboard open (6.36). */
+/** AWT's `getContents` throws while another application holds the clipboard open. */
 @OptIn(ExperimentalComposeUiApi::class)
 class ClipboardReadFailureTest {
 

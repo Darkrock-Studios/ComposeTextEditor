@@ -19,7 +19,7 @@ import kotlinx.coroutines.test.TestScope
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
-/** A heading writes its own inline formatting, without its baked heading look (6.31). */
+/** A heading writes its own inline formatting, without its baked heading look. */
 class HeadingInlineFormattingHtmlTest {
 
 	private fun state(): TextEditorState =

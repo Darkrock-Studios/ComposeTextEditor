@@ -16,7 +16,7 @@ import kotlinx.coroutines.test.TestScope
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
-/** Bold text at a heading's size is bold text; only a heading block writes a heading (6.26). */
+/** Bold text at a heading's size is bold text; only a heading block writes a heading. */
 class HeadingSizeBoldHtmlTest {
 
 	private val styles = RichTextStyles.DEFAULT

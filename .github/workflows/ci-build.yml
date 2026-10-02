@@ -255,7 +255,7 @@ jobs:
           :ComposeTextEditorFind:iosSimulatorArm64Test
       - name: Build the iOS sample app and run its UI smoke test
         # Builds the app as Xcode does (the run script phase links the simulator
-        # framework through Gradle), then types into it on a simulator (0.7). The
+        # framework through Gradle), then types into it on a simulator. The
         # runner's simulators vary, so this takes the first iPhone on the newest runtime
         # that has one.
         run: |

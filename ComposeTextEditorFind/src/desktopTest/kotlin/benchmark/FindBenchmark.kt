@@ -17,7 +17,7 @@ import org.junit.Assume.assumeTrue
 import kotlin.test.Test
 
 /**
- * Timings for find (7.88) over 5,000 lines of prose with three matches and two spell
+ * Timings for find over 5,000 lines of prose with three matches and two spell
  * check flags on every line. Skipped unless `CTE_BENCHMARK` is 1:
  *
  * `CTE_BENCHMARK=1 ./gradlew :ComposeTextEditorFind:desktopTest --tests 'benchmark.FindBenchmark' --rerun`

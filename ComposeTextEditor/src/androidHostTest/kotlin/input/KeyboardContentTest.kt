@@ -32,7 +32,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
-/** Roadmap 3.17: a keyboard's GIFs and stickers reach the host only when it takes them. */
+/** A keyboard's GIFs and stickers reach the host only when it takes them. */
 class KeyboardContentTest {
 
 	private val state = TextEditorState(

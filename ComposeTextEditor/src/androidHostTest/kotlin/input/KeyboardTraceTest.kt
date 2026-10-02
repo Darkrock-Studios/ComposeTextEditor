@@ -28,7 +28,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-/** Roadmap 0.4: a keyboard session recorded through the editor's connection replays as it ran. */
+/** A keyboard session recorded through the editor's connection replays as it ran. */
 class KeyboardTraceTest {
 
 	private val posted = ArrayList<Runnable>()

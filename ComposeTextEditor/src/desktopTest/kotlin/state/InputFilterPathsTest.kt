@@ -18,7 +18,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import utils.setBlockLines
 
-/** Every way text enters places the caret and marks by what the input filter let land (7.13). */
+/** Every way text enters places the caret and marks by what the input filter let land. */
 class InputFilterPathsTest {
 
 	private fun TestScope.createState(text: String, filter: EditorInputFilter): TextEditorState =

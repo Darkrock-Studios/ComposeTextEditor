@@ -30,7 +30,7 @@ import kotlin.coroutines.EmptyCoroutineContext
 import kotlin.test.Test
 
 /**
- * Timings for spell check and diagnostics (7.88) over 5,000 lines of prose with two
+ * Timings for spell check and diagnostics over 5,000 lines of prose with two
  * misspellings, two diagnostics and three highlights of another owner on every line.
  * Skipped unless `CTE_BENCHMARK` is 1:
  *

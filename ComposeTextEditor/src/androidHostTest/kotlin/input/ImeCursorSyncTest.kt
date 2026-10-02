@@ -176,7 +176,7 @@ class ImeCursorSyncTest {
 		assertEquals(listOf("restart", "sel(2,2,-1,-1)"), sink.events)
 	}
 
-	/** Roadmap 4.27: the keyboard sent nothing, so what it last heard still holds. */
+	/** The keyboard sent nothing, so what it last heard still holds. */
 	@Test
 	fun `a resync claimed by a hardware key needs nothing more`() {
 		editor("ab")
@@ -373,7 +373,7 @@ class ImeCursorSyncTest {
 		viewY = viewY,
 	)
 
-	/** A scroll moves the caret on screen with the selection unchanged (roadmap 3.10). */
+	/** A scroll moves the caret on screen with the selection unchanged. */
 	@Test
 	fun `a monitored cursor anchor is resent when the caret moves on screen`() {
 		editor("hello")
@@ -497,7 +497,7 @@ class ImeCursorSyncTest {
 		}
 	}
 
-	/** An `adjustPan` window or a scrolling parent moves the view with nothing in the editor changing (4.31). */
+	/** An `adjustPan` window or a scrolling parent moves the view with nothing in the editor changing. */
 	@Test
 	fun `a view moving on screen alone resends the monitored anchor as it draws`() {
 		val draws = FakeDrawWatch()
@@ -571,7 +571,7 @@ class ImeCursorSyncTest {
 		verify { view.removeOnAttachStateChangeListener(attachment.captured) }
 	}
 
-	/** A keyboard switched to floating uncovers the caret, which the marker's flags carry (4.31). */
+	/** A keyboard switched to floating uncovers the caret, which the marker's flags carry. */
 	@Test
 	fun `a change in the keyboard cover alone resends the monitored anchor`() {
 		val covered = { state.scrollManager.obscuredBottomPx > 0 }

@@ -71,7 +71,7 @@ internal class SemanticsLayout(private val state: TextEditorState) {
 		/** For each placeholder, the line whose last row it stretches and how far below that row's top the next line starts. */
 		val steps: List<RowStep>,
 		val width: Int,
-		/** Unwrapped as the editor's lines are (7.41): at least [width] wide, and as wide as the widest line. */
+		/** Unwrapped as the editor's lines are: at least [width] wide, and as wide as the widest line. */
 		val softWrap: Boolean,
 		val measurer: TextMeasurer,
 		val density: Density?,

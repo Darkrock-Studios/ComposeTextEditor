@@ -15,7 +15,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 /**
- * Sentence mode against a real checker (roadmap 7.20): SymSpell's word-break
+ * Sentence mode against a real checker: SymSpell's word-break
  * segmentation flags run-together words, and its offsets, relative to the sentence's
  * text, land on the words in the document.
  */

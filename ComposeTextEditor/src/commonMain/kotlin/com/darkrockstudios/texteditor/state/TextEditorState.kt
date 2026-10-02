@@ -2176,7 +2176,7 @@ class TextEditorState private constructor(
 	private var settleBelow = Int.MAX_VALUE
 
 	/**
-	 * Reshapes lazily (7.48): the lines with a row in the viewport, and a viewport's
+	 * Reshapes lazily: the lines with a row in the viewport, and a viewport's
 	 * worth beyond each edge, are shaped now; every other line keeps its layout at the
 	 * old shape until the settling job reaches it. The scroll stays anchored to the
 	 * line at the top of the viewport, at its offset within it.
@@ -2769,7 +2769,7 @@ class TextEditorState private constructor(
 	 * beside one that grows at its edge, stretched it over the inserted text. A link
 	 * landing against a link to the same place joins it, since a link does not grow.
 	 * A line's marker, block or format takes only lines the insert covers whole: text
-	 * landing inside a line without its line break takes that line as it is (6.40).
+	 * landing inside a line without its line break takes that line as it is.
 	 */
 	internal fun addPreservedRichSpans(insertPosition: CharLineOffset, spans: List<PreservedRichSpan>) = withAtomicEdit {
 		spans.forEach { preserved ->

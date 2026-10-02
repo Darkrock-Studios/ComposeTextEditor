@@ -22,7 +22,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-/** What a host's [KeyboardSettings] ask of an Android keyboard (roadmap 3.11). */
+/** What a host's [KeyboardSettings] ask of an Android keyboard. */
 class KeyboardSettingsTest {
 
 	private val state = TextEditorState(
@@ -127,7 +127,7 @@ class KeyboardSettingsTest {
 		assertEquals(listOf(ImeAction.Send), sent)
 	}
 
-	/** Roadmap 7.40: a single line has no Enter to offer, so its default key is Done. */
+	/** A single line has no Enter to offer, so its default key is Done. */
 	@Test
 	fun `a single line asks for single-line text and Done`() {
 		val settings = KeyboardSettings()
@@ -171,7 +171,7 @@ class KeyboardSettingsTest {
 		assertEquals(listOf("restart", "restart"), events)
 	}
 
-	/** Roadmap 7.66: a multi-line editor holding focus beside a single-line one keeps Enter. */
+	/** A multi-line editor holding focus beside a single-line one keeps Enter. */
 	@Test
 	fun `the focused editor's line limit decides the keyboard`() {
 		val events = mutableListOf<String>()

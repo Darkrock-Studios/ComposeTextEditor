@@ -28,7 +28,7 @@ import kotlin.test.assertNotEquals
  * A touch platform shows where a sideways scroll stands with a thin thumb along the
  * bottom edge that fades when the scroll stops, as it does for the vertical scroll, and
  * as a native scroll view does. It takes no room: the text under it is covered only
- * while it shows, so nothing is kept clear of it (7.41, found on iOS).
+ * while it shows, so nothing is kept clear of it (found on iOS).
  */
 @OptIn(ExperimentalTestApi::class)
 class HorizontalScrollIndicatorTest {

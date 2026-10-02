@@ -44,7 +44,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
 /**
- * Shortcuts follow the active keyboard layout (2.7, hammer-editor#945). On X11, AWT's
+ * Shortcuts follow the active keyboard layout (hammer-editor#945). On X11, AWT's
  * key code is the key's symbol in the first layout installed, whichever is active, so
  * with US listed before BÉPO the key that types 'y' on BÉPO reports X; its extended key
  * code is the active layout's.

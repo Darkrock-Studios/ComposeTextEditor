@@ -13,7 +13,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-/** The IME composing underline sits at the bottom of the row its text is on (1.25). */
+/** The IME composing underline sits at the bottom of the row its text is on. */
 @OptIn(ExperimentalTestApi::class)
 class ComposingUnderlineTest {
 

@@ -24,7 +24,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * With wrapping off (7.41) a line is one row as wide as its text, and the content is as
+ * With wrapping off a line is one row as wide as its text, and the content is as
  * wide as its widest line, kept by the row list's directory through every edit.
  */
 class SoftWrapLayoutTest {

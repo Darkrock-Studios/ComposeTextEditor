@@ -34,7 +34,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * Caret, selection, and handle geometry (0.5), read from what the editor draws and
+ * Caret, selection, and handle geometry, read from what the editor draws and
  * compared with Compose's own layout of the same text in the pinned test font.
  */
 @OptIn(ExperimentalTestApi::class)
@@ -284,7 +284,7 @@ class GeometryTest {
 		}
 	}
 
-	// Paragraph spacing (5.7)
+	// Paragraph spacing
 
 	@Test
 	fun `space after a paragraph opens a gap that the caret and the selection stay out of`() = editorUiTest(

@@ -2,8 +2,8 @@ import { expect, test, type Page } from '@playwright/test';
 import { clickThroughCanvas, inputField, openBlankEditor } from './editor';
 
 /*
- * A phone keyboard reads the field's attributes as it rises, on the field's first focus
- * (4.40). Compose creates its backing field with `autocapitalize="off"` and focuses it at
+ * A phone keyboard reads the field's attributes as it rises, on the field's first focus.
+ * Compose creates its backing field with `autocapitalize="off"` and focuses it at
  * once, so the attribute a field holds as its first `focus()` returns is the one a
  * keyboard sees.
  */

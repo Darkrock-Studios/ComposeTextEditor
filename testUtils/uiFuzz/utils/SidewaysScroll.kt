@@ -10,7 +10,7 @@ import kotlin.random.Random
 import kotlin.test.fail
 
 /*
- * Wrapping off (7.41), view coordinates are content coordinates less the sideways scroll.
+ * Wrapping off, view coordinates are content coordinates less the sideways scroll.
  * With wrapping on that scroll is always 0, so code that pairs a row's content x with a
  * view or pointer x and forgets it passes every wrapped test. The sideways storms keep
  * the scroll moving and check, after every op, that what the view answers follows it.

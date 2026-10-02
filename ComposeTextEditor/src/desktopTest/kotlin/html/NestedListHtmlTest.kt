@@ -19,7 +19,7 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
 
 /**
- * Nested lists in HTML (7.47): export writes a nested item's list inside its parent's
+ * Nested lists in HTML: export writes a nested item's list inside its parent's
  * `<li>`, and import reads a list's depth from the lists around it, a list directly
  * inside another included, as browsers render both.
  */

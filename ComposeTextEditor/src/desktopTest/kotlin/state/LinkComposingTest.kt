@@ -22,7 +22,7 @@ import kotlin.test.assertTrue
 /**
  * A link a replace touches is placed by the characters the replace changes: text an
  * input method sets over a link's word, or over its first or last letters, stays inside
- * the link, and letters added at its end stay out, as typed ones do (5.13).
+ * the link, and letters added at its end stay out, as typed ones do.
  */
 class LinkComposingTest {
 

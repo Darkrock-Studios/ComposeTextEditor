@@ -23,7 +23,7 @@ import kotlin.test.assertTrue
 import kotlin.test.fail
 
 /*
- * Geometry assertions (0.5): the editor's own draw functions for the caret, the selection,
+ * Geometry assertions: the editor's own draw functions for the caret, the selection,
  * and the touch handles, run against its current state through [recordDrawing], in the
  * text canvas's coordinates (scrolled, content padding excluded), to compare with an
  * independent layout of the same text. They run outside the composition's draw pass, so

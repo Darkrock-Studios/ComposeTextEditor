@@ -25,7 +25,7 @@ import kotlin.test.assertEquals
  * tab for Tab, arriving as a commit of "\t". It repeats a held key on its own without
  * sending the editor another key event. On iOS the editor drops UIKit's echo of the
  * press and runs its own command again for each repeat, so a press acts once and a held
- * key follows the editor's rows, word stops and indent (roadmap 1.1, 4.6, 2.9).
+ * key follows the editor's rows, word stops and indent.
  */
 class KeyEchoE2eTest {
 	private val doc = AnnotatedString("a😀bc\nsecond line\nthird line")

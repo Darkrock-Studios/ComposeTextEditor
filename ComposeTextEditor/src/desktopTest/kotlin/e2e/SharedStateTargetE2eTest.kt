@@ -41,7 +41,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 /**
- * Roadmap 7.73 and 7.75: with two editors on one state, an edit aimed at the editor without
+ * With two editors on one state, an edit aimed at the editor without
  * focus (an accessibility service's) follows that editor's line limit and default action, not
  * the focused one's.
  */

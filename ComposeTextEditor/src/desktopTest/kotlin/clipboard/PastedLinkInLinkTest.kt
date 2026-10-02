@@ -18,7 +18,7 @@ import utils.InMemoryClipboard
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
-/** A link pasted into another link takes its text out of that link (5.15). */
+/** A link pasted into another link takes its text out of that link. */
 @OptIn(ExperimentalComposeUiApi::class)
 class PastedLinkInLinkTest {
 

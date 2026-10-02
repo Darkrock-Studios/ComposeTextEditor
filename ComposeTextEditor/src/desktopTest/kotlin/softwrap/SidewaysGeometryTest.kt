@@ -31,7 +31,7 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 /**
- * The geometry harness with wrapping off (7.41), through one fixture: each scene is
+ * The geometry harness with wrapping off, through one fixture: each scene is
  * checked at several points of the sideways range, by [assertViewFollowsSidewaysScroll]
  * (the conversions, the caret and selection drawn, decorators and their tints, input
  * method, stylus, character bounds), and by pointer input placed from the rows' own

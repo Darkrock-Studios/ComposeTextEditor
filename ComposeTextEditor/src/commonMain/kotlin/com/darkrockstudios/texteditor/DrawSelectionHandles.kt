@@ -71,7 +71,7 @@ internal fun TextEditorState.touchHandle(role: HandleRole): TouchHandle? {
 
 /**
  * A handle's side follows its paragraph's direction, not the bidi run at its end as
- * Compose's does: the editor places an end by the paragraph's direction too (3.21).
+ * Compose's does: the editor places an end by the paragraph's direction too.
  */
 private fun TextEditorState.handleAt(role: HandleRole, position: CharLineOffset, affinity: CaretAffinity): TouchHandle {
 	val layout = lineOffsets.rowAt(position)?.textLayoutResult

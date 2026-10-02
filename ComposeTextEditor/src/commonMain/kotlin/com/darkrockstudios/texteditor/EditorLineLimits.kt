@@ -47,7 +47,7 @@ sealed interface EditorLineLimits {
 /**
  * The largest fixed size Compose's `Constraints` hold in one dimension, the other
  * unbounded: the tallest a fixed height can be for any editor width, and the widest an
- * unwrapped line can be laid out (7.41).
+ * unwrapped line can be laid out.
  */
 internal const val MAX_FIXED_PX = (1 shl 18) - 2
 

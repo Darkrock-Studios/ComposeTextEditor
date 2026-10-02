@@ -29,9 +29,9 @@ import org.junit.Assume.assumeTrue
 import kotlin.test.Test
 
 /**
- * Timings on a 200,000-character document (2,000 lines of 99 characters), the size the
- * iOS measurements in roadmap 4.21 used. Skipped unless `CTE_BENCHMARK` is 1, since it
- * is slow and its numbers depend on the machine and its fonts:
+ * Timings on a 200,000-character document (2,000 lines of 99 characters). Skipped
+ * unless `CTE_BENCHMARK` is 1, since it is slow and its numbers depend on the machine
+ * and its fonts:
  *
  * `CTE_BENCHMARK=1 ./gradlew :ComposeTextEditor:desktopTest --tests 'benchmark.LongDocumentBenchmark' --rerun`
  *
@@ -112,7 +112,7 @@ class LongDocumentBenchmark {
 	@Test
 	fun `long document timings`() = timings(softWrap = true)
 
-	/** The same with wrapping off (7.41): a row per line, scrolling sideways. */
+	/** The same with wrapping off: a row per line, scrolling sideways. */
 	@Test
 	fun `long document timings, wrapping off`() = timings(softWrap = false)
 

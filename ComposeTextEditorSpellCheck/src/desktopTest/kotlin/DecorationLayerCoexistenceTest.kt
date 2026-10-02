@@ -32,7 +32,7 @@ import kotlin.test.assertTrue
 
 /**
  * Spell check, diagnostics, find and a host each keep their decorations on a layer of
- * their own (7.88): none reads another's spans, and none clears another's.
+ * their own: none reads another's spans, and none clears another's.
  */
 class DecorationLayerCoexistenceTest {
 

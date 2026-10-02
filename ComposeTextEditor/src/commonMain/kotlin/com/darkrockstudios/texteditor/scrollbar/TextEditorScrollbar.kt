@@ -21,7 +21,7 @@ expect fun TextEditorScrollbar(
     content: @Composable (modifier: Modifier) -> Unit,
 )
 /**
- * The platform's sideways scrollbar for [scrollState] (7.41), laid over the bottom edge of
+ * The platform's sideways scrollbar for [scrollState], laid over the bottom edge of
  * the text: Compose's own on desktop and the web, a display-only thumb that takes no
  * room on Android and iOS ([HorizontalScrollIndicator]).
  */

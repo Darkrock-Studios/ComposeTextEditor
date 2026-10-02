@@ -13,7 +13,7 @@ import utils.setBlockLines
 
 /**
  * A replace that joins a line block's line onto the kept head of the line above
- * leaves the markers a delete of the same range does (6.28).
+ * leaves the markers a delete of the same range does.
  */
 class ReplaceAcrossLinesSpansTest {
 

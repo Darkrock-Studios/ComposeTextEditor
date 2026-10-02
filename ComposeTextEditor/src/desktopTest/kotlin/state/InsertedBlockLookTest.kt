@@ -30,8 +30,8 @@ import kotlin.test.assertTrue
 
 /**
  * Styled text put in outside paste and drop takes the look of the line it lands on, as
- * pasted text does (6.38): a heading's look it carries stays off a plain line, and a link's
- * look stays off text no link holds (6.45).
+ * pasted text does: a heading's look it carries stays off a plain line, and a link's
+ * look stays off text no link holds.
  */
 @OptIn(ExperimentalTestApi::class)
 class InsertedBlockLookTest {

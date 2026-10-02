@@ -20,7 +20,7 @@ import org.junit.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-/** Find keeps its highlights and scope on its own decoration layer (7.88). */
+/** Find keeps its highlights and scope on its own decoration layer. */
 class FindDecorationLayerTest {
 
 	private fun editor(text: String) = TextEditorState(

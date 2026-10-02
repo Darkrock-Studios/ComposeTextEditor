@@ -18,7 +18,7 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 /**
- * With wrapping off (7.41) the caret is kept in view sideways as it moves and as text is
+ * With wrapping off the caret is kept in view sideways as it moves and as text is
  * typed, and the content scrolls sideways under a wheel, a drag and the scrollbar.
  */
 @OptIn(ExperimentalTestApi::class)

@@ -114,8 +114,8 @@ class TouchToolbarTest {
 
 	/**
 	 * The platform's menu needs the input session's view, which a long press on an
-	 * unfocused editor starts only as it focuses it: iOS showed nothing when asked first
-	 * (roadmap 3.18). The menu comes once the session runs.
+	 * unfocused editor starts only as it focuses it: iOS showed nothing when asked first.
+	 * The menu comes once the session runs.
 	 */
 	@Test
 	fun `a long press on an unfocused editor shows the toolbar once its input session runs`() {
@@ -174,7 +174,7 @@ class TouchToolbarTest {
 	/**
 	 * The release that ends a gesture also asks for the keyboard, after the canvas has
 	 * acted on it, and on iOS that request dismisses an edit menu shown during the
-	 * release: a tap on the caret handle showed nothing (roadmap 3.18). The toolbar comes
+	 * release: a tap on the caret handle showed nothing. The toolbar comes
 	 * a frame after the release instead.
 	 */
 	@Test
@@ -512,7 +512,7 @@ class TouchToolbarTest {
 
 	/**
 	 * On iOS a right-click, from a mouse or a trackpad, opens the edit menu at the pointer,
-	 * as a native text view does, rather than the editor's own menu (roadmap 4.8).
+	 * as a native text view does, rather than the editor's own menu.
 	 */
 	@Test
 	fun `where the platform's menu answers a pointer, a right-click opens it at the pointer`() {

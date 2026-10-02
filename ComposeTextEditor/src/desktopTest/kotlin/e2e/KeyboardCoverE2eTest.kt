@@ -14,7 +14,7 @@ import kotlin.test.assertTrue
  * A soft keyboard drawn over the editor (iOS, and an edge-to-edge Android window)
  * covers the bottom of its viewport. The caret must stay above it, and the focus rect
  * the platform keeps above the keyboard must be the caret row the editor can scroll
- * there, not the whole editor (roadmap 4.24).
+ * there, not the whole editor.
  */
 @OptIn(ExperimentalTestApi::class)
 class KeyboardCoverE2eTest {

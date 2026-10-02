@@ -62,7 +62,7 @@ class TabE2eTest {
 		waitForIdle()
 		state.cursor.updatePosition(CharLineOffset(1, 0))
 		press(Key.Tab)
-		assertEquals(listOf("intro", "    item"), lines, "the first item has nothing to nest under (7.58)")
+		assertEquals(listOf("intro", "    item"), lines, "the first item has nothing to nest under")
 		assertEquals(listOf(1), state.linesWith(BulletListSpanStyle))
 		assertEquals("intro\n-     item", state.blockLines())
 
@@ -80,8 +80,8 @@ class TabE2eTest {
 		waitForIdle()
 		press(Key.A, ctrl = true)
 		press(Key.Tab)
-		// The bullet has nothing to nest under, so it takes the indent text (7.58);
-		// the numbered item nests under it (5.6).
+		// The bullet has nothing to nest under, so it takes the indent text;
+		// the numbered item nests under it.
 		assertEquals(listOf("    one", "    two", "three", "    four"), lines)
 		assertEquals(listOf(1), state.linesWith(BulletListSpanStyle))
 		assertEquals(listOf(2), state.linesWith(OrderedListSpanStyle.of(1)))

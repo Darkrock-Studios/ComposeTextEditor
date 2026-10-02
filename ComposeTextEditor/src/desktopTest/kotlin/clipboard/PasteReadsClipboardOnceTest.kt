@@ -22,7 +22,7 @@ import utils.ForeignRichTransferable
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
-/** A desktop paste reads the clipboard once and takes text, markup and copy id from that read (6.37). */
+/** A desktop paste reads the clipboard once and takes text, markup and copy id from that read. */
 @OptIn(ExperimentalComposeUiApi::class)
 class PasteReadsClipboardOnceTest {
 

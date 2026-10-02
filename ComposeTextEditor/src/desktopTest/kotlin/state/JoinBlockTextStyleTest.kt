@@ -25,7 +25,7 @@ import kotlin.test.assertTrue
 import utils.blockLines
 import utils.setBlockLines
 
-/** A joined line carries the text style its kept markers bake, over all of it, and no other block's (6.35, 7.72). */
+/** A joined line carries the text style its kept markers bake, over all of it, and no other block's. */
 class JoinBlockTextStyleTest {
 
 	private val styles = RichTextStyles.DEFAULT

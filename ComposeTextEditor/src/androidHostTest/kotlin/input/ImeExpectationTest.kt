@@ -5,7 +5,7 @@ import kotlin.test.Test
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/** Where the keyboard's own commands leave it expecting the selection (roadmap 4.27). */
+/** Where the keyboard's own commands leave it expecting the selection. */
 class ImeExpectationTest {
 
 	private fun at(selStart: Int, selEnd: Int = selStart, compStart: Int = -1, compEnd: Int = -1, length: Int = 10) =

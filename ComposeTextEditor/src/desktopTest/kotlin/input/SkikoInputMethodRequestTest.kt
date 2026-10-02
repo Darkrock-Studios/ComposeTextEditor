@@ -243,7 +243,7 @@ class SkikoInputMethodRequestTest {
 		assertTrue(state.richSpanManager.getAllRichSpans().none { it.style === BulletListSpanStyle })
 	}
 
-	// --- the iOS soft keyboard's backspace (roadmap 4.33) ---
+	// --- the iOS soft keyboard's backspace ---
 	// UIKit deletes backward by selecting the composed character before the caret, then
 	// deleting the selection: two edits, a setSelection and a commit of nothing.
 
