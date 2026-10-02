@@ -90,6 +90,32 @@ internal class SpanIndex private constructor(
 		return if (own.isEmpty()) reaching else own + reaching
 	}
 
+	/**
+	 * The spans of a style [matching] covering any line from [first] to [last]: only those
+	 * are built as [RichSpan]s, so a query for one owner's spans costs nothing for the rest.
+	 */
+	fun collect(first: Int, last: Int, matching: (RichSpanStyle) -> Boolean): List<RichSpan> {
+		val from = first.coerceAtLeast(0)
+		val to = minOf(last, lineCount - 1)
+		if (from > to) return emptyList()
+		val found = ArrayList<RichSpan>()
+		var chunk = lastAtOrBefore(firstLine, chunks.size, from)
+		var line = from
+		while (line <= to) {
+			val base = firstLine[chunk]
+			val lines = chunks[chunk].lines
+			while (line <= to && line - base < lines.size) {
+				for (span in lines[line - base]) if (matching(span.style)) found += span.at(line)
+				line++
+			}
+			chunk++
+		}
+		for (span in loose) {
+			if (span.range.end.line >= from && span.range.start.line <= to && matching(span.style)) found += span
+		}
+		return found
+	}
+
 	/** Every span, the single-line ones in line order, then the loose ones. */
 	val all: Set<RichSpan> by lazy(LazyThreadSafetyMode.PUBLICATION) {
 		val set = LinkedHashSet<RichSpan>()
@@ -182,6 +208,41 @@ internal class SpanIndex private constructor(
 		return rewriteLines(byLine.keys, loose) { line, present ->
 			val removed = byLine[line] ?: return@rewriteLines present
 			present.filterNot { it in removed }
+		}
+	}
+
+	/**
+	 * `minus(remove).plus(add)` in one rewrite of the lines either touches, for spans with
+	 * no line-anchored style, which `plus` would fold: a line's spans are filtered and
+	 * appended to once, however many it gains or loses.
+	 */
+	fun swapping(remove: Collection<RichSpan>, add: Collection<RichSpan>): SpanIndex {
+		if (remove.isEmpty() && add.isEmpty()) return this
+		val removed = HashMap<Int, HashSet<LineSpan>>()
+		val added = HashMap<Int, MutableList<LineSpan>>()
+		val loose = LinkedHashSet(this.loose)
+		for (span in remove) {
+			val line = span.range.start.line
+			if (line == span.range.end.line && line in 0 until lineCount) {
+				removed.getOrPut(line) { HashSet() } += LineSpan(span.range.start.char, span.range.end.char, span.style)
+			} else {
+				loose -= span
+			}
+		}
+		for (span in add) {
+			val line = span.range.start.line
+			if (line == span.range.end.line && line in 0 until lineCount) {
+				added.getOrPut(line) { ArrayList() } += LineSpan(span.range.start.char, span.range.end.char, span.style)
+			} else {
+				loose += span
+			}
+		}
+		return rewriteLines(removed.keys + added.keys, loose) { line, present ->
+			val gone = removed[line]
+			val kept = if (gone == null) present else present.filterNot { it in gone }
+			val extra = added[line] ?: return@rewriteLines kept
+			val seen = HashSet(kept)
+			kept + extra.filter { seen.add(it) }
 		}
 	}
 

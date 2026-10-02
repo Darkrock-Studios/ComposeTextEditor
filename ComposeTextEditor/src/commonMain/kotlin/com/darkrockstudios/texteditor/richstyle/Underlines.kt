@@ -1,6 +1,7 @@
 package com.darkrockstudios.texteditor.richstyle
 
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PointMode
@@ -13,10 +14,14 @@ import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.unit.dp
 import com.darkrockstudios.texteditor.LineWrap
 import com.darkrockstudios.texteditor.utils.getRunBoxes
+import kotlin.math.floor
+import kotlin.math.roundToInt
 
 private val waveLengthDp = 15.dp
 private val amplitudeDp = 2.dp
 private val strokeWidthDp = 1.5.dp
+
+private val solidWidthDp = 1.dp
 
 private val dotSpacingDp = 4.dp
 private val dotRadiusDp = 1.dp
@@ -69,6 +74,24 @@ fun DrawScope.drawWavyUnderline(
 			cap = StrokeCap.Round
 		)
 	)
+}
+
+/**
+ * Draws a straight underline in [color] beneath [textRange] on one wrapped line, for a
+ * [RichSpanStyle]'s [RichSpanStyle.drawCustomStyle], one line under each stretch of the row
+ * the range covers. Whole pixels, so it stays crisp.
+ */
+fun DrawScope.drawSolidUnderline(
+	layoutResult: TextLayoutResult,
+	lineWrap: LineWrap,
+	textRange: TextRange,
+	color: Color,
+) {
+	val thickness = solidWidthDp.toPx().roundToInt().coerceAtLeast(1).toFloat()
+	val top = floor(underlineY(layoutResult, lineWrap) - thickness / 2f)
+	for (box in layoutResult.getRunBoxes(lineWrap.virtualLineIndex, textRange.start, textRange.end)) {
+		drawRect(color = color, topLeft = Offset(box.left, top), size = Size(box.width, thickness))
+	}
 }
 
 /**
