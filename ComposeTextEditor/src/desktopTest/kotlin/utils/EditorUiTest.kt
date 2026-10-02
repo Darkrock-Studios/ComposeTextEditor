@@ -479,6 +479,8 @@ class EditorUiTestScope internal constructor(
 			.map { it.item }
 
 	override fun waitForIdle() = test.waitForIdle()
+
+	override fun runOnIdle(block: () -> Unit) = test.runOnIdle(block)
 }
 
 /** The size the character at flat index [charIndex] renders at: its spans merged in order. */
