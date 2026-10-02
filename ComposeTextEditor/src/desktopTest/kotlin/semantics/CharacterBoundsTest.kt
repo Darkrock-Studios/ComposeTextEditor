@@ -65,9 +65,10 @@ class CharacterBoundsTest {
 		return editorNode().fetchSemanticsNode().config[CharacterBoundsKey]
 	}
 
-	/** Where the canvas sits in root, from the node and the padding alone. */
+	/** Where the document's origin sits in root, from the node, the padding and both scrolls alone. */
 	private fun EditorUiTestScope.canvasOrigin(startPadding: Float): Offset =
-		editorNode().fetchSemanticsNode().positionInRoot + Offset(startPadding, -state.scrollState.value.toFloat())
+		editorNode().fetchSemanticsNode().positionInRoot +
+			Offset(startPadding - state.horizontalScrollState.value, -state.scrollState.value.toFloat())
 
 	/**
 	 * Every character's box is its row's glyph box moved by [origin] and its paragraph's
@@ -81,7 +82,9 @@ class CharacterBoundsTest {
 			val row = assertNotNull(state.lineOffsets.getWrapForDrawing(position, CaretAffinity.Downstream))
 			val box = assertNotNull(bounds.boundsOf(index), "bounds of $index")
 			if (row.richSpans.any { it.style is HorizontalRuleSpanStyle }) {
-				val block = Rect(0f, row.offset.y, state.viewportSize.width, row.offset.y + row.effectiveHeight)
+				// Unwrapped, a rule is drawn across the content's width.
+				val width = state.viewportSize.width + state.horizontalScrollState.maxValue
+				val block = Rect(0f, row.offset.y, width, row.offset.y + row.effectiveHeight)
 				assertNear(block.translate(origin), box, "the rule's row at $index")
 				continue
 			}
@@ -96,7 +99,8 @@ class CharacterBoundsTest {
 				assertTrue(abs(box.top - (origin.y + row.offset.y)) < 1f, "top of $index: ${box.top}, row at ${origin.y + row.offset.y}")
 			}
 			if (text[index].isLetter()) {
-				val caret = origin.x + state.getPositionForOffset(position).position.x
+				// The caret's position is in view x, which the sideways scroll is already out of.
+				val caret = origin.x + state.horizontalScrollState.value + state.getPositionForOffset(position).position.x
 				assertTrue(abs(box.left - caret) < 1f, "left edge of $index '${text[index]}': ${box.left}, caret at $caret")
 				assertEquals(index, bounds.indexAt(Offset(box.left + 1f, box.center.y)), "index at the left edge of $index")
 			}
@@ -131,6 +135,24 @@ class CharacterBoundsTest {
 		test.runOnIdle { state.scrollState.scrollTo(150) }
 		waitForIdle()
 		assertEquals(150, state.scrollState.value)
+		assertDrawn(state, bounds, canvasOrigin(startPadding = 24f))
+	}
+
+	@Test
+	fun `with wrapping off, scrolled sideways, the bounds are what is drawn`() = editorUiTest(
+		initialText = AnnotatedString((1..6).joinToString("\n") { if (it == 3) " " else "Line $it runs well past the right edge of a narrow editor, unwrapped." }),
+		width = 200.dp,
+		softWrap = false,
+		contentPadding = PaddingValues(start = 24.dp, top = 8.dp),
+	) {
+		state.addRichSpan(TextEditorRange(CharLineOffset(2, 0), CharLineOffset(2, 1)), HorizontalRuleSpanStyle)
+		waitForIdle()
+		assertEquals(6, state.lineOffsets.size, "precondition: one row per line")
+		val bounds = bounds()
+		test.runOnIdle { state.horizontalScrollState.scrollTo(150) }
+		waitForIdle()
+		assertEquals(150, state.horizontalScrollState.value)
+
 		assertDrawn(state, bounds, canvasOrigin(startPadding = 24f))
 	}
 

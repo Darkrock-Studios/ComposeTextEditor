@@ -46,9 +46,9 @@ that apply the vertical one:
    by the horizontal scroll, widens the scope's `size` to the content width (so
    what spans the full width, a code fence card, a blockquote's background, a
    rule, spans the widest line), and with wrapping off clips sideways to the
-   canvas, which is otherwise unclipped. The text with its rich spans and
-   composing underline (`DrawEditorText`) and the selection (`DrawSelection`)
-   draw inside it, in content x and view y as before. The caret and the drop
+   canvas, which is otherwise unclipped. The text with its rich spans, its
+   decorations' tints (7.86) and composing underline (`DrawEditorText`) and the
+   selection (`DrawSelection`) draw inside it, in content x and view y as before. The caret and the drop
    caret are drawn from view-space metrics outside it, and are not drawn when
    scrolled out of view sideways (wrapped, a caret past the right edge is still
    pulled back inside). Line decorators run outside it.
@@ -117,10 +117,13 @@ with its vertical jump.
 
 The skiko input method's text origin subtracts the scroll; its caret rectangle
 is measured in view space when asked for, and as for a vertical scroll, a scroll
-alone does not ask the platform to read it again. Its document layout (iOS's
-floating cursor) and the semantics text layout are measured unwrapped, at least
-the viewport wide, as the lines are. Neither carries the scroll offset, as
-neither carries the vertical one. Android's cursor anchor is watched through the
+alone does not ask the platform to read it again. The semantics text layout,
+which the input method also serves (iOS's floating cursor, 7.57), is measured
+unwrapped, at least the viewport wide and as wide as the widest line: an
+intrinsic width leaves out an indent, which would break that line. It carries
+neither scroll offset; the input method's text origin does. The screen reader's
+character bounds (`CharacterBounds`, 7.57) subtract the sideways scroll with the
+vertical one, in `documentToCanvas`. Android's cursor anchor is watched through the
 caret's view position, so a sideways scroll resends it. The touch toolbar moves
 with a sideways scroll as with a vertical one.
 
@@ -137,8 +140,10 @@ it:
   caret's metrics, `getPositionForOffset` and what points along the caret's row
   hit must agree. Core's `assertViewFollowsSidewaysScroll` adds the selection
   drawn in `inContentSpace`, the line decorators' offset, the skiko input
-  method's caret and text origin and the stylus gesture layout, and checks that
-  the caret is drawn at its metrics and not at all once scrolled out of view.
+  method's caret and text origin, the stylus gesture layout and the character
+  bounds, and checks that the caret is drawn at its metrics and not at all once
+  scrolled out of view, and that a decoration's text colour tints only its own
+  glyphs (read from pixels).
 - The UI storms (`EditorFuzzE2eTest`, the markdown module's
   `MarkdownUiFuzzFixpointTest`) and the invariant fuzz (`EditorInvariantFuzzTest`,
   invariant `ViewFollowsSidewaysScroll`) have sideways variants: wrapping off,
@@ -155,8 +160,9 @@ it:
 
 Each place that applies the sideways scroll (the conversions, `inContentSpace`,
 the hit test, the magnifier's clamp, the caret's drawing, the touch toolbar, the
-stylus gesture layout, the skiko text origin, the line decorators' offset and the
-drag auto-scroll) was checked against these: with its scroll taken out, at least
+stylus gesture layout, the skiko text origin, the line decorators' offset, the
+drag auto-scroll, the character bounds and the text pass that decorations tint,
+inside `inContentSpace`) was checked against these: with its scroll taken out, at least
 one of them fails. A new place should be checked the same way.
 
 ## Known limits

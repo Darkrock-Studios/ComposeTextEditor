@@ -56,7 +56,9 @@ coverage, antialiasing included (`DrawTextTint.kt`). The layer is opened only
 when a row in view has a coloured decoration, once per frame, and holds the
 text alone: the text is drawn in its own pass, after the host's `decorateLine`
 and before every foreground span and the composing underline, so a gutter or a
-margin mark is neither clipped by the layer nor tinted.
+margin mark is neither clipped by the layer nor tinted. With wrapping off (7.41)
+the layer and its tints are opened inside `inContentSpace`, so they scroll
+sideways with the text and stop at the canvas's edges.
 
 Consequences:
 

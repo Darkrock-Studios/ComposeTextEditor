@@ -17,6 +17,7 @@ import com.darkrockstudios.texteditor.state.DocumentSnapshot
 import com.darkrockstudios.texteditor.state.RowList
 import com.darkrockstudios.texteditor.state.TextEditorState
 import kotlin.math.abs
+import kotlin.math.ceil
 
 /**
  * The whole document laid out as one text, one per state, for `getTextLayoutResult`
@@ -96,13 +97,15 @@ internal class SemanticsLayout(private val state: TextEditorState) {
 	}
 
 	private fun layoutInput(content: DocumentSnapshot): LayoutInput {
-		val width = maxOf(1, state.viewportSize.width.toInt())
 		val style = state.textStyle
 		val outerIndent = style.textIndent?.takeIf { it != TextIndent.None }
 		val measureStyle = if (outerIndent == null) style else style.copy(textIndent = TextIndent.None)
 		val lines = content.lines
 		// Rows laid out for another revision (a collapsed viewport leaves them behind) are not used.
 		val rows = (state.lineOffsets as? RowList)?.takeIf { it.lineCount == lines.size && it.spans === content.spanIndex }
+		val viewport = maxOf(1, state.viewportSize.width.toInt())
+		// Unwrapped, at least the widest line wide: the intrinsic width leaves out an indent, which would break that line.
+		val width = if (state.softWrap || rows == null) viewport else maxOf(viewport, ceil(rows.contentWidth).toInt().coerceAtMost(MAX_FIXED_PX))
 		// Each line as the editor measured it, unless its rows are behind the text.
 		val shaped = List(lines.size) { index ->
 			val line = lines[index]

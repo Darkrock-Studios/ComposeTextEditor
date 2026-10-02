@@ -1,6 +1,7 @@
 package softwrap
 
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
@@ -9,7 +10,12 @@ import androidx.compose.ui.unit.dp
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.LineWrap
 import com.darkrockstudios.texteditor.RichSpanClick
+import com.darkrockstudios.texteditor.TextEditorRange
+import com.darkrockstudios.texteditor.decoration.Decoration
+import com.darkrockstudios.texteditor.decoration.DecorationLayer
+import com.darkrockstudios.texteditor.decoration.setDecorations
 import com.darkrockstudios.texteditor.richstyle.LinkSpanStyle
+import com.darkrockstudios.texteditor.richstyle.RichSpan
 import com.darkrockstudios.texteditor.rowAt
 import com.darkrockstudios.texteditor.state.caretX
 import utils.EditorUiTestScope
@@ -27,9 +33,10 @@ import kotlin.test.assertTrue
 /**
  * The geometry harness with wrapping off (7.41), through one fixture: each scene is
  * checked at several points of the sideways range, by [assertViewFollowsSidewaysScroll]
- * (the conversions, the caret and selection drawn, decorators, input method, stylus),
- * and by pointer input placed from the rows' own layout less the scroll, never through
- * the conversions under test: clicks, a link, touch handles, the toolbar, the magnifier.
+ * (the conversions, the caret and selection drawn, decorators and their tints, input
+ * method, stylus, character bounds), and by pointer input placed from the rows' own
+ * layout less the scroll, never through the conversions under test: clicks, a link,
+ * touch handles, the toolbar, the magnifier.
  * With wrapping on the sideways scroll is always 0, so these are what fail when code
  * that pairs a row with a view or pointer x forgets it.
  */
@@ -100,6 +107,19 @@ class SidewaysGeometryTest {
 		state.setBlockLines("$long\n``` $long\n- $long\n> $long")
 		test.waitForIdle()
 		test.runOnIdle { state.selector.updateSelection(CharLineOffset(0, 120), CharLineOffset(3, 200)) }
+		atSidewaysScrolls { assertViewFollowsSidewaysScroll() }
+	}
+
+	@Test
+	fun `a decoration's text colour follows the sideways scroll`() = sideways("$long\n$long") {
+		val layer = DecorationLayer("sideways")
+		val tinted = listOf(CharLineOffset(0, 20) to 34, CharLineOffset(0, 200) to 214, CharLineOffset(1, 105) to 119)
+		test.runOnIdle {
+			state.setDecorations(layer, tinted.map { (start, end) ->
+				RichSpan(TextEditorRange(start, start.copy(char = end)), Decoration(layer, textColor = Color.Red))
+			})
+		}
+		placeCaret(CharLineOffset(1, 110))
 		atSidewaysScrolls { assertViewFollowsSidewaysScroll() }
 	}
 

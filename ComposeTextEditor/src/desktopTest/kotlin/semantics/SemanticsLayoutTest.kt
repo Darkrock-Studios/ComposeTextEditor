@@ -73,6 +73,20 @@ class SemanticsLayoutTest {
 	}
 
 	@Test
+	fun `with wrapping off an indented widest line stays one row`() = editorUiTest(
+		initialText = AnnotatedString(paragraphs),
+		width = 200.dp,
+		softWrap = false,
+		textStyle = TextStyle(textIndent = TextIndent(firstLine = 16.sp)),
+	) {
+		state.setParagraphFormat(1..1, ParagraphFormatSpanStyle(indent = 12.sp, firstLineIndent = 40.sp))
+		waitForIdle()
+		assertEquals(3, state.lineOffsets.size, "precondition: one row per line")
+
+		assertRowsMatch(semanticsLayout())
+	}
+
+	@Test
 	fun `rows below a rule sit where the editor draws them`() = editorUiTest(
 		initialText = AnnotatedString("above\n \nbelow\nand more"),
 	) {

@@ -72,8 +72,7 @@ paragraph top; `rowTops` differ only where a block makes a row taller, and the g
 stay at the layout's position). Document space to the semantics node:
 
 - x: plus the canvas origin in the node (the start padding, `contentOrigin.x`), less
-  the horizontal scroll when 7.41 adds one (a `scrollX` read with `scrollState.value`
-  today a constant 0).
+  the horizontal scroll (7.41's `scrollX`, 0 while lines wrap).
 - y: less `scrollState.value`. The top padding is scroll range (`minValue` is minus
   the top padding), and the first paragraph's `spaceBefore` is in the row's offset, so
   `offset.y - scrollState.value` already covers both; `getPositionForOffset` does this.
@@ -135,12 +134,12 @@ are ignored by every platform bridge, so it is inert off Android.
 `boundsOf(index)`: `state.getOffsetAtCharacter(index)`, the row through
 `lineOffsets.getWrapForDrawing(position, Downstream)`, the box from
 `wrap.textLayoutResult.getBoundingBox(position.char)` moved by `(0, wrap.paragraphTop)`
-into document space, then less the scroll (`documentToCanvas`, the one place a
-horizontal scroll term joins the vertical one) onto the canvas, and through the canvas's
+into document space, then less both scrolls (`documentToCanvas`, the one place
+the horizontal scroll joins the vertical one) onto the canvas, and through the canvas's
 transform to root (`transformFrom`, so a scaled ancestor is mapped as `indexAt` maps
 it). A line break gets the zero-width `getCursorRect` at the row's end. A row whose
 block replaces its text (a rule, an image) answers the block's row, which is what is
-drawn. `indexAt` is the inverse through `getOffsetAtPosition` and `getCharacterIndex`,
+drawn (with wrapping off, as wide as the content, as `inContentSpace` draws it). `indexAt` is the inverse through `getOffsetAtPosition` and `getCharacterIndex`,
 and -1 when there is no answer. Both answer nothing while the rows lag the text (a pass
 skipped while the viewport is collapsed, or inside a transaction).
 
@@ -220,7 +219,9 @@ the drawn ones in styled documents, and the span-pass reuse applies. The whole-d
 shape per text revision stays, since `NativeTextInputConnection` indexes one layout by
 absolute offsets and is internal. `unclippedTextOffsetInRoot` adds the first row's top
 (`lineOffsets.firstOrNull()?.offset?.y ?: 0f`) so the space above the first paragraph
-is counted; padding and scroll were already right.
+is counted; padding and both scrolls were already right. With wrapping off (7.41) the
+layout is measured unwrapped and as wide as the widest line, since an intrinsic width
+leaves out an indent and would break that line.
 
 Found while doing it: the editor's session asks for no `PlatformImeOptions`, so CMP
 runs it on the legacy `ComposeTextInputConnection`, not `NativeTextInputConnection`.
@@ -257,7 +258,8 @@ spacing. For every character, `boundsOf(i)` equals the drawn glyph box
 break's box sits at its row's end with zero width, an index past the end is null;
 after a span pass and after an edit at the end, a request leaves every `LineLayout`
 identity in the row list as it was (no reshaping). `RichTextView` the same with its
-padding.
+padding. With wrapping off, scrolled sideways, the same per-character check, and
+7.41's `assertViewFollowsSidewaysScroll` reads the bounds at two sideways scrolls.
 
 Android: the module has host tests only (no Robolectric). The forwarding is a host test
 with mocks (`androidHostTest/semantics/EditorAccessibilityBridgeTest`); the
