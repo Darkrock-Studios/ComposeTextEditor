@@ -5,19 +5,30 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextRange
 import com.darkrockstudios.texteditor.LineWrap
-import com.darkrockstudios.texteditor.richstyle.RichSpanStyle
+import com.darkrockstudios.texteditor.decoration.DecorationLayer
+import com.darkrockstudios.texteditor.decoration.DecorationStyle
 import com.darkrockstudios.texteditor.richstyle.drawRangeHighlight
 import com.darkrockstudios.texteditor.state.TextEditorState
 
+/** The layer of a find style made without one: no [FindState] reads or clears it. */
+private val UnownedFindLayer = DecorationLayer("unowned find styles")
+
+/** Semi-transparent yellow. */
+internal val DefaultFindMatchColor = Color(0x60FFEB3B)
+
+/** Semi-transparent orange. */
+internal val DefaultFindCurrentMatchColor = Color(0x80FF9800)
+
 /**
- * Default highlight style for all find matches (non-current).
- * Uses a semi-transparent yellow background by default.
+ * Highlight style for all find matches (non-current), drawn on [layer]. A [FindState] draws
+ * its own on a layer of its own.
  */
 class FindMatchStyle(
-	private val color: Color = Color(0x60FFEB3B) // Semi-transparent yellow
-) : RichSpanStyle {
-	/** Marks this highlight as an ephemeral overlay, keeping it out of the undo and edit history. */
-	override val isDecoration: Boolean = true
+	private val color: Color,
+	override val layer: DecorationLayer,
+) : DecorationStyle {
+	/** A style on a layer no [FindState] reads or clears, semi-transparent yellow by default. */
+	constructor(color: Color = DefaultFindMatchColor) : this(color, UnownedFindLayer)
 
 	/** A tint only: clicks go to the spans beneath, such as its line's list marker. */
 	override val isHitTestable: Boolean = false
@@ -31,14 +42,15 @@ class FindMatchStyle(
 }
 
 /**
- * Highlight style for the current/active find match.
- * Uses a semi-transparent orange background by default to distinguish from other matches.
+ * Highlight style for the current/active find match, drawn on [layer]. A [FindState] draws
+ * its own on a layer of its own.
  */
 class FindCurrentMatchStyle(
-	private val color: Color = Color(0x80FF9800) // Semi-transparent orange
-) : RichSpanStyle {
-	/** Marks this highlight as an ephemeral overlay, keeping it out of the undo and edit history. */
-	override val isDecoration: Boolean = true
+	private val color: Color,
+	override val layer: DecorationLayer,
+) : DecorationStyle {
+	/** A style on a layer no [FindState] reads or clears, semi-transparent orange by default. */
+	constructor(color: Color = DefaultFindCurrentMatchColor) : this(color, UnownedFindLayer)
 
 	/** A tint only: clicks go to the spans beneath, such as its line's list marker. */
 	override val isHitTestable: Boolean = false
@@ -56,18 +68,10 @@ class FindCurrentMatchStyle(
  * clicks, so the list, quote, and fence markers inside it still do.
  */
 internal class FindScopeStyle(
-	private val color: Color = Color(0x1A2196F3)
-) : RichSpanStyle {
-	override val isDecoration: Boolean = true
+	override val layer: DecorationLayer,
+	private val color: Color = Color(0x1A2196F3),
+) : DecorationStyle {
 	override val isHitTestable: Boolean = false
-
-	override fun DrawScope.drawCustomStyle(
-		layoutResult: TextLayoutResult,
-		lineWrap: LineWrap,
-		textRange: TextRange,
-		state: TextEditorState,
-	) {
-	}
 
 	override fun DrawScope.drawBackground(
 		layoutResult: TextLayoutResult,

@@ -35,8 +35,7 @@ once (`SpanIndex.swapping`, each touched line filtered and appended to once),
 the publish marks no line for block normalization, and the layout update names
 no line, so the rows are only pointed at the new index. `updateRichSpans` takes
 the same path when every span it is given only paints (`paintsOnly`: a
-decoration that anchors, shapes and numbers no line), so spell check and find
-gain it without moving onto layers.
+decoration that anchors, shapes and numbers no line).
 
 `DecorationBenchmark` (run with `CTE_BENCHMARK=1`) times 5,000 lines of code
 with a colour on every token, 45,000 spans, on the Linux desktop: setting the
@@ -80,6 +79,19 @@ The tint costs the frame: about 1 ms with no decoration, 3.6 ms with every token
 of 40 lines in view tinted, on the benchmark's software canvas. A third of the
 difference is the rectangles, which a GPU canvas fills far faster; most of the
 rest is finding each stretch's boxes.
+
+## Find
+
+`FindState` keeps its highlights and its in-selection scope on its own layer
+(7.88) and reads them back with `decorations(layer)`, which builds only its own
+spans, never the whole span set. A search lays again only the lines whose
+highlights differ from the matches, so after an edit that is the edited lines;
+stepping to the next match, with the text unchanged since the highlights were
+laid, swaps the two lines the current highlight leaves and reaches. The scope,
+which crosses lines, is set whole through `updateRichSpans` rather than split
+per line, so it follows edits as one range. `FindBenchmark` (5,000 lines,
+15,000 matches, 10,000 other spans): an update after an edit 7.2 ms to 3.5 ms,
+a step 5.3 ms to 20 us.
 
 ## Looks
 

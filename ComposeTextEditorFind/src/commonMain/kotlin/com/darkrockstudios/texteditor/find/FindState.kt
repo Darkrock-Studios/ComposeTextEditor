@@ -9,6 +9,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.buildAnnotatedString
 import com.darkrockstudios.texteditor.TextEditorRange
+import com.darkrockstudios.texteditor.decoration.DecorationLayer
+import com.darkrockstudios.texteditor.decoration.decorations
 import com.darkrockstudios.texteditor.richstyle.RichSpan
 import com.darkrockstudios.texteditor.state.TextEditorState
 import kotlinx.coroutines.CoroutineScope
@@ -67,10 +69,22 @@ class FindState(
 
 	val matchCount: Int get() = _matches.size
 
-	// Styles for highlighting
-	private val matchStyle = FindMatchStyle()
-	private val currentMatchStyle = FindCurrentMatchStyle()
-	private val scopeStyle = FindScopeStyle()
+	/**
+	 * The decoration layer this find draws its match highlights and its in-selection scope on,
+	 * apart from every other owner's (see `docs/design/decorations.md`).
+	 */
+	internal val layer = DecorationLayer("find")
+
+	private val matchStyle = FindMatchStyle(DefaultFindMatchColor, layer)
+	private val currentMatchStyle = FindCurrentMatchStyle(DefaultFindCurrentMatchColor, layer)
+	private val scopeStyle = FindScopeStyle(layer)
+
+	/**
+	 * The [TextEditorState.textLines] the highlights were last laid in, null once cleared, and
+	 * the match then current: while the text is still that, they lie where [matches] say.
+	 */
+	private var highlightedLines: List<AnnotatedString>? = null
+	private var highlightedIndex = -1
 
 	/**
 	 * The user's last own selection this session, as it stood before a search or a replacement
@@ -221,6 +235,8 @@ class FindState(
 				selection
 			}
 			if (scope == null || scope.start == scope.end) return
+			// Kept whole, not a piece per line as setDecorations would keep it, so it follows
+			// edits as one range.
 			textState.addRichSpan(scope, scopeStyle)
 		} else {
 			removeScope()
@@ -263,7 +279,7 @@ class FindState(
 		selectionBeforeSearch?.takeIf { selectionBeforeSearchLines === textState.textLines }
 
 	private fun scopeSpans(): List<RichSpan> =
-		textState.richSpanManager.getAllRichSpans().filter { it.style === scopeStyle }
+		textState.decorations(layer).filter { it.style === scopeStyle }
 
 	private fun scopeRange(): TextEditorRange? = scopeSpans().firstOrNull()?.range
 
@@ -345,7 +361,7 @@ class FindState(
 			0 // Wrap around
 		}
 
-		updateHighlights()
+		moveCurrentHighlight()
 		goToCurrentMatch()
 	}
 
@@ -361,7 +377,7 @@ class FindState(
 			_matches.lastIndex // Wrap around
 		}
 
-		updateHighlights()
+		moveCurrentHighlight()
 		goToCurrentMatch()
 	}
 
@@ -372,7 +388,7 @@ class FindState(
 		if (index < 0 || index >= _matches.size) return
 
 		currentMatchIndex = index
-		updateHighlights()
+		moveCurrentHighlight()
 		goToCurrentMatch()
 	}
 
@@ -418,7 +434,7 @@ class FindState(
 
 		// An edit since the last search can have moved the match. Its highlight moved with it, so
 		// replace what the user sees highlighted, and only while that is still a match.
-		val highlighted = textState.richSpanManager.getAllRichSpans()
+		val highlighted = textState.decorations(layer)
 			.firstOrNull { it.style === currentMatchStyle }?.range
 			?: _matches[currentMatchIndex]
 		val current = findMatches()
@@ -644,35 +660,83 @@ class FindState(
 	}
 
 	/**
-	 * Update RichSpan highlights for all matches in a single batched relayout.
+	 * Lays a highlight on every match, the current one in its own style, in one redraw. Only
+	 * the lines whose highlights differ from the matches' are laid again, each with its
+	 * highlights in match order.
 	 */
 	private fun updateHighlights() {
-		val newSpans = _matches.mapIndexed { index, range ->
-			val style = if (index == currentMatchIndex) currentMatchStyle else matchStyle
-			RichSpan(range, style)
+		val existing = highlightSpans().groupBy { it.range.start.line }
+		val wanted = HashMap<Int, MutableList<RichSpan>>()
+		_matches.indices.forEach { index -> wanted.getOrPut(_matches[index].start.line) { ArrayList() } += highlight(index) }
+		val remove = ArrayList<RichSpan>()
+		val add = ArrayList<RichSpan>()
+		for (line in existing.keys + wanted.keys) {
+			val have = existing[line].orEmpty()
+			val want = wanted[line].orEmpty()
+			if (have != want) {
+				remove += have
+				add += want
+			}
 		}
-		textState.updateRichSpans(remove = currentHighlightSpans(), add = newSpans)
+		textState.updateRichSpans(remove = remove, add = add)
+		highlightedLines = textState.textLines
+		highlightedIndex = currentMatchIndex
 	}
+
+	/**
+	 * Moves the current highlight to [currentMatchIndex] after a step through [matches]. While
+	 * the text is the one the highlights were laid in, only the lines it leaves and reaches
+	 * change; after an edit every highlight is laid where [matches] say, as by a search.
+	 */
+	private fun moveCurrentHighlight() {
+		val lineCount = textState.textLines.size
+		val from = _matches.getOrNull(highlightedIndex)?.takeIf { it.start.line < lineCount }
+		val to = _matches.getOrNull(currentMatchIndex)?.takeIf { it.start.line < lineCount }
+		// A match past the last line, found before an edit shortened the text, was clamped
+		// onto the last line when laid; only laying them all again finds it there.
+		if (highlightedLines !== textState.textLines || from == null || to == null) {
+			updateHighlights()
+			return
+		}
+		val remove = ArrayList<RichSpan>()
+		val add = ArrayList<RichSpan>()
+		for (line in setOf(from.start.line, to.start.line)) {
+			remove += textState.decorations(layer, line..line).filter { it.isHighlight() }
+			add += highlightsOn(line)
+		}
+		textState.updateRichSpans(remove = remove, add = add)
+		highlightedIndex = currentMatchIndex
+	}
+
+	/** The highlights of the matches on [line], in match order. */
+	private fun highlightsOn(line: Int): List<RichSpan> {
+		var low = 0
+		var high = _matches.size
+		while (low < high) {
+			val mid = (low + high) ushr 1
+			if (_matches[mid].start.line < line) low = mid + 1 else high = mid
+		}
+		val spans = ArrayList<RichSpan>()
+		var index = low
+		while (index < _matches.size && _matches[index].start.line == line) spans += highlight(index++)
+		return spans
+	}
+
+	private fun highlight(index: Int) =
+		RichSpan(_matches[index], if (index == currentMatchIndex) currentMatchStyle else matchStyle)
 
 	/**
 	 * Remove all find-related highlights.
 	 */
 	private fun clearHighlights() {
-		val existing = currentHighlightSpans()
-		if (existing.isNotEmpty()) {
-			textState.updateRichSpans(remove = existing, add = emptyList())
-		}
+		textState.updateRichSpans(remove = highlightSpans(), add = emptyList())
+		highlightedLines = null
 	}
 
-	/**
-	 * The highlight spans currently applied by this find session, identified by
-	 * the two style instances this session owns. Read live from the manager so
-	 * removal stays correct even after an edit transforms span positions.
-	 */
-	private fun currentHighlightSpans(): List<RichSpan> =
-		textState.richSpanManager.getAllRichSpans().filter {
-			it.style === matchStyle || it.style === currentMatchStyle
-		}
+	/** The highlights as edits have moved them, read off [layer] so removal stays correct after an edit. */
+	private fun highlightSpans(): List<RichSpan> = textState.decorations(layer).filter { it.isHighlight() }
+
+	private fun RichSpan.isHighlight(): Boolean = style === matchStyle || style === currentMatchStyle
 
 	/**
 	 * Navigate to the current match - scroll and select.

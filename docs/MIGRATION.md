@@ -26,6 +26,16 @@ carries data for a click. A text colour tints the drawn text, so it wins over a
 colour the text has of its own. `updateRichSpans` with only such spans no
 longer re-resolves the lines they touch. Design: `docs/design/decorations.md`.
 
+## Find on a decoration layer
+
+From the first release after 2.8.0, `FindState` draws its match highlights and
+its in-selection scope on a `DecorationLayer` of its own, and reads and
+replaces them there instead of filtering `getAllRichSpans()`.
+`FindMatchStyle` and `FindCurrentMatchStyle` are `DecorationStyle`s, made with
+a colour and a `layer`; the constructor taking only a colour, which existing
+code calls, puts one on a layer no `FindState` reads or clears. Nothing changes
+on screen.
+
 ## Single line scrolls sideways; wrapping can be turned off
 
 From the first release after 2.8.0, an editor with
