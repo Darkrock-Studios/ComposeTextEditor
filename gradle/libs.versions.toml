@@ -20,6 +20,7 @@ composeBom = "2026.06.01"
 
 symspellkt = "3.4.0"
 spellcheckerkt = "1.3.2"
+highlights = "1.0.0"
 
 maven-publish = "0.37.0"
 dokka = "2.2.0"
@@ -37,6 +38,7 @@ ksoup = { module = "com.fleeksoft.ksoup:ksoup", version.ref = "ksoup" }
 markdown = { module = "org.jetbrains:markdown", version.ref = "markdown" }
 mockk = { module = "io.mockk:mockk", version.ref = "mockk" }
 platform-spellchecker = { module = "com.darkrockstudios:platform-spellcheckerkt", version.ref = "spellcheckerkt" }
+highlights = { module = "dev.snipme:highlights", version.ref = "highlights" }
 
 lifecycle-runtime-ktx = { group = "androidx.lifecycle", name = "lifecycle-runtime-ktx", version.ref = "lifecycleRuntimeKtx" }
 activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "activityCompose" }

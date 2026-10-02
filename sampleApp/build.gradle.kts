@@ -60,6 +60,7 @@ kotlin {
 				implementation(projects.composeTextEditorMarkdown)
 				implementation(projects.composeTextEditorSpellCheck)
 				implementation(projects.composeTextEditorFind)
+				implementation(libs.highlights)
 				implementation(compose.runtime)
 				implementation(compose.foundation)
 				implementation(compose.material3)
@@ -97,6 +98,8 @@ kotlin {
 				implementation(libs.mockk)
 				implementation(libs.kotlinx.coroutines.test)
 				implementation(libs.kotlinx.coroutines.test.jvm)
+				@OptIn(org.jetbrains.compose.ExperimentalComposeLibrary::class)
+				implementation(compose.uiTest)
 			}
 		}
 
