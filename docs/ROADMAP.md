@@ -191,7 +191,7 @@ review.
 | F | Android input | `androidMain` | 0.4, 0.12, 3.9 to 3.11, 3.14, 3.17, 3.22, 4.16, 4.18, 4.20, 4.27, 4.30, 4.31, 4.34, 4.36, 4.41, 7.40 |
 | G | Edit pipeline and undo | `state/TextEditManager.kt`, `state/TextEditHistory.kt`, `state/EditBehavior.kt`, `input/ImeEditLogic.kt` | 1.20, 5.1 to 5.5, 5.9 to 5.11, 5.13 to 5.18, 6.1 to 6.6, 6.14, 6.15, 6.17, 6.22, 6.23, 6.28, 6.29, 6.33 to 6.35, 6.40, 6.45, 6.49, 7.54, 7.55 |
 | H | Clipboard and HTML | `clipboard/`, `html/`, `dragdrop/` | 4.9, 4.13, 4.17, 6.7 to 6.13, 6.18 to 6.21, 5.12, 6.24 to 6.27, 6.30 to 6.32, 6.36 to 6.39, 6.41 to 6.44, 6.46 to 6.48, 7.39, 7.46, 7.47, 7.49, 7.53, 7.63 |
-| I | Markdown and block model | `ComposeTextEditorMarkdown/`, `richstyle/`, `state/TextEditorStateBlockExt.kt` | 5.6, 7.14 to 7.16, 7.43, 7.45, 7.52, 7.64, 7.67, 7.70 to 7.72, 7.79, 7.80, 7.83, 7.85 |
+| I | Markdown and block model | `ComposeTextEditorMarkdown/`, `richstyle/`, `state/TextEditorStateBlockExt.kt` | 5.6, 7.14 to 7.16, 7.43, 7.45, 7.52, 7.64, 7.67, 7.70 to 7.72, 7.79, 7.80, 7.83, 7.85, 7.89 |
 | J | Find addon | `ComposeTextEditorFind/` | 7.17 to 7.19, 7.26, 7.29, 7.42, 7.68, 7.69, 7.88 |
 | K | Spell check addon | `ComposeTextEditorSpellCheck/` | 7.20 to 7.22, 7.28, 7.30, 7.31, 7.34, 7.35, 7.38, 7.44, 7.50, 7.56, 7.61, 7.74, 7.76, 7.77, 7.81, 7.84, 7.88 |
 | L | Tests and CI | test sources, `.github/workflows/` | 0.1 to 0.3, 0.5 to 0.11, 4.1, 4.15, 7.62, 7.65 |
@@ -4864,6 +4864,20 @@ Shaping is one line per keystroke. These still scale with document length:
   to become `DecorationStyle`s, a change to their constructors. Each state
   owning a `DecorationLayer` would let them read and replace their own by line
   (`decorations(layer, lines)`) and drop the scans. Found in 7.86.
+- [ ] **7.89 Tables as a block. S.** [Opus] [Lane I] A proposal, designed in
+  `docs/design/tables.md`: a GFM pipe table imports as literal text today
+  (`MarkdownTables.kt`), export writes a cell's pipe bare, and an HTML paste of
+  a table flattens to tab-separated lines. Hold a table as a run of cell lines,
+  each carrying a per-column `TableCellSpanStyle` (alignment and header baked
+  in, the table row index and column count derived in the `LineFacts` walk as
+  list numerals are), laid out side by side in `RowList` with one top per
+  table row; a `TableEditBehavior` for Enter, Tab, Backspace and Delete at
+  cell edges; import from the parser's GFM table nodes and export with the
+  delimiter row and `\|` escaping, under the fuzz fixpoint; `<table>` in and
+  out of HTML. Inline styles only inside a cell. The chunk plan, the options
+  rejected (one line per table row with a hidden delimiter; an atomic block
+  edited through an overlay) and the risks (the row list's monotonic tops,
+  chunk boundaries, `offset.x` readers) are in the design.
 
 ## Housekeeping
 
