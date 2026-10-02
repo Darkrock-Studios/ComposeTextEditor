@@ -1,5 +1,6 @@
 package utils
 
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.Dp
 import com.darkrockstudios.texteditor.cursor.calculateCursorPosition
@@ -35,9 +36,15 @@ enum class EditorInvariant(vararg val needs: String) {
 	/**
 	 * Without a selection and away from the document start, Left then Right puts the
 	 * caret back: to the same offset, or in a line with right-to-left text to the same
-	 * place on screen, unless Left found nothing further left.
+	 * place in its layout, unless Left found nothing further left.
 	 */
 	LeftThenRightReturns,
+
+	/**
+	 * With wrapping off, what the view answers follows the sideways scroll
+	 * ([assertViewFollowsSidewaysScroll]). With wrapping on there is no sideways range.
+	 */
+	ViewFollowsSidewaysScroll,
 	;
 
 	val onByDefault: Boolean get() = needs.none { it in OPEN_PARITY_ITEMS }
@@ -74,21 +81,22 @@ fun EditorUiTestScope.checkInvariants(invariants: Set<EditorInvariant>) {
 			fail("CaretOnGraphemeBoundary: caret or anchor inside a grapheme cluster in $snapshot")
 		}
 	}
+	if (EditorInvariant.ViewFollowsSidewaysScroll in invariants) assertViewFollowsSidewaysScroll()
 	if (snapshot.hasSelection) return
 	if (EditorInvariant.LeftThenRightReturns in invariants && snapshot.caret > 0) {
 		val line = state.textLines[state.cursorPosition.line].text
 		val visual = line.hasRightToLeft(0, line.length) || state.caretParagraphIsRtl()
-		val drawn = state.calculateCursorPosition().position
+		val drawn = caretInContent()
 		send(Left)
 		// At the first row's left edge Left has nowhere to go, wherever that is in the text.
-		val stuckAtLeftEdge = state.calculateCursorPosition().position == drawn && state.cursorRowIndex() == 0
+		val stuckAtLeftEdge = caretInContent().isNear(drawn) && state.cursorRowIndex() == 0
 		send(Right)
 		if (visual) {
-			// The arrows are visual (7.33): back to the same place on screen, which between
-			// runs of opposite direction two offsets share.
-			val back = state.calculateCursorPosition().position
+			// The arrows are visual (7.33): back to the same place in the layout, which
+			// between runs of opposite direction two offsets share.
+			val back = caretInContent()
 			assertTrue(
-				stuckAtLeftEdge || (abs(back.x - drawn.x) <= 0.5f && back.y == drawn.y),
+				stuckAtLeftEdge || back.isNear(drawn),
 				"LeftThenRightReturns: from $snapshot drawn at $drawn, back at $back",
 			)
 		} else {
@@ -111,10 +119,19 @@ fun EditorUiTestScope.checkInvariants(invariants: Set<EditorInvariant>) {
 	}
 }
 
+/** Within half a pixel sideways, on the same row. */
+private fun Offset.isNear(other: Offset): Boolean = abs(x - other.x) <= 0.5f && y == other.y
+
+/** Where the caret is drawn, in content x, which a sideways scroll does not move. */
+private fun EditorUiTestScope.caretInContent(): Offset =
+	state.calculateCursorPosition().position + Offset(state.horizontalScrollState.value.toFloat(), 0f)
+
 /**
  * Replays a seeded [generateStrokeScript] through the editor alone and checks
  * [invariants] after every stroke. Unlike [differentialFuzz] there is no reference,
- * so the probes in [checkInvariants] are free to move the caret.
+ * so the probes in [checkInvariants] are free to move the caret. With [sideways]
+ * wrapping is off, and the view is scrolled sideways to a seeded point before the
+ * first stroke and after each.
  */
 internal fun invariantFuzz(
 	seed: Long,
@@ -122,17 +139,21 @@ internal fun invariantFuzz(
 	width: Dp,
 	startText: String = FUZZ_START_TEXT,
 	invariants: Set<EditorInvariant> = EditorInvariant.active(),
-) = editorUiTest(initialText = AnnotatedString(startText), width = width) {
+	sideways: Boolean = false,
+) = editorUiTest(initialText = AnnotatedString(startText), width = width, softWrap = !sideways) {
 	val script = generateStrokeScript(seed, count)
+	val scrolls = sidewaysScrolls(seed)
+	if (sideways) scrollSidewaysAtRandom(scrolls)
 	script.forEachIndexed { index, stroke ->
 		send(stroke)
+		if (sideways) scrollSidewaysAtRandom(scrolls)
 		try {
 			checkInvariants(invariants)
 		} catch (failure: AssertionError) {
 			throw AssertionError(
 				"invariant fuzz seed=$seed failed after stroke[$index]=$stroke " +
 					"(replay: FUZZ_SEED=$seed FUZZ_INVARIANTS=${invariants.joinToString(",")}, " +
-					"$count strokes)\n${failure.message}\n" +
+					"$count strokes${if (sideways) ", sideways" else ""})\n${failure.message}\n" +
 					"recent strokes: ${script.subList(maxOf(0, index - 12), index + 1)}",
 				failure,
 			)

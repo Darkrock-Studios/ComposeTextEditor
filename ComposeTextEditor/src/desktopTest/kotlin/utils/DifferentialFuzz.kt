@@ -20,6 +20,10 @@ val OPEN_PARITY_ITEMS: Set<String> = emptySet()
 /** Starting text for the Unicode fuzzers: an emoji, a combining mark, and a right-to-left word. */
 const val FUZZ_START_TEXT = "seed line\nsecond line of words\n\uD83D\uDE00 e\u0301 שלום end"
 
+/** [FUZZ_START_TEXT] with lines wider than a narrow editor, for the fuzzers with wrapping off. */
+const val FUZZ_START_TEXT_UNWRAPPED = "seed line, long enough to run on past the right edge of the editor\n" +
+	"second line of words\n\uD83D\uDE00 e\u0301 שלום end, and then more words to scroll sideways to"
+
 /**
  * Text the fuzzer types: plain words, and every kind of multi-unit grapheme
  * cluster, plus right-to-left and CJK words.
@@ -270,6 +274,9 @@ fun referenceQuirk(
  *
  * To widen the check once a lane A item lands, delete it from [OPEN_PARITY_ITEMS].
  *
+ * [softWrap] and [singleLine] are [differentialUiTest]'s; a single line's script
+ * presses no Enter.
+ *
  * Returns how often each open item or quirk was tolerated.
  */
 internal fun differentialFuzz(
@@ -278,14 +285,19 @@ internal fun differentialFuzz(
 	count: Int,
 	width: Dp,
 	openItems: Set<String> = OPEN_PARITY_ITEMS,
+	softWrap: Boolean = true,
+	singleLine: Boolean = false,
 ): Map<String, Int> {
-	val script = generateStrokeScript(seed, count)
+	val script = generateStrokeScript(seed, count).filter { !singleLine || it != Enter }
 	val tolerated = mutableMapOf<String, Int>()
-	differentialUiTest(initialText = start.text, width = width) {
+	differentialUiTest(initialText = start.text, width = width, softWrap = softWrap, singleLine = singleLine) {
 		assertSameRows()
 		val reference = replayReference(start, script)
 		focusEditor()
 		setEditor(start)
+		val sideways = !softWrap || singleLine
+		val scrolls = sidewaysScrolls(seed)
+		if (sideways) scrollEditorSidewaysAtRandom(scrolls)
 		var before = start
 		var goalColumnLost = false
 		var inVerticalRun = false
@@ -323,7 +335,7 @@ internal fun differentialFuzz(
 
 					stroke.dependsOnRows() && !rowsAgree() -> setOf("reference: rows wrap differently")
 					else -> fail(
-						"differential fuzz seed=$seed diverged at stroke[$index]=$stroke " +
+						"differential fuzz seed=$seed (softWrap=$softWrap, singleLine=$singleLine) diverged at stroke[$index]=$stroke " +
 							"and no open roadmap item explains it (replay with FUZZ_SEED=$seed)\n" +
 							"before  $before\nnative  $native\neditor  $actual\n" +
 							"recent strokes: ${script.subList(maxOf(0, index - 12), index + 1)}\n" +
@@ -335,6 +347,7 @@ internal fun differentialFuzz(
 				goalColumnLost = stroke.isVertical()
 			}
 			before = native
+			if (sideways) scrollEditorSidewaysAtRandom(scrolls)
 		}
 	}
 	return tolerated

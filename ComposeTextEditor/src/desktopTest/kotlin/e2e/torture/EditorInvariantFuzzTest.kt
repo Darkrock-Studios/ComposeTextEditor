@@ -2,6 +2,7 @@ package e2e.torture
 
 import androidx.compose.ui.unit.dp
 import utils.EditorInvariant
+import utils.FUZZ_START_TEXT_UNWRAPPED
 import utils.fuzzSeed
 import utils.invariantFuzz
 import kotlin.test.Test
@@ -18,6 +19,15 @@ import kotlin.test.fail
 class EditorInvariantFuzzTest {
 
 	private fun fuzz(seed: Long) = invariantFuzz(seed = fuzzSeed(seed), count = 120, width = WIDTH)
+
+	/** Wrapping off, the lines wider than the editor, and the view scrolled sideways before each stroke. */
+	private fun sidewaysFuzz(seed: Long) = invariantFuzz(
+		seed = fuzzSeed(seed),
+		count = 120,
+		width = WIDTH,
+		startText = FUZZ_START_TEXT_UNWRAPPED,
+		sideways = true,
+	)
 
 	/** Passes on the first of [seeds] that breaks [invariant], so unrelated fixes cannot retire the check. */
 	private fun assertStillFails(invariant: EditorInvariant, seeds: LongRange = 1L..12L) {
@@ -50,6 +60,21 @@ class EditorInvariantFuzzTest {
 
 	@Test
 	fun `invariant fuzz seed 31337`() = fuzz(31337)
+
+	@Test
+	fun `sideways invariant fuzz seed 1`() = sidewaysFuzz(1)
+
+	@Test
+	fun `sideways invariant fuzz seed 42`() = sidewaysFuzz(42)
+
+	@Test
+	fun `sideways invariant fuzz seed 777`() = sidewaysFuzz(777)
+
+	@Test
+	fun `sideways invariant fuzz seed 20260928`() = sidewaysFuzz(20260928)
+
+	@Test
+	fun `sideways invariant fuzz seed 31337`() = sidewaysFuzz(31337)
 
 	@Test
 	fun `NoLoneSurrogate still fails while its items are open`() =

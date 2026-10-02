@@ -4,9 +4,12 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.input.TextFieldLineLimits
 import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.InternalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -38,11 +41,13 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.darkrockstudios.texteditor.BasicTextEditor
 import com.darkrockstudios.texteditor.CharLineOffset
+import com.darkrockstudios.texteditor.EditorLineLimits
 import com.darkrockstudios.texteditor.rememberTextEditorStyle
 import com.darkrockstudios.texteditor.input.CtrlKeyBindings
 import com.darkrockstudios.texteditor.input.LocalKeyBindings
 import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.rememberTextEditorState
+import kotlin.random.Random
 import kotlin.test.assertEquals
 import kotlin.test.fail
 
@@ -149,6 +154,9 @@ fun type(text: String): Stroke = Stroke.Type(text)
 
 private const val REFERENCE_TEST_TAG = "reference-text-field"
 
+/** Wider than any line a script writes, so the reference wraps none. */
+private val UNWRAPPED_REFERENCE_WIDTH = 20_000.dp
+
 /**
  * Harness for differential tests: composes [BasicTextEditor] beside Compose's own
  * `BasicTextField(TextFieldState)`, the desktop reference for native behaviour
@@ -177,6 +185,12 @@ private const val REFERENCE_TEST_TAG = "reference-text-field"
  * [textDirection] goes into both widgets' text style. Compose's default resolves to
  * the layout direction, so a right-to-left paragraph is left-to-right based unless
  * a host asks for [TextDirection.Content].
+ *
+ * Without [softWrap] the editor's lines do not wrap and its view scrolls sideways.
+ * `BasicTextField` wraps every line of a multi-line field, so the reference is laid
+ * out [UNWRAPPED_REFERENCE_WIDTH] wide instead, where none of its lines wraps either.
+ * [singleLine] makes both one line that scrolls sideways: the editor's
+ * [EditorLineLimits.SingleLine] and the reference's [TextFieldLineLimits.SingleLine].
  */
 @OptIn(ExperimentalTestApi::class)
 internal fun differentialUiTest(
@@ -184,6 +198,8 @@ internal fun differentialUiTest(
 	width: Dp = 400.dp,
 	height: Dp = 300.dp,
 	textDirection: TextDirection = TextDirection.Unspecified,
+	softWrap: Boolean = true,
+	singleLine: Boolean = false,
 	block: DifferentialScope.() -> Unit,
 ) = withPinnedReferenceKeyMapping {
 	runSkikoComposeUiTest {
@@ -203,17 +219,28 @@ internal fun differentialUiTest(
 				Row {
 					BasicTextEditor(
 						state = editorState,
-						modifier = Modifier.size(width, height).testTag(EDITOR_TEST_TAG),
+						modifier = (if (singleLine) Modifier.width(width) else Modifier.size(width, height))
+							.testTag(EDITOR_TEST_TAG),
 						autoFocus = true,
 						style = rememberTextEditorStyle(textStyle = textStyle),
+						lineLimits = if (singleLine) EditorLineLimits.SingleLine else EditorLineLimits.Fill,
+						softWrap = softWrap,
 					)
 					val textWidth = with(LocalDensity.current) { editorState.viewportSize.width.toDp() }
+					val unwrapped = !softWrap && !singleLine
 					BasicTextField(
 						state = fieldState,
 						textStyle = textStyle,
+						lineLimits = if (singleLine) TextFieldLineLimits.SingleLine else TextFieldLineLimits.Default,
 						modifier = Modifier
-							.width(textWidth)
-							.height(height)
+							.then(
+								if (unwrapped) {
+									Modifier.wrapContentWidth(Alignment.Start, unbounded = true).width(UNWRAPPED_REFERENCE_WIDTH)
+								} else {
+									Modifier.width(textWidth)
+								}
+							)
+							.then(if (singleLine) Modifier else Modifier.height(height))
 							.testTag(REFERENCE_TEST_TAG)
 							.focusRequester(fieldFocus)
 							.onFocusChanged { fieldFocused = it.isFocused },
@@ -294,6 +321,14 @@ class DifferentialScope internal constructor(
 
 	/** Sends [stroke] to whichever widget holds focus. */
 	fun send(stroke: Stroke) = test.sendStroke(stroke)
+
+	/** Scrolls the editor sideways to a seeded point of its range, which no stroke's result may depend on. */
+	fun scrollEditorSidewaysAtRandom(random: Random) {
+		val sideways = editor.horizontalScrollState
+		if (sideways.maxValue == 0) return
+		test.runOnIdle { sideways.scrollTo(random.nextInt(sideways.maxValue + 1)) }
+		test.waitForIdle()
+	}
 
 	/**
 	 * Asserts both widgets break the current text into the same visual rows, the
