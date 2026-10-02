@@ -4,8 +4,10 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.TextIndent
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.unit.sp
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.state.RowList
@@ -61,6 +63,18 @@ class SoftWrapLayoutTest {
 		assertEquals(measureLineWidth(long, style), state.rows.contentWidth, 0.5f)
 		val width = ceil(state.rows.contentWidth + state.lineBreakWidth).toInt()
 		assertEquals(width - viewport.width.toInt(), state.horizontalScrollState.maxValue)
+	}
+
+	@Test
+	fun `an indented line stays one row and its indent is in the range`() {
+		val long = "word ".repeat(80).trimEnd()
+		val state = editor("$long\nshort")
+		state.textStyle = style.copy(textIndent = TextIndent(firstLine = 30.sp, restLine = 30.sp))
+		state.settleLayout()
+
+		assertEquals(2, state.lineOffsets.size)
+		assertEquals(measureLineWidth(long, style) + 30f, state.rows.contentWidth, 0.5f)
+		assertEquals(viewport.width.toInt(), state.rows.layoutOf(1).layout.size.width, "a short line keeps the viewport's width")
 	}
 
 	@Test

@@ -44,8 +44,12 @@ sealed interface EditorLineLimits {
 	}
 }
 
-/** The tallest a fixed height can be for any editor width layout can represent. */
-private const val MAX_HEIGHT_PX = (1 shl 18) - 2
+/**
+ * The largest fixed size Compose's `Constraints` hold in one dimension, the other
+ * unbounded: the tallest a fixed height can be for any editor width, and the widest an
+ * unwrapped line can be laid out (7.41).
+ */
+internal const val MAX_FIXED_PX = (1 shl 18) - 2
 
 /**
  * Sizes the editor to [limits]: under [EditorLineLimits.MultiLine], to its laid-out rows
@@ -63,8 +67,8 @@ internal fun Modifier.editorLineLimits(
 	EditorLineLimits.SingleLine -> editorLineLimits(EditorLineLimits.MultiLine(), verticalPaddingPx, rowHeightPx, contentHeightPx)
 	is EditorLineLimits.MultiLine -> layout { measurable, constraints ->
 		val least = rows(rowHeightPx, limits.minLines)
-		val most = if (limits.maxLines == Int.MAX_VALUE) MAX_HEIGHT_PX else rows(rowHeightPx, limits.maxLines)
-		val wanted = (contentHeightPx().coerceIn(least, most) + verticalPaddingPx).coerceAtMost(MAX_HEIGHT_PX)
+		val most = if (limits.maxLines == Int.MAX_VALUE) MAX_FIXED_PX else rows(rowHeightPx, limits.maxLines)
+		val wanted = (contentHeightPx().coerceIn(least, most) + verticalPaddingPx).coerceAtMost(MAX_FIXED_PX)
 		val height = constraints.constrainHeight(wanted)
 		val placeable = measurable.measure(constraints.copy(minHeight = height, maxHeight = height))
 		layout(placeable.width, height) { placeable.place(0, 0) }
@@ -72,4 +76,4 @@ internal fun Modifier.editorLineLimits(
 }
 
 private fun rows(rowHeightPx: Float, count: Int): Int =
-	ceil(rowHeightPx.toDouble() * count).coerceAtMost(MAX_HEIGHT_PX.toDouble()).toInt()
+	ceil(rowHeightPx.toDouble() * count).coerceAtMost(MAX_FIXED_PX.toDouble()).toInt()

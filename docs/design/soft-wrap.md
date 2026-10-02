@@ -137,4 +137,7 @@ with a sideways scroll as with a vertical one.
 - Compose's `Constraints` cannot hold a width past 262,142 pixels, so a line
   wider than that (some 30,000 characters) wraps there.
 - An unbounded measure reads the line's intrinsic width, a second Skia layout
-  pass over the shaped text, which the tight wrapped measure skips.
+  pass over the shaped text, which the tight wrapped measure skips. The intrinsic
+  width leaves out a paragraph's indent, so an indented line it breaks is
+  measured twice more: at the widest width there is, for its text's width, then
+  at that width.

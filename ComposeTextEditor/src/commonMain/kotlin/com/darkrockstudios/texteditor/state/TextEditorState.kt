@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.LineWrap
+import com.darkrockstudios.texteditor.MAX_FIXED_PX
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.annotatedstring.normalizeLineEndings
 import com.darkrockstudios.texteditor.annotatedstring.splitAnnotatedString
@@ -2411,11 +2412,25 @@ class TextEditorState private constructor(
 				else -> line
 			}
 			return try {
-				textMeasurer.measure(text = measureLine, style = measureStyle, softWrap = softWrap, constraints = constraints)
+				val layout = textMeasurer.measure(text = measureLine, style = measureStyle, softWrap = softWrap, constraints = constraints)
+				if (softWrap || layout.lineCount == 1 || layout.size.width >= MAX_FIXED_PX) layout else unwrapped(measureLine)
 			} catch (_: IllegalArgumentException) {
 				// If measurement fails, create an empty layout result
 				textMeasurer.measure(text = AnnotatedString(""), style = measureStyle, softWrap = softWrap, constraints = constraints)
 			}
+		}
+
+		/**
+		 * [line] on one row where its intrinsic width, which leaves out an indent, broke it:
+		 * measured at the widest width there is to find how wide its text is, then at that
+		 * width, or the viewport's for a shorter line, so it aligns as the others do.
+		 */
+		private fun unwrapped(line: AnnotatedString): TextLayoutResult {
+			val widest = textMeasurer.measure(text = line, style = measureStyle, softWrap = false, constraints = Constraints.fixedWidth(MAX_FIXED_PX))
+			if (widest.lineCount > 1) return widest
+			val width = maxOf(viewportSize.width.toInt(), ceil(widest.textExtent()).toInt()).coerceAtMost(MAX_FIXED_PX)
+			val fitted = textMeasurer.measure(text = line, style = measureStyle, softWrap = false, constraints = Constraints.fixedWidth(width))
+			return if (fitted.lineCount == 1) fitted else widest
 		}
 	}
 

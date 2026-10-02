@@ -3512,7 +3512,7 @@ iOS Safari; browser tests run in CI (met: the `browser` job, 4.15).
   takes it too. The iOS and web
   keyboards are 4.32. The semantics' `onImeAction` still reads the setting
   alone (7.59).
-- [ ] **7.41** [Opus] [Lane C] No soft-wrap toggle: every line wraps at the
+- [x] **7.41** [Opus] [Lane C] No soft-wrap toggle: every line wraps at the
   viewport width, so a code editor cannot keep a line whole and scroll
   sideways, and `EditorLineLimits.SingleLine` (7.13) wraps and grows where
   `BasicTextField`'s single line scrolls. Split out of 7.13 because it is not
@@ -3574,7 +3574,25 @@ iOS Safari; browser tests run in CI (met: the `browser` job, 4.15).
   - `SingleLine` scrolls sideways: done. A single-line editor counts as one with
     wrapping off whatever its `softWrap`, so it stays one row tall and follows the
     caret sideways, with no scrollbar (`LineLimitsE2eTest`).
-  - The sample app's switch: not started.
+  - The sample app's switch: done. A Soft wrap switch in the demo, and the Code
+    Editor demo unwrapped, its line numbers placed by a fixed x.
+
+  Done: `softWrap` on the editor composables, `TextEditorState.horizontalScrollState`,
+  and `SingleLine` one row scrolling sideways; checked in rendered frames of a
+  scrolled code fence, selection and single line. An indent the intrinsic width
+  leaves out would wrap an unwrapped line, which is measured again wide enough.
+  `LongDocumentBenchmark` (`CTE_BENCHMARK=1`, 2,000 lines of 99 characters at 400
+  pixels), wrapping on, before and after, medians of two runs each: keystroke 191
+  and 193 us, typing frame 718 and 726 us, idle frame 663 and 660 us, `moveRight`
+  4.3 and 3.7 us, a width change 2,434 and 2,457 us; within the noise. Wrapping
+  off (2,000 rows): keystroke 120 us, typing frame 874 us, idle frame 838 us, a
+  width change 4,298 us. Limits (`docs/design/soft-wrap.md`): the sideways scroll
+  is not saved with the state; `RichTextView` always wraps; scroll 0 is the
+  left edge, so an unfocused right-to-left line wider than the field shows its
+  end; a line wider than 262,142 pixels wraps there; a visible line is drawn
+  whole; Android and iOS show no sideways indicator; a scroll alone does not ask
+  the desktop and web input method to read the caret rectangle again, as with
+  the vertical scroll.
 
 ### Right-to-left and bidirectional text
 
@@ -4911,4 +4929,5 @@ records results and removes entries that passed.
 | 7.8, 7.48 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64` and `:ComposeTextEditor:iosSimulatorArm64Test` (commonMain changed how the lines, rows and spans are stored; no `iosMain` or `skikoMain` change). Then re-time the iOS simulator as 4.21 did (iPhone 17 Pro Max simulator, Debug framework, a 200,000-character document of 2,000 lines of 99 characters, temporary logging): the keyboard's `editText` block and the frames over 20 ms while typing twelve keys, then rotate the device and time the frame the rotation costs and how long the rows take to settle | Before (4.21, `f3b8d8f`): `editText` 9.4 ms median at 200k against 0.7 ms at 2k. A pass: `editText` within a few times the 2k figure, wherever the caret is (desktop went 837 µs to 174 µs, and 2,026 µs to 94 µs with a span on every line); a rotation that shapes only the visible lines at once and settles the rest in the background without the scroll jumping. Record the numbers here and in 7.8 and 7.48 || Partial, 2026-10-01 at `0063e6f6`: compiles, the tests pass, and `editText` is 1.1 ms median at the end of 200k and 1.3 ms at the start (recorded in 7.8). The rotation is left for a person: the simulator tools here cannot rotate the device |
 | 6.20 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64` and `:ComposeTextEditor:iosSimulatorArm64Test`. The `dragdrop/PlatformTextDrag.kt` expects changed: `textDragTransferData` takes a nullable `html`, and `droppedText` an `ownDrag` flag; the iOS actuals (`iosMain/.../dragdrop/PlatformTextDrag.ios.kt`) still answer null and false, by choice (6.20 says why; 6.46 follows up). Common code changed a long press inside the selection while the platform toolbar is up (it tries to start a drag, which on iOS returns at once since `platformDragsText` is false) and a pointer press inside the selection (held through `holdPress`; the wider slop for a drag the platform starts is the web's only). Then on an iPad simulator in the sample app: select a word with a long press and long-press inside it again; with the pointer (I/O > Input > Send Pointer to Device), click inside the selection, and press inside it and drag; with Notes and then Safari beside the sample app in Split View, drag text from them over the editor and drop it | Compiles and the tests pass. The second long press shows the edit menu on lift and starts no drag; the click places the caret and the pointer drag selects from the press, as before; the drops from Notes and Safari land nothing, show no drop caret, and nothing crashes | Compile part passed 2026-10-01 at `0a4ca7ed`, with the iOS tests passing. The rest is for a person |
 | 4.26 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64` and `:ComposeTextEditor:iosSimulatorArm64Test`. `skikoMain` changed: `SkikoTextEditorInputMethodRequest` runs each `editText` block and each `onEditCommand` list as one IME batch (`TextEditorState.imeBatch`), so the edit behaviors are offered what landed once the block ends. No `iosMain` change. Then in the iOS sample app with `SmartPunctuation` added to the editor's `editBehaviors`: type `a--`, `"hi"`, `it's` and `...` with the soft keyboard, with autocorrect on, and undo once after the dash | Compiles and the tests pass. The dash, the curly quotes, the apostrophe and the ellipsis appear as the character is typed, the keyboard's suggestions follow the substituted text (no stray characters, nothing doubled or lost when autocorrect rewrites the word before), and one undo gives `a--` back | Compile and tests passed 2026-10-01 at `e6001af2`. The typing check is for a person, with `SmartPunctuation` added to the sample |
+| 7.41 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64` and `:ComposeTextEditor:iosSimulatorArm64Test`. A new internal `expect`, `EditorHorizontalScrollbar` (commonMain `scrollbar/TextEditorScrollbar.kt`), has an empty `iosMain` actual; `skikoMain` changed: the input method's `unclippedTextOffsetInRoot` subtracts the sideways scroll, `DocumentTextLayout` measures unwrapped with wrapping off, and `EditorVerticalScrollbar.skiko.kt` gained the horizontal bar (used by desktop and web only). Then in the iOS sample app: turn on Single line and type past the right edge; turn it off, turn off Soft wrap, and on a long line drag sideways, then hold the spacebar and move the floating cursor along the line | Compiles and the tests pass. The single line stays one row and follows the caret sideways; the unwrapped text scrolls sideways under a drag with no scrollbar drawn; the floating cursor tracks the finger along the unwrapped line, and the edit menu and handles sit on the text after a sideways scroll | |
 | 3.20 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64` and `:ComposeTextEditor:iosSimulatorArm64Test`. No `iosMain` or `skikoMain` change, but common code now draws the bars in a `Popup` each (`TouchHandlePopups.kt`), which on iOS takes the place of the canvas drawing. Then in the iOS sample app on the simulator: scroll so a line sits on the editor's top edge, double tap a word on it, and drag the start bar by its dot (above the editor) to the left; select a word on the last wholly visible line and drag the end bar by its dot (below the editor) to the right; then scroll the selection out of view and back | Compiles and the tests pass. Each dot draws past the editor's edge and drags its end, with no scroll while the finger stays level; the bars hide once their row's bottom leaves the view and come back with it, leaving no stray bar | |

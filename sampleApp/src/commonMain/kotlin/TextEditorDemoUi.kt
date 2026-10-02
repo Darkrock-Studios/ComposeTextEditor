@@ -118,6 +118,7 @@ fun TextEditorDemoUi(
 	var readOnly by remember { mutableStateOf(false) }
 	var grow by remember { mutableStateOf(false) }
 	var singleLine by remember { mutableStateOf(false) }
+	var softWrap by remember { mutableStateOf(true) }
 	var limited by remember { mutableStateOf(false) }
 	val editable = enabled && !readOnly
 	LaunchedEffect(state, limited) {
@@ -177,6 +178,7 @@ fun TextEditorDemoUi(
 			if (enabled) LabeledSwitch("Read only", readOnly) { readOnly = it }
 			LabeledSwitch("Grow", grow) { grow = it }
 			LabeledSwitch("Single line", singleLine) { singleLine = it }
+			LabeledSwitch("Soft wrap", softWrap) { softWrap = it }
 			LabeledSwitch("280 max", limited) { limited = it }
 			LabeledSwitch("Curly \"quotes\"", punctuation.doubleQuotes) {
 				punctuation = punctuation.copy(doubleQuotes = it)
@@ -221,6 +223,7 @@ fun TextEditorDemoUi(
 				grow -> EditorLineLimits.MultiLine(minLines = 3, maxLines = 8)
 				else -> EditorLineLimits.Fill
 			},
+			softWrap = softWrap,
 			contentDescription = "Document",
 			onRichSpanClick = { span, clickType, _ ->
 				when (clickType) {

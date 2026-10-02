@@ -4,6 +4,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.TextMeasurer
+import androidx.compose.ui.text.style.TextIndent
 import androidx.compose.ui.unit.Constraints
 import com.darkrockstudios.texteditor.state.TextEditorState
 
@@ -38,7 +39,9 @@ internal class DocumentTextLayout(private val state: TextEditorState) {
 		if (!current.matches(key)) {
 			layout = state.textMeasurer.measure(
 				text = AnnotatedString(state.getAllPlainText()),
-				style = current.style,
+				// Unwrapped, every row is its paragraph's first: dropping the indent moves them
+				// all alike, where an intrinsic width without it would break the widest.
+				style = if (current.softWrap) current.style else current.style.copy(textIndent = TextIndent.None),
 				softWrap = current.softWrap,
 				constraints = if (current.softWrap) Constraints(maxWidth = width) else Constraints(minWidth = width),
 				// Keep the document out of the measurer's cache, which the line layouts use.
