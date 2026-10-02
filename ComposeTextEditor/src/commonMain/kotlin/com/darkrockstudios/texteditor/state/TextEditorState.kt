@@ -1875,6 +1875,9 @@ class TextEditorState private constructor(
 		if (keepCaret) onCommit { scrollManager.snapCursorVisible() }
 	}
 
+	/** Whether the rows were laid out for the lines as they are, not left behind them by a skipped pass. */
+	internal val rowsFollowText: Boolean get() = draft == null && lastLayoutLines === textLines
+
 	/**
 	 * Whether the last completed pass laid out the current lines at [width] against the
 	 * current layout inputs, outside any transaction. A pass the collapsed viewport

@@ -237,10 +237,13 @@ fun BasicTextEditor(
 	}
 	val latestOnLinkClick by rememberUpdatedState(onLinkClick)
 	val hasLinkClick = onLinkClick != null
-	val semanticsModifier = remember(state, enabled, editable, focusRequester, contextMenuActions, contentDescription, hasLinkClick, singleLine) {
-		val openLink: ((String) -> Unit)? = if (hasLinkClick) { url -> latestOnLinkClick?.invoke(url) } else null
+	val canvasPlacement = remember { CanvasPlacement() }
+	val semanticsDocument = remember(state, hasLinkClick) {
+		SemanticsDocument(state, canvasPlacement, if (hasLinkClick) { url -> latestOnLinkClick?.invoke(url) } else null)
+	}
+	val semanticsModifier = remember(state, enabled, editable, focusRequester, contextMenuActions, contentDescription, semanticsDocument, singleLine) {
 		Modifier.editorSemantics(
-			state, enabled, editable, singleLine, inputRequester::editor, focusRequester, contextMenuActions, contentDescription, openLink,
+			state, enabled, editable, singleLine, inputRequester::editor, focusRequester, contextMenuActions, contentDescription, semanticsDocument,
 		)
 	}
 	// A stylus stroke on an unfocused editor writes where it began, as in EditText.
@@ -450,6 +453,7 @@ fun BasicTextEditor(
 						// The content canvas's position, below the padding: the desktop IME places
 						// its candidate window by it, and the touch toolbar its menu.
 						.onGloballyPositioned {
+							canvasPlacement.coordinates = it
 							state.canvasLayoutCoordinates = it
 							state.canvasPositionInRoot = it.positionInRoot()
 							state.updateKeyboardCover(imeInsets.getBottom(density))

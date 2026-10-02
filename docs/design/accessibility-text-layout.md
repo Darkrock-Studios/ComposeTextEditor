@@ -132,24 +132,34 @@ next to `getTextLayoutResult` (`this[CharacterBoundsKey] = document`). Unknown k
 are ignored by every platform bridge, so it is inert off Android.
 
 `boundsOf(index)`: `state.getOffsetAtCharacter(index)`, the row through
-`lineOffsets.getWrapForDrawing(position, Downstream)` (a line the rows have not shaped
-yet, after 7.48's lazy width pass, is shaped there as a caret move would shape it: per
-line, cached in the row list, the only measuring a request can trigger), the box from
-`wrap.textLayoutResult.getBoundingBox(position.char)` moved by
-`(0, wrap.paragraphTop - scrollState.value)`, then by the content origin and the node's
-position in root. A line break (`position.char == line.length`) gets the zero-width
-`getCursorRect` at the row's end. `indexAt` is the inverse through
-`getOffsetAtPosition` and `getCharacterIndex`.
+`lineOffsets.getWrapForDrawing(position, Downstream)`, the box from
+`wrap.textLayoutResult.getBoundingBox(position.char)` moved by `(0, wrap.paragraphTop)`
+into document space, then less the scroll (`documentToCanvas`, the one place a
+horizontal scroll term joins the vertical one) onto the canvas, and through the canvas's
+transform to root (`transformFrom`, so a scaled ancestor is mapped as `indexAt` maps
+it). A line break gets the zero-width `getCursorRect` at the row's end. A row whose
+block replaces its text (a rule, an image) answers the block's row, which is what is
+drawn. `indexAt` is the inverse through `getOffsetAtPosition` and `getCharacterIndex`,
+and -1 when there is no answer. Both answer nothing while the rows lag the text (a pass
+skipped while the viewport is collapsed, or inside a transaction).
 
-The node's coordinates: an `onGloballyPositioned` next to `semanticsModifier` on the
-outer box stores its `LayoutCoordinates` in the `SemanticsDocument`; the content
-origin is `outer.localPositionOf(state.canvasLayoutCoordinates, Offset.Zero)`. The
-same in `RichTextView`, whose padding is on its canvas box too.
+A request measures nothing. A line the rows have not shaped at the current width yet,
+after 7.48's lazy width pass, answers from its provisional rows: the draw shapes every
+line in view first, so only lines out of view can be provisional, and Android clips
+their boxes to the node's visible bounds anyway. Shaping one from a request would move
+the scroll and stop a fling under way.
+
+The coordinates: the canvas's `onGloballyPositioned` (below the padding) stores its
+`LayoutCoordinates` in a `CanvasPlacement` the editor remembers apart from its
+`SemanticsDocument`, which is rebuilt when links start or stop being published; the
+`SemanticsDocument` reads it. The same in `RichTextView`, whose padding is on its canvas
+box too. Root coordinates come from the canvas alone, so the semantics node's own
+position does not enter.
 
 Nothing is cached: the rows are the editor's cache and every edit already replaces
-them. A request costs O(length) row lookups and no shaping. Requests arrive on the
-main thread on every platform (Android's interaction controller posts to the view's
-thread; desktop's bridge calls on the EDT), so plain state reads are safe.
+them. Requests arrive on the main thread on every platform (Android's interaction
+controller posts to the view's thread; desktop's bridge calls on the EDT), so plain
+state reads are safe.
 
 ### Android: a delegate wrapper answering the character-location key
 

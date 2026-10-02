@@ -2,6 +2,12 @@ package com.darkrockstudios.texteditor
 
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.Matrix
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.findRootCoordinates
+import androidx.compose.ui.semantics.SemanticsPropertyKey
 import androidx.compose.ui.semantics.SemanticsPropertyReceiver
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.copyText
@@ -39,11 +45,14 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.sp
 import com.darkrockstudios.texteditor.annotatedstring.normalizeLineEndings
 import com.darkrockstudios.texteditor.contextmenu.ContextMenuActions
+import com.darkrockstudios.texteditor.cursor.getWrapForDrawing
 import com.darkrockstudios.texteditor.html.sanitizeLinkUrl
 import com.darkrockstudios.texteditor.input.EditorCommand.Action
 import com.darkrockstudios.texteditor.input.selectionAsTextRange
 import com.darkrockstudios.texteditor.input.startsLine
+import com.darkrockstudios.texteditor.richstyle.BlockSpanStyle
 import com.darkrockstudios.texteditor.richstyle.LinkSpanStyle
+import com.darkrockstudios.texteditor.state.CaretAffinity
 import com.darkrockstudios.texteditor.state.DocumentSnapshot
 import com.darkrockstudios.texteditor.state.FocusedEditor
 import com.darkrockstudios.texteditor.state.RowList
@@ -87,9 +96,8 @@ internal fun Modifier.editorSemantics(
 	focusRequester: FocusRequester,
 	actions: ContextMenuActions,
 	contentDescription: String?,
-	onLinkClick: ((String) -> Unit)?,
+	document: SemanticsDocument,
 ): Modifier {
-	val document = SemanticsDocument(state, onLinkClick)
 	return semantics {
 		editableText = document.text()
 		textSelectionRange = state.selectionAsTextRange()
@@ -100,6 +108,7 @@ internal fun Modifier.editorSemantics(
 		state.inputFilter?.maxLength?.let { maxTextLength = it }
 		contentDescription?.let { this.contentDescription = it }
 		getTextLayoutResult { results -> document.addLayoutTo(results) }
+		this[CharacterBoundsKey] = document
 		clipboardActions(actions)
 		longPressOpensMenu(focusRequester, actions)
 		editorSemanticsEdits(state, enabled, editable, editor)
@@ -189,14 +198,50 @@ internal fun SemanticsPropertyReceiver.selectionSemantics(state: TextEditorState
 }
 
 /**
+ * Where each character of a text node is drawn, answered from the editor's rows, for a
+ * platform bridge that can ask for it instead of measuring `getTextLayoutResult`'s
+ * whole-document layout, which cannot carry the content padding or the scroll.
+ */
+internal interface CharacterBounds {
+	/**
+	 * The character at flat [index] as drawn, in root coordinates, or null when the index
+	 * is out of range or the text is not laid out. A line break is a zero-width box at
+	 * the end of its row.
+	 */
+	fun boundsOf(index: Int): Rect?
+
+	/**
+	 * The caret position nearest [position], in root coordinates, as a flat character
+	 * index, or -1 when the text is not laid out.
+	 */
+	fun indexAt(position: Offset): Int
+}
+
+/** Never merged into an ancestor: the bounds are only this node's text's. */
+internal val CharacterBoundsKey = SemanticsPropertyKey<CharacterBounds>(
+	name = "CharacterBounds",
+	mergePolicy = { parentValue, _ -> parentValue },
+)
+
+/**
+ * Where the canvas the rows are drawn on was last placed, its origin at the content
+ * origin. Kept apart from the [SemanticsDocument], which is rebuilt when links start
+ * or stop being published while the canvas stays where it is.
+ */
+internal class CanvasPlacement {
+	var coordinates: LayoutCoordinates? = null
+}
+
+/**
  * The document as accessibility services see it, each part cached per revision (a
  * snapshot, compared by identity, since every edit publishes a new one). Links are
  * published only with an [onLinkClick] to open them.
  */
 internal class SemanticsDocument(
 	private val state: TextEditorState,
+	private val canvas: CanvasPlacement = CanvasPlacement(),
 	onLinkClick: ((String) -> Unit)?,
-) {
+) : CharacterBounds {
 	private val linkListener = onLinkClick?.let { open ->
 		LinkInteractionListener { link -> open((link as LinkAnnotation.Url).url) }
 	}
@@ -342,7 +387,8 @@ internal class SemanticsDocument(
 	 * What cannot match: the layout starts at the first row's top and the text's left
 	 * edge, so it leaves out the content padding, the space above the first paragraph and
 	 * in the editor the scroll offset (Compose has no way to move a layout, and moving the
-	 * semantics node would move the field's bounds with it); a block shorter than its
+	 * semantics node would move the field's bounds with it; [CharacterBounds] answers from
+	 * the rows where a platform bridge can ask for it instead); a block shorter than its
 	 * line's text, a block on any row but its line's last, and a block on the last line
 	 * (which has no line break to carry a placeholder) keep the text's height.
 	 */
@@ -460,6 +506,44 @@ internal class SemanticsDocument(
 	} catch (_: IllegalArgumentException) {
 		null
 	}
+
+	/**
+	 * Measures nothing: a line the draw has not shaped at the current width yet (only
+	 * lines out of view, after a width change) answers from its provisional rows. A line
+	 * whose block replaces its text answers the block's row.
+	 */
+	override fun boundsOf(index: Int): Rect? {
+		val canvas = canvas.coordinates?.takeIf { it.isAttached } ?: return null
+		if (index < 0 || index >= state.getTextLength() || !state.rowsFollowText) return null
+		val position = state.getOffsetAtCharacter(index)
+		val row = state.lineOffsets.getWrapForDrawing(position, CaretAffinity.Downstream)
+			?.takeIf { it.line == position.line } ?: return null
+		val layout = row.textLayoutResult
+		val laidOut = layout.layoutInput.text.length
+		val inDocument = when {
+			row.richSpans.any { (it.style as? BlockSpanStyle)?.replacesText() == true } ->
+				Rect(0f, row.offset.y, state.viewportSize.width, row.offset.y + row.effectiveHeight)
+			// The draw anchors a line's layout at its paragraph's top.
+			position.char < minOf(laidOut, state.textLines[position.line].length) ->
+				layout.getBoundingBox(position.char).translate(row.offset.x, row.paragraphTop)
+			else -> layout.getCursorRect(position.char.coerceAtMost(laidOut))
+				.let { Rect(it.left, it.top, it.left, it.bottom) }
+				.translate(row.offset.x, row.paragraphTop)
+		}
+		val toRoot = Matrix()
+		canvas.findRootCoordinates().transformFrom(canvas, toRoot)
+		return toRoot.map(inDocument.translate(documentToCanvas()))
+	}
+
+	override fun indexAt(position: Offset): Int {
+		val canvas = canvas.coordinates?.takeIf { it.isAttached } ?: return -1
+		if (!state.rowsFollowText) return -1
+		val local = canvas.localPositionOf(canvas.findRootCoordinates(), position)
+		return state.getCharacterIndex(state.getOffsetAtPosition(local))
+	}
+
+	/** Where document space's origin sits on the canvas. */
+	private fun documentToCanvas() = Offset(0f, -state.scrollState.value.toFloat())
 }
 
 private const val ZERO_WIDTH_SPACE = '​'

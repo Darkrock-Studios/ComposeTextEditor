@@ -77,8 +77,9 @@ fun RichTextView(
 	val currentOnLinkClick by rememberUpdatedState(onLinkClick)
 	val linkClicks = remember { LinkClicks.forReadOnly { currentOnLinkClick } }
 	val hasLinkClick = onLinkClick != null
+	val canvasPlacement = remember { CanvasPlacement() }
 	val document = remember(state, hasLinkClick) {
-		SemanticsDocument(state, if (hasLinkClick) { url -> currentOnLinkClick?.invoke(url) } else null)
+		SemanticsDocument(state, canvasPlacement, if (hasLinkClick) { url -> currentOnLinkClick?.invoke(url) } else null)
 	}
 
 	LaunchedEffect(style.textStyle) {
@@ -152,6 +153,7 @@ fun RichTextView(
 					.then(inputModifierElement)
 					.focusable(enabled = true, interactionSource = interactionSource)
 					.then(semantics),
+				canvasPlacement = canvasPlacement,
 				contentPadding = contentPadding,
 				style = style,
 				isSelectable = true,
@@ -164,6 +166,7 @@ fun RichTextView(
 		RichTextViewBody(
 			state = state,
 			modifier = modifier.then(remember(document) { Modifier.viewSemantics(document) {} }),
+			canvasPlacement = canvasPlacement,
 			contentPadding = contentPadding,
 			style = style,
 			isSelectable = false,
@@ -178,6 +181,7 @@ fun RichTextView(
 private fun RichTextViewBody(
 	state: TextEditorState,
 	modifier: Modifier,
+	canvasPlacement: CanvasPlacement,
 	contentPadding: PaddingValues,
 	style: TextEditorStyle,
 	isSelectable: Boolean,
@@ -229,8 +233,6 @@ private fun RichTextViewBody(
 					handles = style.handleShape.look,
 				)
 				.padding(contentPadding)
-				// The touch toolbar is placed in root coordinates, from the canvas's.
-				.onGloballyPositioned { state.canvasLayoutCoordinates = it }
 				.textMagnifier(state, style)
 		} else {
 			Modifier
@@ -242,6 +244,11 @@ private fun RichTextViewBody(
 		// The canvas: a box, so the handles' popups are placed from its content.
 		Box(
 			modifier = pointerModifier
+				.onGloballyPositioned {
+					canvasPlacement.coordinates = it
+					// The touch toolbar is placed in root coordinates, from the canvas's.
+					if (isSelectable) state.canvasLayoutCoordinates = it
+				}
 				.fillMaxWidth()
 				.height(with(density) { contentHeightPx.toDp() })
 				.graphicsLayer { clip = false }
@@ -269,5 +276,6 @@ private fun Modifier.viewSemantics(
 ): Modifier = semantics {
 	text = document.text()
 	getTextLayoutResult { results -> document.addLayoutTo(results) }
+	this[CharacterBoundsKey] = document
 	more()
 }
