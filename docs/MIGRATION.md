@@ -26,6 +26,25 @@ carries data for a click. A text colour tints the drawn text, so it wins over a
 colour the text has of its own. `updateRichSpans` with only such spans no
 longer re-resolves the lines they touch. Design: `docs/design/decorations.md`.
 
+## Single line scrolls sideways; wrapping can be turned off
+
+From the first release after 2.8.0, an editor with
+`lineLimits = EditorLineLimits.SingleLine` keeps its text on one row and
+scrolls sideways to follow the caret, as `BasicTextField`'s single line does,
+where it used to wrap and grow. `softWrap = false` on `BasicTextEditor`,
+`TextEditor` and `SpellCheckingTextEditor` does the same for a whole document
+(a code editor). Nothing changes for an editor that wraps.
+
+With wrapping off, the sideways scroll is `TextEditorState.horizontalScrollState`,
+and what the state reports in view coordinates accounts for it as for the
+vertical scroll: `getPositionForOffset`, `calculateCursorPosition` and
+`lastCursorMetrics` subtract it, `getOffsetAtPosition` adds it. A `decorateLine`
+decorator's offset is where the line's text is drawn, so it moves with the
+sideways scroll; a gutter that placed itself by `offset.x` should use a fixed x
+instead (the sample's `CodeEditor` does). Wrapping is the layout's, which the
+state owns: a single-line editor stops every editor showing the same state from
+wrapping.
+
 ## Chords matched on `layoutKey`
 
 From the first release after 2.8.0, the built-in key bindings match letter

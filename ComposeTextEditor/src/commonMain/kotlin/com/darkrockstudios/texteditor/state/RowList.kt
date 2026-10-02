@@ -131,26 +131,28 @@ internal class LineLayout(
 			}
 			val spaceBefore = format?.spaceBefore?.takeIf { it.isSpecified }?.let { density?.run { it.toPx() } } ?: 0f
 			val spaceAfter = format?.spaceAfter?.takeIf { it.isSpecified }?.let { density?.run { it.toPx() } } ?: inputs.paragraphSpacing
-			val textWidth = if (inputs.softWrap) 0f else naturalWidth(layout, rows)
+			val textWidth = if (inputs.softWrap) 0f else layout.textExtent()
 			return LineLayout(layout, rowStarts, rowEnds, rowTops, blockHeights, orderedListNumber, codeFenceBoundary, counters, generation, spaceBefore, spaceAfter, textWidth)
 		}
 
-		/**
-		 * The widest of [layout]'s rows without the width it was laid out at: a short
-		 * line's layout is the viewport wide, for its alignment, and a right-to-left row's
-		 * text ends at the layout's right edge.
-		 */
-		private fun naturalWidth(layout: TextLayoutResult, rows: Int): Float {
-			val ltr = layout.getParagraphDirection(0) == ResolvedTextDirection.Ltr
-			var widest = 0f
-			for (row in 0 until rows) {
-				val end = layout.rowEndX(row)
-				// Text hanging left of the layout cannot be scrolled to; it must not widen the range on the right.
-				widest = maxOf(widest, if (ltr) end else layout.size.width - end.coerceAtLeast(0f))
-			}
-			return widest
-		}
 	}
+}
+
+/**
+ * How wide the text of this layout's widest row is, from the side the paragraph starts on
+ * to the row's end with its trailing spaces and indent, whatever width it was laid out at:
+ * a short line's layout is the viewport wide, for its alignment, and a right-to-left row's
+ * text ends at the layout's right edge.
+ */
+internal fun TextLayoutResult.textExtent(): Float {
+	val ltr = getParagraphDirection(0) == ResolvedTextDirection.Ltr
+	var widest = 0f
+	for (row in 0 until lineCount) {
+		val end = rowEndX(row)
+		// Text hanging left of the layout cannot be scrolled to; it must not widen the range on the right.
+		widest = maxOf(widest, if (ltr) end else size.width - end.coerceAtLeast(0f))
+	}
+	return widest
 }
 
 /** The paragraph format among the spans on [line], the one starting there. */
