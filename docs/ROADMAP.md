@@ -4838,6 +4838,25 @@ Shaping is one line per keystroke. These still scale with document length:
   `DecorationCostTest`, `DecorationDrawingTest`, the `decorations` golden;
   `docs/design/decorations.md`, `docs/MIGRATION.md`).
   Spell check and find stay on `updateRichSpans`: moving them is 7.88.
+- [x] **7.87 Syntax highlighting in the code editor demo.** [Opus] On the
+  `syntax-highlighting` branch, over `soft-wrap`. The sample's code editor
+  colours code with the Highlights library (`dev.snipme:highlights`, sample
+  only), as a decoration layer (7.86), so the colours stay out of undo,
+  copies and exports. A language picker over Highlights' languages, Kotlin by
+  default; Atom One in the light theme, Darcula in the dark; switches for the
+  highlighting and soft wrap; a 5,000-line sample.
+  Done: after each pause in typing (150 ms) the text is analysed off the main
+  thread and the lines from the first whose colours change to the last are
+  replaced in one step; a result is dropped when the text changed since it was
+  taken. Highlights' analysis grows with the square of the text (about a
+  second for 5,000 lines), and its incremental mode only follows text added at
+  the end, so the sample cuts the file into pieces, at blank lines or lines
+  their text picks, outside the language's block comments and multi-line
+  strings, and analyses only the pieces whose text changed: 5,000 lines take
+  105 ms from nothing and 17 ms after a keystroke, off the main thread, and
+  the apply on it 6 ms and 0.08 ms. Version 1.0.0, as 1.1.0's JVM classes need Java 21
+  and the sample runs on 17 (`SyntaxHighlightingTest`,
+  `SyntaxHighlightingBenchmark`, `CodeEditorScreenshotTest`).
 - [ ] **7.88 Spell check and find on decoration layers. S.** [Opus] [Lanes J,
   K] Both find their own overlays by filtering `getAllRichSpans()` by style,
   which builds the whole span set each time, and both public style classes
@@ -4974,3 +4993,4 @@ records results and removes entries that passed.
 | 4.26 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64` and `:ComposeTextEditor:iosSimulatorArm64Test`. `skikoMain` changed: `SkikoTextEditorInputMethodRequest` runs each `editText` block and each `onEditCommand` list as one IME batch (`TextEditorState.imeBatch`), so the edit behaviors are offered what landed once the block ends. No `iosMain` change. Then in the iOS sample app with `SmartPunctuation` added to the editor's `editBehaviors`: type `a--`, `"hi"`, `it's` and `...` with the soft keyboard, with autocorrect on, and undo once after the dash | Compiles and the tests pass. The dash, the curly quotes, the apostrophe and the ellipsis appear as the character is typed, the keyboard's suggestions follow the substituted text (no stray characters, nothing doubled or lost when autocorrect rewrites the word before), and one undo gives `a--` back | Compile and tests passed 2026-10-01 at `e6001af2`. The typing check is for a person, with `SmartPunctuation` added to the sample |
 | 7.41 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64` and `:ComposeTextEditor:iosSimulatorArm64Test`. A new internal `expect`, `EditorHorizontalScrollbar` (commonMain `scrollbar/TextEditorScrollbar.kt`), has an empty `iosMain` actual; `skikoMain` changed: the input method's `unclippedTextOffsetInRoot` subtracts the sideways scroll, `DocumentTextLayout` measures unwrapped with wrapping off, and `EditorVerticalScrollbar.skiko.kt` gained the horizontal bar (used by desktop and web only). Then in the iOS sample app: turn on Single line and type past the right edge; turn it off, turn off Soft wrap, and on a long line drag sideways, then hold the spacebar and move the floating cursor along the line | Compiles and the tests pass. The single line stays one row and follows the caret sideways; the unwrapped text scrolls sideways under a drag with no scrollbar drawn; the floating cursor tracks the finger along the unwrapped line, and the edit menu and handles sit on the text after a sideways scroll | |
 | 3.20 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64` and `:ComposeTextEditor:iosSimulatorArm64Test`. No `iosMain` or `skikoMain` change, but common code now draws the bars in a `Popup` each (`TouchHandlePopups.kt`), which on iOS takes the place of the canvas drawing. Then in the iOS sample app on the simulator: scroll so a line sits on the editor's top edge, double tap a word on it, and drag the start bar by its dot (above the editor) to the left; select a word on the last wholly visible line and drag the end bar by its dot (below the editor) to the right; then scroll the selection out of view and back | Compiles and the tests pass. Each dot draws past the editor's edge and drags its end, with no scroll while the finger stays level; the bars hide once their row's bottom leaves the view and come back with it, leaving no stray bar | |
+| 7.86, 7.87 | On the `syntax-highlighting` branch: `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64` and `:sampleApp:compileKotlinIosSimulatorArm64` (the sample now depends on Highlights 1.0.0, which publishes iOS klibs; core draws decoration text colours as a `SrcAtop` tint in a layer, common code only). Then open the Code Editor demo in the iOS sample app, type in it, toggle Soft wrap, and load the 5,000 lines | Compiles; the code shows Atom One colours (Darcula in dark mode), typing recolours the line after a pause without stutter, the colours stay put while scrolling and wrapping, and emoji keep their colours | |
