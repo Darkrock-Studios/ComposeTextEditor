@@ -1318,7 +1318,7 @@ Constraints that shape the order:
   pass. By hand on the iPhone 17 Pro Max simulator (iOS 26): the dots draw
   past the editor's top and bottom edges and drag their ends, and the bars
   hide and come back with their rows on a scroll.
-- [ ] **3.21 Touch handles at a bidi run's edge. S.** [Opus] [Lane B]
+- [x] **3.21 Touch handles at a bidi run's edge. S.** [Opus] [Lane B]
   Compose places a selection handle at the edge of the bidi run the selected
   character is in (`getHorizontalPosition(offset, isStart, ...)`) and hangs it
   by that run's direction. The editor places it at the caret's x for the
@@ -1327,6 +1327,7 @@ Constraints that shape the order:
   on the Hebrew word's left edge, where "abc " ends, rather than on its right
   edge, where its first letter is. Place and hang each end as Compose does,
   and check the selection highlight agrees. Found in 3.19.
+  Won't fix: only touch selection across mixed-direction text, and the highlight is already right; rare for Hammer's users.
 - [x] **3.22 Handwriting gestures show no preview on Android. S.** [Opus]
   [Lane F] Gboard previews a select or delete gesture while the stylus is
   still down (`previewHandwritingGesture`, API 34); `BasicTextField`
@@ -1709,7 +1710,7 @@ Also seen:
   from its node in the accessibility tree Compose mirrors into the page.
   Found 4.35, marked `test.fixme`. A real IME in each browser (4.12) is still
   a person's check.
-- [ ] **4.35 A browser composition can land at a stale offset. R.** [Opus]
+- [x] **4.35 A browser composition can land at a stale offset. R.** [Opus]
   [Lane E] With Chromium's own input method events (4.15), a composition
   started after moving the caret by key can land away from the caret: in
   "ab" after Left, "か" landed at the line end in three runs of five (one in
@@ -1726,6 +1727,7 @@ Also seen:
   in the middle of a line" and "a composition after Home lands at the line
   start", both `test.fixme`.
   Deferred: Hammer has no web target.
+  Won't fix: web only, and Hammer has no web target.
 - [x] **4.21 Whole-document mirror per edit. S.** [Opus] [Lane E] Compose's web
   session copies `request.value().text` into the backing `<textarea>` after
   every edit, and iOS snapshots `state.text` the same way, so each keystroke
@@ -2262,7 +2264,7 @@ iOS Safari; browser tests run in CI (met: the `browser` job, 4.15).
   session ends and UIKit's tab reaches no editor. The handled Tab's own echo
   was the bug found there, fixed in 2.9.
 - [ ] **4.41 A stale connection's close ends its successor's composition. S.**
-  [Fable] [Lane F] `TextEditorInputConnection.closeConnection` finishes the
+  [Fable] [Human] [Lane F] `TextEditorInputConnection.closeConnection` finishes the
   state's composition (5.9) whichever connection it is, while
   `connectionClosed` guards on `activeConnection`. Android closes the old
   connection after `restartInput` has opened and started the new one, posted
@@ -3373,7 +3375,7 @@ iOS Safari; browser tests run in CI (met: the `browser` job, 4.15).
   other edits the keyboard did not make (cut, yank, a host's `insertTypedString`)
   still end one unoffered, all needing a composition alive beside a selection or
   a host edit mid-word (`clipboard/PasteOverCompositionTest.kt`).
-- [ ] **6.49 A copied image or rule pasted inside a line leaves a space. C.**
+- [x] **6.49 A copied image or rule pasted inside a line leaves a space. C.**
   [Opus] [Lane G] An image or horizontal rule line holds a one-space
   placeholder under its `BlockSpanStyle`. Copying the placeholder without its
   line break and pasting it inside or at the end of a text line lands the bare
@@ -3381,6 +3383,7 @@ iOS Safari; browser tests run in CI (met: the `browser` job, 4.15).
   model has no inline image. Paste such a block onto a line of its own (split
   the line, as Word puts a pasted picture in its own paragraph when it cannot sit
   inline), or leave the placeholder out. Found in 6.40's review.
+  Won't fix: an unusual copy (the placeholder without its line break); Hammer users rarely copy images around.
 - [x] **6.48 A moved run without formatting takes the formatting where it lands.
   R.** [Opus] [Lane H] A drop inserts its text through `insertStringAtCursor`,
   which gives text with no span styles of its own the caret's style there, so
