@@ -14,6 +14,7 @@ import com.darkrockstudios.texteditor.spellcheck.diagnostics.DiagnosticStyle
 import com.darkrockstudios.texteditor.spellcheck.diagnostics.LineDiagnostic
 import com.darkrockstudios.texteditor.spellcheck.diagnostics.TextDiagnosticsChecker
 import com.darkrockstudios.texteditor.spellcheck.diagnostics.TextDiagnosticsState
+import com.darkrockstudios.texteditor.state.EditorInputFilter
 import com.darkrockstudios.texteditor.state.TextEditOperation
 import com.darkrockstudios.texteditor.state.TextEditorState
 import io.mockk.every
@@ -128,6 +129,48 @@ class TextDiagnosticsStateTest {
 
 		assertEquals("Over the hill.", textState.getAllText().text)
 		assertTrue(spans().isEmpty())
+	}
+
+	@Test
+	fun `a fix the input filter refuses keeps the underline`() = runTest {
+		textState.setText("Over the the hill.")
+		val state = diagnostics()
+		state.refresh()
+		val underline = spans().single()
+		textState.inputFilter = EditorInputFilter { _, _, _ -> null }
+
+		state.applyFix(underline, "the")
+
+		assertEquals("Over the the hill.", textState.getAllText().text)
+		assertEquals(listOf(underline.range), spans().map { it.range })
+	}
+
+	@Test
+	fun `a fix the input filter changes is an edit like any other`() = runTest {
+		textState.setText("Over the the hill.")
+		val state = diagnostics()
+		state.refresh()
+		val underline = spans().single()
+		textState.inputFilter = EditorInputFilter { _, _, text -> AnnotatedString(text.text.take(2)) }
+
+		state.applyFix(underline, "the")
+
+		assertEquals("Over th hill.", textState.getAllText().text)
+		assertTrue(spans().isEmpty())
+	}
+
+	@Test
+	fun `a fix leaves the other underlines on its text alone`() = runTest {
+		textState.setText("Over the the hill.")
+		val state = diagnostics()
+		state.refresh()
+		val underline = spans().single()
+		val other = RichSpan(range(0, 0, 18), DiagnosticStyle("Long", emptyList(), Color.Yellow, DiagnosticSeverity.Suggestion))
+		textState.updateRichSpans(remove = emptyList(), add = listOf(other))
+
+		state.applyFix(underline, "the")
+
+		assertEquals(listOf(other.style), spans().map { it.style })
 	}
 
 	@Test

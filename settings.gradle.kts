@@ -35,5 +35,6 @@ dependencyResolutionManagement {
 include(":ComposeTextEditor")
 include(":ComposeTextEditorSpellCheck")
 include(":ComposeTextEditorFind")
+include(":ComposeTextEditorMarkdown")
 include(":sampleApp")
 include(":androidApp")

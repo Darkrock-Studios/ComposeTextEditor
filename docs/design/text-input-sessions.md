@@ -34,8 +34,14 @@ if none is running. It never restarts a live one for a tap, since a restart
 resets the keyboard mid-word and discards whatever it had in flight.
 
 A session starts only when the user asks for input, because starting one
-raises the soft keyboard: on gaining focus, or on a tap. Re-enabling a focused
-editor restores its focus state but waits for a tap. Rebinding it to a
+raises the soft keyboard: on gaining focus, or on a tap. Turning input back on
+under focus (`enabled`, or `readOnly` switched off) restores the focus state and,
+where the platform can keep the keyboard down (`startsInputQuietly`: Android and
+desktop), starts a session with a request to hide the keyboard queued behind it,
+which Android's input service coalesces with the session's own request to show,
+so the keyboard never rises; a tap then shows it in that session. iOS and the web
+wait for a tap, since their keyboard follows the session's first responder or
+focused text area. Rebinding the editor to a
 different state restarts a live session, since a session is bound to its
 state.
 
@@ -128,7 +134,8 @@ any departure from it.
 `createInputConnection` returns a `TextEditorInputConnection` bound to the
 session's view and populates `EditorInfo`: the input type and action from the
 host's `TextEditorState.keyboardSettings` (by default multi-line text with
-autocorrect and sentence caps, Enter as a new line), no fullscreen extract UI,
+autocorrect and sentence caps, Enter as a new line; single-line text with Done
+for an editor limited to one line), no fullscreen extract UI,
 the initial selection in flat character indices, the caps mode at the caret,
 and, from API 30, the text around the caret. The action key a connection was
 opened with calls the host's `onImeAction`, or the default the modifier node
@@ -236,10 +243,14 @@ stylus handwriting, and some candidate windows) is requested by the IME via
 `requestCursorUpdates` and sent by the flush whenever the selection report
 changes, and while it monitors, whenever the caret moves on screen without
 the selection changing (a scroll, a relayout, the editor moving or resizing
-in its window): the flush compares the caret's geometry and the view's screen
-location too, and remembers what any report sent, an immediate one included.
-A view that moves on screen with nothing in the editor changing is not
-noticed until the next flush (roadmap 4.31). The marker is the caret
+in its window, the strip a keyboard covers): the flush compares the caret's
+geometry
+and the view's screen location too, and remembers what any report sent, an
+immediate one included. While it monitors, each frame that draws the view
+somewhere else on screen than the last anchor said resends the anchor alone,
+as `TextView` checks its position on each frame: that catches a view that
+moves with nothing in the editor changing (a window panned for the keyboard,
+a scrolling parent). The marker is the caret
 measured from the layout as it is sent (the last frame's drawn caret is one
 move behind), in the view's coordinates (the canvas's position in the Compose
 root, so content padding and scroll are in it), with flags saying whether its
@@ -393,23 +404,27 @@ What the browser delivers, and when (`DomInputStrategy` and
   order, so a Backspace `keydown` that Compose consumed suppresses the
   textarea's own `deleteContentBackward`.
 
-Which path owns plain typing therefore follows DOM focus, and the browser
-gives a keystroke to one element only. With the textarea focused, typing is
-`commitText` and the character-input predicate never sees it. A mouse press
-on the canvas moves DOM focus there even when Compose focus stays on the
-editor: a right-click (which skips `requestInput`, so a menu is not covered
-by a phone keyboard), a toolbar button that takes no focus, a context menu
-item. Canvas key events cannot tell some typed characters from named keys,
-so while its session is live the web input service listens for `focusin` on
-the viewport's shadow root and hands DOM focus from the canvas straight back
-to the textarea. The listener sits on the shadow root because a focus move
-inside a shadow tree is not reported outside it, and it is removed as the
-session is cancelled. A touch is left alone: a tap Compose did not consume
-blurs the textarea to hide the soft keyboard, and refocusing would raise it
-again.
+Which path owns plain typing therefore follows DOM focus, and the browser gives
+a keystroke to one element only. With the textarea focused, typing is
+`commitText` and the character-input predicate never sees it. A mouse press on
+the canvas moves DOM focus there even when Compose focus stays on the editor: a
+right-click (which skips `requestInput`, so a menu is not covered by a phone
+keyboard), a toolbar button that takes no focus, a context menu item. Canvas key
+events cannot tell some typed characters from named keys, so while its session
+is live the web input service listens for `focusin` on the viewport's shadow
+root and hands DOM focus from the canvas straight back to the textarea. The
+listener sits on the shadow root because a focus move inside a shadow tree is
+not reported outside it, and it is removed as the session is cancelled. The
+textarea prevents a Tab's default itself and leaves the key to Compose's focus
+system; when that moves focus off the editor the session ends and Compose
+removes the focused textarea, which would drop DOM focus to the page body, so a
+task later the session puts it back on the canvas, unless the last press was
+outside the viewport or something else has taken focus. A touch is left alone:
+a tap Compose did not consume blurs the textarea to hide the soft keyboard, and
+refocusing would raise it again.
 
 The canvas keeps DOM focus only while the editor has no session (a focused
-editor disabled and enabled again waits for a tap) or after such a touch,
+editor disabled and enabled again waits for a tap on the web) or after such a touch,
 and a keystroke then
 arrives as a canvas `keydown` carrying the character, which the predicate
 (`KeyDown`) accepts. The same keystroke cannot reach both elements, but two
@@ -428,7 +443,11 @@ bindings a frame later. `ClipboardEventsEffect` (in `clipboard/`) uses the event
 to move the data, since only then may the page use the clipboard without a
 permission prompt, and prevents the textarea's own plain-text copy or paste; the
 Copy, Cut and Paste actions the key then runs do the editing and take the data
-from there rather than from `navigator.clipboard`.
+from there rather than from `navigator.clipboard`. Without a session (a disabled
+or read-only editor, a `RichTextView`) the canvas holds DOM focus, and Compose
+takes a key there before the browser fires any clipboard event, so a copy chord
+pressed on a Compose canvas asks for a `copy` event with `execCommand('copy')`
+first, in the capture phase.
 
 Compose sets `autocapitalize="off"` on every backing field whatever the
 `ImeOptions` say, so the web session sets it back to `sentences`, as the

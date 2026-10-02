@@ -4,9 +4,11 @@ import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.markdown.MarkdownExtension
 import com.darkrockstudios.texteditor.state.TextEditorState
+import com.darkrockstudios.texteditor.state.toggleBulletList
+import com.darkrockstudios.texteditor.state.toggleCodeFence
 import io.mockk.mockk
-import kotlinx.coroutines.test.TestScope
 import kotlin.test.Test
+import kotlinx.coroutines.test.TestScope
 
 /**
  * Found by EditorStateFuzzTest seed 987654321, hand-shrunk: a delete that joins a
@@ -26,8 +28,8 @@ class ParagraphOverlapCrashTest {
 	fun `typing after a delete across a fence to bullet boundary must not crash`() {
 		val (state, markdown) = editor()
 		markdown.importMarkdown("aaa\nbbb\nccc")
-		markdown.toggleCodeFence(0..1)
-		markdown.toggleBulletList(2..2)
+		markdown.editorState.toggleCodeFence(0..1)
+		markdown.editorState.toggleBulletList(2..2)
 
 		state.delete(TextEditorRange(CharLineOffset(1, 1), CharLineOffset(2, 1)))
 		state.cursor.updatePosition(CharLineOffset(1, 1))
@@ -38,8 +40,8 @@ class ParagraphOverlapCrashTest {
 	fun `typing after a delete across a bullet to fence boundary must not crash`() {
 		val (state, markdown) = editor()
 		markdown.importMarkdown("aaa\nbbb\nccc")
-		markdown.toggleBulletList(0..0)
-		markdown.toggleCodeFence(1..2)
+		markdown.editorState.toggleBulletList(0..0)
+		markdown.editorState.toggleCodeFence(1..2)
 
 		state.delete(TextEditorRange(CharLineOffset(0, 1), CharLineOffset(1, 1)))
 		state.cursor.updatePosition(CharLineOffset(0, 1))

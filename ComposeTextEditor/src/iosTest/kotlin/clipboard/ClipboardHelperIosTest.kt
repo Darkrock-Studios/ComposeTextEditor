@@ -5,21 +5,21 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
+import com.darkrockstudios.texteditor.RichTextStyles
 import com.darkrockstudios.texteditor.clipboard.readPlain
 import com.darkrockstudios.texteditor.clipboard.readStyled
 import com.darkrockstudios.texteditor.clipboard.writeStyled
 import com.darkrockstudios.texteditor.html.toHtml
-import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
-import platform.Foundation.NSString
-import platform.Foundation.NSUTF8StringEncoding
-import platform.Foundation.dataUsingEncoding
-import platform.UIKit.UIPasteboard
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import platform.Foundation.NSString
+import platform.Foundation.NSUTF8StringEncoding
+import platform.Foundation.dataUsingEncoding
+import platform.UIKit.UIPasteboard
 
 /**
  * The iOS clipboard's reads and writes against a real UIPasteboard (roadmap 4.9). A
@@ -27,7 +27,7 @@ import kotlin.test.assertTrue
  */
 class ClipboardHelperIosTest {
 	private val pasteboard = UIPasteboard.pasteboardWithUniqueName()
-	private val configuration = MarkdownConfiguration.DEFAULT
+	private val styles = RichTextStyles.DEFAULT
 
 	@AfterTest
 	fun removePasteboard() {
@@ -59,7 +59,7 @@ class ClipboardHelperIosTest {
 
 	@Test
 	fun a_copy_offers_markup_beside_its_text_in_one_item() {
-		pasteboard.writeStyled(bold.text, bold.toHtml(configuration))
+		pasteboard.writeStyled(bold.text, bold.toHtml(styles))
 
 		assertEquals(1L, pasteboard.numberOfItems)
 		assertEquals("plain bold", pasteboard.string)
@@ -68,9 +68,9 @@ class ClipboardHelperIosTest {
 
 	@Test
 	fun a_copy_pastes_back_bold() {
-		pasteboard.writeStyled(bold.text, bold.toHtml(configuration))
+		pasteboard.writeStyled(bold.text, bold.toHtml(styles))
 
-		val pasted = assertNotNull(pasteboard.readStyled(configuration).text)
+		val pasted = assertNotNull(pasteboard.readStyled(styles).text)
 
 		assertEquals("plain bold", pasted.text)
 		assertTrue(pasted.isBold("bold"), "bold survives: ${pasted.spanStyles}")
@@ -81,7 +81,7 @@ class ClipboardHelperIosTest {
 		val markup = "<ul><li>one <b>two</b></li></ul>"
 		offer(html = markup, text = "one two")
 
-		val paste = pasteboard.readStyled(configuration)
+		val paste = pasteboard.readStyled(styles)
 
 		assertTrue(assertNotNull(paste.text).isBold("two"))
 		assertEquals(markup, paste.html)
@@ -91,7 +91,7 @@ class ClipboardHelperIosTest {
 	fun plain_text_alone_pastes_as_it_is() {
 		offer(html = null, text = "just text")
 
-		val paste = pasteboard.readStyled(configuration)
+		val paste = pasteboard.readStyled(styles)
 
 		assertEquals("just text", paste.text?.text)
 		assertNull(paste.html)
@@ -113,16 +113,16 @@ class ClipboardHelperIosTest {
 
 	@Test
 	fun a_copy_carries_its_copy_id() {
-		pasteboard.writeStyled(bold.text, bold.toHtml(configuration), copyId = 42L)
+		pasteboard.writeStyled(bold.text, bold.toHtml(styles), copyId = 42L)
 
-		assertEquals(42L, pasteboard.readStyled(configuration).copyId)
+		assertEquals(42L, pasteboard.readStyled(styles).copyId)
 	}
 
 	@Test
 	fun another_apps_content_has_no_copy_id() {
 		offer(html = "<p>theirs</p>", text = "theirs")
 
-		assertNull(pasteboard.readStyled(configuration).copyId)
+		assertNull(pasteboard.readStyled(styles).copyId)
 	}
 
 	/** The in-editor span buffer matches the copied characters, which the markup must not change. */
@@ -130,14 +130,14 @@ class ClipboardHelperIosTest {
 	fun an_own_copy_whose_markup_reparses_to_other_text_pastes_its_own_text() {
 		pasteboard.writeStyled("a  b", "<p>a  b</p>", copyId = 7L)
 
-		assertEquals("a  b", pasteboard.readStyled(configuration).text?.text)
+		assertEquals("a  b", pasteboard.readStyled(styles).text?.text)
 	}
 
 	@Test
 	fun several_items_paste_one_per_line() {
 		offerItems("first", "second")
 
-		assertEquals("first\nsecond", pasteboard.readStyled(configuration).text?.text)
+		assertEquals("first\nsecond", pasteboard.readStyled(styles).text?.text)
 		assertEquals("first\nsecond", pasteboard.readPlain())
 	}
 
@@ -145,7 +145,7 @@ class ClipboardHelperIosTest {
 	fun an_empty_pasteboard_pastes_nothing() {
 		pasteboard.setItems(emptyList<Any?>())
 
-		assertNull(pasteboard.readStyled(configuration).text)
+		assertNull(pasteboard.readStyled(styles).text)
 		assertNull(pasteboard.readPlain())
 	}
 }

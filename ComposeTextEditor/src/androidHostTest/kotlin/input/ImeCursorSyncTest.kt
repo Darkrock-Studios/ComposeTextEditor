@@ -1,6 +1,7 @@
 package input
 
 import android.view.View
+import android.view.ViewTreeObserver
 import android.view.inputmethod.InputConnection
 import android.view.inputmethod.InputMethodManager
 import androidx.compose.runtime.getValue
@@ -10,15 +11,20 @@ import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.text.AnnotatedString
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
+import com.darkrockstudios.texteditor.input.DrawWatch
 import com.darkrockstudios.texteditor.input.ImeCaretGeometry
 import com.darkrockstudios.texteditor.input.ImeCursorSync
 import com.darkrockstudios.texteditor.input.ImeUpdateSink
 import com.darkrockstudios.texteditor.input.TextEditorInputConnection
+import com.darkrockstudios.texteditor.input.ViewDrawWatch
+import com.darkrockstudios.texteditor.input.ViewDrawn
 import com.darkrockstudios.texteditor.state.CursorAnchor
 import com.darkrockstudios.texteditor.state.EditBehavior
 import com.darkrockstudios.texteditor.state.TextEditorState
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.slot
+import io.mockk.verify
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
@@ -358,10 +364,10 @@ class ImeCursorSyncTest {
 		assertSame(view, state.platformExtensions.imeView)
 	}
 
-	private fun caretAt(top: Float, viewY: Int = 0) = CursorAnchor(
+	private fun caretAt(top: Float, viewY: Int = 0, bottomVisible: Boolean = true) = CursorAnchor(
 		ImeCaretGeometry(
 			x = 10f, top = top, baseline = top + 12f, bottom = top + 16f,
-			topVisible = true, bottomVisible = true,
+			topVisible = true, bottomVisible = bottomVisible,
 		),
 		viewX = 0,
 		viewY = viewY,
@@ -450,6 +456,137 @@ class ImeCursorSyncTest {
 			watching.stopSync()
 		} finally {
 			Dispatchers.resetMain()
+		}
+	}
+
+	/** Stands in for the view's pre-draw callbacks. */
+	private class FakeDrawWatch : DrawWatch {
+		var watched: View? = null
+		private var onDraw: ViewDrawn? = null
+		override fun watch(view: View, onDraw: ViewDrawn): () -> Unit {
+			watched = view
+			this.onDraw = onDraw
+			return {
+				watched = null
+				this.onDraw = null
+			}
+		}
+
+		fun draw(screenY: Int) = checkNotNull(onDraw) { "draws are not watched" }.drawn(0, screenY)
+	}
+
+	/** Runs [block] with a started sync that watches draws through [draws], its anchor from [anchorOf]. */
+	@OptIn(ExperimentalCoroutinesApi::class)
+	private fun monitoredSync(draws: DrawWatch, anchorOf: () -> CursorAnchor?, block: (ImeCursorSync) -> Unit) {
+		Dispatchers.setMain(UnconfinedTestDispatcher())
+		try {
+			editor("hello")
+			val watching = ImeCursorSync(state, sink, cursorAnchor = anchorOf, drawWatch = draws) { posted += it }
+			try {
+				watching.startSync()
+				state.platformExtensions.cursorAnchorMonitoringEnabled = true
+				Snapshot.sendApplyNotifications()
+				runPosted()
+				sink.events.clear()
+				block(watching)
+			} finally {
+				watching.stopSync()
+			}
+		} finally {
+			Dispatchers.resetMain()
+		}
+	}
+
+	/** An `adjustPan` window or a scrolling parent moves the view with nothing in the editor changing (4.31). */
+	@Test
+	fun `a view moving on screen alone resends the monitored anchor as it draws`() {
+		val draws = FakeDrawWatch()
+		var viewY = 0
+		monitoredSync(draws, anchorOf = { caretAt(0f, viewY = viewY) }) {
+			draws.draw(screenY = 0)
+			assertTrue(sink.events.isEmpty(), "an unmoved view reports nothing")
+
+			viewY = -300
+			draws.draw(screenY = -300)
+
+			assertEquals(listOf("anchor"), sink.events, "sent with the frame, not posted after it")
+		}
+	}
+
+	@Test
+	fun `draws are watched only while the anchor is monitored`() {
+		val draws = FakeDrawWatch()
+		monitoredSync(draws, anchorOf = { caretAt(0f) }) { sync ->
+			assertSame(state.platformExtensions.imeView, draws.watched)
+
+			state.platformExtensions.cursorAnchorMonitoringEnabled = false
+			Snapshot.sendApplyNotifications()
+			assertEquals(null, draws.watched)
+
+			state.platformExtensions.cursorAnchorMonitoringEnabled = true
+			Snapshot.sendApplyNotifications()
+			assertSame(state.platformExtensions.imeView, draws.watched)
+			sync.stopSync()
+			assertEquals(null, draws.watched)
+		}
+	}
+
+	/** A restart opens a new connection, whose keyboard asks to monitor again before any flow runs. */
+	@Test
+	fun `a new connection's view is watched in place of the old one`() {
+		val draws = FakeDrawWatch()
+		monitoredSync(draws, anchorOf = { caretAt(0f) }) {
+			val view = mockk<View>(relaxed = true)
+			TextEditorInputConnection(state, view)
+			state.platformExtensions.cursorAnchorMonitoringEnabled = true
+			Snapshot.sendApplyNotifications()
+
+			assertSame(view, draws.watched)
+		}
+	}
+
+	@Test
+	fun `the view's watch holds a draw listener only while it is attached`() {
+		val view = mockk<View>(relaxed = true)
+		val observer = mockk<ViewTreeObserver>(relaxed = true)
+		val attachment = slot<View.OnAttachStateChangeListener>()
+		val listener = slot<ViewTreeObserver.OnDrawListener>()
+		every { view.isAttachedToWindow } returns true
+		every { view.viewTreeObserver } returns observer
+		every { observer.isAlive } returns true
+		every { view.addOnAttachStateChangeListener(capture(attachment)) } returns Unit
+		every { observer.addOnDrawListener(capture(listener)) } returns Unit
+		every { view.getLocationOnScreen(any()) } answers { firstArg<IntArray>()[1] = 42 }
+		val drawnAt = mutableListOf<Int>()
+
+		val stop = ViewDrawWatch.watch(view) { _, y -> drawnAt += y }
+		listener.captured.onDraw()
+		attachment.captured.onViewDetachedFromWindow(view)
+		attachment.captured.onViewAttachedToWindow(view)
+		stop()
+
+		assertEquals(listOf(42), drawnAt)
+		verify(exactly = 2) { observer.addOnDrawListener(listener.captured) }
+		verify(exactly = 2) { observer.removeOnDrawListener(listener.captured) }
+		verify { view.removeOnAttachStateChangeListener(attachment.captured) }
+	}
+
+	/** A keyboard switched to floating uncovers the caret, which the marker's flags carry (4.31). */
+	@Test
+	fun `a change in the keyboard cover alone resends the monitored anchor`() {
+		val covered = { state.scrollManager.obscuredBottomPx > 0 }
+		val draws = FakeDrawWatch()
+		monitoredSync(draws, anchorOf = { caretAt(0f, bottomVisible = !covered()) }) {
+			state.scrollManager.obscuredBottomPx = 40
+			Snapshot.sendApplyNotifications()
+			runPosted()
+			assertEquals(listOf("anchor"), sink.events)
+			sink.events.clear()
+
+			// The cover alone moves nothing on screen, so the frame it draws needs no report.
+			draws.draw(screenY = 0)
+
+			assertTrue(sink.events.isEmpty())
 		}
 	}
 

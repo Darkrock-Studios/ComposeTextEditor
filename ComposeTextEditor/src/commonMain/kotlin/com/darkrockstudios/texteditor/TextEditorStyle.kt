@@ -75,6 +75,12 @@ data class TextEditorStyle(
 	/** Width of the caret. The default matches `BasicTextField`'s. */
 	val cursorWidth: Dp = 2.dp,
 	/**
+	 * The space below every paragraph, as a word processor's "space after". Zero, as
+	 * plain text fields have it; a paragraph's own format
+	 * ([com.darkrockstudios.texteditor.richstyle.ParagraphFormatSpanStyle]) overrides it.
+	 */
+	val paragraphSpacing: Dp = 0.dp,
+	/**
 	 * Selection colour while the editor does not have focus, dimmed as native editors
 	 * dim it. `Color.Unspecified` falls back to [selectionColor] at half its alpha.
 	 */
@@ -133,11 +139,13 @@ fun rememberTextEditorStyle(
 	// A neutral grey, as macOS and browsers draw a selection whose editor lost focus.
 	unfocusedSelectionColor: Color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f),
 	handleColor: Color = MaterialTheme.colorScheme.primary,
+	paragraphSpacing: Dp = 0.dp,
 ): TextEditorStyle = remember(
 	textColor, backgroundColor, placeholderText, placeholderColor,
 	cursorColor, selectionColor, focusedBorderColor, unfocusedBorderColor, textStyle,
 	bulletColor, blockquoteBarColor, blockquoteBackgroundColor, orderedListMarkerColor,
 	codeFenceBackgroundColor, codeFenceBorderColor, cursorWidth, unfocusedSelectionColor, handleColor,
+	paragraphSpacing,
 ) {
 	TextEditorStyle(
 		textColor = textColor,
@@ -158,5 +166,6 @@ fun rememberTextEditorStyle(
 		cursorWidth = cursorWidth,
 		unfocusedSelectionColor = unfocusedSelectionColor,
 		handleColor = handleColor,
+		paragraphSpacing = paragraphSpacing,
 	)
 }

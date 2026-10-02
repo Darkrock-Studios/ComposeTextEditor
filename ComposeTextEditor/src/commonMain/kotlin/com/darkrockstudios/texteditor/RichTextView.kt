@@ -28,6 +28,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.text
 import androidx.compose.ui.semantics.textSelectionRange
 import androidx.compose.ui.unit.dp
+import com.darkrockstudios.texteditor.clipboard.ClipboardEventsEffect
 import com.darkrockstudios.texteditor.contextmenu.ContextMenuActions
 import com.darkrockstudios.texteditor.contextmenu.ContextMenuOpener
 import com.darkrockstudios.texteditor.contextmenu.ContextMenuPlacement
@@ -81,6 +82,10 @@ fun RichTextView(
 		state.textStyle = style.textStyle
 	}
 
+	LaunchedEffect(style.paragraphSpacing) {
+		state.paragraphSpacing = style.paragraphSpacing
+	}
+
 	val density = LocalDensity.current
 
 	LaunchedEffect(density) {
@@ -101,6 +106,7 @@ fun RichTextView(
 		}
 		val menuPlacement = remember(state, contextMenuState) { ContextMenuPlacement(state, contextMenuState) }
 		ContextMenuOpener(state, menuPlacement)
+		ClipboardEventsEffect(state)
 		val textToolbar = LocalTextToolbar.current
 		val nativeTextToolbar = LocalNativeTextToolbar.current
 		val touchToolbar = remember(state, textToolbar, nativeTextToolbar, contextMenuActions, menuPlacement) {

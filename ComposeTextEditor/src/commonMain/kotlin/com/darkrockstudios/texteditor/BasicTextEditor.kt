@@ -61,10 +61,12 @@ import com.darkrockstudios.texteditor.input.TextEditorInputModifierElement
 import com.darkrockstudios.texteditor.input.TextInputRequester
 import com.darkrockstudios.texteditor.richstyle.BlockSpanStyle
 import com.darkrockstudios.texteditor.state.LayoutUpdate
+import com.darkrockstudios.texteditor.state.LocalImeInsets
 import com.darkrockstudios.texteditor.richstyle.RichSpan
 import com.darkrockstudios.texteditor.scrollbar.TextEditorScrollbar
 import com.darkrockstudios.texteditor.state.SpanClickType
 import com.darkrockstudios.texteditor.state.TextEditorState
+import com.darkrockstudios.texteditor.state.measuresKeyboardCover
 import com.darkrockstudios.texteditor.state.rememberTextEditorState
 import com.darkrockstudios.texteditor.state.updateKeyboardCover
 import kotlinx.coroutines.delay
@@ -207,14 +209,11 @@ fun BasicTextEditor(
 		state.density = density
 	}
 
-	// A soft keyboard drawn over the window covers the bottom of the viewport. The
-	// canvas's position feeds the same measure when it moves (see onGloballyPositioned).
-	// Focus decides whose keyboard it is, so a focus change measures again too.
-	val imeInsets by rememberUpdatedState(WindowInsets.ime)
-	LaunchedEffect(state, density) {
-		snapshotFlow { imeInsets.getBottom(density) to state.isFocused }
-			.collect { (keyboardHeight, _) -> state.updateKeyboardCover(keyboardHeight) }
-	}
+	// A soft keyboard drawn over the window covers the bottom of the viewport: measured
+	// on the canvas (measuresKeyboardCover), and again when it moves (onGloballyPositioned).
+	// The local is static and unset outside tests, so the call order stays fixed.
+	val imeInsets by rememberUpdatedState(LocalImeInsets.current ?: WindowInsets.ime)
+	val imeInsetsProvider = remember { { imeInsets } }
 	val caretFocusRect = remember(state) { CaretFocusRect(state) }
 	// Use provided context menu state or create internal one
 	val internalContextMenuState = remember { TextEditorContextMenuState() }
@@ -287,6 +286,10 @@ fun BasicTextEditor(
 		state.orderedListMarkerColor = style.orderedListMarkerColor
 		state.codeFenceBackgroundColor = style.codeFenceBackgroundColor
 		state.codeFenceBorderColor = style.codeFenceBorderColor
+	}
+
+	LaunchedEffect(style.paragraphSpacing) {
+		state.paragraphSpacing = style.paragraphSpacing
 	}
 
 	// Re-run layout when an asynchronous block-state change (e.g. an image
@@ -378,6 +381,7 @@ fun BasicTextEditor(
 						.textMagnifier(state)
 						.background(style.backgroundColor)
 						.onSizeChanged { size -> state.onViewportSizeChange(size.toSize()) }
+						.measuresKeyboardCover(state, imeInsetsProvider)
 						// The content canvas's position, below the padding: the desktop IME places
 						// its candidate window by it, and the touch toolbar its menu.
 						.onGloballyPositioned {

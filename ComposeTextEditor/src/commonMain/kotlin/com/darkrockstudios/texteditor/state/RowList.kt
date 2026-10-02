@@ -3,10 +3,12 @@ package com.darkrockstudios.texteditor.state
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.isSpecified
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.CodeFenceBoundary
 import com.darkrockstudios.texteditor.LineWrap
 import com.darkrockstudios.texteditor.richstyle.BlockSpanStyle
+import com.darkrockstudios.texteditor.richstyle.ParagraphFormatSpanStyle
 import com.darkrockstudios.texteditor.richstyle.RichSpan
 
 /**
@@ -14,8 +16,9 @@ import com.darkrockstudios.texteditor.richstyle.RichSpan
  * character bounds and tops, read from the [layout] once, the block height of each
  * row, the ordered-list numeral, the code-fence edge, the ordered-list counters as
  * they stand after the line, so a pass can resume the numbering walk from any line,
- * and the [generation] of layout inputs it was shaped under: a line shaped under an
- * older one is provisional until the settling reshape reaches it (7.48).
+ * the paragraph spacing above and below its rows (5.7), and the [generation] of
+ * layout inputs it was shaped under: a line shaped under an older one is provisional
+ * until the settling reshape reaches it (7.48).
  * The rows a [RowList] hands out are built from this on read.
  */
 internal class LineLayout(
@@ -33,37 +36,41 @@ internal class LineLayout(
 	/** The ordered-list counter of each nesting level after this line; shared and never written. */
 	val counters: IntArray,
 	val generation: Int,
+	/** The space above the first row and below the last, in pixels; outside every row. */
+	val spaceBefore: Float,
+	val spaceAfter: Float,
 ) {
 	val rowCount: Int get() = rowStarts.size
 
-	val height: Float get() = rowTops[rowCount]
+	/** The rows' heights and the spacing around them. */
+	val height: Float get() = spaceBefore + rowTops[rowCount] + spaceAfter
 
 	fun blockHeight(row: Int): Float? = blockHeights?.get(row)?.takeUnless { it.isNaN() }
 
 	/** This layout with the facts a walk derived, itself when they are the same. */
 	fun withFacts(facts: LineFacts): LineLayout =
 		if (facts.orderedListNumber == orderedListNumber && facts.codeFenceBoundary == codeFenceBoundary && facts.counters.contentEquals(counters)) this
-		else LineLayout(layout, rowStarts, rowEnds, rowTops, blockHeights, facts.orderedListNumber, facts.codeFenceBoundary, facts.counters, generation)
+		else LineLayout(layout, rowStarts, rowEnds, rowTops, blockHeights, facts.orderedListNumber, facts.codeFenceBoundary, facts.counters, generation, spaceBefore, spaceAfter)
 
-	/** This layout resolved again for [spans] on its line, which may have changed its block heights, and [facts]. */
-	fun withSpans(line: Int, spans: List<RichSpan>, density: Density?, width: Float, facts: LineFacts): LineLayout =
-		resolve(layout, line, rowStarts, rowEnds, spans, density, width, facts.orderedListNumber, facts.codeFenceBoundary, facts.counters, generation)
+	/** This layout resolved again for [spans] on its line, which may have changed its block heights or spacing, and [facts]. */
+	fun withSpans(line: Int, spans: List<RichSpan>, inputs: LineInputs, facts: LineFacts): LineLayout =
+		resolve(layout, line, rowStarts, rowEnds, spans, spans.paragraphFormat(line), inputs, facts.orderedListNumber, facts.codeFenceBoundary, facts.counters, generation)
 
-	/** The line shaped again into [layout] under [generation], keeping the facts, which shaping does not change. */
-	fun reshaped(layout: TextLayoutResult, line: Int, spans: List<RichSpan>, density: Density?, width: Float, generation: Int): LineLayout =
-		of(layout, line, spans, density, width, orderedListNumber, codeFenceBoundary, counters, generation)
+	/** The line shaped again into [layout] under [generation] with [format], keeping the facts, which shaping does not change. */
+	fun reshaped(layout: TextLayoutResult, line: Int, spans: List<RichSpan>, format: ParagraphFormatSpanStyle?, inputs: LineInputs, generation: Int): LineLayout =
+		of(layout, line, spans, format, inputs, orderedListNumber, codeFenceBoundary, counters, generation)
 
 	companion object {
-		/** The layout of a line shaped into [layout] under [generation], with [spans] on it. */
-		fun of(layout: TextLayoutResult, line: Int, spans: List<RichSpan>, density: Density?, width: Float, facts: LineFacts, generation: Int): LineLayout =
-			of(layout, line, spans, density, width, facts.orderedListNumber, facts.codeFenceBoundary, facts.counters, generation)
+		/** The layout of a line shaped into [layout] under [generation] with [format], with [spans] on it. */
+		fun of(layout: TextLayoutResult, line: Int, spans: List<RichSpan>, format: ParagraphFormatSpanStyle?, inputs: LineInputs, facts: LineFacts, generation: Int): LineLayout =
+			of(layout, line, spans, format, inputs, facts.orderedListNumber, facts.codeFenceBoundary, facts.counters, generation)
 
 		private fun of(
 			layout: TextLayoutResult,
 			line: Int,
 			spans: List<RichSpan>,
-			density: Density?,
-			width: Float,
+			format: ParagraphFormatSpanStyle?,
+			inputs: LineInputs,
 			orderedListNumber: Int?,
 			codeFenceBoundary: CodeFenceBoundary?,
 			counters: IntArray,
@@ -74,24 +81,29 @@ internal class LineLayout(
 				layout, line,
 				rowStarts = IntArray(rows) { layout.getLineStart(it) },
 				rowEnds = IntArray(rows) { layout.getLineEnd(it) },
-				spans, density, width, orderedListNumber, codeFenceBoundary, counters, generation,
+				spans, format, inputs, orderedListNumber, codeFenceBoundary, counters, generation,
 			)
 		}
 
-		/** A block span's height applies to each row it intersects, at the viewport's [width]. */
+		/**
+		 * A block span's height applies to each row it intersects, at the viewport's
+		 * width; a paragraph format's spacing, or the editor's, goes around the rows.
+		 */
 		private fun resolve(
 			layout: TextLayoutResult,
 			line: Int,
 			rowStarts: IntArray,
 			rowEnds: IntArray,
 			spans: List<RichSpan>,
-			density: Density?,
-			width: Float,
+			format: ParagraphFormatSpanStyle?,
+			inputs: LineInputs,
 			orderedListNumber: Int?,
 			codeFenceBoundary: CodeFenceBoundary?,
 			counters: IntArray,
 			generation: Int,
 		): LineLayout {
+			val density = inputs.density
+			val width = inputs.width
 			val paragraph = layout.multiParagraph
 			val rows = rowStarts.size
 			var blockHeights: FloatArray? = null
@@ -111,10 +123,24 @@ internal class LineLayout(
 				val block = blockHeights?.get(row)?.takeUnless { it.isNaN() }
 				rowTops[row + 1] = rowTops[row] + (block ?: paragraph.getLineHeight(row))
 			}
-			return LineLayout(layout, rowStarts, rowEnds, rowTops, blockHeights, orderedListNumber, codeFenceBoundary, counters, generation)
+			val spaceBefore = format?.spaceBefore?.takeIf { it.isSpecified }?.let { density?.run { it.toPx() } } ?: 0f
+			val spaceAfter = format?.spaceAfter?.takeIf { it.isSpecified }?.let { density?.run { it.toPx() } } ?: inputs.paragraphSpacing
+			return LineLayout(layout, rowStarts, rowEnds, rowTops, blockHeights, orderedListNumber, codeFenceBoundary, counters, generation, spaceBefore, spaceAfter)
 		}
 	}
 }
+
+/** The paragraph format among the spans on [line], the one starting there. */
+internal fun List<RichSpan>.paragraphFormat(line: Int): ParagraphFormatSpanStyle? {
+	for (span in this) {
+		val style = span.style as? ParagraphFormatSpanStyle ?: continue
+		if (span.range.start.line == line) return style
+	}
+	return null
+}
+
+/** The layout inputs a line's layout depends on besides its shaping: the density, the viewport width and the editor's paragraph spacing in pixels. */
+internal class LineInputs(val density: Density?, val width: Float, val paragraphSpacing: Float)
 
 /**
  * The laid-out rows ([TextEditorState.lineOffsets]): one [LineLayout] per logical
@@ -197,15 +223,16 @@ internal class RowList private constructor(
 			val rowEnd = layout.rowEnds[row]
 			val onLine = spans.spansOn(line)
 			val rowSpans = if (onLine.isEmpty()) onLine else onLine.filter { it.intersectsRow(line, rowStart, rowEnd) }
+			val textTop = lineTop + layout.spaceBefore
 			LineWrap(
 				line = line,
 				wrapStartsAtIndex = rowStart,
 				virtualLength = rowEnd - rowStart,
 				virtualLineIndex = row,
-				offset = Offset(0f, (lineTop + layout.rowTops[row]).toFloat()),
+				offset = Offset(0f, (textTop + layout.rowTops[row]).toFloat()),
 				textLayoutResult = layout.layout,
 				richSpans = rowSpans,
-				paragraphTop = lineTop.toFloat(),
+				paragraphTop = textTop.toFloat(),
 				blockHeight = layout.blockHeight(row),
 				orderedListNumber = layout.orderedListNumber,
 				codeFenceBoundary = layout.codeFenceBoundary,
@@ -259,11 +286,11 @@ internal class RowList private constructor(
 	}
 
 	/** Row [index]'s top, the same float [get] gives its offset. */
-	private fun rowTopOf(index: Int): Float = at(index) { _, layout, row, lineTop -> (lineTop + layout.rowTops[row]).toFloat() }
+	private fun rowTopOf(index: Int): Float = at(index) { _, layout, row, lineTop -> (lineTop + layout.spaceBefore + layout.rowTops[row]).toFloat() }
 
 	/** Row [index]'s bottom, its top plus its height as `LineWrap.effectiveHeight` reads it. */
 	private fun rowBottomOf(index: Int): Float = at(index) { _, layout, row, lineTop ->
-		(lineTop + layout.rowTops[row]).toFloat() + (layout.blockHeight(row) ?: layout.layout.multiParagraph.getLineHeight(row))
+		(lineTop + layout.spaceBefore + layout.rowTops[row]).toFloat() + (layout.blockHeight(row) ?: layout.layout.multiParagraph.getLineHeight(row))
 	}
 
 	/**

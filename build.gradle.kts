@@ -12,9 +12,16 @@ plugins {
 	alias(libs.plugins.dokka)
 }
 
-// Aggregates the three published library modules into a single API doc site.
+// Each desktop suite runs in one JVM. Room above Gradle's 512 MB default for tests
+// that build long documents on mocks, which record every call (docs/ROADMAP.md, 0.10).
+subprojects {
+	tasks.withType<Test>().matching { it.name == "desktopTest" }.configureEach { maxHeapSize = "1g" }
+}
+
+// Aggregates the four published library modules into a single API doc site.
 dependencies {
 	dokka(project(":ComposeTextEditor"))
+	dokka(project(":ComposeTextEditorMarkdown"))
 	dokka(project(":ComposeTextEditorFind"))
 	dokka(project(":ComposeTextEditorSpellCheck"))
 }

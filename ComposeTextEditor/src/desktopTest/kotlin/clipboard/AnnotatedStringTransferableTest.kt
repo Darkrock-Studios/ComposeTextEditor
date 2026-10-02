@@ -2,9 +2,9 @@ package clipboard
 
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.buildAnnotatedString
+import com.darkrockstudios.texteditor.RichTextStyles
 import com.darkrockstudios.texteditor.clipboard.AnnotatedStringTransferable
 import com.darkrockstudios.texteditor.html.toAnnotatedStringFromHtml
-import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
 import java.awt.datatransfer.DataFlavor
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -13,7 +13,7 @@ import kotlin.test.assertTrue
 
 class AnnotatedStringTransferableTest {
 
-	private val config = MarkdownConfiguration.DEFAULT
+	private val config = RichTextStyles.DEFAULT
 
 	private fun styled(): AnnotatedString = buildAnnotatedString {
 		append("Hello ")

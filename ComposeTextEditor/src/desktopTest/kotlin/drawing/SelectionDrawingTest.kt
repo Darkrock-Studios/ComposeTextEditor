@@ -4,7 +4,6 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextIndent
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -26,8 +25,9 @@ class SelectionDrawingTest {
 	private fun TextEditorState.select(from: Int, to: Int) =
 		selector.updateSelection(getOffsetAtCharacter(from), getOffsetAtCharacter(to))
 
+	/** One space in the editor's text style, with no indent. */
 	private fun TextEditorState.spaceWidth(): Float =
-		textMeasurer.measure(" ", TextStyle.Default).size.width.toFloat()
+		textMeasurer.measure(" ", textStyle.copy(textIndent = TextIndent.None)).size.width.toFloat()
 
 	private fun TextEditorState.rowTop(row: Int): Float = lineOffsets[row].offset.y - scrollState.value
 
@@ -114,7 +114,7 @@ class SelectionDrawingTest {
 	fun `the sliver is a space wide even when the text style has an indent`() = editorUiTest(
 		initialText = AnnotatedString("one\n\nthree"),
 	) {
-		state.textStyle = TextStyle(textIndent = TextIndent(firstLine = 32.sp))
+		state.textStyle = state.textStyle.copy(textIndent = TextIndent(firstLine = 32.sp))
 		press(Key.A, ctrl = true)
 
 		assertEquals(state.spaceWidth(), state.selectionRects().onRow(state, 1).width, 0.01f)

@@ -24,8 +24,9 @@ fun rememberSpellCheckState(
 	spellCheckMode: SpellCheckMode = SpellCheckMode.Word,
 ): SpellCheckState {
 	val richTextState = rememberTextEditorState(initialText)
+	val scanContext = LocalScanContext.current
 	val state = remember {
-		SpellCheckState(richTextState, spellChecker, enableSpellChecking, spellCheckMode)
+		SpellCheckState(richTextState, spellChecker, enableSpellChecking, spellCheckMode, scanContext)
 	}
 
 	// Run SpellCheck as soon as it is ready

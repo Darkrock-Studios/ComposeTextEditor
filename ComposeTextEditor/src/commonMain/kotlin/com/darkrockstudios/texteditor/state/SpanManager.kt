@@ -2,6 +2,7 @@ package com.darkrockstudios.texteditor.state
 
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
+import com.darkrockstudios.texteditor.annotatedstring.withSpanStyles
 
 /**
  * Manages text spans efficiently by handling merging, shrinking, and expansion of spans
@@ -186,16 +187,8 @@ class SpanManager {
 		// Create new span list
 		val newSpans = mergeOverlaps(existingSpans, spanStyle, start, end)
 
-		// Sort spans by start position
-		val sortedSpans = newSpans.sortedBy { it.start }
-
-		// Create new AnnotatedString with updated spans
-		val newText = AnnotatedString(
-			text = line.text,
-			spanStyles = sortedSpans
-		)
-
-		return newText
+		// Unsorted: where spans overlap, a later one wins.
+		return line.withSpanStyles(newSpans)
 	}
 
 	private fun mergeOverlaps(
@@ -244,7 +237,7 @@ class SpanManager {
 		// Add final range
 		result.add(AnnotatedString.Range(spanStyle, currentStart, currentEnd))
 
-		return result.sortedBy { it.start }
+		return result
 	}
 
 	internal fun removeSingleLineSpanStyle(
@@ -299,13 +292,7 @@ class SpanManager {
 			}
 		}
 
-		// Create new AnnotatedString with updated spans
-		val newText = AnnotatedString(
-			text = line.text,
-			spanStyles = newSpans.sortedBy { it.start }
-		)
-
-		return newText
+		return line.withSpanStyles(newSpans)
 	}
 }
 

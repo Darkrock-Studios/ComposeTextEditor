@@ -65,7 +65,10 @@ Styling lives in two deliberately separate places:
   duplicates, shifting ranges).
 - **Rich spans** (`RichSpan`: a `TextEditorRange` plus a `RichSpanStyle`) are
   decorations Compose's text stack cannot express: list bullets and numbering,
-  blockquote bars, code-fence cards, links, highlights, spell-check underlines.
+  blockquote bars, code-fence cards, links, highlights, spell-check underlines,
+  and a paragraph's own format (`ParagraphFormatSpanStyle`: spacing above and
+  below, alignment, indents, line height), which draws nothing and is shaped
+  into its line's rows and the gaps around them.
   A `RichSpanStyle` paints itself into the canvas (over the text, or under it
   via `drawBackground`) and declares its behavior: `stickyAtStart` for
   line-anchored gutter markers that must track their whole line,
@@ -155,8 +158,8 @@ on.
   through `TextEditorState.cursorRowIndex()`, drawing, handles, the touch
   toolbar and scrolling through the affinity overloads of `getWrapForDrawing`
   and `getPositionForOffset`, and every move resets the caret to downstream
-  unless it deliberately lands at a row's end (End, or a vertical move past
-  the row's end).
+  unless it deliberately lands at a row's end (End, a vertical move past the
+  row's end, or a pointer past it, which `pointerHitAt` reports).
 - **`TextEditorSelectionManager`**: the selection range and the gesture state
   behind it (touch handles, drag). Rule: any content mutation clears the
   selection; only span-level operations keep it.
@@ -166,7 +169,8 @@ on.
   runs from minus the top padding (the first row below the top padding) to the
   last row and bottom padding at the viewport's bottom, and is empty when
   everything fits. A soft keyboard is met two ways: one drawn over the
-  editor is a covered strip the caret is kept above (`KeyboardCover.kt`), and
+  editor is a covered strip the caret is kept above (`KeyboardCover.kt`,
+  measured on the canvas once it is placed for the keyboard's inset), and
   a window that shrinks the editor instead keeps a caret that was in view in
   view (`onViewportSizeChange`).
 - **`PlatformTextEditorExtensions`**: per-platform IME glue (Android cursor
@@ -187,7 +191,9 @@ other line moves with its chunk; a `LineWrap` is built when it is read. The
 rows run line by line, each line's by wrap start, and top to bottom with no
 gaps, so finding the row that holds a position or sits at a height is a binary
 search (`RowSearch.kt`, answered from the `RowList`'s directory without
-building a row), and a frame reads only the rows in view.
+building a row), and a frame reads only the rows in view. A paragraph's
+spacing lies between its last row and the next paragraph's first, outside
+every row, so a point in a gap belongs to the row above it.
 
 ### The view layer
 
@@ -217,7 +223,8 @@ text that differs, as one undo step, so the rest keeps its spans. Copy, cut,
 paste and the long-press menu run through the action registry, as the keyboard
 and context menu do, so a read-only editor refuses the same edits; links ride
 in the text as URL links. `getTextLayoutResult` is a whole-document layout
-measured on request, because the editor has no single one. `RichTextView`
+measured on request from the editor's rows (each line as the editor shaped it, the
+space between rows as placeholders), because the editor has no single one. `RichTextView`
 publishes the same text and layout as a read-only text (and, when selectable,
 the selection and copy). The
 document is not snapshot state, so the semantics block reads the state's
@@ -232,11 +239,14 @@ for toolbars (starting with the current one), `wordCount` counts words through
 the same ICU segmentation as word motion and spell check, recounting only the
 lines an edit replaced, and `snapshot()` hands any thread a coherent document
 revision.
-Extensions build on exactly this surface plus the public span API: the markdown
-module converts to and from markdown text, and the spell-check and find modules
-(separate artifacts) watch `editOperations` and paint their results as
-decoration rich spans through `updateRichSpans`, without ever touching editor
-internals.
+Extensions build on exactly this surface plus the public span API, the block
+API on the state and the style configuration (`RichTextStyles`): the markdown
+module (a separate artifact) converts to and from markdown text through the
+snapshot and `applyDocumentBlocks`, and the spell-check and find modules watch
+`editOperations` and paint their results as decoration rich spans through
+`updateRichSpans`, without ever touching editor internals. What each module
+owns and the seam between core and a format:
+[design/modules.md](design/modules.md).
 
 ## Input: from raw event to operation
 
@@ -317,7 +327,9 @@ under it, long-presses to select a word or open the context menu, and drags
 the caret and selection handles. A span click is reported on release, when the
 press and release land on the same span without a drag, so placing the caret
 or selecting never reads as a click; links open by the host's `onLinkClick` on
-Ctrl/Cmd+click in an editor and on a plain click in `RichTextView`.
+Ctrl/Cmd+click in an editor and on a plain click in `RichTextView`, and only
+a destination `sanitizeLinkUrl` allows (relative, http, https, mailto, tel, ftp)
+reaches it, the same allowlist every importer applies.
 
 ## Document model and transactions
 
@@ -326,10 +338,11 @@ plus a flat set of `RichSpan` decorations. Every mutation publishes a whole new
 snapshot, so a reader on any thread always sees a complete, self-consistent
 revision.
 
-Lines are separated by `\n` alone. Every path text enters by (`setText`, the
-insert and replace calls, typed and IME text, paste, markdown and HTML parsing)
-turns `\r\n` and a lone `\r` into `\n` first, so no line holds a carriage
-return (`setDocument` alone takes its lines as given). Copy writes `\n`; converting to a platform's native line ending is the
+Lines are separated by `\n` alone. `TextEditManager.applyOperation` turns
+`\r\n` and a lone `\r` into `\n` in every insert and replace it applies, whoever
+built it, and the paths that load or parse text (`setText`, markdown and HTML
+parsing) do the same, so no line holds a carriage return (`setDocument` alone
+takes its lines as given). Copy writes `\n`; converting to a platform's native line ending is the
 platform clipboard's job (AWT does it on Windows).
 
 `setDocument` is the inverse of `snapshot()`: it loads a snapshot, rich spans

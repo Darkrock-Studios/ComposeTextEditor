@@ -63,6 +63,9 @@ import com.darkrockstudios.texteditor.state.rememberTextEditorState
  * [keyBindings] is pinned rather than taken from the host, so the same shortcuts
  * are exercised no matter which OS runs the suite; pass [MacKeyBindings] to test
  * the macOS chords.
+ *
+ * Text is laid out in [TestFontFamily] unless [textStyle] names another font family,
+ * so wrapping and widths do not depend on the machine's fonts.
  */
 @OptIn(ExperimentalTestApi::class)
 internal fun editorUiTest(
@@ -89,6 +92,7 @@ internal fun editorUiTest(
 	val clipboard = InMemoryClipboard()
 	lateinit var state: TextEditorState
 	val trailing = FocusFlag()
+	val editorTextStyle = textStyle.withTestFont()
 	setContent {
 		state = rememberTextEditorState(initialText = initialText)
 		CompositionLocalProvider(
@@ -106,7 +110,7 @@ internal fun editorUiTest(
 					contentPadding = contentPadding,
 					enabled = enabled,
 					autoFocus = autoFocus,
-					style = rememberTextEditorStyle(textStyle = textStyle),
+					style = rememberTextEditorStyle(textStyle = editorTextStyle),
 					contextMenuState = contextMenuState,
 					contextMenuStrings = contextMenuStrings,
 					onRichSpanClick = onRichSpanClick,

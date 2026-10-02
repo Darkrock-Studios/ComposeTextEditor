@@ -6,18 +6,18 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import com.darkrockstudios.texteditor.CharLineOffset
+import com.darkrockstudios.texteditor.RichTextStyles
 import com.darkrockstudios.texteditor.TextEditorRange
-import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
 import com.darkrockstudios.texteditor.markdown.MarkdownExtension
 import com.darkrockstudios.texteditor.richstyle.SpellCheckStyle
 import com.darkrockstudios.texteditor.state.TextEditorState
 import io.mockk.mockk
-import kotlinx.coroutines.test.TestScope
-import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.runTest
 
 /**
  * The caret's typing style ([TextEditorCursorState.styles]) must survive events that
@@ -152,7 +152,7 @@ class CursorTypingStylePreservationTest {
 		state.cursor.updatePosition(CharLineOffset(0, 0))
 
 		assertTrue(
-			MarkdownConfiguration.DEFAULT.defaultTextStyle in state.cursor.styles,
+			RichTextStyles.DEFAULT.defaultTextStyle in state.cursor.styles,
 			"typing style must follow the installed configuration, got ${state.cursor.styles}",
 		)
 	}
@@ -166,7 +166,7 @@ class CursorTypingStylePreservationTest {
 		state.insertCharacterAtCursor('a')
 
 		assertEquals(
-			listOf(MarkdownConfiguration.DEFAULT.defaultTextStyle),
+			listOf(RichTextStyles.DEFAULT.defaultTextStyle),
 			state.textLines[0].spanStyles.map { it.item },
 		)
 	}
@@ -177,11 +177,11 @@ class CursorTypingStylePreservationTest {
 		val markdown = MarkdownExtension(state)
 		state.cursor.updatePosition(CharLineOffset(0, 0))
 
-		val restyled = MarkdownConfiguration.DEFAULT.copy(
+		val restyled = RichTextStyles.DEFAULT.copy(
 			defaultTextStyle = SpanStyle(fontSize = 22.sp),
 		)
 		// No heading lines to rebake, so the swap publishes no new revision.
-		markdown.markdownConfiguration = restyled
+		markdown.editorState.richTextStyles = restyled
 
 		assertEquals(setOf(restyled.defaultTextStyle), state.cursor.styles)
 	}

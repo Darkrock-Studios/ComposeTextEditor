@@ -7,6 +7,7 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.darkrockstudios.texteditor.cursor.CursorMetrics
+import com.darkrockstudios.texteditor.state.CaretAffinity
 import com.darkrockstudios.texteditor.state.TextEditorState
 
 internal fun DrawScope.DrawSelectionHandles(
@@ -20,12 +21,19 @@ internal fun DrawScope.DrawSelectionHandles(
 
 	val selection = state.selector.selection?.takeIf { state.selector.isTouchSelection } ?: return
 
-	val startOffset = state.getPositionForOffset(selection.start)
+	val startOffset = state.getPositionForOffset(selection.start, handleAffinity(isStart = true))
 	drawHandle(startOffset, handleColor)
 
-	val endOffset = state.getPositionForOffset(selection.end)
+	val endOffset = state.getPositionForOffset(selection.end, handleAffinity(isStart = false))
 	drawHandle(endOffset, handleColor)
 }
+
+/**
+ * The row a selection handle stands on at a wrap offset: the end handle on the row the
+ * selection ends, as its highlight does, and the start handle on the row it starts.
+ */
+internal fun handleAffinity(isStart: Boolean): CaretAffinity =
+	if (isStart) CaretAffinity.Downstream else CaretAffinity.Upstream
 
 /** Where the handle for a selection end with [positionMetrics] is drawn: well below its row. */
 internal fun Density.handleCenter(positionMetrics: CursorMetrics): Offset {

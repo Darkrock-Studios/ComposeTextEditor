@@ -3,16 +3,15 @@ package clipboard
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.contextmenu.ContextMenuActions
 import com.darkrockstudios.texteditor.html.HtmlExtension
-import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
 import com.darkrockstudios.texteditor.richstyle.BulletListSpanStyle
 import com.darkrockstudios.texteditor.state.TextEditorState
 import io.mockk.mockk
+import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import utils.InMemoryClipboard
-import kotlin.test.Test
-import kotlin.test.assertEquals
 
 /**
  * The context menu's cut/copy/paste have to carry block styles the same way the
@@ -22,7 +21,7 @@ class ContextMenuClipboardTest {
 
 	private fun TestScope.bulletedEditor(): TextEditorState {
 		val state = TextEditorState(scope = this, measurer = mockk(relaxed = true))
-		HtmlExtension(state, MarkdownConfiguration.DEFAULT)
+		HtmlExtension(state)
 			.importHtml("<ul><li>one</li><li>two</li></ul>")
 		return state
 	}

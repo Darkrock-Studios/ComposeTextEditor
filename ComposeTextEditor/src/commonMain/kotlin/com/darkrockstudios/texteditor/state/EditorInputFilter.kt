@@ -2,6 +2,7 @@ package com.darkrockstudios.texteditor.state
 
 import androidx.compose.ui.text.AnnotatedString
 import com.darkrockstudios.texteditor.TextEditorRange
+import com.darkrockstudios.texteditor.annotatedstring.normalizeLineEndings
 
 /**
  * Screens every edit that adds text before it lands: typing, the IME, Enter, paste,
@@ -86,11 +87,13 @@ private fun AnnotatedString.replacingLineBreaks(): AnnotatedString = AnnotatedSt
 /**
  * What the state's filter lets replace [range] with [text], asked before an edit whose
  * caller must know what will land (the IME places its caret and composition by it, a
- * paste its styling): [text] when there is no filter, null when refused.
+ * paste its styling): [text] when there is no filter, null when refused. The filter
+ * sees, and the caller gets, the text with its line endings normalised, as it lands.
  */
 internal fun TextEditorState.screenInput(range: TextEditorRange, text: AnnotatedString): AnnotatedString? {
-	val filter = effectiveInputFilter ?: return text
-	return filter.filter(this, range, text)
+	val normalized = text.normalizeLineEndings()
+	val filter = effectiveInputFilter ?: return normalized
+	return filter.filter(this, range, normalized)?.normalizeLineEndings()
 }
 
 /** [screenInput] over the selection, or at the caret. */

@@ -19,13 +19,17 @@ import com.darkrockstudios.texteditor.richstyle.ORDERED_LIST_PARAGRAPH_STYLE
 import com.darkrockstudios.texteditor.richstyle.OrderedListSpanStyle
 import com.darkrockstudios.texteditor.state.TextEditOperation
 import com.darkrockstudios.texteditor.state.TextEditorState
+import com.darkrockstudios.texteditor.state.toggleBlockquote
+import com.darkrockstudios.texteditor.state.toggleBulletList
+import com.darkrockstudios.texteditor.state.toggleCodeFence
+import com.darkrockstudios.texteditor.state.toggleOrderedList
 import io.mockk.mockk
-import kotlinx.coroutines.test.TestScope
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import kotlinx.coroutines.test.TestScope
 
 class LineBlockUndoTests {
 	private lateinit var scope: TestScope
@@ -55,7 +59,7 @@ class LineBlockUndoTests {
 		state.setText("Hello World")
 		val prior = state.textLines[0]
 
-		markdown.toggleOrderedList(0..0)
+		markdown.editorState.toggleOrderedList(0..0)
 		assertEquals(listOf(0), spanLines(OrderedListSpanStyle))
 		assertTrue(hasParagraphStyle(0, ORDERED_LIST_PARAGRAPH_STYLE))
 
@@ -80,7 +84,7 @@ class LineBlockUndoTests {
 		)
 		assertEquals("Hello World!", state.textLines[0].text)
 
-		markdown.toggleOrderedList(0..0)
+		markdown.editorState.toggleOrderedList(0..0)
 		assertEquals(listOf(0), spanLines(OrderedListSpanStyle))
 
 		// Undo only the list — the typed char stays, and the list is fully gone.
@@ -97,7 +101,7 @@ class LineBlockUndoTests {
 	@Test
 	fun `undo blockquote removes span and indent`() {
 		state.setText("quote me")
-		markdown.toggleBlockquote(0..0)
+		markdown.editorState.toggleBlockquote(0..0)
 		assertEquals(listOf(0), spanLines(BlockquoteSpanStyle))
 		assertTrue(hasParagraphStyle(0, BLOCKQUOTE_PARAGRAPH_STYLE))
 
@@ -110,7 +114,7 @@ class LineBlockUndoTests {
 	@Test
 	fun `undo code fence removes span and indent`() {
 		state.setText("code line")
-		markdown.toggleCodeFence(0..0)
+		markdown.editorState.toggleCodeFence(0..0)
 		assertEquals(listOf(0), spanLines(CodeFenceSpanStyle))
 		assertTrue(hasParagraphStyle(0, CODE_FENCE_PARAGRAPH_STYLE))
 
@@ -129,7 +133,7 @@ class LineBlockUndoTests {
 		)
 		state.selector.updateSelection(selection.start, selection.end)
 
-		markdown.toggleOrderedList(0..2)
+		markdown.editorState.toggleOrderedList(0..2)
 
 		assertEquals(selection, state.selector.selection)
 	}
@@ -137,7 +141,7 @@ class LineBlockUndoTests {
 	@Test
 	fun `undo multi-line list toggle restores every line`() {
 		state.setText("one\ntwo\nthree")
-		markdown.toggleOrderedList(0..2)
+		markdown.editorState.toggleOrderedList(0..2)
 		assertEquals(listOf(0, 1, 2), spanLines(OrderedListSpanStyle))
 
 		state.undo()
@@ -162,7 +166,7 @@ class LineBlockUndoTests {
 			?.let { it.start to it.end }
 		assertEquals(6 to 11, boldRange())
 
-		markdown.toggleOrderedList(0..0)
+		markdown.editorState.toggleOrderedList(0..0)
 		assertEquals("Hello World", state.textLines[0].text)
 		assertEquals(6 to 11, boldRange())
 
@@ -185,7 +189,7 @@ class LineBlockUndoTests {
 		assertEquals(1, highlightSpans().size)
 		assertEquals(range, highlightSpans().single().range)
 
-		markdown.toggleOrderedList(0..0)
+		markdown.editorState.toggleOrderedList(0..0)
 		assertEquals(1, highlightSpans().size)
 		assertEquals(range, highlightSpans().single().range)
 
@@ -198,13 +202,13 @@ class LineBlockUndoTests {
 	@Test
 	fun `undo ordered list demoting a bullet restores the bullet`() {
 		state.setText("item")
-		markdown.toggleBulletList(0..0)
+		markdown.editorState.toggleBulletList(0..0)
 		assertEquals(listOf(0), spanLines(BulletListSpanStyle))
 		assertTrue(hasParagraphStyle(0, BULLET_LIST_PARAGRAPH_STYLE))
 		val bulletContent = state.textLines[0]
 
 		// Ordered list demotes the bullet as a mutually-excluded block.
-		markdown.toggleOrderedList(0..0)
+		markdown.editorState.toggleOrderedList(0..0)
 		assertEquals(listOf(0), spanLines(OrderedListSpanStyle))
 		assertTrue(spanLines(BulletListSpanStyle).isEmpty())
 

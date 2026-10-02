@@ -7,33 +7,34 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextDecoration
 import com.darkrockstudios.texteditor.CharLineOffset
+import com.darkrockstudios.texteditor.RichTextStyles
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.html.HtmlLink
 import com.darkrockstudios.texteditor.html.parseHtmlDocument
 import com.darkrockstudios.texteditor.html.sanitizeLinkUrl
 import com.darkrockstudios.texteditor.html.toHtml
 import com.darkrockstudios.texteditor.html.withHtml
-import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
 import com.darkrockstudios.texteditor.markdown.withMarkdown
 import com.darkrockstudios.texteditor.richstyle.LinkSpanStyle
 import com.darkrockstudios.texteditor.richstyle.RichSpan
 import com.darkrockstudios.texteditor.state.TextEditorState
+import com.darkrockstudios.texteditor.state.setLink
 import io.mockk.mockk
-import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.test.runTest
-import utils.editorUiTest
-import utils.pasteHtml
 import java.awt.datatransfer.Transferable
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.runTest
+import utils.editorUiTest
+import utils.pasteHtml
 
 /** `<a href>` maps to [LinkSpanStyle] on the way in and back to `<a href>` on the way out. */
 class HtmlLinkTest {
 
-	private val config = MarkdownConfiguration.DEFAULT
+	private val config = RichTextStyles.DEFAULT
 
 	private fun range(line: Int, start: Int, end: Int) =
 		TextEditorRange(CharLineOffset(line, start), CharLineOffset(line, end))
@@ -82,7 +83,7 @@ class HtmlLinkTest {
 	fun `an in-editor paste of a link across lines adds no second link`() = editorUiTest(
 		initialText = AnnotatedString("one\ntwo"),
 	) {
-		markdown.setLink(TextEditorRange(CharLineOffset(0, 1), CharLineOffset(1, 2)), "https://x.test")
+		markdown.editorState.setLink(TextEditorRange(CharLineOffset(0, 1), CharLineOffset(1, 2)), "https://x.test")
 		press(Key.A, ctrl = true)
 		press(Key.C, ctrl = true)
 		press(Key.MoveEnd, ctrl = true)

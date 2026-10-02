@@ -3,15 +3,17 @@ package e2e.torture
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
-import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
+import com.darkrockstudios.texteditor.RichTextStyles
 import com.darkrockstudios.texteditor.richstyle.HorizontalRuleSpanStyle
+import com.darkrockstudios.texteditor.state.toggleBlockquote
+import com.darkrockstudios.texteditor.state.toggleBulletList
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 import utils.blockFlags
 import utils.editorUiTest
 import utils.linesWith
 import utils.pasteHtml
-import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertTrue
 
 /**
  * Export/import round trips of the shapes the line-blocks design doc marks as
@@ -25,7 +27,7 @@ class MarkdownRoundTripTortureE2eTest {
 		markdown.importMarkdown("a\n---\nb")
 		assertEquals(listOf(1), state.linesWith(HorizontalRuleSpanStyle))
 
-		markdown.toggleBulletList(0..2)
+		markdown.editorState.toggleBulletList(0..2)
 		markdown.importMarkdown(markdown.exportAsMarkdown())
 
 		assertEquals(
@@ -38,7 +40,7 @@ class MarkdownRoundTripTortureE2eTest {
 	@Test
 	fun `the second generation export of a bulleted rule is a fixpoint`() = editorUiTest {
 		markdown.importMarkdown("a\n---\nb")
-		markdown.toggleBulletList(0..2)
+		markdown.editorState.toggleBulletList(0..2)
 
 		val first = markdown.exportAsMarkdown()
 		markdown.importMarkdown(first)
@@ -50,8 +52,8 @@ class MarkdownRoundTripTortureE2eTest {
 	@Test
 	fun `a quote stacked on a bullet round trips`() = editorUiTest {
 		markdown.importMarkdown("item")
-		markdown.toggleBulletList(0..0)
-		markdown.toggleBlockquote(0..0)
+		markdown.editorState.toggleBulletList(0..0)
+		markdown.editorState.toggleBlockquote(0..0)
 
 		val exported = markdown.exportAsMarkdown()
 		assertEquals("> - item", exported, "quote stacks with list on export")
@@ -65,8 +67,8 @@ class MarkdownRoundTripTortureE2eTest {
 	@Test
 	fun `a stacked marker export import export is a fixpoint`() = editorUiTest {
 		markdown.importMarkdown("item")
-		markdown.toggleBulletList(0..0)
-		markdown.toggleBlockquote(0..0)
+		markdown.editorState.toggleBulletList(0..0)
+		markdown.editorState.toggleBlockquote(0..0)
 
 		val first = markdown.exportAsMarkdown()
 		markdown.importMarkdown(first)
@@ -132,7 +134,7 @@ class MarkdownRoundTripTortureE2eTest {
 	fun `switching header configuration must not silently demote headings`() = editorUiTest {
 		markdown.importMarkdown("# Title\n\nbody")
 
-		markdown.markdownConfiguration = MarkdownConfiguration(
+		markdown.editorState.richTextStyles = RichTextStyles(
 			header1Style = SpanStyle(fontSize = 40.sp, fontWeight = FontWeight.Bold),
 		)
 

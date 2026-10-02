@@ -14,6 +14,8 @@ import androidx.compose.ui.platform.PlatformTextInputMethodRequest
 import androidx.compose.ui.platform.PlatformTextInputSession
 import com.darkrockstudios.texteditor.state.TextEditorState
 
+internal actual val startsInputQuietly: Boolean = true
+
 /**
  * Android implementation of [TextEditorTextInputService]: opens the soft keyboard with a
  * [TextEditorInputConnection] bound to the session's view.
@@ -42,8 +44,8 @@ private const val SURROUNDING_TEXT_WINDOW = 2048
 
 private fun EditorInfo.populate(state: TextEditorState, connection: TextEditorInputConnection) {
 	val settings = state.keyboardSettings
-	inputType = settings.androidInputType()
-	imeOptions = settings.androidImeOptions()
+	inputType = settings.androidInputType(state.isSingleLine)
+	imeOptions = settings.androidImeOptions(state.isSingleLine)
 
 	val selection = state.selectionAsTextRange()
 	initialSelStart = selection.start
@@ -88,9 +90,9 @@ internal class TextEditorInputConnection(
 	@Volatile
 	private var isActive: Boolean = true
 
-	/** The settings the keyboard was opened with; a change restarts input with a new connection. */
-	private val keyboardSettings = state.keyboardSettings
-	private val actionKey = keyboardSettings.androidEditorAction()
+	/** The action key the keyboard was opened with; a change restarts input with a new connection. */
+	private val imeAction = state.effectiveImeAction()
+	private val actionKey = imeAction.androidEditorAction()
 
 	/** Batch levels this connection holds open on the state, released when it closes. */
 	private var batchDepth: Int = 0
@@ -283,7 +285,7 @@ internal class TextEditorInputConnection(
 
 			// Outside a batch of its own: the host's handler may do anything, move focus
 			// included, and an IME batch around this call holds back only notifications.
-			actionKey -> state.performImeAction(keyboardSettings.imeAction)
+			actionKey -> state.performImeAction(imeAction)
 		}
 		return true
 	}

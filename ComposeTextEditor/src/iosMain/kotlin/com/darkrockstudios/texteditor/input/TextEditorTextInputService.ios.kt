@@ -28,3 +28,6 @@ private val iosImeOptions = ImeOptions(
 	keyboardType = KeyboardType.Text,
 	imeAction = ImeAction.Default,
 )
+
+// Starting a session makes its view first responder, which raises the keyboard.
+internal actual val startsInputQuietly: Boolean = false

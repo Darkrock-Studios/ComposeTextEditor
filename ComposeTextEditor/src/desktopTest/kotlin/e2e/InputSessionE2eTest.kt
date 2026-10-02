@@ -4,7 +4,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.SoftwareKeyboardController
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.runSkikoComposeUiTest
 import androidx.compose.ui.text.AnnotatedString
@@ -81,6 +84,52 @@ class InputSessionE2eTest {
 		enabled = true
 		waitForIdle()
 		assertTrue(state.isFocused)
+	}
+
+	/** Roadmap 7.37: IME input works again at once, and the soft keyboard stays down. */
+	@Test
+	fun `input turned back on under focus starts a session that asks for no keyboard`() = runSkikoComposeUiTest {
+		var enabled by mutableStateOf(true)
+		var readOnly by mutableStateOf(false)
+		val keyboard = RecordingKeyboard()
+		lateinit var state: TextEditorState
+		setContent {
+			state = rememberTextEditorState(initialText = document)
+			CompositionLocalProvider(LocalSoftwareKeyboardController provides keyboard) {
+				BasicTextEditor(
+					state = state,
+					modifier = Modifier.size(400.dp, 300.dp),
+					enabled = enabled,
+					readOnly = readOnly,
+					autoFocus = true,
+				)
+			}
+		}
+		waitUntil(timeoutMillis = 5_000) { state.isFocused }
+		assertTrue(state.hasInputSession)
+
+		for (toggle in listOf<(Boolean) -> Unit>({ enabled = it }, { readOnly = !it })) {
+			toggle(false)
+			waitForIdle()
+			assertFalse(state.hasInputSession)
+			keyboard.calls.clear()
+
+			toggle(true)
+			waitForIdle()
+			assertTrue(state.hasInputSession, "a session runs again")
+			assertEquals(listOf("hide"), keyboard.calls, "and cancels the keyboard its start asks for")
+		}
+	}
+
+	private class RecordingKeyboard : SoftwareKeyboardController {
+		val calls = mutableListOf<String>()
+		override fun show() {
+			calls += "show"
+		}
+
+		override fun hide() {
+			calls += "hide"
+		}
 	}
 
 	@Test

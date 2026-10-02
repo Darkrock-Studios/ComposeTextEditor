@@ -2,6 +2,7 @@ package com.darkrockstudios.texteditor.state
 
 import androidx.annotation.VisibleForTesting
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Size
@@ -60,16 +61,19 @@ class TextEditorScrollManager(
 	 * How much of the viewport's bottom something drawn over the editor covers, in
 	 * pixels: the soft keyboard on iOS, or on an edge-to-edge Android window. The caret
 	 * counts as off screen there, and the scroll range grows by it so the last line can
-	 * still come above it, as a native text view's content inset does.
+	 * still come above it, as a native text view's content inset does. Snapshot state, so
+	 * what places itself by the covered strip (the Android cursor anchor) hears it change.
 	 */
-	var obscuredBottomPx: Int = 0
+	var obscuredBottomPx: Int
+		get() = obscuredBottom
 		set(value) {
 			val covered = value.coerceAtLeast(0)
-			if (field != covered) {
-				field = covered
+			if (obscuredBottom != covered) {
+				obscuredBottom = covered
 				applyScrollRange()
 			}
 		}
+	private var obscuredBottom by mutableIntStateOf(0)
 
 	/**
 	 * The height a caret row of [rowHeight] is kept inside: the viewport above

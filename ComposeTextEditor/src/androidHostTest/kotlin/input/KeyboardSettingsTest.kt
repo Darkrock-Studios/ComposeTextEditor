@@ -126,20 +126,65 @@ class KeyboardSettingsTest {
 		assertEquals(listOf(ImeAction.Send), sent)
 	}
 
+	/** Roadmap 7.40: a single line has no Enter to offer, so its default key is Done. */
+	@Test
+	fun `a single line asks for single-line text and Done`() {
+		val settings = KeyboardSettings()
+
+		assertEquals(
+			InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES or InputType.TYPE_TEXT_FLAG_AUTO_CORRECT,
+			settings.androidInputType(singleLine = true),
+		)
+		assertEquals(
+			EditorInfo.IME_ACTION_DONE or EditorInfo.IME_FLAG_NO_FULLSCREEN or EditorInfo.IME_FLAG_NO_EXTRACT_UI,
+			settings.androidImeOptions(singleLine = true),
+		)
+		val send = KeyboardSettings(imeAction = ImeAction.Send).androidImeOptions(singleLine = true)
+		assertEquals(EditorInfo.IME_ACTION_SEND, send and EditorInfo.IME_MASK_ACTION, "a chosen action stays")
+	}
+
+	@Test
+	fun `a single line's Done key calls the host`() {
+		val sent = mutableListOf<ImeAction>()
+		state.singleLineEditors = 1
+		state.onImeAction = { sent += it }
+		val connection = TextEditorInputConnection(state, mockk<View>(relaxed = true))
+
+		connection.performEditorAction(EditorInfo.IME_ACTION_DONE)
+
+		assertEquals(listOf(ImeAction.Done), sent)
+	}
+
+	@Test
+	fun `a single line's limit coming or going restarts input`() {
+		val events = mutableListOf<String>()
+		val sync = ImeCursorSync(state, restartRecorder(events)) {}
+		sync.attach()
+		sync.flush()
+
+		state.singleLineEditors = 1
+		sync.flush()
+		state.singleLineEditors = 0
+		sync.flush()
+
+		assertEquals(listOf("restart", "restart"), events)
+	}
+
+	private fun restartRecorder(events: MutableList<String>) = object : ImeUpdateSink {
+		override val isReady = true
+		override fun restartInput() {
+			events += "restart"
+		}
+
+		override fun updateSelection(selStart: Int, selEnd: Int, compStart: Int, compEnd: Int) = Unit
+		override fun updateExtractedText(token: Int) = Unit
+		override fun sendCursorAnchorInfo(anchor: CursorAnchor) = Unit
+	}
+
 	@Test
 	fun `new settings restart input, equal ones do not`() {
 		val events = mutableListOf<String>()
-		val sink = object : ImeUpdateSink {
-			override val isReady = true
-			override fun restartInput() {
-				events += "restart"
-			}
-
-			override fun updateSelection(selStart: Int, selEnd: Int, compStart: Int, compEnd: Int) = Unit
-			override fun updateExtractedText(token: Int) = Unit
-			override fun sendCursorAnchorInfo(anchor: CursorAnchor) = Unit
-		}
-		val sync = ImeCursorSync(state, sink) {}
+		val sync = ImeCursorSync(state, restartRecorder(events)) {}
 		sync.attach()
 		sync.flush()
 

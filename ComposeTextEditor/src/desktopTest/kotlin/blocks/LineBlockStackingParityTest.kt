@@ -7,10 +7,11 @@ import androidx.compose.ui.text.font.createFontFamilyResolver
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
 import com.darkrockstudios.texteditor.CharLineOffset
+import com.darkrockstudios.texteditor.RichTextStyles
 import com.darkrockstudios.texteditor.TextEditorRange
-import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
 import com.darkrockstudios.texteditor.richstyle.Blockquote
 import com.darkrockstudios.texteditor.richstyle.BulletList
+import com.darkrockstudios.texteditor.richstyle.BulletListSpanStyle
 import com.darkrockstudios.texteditor.richstyle.CodeFence
 import com.darkrockstudios.texteditor.richstyle.LineBlockStyle
 import com.darkrockstudios.texteditor.richstyle.OrderedList
@@ -20,9 +21,9 @@ import com.darkrockstudios.texteditor.richstyle.applyDocumentBlocks
 import com.darkrockstudios.texteditor.richstyle.applyLineBlock
 import com.darkrockstudios.texteditor.richstyle.lineBlockSpanStyles
 import com.darkrockstudios.texteditor.state.TextEditorState
-import kotlinx.coroutines.test.TestScope
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlinx.coroutines.test.TestScope
 
 /**
  * The per-line path (toolbar toggle, undo/redo, Enter on a block line) and the
@@ -73,13 +74,13 @@ class LineBlockStackingParityTest {
 		// The batched path visits a line's blocks in registry order whatever
 		// order they were requested in, so the per-line path has to be driven that way
 		// for the comparison to be about the rules rather than about the ordering.
-		allBlockStyles(MarkdownConfiguration.DEFAULT)
+		allBlockStyles(RichTextStyles.DEFAULT)
 			.filter { it in blocks }
 			.forEach { perLine.applyLineBlock(0, it) }
 
 		val batched = freshState("line text")
 		existing.forEach { batched.applyLineBlock(0, it) }
-		batched.applyDocumentBlocks(blockLines = blocks.associateWith { listOf(0) })
+		batched.applyDocumentBlocks(blockLines = blocks.associate { it.spanStyle to listOf(0) })
 
 		assertEquals(perLine.blockStructure(), batched.blockStructure())
 		assertEquals(expected.map { it.spanStyle }, perLine.lineBlockSpanStyles(0))
@@ -142,7 +143,7 @@ class LineBlockStackingParityTest {
 		perLine.applyLineBlock(0, BulletList)
 
 		val batched = freshState("")
-		batched.applyDocumentBlocks(blockLines = mapOf(BulletList to listOf(0)))
+		batched.applyDocumentBlocks(blockLines = mapOf(BulletListSpanStyle to listOf(0)))
 
 		assertEquals(perLine.blockStructure(), batched.blockStructure())
 		assertEquals(listOf(BulletList.spanStyle), perLine.lineBlockSpanStyles(0))

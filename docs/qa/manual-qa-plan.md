@@ -99,6 +99,18 @@ this exercises the clipboard's HTML as the block carrier.
    level; no raw HTML markup text. Blocks arriving as flat paragraphs is the
    regression this guards.
 5. Bold body text pasted out must **not** land as an `<h4>` in the target app.
+6. Copy a nested list (Tab to nest an item, then Tab again under it) out of the
+   editor into a browser rich-text field, and a nested list from a web page or
+   Google Docs into the editor (7.47). **Expect:** the nesting survives both ways.
+7. In Google Docs or Word, write a paragraph with one red word and one word at a
+   larger size, copy it and paste into the Markdown demo in a dark theme (7.46).
+   **Expect:** the red word is red and the large word large; the rest takes the
+   editor's own text colour and size, not the source's black and 11 pt.
+8. Centre a paragraph and give another a first-line indent (from code with
+   `setParagraphFormat`: the sample has no paragraph controls), copy both into a browser
+   rich-text field, and paste a centred paragraph from Google Docs (7.49).
+   **Expect:** the alignment and indent survive both ways; a Docs paste keeps
+   the editor's own line spacing.
 
 ### 2.5 Paste font size (#49)
 
@@ -202,6 +214,8 @@ this exercises the clipboard's HTML as the block carrier.
    one undo puts it back. Hold Ctrl (Option on macOS) while dropping. **Expect:** a
    copy, the original stays.
 2. Drop the word back inside its own selection. **Expect:** nothing changes.
+   Highlight a word with the demo's Highlight button (a rich span) and drag it
+   elsewhere. **Expect:** it keeps the highlight, moved or copied (6.21).
 3. Click (press and release without moving) inside a selection. **Expect:** the caret
    lands there and the selection goes, on release.
 4. Drag a bold, bulleted line into a browser rich-text field or word processor.
@@ -230,8 +244,17 @@ In Chrome, Firefox and Safari, against the built demo:
    shows a Paste button); allowed, the markup pastes; denied, nothing changes and
    the console shows a `ComposeTextEditor: could not read ... the clipboard` warning.
 5. Serve the demo over plain http from another machine (an insecure context) and
-   use the context menu's Copy and Paste. **Expect:** a console warning for each,
-   while the keyboard chords still work.
+   use the context menu's Copy, Cut and Paste. **Expect:** a console warning for
+   each, the text stays where it was after Cut (6.19), and the keyboard chords
+   still work.
+6. Turn on Read only (then, separately, turn off Enabled), select a bold word and
+   press Ctrl/Cmd+C, and do the same in the RichTextView demo; paste into Google
+   Docs. **Expect:** the word stays bold, with no permission prompt and no console
+   warning (7.39). Try Ctrl+Insert on Windows and Linux too.
+
+7. Web demo: click into the editor, press Escape then Tab, then Shift+Tab (4.28).
+   **Expect:** no tab character is typed, focus leaves the editor and comes back
+   to it, and the keyboard keeps working throughout without a click.
 
 ### 2.10 Links (6.9)
 
@@ -400,6 +423,14 @@ the platform's double-tap timeout (300 ms on desktop), not the OS mouse setting.
    with no lurching or jumping back (1.23). Move the mouse back inside and
    release. **Expect:** the view then scrolls to show the caret at the end of the
    last selected paragraph.
+10. Click in the blank space right of a wrapped row, one that wraps mid-word and
+    one that wraps after a space (1.24). **Expect:** the caret at that row's right
+    edge (after the space), not at the start of the next row; Home goes to that
+    row's start. Drag from a word to past the row's end. **Expect:** the whole
+    row, trailing space included, is selected. Double-click past the row's end.
+    **Expect:** the row's last word. On Android, tap past the row's end and drag
+    the caret handle there. **Expect:** the same, and a selection handle dragged
+    there stands at the row's end.
 
 ### 3.8 Web input (built demo)
 
@@ -583,7 +614,10 @@ German, or French).
 4. Keyboard down, tap a word on the editor's last visible row. **Expect:** the
    keyboard rises and the row stays in view just above it; the app's toolbar
    does not slide off the top (3.9). Scroll that caret out of view, hide and
-   raise the keyboard. **Expect:** the scroll stays where it was.
+   raise the keyboard. **Expect:** the scroll stays where it was. In a host
+   that pads the editor with `imePadding` in an edge-to-edge window, the row
+   ends right at the keyboard's top, not a strip above it, and the text does
+   not jump while the keyboard slides (3.16).
 5. Code Editor demo: type a sentence. **Expect:** no capital at its start and no
    autocorrection; the rich text demo still capitalises and corrects (3.11).
    With a host setting `KeyboardSettings(imeAction = ImeAction.Send)` and
@@ -603,7 +637,11 @@ German, or French).
    behind (4.30), and sits at the caret, not above and left of it by the
    editor's offset in the window (3.10). Scroll the text under a fixed caret.
    **Expect:** the floating candidates follow it, and hide or move off when
-   the caret row leaves the editor.
+   the caret row leaves the editor. In a host whose window pans for the
+   keyboard (`adjustPan`) or whose editor sits in a scrolling parent, move the
+   view without touching the text. **Expect:** the floating candidates follow
+   at once (4.31); switching Gboard between docked and floating updates them
+   too.
 
 Checked on an emulator (2026-09-29, API 36, Gboard active) through
 `adb shell input`, whose virtual keyboard has Alt+E as a combining acute:
@@ -835,7 +873,14 @@ Rich Text Editor demo.
    paste. TalkBack reads the limit ("280 characters maximum" or similar).
 2. Turn on Single line. Press Enter, paste two lines. **Expect:** Enter adds nothing;
    the pasted line break becomes a space; the editor is one line tall and grows as the
-   line wraps.
+   line wraps. On Android the soft keyboard shows a Done key instead of a return key,
+   and Done and a hardware Enter both hide it (7.40); turning Single line off brings
+   the return key back.
+3. With the keyboard up (Android) or composing with a dead key (desktop), turn
+   Read only on and off, and Enabled off and on, without touching the editor.
+   **Expect:** the keyboard stays down, and a dead key or an IME composes at once
+   on desktop; a tap then brings the keyboard back (7.37). iOS and the web still
+   need that tap before IME input.
 
 ## 8b2. Saved state (Android)
 

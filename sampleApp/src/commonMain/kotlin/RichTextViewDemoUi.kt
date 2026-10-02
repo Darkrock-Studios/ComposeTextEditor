@@ -18,7 +18,7 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.darkrockstudios.texteditor.RichTextView
-import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
+import com.darkrockstudios.texteditor.RichTextStyles
 import com.darkrockstudios.texteditor.markdown.withMarkdown
 import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.rememberTextEditorState
@@ -39,21 +39,21 @@ A second section after the rule, to verify spacing and span isolation."""
 fun RichTextViewDemoUi(
 	modifier: Modifier = Modifier,
 	navigateTo: (Destination) -> Unit,
-	configuration: MarkdownConfiguration,
+	styles: RichTextStyles,
 ) {
-	val singleState = rememberMarkdownState(DEMO_MARKDOWN, configuration)
+	val singleState = rememberMarkdownState(DEMO_MARKDOWN, styles)
 	val cardSamples = listOf(
 		rememberMarkdownState(
 			"# Quick note\n\nA short **bold** opener with *italic* aside and a [link](https://example.com).",
-			configuration,
+			styles,
 		),
 		rememberMarkdownState(
 			"## Meeting recap\n\nDiscussed ~~old approach~~ and the new plan.\n\n---\n\nFollow-up items below the rule.",
-			configuration,
+			styles,
 		),
 		rememberMarkdownState(
 			"Plain paragraph with no markdown markers — should render as body text only.",
-			configuration,
+			styles,
 		),
 	)
 
@@ -115,10 +115,11 @@ fun RichTextViewDemoUi(
 @Composable
 private fun rememberMarkdownState(
 	markdown: String,
-	configuration: MarkdownConfiguration,
+	styles: RichTextStyles,
 ): TextEditorState {
 	val state = rememberTextEditorState()
-	val markdownExtension = remember(state, configuration) { state.withMarkdown(configuration) }
+	remember(state, styles) { state.richTextStyles = styles }
+	val markdownExtension = remember(state) { state.withMarkdown() }
 	LaunchedEffect(markdownExtension, markdown) {
 		markdownExtension.importMarkdown(markdown)
 	}

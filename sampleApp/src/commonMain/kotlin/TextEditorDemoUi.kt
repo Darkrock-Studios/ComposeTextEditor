@@ -23,7 +23,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.darkrockstudios.texteditor.EditorLineLimits
 import com.darkrockstudios.texteditor.TextEditor
-import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
+import com.darkrockstudios.texteditor.RichTextStyles
 import com.darkrockstudios.texteditor.markdown.withMarkdown
 import com.darkrockstudios.texteditor.rememberTextEditorStyle
 import com.darkrockstudios.texteditor.richstyle.ImageBlockSpanStyle
@@ -46,7 +46,7 @@ fun TextEditorDemoUi(
 	modifier: Modifier = Modifier,
 	navigateTo: (Destination) -> Unit,
 	demoContent: DemoContent,
-	configuration: MarkdownConfiguration
+	styles: RichTextStyles,
 ) {
 	val imageProvider = rememberDemoImageProvider()
 	val state: TextEditorState = when (demoContent) {
@@ -76,15 +76,20 @@ fun TextEditorDemoUi(
 			rememberSaveableTextEditorState(richSpanStyleSaver = imageSaver)
 		}
 	}
-	val markdownExtension = remember(state, configuration, imageProvider) {
-		state.withMarkdown(configuration, imageProvider = imageProvider)
+	// The plain rich text demo is a rich text editor with nothing installed, its
+	// default styles included; the others are markdown editors with the theme's.
+	val markdownExtension = if (demoContent == DemoContent.Rich) {
+		null
+	} else {
+		remember(state, styles) { state.richTextStyles = styles }
+		remember(state, imageProvider) { state.withMarkdown(imageProvider = imageProvider) }
 	}
 
 	LaunchedEffect(state, demoContent) {
 		if (demoContent == DemoContent.Markdown) {
 			// importMarkdown resolves block-level constructs (HR, images) into rich spans;
 			// toAnnotatedStringFromMarkdown alone leaves them as raw text.
-			markdownExtension.importMarkdown(SIMPLE_MARKDOWN)
+			markdownExtension?.importMarkdown(SIMPLE_MARKDOWN)
 		}
 	}
 
@@ -123,7 +128,7 @@ fun TextEditorDemoUi(
 				overflow = TextOverflow.Ellipsis,
 			)
 			Text("${state.wordCount} words", style = MaterialTheme.typography.labelMedium)
-			if (editable && demoContent != DemoContent.Rich) {
+			if (editable && markdownExtension != null) {
 				Button(
 					onClick = {
 						val markdown = markdownExtension.exportAsMarkdown()
@@ -153,8 +158,8 @@ fun TextEditorDemoUi(
 
 		if (editable) {
 			TextEditorToolbar(
-				mardkown = markdownExtension,
-				markdownControls = (demoContent != DemoContent.Rich)
+				state = state,
+				markdownControls = markdownExtension != null,
 			)
 		}
 

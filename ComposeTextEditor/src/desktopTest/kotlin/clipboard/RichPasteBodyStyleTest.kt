@@ -3,14 +3,14 @@ package clipboard
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
+import com.darkrockstudios.texteditor.RichTextStyles
 import com.darkrockstudios.texteditor.html.withHtml
-import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
-import utils.editorUiTest
-import utils.pasteHtml
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import utils.editorUiTest
+import utils.pasteHtml
 
 /**
  * Styled text pasted from markup takes the styles that size text where it lands
@@ -19,7 +19,7 @@ import kotlin.test.assertTrue
  */
 class RichPasteBodyStyleTest {
 
-	private val body = MarkdownConfiguration.DEFAULT.defaultTextStyle
+	private val body = RichTextStyles.DEFAULT.defaultTextStyle
 
 	@Test
 	fun `bold markup pasted into a markdown editor keeps the body size`() = editorUiTest {
@@ -44,7 +44,7 @@ class RichPasteBodyStyleTest {
 			.filter { title >= it.start && title < it.end }
 			.fold(androidx.compose.ui.text.SpanStyle()) { acc, range -> acc.merge(range.item) }
 			.fontSize
-		assertEquals(MarkdownConfiguration.DEFAULT.header2Style.fontSize, size)
+		assertEquals(RichTextStyles.DEFAULT.header2Style.fontSize, size)
 	}
 
 	@Test
@@ -53,7 +53,7 @@ class RichPasteBodyStyleTest {
 		press(Key.MoveEnd, ctrl = true)
 		pasteHtml("<b>x</b>")
 		assertEquals("Titlex", text)
-		assertEquals(MarkdownConfiguration.DEFAULT.header2Style.fontSize, fontSizeAt(text.indexOf("x")))
+		assertEquals(RichTextStyles.DEFAULT.header2Style.fontSize, fontSizeAt(text.indexOf("x")))
 	}
 
 	/** The size the character at [index] renders at: its spans merged in order. */

@@ -13,12 +13,16 @@ import androidx.compose.ui.input.pointer.*
 import androidx.compose.ui.platform.ViewConfiguration
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
+import com.darkrockstudios.texteditor.cursor.getWrappedLineIndex
+import com.darkrockstudios.texteditor.html.sanitizeLinkUrl
 import com.darkrockstudios.texteditor.input.CtrlKeyBindings
 import com.darkrockstudios.texteditor.input.KeyBindings
 import com.darkrockstudios.texteditor.input.MacKeyBindings
 import com.darkrockstudios.texteditor.input.platformKeyBindings
 import com.darkrockstudios.texteditor.richstyle.LinkSpanStyle
 import com.darkrockstudios.texteditor.richstyle.RichSpan
+import com.darkrockstudios.texteditor.state.CaretAffinity
+import com.darkrockstudios.texteditor.state.PointerHit
 import com.darkrockstudios.texteditor.state.SelectionGranularity
 import com.darkrockstudios.texteditor.state.SpanClickType
 import com.darkrockstudios.texteditor.state.TextEditorState
@@ -277,14 +281,16 @@ private class PointerSelection(
 	private val granularity: SelectionGranularity,
 	private val isTouch: Boolean,
 ) {
-	fun selectTo(position: Offset) {
-		state.selector.selectFromAnchor(anchor, state.getOffsetAtPosition(position), granularity, isTouch)
+	fun selectTo(position: Offset) = selectTo(state.pointerHitAt(position))
+
+	private fun selectTo(hit: PointerHit) {
+		state.selector.selectFromAnchor(anchor, granularity.unitOf(hit), granularity, isTouch, hit.affinity)
 	}
 
 	/** [selectTo] for a finger drag, which also magnifies the end it moves. */
 	fun dragTo(position: Offset) {
 		selectTo(position)
-		state.selector.magnifierCenter = magnifierCenter(state, state.cursorPosition, position)
+		state.selector.magnifierCenter = magnifierCenter(state, state.cursorPosition, position, state.cursor.affinity)
 	}
 
 	fun release() {
@@ -300,20 +306,25 @@ private class PointerSelection(
 			isShiftPressed: Boolean = false,
 			isTouch: Boolean = false,
 		): PointerSelection {
+			val hit = state.pointerHitAt(position)
 			val anchor = if (isShiftPressed) {
 				val fixed = state.selector.extensionAnchor(state.cursorPosition)
 				TextEditorRange(fixed, fixed)
 			} else {
-				state.selector.rangeAt(state.getOffsetAtPosition(position), granularity)
+				state.selector.rangeAt(granularity.unitOf(hit), granularity)
 			}
 			state.selector.hideCaretHandle()
 			return PointerSelection(state, anchor, granularity, isTouch).also {
-				it.selectTo(position)
+				it.selectTo(hit)
 				state.endCompositionIfPointerLeft()
 			}
 		}
 	}
 }
+
+/** What a pointer selection by this unit extends to: a caret for characters, else the character hit. */
+private fun SelectionGranularity.unitOf(hit: PointerHit): CharLineOffset =
+	if (this == SelectionGranularity.Character) hit.position else hit.character
 
 /** Whether [position] in the canvas is over a selected character, not merely beside one. */
 private fun TextEditorState.selectionContains(position: Offset): Boolean {
@@ -377,7 +388,7 @@ private class ClickTarget(val span: RichSpan?, val link: String?) {
 	companion object {
 		fun at(state: TextEditorState, offset: Offset): ClickTarget = ClickTarget(
 			state.spanAt(offset),
-			state.characterAt(offset)?.let { state.linkAt(it) },
+			state.characterAt(offset)?.let { state.linkToOpenAt(it) },
 		)
 	}
 }
@@ -424,12 +435,15 @@ private fun TextEditorState.characterAt(offset: Offset): CharLineOffset? {
 	return if (char < length) CharLineOffset(found.line, char) else null
 }
 
-/** The URL of the [LinkSpanStyle] covering [position], if any. */
-private fun TextEditorState.linkAt(position: CharLineOffset): String? =
+/**
+ * The URL of the [LinkSpanStyle] covering [position], if any. A destination the allowlist
+ * refuses, which only a host attaching the span directly can place, is no link to open.
+ */
+private fun TextEditorState.linkToOpenAt(position: CharLineOffset): String? =
 	lineOffsets.rowAt(position)
 		?.richSpans
 		?.firstOrNull { it.style is LinkSpanStyle && it.containsPosition(position) }
-		?.let { (it.style as LinkSpanStyle).url }
+		?.let { sanitizeLinkUrl((it.style as LinkSpanStyle).url) }
 
 /**
  * The pointer icon for a mouse hovering at [offset] with [modifiers] held: a hand over a
@@ -443,7 +457,7 @@ internal fun pointerIconAt(
 	default: PointerIcon?,
 ): PointerIcon? {
 	if (links == null || !links.opensOnClick(modifiers)) return default
-	val link = state.characterAt(offset)?.let { state.linkAt(it) }
+	val link = state.characterAt(offset)?.let { state.linkToOpenAt(it) }
 	return if (link != null) PointerIcon.Hand else default
 }
 
@@ -557,9 +571,10 @@ private suspend fun AwaitPointerEventScope.dragSelectionHandle(
 	val selection = state.selector.selection ?: return
 	val anchor = if (handle.isStart) selection.end else selection.start
 	val downAt = down.inContent(origin)
-	val grabOffset = grabOffset(state, handle.position, downAt)
+	val handleAffinity = handleAffinity(handle.isStart)
+	val grabOffset = grabOffset(state, handle.position, downAt, handleAffinity)
 	state.selector.setDraggingHandle(handle.isStart)
-	state.selector.magnifierCenter = magnifierCenter(state, handle.position, downAt + grabOffset)
+	state.selector.magnifierCenter = magnifierCenter(state, handle.position, downAt + grabOffset, handleAffinity)
 	state.endCompositionIfPointerLeft()
 
 	val autoScroll = DragAutoScroll(state, autoScrollScope, grabOffset) { target ->
@@ -581,7 +596,8 @@ private suspend fun AwaitPointerEventScope.dragSelectionHandle(
 			)
 			state.selector.setDraggingHandle(isStart = position isBefore anchor)
 		}
-		state.selector.magnifierCenter = magnifierCenter(state, position, target)
+		state.selector.magnifierCenter =
+			magnifierCenter(state, position, target, handleAffinity(isStart = position isBefore anchor))
 	}
 	try {
 		followDrag(autoScroll, down, origin, consumeAll = true)
@@ -604,16 +620,17 @@ private suspend fun AwaitPointerEventScope.dragCaretHandle(
 	autoScrollScope: CoroutineScope,
 ): Boolean {
 	val downAt = down.inContent(origin)
-	val grabOffset = grabOffset(state, state.cursorPosition, downAt)
-	state.selector.magnifierCenter = magnifierCenter(state, state.cursorPosition, downAt + grabOffset)
+	val grabOffset = grabOffset(state, state.cursorPosition, downAt, state.cursor.affinity)
+	state.selector.magnifierCenter =
+		magnifierCenter(state, state.cursorPosition, downAt + grabOffset, state.cursor.affinity)
 	val autoScroll = DragAutoScroll(state, autoScrollScope, grabOffset) { target ->
 		if (!state.selector.isCaretHandleVisible) {
 			state.selector.magnifierCenter = null
 			return@DragAutoScroll
 		}
-		val position = state.getOffsetAtPosition(target)
-		state.selector.dragCaretHandleTo(position)
-		state.selector.magnifierCenter = magnifierCenter(state, position, target)
+		val hit = state.pointerHitAt(target)
+		state.selector.dragCaretHandleTo(hit.position, hit.affinity)
+		state.selector.magnifierCenter = magnifierCenter(state, hit.position, target, hit.affinity)
 		state.endCompositionIfPointerLeft()
 	}
 	try {
@@ -625,27 +642,40 @@ private suspend fun AwaitPointerEventScope.dragCaretHandle(
 }
 
 /**
- * The magnifier's point for a handle dragged to [position]: on the middle of its row,
- * and level with the dragged point [target] so it glides rather than jumping a character
- * at a time, but never beyond the row's text, as Android's own text magnifier.
+ * The magnifier's point for a handle dragged to [position]: on the middle of its row
+ * (the one [affinity] picks at a wrap offset), and level with the dragged point [target]
+ * so it glides rather than jumping a character at a time, but never beyond the row's
+ * text, as Android's own text magnifier.
  */
-private fun magnifierCenter(state: TextEditorState, position: CharLineOffset, target: Offset): Offset {
-	val row = state.getPositionForOffset(position)
-	val wrap = state.lineOffsets.rowAt(position)
+private fun magnifierCenter(
+	state: TextEditorState,
+	position: CharLineOffset,
+	target: Offset,
+	affinity: CaretAffinity = CaretAffinity.Downstream,
+): Offset {
+	val row = state.getPositionForOffset(position, affinity)
+	val wrap = state.lineOffsets.getOrNull(state.lineOffsets.getWrappedLineIndex(position, affinity))
 	val x = if (wrap == null) {
 		row.position.x
 	} else {
 		val layout = wrap.textLayoutResult.multiParagraph
 		val left = wrap.offset.x + layout.getLineLeft(wrap.virtualLineIndex)
 		val right = wrap.offset.x + layout.getLineRight(wrap.virtualLineIndex)
-		target.x.coerceIn(minOf(left, right), maxOf(left, right))
+		// The line's edges stop before trailing spaces, which a caret at the row's end is past.
+		val caret = row.position.x
+		target.x.coerceIn(minOf(left, right, caret), maxOf(left, right, caret))
 	}
 	return Offset(x, row.position.y + row.height / 2f)
 }
 
 /** From the finger at [down] to the middle of [position]'s row: what a handle drag moves. */
-private fun grabOffset(state: TextEditorState, position: CharLineOffset, down: Offset): Offset {
-	val edge = state.getPositionForOffset(position)
+private fun grabOffset(
+	state: TextEditorState,
+	position: CharLineOffset,
+	down: Offset,
+	affinity: CaretAffinity = CaretAffinity.Downstream,
+): Offset {
+	val edge = state.getPositionForOffset(position, affinity)
 	return Offset(edge.position.x, edge.position.y + edge.height / 2f) - down
 }
 
@@ -686,8 +716,8 @@ private fun Density.findHandleAtPosition(
 	if (!state.selector.isTouchSelection || !state.hasFocus) return null
 	val selection = state.selector.selection ?: return null
 
-	val startHandlePos = handleCenter(state.getPositionForOffset(selection.start))
-	val endHandlePos = handleCenter(state.getPositionForOffset(selection.end))
+	val startHandlePos = handleCenter(state.getPositionForOffset(selection.start, handleAffinity(isStart = true)))
+	val endHandlePos = handleCenter(state.getPositionForOffset(selection.end, handleAffinity(isStart = false)))
 	val hitRadius = SelectionHandleHitRadius.toPx()
 
 	// The hit areas overlap on a short selection, so the nearer handle wins.
@@ -721,17 +751,17 @@ private fun Density.handleSpanInteraction(
 ): Boolean {
 	if (clickType == SpanClickType.TAP && isOnAnyHandle(offset, state)) return false
 
-	val position = state.getOffsetAtPosition(offset)
+	val hit = state.pointerHitAt(offset)
 	val placesCaret = when (clickType) {
 		SpanClickType.PRIMARY_CLICK, SpanClickType.TAP -> true
 		// Like native editors, a right-click inside the selection keeps it for the context
 		// menu, and one outside it moves the caret there first. Read-only views have no
 		// caret to move, so they keep the selection either way.
-		SpanClickType.SECONDARY_CLICK -> !readOnly && !state.selector.selectionContains(position)
+		SpanClickType.SECONDARY_CLICK -> !readOnly && !state.selector.selectionContains(hit.character)
 	}
 	if (placesCaret) {
 		if (!readOnly) {
-			state.cursor.updatePosition(position)
+			state.cursor.updatePosition(hit.position, hit.affinity)
 		}
 		state.selector.clearSelection()
 		state.endCompositionIfPointerLeft()
@@ -796,7 +826,7 @@ private fun Modifier.handleTouchInteractions(
 				val existingSelection = state.selector.selection
 				val longPressJob = state.scope.launch {
 					delay(longPressTimeout)
-					val wordPosition = state.getOffsetAtPosition(downAt)
+					val wordPosition = state.pointerHitAt(downAt).character
 
 					val isOnSelection = existingSelection != null &&
 							(wordPosition isAfterOrEqual existingSelection.start) &&

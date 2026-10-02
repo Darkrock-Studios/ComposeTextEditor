@@ -8,15 +8,17 @@ import androidx.compose.ui.text.font.FontWeight
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.richstyle.HighlightSpanStyle
 import com.darkrockstudios.texteditor.richstyle.RichSpan
+import com.darkrockstudios.texteditor.state.toggleBlockquote
+import com.darkrockstudios.texteditor.state.toggleBulletList
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 import utils.assertBlockState
 import utils.assertRichSpanInvariants
 import utils.editorUiTest
 import utils.selectChars
 import utils.undoAll
-import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertFalse
-import kotlin.test.assertTrue
 
 /**
  * Undo/redo under sustained abuse: long streaks, interleaved bursts, the history
@@ -175,10 +177,10 @@ class UndoStormE2eTest {
 	@Test
 	fun `undo storm across block toggles lands on the initial document`() = editorUiTest {
 		typeText("abc\ndef")
-		markdown.toggleBulletList(0..1)
+		markdown.editorState.toggleBulletList(0..1)
 		press(Key.MoveEnd, ctrl = true)
 		typeText("x")
-		markdown.toggleBlockquote(0..1)
+		markdown.editorState.toggleBlockquote(0..1)
 
 		undoAll()
 

@@ -3,15 +3,19 @@ package e2e.torture
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.text.AnnotatedString
 import com.darkrockstudios.texteditor.richstyle.HorizontalRuleSpanStyle
+import com.darkrockstudios.texteditor.state.toggleBlockquote
+import com.darkrockstudios.texteditor.state.toggleBulletList
+import com.darkrockstudios.texteditor.state.toggleCodeFence
+import com.darkrockstudios.texteditor.state.toggleOrderedList
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 import utils.assertBlockState
 import utils.assertRichSpanInvariants
 import utils.blockFlags
 import utils.editorUiTest
 import utils.linesWith
 import utils.selectChars
-import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertTrue
 
 /**
  * Deletions that cross block boundaries: merging lists, joining styled lines into
@@ -39,7 +43,7 @@ class BlockBoundaryDeletionE2eTest {
 	fun `forward deleting the newline before a bulleted line makes it plain`() = editorUiTest(
 		initialText = AnnotatedString("plain\nitem"),
 	) {
-		markdown.toggleBulletList(1..1)
+		markdown.editorState.toggleBulletList(1..1)
 
 		press(Key.MoveHome, ctrl = true)
 		press(Key.MoveEnd)
@@ -56,8 +60,8 @@ class BlockBoundaryDeletionE2eTest {
 	fun `deleting across a quote to fence boundary leaves one block style`() = editorUiTest(
 		initialText = AnnotatedString("quoted\ncode"),
 	) {
-		markdown.toggleBlockquote(0..0)
-		markdown.toggleCodeFence(1..1)
+		markdown.editorState.toggleBlockquote(0..0)
+		markdown.editorState.toggleCodeFence(1..1)
 
 		selectChars(3, 9)
 		press(Key.Delete)
@@ -73,8 +77,8 @@ class BlockBoundaryDeletionE2eTest {
 	fun `select all delete in a fully styled doc leaves a clean empty state`() = editorUiTest(
 		initialText = AnnotatedString("one\ntwo\nthree"),
 	) {
-		markdown.toggleBulletList(0..2)
-		markdown.toggleBlockquote(0..2)
+		markdown.editorState.toggleBulletList(0..2)
+		markdown.editorState.toggleBlockquote(0..2)
 
 		press(Key.A, ctrl = true)
 		press(Key.Delete)
@@ -90,7 +94,7 @@ class BlockBoundaryDeletionE2eTest {
 	fun `deleting the last character of a one char item keeps the bullet`() = editorUiTest(
 		initialText = AnnotatedString("x"),
 	) {
-		markdown.toggleBulletList(0..0)
+		markdown.editorState.toggleBulletList(0..0)
 		press(Key.MoveEnd)
 		press(Key.Backspace)
 
@@ -116,8 +120,8 @@ class BlockBoundaryDeletionE2eTest {
 	fun `undo of a cross block delete restores both block styles`() = editorUiTest(
 		initialText = AnnotatedString("quoted\ncode"),
 	) {
-		markdown.toggleBlockquote(0..0)
-		markdown.toggleCodeFence(1..1)
+		markdown.editorState.toggleBlockquote(0..0)
+		markdown.editorState.toggleCodeFence(1..1)
 
 		selectChars(3, 9)
 		press(Key.Delete)
@@ -133,7 +137,7 @@ class BlockBoundaryDeletionE2eTest {
 	fun `word delete at the end of a bulleted word keeps the bullet`() = editorUiTest(
 		initialText = AnnotatedString("word"),
 	) {
-		markdown.toggleBulletList(0..0)
+		markdown.editorState.toggleBulletList(0..0)
 		press(Key.MoveEnd)
 		press(Key.Backspace, ctrl = true)
 
@@ -146,8 +150,8 @@ class BlockBoundaryDeletionE2eTest {
 	fun `deleting the blank line between two fences merges them`() = editorUiTest(
 		initialText = AnnotatedString("code1\n\ncode2"),
 	) {
-		markdown.toggleCodeFence(0..0)
-		markdown.toggleCodeFence(2..2)
+		markdown.editorState.toggleCodeFence(0..0)
+		markdown.editorState.toggleCodeFence(2..2)
 
 		press(Key.MoveHome, ctrl = true)
 		press(Key.MoveEnd)
@@ -168,10 +172,10 @@ class BlockBoundaryDeletionE2eTest {
 	fun `backspacing through an entire mixed block document ends clean`() = editorUiTest(
 		initialText = AnnotatedString("qq\nbb\noo\ncc\npp"),
 	) {
-		markdown.toggleBlockquote(0..0)
-		markdown.toggleBulletList(1..1)
-		markdown.toggleOrderedList(2..2)
-		markdown.toggleCodeFence(3..3)
+		markdown.editorState.toggleBlockquote(0..0)
+		markdown.editorState.toggleBulletList(1..1)
+		markdown.editorState.toggleOrderedList(2..2)
+		markdown.editorState.toggleCodeFence(3..3)
 
 		press(Key.MoveEnd, ctrl = true)
 		var presses = 0

@@ -7,7 +7,7 @@ import androidx.compose.ui.text.AnnotatedString
  * separator the document model knows. Text that enters the editor passes through
  * here, so a carriage return never lands inside a line.
  */
-internal fun String.normalizeLineEndings(): String {
+fun String.normalizeLineEndings(): String {
 	if (indexOf('\r') == -1) return this
 	return replace("\r\n", "\n").replace('\r', '\n')
 }

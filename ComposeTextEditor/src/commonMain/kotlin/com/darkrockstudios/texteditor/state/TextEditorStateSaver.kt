@@ -19,7 +19,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.text.style.TextIndent
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.isSpecified
 import androidx.compose.ui.unit.TextUnitType
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
@@ -38,6 +41,7 @@ import com.darkrockstudios.texteditor.richstyle.HorizontalRuleSpanStyle
 import com.darkrockstudios.texteditor.richstyle.LinkSpanStyle
 import com.darkrockstudios.texteditor.richstyle.ORDERED_LIST_PARAGRAPH_STYLE
 import com.darkrockstudios.texteditor.richstyle.OrderedListSpanStyle
+import com.darkrockstudios.texteditor.richstyle.ParagraphFormatSpanStyle
 import com.darkrockstudios.texteditor.richstyle.RichSpan
 import com.darkrockstudios.texteditor.richstyle.RichSpanStyle
 import kotlinx.coroutines.CoroutineScope
@@ -81,6 +85,8 @@ private val blockParagraphs: Map<String, ParagraphStyle> = mapOf(
 	"header" to HEADER_PARAGRAPH_STYLE,
 	// A nested item's indent, one name per level; both list kinds share it.
 ) + (1..MAX_LIST_LEVEL).associate { level -> "list:$level" to listParagraphStyle(level) }
+
+private val textAligns = listOf(TextAlign.Left, TextAlign.Right, TextAlign.Center, TextAlign.Justify, TextAlign.Start, TextAlign.End)
 
 private val textDirections = listOf(
 	TextDirection.Ltr, TextDirection.Rtl, TextDirection.Content, TextDirection.ContentOrLtr, TextDirection.ContentOrRtl,
@@ -211,6 +217,14 @@ private fun RichSpanStyle.encode(scope: SaverScope, custom: Saver<RichSpanStyle,
 		is BulletListSpanStyle -> "bullet:$level" to ""
 		is OrderedListSpanStyle -> "ordered:$level" to ""
 		is CodeFenceLanguageSpanStyle -> "fence-language" to language
+		is ParagraphFormatSpanStyle -> "paragraph" to arrayListOf<Any>(
+			if (spaceBefore.isSpecified) spaceBefore.value else Float.NaN,
+			if (spaceAfter.isSpecified) spaceAfter.value else Float.NaN,
+			textAlign?.let { textAligns.indexOf(it) } ?: -1,
+			indent.typeCode(), indent.valueOrZero(),
+			firstLineIndent.typeCode(), firstLineIndent.valueOrZero(),
+			lineHeight.typeCode(), lineHeight.valueOrZero(),
+		)
 		else -> {
 			val saved = custom?.let { saver -> with(saver) { scope.save(this@encode) } } ?: return null
 			require(scope.canBeSaved(saved)) {
@@ -230,6 +244,16 @@ private fun decodeRichSpanStyle(kind: String, argument: Any?, custom: Saver<Rich
 		kind.startsWith("bullet:") -> kind.substringAfter(':').toIntOrNull()?.let { BulletListSpanStyle.of(it) }
 		kind.startsWith("ordered:") -> kind.substringAfter(':').toIntOrNull()?.let { OrderedListSpanStyle.of(it) }
 		kind == "fence-language" -> (argument as? String)?.let { CodeFenceLanguageSpanStyle(it) }
+		kind == "paragraph" -> (argument as? List<*>)?.let { saved ->
+			ParagraphFormatSpanStyle(
+				spaceBefore = (saved[0] as Float).let { if (it.isNaN()) Dp.Unspecified else it.dp },
+				spaceAfter = (saved[1] as Float).let { if (it.isNaN()) Dp.Unspecified else it.dp },
+				textAlign = textAligns.getOrNull(saved[2] as Int),
+				indent = textUnit(saved[3] as Int, saved[4] as Float),
+				firstLineIndent = textUnit(saved[5] as Int, saved[6] as Float),
+				lineHeight = textUnit(saved[7] as Int, saved[8] as Float),
+			)
+		}
 		kind == KIND_CUSTOM && argument != null -> custom?.restore(argument)
 		else -> null
 	}
