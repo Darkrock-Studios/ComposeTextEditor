@@ -18,6 +18,7 @@ import com.darkrockstudios.texteditor.state.TextEditorState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.coroutines.cancellation.CancellationException
 
 /** [App] with the Android additions to its editors. */
 @Composable
@@ -41,10 +42,13 @@ private fun KeyboardImages(state: TextEditorState, images: InMemoryImageProvider
 			scope.launch {
 				val uri = content.contentUri
 				// The grant lasts as long as `content` does; it is given back once the bytes are read.
+				@Suppress("TooGenericExceptionCaught")
 				val bitmap = try {
 					withContext(Dispatchers.IO) {
 						context.contentResolver.openInputStream(uri)?.use(BitmapFactory::decodeStream)
 					}
+				} catch (e: CancellationException) {
+					throw e
 				} catch (e: Exception) {
 					Log.w("KeyboardImages", "Could not read $uri", e)
 					null

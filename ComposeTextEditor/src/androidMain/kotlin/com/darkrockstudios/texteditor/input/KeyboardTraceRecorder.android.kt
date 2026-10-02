@@ -87,6 +87,7 @@ class KeyboardTraceRecorder {
 	 * cannot run, and goes in the trace as a change from outside.
 	 */
 	@Synchronized
+	@Suppress("TooGenericExceptionCaught")
 	internal fun <T> call(
 		marker: Char,
 		id: Int,
