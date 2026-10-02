@@ -8,8 +8,8 @@ import com.darkrockstudios.texteditor.state.TextEditorState
 
 /**
  * Draws the caret while it is in its blink's visible phase and nothing is selected, as
- * native editors hide it behind a selection. Its metrics are recorded either way, since
- * the IME places its windows by them.
+ * native editors hide it behind a selection. Its metrics are recorded either way, for
+ * [TextEditorState.lastCursorMetrics].
  */
 internal fun DrawScope.DrawCursor(
 	state: TextEditorState,

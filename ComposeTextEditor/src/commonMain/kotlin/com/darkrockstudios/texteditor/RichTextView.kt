@@ -23,6 +23,8 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalTextToolbar
 import androidx.compose.ui.unit.dp
 import com.darkrockstudios.texteditor.contextmenu.ContextMenuActions
+import com.darkrockstudios.texteditor.contextmenu.ContextMenuOpener
+import com.darkrockstudios.texteditor.contextmenu.ContextMenuPlacement
 import com.darkrockstudios.texteditor.contextmenu.ContextMenuStrings
 import com.darkrockstudios.texteditor.contextmenu.TextEditorContextMenuProvider
 import com.darkrockstudios.texteditor.contextmenu.TextEditorContextMenuState
@@ -49,6 +51,7 @@ import com.darkrockstudios.texteditor.state.TextEditorState
  *   URL on a click or tap that lands and lifts on the link. Dragging a selection
  *   across a link does not open it. Pass `LocalUriHandler.current::openUri` to open
  *   links in the browser.
+ * @param contextMenuStrings Localized labels for the context menu of a selectable view.
  */
 @Composable
 fun RichTextView(
@@ -58,6 +61,7 @@ fun RichTextView(
 	style: TextEditorStyle = rememberTextEditorStyle(),
 	isSelectable: Boolean = false,
 	onLinkClick: ((url: String) -> Unit)? = null,
+	contextMenuStrings: ContextMenuStrings = ContextMenuStrings.Default,
 ) {
 	val currentOnLinkClick by rememberUpdatedState(onLinkClick)
 	val linkClicks = remember { LinkClicks.forReadOnly { currentOnLinkClick } }
@@ -84,12 +88,12 @@ fun RichTextView(
 		val contextMenuActions = remember(state, clipboard) {
 			ContextMenuActions(state, clipboard, state.scope, enabled = false)
 		}
+		val menuPlacement = remember(state, contextMenuState) { ContextMenuPlacement(state, contextMenuState) }
+		ContextMenuOpener(state, menuPlacement)
 		val textToolbar = LocalTextToolbar.current
 		val nativeTextToolbar = LocalNativeTextToolbar.current
-		val touchToolbar = remember(state, textToolbar, nativeTextToolbar, contextMenuActions) {
-			TouchToolbar(state, textToolbar.takeIf { nativeTextToolbar }, contextMenuActions) { offset ->
-				contextMenuState.showMenu(offset)
-			}
+		val touchToolbar = remember(state, textToolbar, nativeTextToolbar, contextMenuActions, menuPlacement) {
+			TouchToolbar(state, textToolbar.takeIf { nativeTextToolbar }, contextMenuActions, menuPlacement::showAtContent)
 		}
 		LaunchedEffect(touchToolbar) { touchToolbar.watch() }
 		DisposableEffect(touchToolbar) { onDispose { touchToolbar.hide() } }
@@ -97,12 +101,13 @@ fun RichTextView(
 		TextEditorContextMenuProvider(
 			menuState = contextMenuState,
 			actions = contextMenuActions,
-			strings = ContextMenuStrings.Default,
+			strings = contextMenuStrings,
 			enabled = false,
 		) {
 			RichTextViewBody(
 				state = state,
-				modifier = modifier
+				modifier = menuPlacement.modifier
+					.then(modifier)
 					.focusRequester(focusRequester)
 					// A read-only view never raises a soft keyboard, and its focus exists
 					// only to route copy/select-all shortcuts, so no tap ever suppresses it.
@@ -112,7 +117,7 @@ fun RichTextView(
 				contentPadding = contentPadding,
 				style = style,
 				isSelectable = true,
-				onContextMenuRequest = { offset -> contextMenuState.showMenu(offset) },
+				onContextMenuRequest = menuPlacement::showAtContent,
 				linkClicks = linkClicks,
 				touchToolbar = touchToolbar,
 			)

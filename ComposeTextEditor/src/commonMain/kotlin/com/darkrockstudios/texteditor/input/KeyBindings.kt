@@ -46,11 +46,18 @@ fun interface KeyBindings {
 	/**
 	 * The motion the forward word chord (Ctrl+Right, Option+Right) performs. In a
 	 * right-to-left paragraph the arrow keys mirror, so Ctrl+Left performs this and
-	 * Ctrl+Right the word start. [WindowsKeyBindings] returns [Motion.WordRight]. A
+	 * Ctrl+Right [wordBackward]. [WindowsKeyBindings] returns [Motion.WordRight]. A
 	 * lambda cannot override it, so bindings that wrap the platform's on Windows keep
 	 * it by delegating: `object Mine : KeyBindings by platformKeyBindings() { ... }`.
 	 */
 	val wordForward: Motion get() = Motion.WordEnd
+
+	/**
+	 * The motion the backward word chord (Ctrl+Left, Option+Left) performs, which Ctrl+Right
+	 * performs in a right-to-left paragraph. [WindowsKeyBindings] returns
+	 * [Motion.PreviousWordStart]. Delegate to keep it, as for [wordForward].
+	 */
+	val wordBackward: Motion get() = Motion.WordLeft
 }
 
 /** The bindings of the host platform. */
@@ -65,7 +72,8 @@ val LocalKeyBindings = staticCompositionLocalOf { platformKeyBindings() }
 
 /**
  * Linux conventions, also used on Android: Ctrl for shortcuts, Ctrl+Left/Right for word
- * jumps, Ctrl+Up/Down for paragraph jumps, Home/End for line bounds. Going forward, Ctrl+Right
+ * jumps, Ctrl+Up/Down for paragraph jumps, Home/End for line bounds, Shift+F10 and the Menu
+ * key for the context menu. Going forward, Ctrl+Right
  * and Ctrl+Delete stop at the end of the word and Ctrl+Down at the end of the paragraph, as
  * GTK, `EditText` and `BasicTextField` do. Windows differs only in those, see
  * [WindowsKeyBindings].
@@ -83,6 +91,7 @@ object CtrlKeyBindings : KeyBindings {
 			}
 
 			Key.B, Key.I, Key.U, Key.E -> if (ctrl && !event.isShiftPressed) formattingToggleFor(event.key) else null
+			Key.Backslash -> if (ctrl && !event.isShiftPressed) Action.ClearFormatting else null
 			Key.V -> when {
 				ctrl && event.isShiftPressed -> Action.PasteAsPlainText
 				ctrl -> Action.Paste
@@ -116,6 +125,9 @@ object CtrlKeyBindings : KeyBindings {
 				else -> null
 			}
 
+			Key.F10 -> if (event.isShiftPressed && !event.hasCommandModifier) Action.ShowContextMenu else null
+			Key.Menu, AwtContextMenuKey -> if (event.hasCommandModifier) null else Action.ShowContextMenu
+
 			else -> commonCommandFor(event)
 		}
 	}
@@ -124,23 +136,28 @@ object CtrlKeyBindings : KeyBindings {
 /**
  * Windows conventions: [CtrlKeyBindings], except that going forward runs on to the next
  * start, as Windows edit controls, Word and WordPad do: Ctrl+Right and Ctrl+Delete to the
- * start of the next word, Ctrl+Down to the start of the next paragraph.
+ * start of the next word, Ctrl+Down to the start of the next paragraph. Word motion and
+ * deletion also stop at every line break: Ctrl+Left and Ctrl+Backspace from a line start go
+ * to the previous line's end, not its last word.
  */
 object WindowsKeyBindings : KeyBindings {
 	override val wordForward: Motion get() = Motion.WordRight
+	override val wordBackward: Motion get() = Motion.PreviousWordStart
 
 	override fun commandFor(event: KeyEvent): EditorCommand? {
-		val forward = if (event.isCtrlShortcut) {
+		val own = if (event.isCtrlShortcut) {
 			when (event.navigationKey) {
 				Key.DirectionRight -> Motion.WordRight
+				Key.DirectionLeft -> Motion.PreviousWordStart
 				Key.DirectionDown -> Motion.NextParagraphStart
 				Key.Delete -> Action.DeleteWordForward
+				Key.Backspace -> Action.DeleteToPreviousWordStart
 				else -> null
 			}
 		} else {
 			null
 		}
-		return forward ?: CtrlKeyBindings.commandFor(event)
+		return own ?: CtrlKeyBindings.commandFor(event)
 	}
 }
 
@@ -149,8 +166,8 @@ object WindowsKeyBindings : KeyBindings {
  * end of the word), Option+Up/Down for paragraph jumps, Cmd+Arrow for line and document
  * bounds, and the Emacs-style Ctrl chords of every Cocoa text view: A and E for the
  * paragraph's start and end, F, B, N and P for a character or a row, D and H to delete
- * forward and backward, K to delete to the paragraph end. Ctrl+Y needs a kill ring and is
- * unbound. Every other Ctrl chord selects the same command as the unmodified key, since on
+ * forward and backward, K to delete to the paragraph end, keeping it for Y to yank. Every
+ * other Ctrl chord selects the same command as the unmodified key, since on
  * macOS Ctrl belongs to the system; Enter with Ctrl, Cmd or Option is left for the host.
  *
  * Option is also the macOS compose modifier (Option+8 types '{'), so only the chords claimed here
@@ -173,6 +190,7 @@ object MacKeyBindings : KeyBindings {
 			}
 
 			Key.B, Key.I, Key.U, Key.E -> if (cmd && !event.isShiftPressed) formattingToggleFor(event.key) else null
+			Key.Backslash -> if (cmd && !event.isShiftPressed && !option) Action.ClearFormatting else null
 			// Cmd+Option+Shift+V is Cocoa's Paste and Match Style; Cmd+Shift+V is the common alias.
 			Key.V -> when {
 				cmd && event.isShiftPressed -> Action.PasteAsPlainText
@@ -232,7 +250,9 @@ object MacKeyBindings : KeyBindings {
 /**
  * Bold, italic and underline sit on B, I and U everywhere. Inline code is on E (GitHub,
  * Notion). Strikethrough, bound beside Cut, is on Shift+X (Google Docs on macOS, Slack,
- * Teams): the other common choice, Shift+S, is Save As in most hosts.
+ * Teams): the other common choice, Shift+S, is Save As in most hosts. Clear formatting is
+ * on backslash (Google Docs): Word's Ctrl+Space switches the input method on Windows,
+ * Linux and macOS. Unlink has no common chord and is left unbound.
  */
 private fun formattingToggleFor(key: Key): Action? = when (key) {
 	Key.B -> Action.ToggleBold
@@ -246,7 +266,13 @@ private fun formattingToggleFor(key: Key): Action? = when (key) {
 private fun commonCommandFor(event: KeyEvent): EditorCommand? = when (event.navigationKey) {
 	Key.PageUp -> Motion.PageUp
 	Key.PageDown -> Motion.PageDown
-	Key.Tab -> if (event.isShiftPressed) Action.Outdent else Action.Indent
+	// Ctrl+Tab is left to the focus system, the way out of a text view that takes Tab.
+	// Cmd+Tab and Super+Tab belong to the system.
+	Key.Tab -> when {
+		event.isCtrlPressed || event.isMetaPressed -> null
+		event.isShiftPressed -> Action.Outdent
+		else -> Action.Indent
+	}
 	Key.Enter, Key.NumPadEnter -> if (event.isEnterHostChord) null else Action.NewLine
 	Key.Cut -> Action.Cut
 	Key.Copy -> Action.Copy
@@ -261,7 +287,7 @@ private val KeyEvent.isEmacsChord: Boolean
 /**
  * Cocoa's Emacs-style Ctrl chords. A and E are `moveToBeginningOfParagraph:` and
  * `moveToEndOfParagraph:`; the motions extend the selection with Shift, the deletions
- * take none.
+ * and the yank take none.
  */
 private fun emacsCommandFor(event: KeyEvent): EditorCommand? = when (event.key) {
 	Key.A -> Motion.ParagraphStart
@@ -273,8 +299,21 @@ private fun emacsCommandFor(event: KeyEvent): EditorCommand? = when (event.key) 
 	Key.D -> if (event.isShiftPressed) null else Action.DeleteForward
 	Key.H -> if (event.isShiftPressed) null else Action.DeleteBackward
 	Key.K -> if (event.isShiftPressed) null else Action.DeleteToParagraphEnd
+	Key.Y -> if (event.isShiftPressed) null else Action.Yank
 	else -> null
 }
+
+/** Ctrl, Alt or Cmd: a chord a host or the system may claim. */
+private val KeyEvent.hasCommandModifier: Boolean
+	get() = isCtrlPressed || isAltPressed || isMetaPressed
+
+/**
+ * The Menu key on desktop: AWT's `VK_CONTEXT_MENU` at the standard location, which Compose
+ * desktop reports without naming it ([Key.Menu] is the Android key). Desktop packs the
+ * location above the key code, which no other platform's keys carry, so this matches
+ * nothing elsewhere.
+ */
+private val AwtContextMenuKey = Key((1L shl 32) or 525L)
 
 /**
  * Enter with Ctrl, Cmd or Alt is left for the host to claim (send, submit, a page break).

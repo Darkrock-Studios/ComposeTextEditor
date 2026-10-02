@@ -90,6 +90,8 @@ class StylingSpansE2eTest {
 		dragSelect(fromChar = 0, toChar = 7)
 		state.addStyleSpan(state.selector.selection!!, BOLD)
 
+		// A press inside the selection would drag it, so collapse it first.
+		clickAtCharacter(7)
 		dragSelect(fromChar = 2, toChar = 5)
 		state.removeStyleSpan(state.selector.selection!!, BOLD)
 
@@ -105,6 +107,8 @@ class StylingSpansE2eTest {
 		dragSelect(fromChar = 0, toChar = 5)
 		state.addStyleSpan(state.selector.selection!!, BOLD)
 
+		// A press inside the selection would drag it, so collapse it first.
+		clickAtCharacter(8)
 		dragSelect(fromChar = 3, toChar = 8)
 		state.addStyleSpan(state.selector.selection!!, ITALIC)
 

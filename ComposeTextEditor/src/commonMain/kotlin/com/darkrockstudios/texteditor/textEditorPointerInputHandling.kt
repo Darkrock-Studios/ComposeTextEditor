@@ -48,13 +48,14 @@ internal fun Modifier.textEditorPointerInputHandling(
 	caretHandle: Boolean = !readOnly,
 	contentOrigin: () -> Offset,
 	touchToolbar: TouchToolbar? = null,
+	selectionDrag: ((Offset) -> Boolean)? = null,
 ): Modifier {
 	return this
 		.handleHandleDrag(state, contentOrigin, touchToolbar)
 		.handleTouchInteractions(
 			state, onSpanClick, onContextMenuRequest, readOnly, links, caretHandle, contentOrigin, touchToolbar,
 		)
-		.handleMouseInput(state, onSpanClick, onContextMenuRequest, readOnly, links, contentOrigin, touchToolbar)
+		.handleMouseInput(state, onSpanClick, onContextMenuRequest, readOnly, links, contentOrigin, touchToolbar, selectionDrag)
 }
 
 /**
@@ -175,8 +176,10 @@ internal val DOUBLE_TAP_SLOP = 100.dp
 /**
  * Every mouse gesture. The primary button places the caret on press (or extends with
  * shift), a second and third press select the word and the line, and a drag extends by
- * whatever unit the press selected. The secondary button opens the context menu; any
- * other button does nothing.
+ * whatever unit the press selected. A plain press inside the selection is held instead:
+ * moving past the slop hands the selection to [selectionDrag], and coming up in place
+ * puts the caret there, as native editors do. The secondary button opens the context
+ * menu; any other button does nothing.
  */
 private fun Modifier.handleMouseInput(
 	state: TextEditorState,
@@ -186,7 +189,8 @@ private fun Modifier.handleMouseInput(
 	links: LinkClicks?,
 	contentOrigin: () -> Offset,
 	touchToolbar: TouchToolbar?,
-): Modifier = pointerInput(state, links, touchToolbar) {
+	selectionDrag: ((Offset) -> Boolean)?,
+): Modifier = pointerInput(state, links, touchToolbar, selectionDrag) {
 	val clickCounter = ClickCounter(viewConfiguration)
 	val touchSlop = viewConfiguration.touchSlop
 	coroutineScope {
@@ -207,14 +211,25 @@ private fun Modifier.handleMouseInput(
 				// The second and third press of a multi-click select; only a plain first
 				// press can become a click on what is under it.
 				val pressed = if (clicks == 1 && !isShiftPressed) ClickTarget.at(state, downAt) else null
-				val selection = PointerSelection.press(
-					state,
-					position = downAt,
-					granularity = SelectionGranularity.forClickCount(clicks),
-					isShiftPressed = isShiftPressed,
-				)
-				val autoScroll = DragAutoScroll(state, autoScrollScope, onDrag = selection::selectTo)
-				val release = followDrag(autoScroll, down, origin, touchSlop) ?: return@awaitEachGesture
+				val held = pressed != null && selectionDrag != null && state.selectionContains(downAt)
+				val outcome = if (held) awaitMoveOrRelease(down, touchSlop) ?: return@awaitEachGesture else null
+				if (outcome != null && outcome.pressed && selectionDrag?.invoke(outcome.position) == true) {
+					clickCounter.reset()
+					return@awaitEachGesture
+				}
+				val release = if (outcome != null && !outcome.pressed) {
+					PointerSelection.press(state, downAt, SelectionGranularity.forClickCount(clicks))
+					outcome
+				} else {
+					val selection = PointerSelection.press(
+						state,
+						position = downAt,
+						granularity = SelectionGranularity.forClickCount(clicks),
+						isShiftPressed = isShiftPressed,
+					)
+					val autoScroll = DragAutoScroll(state, autoScrollScope, onDrag = selection::selectTo)
+					followDrag(autoScroll, down, origin, touchSlop) ?: return@awaitEachGesture
+				}
 				// A drag inside the slop that still selected something is a drag too.
 				if (pressed == null || state.selector.hasSelection()) return@awaitEachGesture
 				val releasedAt = release.inContent(origin)
@@ -296,6 +311,32 @@ private class PointerSelection(
 				it.selectTo(position)
 				state.endCompositionIfPointerLeft()
 			}
+		}
+	}
+}
+
+/** Whether [position] in the canvas is over a selected character, not merely beside one. */
+private fun TextEditorState.selectionContains(position: Offset): Boolean {
+	val selection = selector.selection ?: return false
+	val char = characterAt(position) ?: return false
+	return char >= selection.start && char < selection.end
+}
+
+/**
+ * Waits for [down] to move past [touchSlop] or to come up, answering that change (still
+ * pressed for a move), or null when the pointer is gone.
+ */
+private suspend fun AwaitPointerEventScope.awaitMoveOrRelease(
+	down: PointerInputChange,
+	touchSlop: Float,
+): PointerInputChange? {
+	while (true) {
+		val event = awaitPointerEvent()
+		val change = event.changes.firstOrNull { it.id == down.id } ?: return null
+		if (!change.pressed) return change
+		if (event.leavesTap(down, change, touchSlop)) {
+			change.consume()
+			return change
 		}
 	}
 }

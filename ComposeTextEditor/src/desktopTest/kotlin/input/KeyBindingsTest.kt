@@ -97,10 +97,25 @@ class KeyBindingsTest {
 		)
 		assertEquals(Action.DeleteWordForward, WindowsKeyBindings.commandFor(chord(Key.Delete, ctrl = true)))
 		assertEquals(Action.DeleteWordForward, WindowsKeyBindings.commandFor(chord(Key.NumPadDelete, ctrl = true)))
-		assertEquals(Motion.WordLeft, WindowsKeyBindings.commandFor(chord(Key.DirectionLeft, ctrl = true)))
-		assertEquals(Action.DeleteWordBackward, WindowsKeyBindings.commandFor(chord(Key.Backspace, ctrl = true)))
 		assertEquals(Motion.Right, WindowsKeyBindings.commandFor(chord(Key.DirectionRight, ctrl = true, alt = true)))
 		assertEquals(Action.Cut, WindowsKeyBindings.commandFor(chord(Key.Delete, shift = true)))
+	}
+
+	@Test
+	fun `windows ctrl left and ctrl backspace stop at line breaks`() {
+		assertEquals(Motion.PreviousWordStart, WindowsKeyBindings.commandFor(chord(Key.DirectionLeft, ctrl = true)))
+		assertEquals(
+			Motion.PreviousWordStart,
+			WindowsKeyBindings.commandFor(chord(Key.NumPadDirectionLeft, ctrl = true, shift = true)),
+		)
+		assertEquals(
+			Action.DeleteToPreviousWordStart,
+			WindowsKeyBindings.commandFor(chord(Key.Backspace, ctrl = true)),
+		)
+		assertEquals(Motion.PreviousWordStart, WindowsKeyBindings.wordBackward)
+		assertEquals(Motion.WordLeft, CtrlKeyBindings.wordBackward)
+		assertEquals(Motion.WordLeft, MacKeyBindings.wordBackward)
+		assertEquals(Motion.Left, WindowsKeyBindings.commandFor(chord(Key.DirectionLeft, ctrl = true, alt = true)))
 	}
 
 	@Test
@@ -122,11 +137,11 @@ class KeyBindingsTest {
 	fun `the windows table agrees with the ctrl table away from its own chords`() {
 		val ownKeys = setOf(
 			Key.DirectionRight, Key.NumPadDirectionRight, Key.DirectionDown, Key.NumPadDirectionDown,
-			Key.Delete, Key.NumPadDelete,
+			Key.Delete, Key.NumPadDelete, Key.DirectionLeft, Key.NumPadDirectionLeft, Key.Backspace,
 		)
 		val keys = ownKeys + listOf(
 			Key.A, Key.C, Key.V, Key.X, Key.Y, Key.Z, Key.B, Key.K, Key.Enter, Key.Tab, Key.Insert,
-			Key.DirectionLeft, Key.DirectionUp, Key.MoveHome, Key.MoveEnd, Key.PageUp, Key.PageDown, Key.Backspace,
+			Key.DirectionUp, Key.MoveHome, Key.MoveEnd, Key.PageUp, Key.PageDown,
 		)
 		val flags = listOf(false, true)
 		for (key in keys) for (ctrl in flags) for (shift in flags) for (alt in flags) {
@@ -330,7 +345,8 @@ class KeyBindingsTest {
 		assertEquals(Action.ToggleInlineCode, MacKeyBindings.commandFor(chord(Key.E, meta = true)))
 		assertNull(MacKeyBindings.commandFor(chord(Key.F)))
 		assertNull(MacKeyBindings.commandFor(chord(Key.D, meta = true)))
-		assertNull(MacKeyBindings.commandFor(chord(Key.Y, ctrl = true)), "no kill ring to yank from")
+		assertEquals(Action.Yank, MacKeyBindings.commandFor(chord(Key.Y, ctrl = true)), "Cocoa's yank:")
+		assertNull(MacKeyBindings.commandFor(chord(Key.Y, ctrl = true, shift = true)))
 	}
 
 	@Test
@@ -339,7 +355,6 @@ class KeyBindingsTest {
 		assertNull(MacKeyBindings.commandFor(chord(Key.X, ctrl = true)))
 		assertNull(MacKeyBindings.commandFor(chord(Key.V, ctrl = true)))
 		assertNull(MacKeyBindings.commandFor(chord(Key.Z, ctrl = true)))
-		assertNull(MacKeyBindings.commandFor(chord(Key.Y, ctrl = true)))
 	}
 
 	@Test
@@ -367,6 +382,49 @@ class KeyBindingsTest {
 			assertEquals(Motion.PageUp, bindings.commandFor(chord(Key.PageUp)))
 			assertEquals(Motion.PageDown, bindings.commandFor(chord(Key.PageDown)))
 			assertNull(bindings.commandFor(chord(Key.F)))
+		}
+	}
+
+	@Test
+	fun `shift+f10 and the menu key open the context menu off macos`() {
+		for (bindings in listOf(CtrlKeyBindings, WindowsKeyBindings)) {
+			assertEquals(Action.ShowContextMenu, bindings.commandFor(chord(Key.F10, shift = true)), "$bindings")
+			assertEquals(Action.ShowContextMenu, bindings.commandFor(chord(Key.Menu)), "$bindings")
+			assertEquals(
+				Action.ShowContextMenu,
+				bindings.commandFor(chord(Key(java.awt.event.KeyEvent.VK_CONTEXT_MENU))),
+				"$bindings, the desktop menu key",
+			)
+			assertNull(bindings.commandFor(chord(Key.F10)), "$bindings plain F10")
+			assertNull(bindings.commandFor(chord(Key.F10, shift = true, ctrl = true)), "$bindings ctrl+shift+F10")
+		}
+		assertNull(MacKeyBindings.commandFor(chord(Key.F10, shift = true)))
+		assertNull(MacKeyBindings.commandFor(chord(Key(java.awt.event.KeyEvent.VK_CONTEXT_MENU))))
+	}
+
+	/** Google Docs' chord. Ctrl+Space, Word's, switches the input method on every desktop. */
+	@Test
+	fun `ctrl or cmd+backslash clears formatting`() {
+		for (bindings in listOf(CtrlKeyBindings, WindowsKeyBindings)) {
+			assertEquals(Action.ClearFormatting, bindings.commandFor(chord(Key.Backslash, ctrl = true)))
+			assertNull(bindings.commandFor(chord(Key.Backslash, ctrl = true, shift = true)))
+			assertNull(bindings.commandFor(chord(Key.Backslash, ctrl = true, alt = true)), "AltGr")
+			assertNull(bindings.commandFor(chord(Key.Spacebar, ctrl = true)))
+		}
+		assertEquals(Action.ClearFormatting, MacKeyBindings.commandFor(chord(Key.Backslash, meta = true)))
+		assertNull(MacKeyBindings.commandFor(chord(Key.Backslash, ctrl = true)))
+		assertNull(MacKeyBindings.commandFor(chord(Key.Backslash, meta = true, shift = true)))
+	}
+
+	/** Ctrl+Tab is how GTK, Cocoa and Swing text views let the keyboard out; the focus system takes it. */
+	@Test
+	fun `tab with ctrl or cmd is left for focus traversal`() {
+		for (bindings in listOf(CtrlKeyBindings, WindowsKeyBindings, MacKeyBindings)) {
+			for (shift in listOf(false, true)) {
+				assertNull(bindings.commandFor(chord(Key.Tab, ctrl = true, shift = shift)), "$bindings ctrl shift=$shift")
+				assertNull(bindings.commandFor(chord(Key.Tab, meta = true, shift = shift)), "$bindings meta shift=$shift")
+			}
+			assertEquals(Action.Indent, bindings.commandFor(chord(Key.Tab, alt = true)), "$bindings alt")
 		}
 	}
 
@@ -509,11 +567,11 @@ class KeyBindingsTest {
 
 	@Test
 	fun `only document changing commands are edits`() {
-		val readOnly = listOf<EditorCommand>(Action.SelectAll, Action.Copy) + Motion.entries
-		for (command in readOnly) {
+		val readOnlyActions = listOf(Action.SelectAll, Action.Copy, Action.ShowContextMenu)
+		for (command in readOnlyActions + Motion.entries) {
 			assertEquals(false, command.isEdit, "$command must be allowed in a disabled editor")
 		}
-		for (command in Action.Builtins - Action.SelectAll - Action.Copy) {
+		for (command in Action.Builtins - readOnlyActions.toSet()) {
 			assertEquals(true, command.isEdit, "$command changes the document")
 		}
 	}

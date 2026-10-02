@@ -6,23 +6,29 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextDecoration
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
+import com.darkrockstudios.texteditor.annotatedstring.normalizeLineEndings
 import com.darkrockstudios.texteditor.clipboard.ClipboardHelper
 import com.darkrockstudios.texteditor.clipboard.applyHtmlPasteBlocks
 import com.darkrockstudios.texteditor.clipboard.readHtmlPasteDocument
+import com.darkrockstudios.texteditor.clipboard.withSizeForPasteAt
 import com.darkrockstudios.texteditor.html.selectionAsHtml
 import com.darkrockstudios.texteditor.input.EditorCommand.Action
 import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
+import com.darkrockstudios.texteditor.richstyle.BulletList
+import com.darkrockstudios.texteditor.richstyle.OrderedList
+import com.darkrockstudios.texteditor.richstyle.hasLineBlock
 import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.applyStyleForEditAt
+import com.darkrockstudios.texteditor.state.clearFormatting
+import com.darkrockstudios.texteditor.state.linksAtSelection
+import com.darkrockstudios.texteditor.state.unlink
 import com.darkrockstudios.texteditor.state.insertTypedNewline
 import com.darkrockstudios.texteditor.state.moveToNextWord
 import com.darkrockstudios.texteditor.state.moveToPreviousWord
+import com.darkrockstudios.texteditor.state.moveToPreviousWordStart
 import com.darkrockstudios.texteditor.state.moveToWordEnd
 import com.darkrockstudios.texteditor.state.toggleSpanStyle
 import kotlinx.coroutines.launch
-
-/** One outdent level: a single hard tab, else up to this many spaces. */
-private const val TAB_SIZE = 4
 
 /**
  * Registers the actions the editor ships with. Every one goes through the
@@ -75,23 +81,49 @@ internal fun EditorActionRegistry.registerBuiltinActions() {
 	register(EditorActionSpec(Action.DeleteToWordEnd) { ctx ->
 		ctx.state.deleteByMotion { ctx.state.moveToWordEnd() }
 	})
+	register(EditorActionSpec(Action.DeleteToPreviousWordStart) { ctx ->
+		ctx.state.deleteByMotion { ctx.state.moveToPreviousWordStart() }
+	})
 	register(EditorActionSpec(Action.DeleteToLineStart) { ctx ->
-		ctx.state.deleteByMotion { ctx.state.cursor.moveToLineStart() }
+		ctx.state.deleteByMotion(kill = Kill.Backward) { ctx.state.cursor.moveToLineStart() }
 	})
 	register(EditorActionSpec(Action.DeleteToLineEnd) { ctx ->
-		ctx.state.deleteByMotion { ctx.state.moveCursorToVisualRowEnd() }
+		ctx.state.deleteByMotion(kill = Kill.Forward) { ctx.state.moveCursorToVisualRowEnd() }
 	})
 	register(EditorActionSpec(Action.DeleteToParagraphEnd) { it.state.deleteToParagraphEnd() })
+	register(
+		EditorActionSpec(
+			action = Action.Yank,
+			isEnabled = { it.state.killRing.text != null },
+			perform = { it.state.yank() },
+		)
+	)
 
 	register(EditorActionSpec(Action.Indent) { it.state.handleIndent() })
 	register(EditorActionSpec(Action.Outdent) { it.state.handleOutdent() })
 	register(EditorActionSpec(Action.NewLine) { it.state.handleEnter() })
+
+	register(
+		EditorActionSpec(
+			action = Action.ShowContextMenu,
+			isEnabled = { it.state.contextMenuOpeners.isNotEmpty() },
+			perform = { it.state.contextMenuOpeners.lastOrNull()?.invoke() },
+		)
+	)
 
 	registerFormattingToggle(Action.ToggleBold) { it.boldStyle }
 	registerFormattingToggle(Action.ToggleItalic) { it.italicStyle }
 	registerFormattingToggle(Action.ToggleUnderline) { UNDERLINE }
 	registerFormattingToggle(Action.ToggleStrikethrough) { it.strikethroughStyle }
 	registerFormattingToggle(Action.ToggleInlineCode) { it.codeStyle }
+	register(EditorActionSpec(Action.ClearFormatting) { it.state.clearFormatting() })
+	register(
+		EditorActionSpec(
+			action = Action.Unlink,
+			isEnabled = { it.state.linksAtSelection().isNotEmpty() },
+			perform = { it.state.unlink() },
+		)
+	)
 }
 
 private val UNDERLINE = SpanStyle(textDecoration = TextDecoration.Underline)
@@ -138,10 +170,15 @@ private fun EditorActionContext.cutSelection() {
  */
 private fun EditorActionContext.pasteClipboard(plainText: Boolean) {
 	scope.launch {
-		ClipboardHelper.getText(clipboard, state.markdownConfiguration)?.let { clipboardText ->
-			val text = if (plainText) AnnotatedString(clipboardText.text) else clipboardText
+		val clipboardText = if (plainText) {
+			ClipboardHelper.getPlainText(clipboard)?.let(::AnnotatedString)
+		} else {
+			ClipboardHelper.getText(clipboard, state.markdownConfiguration)
+		}
+		clipboardText?.let {
 			val curSelection = state.selector.selection
 			val insertPosition = curSelection?.start ?: state.cursorPosition
+			val text = state.withSizeForPasteAt(insertPosition, it.normalizeLineEndings())
 			// Read the clipboard's HTML before mutating: the text, the in-editor
 			// rich spans and the pasted block structure then land as one revision.
 			val htmlDocument = if (plainText) null else state.readHtmlPasteDocument(clipboard, text)
@@ -184,15 +221,22 @@ private fun TextEditorState.handleBackspace() {
 	}
 }
 
+private enum class Kill { Forward, Backward }
+
 /**
  * Deletes between the caret and wherever [locateRangeEdge] moves it, or the selection when
- * there is one. The caret the user had is handed to [TextEditorState.delete] explicitly:
- * [locateRangeEdge] has already moved it off that position, and delete otherwise records
- * wherever the caret currently sits as the position undo returns to.
+ * there is one, keeping what goes in the kill ring when this is a [kill]. The caret the
+ * user had is handed to [TextEditorState.delete] explicitly: [locateRangeEdge] has already
+ * moved it off that position, and delete otherwise records wherever the caret currently
+ * sits as the position undo returns to.
  */
-private fun TextEditorState.deleteByMotion(locateRangeEdge: () -> Unit) {
-	if (selector.selection != null) {
+private fun TextEditorState.deleteByMotion(kill: Kill? = null, locateRangeEdge: () -> Unit) {
+	val continuesKill = kill != null && killRing.continuesAt(this)
+	selector.selection?.let { selection ->
+		val killed = kill?.let { getTextInRange(selection) }
 		selector.deleteSelection()
+		// Selecting came between, so a selection starts a kill of its own.
+		if (killed != null) killRing.add(this, killed, kill == Kill.Backward, continues = false)
 		return
 	}
 	val origin = cursorPosition
@@ -205,8 +249,24 @@ private fun TextEditorState.deleteByMotion(locateRangeEdge: () -> Unit) {
 	} else {
 		TextEditorRange(origin, edge)
 	}
+	val killed = kill?.let { getTextInRange(range) }
 	// Never typing, even over one character: a backspace after it is its own step.
 	editManager.recordingAsTyping(false) { delete(range, cursorBefore = origin) }
+	if (killed != null) killRing.add(this, killed, kill == Kill.Backward, continuesKill)
+}
+
+/** Inserts the kill ring's text over the selection, or at the caret, as one step. */
+private fun TextEditorState.yank() {
+	val text = killRing.text ?: return
+	editManager.recordingAsTyping(false) {
+		val selection = selector.selection
+		if (selection != null) {
+			replace(selection, applyStyleForEditAt(selection.start, text))
+		} else {
+			insertStringAtCursor(text)
+		}
+	}
+	selector.clearSelection()
 }
 
 /**
@@ -230,9 +290,15 @@ private fun TextEditorState.deleteToParagraphEnd() {
 	val position = cursorPosition
 	val lineLength = textLines[position.line].length
 	if (selector.selection == null && position.char == lineLength) {
+		val continuesKill = killRing.continuesAt(this)
+		val lineCount = textLines.size
 		deleteAtCursor()
+		// A behavior may claim the delete and keep the line break.
+		if (textLines.size < lineCount) {
+			killRing.add(this, AnnotatedString("\n"), backward = false, continues = continuesKill)
+		}
 	} else {
-		deleteByMotion { cursor.updatePosition(position.copy(char = lineLength)) }
+		deleteByMotion(kill = Kill.Forward) { cursor.updatePosition(position.copy(char = lineLength)) }
 	}
 }
 
@@ -241,12 +307,19 @@ private fun TextEditorState.handleIndent() = editGroup {
 	if (selection != null && selection.start.line != selection.end.line) {
 		indentLineRange(selection.start.line, selection.end.line)
 	} else {
+		val at = selection?.start ?: cursorPosition
+		// A list item has no indent level to take until nested lists exist (roadmap 5.6),
+		// and leading spaces in one do not survive a markdown round trip.
+		if (at.char == 0 && isListItem(at.line)) return@editGroup
 		if (selection != null) {
 			selector.deleteSelection()
 		}
-		insertStringAtCursor(" ".repeat(TAB_SIZE))
+		insertStringAtCursor(tabSettings.indentText)
 	}
 }
+
+private fun TextEditorState.isListItem(line: Int): Boolean =
+	hasLineBlock(line, BulletList) || hasLineBlock(line, OrderedList)
 
 private fun TextEditorState.handleOutdent() {
 	val selection = selector.selection
@@ -257,20 +330,15 @@ private fun TextEditorState.handleOutdent() {
 	}
 }
 
+/** Indents every line in the range but the list items, as Tab at a list item's start does. */
 private fun TextEditorState.indentLineRange(startLine: Int, endLine: Int) {
-	val prefix = " ".repeat(TAB_SIZE)
-	val newText = buildAnnotatedString {
-		for (i in startLine..endLine) {
-			if (i > startLine) append('\n')
-			append(prefix)
-			append(textLines[i])
-		}
+	val lines = (startLine..endLine).filterNot { isListItem(it) }
+	if (lines.isEmpty()) return
+	val prefix = tabSettings.indentText
+	for (line in lines) {
+		val start = CharLineOffset(line, 0)
+		replace(TextEditorRange(start, start), prefix)
 	}
-	val range = TextEditorRange(
-		CharLineOffset(startLine, 0),
-		CharLineOffset(endLine, textLines[endLine].length)
-	)
-	replace(range, newText)
 	selector.updateSelection(
 		CharLineOffset(startLine, 0),
 		CharLineOffset(endLine, textLines[endLine].length)
@@ -283,7 +351,7 @@ private fun TextEditorState.outdentLineRange(startLine: Int, endLine: Int) {
 		for (i in startLine..endLine) {
 			if (i > startLine) append('\n')
 			val line = textLines[i]
-			val remove = leadingOutdentWidth(line)
+			val remove = leadingOutdentWidth(line, tabSettings.size)
 			if (remove > 0) changed = true
 			append(line.subSequence(remove, line.length))
 		}
@@ -303,7 +371,7 @@ private fun TextEditorState.outdentLineRange(startLine: Int, endLine: Int) {
 
 private fun TextEditorState.outdentCurrentLine() {
 	val line = cursorPosition.line
-	val remove = leadingOutdentWidth(textLines[line])
+	val remove = leadingOutdentWidth(textLines[line], tabSettings.size)
 	if (remove == 0) return
 
 	val cursorChar = cursorPosition.char
@@ -311,12 +379,12 @@ private fun TextEditorState.outdentCurrentLine() {
 	cursor.updatePosition(CharLineOffset(line, (cursorChar - remove).coerceAtLeast(0)))
 }
 
-/** Leading indentation to strip for one outdent level: a single hard tab, else up to [TAB_SIZE] spaces. */
-private fun leadingOutdentWidth(line: AnnotatedString): Int {
+/** Leading indentation to strip for one outdent level: a single hard tab, else up to [tabSize] spaces. */
+private fun leadingOutdentWidth(line: AnnotatedString, tabSize: Int): Int {
 	if (line.isEmpty()) return 0
 	if (line[0] == '\t') return 1
 	var count = 0
-	while (count < TAB_SIZE && count < line.length && line[count] == ' ') count++
+	while (count < tabSize && count < line.length && line[count] == ' ') count++
 	return count
 }
 

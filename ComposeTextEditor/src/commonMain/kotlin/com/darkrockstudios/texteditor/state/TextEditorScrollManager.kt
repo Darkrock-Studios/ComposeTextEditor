@@ -25,6 +25,9 @@ class TextEditorScrollManager(
 ) {
 	private var scrollJob: Job? = null
 
+	/** The last scroll [scrollToCursor] started, to tell it from a page move's or a find's. */
+	private var cursorScrollJob: Job? = null
+
 	var totalContentHeight by mutableStateOf(0)
 		private set
 
@@ -176,21 +179,8 @@ class TextEditorScrollManager(
 			return
 		}
 
-		val cursorTop = calculateOffsetYPosition(offset, affinity).toInt()
-		val cursorHeight = calculateLineHeight(offset, affinity)
 		val viewportTop = scrollState.value
-		val minScroll = scrollState.minValue
-		val visibleHeight = caretViewportHeight(cursorHeight)
-
-		// Just far enough to show the caret's whole row, as native editors scroll.
-		val targetScroll = if (cursorTop < viewportTop) {
-			cursorTop.coerceIn(minScroll, maxScroll)
-		} else if (cursorTop + cursorHeight > viewportTop + visibleHeight) {
-			(cursorTop + cursorHeight - visibleHeight).coerceIn(minScroll, maxScroll)
-		} else {
-			viewportTop
-		}
-
+		val targetScroll = scrollShowing(offset, affinity)
 		if(targetScroll != viewportTop) {
 			stopScrolling()
 			scrollJob = scope.launch {
@@ -199,10 +189,31 @@ class TextEditorScrollManager(
 		}
 	}
 
+	/** The scroll that shows [offset]'s whole row, moving just far enough, as native editors scroll. */
+	private fun scrollShowing(offset: CharLineOffset, affinity: CaretAffinity): Int {
+		val cursorTop = calculateOffsetYPosition(offset, affinity).toInt()
+		val cursorHeight = calculateLineHeight(offset, affinity)
+		val viewportTop = scrollState.value
+		val minScroll = scrollState.minValue
+		val visibleHeight = caretViewportHeight(cursorHeight)
+		return if (cursorTop < viewportTop) {
+			cursorTop.coerceIn(minScroll, maxScroll)
+		} else if (cursorTop + cursorHeight > viewportTop + visibleHeight) {
+			(cursorTop + cursorHeight - visibleHeight).coerceIn(minScroll, maxScroll)
+		} else {
+			viewportTop
+		}
+	}
+
 	/** Scrolls to the row the caret is drawn on. */
 	fun scrollToCursor() {
+		val before = scrollJob
 		scrollToPosition(getCursorPosition(), getCursorAffinity(), top = false, animated = true)
+		if (scrollJob !== before) cursorScrollJob = scrollJob
 	}
+
+	private val isScrollingToCursor: Boolean
+		get() = scrollJob?.isActive == true && scrollJob === cursorScrollJob
 
 	fun ensureCursorVisible() {
 		if (cursorScrollSuppressed) return
@@ -212,6 +223,24 @@ class TextEditorScrollManager(
 	}
 
 	fun isOffsetVisible(offset: CharLineOffset): Boolean = isOffsetVisible(offset, CaretAffinity.Downstream)
+
+	/** Whether the caret's whole row is in view, above any covered strip, or a scroll is taking it there. */
+	internal fun isCursorInViewOrScrolling(): Boolean =
+		isOffsetVisible(getCursorPosition(), getCursorAffinity()) || isScrollingToCursor
+
+	/**
+	 * Brings the caret's row into view at once, taking over a scroll to the caret, whose
+	 * target was measured for the old viewport. A viewport shrinking for a soft keyboard
+	 * does so a little every frame, and an animated scroll would trail it. Any other
+	 * scroll (a page move, a find) is left to finish.
+	 */
+	internal fun snapCursorVisible() {
+		if (cursorScrollSuppressed) return
+		if (scrollJob?.isActive == true && !isScrollingToCursor) return
+		stopScrolling()
+		if (isOffsetVisible(getCursorPosition(), getCursorAffinity())) return
+		scrollState.scrollTo(scrollShowing(getCursorPosition(), getCursorAffinity()))
+	}
 
 	private fun isOffsetVisible(offset: CharLineOffset, affinity: CaretAffinity): Boolean {
 		val cursorTop = calculateOffsetYPosition(offset, affinity).toInt()

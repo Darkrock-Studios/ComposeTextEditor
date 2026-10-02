@@ -261,20 +261,7 @@ class RichSpanManager(
 		updatedSpans: MutableSet<RichSpan>,
 		span: RichSpan
 	) {
-		// Calculate new end position after replacement
-		val newEnd = if (operation.newText.contains('\n')) {
-			val lines = operation.newText.text.split('\n')
-			val lastLineLength = lines.last().length
-			CharLineOffset(
-				operation.range.start.line + (lines.size - 1),
-				if (lines.size == 1) operation.range.start.char + lastLineLength else lastLineLength
-			)
-		} else {
-			CharLineOffset(
-				operation.range.start.line,
-				operation.range.start.char + operation.newText.length
-			)
-		}
+		val newEnd = operation.newTextEnd
 
 		when {
 			// Span ends before replacement - keep as is

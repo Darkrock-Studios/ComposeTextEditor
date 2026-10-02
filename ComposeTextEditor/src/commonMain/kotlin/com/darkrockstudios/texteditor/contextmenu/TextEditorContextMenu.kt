@@ -1,7 +1,7 @@
 package com.darkrockstudios.texteditor.contextmenu
 
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.absoluteOffset
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
@@ -10,17 +10,19 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.IntOffset
-import com.darkrockstudios.texteditor.input.EditorCommand
+import com.darkrockstudios.texteditor.input.EditorCommand.Action
 import kotlin.math.roundToInt
 
 /**
- * Context menu dropdown for Cut, Copy, Paste, and Select All operations.
- * Supports extra items that appear before the standard items.
+ * The context menu: any [extraItems] and [trailingItems] first, then Undo and Redo, the
+ * clipboard items, and Select All, each group behind a divider. A standard item shows
+ * when its action is registered and allowed here (a read-only editor has no editing
+ * items), and is disabled while it has nothing to act on, as in native menus.
  *
- * @param position The position where the menu should appear
+ * @param position Where the menu opens, in the provider's coordinates
  * @param actions The context menu actions handler
  * @param strings Localizable strings for menu items
- * @param enabled Whether editing operations (cut, paste) are enabled
+ * @param enabled Whether editing operations are enabled; [actions] already enforces it
  * @param extraItems Extra menu items to display before standard items
  * @param trailingItems Items shown after [extraItems] in their own divider-delimited group
  * @param onDismiss Callback when the menu should be dismissed
@@ -30,24 +32,32 @@ internal fun TextEditorContextMenu(
 	position: Offset,
 	actions: ContextMenuActions,
 	strings: ContextMenuStrings,
-	enabled: Boolean,
+	@Suppress("UNUSED_PARAMETER") enabled: Boolean,
 	extraItems: List<ContextMenuItem> = emptyList(),
 	trailingItems: List<ContextMenuItem> = emptyList(),
 	onDismiss: () -> Unit,
 ) {
-	val showCut = actions.canCut() && enabled
-	val showCopy = actions.canCopy()
-	val showPaste = enabled && actions.canPaste()
-	val showSelectAll = actions.canPerform(EditorCommand.Action.SelectAll)
+	val standardGroups = listOf(
+		listOf(Action.Undo to strings.undo, Action.Redo to strings.redo),
+		listOf(
+			Action.Cut to strings.cut,
+			Action.Copy to strings.copy,
+			Action.Paste to strings.paste,
+			Action.PasteAsPlainText to strings.pasteAsPlainText,
+		),
+		listOf(Action.SelectAll to strings.selectAll),
+	).map { group -> group.filter { (action, _) -> actions.isAvailable(action) } }
+		.filter { it.isNotEmpty() }
 
-	// Every standard item is conditional, so a registry with them all dropped would
-	// otherwise pop an empty dropdown the user has to click away.
-	if (extraItems.isEmpty() && trailingItems.isEmpty() && !showCut && !showCopy && !showPaste && !showSelectAll) {
+	// A registry with every standard item dropped would otherwise pop an empty dropdown
+	// the user has to click away.
+	if (extraItems.isEmpty() && trailingItems.isEmpty() && standardGroups.isEmpty()) {
 		onDismiss()
 		return
 	}
 
-	Box(modifier = Modifier.offset {
+	// The position is physical, measured from the left even in a right-to-left layout.
+	Box(modifier = Modifier.absoluteOffset {
 		IntOffset(
 			position.x.roundToInt(),
 			position.y.roundToInt()
@@ -65,49 +75,20 @@ internal fun TextEditorContextMenu(
 			}
 			CustomItems(trailingItems, onDismiss)
 
-			// Divider between custom items and standard items
-			if (extraItems.isNotEmpty() || trailingItems.isNotEmpty()) {
-				HorizontalDivider()
-			}
-
-			if (showCut) {
-				DropdownMenuItem(
-					text = { Text(strings.cut) },
-					onClick = {
-						actions.cut()
-						onDismiss()
-					},
-				)
-			}
-
-			if (showCopy) {
-				DropdownMenuItem(
-					text = { Text(strings.copy) },
-					onClick = {
-						actions.copy()
-						onDismiss()
-					},
-				)
-			}
-
-			if (showPaste) {
-				DropdownMenuItem(
-					text = { Text(strings.paste) },
-					onClick = {
-						actions.paste()
-						onDismiss()
-					},
-				)
-			}
-
-			if (showSelectAll) {
-				DropdownMenuItem(
-					text = { Text(strings.selectAll) },
-					onClick = {
-						actions.selectAll()
-						onDismiss()
-					},
-				)
+			standardGroups.forEachIndexed { index, group ->
+				if (index > 0 || extraItems.isNotEmpty() || trailingItems.isNotEmpty()) {
+					HorizontalDivider()
+				}
+				group.forEach { (action, label) ->
+					DropdownMenuItem(
+						text = { Text(label) },
+						enabled = actions.canPerform(action),
+						onClick = {
+							actions.perform(action)
+							onDismiss()
+						},
+					)
+				}
 			}
 		}
 	}

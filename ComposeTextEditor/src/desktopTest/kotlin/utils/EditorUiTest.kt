@@ -1,9 +1,13 @@
 package utils
 
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.input.key.Key
@@ -37,6 +41,7 @@ import com.darkrockstudios.texteditor.RichSpanClickEventListener
 import com.darkrockstudios.texteditor.handleCenter as drawnHandleCenter
 import com.darkrockstudios.texteditor.RichSpanClickListener
 import com.darkrockstudios.texteditor.rememberTextEditorStyle
+import com.darkrockstudios.texteditor.contextmenu.ContextMenuStrings
 import com.darkrockstudios.texteditor.contextmenu.TextEditorContextMenuState
 import com.darkrockstudios.texteditor.input.CtrlKeyBindings
 import com.darkrockstudios.texteditor.input.KeyBindings
@@ -70,15 +75,18 @@ internal fun editorUiTest(
 	onRichSpanClickEvent: RichSpanClickEventListener? = null,
 	onLinkClick: ((String) -> Unit)? = null,
 	contextMenuState: TextEditorContextMenuState? = null,
+	contextMenuStrings: ContextMenuStrings = ContextMenuStrings.Default,
 	autoFocus: Boolean = enabled,
 	contentPadding: PaddingValues = PaddingValues(0.dp),
 	density: Float = 1f,
 	textToolbar: TextToolbar? = null,
 	textStyle: TextStyle = TextStyle.Default,
+	trailingFocusable: Boolean = false,
 	block: EditorUiTestScope.() -> Unit,
 ) = runSkikoComposeUiTest(density = Density(density)) {
 	val clipboard = InMemoryClipboard()
 	lateinit var state: TextEditorState
+	val trailing = FocusFlag()
 	setContent {
 		state = rememberTextEditorState(initialText = initialText)
 		CompositionLocalProvider(
@@ -89,19 +97,25 @@ internal fun editorUiTest(
 			LocalTextToolbar provides (textToolbar ?: LocalTextToolbar.current),
 			LocalNativeTextToolbar provides (textToolbar != null),
 		) {
-			BasicTextEditor(
-				state = state,
-				modifier = Modifier.size(width, height).testTag(EDITOR_TEST_TAG),
-				contentPadding = contentPadding,
-				enabled = enabled,
-				autoFocus = autoFocus,
-				style = rememberTextEditorStyle(textStyle = textStyle),
-				contextMenuState = contextMenuState,
-				onRichSpanClick = onRichSpanClick,
-				onRichSpanClickEvent = onRichSpanClickEvent,
-				onLinkClick = onLinkClick,
-				keyBindings = keyBindings,
-			)
+			Column {
+				BasicTextEditor(
+					state = state,
+					modifier = Modifier.size(width, height).testTag(EDITOR_TEST_TAG),
+					contentPadding = contentPadding,
+					enabled = enabled,
+					autoFocus = autoFocus,
+					style = rememberTextEditorStyle(textStyle = textStyle),
+					contextMenuState = contextMenuState,
+					contextMenuStrings = contextMenuStrings,
+					onRichSpanClick = onRichSpanClick,
+					onRichSpanClickEvent = onRichSpanClickEvent,
+					onLinkClick = onLinkClick,
+					keyBindings = keyBindings,
+				)
+				if (trailingFocusable) {
+					Box(Modifier.size(20.dp).onFocusChanged { trailing.focused = it.isFocused }.focusable())
+				}
+			}
 		}
 	}
 	waitForIdle()
@@ -112,7 +126,11 @@ internal fun editorUiTest(
 	if (enabled && autoFocus) {
 		waitUntil(timeoutMillis = 5_000) { state.isFocused }
 	}
-	EditorUiTestScope(this, state, clipboard).block()
+	EditorUiTestScope(this, state, clipboard, trailing).block()
+}
+
+class FocusFlag {
+	var focused = false
 }
 
 @OptIn(ExperimentalTestApi::class)
@@ -120,7 +138,11 @@ class EditorUiTestScope(
 	val test: SkikoComposeUiTest,
 	val state: TextEditorState,
 	val clipboard: InMemoryClipboard,
+	private val trailing: FocusFlag = FocusFlag(),
 ) {
+	/** Whether the focusable placed after the editor by `trailingFocusable` holds focus. */
+	val trailingFocused: Boolean get() = trailing.focused
+
 	// Pointer input is injected at the tagged editor node, not onRoot(): once a
 	// context menu popup is open there are two roots and onRoot() refuses to pick.
 	private val editor get() = test.onNodeWithTag(EDITOR_TEST_TAG)

@@ -51,55 +51,43 @@ internal fun AnnotatedString.withInheritedStyles(styles: Set<SpanStyle>): Annota
 internal fun AnnotatedString.splitAnnotatedString(): List<AnnotatedString> {
 	if (this.isEmpty()) return listOf(AnnotatedString(""))
 
-	val result = mutableListOf<AnnotatedString>()
-	var currentIndex = 0
+	val lineTexts = text.split('\n')
+	val lineStarts = IntArray(lineTexts.size)
+	for (line in 1 until lineTexts.size) lineStarts[line] = lineStarts[line - 1] + lineTexts[line - 1].length + 1
 
-	this.text.split('\n').forEach { lineText ->
-		val endIndex = currentIndex + lineText.length
-
-		// Create a new AnnotatedString for this line
-		val lineAnnotatedString = buildAnnotatedString {
-			// Append the line text
-			append(lineText)
-
-			// Copy over all relevant spans for this line segment
-			this@splitAnnotatedString.spanStyles.forEach { span ->
-				val spanStart = span.start
-				val spanEnd = span.end
-
-				// Check if this span overlaps with our current line
-				if (spanStart < endIndex && spanEnd > currentIndex) {
-					// Calculate the overlapping region
-					val overlapStart = maxOf(spanStart - currentIndex, 0)
-					val overlapEnd = minOf(spanEnd - currentIndex, lineText.length)
-
-					if (overlapStart < overlapEnd) {
-						addStyle(span.item, overlapStart, overlapEnd)
-					}
-				}
-			}
-
-			// Copy over all relevant paragraph styles
-			this@splitAnnotatedString.paragraphStyles.forEach { paragraph ->
-				val paragraphStart = paragraph.start
-				val paragraphEnd = paragraph.end
-
-				// Check if this paragraph style overlaps with our current line
-				if (paragraphStart < endIndex && paragraphEnd > currentIndex) {
-					// Calculate the overlapping region
-					val overlapStart = maxOf(paragraphStart - currentIndex, 0)
-					val overlapEnd = minOf(paragraphEnd - currentIndex, lineText.length)
-
-					if (overlapStart < overlapEnd) {
-						addStyle(paragraph.item, overlapStart, overlapEnd)
-					}
-				}
-			}
+	/** The line holding [offset]. */
+	fun lineOf(offset: Int): Int {
+		var low = 0
+		var high = lineStarts.lastIndex
+		while (low < high) {
+			val mid = (low + high + 1) ushr 1
+			if (lineStarts[mid] <= offset) low = mid else high = mid - 1
 		}
-
-		result.add(lineAnnotatedString)
-		currentIndex = endIndex + 1 // +1 for the newline character
+		return low
 	}
 
-	return result
+	// Each range goes only to the lines it overlaps, found by search, so the cost is
+	// the lines plus the lines each range covers.
+	fun <T> distribute(ranges: List<AnnotatedString.Range<T>>): Array<MutableList<AnnotatedString.Range<T>>?> {
+		val byLine = arrayOfNulls<MutableList<AnnotatedString.Range<T>>>(lineTexts.size)
+		ranges.forEach { range ->
+			var line = lineOf(range.start.coerceAtLeast(0))
+			while (line < lineTexts.size && lineStarts[line] < range.end) {
+				val overlapStart = maxOf(range.start - lineStarts[line], 0)
+				val overlapEnd = minOf(range.end - lineStarts[line], lineTexts[line].length)
+				if (overlapStart < overlapEnd) {
+					val onLine = byLine[line] ?: mutableListOf<AnnotatedString.Range<T>>().also { byLine[line] = it }
+					onLine += AnnotatedString.Range(range.item, overlapStart, overlapEnd)
+				}
+				line++
+			}
+		}
+		return byLine
+	}
+
+	val spansByLine = distribute(spanStyles)
+	val paragraphsByLine = distribute(paragraphStyles)
+	return lineTexts.mapIndexed { line, lineText ->
+		AnnotatedString(lineText, spansByLine[line].orEmpty(), paragraphsByLine[line].orEmpty())
+	}
 }

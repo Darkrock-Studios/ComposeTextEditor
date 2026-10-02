@@ -5,9 +5,14 @@ import android.graphics.Matrix
 import android.view.View
 import android.view.inputmethod.CursorAnchorInfo
 import android.view.inputmethod.InputMethodManager
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import com.darkrockstudios.texteditor.input.ImeCaretGeometry
 import com.darkrockstudios.texteditor.input.ImeCursorSync
 import com.darkrockstudios.texteditor.input.TextEditorInputConnection
 import com.darkrockstudios.texteditor.input.composingAsTextRange
+import com.darkrockstudios.texteditor.input.imeCaretInRoot
 import com.darkrockstudios.texteditor.input.selectionAsTextRange
 
 /**
@@ -26,9 +31,10 @@ actual class PlatformTextEditorExtensions actual constructor(
 
 	/**
 	 * When true, cursor anchor info should be sent to the IME whenever the cursor moves.
-	 * Set by [requestCursorUpdates] when IME requests CURSOR_UPDATE_MONITOR mode.
+	 * Set by [requestCursorUpdates] when IME requests CURSOR_UPDATE_MONITOR mode. Snapshot
+	 * state, so the sync's watch on the caret's screen position starts when it turns on.
 	 */
-	var cursorAnchorMonitoringEnabled: Boolean = false
+	var cursorAnchorMonitoringEnabled: Boolean by mutableStateOf(false)
 
 	/**
 	 * When true, [InputMethodManager.updateExtractedText] should be sent on every text/selection
@@ -118,14 +124,24 @@ actual class PlatformTextEditorExtensions actual constructor(
 	}
 
 	/**
-	 * Sends cursor anchor information to the IME.
-	 * This provides the keyboard with cursor position for floating toolbars and other UI.
-	 *
-	 * Called:
-	 * - Immediately when IME requests CURSOR_UPDATE_IMMEDIATE
-	 * - On cursor changes when CURSOR_UPDATE_MONITOR is active
+	 * Sends cursor anchor information to the IME, which places floating toolbars, candidates
+	 * and the handwriting target by it: when it asks with `CURSOR_UPDATE_IMMEDIATE`, and on
+	 * every change while it monitors with `CURSOR_UPDATE_MONITOR`.
 	 */
 	fun sendCursorAnchorInfo() {
+		val sync = imeSync
+		if (sync != null) sync.sendCursorAnchor() else currentCursorAnchor()?.let(::sendCursorAnchor)
+	}
+
+	/** The cursor anchor's geometry as it stands, or null with no view to report through. */
+	internal fun currentCursorAnchor(): CursorAnchor? {
+		val view = imeView ?: return null
+		val location = IntArray(2)
+		view.getLocationOnScreen(location)
+		return CursorAnchor(state.imeCaretInRoot(), location[0], location[1])
+	}
+
+	internal fun sendCursorAnchor(anchor: CursorAnchor) {
 		val view = imeView ?: return
 		val imm = view.context.getSystemService(Context.INPUT_METHOD_SERVICE)
 				as? InputMethodManager ?: return
@@ -144,22 +160,16 @@ actual class PlatformTextEditorExtensions actual constructor(
 			)
 		}
 
-		// Set the transformation matrix to convert from view coordinates to screen coordinates
+		// The marker is in the view's coordinates; the matrix takes them to the screen's.
 		val matrix = Matrix()
-		val location = IntArray(2)
-		view.getLocationOnScreen(location)
-		matrix.setTranslate(location[0].toFloat(), location[1].toFloat())
+		matrix.setTranslate(anchor.viewX.toFloat(), anchor.viewY.toFloat())
 		builder.setMatrix(matrix)
 
-		// Set insertion marker location if we have cursor metrics
-		state.lastCursorMetrics?.let { metrics ->
-			builder.setInsertionMarkerLocation(
-				metrics.position.x,
-				metrics.lineTop,
-				metrics.lineBaseline,
-				metrics.lineBottom,
-				0 // flags: 0 = visible
-			)
+		anchor.caret?.let { caret ->
+			var flags = 0
+			if (caret.topVisible || caret.bottomVisible) flags = flags or CursorAnchorInfo.FLAG_HAS_VISIBLE_REGION
+			if (!caret.topVisible || !caret.bottomVisible) flags = flags or CursorAnchorInfo.FLAG_HAS_INVISIBLE_REGION
+			builder.setInsertionMarkerLocation(caret.x, caret.top, caret.baseline, caret.bottom, flags)
 		}
 
 		try {
@@ -169,3 +179,9 @@ actual class PlatformTextEditorExtensions actual constructor(
 		}
 	}
 }
+
+/**
+ * What a cursor anchor report carries that can change while the selection stays put: the
+ * caret in the view's coordinates, and the view's position on screen.
+ */
+internal data class CursorAnchor(val caret: ImeCaretGeometry?, val viewX: Int, val viewY: Int)

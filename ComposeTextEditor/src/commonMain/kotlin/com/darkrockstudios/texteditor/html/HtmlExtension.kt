@@ -1,6 +1,8 @@
 package com.darkrockstudios.texteditor.html
 
 import androidx.compose.ui.text.AnnotatedString
+import com.darkrockstudios.texteditor.CharLineOffset
+import com.darkrockstudios.texteditor.clipboard.withBodyStyleBeneath
 import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
 import com.darkrockstudios.texteditor.richstyle.Blockquote
 import com.darkrockstudios.texteditor.richstyle.BulletList
@@ -13,6 +15,7 @@ import com.darkrockstudios.texteditor.richstyle.OrderedList
 import com.darkrockstudios.texteditor.richstyle.RichSpan
 import com.darkrockstudios.texteditor.richstyle.applyDocumentBlocks
 import com.darkrockstudios.texteditor.richstyle.documentBlocksOf
+import com.darkrockstudios.texteditor.state.LayoutUpdate
 import com.darkrockstudios.texteditor.state.TextEditorState
 
 /**
@@ -20,7 +23,9 @@ import com.darkrockstudios.texteditor.state.TextEditorState
  *
  * Where the `AnnotatedString` converters handle inline styling alone, this
  * carries the whole document: headings, lists, blockquotes, code fences,
- * horizontal rules and images all survive the round trip.
+ * horizontal rules, images and links all survive the round trip. Link
+ * destinations pass [sanitizeLinkUrl] both ways, so a `javascript:` link is
+ * neither imported nor written.
  */
 class HtmlExtension(
 	val editorState: TextEditorState,
@@ -55,12 +60,13 @@ class HtmlExtension(
 		val blocks = documentBlocksOf(content.richSpans, configuration)
 		val headerLevels = headerLevelsOf(content.richSpans)
 		val lines = content.lines
+		val links = linksByLine(content.richSpans) { lines.getOrNull(it)?.length ?: 0 }
 		if (lines.size == 1 && lines[0].isEmpty() && blocks.isEmpty() && headerLevels.isEmpty()) {
 			return ""
 		}
 
 		return renderHtmlFragment(
-			lines = lines.mapIndexed { index, line -> HtmlLine(line, index) },
+			lines = lines.mapIndexed { index, line -> HtmlLine(line, index, links = links[index].orEmpty()) },
 			blocks = blocks,
 			headerLevels = headerLevels,
 			configuration = configuration,
@@ -83,7 +89,11 @@ class HtmlExtension(
 		// One revision, so a concurrent export can't catch the document loaded but
 		// not yet styled.
 		editorState.withAtomicEdit {
-			editorState.setText(document.text)
+			editorState.setText(editorState.withBodyStyleBeneath(document.text))
+			if (document.links.isNotEmpty()) {
+				editorState.richSpanManager.addRichSpans(pastedLinkSpans(document.links, CharLineOffset(0, 0)))
+				editorState.updateBookKeeping(LayoutUpdate.SpansOnly)
+			}
 			editorState.applyDocumentBlocks(
 				horizontalRuleLines = document.horizontalRuleLines,
 				imageLines = if (provider == null) {
@@ -112,6 +122,8 @@ internal class HtmlLine(
 	val text: AnnotatedString,
 	val docLine: Int,
 	val isWholeLine: Boolean = true,
+	/** The links over [text], in its own offsets. */
+	val links: List<HtmlLink> = emptyList(),
 )
 
 /** The semantic heading level of each line that carries a [HeaderSpanStyle]. */
@@ -143,6 +155,7 @@ internal fun renderHtmlFragment(
 				blocks = blocks,
 				headerLevel = headerLevels[line.docLine],
 				isWholeLine = line.isWholeLine,
+				links = line.links,
 				configuration = configuration,
 			),
 			inCodeFence = blocks.has(line.docLine, CodeFence),
@@ -171,6 +184,7 @@ private fun lineHtml(
 	blocks: DocumentBlocks,
 	headerLevel: Int?,
 	isWholeLine: Boolean,
+	links: List<HtmlLink>,
 	configuration: MarkdownConfiguration,
 ): String {
 	// Fenced lines are literal code: running them through `toHtml` would see the
@@ -196,8 +210,8 @@ private fun lineHtml(
 		image != null -> "<img src=\"${image.source.escapeHtmlAttribute()}\"" +
 			" alt=\"${image.alt.escapeHtmlAttribute()}\">"
 
-		heading != null -> "<${heading.tag}>${line.text.escapeHtmlText()}</${heading.tag}>"
-		else -> line.toHtml(configuration)
+		heading != null -> "<${heading.tag}>${AnnotatedString(line.text).toHtml(configuration, links)}</${heading.tag}>"
+		else -> line.toHtml(configuration, links)
 	}
 
 	val inList = blocks.has(index, BulletList) || blocks.has(index, OrderedList)

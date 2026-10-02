@@ -47,7 +47,8 @@ What `startInput` actually does is the per-platform fork:
   `PlatformTextInputMethodRequest` shared by the three
   (`SkikoTextEditorInputMethodRequest` in `skikoMain`), which adapts the
   editor state and routes every edit into `ImeEditLogic`. Each platform file
-  contributes only its `ImeOptions`.
+  contributes its `ImeOptions`; web also keeps DOM focus on its textarea
+  (below).
 
 ## The contract has two directions
 
@@ -124,10 +125,17 @@ any departure from it.
 ### The connection
 
 `startInput` registers a `PlatformTextInputMethodRequest` whose
-`createInputConnection` populates `EditorInfo` (multiline text, autocorrect,
-sentence caps, no fullscreen extract UI, initial selection in flat character
-indices) and returns a `TextEditorInputConnection` bound to the session's
-view. The connection's read side (`getTextBeforeCursor`, `getSurroundingText`,
+`createInputConnection` returns a `TextEditorInputConnection` bound to the
+session's view and populates `EditorInfo`: the input type and action from the
+host's `TextEditorState.keyboardSettings` (by default multi-line text with
+autocorrect and sentence caps, Enter as a new line), no fullscreen extract UI,
+the initial selection in flat character indices, the caps mode at the caret,
+and, from API 30, the text around the caret. The action key a connection was
+opened with calls the host's `onImeAction`, or the default the modifier node
+supplies (Next and Previous move focus, Done hides the keyboard); the
+unspecified and none actions are Enter. A settings change restarts input from
+the next flush, as `EditText.setInputType` does; iOS and web do not read the
+settings yet. The connection's read side (`getTextBeforeCursor`, `getSurroundingText`,
 `getExtractedText`) answers from the state's flat-index conversions, measuring
 from the selection's edges and clamping requested lengths before any
 arithmetic (some IMEs ask for `Int.MAX_VALUE`); its write side applies
@@ -194,20 +202,51 @@ own command produces exactly the report it expects, once. Because the
 composing region is part of the comparison, composing-only changes
 (`setComposingRegion`, `finishComposingText`) are reported too.
 
-A behavior that answers an IME request in a way no diff can express (exiting
-a list on backspace leaves text and caret where they were) advances a resync
-generation on the state. A whole-document replacement (`setText`,
-`setDocument`) advances `documentGeneration`, and is no edit the keyboard
-could follow either. The next flush that sees either generation change sends
-`restartInput`, which makes the keyboard discard its mirror, then reports
-afresh, as `EditText` restarts input on `setText`. Reading counters at flush
-time, rather than waiting on a flow, is what guarantees the restart goes out
-when the IME's batch ends.
+A whole-document replacement (`setText`, `setDocument`) advances
+`documentGeneration`, which is no edit the keyboard could follow: the next
+flush sends `restartInput`, which makes the keyboard discard its mirror, then
+reports afresh, as `EditText` restarts input on `setText`.
+
+A behavior that answers an IME request its own way (a claimed Backspace that
+demotes a bullet, "--" become a dash) advances a resync generation on the
+state. A restart clears the keyboard's suggestions and shift state, so it is
+the last resort. `ImeExpectation` follows where the keyboard's own commands
+since the last flush have left it expecting the selection and composing
+region. If the flush finds the selection where the keyboard expects it,
+nothing more is needed (a same-length substitution stays as `EditText` leaves
+it). If it finds a selection the keyboard was not last told, the ordinary
+report reaches it, and keyboards re-read the text around an unexpected
+selection as they do after a tap. Only when the selection is where the
+keyboard last heard it (or nothing has been reported yet) and not where its
+commands left it expecting, or where those commands cannot be followed (a key
+event, a delete counted in code points), does the flush restart: the
+`InputMethodManager` drops a report that repeats the last one. A key event is
+queued rather than applied, so the expectation stays unknown until the flush
+after the key has been handled (a key the view holds behind another pending
+input event can land after that flush; then a claim of it goes unnoticed). A resync the keyboard's commands did not
+cause (a hardware key, a host's edit) leaves the keyboard expecting what it
+was last told, so it restarts nothing. `invalidateInput` (API 34) would not be lighter
+here, since Compose's connection wrapper does not pass `takeSnapshot`
+through, which makes it fall back to a restart. Reading counters at flush
+time, rather than waiting on a flow, is what guarantees the report or restart
+goes out when the IME's batch ends.
 
 Cursor anchor info (`updateCursorAnchorInfo`, used by floating toolbars,
 stylus handwriting, and some candidate windows) is requested by the IME via
 `requestCursorUpdates` and sent by the flush whenever the selection report
-changes, from the caret's layout metrics plus the view's screen location.
+changes, and while it monitors, whenever the caret moves on screen without
+the selection changing (a scroll, a relayout, the editor moving or resizing
+in its window): the flush compares the caret's geometry and the view's screen
+location too, and remembers what any report sent, an immediate one included.
+A view that moves on screen with nothing in the editor changing is not
+noticed until the next flush (roadmap 4.31). The marker is the caret
+measured from the layout as it is sent (the last frame's drawn caret is one
+move behind), in the view's coordinates (the canvas's position in the Compose
+root, so content padding and scroll are in it), with flags saying whether its
+top and bottom are inside the editor's clipped bounds less a strip the
+keyboard covers; the matrix is the view's screen location. The skiko
+request's caret rectangle is built from the same geometry
+(`imeCaretInRoot`).
 Reports go through the view the live connection is bound to, the one the
 `InputMethodManager` is serving; between sessions they fall back to the view
 the `CaptureViewForIme` composable captures into `platformExtensions`.
@@ -231,6 +270,14 @@ the normal key path. Both are routed into the same
   `onPreKeyEvent` ever fired. It intercepts only chords the handler claims;
   typed characters fall through to the IME, which delivers them as
   `commitText`.
+- A hardware keyboard's dead key reaches the key path too, as a character
+  carrying `KeyCharacterMap.COMBINING_ACCENT`. `DeadKeyComposer` shows the
+  accent as a composition (`imeSetComposingText`) and settles it on the next
+  key: the composed pair committed, or the accent committed and the next
+  character typed after it, as `EditText` does. Any other key (an arrow,
+  Enter, Escape) commits it first. An IME text command lands over the
+  composition, as it would over the accent `EditText` selects. Nothing else
+  on the key path composes.
 - `performContextMenuAction` (the IME's select-all/copy/paste/cut buttons)
   synthesizes the matching Ctrl chords and dispatches them to the view
   directly, so they resolve through the same handler and registry. Unlike
@@ -297,9 +344,24 @@ snapshot-backed revision that the request's text reads fold in. Without it an
 edit that moves nothing observable (a forward delete) would never reach the
 platform's mirror.
 
-The caret rectangle reads the caret position for the same reason, but the
-metrics themselves are written when the caret is drawn, so an observer
-re-running at the edit sees the previous draw's rectangle (roadmap 4.19).
+A resync request (`requestImeResync`) reaches the skiko
+platforms through the same session: it watches the generation and hands each
+advance to the platform's `SkikoImeResync`. What a platform needs differs.
+Desktop's AWT input method asks the request for text as it needs it and keeps
+no copy, so desktop does nothing. Web keeps a real copy in its textarea,
+and Compose lets a key's default action edit that copy while mirroring the
+editor back only when the editor's value changes, so a key the editor answered
+without that edit (Enter leaving a list) leaves the browser's own line break
+there; web rewrites the textarea from the request's value. iOS does nothing
+for now: Compose's iOS connection tells UIKit nothing about a change made
+during the keyboard's own edit, and the one tool the session has, restarting
+the input method, resets the keyboard (roadmap 4.29).
+
+The caret rectangle is measured from the layout when a platform asks for it,
+so an observer re-running at a caret move gets the new position before the
+next frame draws the caret. Observers re-run on a caret move only (and on a
+resize, through the viewport size); a scroll alone does not move the
+rectangle until the caret moves.
 
 ## WASM
 
@@ -333,18 +395,44 @@ What the browser delivers, and when (`DomInputStrategy` and
 
 Which path owns plain typing therefore follows DOM focus, and the browser
 gives a keystroke to one element only. With the textarea focused, typing is
-`commitText` and the character-input predicate never sees it. After a mouse
-click on the canvas, DOM focus sits on the canvas until the input is
-refocused (the tap's `requestInput` and the session's next state mirror both
-do that), and a keystroke in that window arrives as a canvas `keydown`
-carrying the character, which the predicate (`KeyDown`) accepts. The same
-keystroke cannot reach both elements, but two shapes the textarea forwards
-would insert on their own and the predicate refuses them: a named key
-(F2, Insert, a dead key), whose Compose event carries the key code as its
-code point and would type a letter, and a Ctrl chord, because Windows
-browsers report AltGr as Ctrl+Alt and the textarea commits that character
-itself. Ctrl is never a typing modifier in a browser, so refusing it loses
-nothing.
+`commitText` and the character-input predicate never sees it. A mouse press
+on the canvas moves DOM focus there even when Compose focus stays on the
+editor: a right-click (which skips `requestInput`, so a menu is not covered
+by a phone keyboard), a toolbar button that takes no focus, a context menu
+item. Canvas key events cannot tell some typed characters from named keys,
+so while its session is live the web input service listens for `focusin` on
+the viewport's shadow root and hands DOM focus from the canvas straight back
+to the textarea. The listener sits on the shadow root because a focus move
+inside a shadow tree is not reported outside it, and it is removed as the
+session is cancelled. A touch is left alone: a tap Compose did not consume
+blurs the textarea to hide the soft keyboard, and refocusing would raise it
+again.
+
+The canvas keeps DOM focus only while the editor has no session (a focused
+editor disabled and enabled again waits for a tap) or after such a touch,
+and a keystroke then
+arrives as a canvas `keydown` carrying the character, which the predicate
+(`KeyDown`) accepts. The same keystroke cannot reach both elements, but two
+shapes the textarea forwards would insert on their own and the predicate
+refuses them: a named key (F2, Insert, a dead key), whose Compose event
+carries the key code as its code point and would type a letter, and a Ctrl
+chord, because Windows browsers report AltGr as Ctrl+Alt and the textarea
+commits that character itself. Ctrl is never a typing modifier in a browser,
+so refusing it loses nothing. The predicate has no view of the DOM event, so
+';' and '=' (whose codes equal their characters, and a German dead key sits
+on '=') are refused too, which costs only the no-session canvas path.
+
+A browser answers Ctrl/Cmd+C, X and V in the textarea with a `copy`, `cut` or
+`paste` event while the key is down; Compose forwards the key to the editor's
+bindings a frame later. `ClipboardEventsEffect` (in `clipboard/`) uses the event
+to move the data, since only then may the page use the clipboard without a
+permission prompt, and prevents the textarea's own plain-text copy or paste; the
+Copy, Cut and Paste actions the key then runs do the editing and take the data
+from there rather than from `navigator.clipboard`.
+
+Compose sets `autocapitalize="off"` on every backing field whatever the
+`ImeOptions` say, so the web session sets it back to `sentences`, as the
+Android and iOS sessions ask of their keyboards.
 
 `ImeCursorSync` stays a no-op on web; the session's `snapshotFlow` over
 `value()` is the state-out direction, fed by the shared revision described

@@ -1,12 +1,14 @@
 package com.darkrockstudios.texteditor.state
 
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.ParagraphStyle
 import androidx.compose.ui.text.SpanStyle
@@ -22,6 +24,7 @@ import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.CodeFenceBoundary
 import com.darkrockstudios.texteditor.LineWrap
 import com.darkrockstudios.texteditor.TextEditorRange
+import com.darkrockstudios.texteditor.annotatedstring.normalizeLineEndings
 import com.darkrockstudios.texteditor.annotatedstring.splitAnnotatedString
 import com.darkrockstudios.texteditor.annotatedstring.subSequence
 import com.darkrockstudios.texteditor.annotatedstring.toAnnotatedString
@@ -31,6 +34,9 @@ import com.darkrockstudios.texteditor.cursor.getWrapForDrawing
 import com.darkrockstudios.texteditor.cursor.getWrappedLineIndex
 import com.darkrockstudios.texteditor.effectiveHeight
 import com.darkrockstudios.texteditor.input.EditorActionRegistry
+import com.darkrockstudios.texteditor.input.KeyboardSettings
+import com.darkrockstudios.texteditor.input.KillRing
+import com.darkrockstudios.texteditor.input.TabSettings
 import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
 import com.darkrockstudios.texteditor.richstyle.BlockSpanStyle
 import com.darkrockstudios.texteditor.richstyle.CodeFenceSpanStyle
@@ -414,17 +420,18 @@ class TextEditorState(
 		private set
 
 	/**
-	 * Last calculated cursor pixel metrics.
-	 * Updated during rendering and used by IME for cursor anchor info.
+	 * The caret's pixel metrics as the last frame drew them, whether or not the blink
+	 * showed it. A caret move is reflected from the next frame; the input methods
+	 * measure the caret when they ask instead.
 	 */
 	var lastCursorMetrics: CursorMetrics? = null
 		internal set
 
 	/**
 	 * Layout coordinates of the editor's drawing canvas, captured via
-	 * `onGloballyPositioned`. Used by the desktop IME to translate the cursor's
-	 * canvas-local [lastCursorMetrics] into root coordinates for placing the
-	 * input-method candidate window.
+	 * `onGloballyPositioned`. The skiko input request uses them to translate the
+	 * canvas-local caret into root coordinates for placing the input-method
+	 * candidate window and the web backing input.
 	 */
 	var canvasLayoutCoordinates: LayoutCoordinates? = null
 		internal set
@@ -625,6 +632,35 @@ class TextEditorState(
 	 */
 	val actions: EditorActionRegistry = EditorActionRegistry()
 
+	/** What the kill actions deleted, for a yank. */
+	internal val killRing = KillRing()
+
+	/** What Tab and Shift+Tab do: the indent size and character, or moving focus. */
+	var tabSettings: TabSettings by mutableStateOf(TabSettings())
+
+	/** What the soft keyboard is asked for: capitalisation, autocorrect, layout, and the action key. */
+	var keyboardSettings: KeyboardSettings by mutableStateOf(KeyboardSettings())
+
+	/**
+	 * Called with the action when the soft keyboard's action key
+	 * ([KeyboardSettings.imeAction]) is pressed. Null leaves the key to the default that
+	 * [KeyboardSettings.imeAction] describes.
+	 */
+	var onImeAction: ((ImeAction) -> Unit)? = null
+
+	/** The action key's default, supplied by the composed editor, which can move focus. */
+	internal var defaultImeAction: ((ImeAction) -> Unit)? = null
+
+	internal fun performImeAction(action: ImeAction) {
+		(onImeAction ?: defaultImeAction)?.invoke(action)
+	}
+
+	/**
+	 * How to open the context menu of each composable showing this state, which adds its
+	 * own while composed. The last opens.
+	 */
+	internal val contextMenuOpeners = mutableListOf<() -> Unit>()
+
 	private val _documentGeneration = MutableStateFlow(0)
 
 	/**
@@ -648,7 +684,7 @@ class TextEditorState(
 	 * the cursor operations.
 	 */
 	fun setText(text: String) {
-		replaceContent(text.split("\n").map { it.toAnnotatedString() })
+		replaceContent(text.normalizeLineEndings().split("\n").map { it.toAnnotatedString() })
 		clearHistory()
 		updateBookKeeping()
 		cursor.refreshStyles()
@@ -661,7 +697,7 @@ class TextEditorState(
 	 * document along with its rich spans, use [setDocument].
 	 */
 	fun setText(text: AnnotatedString) {
-		replaceContent(text.splitAnnotatedString())
+		replaceContent(text.normalizeLineEndings().splitAnnotatedString())
 		clearHistory()
 		updateBookKeeping()
 		cursor.refreshStyles()
@@ -711,7 +747,9 @@ class TextEditorState(
 	 * Cleared immediately rather than at commit, so an edit later in the same
 	 * transaction cannot coalesce into an entry from the old document.
 	 */
+	/** A replaced document starts afresh: no history, and nothing killed from the old one to yank. */
 	private fun clearHistory() {
+		killRing.clear()
 		val restore = editManager.history.clearRestorably()
 		refreshHistoryFlags()
 		onRollback {
@@ -756,12 +794,14 @@ class TextEditorState(
 	}
 
 	/**
-	 * Advances whenever the editor answered an IME request in a way the IME cannot infer
-	 * from the text or the caret, so its mirror of the buffer has to be discarded and
-	 * re-read. A platform with an IME remembers the generation it last acted on; the
-	 * others ignore it.
+	 * Advances whenever the editor answered an IME request its own way, so the IME's
+	 * mirror of the buffer may no longer match. A platform with an IME remembers the
+	 * generation it last acted on and resyncs the keyboard as it can: Android restarts
+	 * input only when a selection report cannot tell the keyboard, so a substitution that
+	 * keeps the caret where the keyboard expects it leaves the keyboard's copy of the
+	 * text as `EditText` would. Snapshot state, so the skiko session can observe it.
 	 */
-	internal var imeResyncGeneration = 0
+	internal var imeResyncGeneration by mutableIntStateOf(0)
 		private set
 
 	internal fun requestImeResync() {
@@ -867,6 +907,7 @@ class TextEditorState(
 
 	/** Inserts a single [char] at the cursor, applying the active typing style. */
 	fun insertCharacterAtCursor(char: Char) {
+		if (char == '\n' || char == '\r') return insertStringAtCursor("\n")
 		val text = cursor.applyCursorStyle(char.toString())
 		val operation = TextEditOperation.Insert(
 			position = cursorPosition,
@@ -886,6 +927,8 @@ class TextEditorState(
 	 * for any embedded line breaks.
 	 */
 	fun insertStringAtCursor(text: AnnotatedString) {
+		@Suppress("NAME_SHADOWING")
+		val text = text.normalizeLineEndings()
 		val styledText = cursor.applyCursorStyle(text)
 
 		// Calculate cursor position after insertion, accounting for newlines
@@ -943,6 +986,8 @@ class TextEditorState(
 	 * replaced text rather than only its own spans.
 	 */
 	fun replace(range: TextEditorRange, newText: AnnotatedString, inheritStyle: Boolean = false) {
+		@Suppress("NAME_SHADOWING")
+		val newText = newText.normalizeLineEndings()
 		val operation = TextEditOperation.Replace(
 			range = range,
 			newText = newText,
@@ -1008,39 +1053,19 @@ class TextEditorState(
 	}
 
 	/**
-	 * Removes [count] lines from [startIndex]. Removing every line leaves one empty
-	 * placeholder line; returns true when that happened, so a caller inserting
-	 * replacement lines overwrites the placeholder rather than a real empty line.
+	 * Replaces lines [first] through [last] with [replacement] in one new list, so a
+	 * splice of many lines copies the document once. [last] of `first - 1` inserts
+	 * before [first]. A document left with no lines gets one empty line.
 	 */
-	internal fun removeLines(startIndex: Int, count: Int): Boolean {
+	internal fun replaceLines(first: Int, last: Int, replacement: List<AnnotatedString>) {
 		val lines = textLines
-		// If there are no lines, or we're trying to remove more lines than exist, abort
-		if (lines.isEmpty() || startIndex >= lines.size) {
-			return false
-		}
-
-		// Ensure we don't remove more lines than available. The floor matters: an
-		// inverted range reaches here with a negative count, which subList would
-		// reject outright.
-		val safeCount = minOf(count, lines.size - startIndex).coerceAtLeast(0)
-
-		// Always keep at least one empty line
-		return if (lines.size <= safeCount) {
-			setLines(listOf(AnnotatedString("")))
-			true
-		} else {
-			setLines(
-				lines.toMutableList().also {
-					it.subList(startIndex, startIndex + safeCount).clear()
-				}
-			)
-			false
-		}
-	}
-
-	internal fun insertLine(index: Int, text: String) = insertLine(index, text.toAnnotatedString())
-	internal fun insertLine(index: Int, text: AnnotatedString) {
-		setLines(textLines.toMutableList().also { it.add(index, text) })
+		val from = first.coerceIn(0, lines.size)
+		val to = last.coerceIn(from - 1, lines.lastIndex)
+		val updated = ArrayList<AnnotatedString>(lines.size - (to - from + 1) + replacement.size)
+		updated.addAll(lines.subList(0, from))
+		updated.addAll(replacement)
+		updated.addAll(lines.subList(to + 1, lines.size))
+		setLines(updated.ifEmpty { listOf(AnnotatedString("")) })
 	}
 
 	/**
@@ -1055,7 +1080,12 @@ class TextEditorState(
 		announceReplacement()
 	}
 
+	/** How many lines [setLines] has been handed; the cost tests read it to catch a list rebuilt per line. */
+	internal var linesWritten = 0L
+		private set
+
 	internal fun setLines(lines: List<AnnotatedString>) {
+		linesWritten += lines.size
 		mutateContent { it.withLines(lines) }
 	}
 
@@ -1109,11 +1139,20 @@ class TextEditorState(
 		return _lineOffsets[vLineIndex]
 	}
 
-	/** Records the editor's new viewport [size] and re-wraps the document to fit. */
+	/**
+	 * Records the editor's new viewport [size] and re-wraps the document to fit. When a
+	 * focused editor gets shorter, as when the window shrinks for a soft keyboard, a caret
+	 * in view (or on its way there) stays in view.
+	 */
 	fun onViewportSizeChange(size: Size) {
+		val keepCaret = isFocused && lineOffsets.isNotEmpty() &&
+				size.width == viewportSize.width && size.height < viewportSize.height &&
+				scrollManager.isCursorInViewOrScrolling()
 		viewportSize = size
 		invalidateLayoutInputs()
 		updateBookKeeping()
+		// After the relayout, which an open transaction holds until it commits.
+		if (keepCaret) onCommit { scrollManager.snapCursorVisible() }
 	}
 
 	/**
@@ -1818,4 +1857,6 @@ class TextEditorState(
 
 // Process-wide so two editors in one window can never mint the same id; copies
 // only happen on the UI thread, so a plain increment is race-free in practice.
-private var nextCopyId: Long = 1L
+// Starts at random because an id leaves the process on the clipboard, and another
+// app embedding the editor must not mint the one this copy carries.
+private var nextCopyId: Long = kotlin.random.Random.nextLong()
