@@ -14,16 +14,16 @@ import kotlin.test.fail
 /**
  * A property of the editor checked after every stroke of [invariantFuzz].
  *
- * [needs] names the roadmap items that must land before the invariant holds. While
- * any of them is still in [OPEN_PARITY_ITEMS] the invariant is off by default, so
- * deleting an item there switches on its invariants as well as its fuzz checks.
+ * [needs] names the gaps that must close before the invariant holds. While any of
+ * them is still in [KNOWN_PARITY_GAPS] the invariant is off by default, so deleting
+ * a gap there switches on its invariants as well as its fuzz checks.
  */
-enum class EditorInvariant(vararg val needs: String) {
+enum class EditorInvariant(vararg val needs: ParityGap) {
 	/** The document never holds half of a surrogate pair. */
-	NoLoneSurrogate("1.1"),
+	NoLoneSurrogate(ParityGap.GraphemeClusters),
 
 	/** The caret and the selection anchor sit on grapheme cluster boundaries. */
-	CaretOnGraphemeBoundary("1.1"),
+	CaretOnGraphemeBoundary(ParityGap.GraphemeClusters),
 
 	/**
 	 * Without a selection, Down moves to the next visual row, or stays on the last
@@ -31,7 +31,7 @@ enum class EditorInvariant(vararg val needs: String) {
 	 * ([com.darkrockstudios.texteditor.state.TextEditorState.cursorRowIndex]), so a
 	 * caret at the end of a wrapped row counts on that row.
 	 */
-	DownMovesOneRow("1.2"),
+	DownMovesOneRow(ParityGap.VerticalMotion),
 
 	/**
 	 * Without a selection and away from the document start, Left then Right puts the
@@ -47,7 +47,7 @@ enum class EditorInvariant(vararg val needs: String) {
 	ViewFollowsSidewaysScroll,
 	;
 
-	val onByDefault: Boolean get() = needs.none { it in OPEN_PARITY_ITEMS }
+	val onByDefault: Boolean get() = needs.none { it in KNOWN_PARITY_GAPS }
 
 	companion object {
 		/**
@@ -92,7 +92,7 @@ fun EditorUiTestScope.checkInvariants(invariants: Set<EditorInvariant>) {
 		val stuckAtLeftEdge = caretInContent().isNear(drawn) && state.cursorRowIndex() == 0
 		send(Right)
 		if (visual) {
-			// The arrows are visual (7.33): back to the same place in the layout, which
+			// The arrows are visual: back to the same place in the layout, which
 			// between runs of opposite direction two offsets share.
 			val back = caretInContent()
 			assertTrue(

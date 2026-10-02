@@ -11,7 +11,7 @@ import kotlin.test.Test
 /**
  * Seeded keystroke storms through the editor and `BasicTextField`, compared after
  * every stroke; see [differentialFuzz]. Divergences the editor is known to have
- * are tolerated while their roadmap item is listed in [utils.OPEN_PARITY_ITEMS].
+ * are tolerated while their gap is listed in [utils.KNOWN_PARITY_GAPS].
  * The narrow width makes most lines wrap. The unwrapped and single-line storms run
  * with wrapping off, scrolled sideways between strokes.
  */

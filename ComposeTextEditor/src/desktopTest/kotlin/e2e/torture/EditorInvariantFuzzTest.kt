@@ -11,10 +11,9 @@ import kotlin.test.fail
 
 /**
  * The Unicode keystroke storms of the differential fuzzer through the editor alone,
- * with [EditorInvariant]s checked after every stroke. Invariants whose roadmap
- * items are still open are off; the `still fails` cases prove each one catches
- * today's bug, and fail once it holds so its items get removed from
- * [utils.OPEN_PARITY_ITEMS].
+ * with [EditorInvariant]s checked after every stroke. Invariants whose gaps are
+ * still known are off; the `still fails` cases prove each one catches today's bug,
+ * and fail once it holds so its gaps get removed from [utils.KNOWN_PARITY_GAPS].
  */
 class EditorInvariantFuzzTest {
 
@@ -37,8 +36,8 @@ class EditorInvariantFuzzTest {
 				invariantFuzz(seed = seed, count = 80, width = WIDTH, invariants = setOf(invariant))
 			}.exceptionOrNull()
 		} ?: fail(
-			"$invariant now holds on seeds $seeds; if roadmap items ${invariant.needs.toList()} " +
-				"have landed, delete them from OPEN_PARITY_ITEMS"
+			"$invariant now holds on seeds $seeds; if gaps ${invariant.needs.toList()} " +
+				"are closed, delete them from KNOWN_PARITY_GAPS"
 		)
 		assertTrue(
 			failure.message.orEmpty().contains(invariant.name),

@@ -176,15 +176,18 @@ do; it fails once the editor matches, so the fix removes the marker.
 `e2e/differential/DifferentialFuzzTest.kt` replays seeded scripts of typing,
 navigation, selection and word motion over emoji, ZWJ sequences, flags,
 combining marks and right-to-left words, wrapped, unwrapped and as a single
-line. A divergence at a reference quirk is tolerated: the editor is reset to the
-reference's state and the script goes on. Any other divergence fails with a
-transcript and the seed; replay it with `FUZZ_SEED=<seed>`.
+line. A divergence at a reference quirk, or one a gap in `KNOWN_PARITY_GAPS`
+explains, is tolerated: the editor is reset to the reference's state and the
+script goes on. Any other divergence fails with a transcript and the seed;
+replay it with `FUZZ_SEED=<seed>`. Removing a closed gap from the set makes the
+fuzz fail on that kind of divergence again.
 
 `e2e/torture/EditorInvariantFuzzTest.kt` runs the same storms through the
 editor alone and checks `EditorInvariant`s (`utils/EditorInvariants.kt`) after
 every stroke: no lone surrogate, the caret on a grapheme boundary, Down moving
 one visual row, Left then Right returning, and the view following the sideways
-scroll. `FUZZ_INVARIANTS` names the ones to check (`all` for every one).
+scroll. An invariant is off while a gap it needs is in `KNOWN_PARITY_GAPS`;
+`FUZZ_INVARIANTS` names the ones to check (`all` for every one).
 
 ## Geometry assertions
 
@@ -196,8 +199,8 @@ instead of reading pixels: `drawnCaret()`, `drawnSelection()` and
 editor's width, the reference to compare against, and `rowBox(row)` is the
 editor's own row. `assertRectEquals` and `assertOffsetEquals` compare within
 half a pixel. `drawing/GeometryTest.kt` is the suite. A case the editor gets
-wrong today goes inside `failsUntil("<item>")`, which fails once the case
-passes, so the fix removes the marker; keep an assertion outside the block that
+wrong today goes inside `failsUntil("<what it should do>")`, which fails once
+the case passes, so the fix removes the marker; keep an assertion outside the block that
 holds both before and after the fix, so a different breakage still fails.
 
 ## Wrapping off
@@ -332,7 +335,7 @@ and `Input.insertText` make the browser fire `compositionstart`,
 `compositionend` on the focused field and edit it as an operating system input
 method does. It covers a dead key, a Japanese composition with conversion, a
 cancelled composition, and typing after a commit. A case the editor gets wrong
-today is `test.fixme` with its roadmap item; to reproduce one, change it to
+today is `test.fixme`, with a comment on how it fails; to reproduce one, change it to
 `test` and run it with `--repeat-each=10` (and `--workers=5` for the failures
 that need load).
 

@@ -179,8 +179,8 @@ private val UNWRAPPED_REFERENCE_WIDTH = 20_000.dp
  * Typed text goes through [typeCodePoints]: KEY_TYPED events that carry an AWT
  * event, which the reference requires and the editor ignores.
  *
- * Cases the editor gets wrong today stay in the suite, marked with the roadmap
- * item that fixes them; see `divergesUntil` on [assertMatchesNative].
+ * Cases the editor gets wrong today stay in the suite, marked with what the editor
+ * should do; see `divergesUntil` on [assertMatchesNative].
  *
  * [textDirection] goes into both widgets' text style. Compose's default resolves to
  * the layout direction, so a right-to-left paragraph is left-to-right based unless
@@ -467,11 +467,11 @@ private fun <T> withPinnedReferenceKeyMapping(block: () -> T): T {
  * Replays [strokes] through both widgets from [start] and asserts the editor ends
  * every stroke in the same state as the reference.
  *
- * [divergesUntil] marks a case the editor is known to get wrong today, naming the
- * roadmap item whose fix makes it match (for example "1.2"). Such a case passes
+ * [divergesUntil] marks a case the editor is known to get wrong today, describing
+ * what it should do (for example "Down keeps the goal column"). Such a case passes
  * while it diverges and fails once it matches, with a message to delete the
  * marker, so a fix switches its cases on rather than leaving them silently
- * skipped. Search for `divergesUntil = "1.2"` to find the cases an item owns.
+ * skipped.
  */
 internal fun assertMatchesNative(
 	start: EditSnapshot,
@@ -496,8 +496,8 @@ internal fun assertMatchesNative(
 		)
 
 		firstDivergence == null && divergesUntil != null -> fail(
-			"the editor now matches BasicTextField; if roadmap item $divergesUntil has " +
-				"landed, delete divergesUntil = \"$divergesUntil\" from this case\n" +
+			"the editor now matches BasicTextField ($divergesUntil); " +
+				"delete divergesUntil from this case\n" +
 				transcript(start, strokes, reference, actual)
 		)
 	}

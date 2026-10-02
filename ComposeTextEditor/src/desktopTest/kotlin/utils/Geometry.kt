@@ -108,15 +108,15 @@ fun assertOffsetEquals(expected: Offset, actual: Offset, tolerance: Float = 0.5f
 }
 
 /**
- * Runs [block], a case the editor gets wrong today, owned by roadmap item [item]. It
- * passes while [block] fails an assertion and fails once [block] passes, with a message
- * to delete the marker, as `divergesUntil` does for the differential tests.
+ * Runs [block], a case the editor gets wrong today; [expected] says what it should do.
+ * It passes while [block] fails an assertion and fails once [block] passes, with a
+ * message to delete the marker, as `divergesUntil` does for the differential tests.
  */
-fun failsUntil(item: String, block: () -> Unit) {
+fun failsUntil(expected: String, block: () -> Unit) {
 	try {
 		block()
 	} catch (_: AssertionError) {
 		return
 	}
-	fail("this case now passes; if roadmap item $item has landed, remove its failsUntil(\"$item\")")
+	fail("this case now passes ($expected); remove its failsUntil")
 }
