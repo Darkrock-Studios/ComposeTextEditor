@@ -133,6 +133,23 @@ wrong today goes inside `failsUntil("<item>")`, which fails once the case
 passes, so the fix removes the marker; keep an assertion outside the block that
 holds both before and after the fix, so a different breakage still fails.
 
+## Wrapping off
+
+With wrapping on, the default, the sideways scroll is 0, so a test that only
+wraps cannot see code that forgets it. Code that pairs a row's offsets with view
+or pointer coordinates goes through the state's conversions or adds the sideways
+scroll (`docs/design/soft-wrap.md`, "Testing"). The sideways variants guard the
+rule: the UI storms, the invariant fuzz and the markdown fixpoint storm each run
+with wrapping off over lines wider than the editor, scrolled sideways between
+steps, and `assertViewFollowsSidewaysScroll` (`assertStateFollowsSidewaysScroll`
+in the markdown suite) checks after each step that what the view answers moves
+with the scroll. `softwrap/SidewaysGeometryTest` puts the geometry harness
+through the same check scene by scene, with clicks, touch handles, the toolbar
+and the magnifier. The differential fuzz also runs unwrapped and as a single
+line, scrolled sideways between strokes; it compares the edits only. A new test
+of geometry or pointer input belongs beside them when the scroll could change
+its answer.
+
 ## Golden screenshots
 
 `golden/GoldenScreenshotTest.kt` captures a few small scenes in the test font
