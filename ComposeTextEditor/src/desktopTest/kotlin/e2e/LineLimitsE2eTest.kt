@@ -2,7 +2,11 @@ package e2e
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.ComposeUiTest
@@ -15,6 +19,7 @@ import androidx.compose.ui.text.style.TextIndent
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import com.darkrockstudios.texteditor.BasicTextEditor
+import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.EditorLineLimits
 import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.rememberTextEditorState
@@ -24,7 +29,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-/** Sizing to the text: minimum and maximum lines, and auto-grow (7.13). */
+/** Sizing to the text: minimum and maximum lines, and auto-grow. */
 @OptIn(ExperimentalTestApi::class)
 class LineLimitsE2eTest {
 
@@ -82,6 +87,49 @@ class LineLimitsE2eTest {
 		runOnIdle { state.setText("one") }
 		waitForIdle()
 		assertHeight(row.rows(1), "and shrinks back")
+	}
+
+	/** As `BasicTextField`'s single line: one row however long, following the caret sideways. */
+	@Test
+	fun `a single line stays one row and scrolls sideways to the caret`() = runComposeUiTest {
+		val state = editor("short", EditorLineLimits.SingleLine)
+		val row = state.rowHeight()
+		assertHeight(row.rows(1), "one row tall")
+
+		val long = "word ".repeat(80).trimEnd()
+		runOnIdle { state.setText(long) }
+		waitForIdle()
+		assertHeight(row.rows(1), "still one row")
+		assertEquals(1, state.lineOffsets.size)
+
+		runOnIdle { state.cursor.updatePosition(CharLineOffset(0, long.length)) }
+		waitForIdle()
+		val scrolled = state.horizontalScrollState.value
+		assertTrue(scrolled > 0, "scrolled sideways to the caret")
+		val caretX = state.getPositionForOffset(state.cursorPosition).position.x
+		assertTrue(caretX in 0f..state.viewportSize.width, "the caret at $caretX is in view")
+		assertEquals(0, state.scrollManager.scrollbarBottomPx, "no scrollbar over a single line")
+	}
+
+	@Test
+	fun `leaving single line wraps again, and a shared editor wraps with it`() = runComposeUiTest {
+		lateinit var state: TextEditorState
+		var limits by mutableStateOf<EditorLineLimits>(EditorLineLimits.SingleLine)
+		setContent {
+			state = rememberTextEditorState(AnnotatedString("word ".repeat(80).trimEnd()))
+			Column {
+				BasicTextEditor(state = state, modifier = Modifier.width(300.dp), lineLimits = limits)
+				BasicTextEditor(state = state, modifier = Modifier.width(300.dp).height(100.dp))
+			}
+		}
+		waitForIdle()
+		assertEquals(1, state.lineOffsets.size, "unwrapped for both while one is a single line")
+
+		limits = EditorLineLimits.Fill
+		waitForIdle()
+		state.settleLayout()
+		assertTrue(state.lineOffsets.size > 1, "wrapped again")
+		assertEquals(0, state.horizontalScrollState.maxValue)
 	}
 
 	@Test

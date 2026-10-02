@@ -26,6 +26,7 @@ import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.cursor.calculateCursorPosition
 import com.darkrockstudios.texteditor.cursor.caretRect
+import com.darkrockstudios.texteditor.cursor.drawCaretRect
 import com.darkrockstudios.texteditor.html.selectionAsHtml
 import com.darkrockstudios.texteditor.richstyle.BlockSpanStyle
 import com.darkrockstudios.texteditor.state.FocusedEditor
@@ -273,10 +274,7 @@ internal class TextDragAndDrop(
 /** Draws the drop caret while a drag of text hovers over the editor. */
 internal fun DrawScope.DrawDropCaret(dragAndDrop: TextDragAndDrop, state: TextEditorState, color: Color, width: Dp) {
 	val hit = dragAndDrop.dropHit ?: return
-	val rect = caretRect(state.calculateCursorPosition(hit.position, hit.affinity), width.toPx(), size.width)
-	if (rect.bottom >= 0f && rect.top <= size.height) {
-		drawRect(color = color, topLeft = rect.topLeft, size = rect.size)
-	}
+	drawCaretRect(state, state.caretRect(state.calculateCursorPosition(hit.position, hit.affinity), width.toPx(), size.width), color)
 }
 
 /** Makes the node this sits on the source and the target of [dragAndDrop]'s drags. */

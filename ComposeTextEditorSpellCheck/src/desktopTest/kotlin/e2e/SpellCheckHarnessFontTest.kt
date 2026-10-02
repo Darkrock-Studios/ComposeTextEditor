@@ -11,7 +11,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertSame
 
-/** The spell check harness lays text out in the bundled test font whatever the host's fonts are (0.9). */
+/** The spell check harness lays text out in the bundled test font whatever the host's fonts are. */
 class SpellCheckHarnessFontTest {
 	@Test
 	fun `the harness lays text out in the test font`() {

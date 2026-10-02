@@ -33,7 +33,7 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/** Decoration layers (7.86): a host's own overlays, keyed by owner, that never become part of the document. */
+/** Decoration layers: a host's own overlays, keyed by owner, that never become part of the document. */
 class DecorationLayerTest {
 
 	private val syntax = DecorationLayer("syntax")

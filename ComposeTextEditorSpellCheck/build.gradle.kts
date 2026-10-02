@@ -98,6 +98,8 @@ kotlin {
 
 				implementation(libs.symspellkt)
 				implementation(libs.platform.spellchecker)
+				// The decoration coexistence test runs find beside spell check.
+				implementation(projects.composeTextEditorFind)
 			}
 		}
 		val wasmJsMain by getting {

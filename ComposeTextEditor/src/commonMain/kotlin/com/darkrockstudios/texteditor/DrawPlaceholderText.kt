@@ -9,14 +9,18 @@ internal fun DrawScope.DrawPlaceholderText(
 	state: TextEditorState,
 	style: TextEditorStyle
 ) {
-	drawText(
-		textMeasurer = state.textMeasurer,
-		text = style.placeholderText,
-		style = state.textStyle.copy(
-			color = style.placeholderColor,
-		),
-		topLeft = state.placeholderTopLeft()
-	)
+	// Unwrapped, a placeholder is one row too, cut at the canvas's edge.
+	clippedSideways(state) {
+		drawText(
+			textMeasurer = state.textMeasurer,
+			text = style.placeholderText,
+			style = state.textStyle.copy(
+				color = style.placeholderColor,
+			),
+			topLeft = state.placeholderTopLeft(),
+			softWrap = state.softWrap,
+		)
+	}
 }
 
 /** Where the placeholder starts: the first line's top, which the top content padding moves down. */

@@ -25,3 +25,16 @@ actual fun TextEditorScrollbar(
 		)
 	}
 }
+
+/** The same indicator along the bottom edge for a sideways scroll. */
+@Composable
+internal actual fun EditorHorizontalScrollbar(scrollState: TextEditorScrollState, modifier: Modifier) {
+	val onSurface = MaterialTheme.colorScheme.onSurface
+	HorizontalScrollIndicator(
+		scrollState = scrollState,
+		modifier = modifier,
+		thumbColor = onSurface.copy(alpha = 0.38f),
+		thickness = 4.dp,
+		trackColor = onSurface.copy(alpha = 0.12f),
+	)
+}

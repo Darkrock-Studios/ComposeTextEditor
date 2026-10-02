@@ -25,7 +25,7 @@ import kotlin.test.assertTrue
 /**
  * A window that resizes for the soft keyboard (Android's `adjustResize`, or a host's
  * `imePadding`) shrinks the editor rather than covering it. A caret in view before the
- * shrink stays in view after it, as `EditText` keeps it (roadmap 3.9, hammer-editor#932).
+ * shrink stays in view after it, as `EditText` keeps it (hammer-editor#932).
  */
 class ViewportResizeE2eTest {
 	private val doc = AnnotatedString((0 until 60).joinToString("\n") { "Line $it" })

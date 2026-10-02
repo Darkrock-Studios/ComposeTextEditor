@@ -86,7 +86,7 @@ class InputSessionE2eTest {
 		assertTrue(state.isFocused)
 	}
 
-	/** Roadmap 7.37: IME input works again at once, and the soft keyboard stays down. */
+	/** IME input works again at once, and the soft keyboard stays down. */
 	@Test
 	fun `input turned back on under focus starts a session that asks for no keyboard`() = runSkikoComposeUiTest {
 		var enabled by mutableStateOf(true)

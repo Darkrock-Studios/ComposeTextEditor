@@ -1,9 +1,10 @@
 # Decorations
 
 A decoration is a view of the text, not part of it: a syntax highlighter's
-colours, a linter's underlines, a search's matches. Spell check and find drew
-theirs as rich spans marked `isDecoration` (7.53, 7.54); 7.86 makes that a
-public API any host can use (`com.darkrockstudios.texteditor.decoration`).
+colours, a linter's underlines, a search's matches. Decoration layers
+(`com.darkrockstudios.texteditor.decoration`) are the public API for them: any host
+can draw on one, and spell check, diagnostics and find each draw on layers of
+their own.
 
 ## Rules
 
@@ -35,8 +36,7 @@ once (`SpanIndex.swapping`, each touched line filtered and appended to once),
 the publish marks no line for block normalization, and the layout update names
 no line, so the rows are only pointed at the new index. `updateRichSpans` takes
 the same path when every span it is given only paints (`paintsOnly`: a
-decoration that anchors, shapes and numbers no line), so spell check and find
-gain it without moving onto layers.
+decoration that anchors, shapes and numbers no line).
 
 `DecorationBenchmark` (run with `CTE_BENCHMARK=1`) times 5,000 lines of code
 with a colour on every token, 45,000 spans, on the Linux desktop: setting the
@@ -56,7 +56,9 @@ coverage, antialiasing included (`DrawTextTint.kt`). The layer is opened only
 when a row in view has a coloured decoration, once per frame, and holds the
 text alone: the text is drawn in its own pass, after the host's `decorateLine`
 and before every foreground span and the composing underline, so a gutter or a
-margin mark is neither clipped by the layer nor tinted.
+margin mark is neither clipped by the layer nor tinted. With wrapping off
+the layer and its tints are opened inside `inContentSpace`, so they scroll
+sideways with the text and stop at the canvas's edges.
 
 Consequences:
 
@@ -78,6 +80,41 @@ The tint costs the frame: about 1 ms with no decoration, 3.6 ms with every token
 of 40 lines in view tinted, on the benchmark's software canvas. A third of the
 difference is the rectangles, which a GPU canvas fills far faster; most of the
 rest is finding each stretch's boxes.
+
+## Spell check, diagnostics and find
+
+Spell check, diagnostics and find each draw on a layer of their own and
+read their marks back with `decorations(layer)` or `decorations(layer, lines)`,
+which build only their own spans, never the whole span set
+(`getAllRichSpans()` builds and hashes every span after any change). Their
+styles are `DecorationStyle`s of that layer, so none clears another's or a
+host's.
+
+Spell check's layer is `SpellCheckStyle`'s, and diagnostics' is
+`DiagnosticStyle`'s default, each shared by every state of its kind, as their
+styles were matched by class before: a state made for an editor takes over the
+marks an earlier one left, and a style a host makes without a layer is replaced
+and cleared as before. Each `FindState` has a layer of its own, as its styles
+were matched by identity.
+
+A recheck or an invalidation reads its own flags on the lines it covers,
+keeping the flags touching the range (not only those sharing a character with
+it, as `replaceDecorations` by range takes), and swaps them through
+`updateRichSpans`, which takes the paint-only path, as does a full check for
+the whole layer. `SpellCheckBenchmark` (5,000 lines, two flags, two diagnostics
+and three other highlights a line): a diagnostics refresh after an edit 6.1 ms
+to 3.9 ms. A spell recheck after an edit was already line-local (about
+0.17 ms), and a full check's 26 ms is its scan, so neither moves.
+
+In find, a search lays again only the lines whose highlights differ from the
+matches, so after an edit that is the edited lines; stepping to the next match,
+with the text unchanged since the highlights were laid, swaps the two lines the
+current highlight leaves and reaches. The in-selection scope, which crosses
+lines, is added whole (`addRichSpan`) rather than split per line, so it follows
+edits as one range. `FindBenchmark` (5,000 lines, 15,000 matches, 10,000 other
+spans): an update after an edit 7.2 ms to 3.5 ms, a step 5.3 ms to 20 us.
+`DecorationLayerCoexistenceTest` checks the owners leave each other alone and
+read no other's spans.
 
 ## Looks
 

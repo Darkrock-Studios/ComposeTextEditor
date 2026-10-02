@@ -18,7 +18,7 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
 
 /**
- * A line's leading spaces and tabs are written as `&nbsp;` and `&emsp;` (7.45): four
+ * A line's leading spaces and tabs are written as `&nbsp;` and `&emsp;`: four
  * spaces or a tab would open an indented code block, and a paragraph drops up to
  * three, so any other form changes the line for other renderers. Import reads a
  * line's leading run of them back as the spaces and tabs, and the rest of the line

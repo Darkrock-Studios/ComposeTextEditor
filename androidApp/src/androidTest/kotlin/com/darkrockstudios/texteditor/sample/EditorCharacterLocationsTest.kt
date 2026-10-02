@@ -30,7 +30,7 @@ import kotlin.math.abs
 import kotlin.math.roundToInt
 
 /**
- * The character locations an accessibility service asks the editor for (7.57), through
+ * The character locations an accessibility service asks the editor for, through
  * the platform's own request on a real device: the glyphs as drawn, past the content
  * padding and less the scroll, where Compose alone answers from a layout that has
  * neither. The editor's other semantics still answer through the wrapped delegate.

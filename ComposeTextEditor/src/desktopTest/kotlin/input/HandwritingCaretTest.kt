@@ -10,7 +10,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 
-/** Roadmap 3.17: a stylus that starts writing in an unfocused editor writes where it began. */
+/** A stylus that starts writing in an unfocused editor writes where it began. */
 @OptIn(ExperimentalTestApi::class)
 class HandwritingCaretTest {
 

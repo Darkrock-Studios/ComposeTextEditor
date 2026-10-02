@@ -27,8 +27,7 @@ import kotlin.test.assertEquals
  * iOS and the web take their keyboard options from the editor's
  * [KeyboardSettings], as Android does: the four fields map one to one, a single line
  * asks for single-line text with its action key, the action key reaches the editor,
- * and a change of settings starts the input method again with the new options
- * (roadmap 4.32).
+ * and a change of settings starts the input method again with the new options.
  */
 class SkikoKeyboardSettingsTest {
 	private fun state(scope: TestScope = TestScope()) =

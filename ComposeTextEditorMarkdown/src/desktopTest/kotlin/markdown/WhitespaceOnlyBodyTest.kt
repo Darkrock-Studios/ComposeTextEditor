@@ -11,8 +11,8 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 /**
- * A list item or heading holding only whitespace keeps it through a round trip
- * (7.67): CommonMark reads a marker followed by whitespace alone as an empty item,
+ * A list item or heading holding only whitespace keeps it through a round trip:
+ * CommonMark reads a marker followed by whitespace alone as an empty item,
  * so the whitespace is written as indent entities, which import reads back.
  */
 class WhitespaceOnlyBodyTest {

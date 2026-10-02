@@ -15,7 +15,7 @@ import utils.pasteHtml
 
 /**
  * Styled text pasted from markup takes the styles that size text where it lands
- * beneath its own spans, so it renders at the size of the text around it (6.18).
+ * beneath its own spans, so it renders at the size of the text around it.
  * Its own styles still win.
  */
 class RichPasteBodyStyleTest {

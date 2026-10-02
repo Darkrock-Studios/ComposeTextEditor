@@ -119,6 +119,76 @@ FONTCONFIG_FILE=/path/to/fonts.conf ./gradlew \
 `--rerun` matters: the environment is not a task input, so without it Gradle
 reports the tests up to date from the previous run.
 
+## Differential tests
+
+### The reference rule
+
+When a behaviour question comes up (where does the caret go, what does this
+chord do), the answer is what the platform's native editor does. On desktop the
+practical reference is Compose's `BasicTextField`: it runs in the same test
+harness and gets these conventions right. Wherever the editor and
+`BasicTextField` were both probed for caret and keyboard behaviour,
+`BasicTextField` gave the native answer, with these exceptions, which the
+differential tests allow for (`referenceQuirk` and `differentialFuzz` in
+`utils/DifferentialFuzz.kt`):
+
+- With a selection, its Home and End measure from the selection's start and end
+  rather than the caret, and so do its Shift paragraph jumps.
+- Home on an empty last line moves to the end of the line above.
+- End stops before a row's trailing spaces, and Up and Down stop before a row's
+  trailing spaces when the goal x is over or past them.
+- It has no caret affinity, so a caret on a wrap offset is on the lower row to
+  it: Home from there stays put, End runs on to the lower row's end, and Up and
+  Down measure from that row.
+- A word wider than the row is broken where it starts instead of moving to the
+  next row.
+- A page move neither starts nor follows a goal x, so it measures from the
+  caret, and Up or Down after one measures from where it landed. PageUp and
+  PageDown stop on the first and last rows instead of going on to the document
+  start and end.
+- Its goal x survives typed text and Enter, so Up or Down after typing measures
+  from the column the typing started at.
+- Its word motions stop after every punctuation character, where GTK, `EditText`
+  and Cocoa skip punctuation (they agree that an emoji is a word of its own).
+  Its Ctrl+Left and Ctrl+Backspace step back one character at a time and stop
+  at the first segment that began before the step, so they pass over
+  one-character segments (a space, a mark, a flag, a lone ideograph) and stop
+  one short of a word when the step lands inside it, where GTK and Cocoa go to
+  the previous word's start.
+- Its paragraph direction is the whole text's, from its first strong character,
+  so a right-to-left paragraph after a left-to-right one keeps left-to-right
+  arrows, where native editors and the editor resolve each paragraph on its own.
+- Its arrow keys inside a mixed-direction paragraph are logical, where native
+  editors and the editor move visually through the runs
+  (`e2e/VisualArrowE2eTest.kt`).
+
+### The harness
+
+`differentialUiTest` (`utils/DifferentialHarness.kt`) composes the editor beside
+`BasicTextField(TextFieldState)`, both in the test font and as wide as each
+other, and replays one keystroke script through each, the reference first. Key
+bindings are pinned on both sides, so the suite means the same on every OS.
+`e2e/differential/BasicTextFieldParityTest.kt` is the suite of scripted cases,
+compared after every stroke by `assertMatchesNative`. A case the editor gets
+wrong today stays in the suite with `divergesUntil` describing what it should
+do; it fails once the editor matches, so the fix removes the marker.
+
+`e2e/differential/DifferentialFuzzTest.kt` replays seeded scripts of typing,
+navigation, selection and word motion over emoji, ZWJ sequences, flags,
+combining marks and right-to-left words, wrapped, unwrapped and as a single
+line. A divergence at a reference quirk, or one a gap in `KNOWN_PARITY_GAPS`
+explains, is tolerated: the editor is reset to the reference's state and the
+script goes on. Any other divergence fails with a transcript and the seed;
+replay it with `FUZZ_SEED=<seed>`. Removing a closed gap from the set makes the
+fuzz fail on that kind of divergence again.
+
+`e2e/torture/EditorInvariantFuzzTest.kt` runs the same storms through the
+editor alone and checks `EditorInvariant`s (`utils/EditorInvariants.kt`) after
+every stroke: no lone surrogate, the caret on a grapheme boundary, Down moving
+one visual row, Left then Right returning, and the view following the sideways
+scroll. An invariant is off while a gap it needs is in `KNOWN_PARITY_GAPS`;
+`FUZZ_INVARIANTS` names the ones to check (`all` for every one).
+
 ## Geometry assertions
 
 `utils/Geometry.kt` (editor desktop tests) runs the editor's draw functions
@@ -129,9 +199,26 @@ instead of reading pixels: `drawnCaret()`, `drawnSelection()` and
 editor's width, the reference to compare against, and `rowBox(row)` is the
 editor's own row. `assertRectEquals` and `assertOffsetEquals` compare within
 half a pixel. `drawing/GeometryTest.kt` is the suite. A case the editor gets
-wrong today goes inside `failsUntil("<item>")`, which fails once the case
-passes, so the fix removes the marker; keep an assertion outside the block that
+wrong today goes inside `failsUntil("<what it should do>")`, which fails once
+the case passes, so the fix removes the marker; keep an assertion outside the block that
 holds both before and after the fix, so a different breakage still fails.
+
+## Wrapping off
+
+With wrapping on, the default, the sideways scroll is 0, so a test that only
+wraps cannot see code that forgets it. Code that pairs a row's offsets with view
+or pointer coordinates goes through the state's conversions or adds the sideways
+scroll (`docs/design/soft-wrap.md`, "Testing"). The sideways variants guard the
+rule: the UI storms, the invariant fuzz and the markdown fixpoint storm each run
+with wrapping off over lines wider than the editor, scrolled sideways between
+steps, and `assertViewFollowsSidewaysScroll` (`assertStateFollowsSidewaysScroll`
+in the markdown suite) checks after each step that what the view answers moves
+with the scroll. `softwrap/SidewaysGeometryTest` puts the geometry harness
+through the same check scene by scene, with clicks, touch handles, the toolbar
+and the magnifier. The differential fuzz also runs unwrapped and as a single
+line, scrolled sideways between strokes; it compares the edits only. A new test
+of geometry or pointer input belongs beside them when the scroll could change
+its answer.
 
 ## Golden screenshots
 
@@ -248,7 +335,7 @@ and `Input.insertText` make the browser fire `compositionstart`,
 `compositionend` on the focused field and edit it as an operating system input
 method does. It covers a dead key, a Japanese composition with conversion, a
 cancelled composition, and typing after a commit. A case the editor gets wrong
-today is `test.fixme` with its roadmap item; to reproduce one, change it to
+today is `test.fixme`, with a comment on how it fails; to reproduce one, change it to
 `test` and run it with `--repeat-each=10` (and `--workers=5` for the failures
 that need load).
 

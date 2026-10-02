@@ -79,7 +79,7 @@ class CaretDrawingTest {
 	@Test
 	fun `a caret at the right edge stays inside the canvas`() {
 		val metrics = CursorMetrics(position = Offset(100f, 0f), height = 20f)
-		val rect = caretRect(metrics, width = 4f, canvasWidth = 100f)
+		val rect = caretRect(metrics, width = 4f, canvasWidth = 100f, scrolled = 0f, range = 0f)
 
 		assertEquals(96f, rect.left)
 		assertEquals(100f, rect.right)

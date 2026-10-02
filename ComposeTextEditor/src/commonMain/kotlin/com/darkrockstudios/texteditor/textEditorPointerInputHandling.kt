@@ -489,7 +489,7 @@ private fun TextEditorState.characterAt(offset: Offset): CharLineOffset? {
 	}
 	val found = above?.takeIf { it.holds(y) } ?: atY.takeIf { it.holds(y) } ?: return null
 	val layout = found.textLayoutResult.multiParagraph
-	val relative = Offset(offset.x - found.offset.x, y - found.paragraphTop)
+	val relative = Offset(offset.x + scrollX - found.offset.x, y - found.paragraphTop)
 	val row = layout.getLineForVerticalPosition(relative.y)
 	if (relative.x < layout.getLineLeft(row) || relative.x >= layout.getLineRight(row)) return null
 	val caret = layout.getOffsetForPosition(relative)
@@ -747,8 +747,8 @@ private fun magnifierCenter(
 		row.position.x
 	} else {
 		val layout = wrap.textLayoutResult.multiParagraph
-		val left = wrap.offset.x + layout.getLineLeft(wrap.virtualLineIndex)
-		val right = wrap.offset.x + layout.getLineRight(wrap.virtualLineIndex)
+		val left = wrap.offset.x - state.scrollX + layout.getLineLeft(wrap.virtualLineIndex)
+		val right = wrap.offset.x - state.scrollX + layout.getLineRight(wrap.virtualLineIndex)
 		// The line's edges stop before trailing spaces, which a caret at the row's end is past.
 		val caret = row.position.x
 		target.x.coerceIn(minOf(left, right, caret), maxOf(left, right, caret))

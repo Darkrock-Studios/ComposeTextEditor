@@ -19,7 +19,7 @@ import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TestTimeSource
 
-/** A pause ends a typing run, and the history keeps as many steps as it is set to (6.6). */
+/** A pause ends a typing run, and the history keeps as many steps as it is set to. */
 class UndoSettingsTest {
 
 	private val time = TestTimeSource()

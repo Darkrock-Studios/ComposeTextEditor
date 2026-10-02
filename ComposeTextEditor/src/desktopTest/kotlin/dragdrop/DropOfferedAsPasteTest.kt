@@ -15,7 +15,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 
-/** A drop is offered to the behaviors as a paste, and a host can offer its own paste (5.12). */
+/** A drop is offered to the behaviors as a paste, and a host can offer its own paste. */
 class DropOfferedAsPasteTest {
 
 	private fun state(text: String): TextEditorState =

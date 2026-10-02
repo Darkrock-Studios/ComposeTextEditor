@@ -23,10 +23,10 @@ import kotlinx.coroutines.test.TestScope
 import utils.editorUiTest
 
 /**
- * Every source of a link agrees with the HTML path's allowlist (6.9): `setLink` refuses
+ * Every source of a link agrees with the HTML path's allowlist: `setLink` refuses
  * a `javascript:` or `data:` destination (as markdown import does, the markdown module's
  * `MarkdownLinkSafetyTest`), and one a host attached directly is refused where it would
- * be opened (6.16).
+ * be opened.
  */
 class LinkDestinationSafetyTest {
 

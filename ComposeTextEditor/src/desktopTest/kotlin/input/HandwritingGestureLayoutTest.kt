@@ -17,7 +17,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-/** Roadmap 3.17: where a stylus gesture's area or point lands in the editor's text. */
+/** Where a stylus gesture's area or point lands in the editor's text. */
 @OptIn(ExperimentalTestApi::class)
 class HandwritingGestureLayoutTest {
 

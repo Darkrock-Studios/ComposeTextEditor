@@ -53,6 +53,7 @@ private fun gutterWidth(state: TextEditorState, style: CodeEditorStyle, colWidth
 	return style.gutterStartPadding + (colWidth * numDigits) + style.gutterEndPadding
 }
 
+/** Draws [line]'s number in the gutter left of the text canvas, which stays put while the text scrolls sideways. */
 private fun DrawScope.drawLineNumbers(
 	line: Int,
 	offset: Offset,
@@ -64,7 +65,7 @@ private fun DrawScope.drawLineNumbers(
 
 	val textWidth = state.textMeasurer.measure(text = lineNumberText).size.width
 
-	val gutterRightEdge = offset.x - style.gutterEndMargin.toPx()
+	val gutterRightEdge = -style.gutterEndMargin.toPx()
 	val x = gutterRightEdge - textWidth - style.gutterEndPadding.toPx()
 
 	val gutterLeftEdge = gutterRightEdge - gutterWidth.toPx()
@@ -118,6 +119,8 @@ fun CodeEditor(
 			autoFocus = autoFocus,
 			style = style.baseStyle,
 			onRichSpanClick = onRichSpanClick,
+			// Code keeps its lines whole and scrolls sideways.
+			softWrap = false,
 			decorateLine = { line: Int, offset: Offset, state: TextEditorState, _: TextEditorStyle ->
 				drawLineNumbers(line, offset, state, style, gutterWidth)
 			}

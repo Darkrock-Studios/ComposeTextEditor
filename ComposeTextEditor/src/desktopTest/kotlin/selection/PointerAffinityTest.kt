@@ -17,8 +17,8 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
 /**
- * A pointer past the end of a wrapped row puts the caret at the row's end, drawn there
- * (1.24), as End does since 1.6, rather than at the start of the next row.
+ * A pointer past the end of a wrapped row puts the caret at the row's end, drawn there,
+ * as End does, rather than at the start of the next row.
  */
 @OptIn(ExperimentalTestApi::class)
 class PointerAffinityTest {

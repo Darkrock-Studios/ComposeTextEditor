@@ -3,6 +3,7 @@
 package com.darkrockstudios.texteditor.input
 
 import androidx.compose.ui.platform.PlatformTextInputSession
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.TextFieldValue
 import com.darkrockstudios.texteditor.state.TextEditorState
@@ -41,6 +42,7 @@ actual class TextEditorTextInputService actual constructor(
 			session,
 			{ state.skikoImeOptions() },
 			imeResync = SkikoImeResync.Rewrite(field::rewrite),
+			composingFieldValue = field::composingValue,
 			onRun = { options ->
 				val autocapitalize = options.capitalization.autocapitalize
 				// onRun runs just before the run starts Compose's input method, which
@@ -63,6 +65,9 @@ private const val BACKING_FIELD = ".compose-backing-field"
 /** Compose's hidden textarea for one session, found through the viewport's shadow root that holds it. */
 private class BackingField {
 	private var root: JsAny? = null
+
+	/** Whether this run's field is inside a composition, from its composition events. */
+	private var composition: JsAny? = null
 
 	/** The root holding the current run's field, looked up on first use. */
 	private fun findRoot(): JsAny? = root ?: backingFieldRoot(BACKING_FIELD)?.also { root = it }
@@ -95,12 +100,30 @@ private class BackingField {
 		setAutocapitalize(root, BACKING_FIELD, autocapitalize)
 		val handle = refocusFromCanvas(root, BACKING_FIELD)
 		val chords = if (platformKeyBindings() === MacKeyBindings) keepCocoaChordsOut(root, BACKING_FIELD) else null
+		val tracking = trackComposition(root, BACKING_FIELD)
+		composition = tracking
 		suspendCancellableCoroutine<Nothing> { continuation ->
 			continuation.invokeOnCancellation {
 				stopRefocusing(handle)
 				chords?.let(::stopKeepingCocoaChordsOut)
+				tracking?.let(::stopTrackingComposition)
+				composition = null
 			}
 		}
+	}
+
+	/**
+	 * What the field holds while the browser composes in it, which runs ahead of the
+	 * editor: each composition update edits the field at once, and reaches the editor on
+	 * the next frame. Null outside a composition.
+	 */
+	fun composingValue(): TextFieldValue? {
+		val tracking = composition ?: return null
+		if (!isComposing(tracking)) return null
+		val start = fieldSelectionStart(tracking)
+		val end = fieldSelectionEnd(tracking)
+		val selection = if (fieldSelectionBackward(tracking)) TextRange(end, start) else TextRange(start, end)
+		return TextFieldValue(fieldText(tracking), selection)
 	}
 
 	/**
@@ -230,6 +253,37 @@ private fun keepCocoaChordsOut(root: JsAny, selector: String): JsAny? = js(
 private fun stopKeepingCocoaChordsOut(handle: JsAny): Unit = js(
 	"{ handle.field.removeEventListener('keydown', handle.onKeyDown); }"
 )
+
+/** Follows whether [root]'s backing field is inside a composition. */
+private fun trackComposition(root: JsAny, selector: String): JsAny? = js(
+	"""{
+	const field = root.querySelector(selector);
+	if (!field) return null;
+	const handle = { field, composing: false };
+	handle.onStart = () => { handle.composing = true; };
+	handle.onEnd = () => { handle.composing = false; };
+	field.addEventListener('compositionstart', handle.onStart);
+	field.addEventListener('compositionend', handle.onEnd);
+	return handle;
+}"""
+)
+
+private fun stopTrackingComposition(handle: JsAny): Unit = js(
+	"""{
+	handle.field.removeEventListener('compositionstart', handle.onStart);
+	handle.field.removeEventListener('compositionend', handle.onEnd);
+}"""
+)
+
+private fun isComposing(handle: JsAny): Boolean = js("handle.composing && handle.field.isConnected")
+
+private fun fieldText(handle: JsAny): String = js("handle.field.value")
+
+private fun fieldSelectionStart(handle: JsAny): Int = js("handle.field.selectionStart")
+
+private fun fieldSelectionEnd(handle: JsAny): Int = js("handle.field.selectionEnd")
+
+private fun fieldSelectionBackward(handle: JsAny): Boolean = js("handle.field.selectionDirection === 'backward'")
 
 /** The `autocapitalize` value for a capitalisation; the browser's default, sentences, when unspecified. */
 private val KeyboardCapitalization.autocapitalize: String

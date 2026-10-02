@@ -3,7 +3,7 @@ import { awaitFieldCaret, expectText, inputField, openBlankEditor } from './edit
 
 /*
  * macOS gives every text view Cocoa's Emacs-style Ctrl chords, the browser's textarea
- * included, and the editor binds the same chords (2.6). Compose turns the textarea's own
+ * included, and the editor binds the same chords. Compose turns the textarea's own
  * backspace into an edit unless the key was Backspace itself, so Ctrl+H deleted twice in
  * Chrome. The page is told it runs on a Mac, whatever the host.
  */
@@ -48,7 +48,7 @@ test("the textarea's own action is prevented for Ctrl chords", async ({ page }) 
 	}
 });
 
-// Cmd+C, X and V must reach the textarea, whose copy, cut and paste events carry the clipboard (4.13).
+// Cmd+C, X and V must reach the textarea, whose copy, cut and paste events carry the clipboard.
 test('Cmd chords keep their default', async ({ page }) => {
 	for (const key of ['a', 'c', 'x', 'v', 'h']) {
 		expect(await chord(page, key, 'metaKey'), `Cmd+${key}`).toBe(false);

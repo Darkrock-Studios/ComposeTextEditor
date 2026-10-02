@@ -60,7 +60,7 @@ class SegmentationCostTest {
 		assertEquals(lineCount, state.readsDuring { sentenceSegments().count() })
 	}
 
-	/** Roadmap 7.20: a partial sentence check scans only the lines it was given. */
+	/** A partial sentence check scans only the lines it was given. */
 	@Test
 	fun `a range's sentences read only its lines`() = runTest {
 		val state = editor()

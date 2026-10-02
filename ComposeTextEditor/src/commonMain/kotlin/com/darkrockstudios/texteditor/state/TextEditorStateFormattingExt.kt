@@ -103,7 +103,7 @@ internal val TextEditorState.bodyStyle: SpanStyle?
 /**
  * The style for text with none of its own to adopt: the body style, unless the document
  * has text and none of it carries the body style (current or retired), as when a host
- * filled it at its own size, so new text there lands at that size too (6.43).
+ * filled it at its own size, so new text there lands at that size too.
  */
 internal val TextEditorState.fallbackBodyStyle: SpanStyle?
 	get() {
@@ -202,7 +202,7 @@ internal fun TextEditorState.removeLinkLookOutsideLinks(range: TextEditorRange) 
  * fence's monospace) that the line the part landed on does not bake: text copied from
  * part of a heading, or pasted or dropped inside another line, brings the look without
  * the marker. The markers of the line it lands on decide its look, and publishing bakes
- * theirs over all of it, as for text a join moves (6.35). A span equal to a block look
+ * theirs over all of it, as for text a join moves. A span equal to a block look
  * goes too: pasted text cannot tell the user's own from one a block baked, and a drop,
  * even of this editor's own text, takes the same rule.
  */

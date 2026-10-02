@@ -14,7 +14,9 @@ import androidx.compose.runtime.setValue
 import kotlin.math.roundToInt
 
 /**
- * Vertical scroll position for a text editor, as a Compose [ScrollableState].
+ * One axis of a text editor's scroll position, as a Compose [ScrollableState]: the
+ * vertical one ([TextEditorState.scrollState]) or, with wrapping off, the horizontal one
+ * ([TextEditorState.horizontalScrollState]).
  *
  * Position is tracked in pixels and clamped to [minValue]..[maxValue]; setting
  * those bounds re-clamps the current [value]. Use with `Modifier.scrollable`, or
@@ -30,8 +32,8 @@ class TextEditorScrollState(
 	private var _maxValue by mutableStateOf(0)
 	private var _isScrollInProgress by mutableStateOf(false)
 
-	/** Height of the viewport the range was computed for, which a scrollbar sizes its thumb by. */
-	internal var viewportHeight by mutableStateOf(0)
+	/** The viewport's length along this axis when the range was computed, which a scrollbar sizes its thumb by. */
+	internal var viewportLength by mutableStateOf(0)
 	private val scrollMutex = MutatorMutex()
 
 	private val scrollScope: ScrollScope = object : ScrollScope {

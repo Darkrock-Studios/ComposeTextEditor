@@ -162,7 +162,7 @@ class LinkSemanticsTest {
 		state.delete(TextEditorRange(CharLineOffset(0, 0), CharLineOffset(0, 4)))
 
 		assertTrue(extension.linkSpans().isEmpty(), "an emptied link must not linger")
-		// The leading space left behind is an indent (7.45).
+		// The leading space left behind is an indent.
 		assertEquals("&nbsp;tail", extension.exportAsMarkdown())
 	}
 }

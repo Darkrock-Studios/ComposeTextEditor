@@ -7,7 +7,7 @@ import io.mockk.mockk
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
-/** Roadmap 4.36: the keyboard rises from the window's bottom, which an embedded view may not reach. */
+/** The keyboard rises from the window's bottom, which an embedded view may not reach. */
 class WindowBottomInRootTest {
 	private fun composeView(topInWindow: Int, windowHeight: Int): View {
 		val window = mockk<View> { every { height } returns windowHeight }

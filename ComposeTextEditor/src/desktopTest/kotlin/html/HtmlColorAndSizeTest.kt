@@ -15,10 +15,10 @@ import kotlin.test.assertNull
 
 /**
  * HTML import reads colour and size out of an inline `style` through the same CSS walk as
- * markdown import (7.46). A colour without hue is the source's text colour and is left to
+ * markdown import. A colour without hue is the source's text colour and is left to
  * the editor's theme; a size is taken relative to the size most of the source's text
  * carries, onto the configuration's body size, so pasted text still matches the text
- * around it (6.18) and a larger word stays as much larger.
+ * around it and a larger word stays as much larger.
  */
 class HtmlColorAndSizeTest {
 

@@ -1,10 +1,9 @@
 # Modules
 
 How the library is split into published artifacts, what each one owns, and the
-seam between the core editor and the formats layered on it. Motivating item:
-roadmap 7.52, from the owner's direction that this is a rich text editor which
-can be used as a markdown editor, so markdown is layered on top of core rather
-than baked into it.
+seam between the core editor and the formats layered on it. This is a rich text
+editor which can be used as a markdown editor, so markdown is layered on top of
+core rather than baked into it.
 
 ## Design rules
 
@@ -247,14 +246,14 @@ strictly a line per line, with no inline syntax and nothing between lines, so
 it holds only block structure and needs no parser beyond a prefix match.
 Inline styles and links a test needs are set through the state. Core's
 desktop tests depend on no markdown, so a markdown change cannot fail core's
-suite and the IDE sees no project cycle (7.62).
+suite and the IDE sees no project cycle.
 
 What tests markdown itself is in the module: the round-trip torture test, the
 fuzz fixpoint (the state fuzz is shared through `testUtils/stateFuzz`; core
 keeps its undo-to-origin storms and checks the UI storms' blocks reload through
 block lines), the markdown link safety and line ending cases, and the export of
 a paragraph format. They use core's public API only, on a state with a mocked
-measurer. The UI storms reach a markdown fixpoint there too (7.65), through a
+measurer. The UI storms reach a markdown fixpoint there too, through a
 small composed harness of the module's own (`markdownUiTest`) on core's public
 API; the script driver (`testUtils/uiFuzz`) and the typing and clipboard helpers
 (`testUtils/uiTest`) are shared with core's harness, which implements the
@@ -292,7 +291,8 @@ changes. The migration is mechanical:
    and the registry), `docs/design/editor-actions.md` (the toggles' styles,
    the block toggles) and the kdoc that names `markdownConfiguration` follow.
 3. The module: the package and its tests moved, the parser dependency with
-   them, the test-only dependency for core's fixtures (dropped by 7.62).
+   them, the test-only dependency for core's fixtures (since replaced by block
+   lines).
 4. The deprecated forwarders, `SpellCheckState.withMarkdown` removed, the
-   sample app, CI and publishing, `Module.md`s, the README, `MIGRATION.md`,
-   the roadmap.
+   sample app, CI and publishing, `Module.md`s, the README and
+   `MIGRATION.md`.

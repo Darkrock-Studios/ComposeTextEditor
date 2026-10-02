@@ -200,7 +200,7 @@ class AndroidTextDragTest {
 		every { android.util.Log.w(any(), any<String>()) } returns 0
 	}
 
-	/** A text file dragged from Files carries a content URI and no text (6.44). */
+	/** A text file dragged from Files carries a content URI and no text. */
 	@Test
 	fun `a drop of a text file reads it with the drop's permissions`() {
 		val notes = file()

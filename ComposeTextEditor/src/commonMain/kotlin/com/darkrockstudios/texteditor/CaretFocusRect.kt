@@ -14,7 +14,7 @@ import com.darkrockstudios.texteditor.state.caretFocusRect
  * Reports the caret row as the focused editor's focus rect, instead of the whole editor.
  * iOS keeps the focus rect above its soft keyboard by moving all of the window's
  * content, so with the editor's full bounds a tall editor was pushed up until its top
- * met the screen's, hiding whatever sat above it (roadmap 4.24). The caret row, where
+ * met the screen's, hiding whatever sat above it. The caret row, where
  * the editor scrolls it, moves the window only when the editor cannot show it itself.
  *
  * [modifier] goes right before the focus target it describes. Remember one per editor,

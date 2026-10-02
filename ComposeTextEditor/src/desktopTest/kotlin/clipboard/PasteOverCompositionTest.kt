@@ -26,7 +26,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * A paste or drop over a typed composition finishes it as a tap does (5.9, 6.47): the
+ * A paste or drop over a typed composition finishes it as a tap does: the
  * behaviors see the word first, and the paste lands where the caret is after their edit.
  */
 @OptIn(ExperimentalComposeUiApi::class)

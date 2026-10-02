@@ -1,6 +1,6 @@
 # hammer-editor#930: Japanese input with Gboard's Japanese keyboard (romaji, QWERTY).
 # Written by hand from how that keyboard drives an InputConnection, not captured: replace
-# it with a recording from a device (roadmap 0.4). Typing "nihongo" composes a reading
+# it with a recording from a device. Typing "nihongo" composes a reading
 # that grows and changes in place, one batch per key; space converts it, Enter confirms
 # it. The editor must report the composition after each batch and never as gone while
 # the keyboard is composing, or the keyboard finishes it on every key.

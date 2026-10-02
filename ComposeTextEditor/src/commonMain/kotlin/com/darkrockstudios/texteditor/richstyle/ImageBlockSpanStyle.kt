@@ -57,7 +57,8 @@ data class ImageBlockSpanStyle(
 		state: TextEditorState,
 	) {
 		val height = lineWrap.blockHeight ?: lineWrap.effectiveHeight
-		val width = size.width
+		// Unwrapped, the scope is as wide as the content, and the block is sized by the viewport.
+		val width = if (state.softWrap) size.width else state.viewportSize.width
 		when (val resource = provider.resolve(source).value) {
 			is ImageBlockResource.Loaded -> {
 				val bitmap = resource.bitmap

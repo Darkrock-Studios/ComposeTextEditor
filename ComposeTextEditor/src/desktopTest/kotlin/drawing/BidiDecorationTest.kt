@@ -25,8 +25,8 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * Underlines and highlights over mixed-direction text (7.7) cover the glyphs of their
- * range and no others, as the selection does (7.6): a range crossing between
+ * Underlines and highlights over mixed-direction text cover the glyphs of their
+ * range and no others, as the selection does: a range crossing between
  * left-to-right and right-to-left text covers separate stretches of the row.
  */
 @OptIn(ExperimentalTestApi::class)

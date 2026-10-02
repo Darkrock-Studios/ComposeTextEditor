@@ -21,7 +21,7 @@ import androidx.compose.ui.input.key.KeyEvent as ComposeKeyEvent
 /**
  * A hardware dead key as Android delivers it reaches the composer: `getUnicodeChar`
  * carries [KeyCharacterMap.COMBINING_ACCENT], and the pair composes through
- * [KeyCharacterMap.getDeadChar] (roadmap 4.20). The composing rules are in the desktop
+ * [KeyCharacterMap.getDeadChar]. The composing rules are in the desktop
  * suite's `DeadKeyTest`.
  */
 class DeadKeyAndroidTest {

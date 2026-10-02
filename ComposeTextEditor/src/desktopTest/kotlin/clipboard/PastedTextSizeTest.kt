@@ -26,7 +26,7 @@ import utils.pasteHtml
 /**
  * Text placed into a document the host filled at its own size, in an editor with the
  * styles installed (the sample's plain rich text demo), lands at that size: the body
- * style is the fallback only where the document carries it, or has no text (6.43).
+ * style is the fallback only where the document carries it, or has no text.
  */
 class PastedTextSizeTest {
 

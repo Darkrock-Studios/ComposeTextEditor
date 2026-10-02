@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.LineWrap
+import com.darkrockstudios.texteditor.MAX_FIXED_PX
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.annotatedstring.normalizeLineEndings
 import com.darkrockstudios.texteditor.annotatedstring.splitAnnotatedString
@@ -195,6 +196,7 @@ class TextEditorState private constructor(
 		}
 		boundMeasurer = null
 		canvasLayoutCoordinates = null
+		canvasFrameCoordinates = null
 		// It holds the departed composition's measurer and a whole-document layout.
 		cachedSemanticsLayout = null
 		// Its watch and timeout ran on the departed scope.
@@ -221,6 +223,32 @@ class TextEditorState private constructor(
 				invalidateLayoutInputs()
 				updateBookKeeping(LayoutUpdate.Reshape)
 			}
+		}
+
+	private var wraps by mutableStateOf(true)
+
+	/**
+	 * Whether lines wrap at the viewport's width; with wrapping off a line is one row and
+	 * the editor scrolls sideways ([horizontalScrollState]). The layout is the state's, so
+	 * this is off while any editor showing it has wrapping off ([noWrapEditors]).
+	 */
+	internal var softWrap: Boolean
+		get() = wraps
+		set(value) {
+			if (wraps != value) {
+				wraps = value
+				// Nothing scrolls sideways once wrapped, even before a relayout the viewport defers.
+				if (value) scrollManager.updateContentWidth(0)
+				invalidateLayoutInputs()
+				updateBookKeeping(LayoutUpdate.Reshape)
+			}
+		}
+
+	/** How many composed editors show this state with wrapping off, single lines among them. */
+	internal var noWrapEditors: Int = 0
+		set(value) {
+			field = value
+			softWrap = value == 0
 		}
 
 	private var lineBreakWidthKey: Pair<TextMeasurer, TextStyle>? = null
@@ -735,6 +763,13 @@ class TextEditorState private constructor(
 		internal set
 
 	/**
+	 * The frame the canvas rests in: the editor's box outside its overscroll effect,
+	 * which the canvas fills. The keyboard's cover is measured on it, since an overscroll
+	 * effect that moves its content (iOS's rubber band) moves the canvas, not the frame.
+	 */
+	internal var canvasFrameCoordinates: LayoutCoordinates? = null
+
+	/**
 	 * Where the canvas sits in the root, as snapshot state. [canvasLayoutCoordinates] is
 	 * a plain field and stays the same object when the canvas moves, so observers of the
 	 * input method's rectangles read this to follow moves as well as resizes.
@@ -854,6 +889,8 @@ class TextEditorState private constructor(
 		getCursorAffinity = { cursor.affinity },
 		getLineOffsets = { _lineOffsets },
 		ensureLineShaped = ::ensureLineShaped,
+		getCaretX = ::caretContentX,
+		getCaretRoom = { lineBreakWidth },
 	)
 
 	/** The text selection: its [TextEditorRange], gestures, and selected-content queries. */
@@ -1131,6 +1168,19 @@ class TextEditorState private constructor(
 
 	/** The underlying scroll position, surfaced from [scrollManager]. */
 	val scrollState get() = scrollManager.scrollState
+
+	/**
+	 * The sideways scroll position, in pixels from the content's left edge. Its range is
+	 * empty unless an editor showing the state has wrapping off (`softWrap = false`, or a
+	 * single line), when it runs to the widest line, plus room for the caret, less the
+	 * viewport's width.
+	 * While a reshape settles (a width change, wrapping turned off) the lines not yet
+	 * shaped keep their old widths, as the content height keeps their old heights.
+	 */
+	val horizontalScrollState: TextEditorScrollState get() = scrollManager.horizontalScrollState
+
+	/** How far the content is scrolled sideways: a row's x less where it is drawn in the canvas. */
+	internal val scrollX: Float get() = horizontalScrollState.value.toFloat()
 
 	/**
 	 * The [CharLineOffset] currently at the top of the viewport. Compose-observable:
@@ -1906,7 +1956,8 @@ class TextEditorState private constructor(
 
 	/**
 	 * Returns the [CursorMetrics] (pixel position and line height) for the caret at
-	 * [CharLineOffset] [position], accounting for the current scroll offset.
+	 * [CharLineOffset] [position], accounting for the current scroll offsets, vertical and
+	 * sideways.
 	 */
 	fun getPositionForOffset(position: CharLineOffset): CursorMetrics =
 		getPositionForOffset(position, CaretAffinity.Downstream)
@@ -1919,8 +1970,7 @@ class TextEditorState private constructor(
 		val currentWrappedLine = lineOffsets.getWrapForDrawing(position, affinity)
 			?: return CursorMetrics(position = Offset.Zero, height = 0f)
 
-		val runSide = if (position == cursorPosition && affinity == cursor.affinity) cursor.runSide else null
-		val cursorX = currentWrappedLine.caretX(position.char, runSide)
+		val cursorX = currentWrappedLine.caretX(position.char, caretRunSide(position, affinity)) - scrollX
 		val cursorY = currentWrappedLine.offset.y - scrollState.value
 
 		val lineHeight = currentWrappedLine.effectiveHeight
@@ -1931,9 +1981,17 @@ class TextEditorState private constructor(
 		)
 	}
 
+	/** The caret's [TextEditorCursorState.runSide] when [position] is where the caret is, else none. */
+	private fun caretRunSide(position: CharLineOffset, affinity: CaretAffinity): CaretAffinity? =
+		if (position == cursorPosition && affinity == cursor.affinity) cursor.runSide else null
+
+	/** [getPositionForOffset]'s x in content, which no scroll moves; null with no row for [position]. */
+	internal fun caretContentX(position: CharLineOffset, affinity: CaretAffinity): Float? =
+		lineOffsets.getWrapForDrawing(position, affinity)?.caretX(position.char, caretRunSide(position, affinity))
+
 	/**
 	 * Maps a pixel [Offset] within the editor (e.g. a tap location) to the nearest
-	 * [CharLineOffset], accounting for scroll. A point above the first row hits the
+	 * [CharLineOffset], accounting for both scroll offsets. A point above the first row hits the
 	 * first row and a point below the last row hits the last row; x is hit-tested on
 	 * that row either way, as native text fields do.
 	 */
@@ -1949,13 +2007,14 @@ class TextEditorState private constructor(
 		if (rows.isEmpty()) return downstreamHit(CharLineOffset(0, 0))
 
 		val contentY = offset.y + scrollState.value
+		val contentX = offset.x + scrollX
 		val row = rows[rows.lastRowAtOrAbove(contentY).coerceAtLeast(0)]
 		val lineLength = textLines.getOrNull(row.line)?.length
 			?: return downstreamHit(CharLineOffset(textLines.lastIndex, textLines.last().length))
 		val lineText = textLines[row.line].text
 		if (row.wrapsToNextRow) {
 			// Hit as a vertical move to this row is, so the two agree at its end.
-			val (char, affinity) = row.caretAtX(offset.x - row.offset.x)
+			val (char, affinity) = row.caretAtX(contentX - row.offset.x)
 			val snapped = lineText.snapToGraphemeBoundary(char.coerceAtMost(lineLength), forward = false)
 			// A row laid out for longer text than the line now has ends past it.
 			if (affinity == CaretAffinity.Downstream || snapped != char) {
@@ -1971,7 +2030,7 @@ class TextEditorState private constructor(
 		val lineHeight = paragraph.getLineHeight(row.virtualLineIndex)
 		val yInLine = (contentY - row.offset.y).coerceIn(0f, (lineHeight - 1f).coerceAtLeast(0f))
 		val charPos = paragraph.getOffsetForPosition(
-			Offset(offset.x - row.offset.x, paragraph.getLineTop(row.virtualLineIndex) + yInLine)
+			Offset(contentX - row.offset.x, paragraph.getLineTop(row.virtualLineIndex) + yInLine)
 		)
 		// Skia already answers on a cluster boundary; the snap guards the caret invariant.
 		val char = lineText.snapToGraphemeBoundary(min(charPos, lineLength), forward = false)
@@ -2102,6 +2161,8 @@ class TextEditorState private constructor(
 		_lineOffsets = laidOut
 		// Rounded up so the last row's fraction of a pixel is still in reach.
 		scrollManager.updateContentHeight(ceil(laidOut.lastRowBottom()).toInt())
+		// A space past the widest line leaves room for the caret and a selected line break.
+		scrollManager.updateContentWidth(if (softWrap) 0 else ceil(laidOut.contentWidth + lineBreakWidth).toInt())
 	}
 
 	/** The settling reshape under way, shaping the lines out of view a slice at a time. */
@@ -2115,7 +2176,7 @@ class TextEditorState private constructor(
 	private var settleBelow = Int.MAX_VALUE
 
 	/**
-	 * Reshapes lazily (7.48): the lines with a row in the viewport, and a viewport's
+	 * Reshapes lazily: the lines with a row in the viewport, and a viewport's
 	 * worth beyond each edge, are shaped now; every other line keeps its layout at the
 	 * old shape until the settling job reaches it. The scroll stays anchored to the
 	 * line at the top of the viewport, at its offset within it.
@@ -2261,8 +2322,8 @@ class TextEditorState private constructor(
 		if (isProvisional(current, line)) reshapeLines(line, line)
 	}
 
-	/** The inputs of one pass besides the shaping: density, viewport width and the paragraph spacing in pixels. */
-	private fun lineInputs() = LineInputs(density, viewportSize.width, density?.run { paragraphSpacing.toPx() } ?: 0f)
+	/** The inputs of one pass besides the shaping: density, viewport width, the paragraph spacing in pixels and the wrapping. */
+	private fun lineInputs() = LineInputs(density, viewportSize.width, density?.run { paragraphSpacing.toPx() } ?: 0f, softWrap)
 
 	/** A full pass: every line shaped, every fact derived in line order. */
 	private fun layoutAll(lines: LineList, spans: SpanIndex): RowList {
@@ -2345,15 +2406,18 @@ class TextEditorState private constructor(
 		private val measureStyle = if (needsIndentBaking) textStyle.copy(textIndent = TextIndent.None) else textStyle
 		private val bakedIndentStyle = if (needsIndentBaking) ParagraphStyle(textIndent = outerIndent) else null
 
+		private val softWrap = this@TextEditorState.softWrap
+
 		// Use a tight width constraint (minWidth == maxWidth) so the paragraph lays out
 		// at the full viewport width rather than shrinking to its natural content width.
 		// The shrinking behavior interacts badly with TextIndent: if the paragraph
 		// shrinks to its natural width W and then TextIndent consumes X pixels of
 		// first-line width, the first line has only W-X pixels available instead of
-		// viewportWidth-X, causing wraps that shouldn't happen.
+		// viewportWidth-X, causing wraps that shouldn't happen. Unwrapped, a line is at
+		// least the viewport wide, so it aligns within the viewport as a wrapped one does.
 		private val constraints = Constraints(
 			minWidth = maxOf(1, viewportSize.width.toInt()),
-			maxWidth = maxOf(1, viewportSize.width.toInt()),
+			maxWidth = if (softWrap) maxOf(1, viewportSize.width.toInt()) else Constraints.Infinity,
 			minHeight = 0,
 			maxHeight = Constraints.Infinity
 		)
@@ -2376,11 +2440,25 @@ class TextEditorState private constructor(
 				else -> line
 			}
 			return try {
-				textMeasurer.measure(text = measureLine, style = measureStyle, constraints = constraints)
+				val layout = textMeasurer.measure(text = measureLine, style = measureStyle, softWrap = softWrap, constraints = constraints)
+				if (softWrap || layout.lineCount == 1 || layout.size.width >= MAX_FIXED_PX) layout else unwrapped(measureLine)
 			} catch (_: IllegalArgumentException) {
 				// If measurement fails, create an empty layout result
-				textMeasurer.measure(text = AnnotatedString(""), style = measureStyle, constraints = constraints)
+				textMeasurer.measure(text = AnnotatedString(""), style = measureStyle, softWrap = softWrap, constraints = constraints)
 			}
+		}
+
+		/**
+		 * [line] on one row where its intrinsic width, which leaves out an indent, broke it:
+		 * measured at the widest width there is to find how wide its text is, then at that
+		 * width, or the viewport's for a shorter line, so it aligns as the others do.
+		 */
+		private fun unwrapped(line: AnnotatedString): TextLayoutResult {
+			val widest = textMeasurer.measure(text = line, style = measureStyle, softWrap = false, constraints = Constraints.fixedWidth(MAX_FIXED_PX))
+			if (widest.lineCount > 1) return widest
+			val width = maxOf(viewportSize.width.toInt(), ceil(widest.textExtent()).toInt()).coerceAtMost(MAX_FIXED_PX)
+			val fitted = textMeasurer.measure(text = line, style = measureStyle, softWrap = false, constraints = Constraints.fixedWidth(width))
+			return if (fitted.lineCount == 1) fitted else widest
 		}
 	}
 
@@ -2691,7 +2769,7 @@ class TextEditorState private constructor(
 	 * beside one that grows at its edge, stretched it over the inserted text. A link
 	 * landing against a link to the same place joins it, since a link does not grow.
 	 * A line's marker, block or format takes only lines the insert covers whole: text
-	 * landing inside a line without its line break takes that line as it is (6.40).
+	 * landing inside a line without its line break takes that line as it is.
 	 */
 	internal fun addPreservedRichSpans(insertPosition: CharLineOffset, spans: List<PreservedRichSpan>) = withAtomicEdit {
 		spans.forEach { preserved ->

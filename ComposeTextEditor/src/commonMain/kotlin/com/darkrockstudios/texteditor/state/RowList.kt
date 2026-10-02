@@ -2,6 +2,7 @@ package com.darkrockstudios.texteditor.state
 
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.style.ResolvedTextDirection
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.isSpecified
 import com.darkrockstudios.texteditor.CharLineOffset
@@ -16,9 +17,9 @@ import com.darkrockstudios.texteditor.richstyle.RichSpan
  * character bounds and tops, read from the [layout] once, the block height of each
  * row, the ordered-list numeral, the code-fence edge, the ordered-list counters as
  * they stand after the line, so a pass can resume the numbering walk from any line,
- * the paragraph spacing above and below its rows (5.7), and the [generation] of
- * layout inputs it was shaped under: a line shaped under an older one is provisional
- * until the settling reshape reaches it (7.48).
+ * the paragraph spacing above and below its rows, its [width] with wrapping off, and
+ * the [generation] of layout inputs it was shaped under: a line shaped under an older
+ * one is provisional until the settling reshape reaches it.
  * The rows a [RowList] hands out are built from this on read.
  */
 internal class LineLayout(
@@ -39,6 +40,11 @@ internal class LineLayout(
 	/** The space above the first row and below the last, in pixels; outside every row. */
 	val spaceBefore: Float,
 	val spaceAfter: Float,
+	/**
+	 * How wide the line's text is, trailing spaces and indent included, whatever width it
+	 * was laid out at; zero when shaped with wrapping on, which never scrolls sideways.
+	 */
+	val width: Float,
 ) {
 	val rowCount: Int get() = rowStarts.size
 
@@ -50,7 +56,7 @@ internal class LineLayout(
 	/** This layout with the facts a walk derived, itself when they are the same. */
 	fun withFacts(facts: LineFacts): LineLayout =
 		if (facts.orderedListNumber == orderedListNumber && facts.codeFenceBoundary == codeFenceBoundary && facts.counters.contentEquals(counters)) this
-		else LineLayout(layout, rowStarts, rowEnds, rowTops, blockHeights, facts.orderedListNumber, facts.codeFenceBoundary, facts.counters, generation, spaceBefore, spaceAfter)
+		else LineLayout(layout, rowStarts, rowEnds, rowTops, blockHeights, facts.orderedListNumber, facts.codeFenceBoundary, facts.counters, generation, spaceBefore, spaceAfter, width)
 
 	/** This layout resolved again for [spans] on its line, which may have changed its block heights or spacing, and [facts]. */
 	fun withSpans(line: Int, spans: List<RichSpan>, inputs: LineInputs, facts: LineFacts): LineLayout =
@@ -125,9 +131,28 @@ internal class LineLayout(
 			}
 			val spaceBefore = format?.spaceBefore?.takeIf { it.isSpecified }?.let { density?.run { it.toPx() } } ?: 0f
 			val spaceAfter = format?.spaceAfter?.takeIf { it.isSpecified }?.let { density?.run { it.toPx() } } ?: inputs.paragraphSpacing
-			return LineLayout(layout, rowStarts, rowEnds, rowTops, blockHeights, orderedListNumber, codeFenceBoundary, counters, generation, spaceBefore, spaceAfter)
+			val textWidth = if (inputs.softWrap) 0f else layout.textExtent()
+			return LineLayout(layout, rowStarts, rowEnds, rowTops, blockHeights, orderedListNumber, codeFenceBoundary, counters, generation, spaceBefore, spaceAfter, textWidth)
 		}
+
 	}
+}
+
+/**
+ * How wide the text of this layout's widest row is, from the side the paragraph starts on
+ * to the row's end with its trailing spaces and indent, whatever width it was laid out at:
+ * a short line's layout is the viewport wide, for its alignment, and a right-to-left row's
+ * text ends at the layout's right edge.
+ */
+internal fun TextLayoutResult.textExtent(): Float {
+	val ltr = getParagraphDirection(0) == ResolvedTextDirection.Ltr
+	var widest = 0f
+	for (row in 0 until lineCount) {
+		val end = rowEndX(row)
+		// Text hanging left of the layout cannot be scrolled to; it must not widen the range on the right.
+		widest = maxOf(widest, if (ltr) end else size.width - end.coerceAtLeast(0f))
+	}
+	return widest
 }
 
 /** The paragraph format among the spans on [line], the one starting there. */
@@ -139,8 +164,11 @@ internal fun List<RichSpan>.paragraphFormat(line: Int): ParagraphFormatSpanStyle
 	return null
 }
 
-/** The layout inputs a line's layout depends on besides its shaping: the density, the viewport width and the editor's paragraph spacing in pixels. */
-internal class LineInputs(val density: Density?, val width: Float, val paragraphSpacing: Float)
+/**
+ * The layout inputs a line's layout depends on besides its shaping: the density, the
+ * viewport width, the editor's paragraph spacing in pixels and whether lines wrap.
+ */
+internal class LineInputs(val density: Density?, val width: Float, val paragraphSpacing: Float, val softWrap: Boolean)
 
 /**
  * The laid-out rows ([TextEditorState.lineOffsets]): one [LineLayout] per logical
@@ -159,6 +187,8 @@ internal class RowList private constructor(
 	private val firstRow: IntArray,
 	/** Each chunk's top, then the content height. Doubles, so the running total does not drift with the chunking. */
 	private val top: DoubleArray,
+	/** The widest line before each chunk, then the widest line of all: a running maximum, kept like [top]. */
+	private val widest: FloatArray,
 	/** The spans of the revision the rows were laid out against. */
 	internal val spans: SpanIndex,
 ) : AbstractList<LineWrap>(), RandomAccess {
@@ -170,11 +200,17 @@ internal class RowList private constructor(
 		/** Each line's top within the chunk, then the chunk's height. */
 		val top = DoubleArray(layouts.size + 1)
 
+		/** The widest of the chunk's lines. */
+		val width: Float
+
 		init {
+			var widest = 0f
 			for (index in layouts.indices) {
 				rowStart[index + 1] = rowStart[index] + layouts[index].rowCount
 				top[index + 1] = top[index] + layouts[index].height
+				widest = maxOf(widest, layouts[index].width)
 			}
+			width = widest
 		}
 
 		val size: Int get() = layouts.size
@@ -189,6 +225,9 @@ internal class RowList private constructor(
 	override val size: Int get() = firstRow[chunks.size]
 
 	val lineCount: Int get() = firstLine[chunks.size]
+
+	/** The widest [LineLayout.width]: zero when every line was shaped with wrapping on. */
+	val contentWidth: Float get() = widest[chunks.size]
 
 	/** The bottom of the last row, as its `LineWrap` reads it, or zero with no rows. */
 	fun lastRowBottom(): Float = if (size == 0) 0f else rowBottomOf(size - 1)
@@ -309,20 +348,20 @@ internal class RowList private constructor(
 		rechunked.copyInto(result, touched.first)
 		chunks.copyInto(result, touched.first + rechunked.size, touched.last + 1, chunks.size)
 		@Suppress("UNCHECKED_CAST")
-		return of(result as Array<Chunk>, touched.first, firstLine, firstRow, top, spans).also {
+		return of(result as Array<Chunk>, touched.first, firstLine, firstRow, top, widest, spans).also {
 			it.hint.chunk = minOf(touched.first, result.size - 1).coerceAtLeast(0)
 		}
 	}
 
 	/** The same rows, laid out against the revision whose span index is [spans]; this list when that is this list's. */
 	fun withSpans(spans: SpanIndex): RowList =
-		if (spans === this.spans) this else RowList(chunks, firstLine, firstRow, top, spans)
+		if (spans === this.spans) this else RowList(chunks, firstLine, firstRow, top, widest, spans)
 
 	private fun chunkOfLine(line: Int): Int = hint.find(firstLine, chunks.size, line)
 
 	companion object {
 		fun of(layouts: List<LineLayout>, spans: SpanIndex): RowList =
-			of(chunk(layouts.toTypedArray()), 0, IntArray(1), IntArray(1), DoubleArray(1), spans)
+			of(chunk(layouts.toTypedArray()), 0, IntArray(1), IntArray(1), DoubleArray(1), FloatArray(1), spans)
 
 		/** A list of [chunks] whose directory matches the given one up to chunk [unchangedBefore]. */
 		private fun of(
@@ -331,20 +370,24 @@ internal class RowList private constructor(
 			firstLine: IntArray,
 			firstRow: IntArray,
 			top: DoubleArray,
+			widest: FloatArray,
 			spans: SpanIndex,
 		): RowList {
 			val newFirstLine = IntArray(chunks.size + 1)
 			val newFirstRow = IntArray(chunks.size + 1)
 			val newTop = DoubleArray(chunks.size + 1)
+			val newWidest = FloatArray(chunks.size + 1)
 			firstLine.copyInto(newFirstLine, 0, 0, unchangedBefore + 1)
 			firstRow.copyInto(newFirstRow, 0, 0, unchangedBefore + 1)
 			top.copyInto(newTop, 0, 0, unchangedBefore + 1)
+			widest.copyInto(newWidest, 0, 0, unchangedBefore + 1)
 			for (index in unchangedBefore until chunks.size) {
 				newFirstLine[index + 1] = newFirstLine[index] + chunks[index].size
 				newFirstRow[index + 1] = newFirstRow[index] + chunks[index].rowStart[chunks[index].size]
 				newTop[index + 1] = newTop[index] + chunks[index].top[chunks[index].size]
+				newWidest[index + 1] = maxOf(newWidest[index], chunks[index].width)
 			}
-			return RowList(chunks, newFirstLine, newFirstRow, newTop, spans)
+			return RowList(chunks, newFirstLine, newFirstRow, newTop, newWidest, spans)
 		}
 
 		private fun chunk(layouts: Array<LineLayout>): Array<Chunk> {

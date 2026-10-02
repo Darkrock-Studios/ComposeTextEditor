@@ -1,7 +1,7 @@
 name: Real OS input (nightly)
 
 # Real X key events under a dead-key layout, typed into a desktop editor window on
-# a virtual display (docs/ROADMAP.md 0.8, docs/TESTING.md). A schedule only runs
+# a virtual display (docs/TESTING.md, "Real OS input"). A schedule only runs
 # from the default branch, so pushes that change the job run it too.
 on:
   schedule:

@@ -30,7 +30,7 @@ internal fun TextEditorState.calculateCursorPosition(
 	// The line's text-left is a floor, not an addition: on an empty indented line
 	// Android already reports the indented position while desktop reports 0.
 	val cursorX = currentWrappedLine.caretX(charIndex, runSide)
-		.coerceAtLeast(layout.lineTextLeft(virtualLineIndex, density))
+		.coerceAtLeast(layout.lineTextLeft(virtualLineIndex, density)) - scrollX
 	val cursorY = currentWrappedLine.offset.y - scrollState.value
 	val lineHeight = layout.multiParagraph.getLineHeight(virtualLineIndex)
 

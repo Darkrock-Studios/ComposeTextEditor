@@ -58,6 +58,29 @@ class DecorationDrawingTest {
 		assertTrue(red.max() - red.min() > (right - left) / 2, "only part of the word was tinted: ${red.sorted()}")
 	}
 
+	@Test
+	fun `a tint follows the text scrolled sideways`() = editorUiTest(
+		initialText = AnnotatedString((0 until 40).joinToString(" ") { "word$it" } + " target end"),
+		softWrap = false,
+	) {
+		val start = state.textLines[0].text.indexOf("target")
+		test.runOnIdle {
+			state.setDecorations(layer, listOf(RichSpan(TextEditorRange(CharLineOffset(0, start), CharLineOffset(0, start + 6)), Decoration(layer, textColor = Color.Red))))
+			state.cursor.updatePosition(CharLineOffset(0, start + 6))
+		}
+		test.waitForIdle()
+		val scrollX = state.horizontalScrollState.value
+		assertTrue(scrollX > 0, "the line did not scroll")
+		val layout = state.lineOffsets.first().textLayoutResult
+		val left = layout.getBoundingBox(start).left - scrollX
+		val right = layout.getBoundingBox(start + 5).right - scrollX
+
+		val red = redColumns()
+
+		assertTrue(red.isNotEmpty(), "nothing was tinted")
+		assertTrue(red.all { it >= left - 1 && it <= right + 1 }, "tinted outside $left..$right: ${red.sorted()}")
+	}
+
 	private fun stretches(text: AnnotatedString): List<String> {
 		val found = mutableListOf<String>()
 		forEachTintable(text, 0, text.length) { from, to -> found += text.text.substring(from, to) }

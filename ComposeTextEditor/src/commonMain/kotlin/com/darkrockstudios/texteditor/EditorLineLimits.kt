@@ -15,12 +15,13 @@ sealed interface EditorLineLimits {
 	data object Fill : EditorLineLimits
 
 	/**
-	 * One paragraph, as tall as its rows: Enter adds no line, and line breaks arriving
-	 * in text (a paste, a dictated phrase) become spaces, by
-	 * [com.darkrockstudios.texteditor.state.EditorInputFilter.SingleLine]. A long line
-	 * wraps and the editor grows with it, since the editor cannot yet scroll sideways as
-	 * `BasicTextField`'s single line does. A document the host loads with line breaks
-	 * keeps them.
+	 * One paragraph on one row: Enter adds no line, and line breaks arriving in text (a
+	 * paste, a dictated phrase) become spaces, by
+	 * [com.darkrockstudios.texteditor.state.EditorInputFilter.SingleLine]. A long line does
+	 * not wrap: the editor scrolls sideways to follow the caret, as `BasicTextField`'s
+	 * single line does, with no scrollbar. A document the host loads with line breaks
+	 * keeps them, a row each, and the editor is as tall as those rows. The layout is the
+	 * state's, so other editors showing the same state stop wrapping too.
 	 *
 	 * The action key and Enter are the editor's own: a multi-line editor showing the same
 	 * state keeps its Enter key. Edits follow the editor holding focus, so that one adds
@@ -43,8 +44,12 @@ sealed interface EditorLineLimits {
 	}
 }
 
-/** The tallest a fixed height can be for any editor width layout can represent. */
-private const val MAX_HEIGHT_PX = (1 shl 18) - 2
+/**
+ * The largest fixed size Compose's `Constraints` hold in one dimension, the other
+ * unbounded: the tallest a fixed height can be for any editor width, and the widest an
+ * unwrapped line can be laid out.
+ */
+internal const val MAX_FIXED_PX = (1 shl 18) - 2
 
 /**
  * Sizes the editor to [limits]: under [EditorLineLimits.MultiLine], to its laid-out rows
@@ -62,8 +67,8 @@ internal fun Modifier.editorLineLimits(
 	EditorLineLimits.SingleLine -> editorLineLimits(EditorLineLimits.MultiLine(), verticalPaddingPx, rowHeightPx, contentHeightPx)
 	is EditorLineLimits.MultiLine -> layout { measurable, constraints ->
 		val least = rows(rowHeightPx, limits.minLines)
-		val most = if (limits.maxLines == Int.MAX_VALUE) MAX_HEIGHT_PX else rows(rowHeightPx, limits.maxLines)
-		val wanted = (contentHeightPx().coerceIn(least, most) + verticalPaddingPx).coerceAtMost(MAX_HEIGHT_PX)
+		val most = if (limits.maxLines == Int.MAX_VALUE) MAX_FIXED_PX else rows(rowHeightPx, limits.maxLines)
+		val wanted = (contentHeightPx().coerceIn(least, most) + verticalPaddingPx).coerceAtMost(MAX_FIXED_PX)
 		val height = constraints.constrainHeight(wanted)
 		val placeable = measurable.measure(constraints.copy(minHeight = height, maxHeight = height))
 		layout(placeable.width, height) { placeable.place(0, 0) }
@@ -71,4 +76,4 @@ internal fun Modifier.editorLineLimits(
 }
 
 private fun rows(rowHeightPx: Float, count: Int): Int =
-	ceil(rowHeightPx.toDouble() * count).coerceAtMost(MAX_HEIGHT_PX.toDouble()).toInt()
+	ceil(rowHeightPx.toDouble() * count).coerceAtMost(MAX_FIXED_PX.toDouble()).toInt()

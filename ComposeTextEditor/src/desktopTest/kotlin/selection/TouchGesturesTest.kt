@@ -179,7 +179,7 @@ class TouchGesturesTest {
 	/**
 	 * Past a row's end there is no word under the finger, so a long press puts the caret
 	 * at the row's end, as iOS and Android text fields do, rather than selecting the
-	 * row's last word (roadmap 3.18).
+	 * row's last word.
 	 */
 	@Test
 	fun `a long press past a line's end places the caret there`() = editorUiTest(initialText = AnnotatedString("alpha beta\ngamma")) {

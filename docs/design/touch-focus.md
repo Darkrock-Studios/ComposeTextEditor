@@ -201,16 +201,16 @@ The `RichSpanClickListener` KDoc now states the Boolean's real contract
 
 - Focus on lift for finger, on press for mouse. Device-confirmed: no keyboard on
   pan, fling coasts.
-- Every mouse button focuses on press, the secondary one included (1.22). The
+- Every mouse button focuses on press, the secondary one included. The
   focus handler reads the press event itself rather than through
   `awaitFirstDown`, which on skiko answers only the primary button.
 - Spell-check menu policy: tap opens a menu only with a correction to offer,
   other spans delegate to the host listener.
 - A tap reports a span click on release, and only when it lifts on the span it
-  landed on (1.15). The release is still dispatched to the Canvas handler before
+  landed on. The release is still dispatched to the Canvas handler before
   the container's focus handler, so the popup check above is unchanged.
 - Long press selects and focuses (test-pinned). A double tap selects the word
-  too, and dragging on from either extends by word (3.7). Such a drag travels
+  too, and dragging on from either extends by word. Such a drag travels
   past touch slop, which alone would read as a pan, so the container handler
   also focuses when the gesture selected: `TextEditorSelectionManager.
   touchSelectionGeneration` advances on every finger selection, and the handler
@@ -222,7 +222,7 @@ The `RichSpanClickListener` KDoc now states the Boolean's real contract
   must be typeable over, but then does not ask for the soft keyboard, which
   would cover the popup; the popup check alone guards gestures that selected
   nothing.
-- The platform text toolbar (3.8) is not a popup in this sense: it is not
+- The platform text toolbar is not a popup in this sense: it is not
   routed through `contextMenuState`, so `popupIsShowing` never sees it, and a
   long press that selects gets both the toolbar and the keyboard, as native
   Android does. Where there is no platform toolbar the context menu stands in,
@@ -234,9 +234,9 @@ The `RichSpanClickListener` KDoc now states the Boolean's real contract
 - The markdown demo document is long enough to fling and puts blocks below the
   fold.
 
-Formerly open, closed by 3.13:
+Settled:
 
-- Dragging a selection handle to restore focus is moot: 1.18 drops the handles
+- Dragging a selection handle to restore focus is moot: the handles go
   with focus, so an unfocused editor has none to grab, and a finger where one
   stood is an ordinary tap, which focuses (test-pinned). A drag still advances
   the touch selection generation on every move (test-pinned), so a drop focuses

@@ -12,7 +12,7 @@ import kotlin.math.abs
 import kotlin.test.fail
 
 /*
- * Golden screenshots (0.6). The goldens live in `src/desktopTest/goldens/`, rendered on
+ * Golden screenshots. The goldens live in `src/desktopTest/goldens/`, rendered on
  * Linux with the bundled test font. Skia rasterises glyphs with FreeType on Linux, Core
  * Text on macOS and DirectWrite on Windows, so the antialiasing differs by OS even with
  * the font pinned: the comparison runs on Linux only and is skipped elsewhere. Gradle

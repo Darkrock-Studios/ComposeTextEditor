@@ -2,7 +2,7 @@ import { test, type Page } from '@playwright/test';
 import { expectText, inputField, openBlankEditor } from './editor';
 
 /*
- * Shortcuts follow the active keyboard layout (4.38). Chromium cannot switch layouts, so
+ * Shortcuts follow the active keyboard layout. Chromium cannot switch layouts, so
  * these dispatch key events shaped as another layout sends them: `code` is the key's US
  * QWERTY position, `key` the character the layout types there. The page is told it runs
  * on Linux, whatever the host, so the bindings are Ctrl+Z for undo and Ctrl+Y for redo.

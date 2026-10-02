@@ -28,7 +28,7 @@ import kotlin.test.assertNotEquals
  * Compose has a text magnifier only on Android. Elsewhere the editor draws its own while a
  * handle is dragged, as iOS text views show a loupe: an enlarged copy of the text around
  * the dragged end, a little above the finger, so the finger does not hide what it moves
- * over (roadmap 3.15).
+ * over.
  */
 @OptIn(ExperimentalTestApi::class)
 class DrawnMagnifierTest {

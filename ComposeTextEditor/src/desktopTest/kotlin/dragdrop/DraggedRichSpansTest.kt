@@ -27,7 +27,7 @@ import kotlin.test.assertNotNull
 
 /**
  * A drag within the editor carries the rich spans its markup cannot (highlights,
- * comments, a host's own), as cut and paste does (6.21).
+ * comments, a host's own), as cut and paste does.
  */
 @OptIn(ExperimentalComposeUiApi::class)
 class DraggedRichSpansTest {

@@ -10,7 +10,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 /**
- * Shortcuts on the web follow the active keyboard layout (4.38). Compose web names a key
+ * Shortcuts on the web follow the active keyboard layout. Compose web names a key
  * by the DOM `code`, its US QWERTY position, and puts the DOM `key`, the active layout's
  * character, in the code point; a `key` that is a name ("Dead", "ArrowLeft", "F2") gives
  * the key code as the code point instead. These events have that shape, with the web's
@@ -157,7 +157,7 @@ class DomLayoutKeyTest {
 
 	/**
 	 * Compose gives a dead key the key code as its code point, the same as the key's own
-	 * capital, so a letter key the active layout gives a dead key keeps its QWERTY name (4.39).
+	 * capital, so a letter key the active layout gives a dead key keeps its QWERTY name.
 	 */
 	@Test
 	fun `a dead key keeps its reported key`() {

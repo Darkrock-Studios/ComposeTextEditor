@@ -136,9 +136,9 @@ the item above it, and a multi-line selection nests each selected item where
 allowed; Shift+Tab un-nests one level; Enter continues the list at the same
 level; Enter on an empty nested item un-nests it, and on an empty top-level
 item ends the list; Backspace at the start of a nested item un-nests it, and
-at a top-level item makes it body text. Tab inside an item's text keeps lane
-D's rule (2.9) and inserts the indent text, as Word does, and so does Tab at the
-start of a list's first item, which has nothing to nest under (7.58). Toggling a list
+at a top-level item makes it body text. Tab inside an item's text inserts the
+indent text, as Word does, and so does Tab at the
+start of a list's first item, which has nothing to nest under. Toggling a list
 kind onto a line that is the other kind keeps its level; onto body text
 starts at level 0.
 
@@ -262,8 +262,8 @@ read one file by, for a host opening files written under the other.
 
 ### Leading indent
 
-A line's leading spaces and tabs (Tab on a plain line inserts four spaces,
-roadmap 2.9) have no markdown form of their own: four spaces or a tab open
+A line's leading spaces and tabs (Tab on a plain line inserts four spaces)
+have no markdown form of their own: four spaces or a tab open
 an indented code block where a block can start, which since every line is a
 paragraph is every line, and a paragraph drops up to three. Export writes
 each leading space as `&nbsp;` and each leading tab as `&emsp;` (a `&#9;`
@@ -290,13 +290,13 @@ the file does not contain, as the entity's `;` stands to a renderer, and
 becomes the whitespace again afterwards, one character for one, so no span
 moves and no character the file holds is mistaken for one. An entity
 elsewhere on a line stays literal text, as before, a typed `&nbsp;` is
-escaped (`\&nbsp;`) by the 7.14 rules, and fenced lines keep their
+escaped (`\&nbsp;`) by the prose escaping rules, and fenced lines keep their
 whitespace as written. A foreign line of only such entities (a spacer)
 reads as an empty line, unless it is a list item or heading, which holds
 the entities' whitespace. Raw leading spaces and tabs on a foreign
 paragraph's line drop on every line, the first's and each continuation's, as
 CommonMark strips them; export never writes them, so this touches only foreign
-files. A line of only whitespace stays (7.70), and a fenced line keeps its
+files. A line of only whitespace stays, and a fenced line keeps its
 whitespace as written. Rejected: a non-breaking space character, which
 is invisible in the file and reads back as content rather than indent; and
 no form (stripping the indent), which loses text on every save.

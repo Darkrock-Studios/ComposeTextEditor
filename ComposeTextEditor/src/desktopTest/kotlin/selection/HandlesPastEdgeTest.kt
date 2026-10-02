@@ -24,7 +24,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * Touch handles past the editor's edge (3.20): drawn in popups, as `BasicTextField`'s are,
+ * Touch handles past the editor's edge: drawn in popups, as `BasicTextField`'s are,
  * so a teardrop below the last visible row, or a bar's dot above the first, draws and takes
  * a finger outside the editor, and one whose end has scrolled out of view is hidden.
  */

@@ -214,7 +214,7 @@ Readers that need a few characters read `DocumentSnapshot.chars` instead, a
 `CharSequence` over the lines and their starts, so an input method's reads
 around the caret never build the whole text.
 
-## 9. Per-keystroke work that does not scale with the document (7.8)
+## 9. Per-keystroke work that does not scale with the document
 
 Sections 2 to 8 make shaping proportional to the edit. Three other costs of a
 keystroke were still proportional to the document: the line list was copied,
@@ -369,7 +369,7 @@ crossing set). `EditRelayoutCostTest`, `RowLookupCostTest`, `FrameCostTest`,
 parity test is the guard for the materialized rows, since it compares them
 field by field against a full pass.
 
-## 10. Lazy width reshape (7.48)
+## 10. Lazy width reshape
 
 A width change (a window drag, a rotation, a split screen) needs every line
 shaped again, and section 9.3 makes that possible without doing it at once.
@@ -422,7 +422,7 @@ synchronously. `LazyReshapeCostTest` pins the lines a width change shapes at
 once, the settling, the anchoring, an edit during settling, and the forcing
 from drawing and the caret scroll.
 
-## 11. Paragraph spacing and formatting (5.7)
+## 11. Paragraph spacing and formatting
 
 Nothing in the model has ever separated paragraphs vertically, and the only
 alignment, indent and line height are the global ones in `textStyle`. The
@@ -477,6 +477,5 @@ test read `paragraphTop`; scrolling keeps a row, not its gaps, in view.
 `paragraph` with its fields as the argument, so a saved state restores it.
 Markdown has no paragraph spacing, alignment, indent or line height: export
 writes the text without them and import reads none, so a document that
-round-trips through markdown loses its paragraph formatting (recorded in
-5.7). HTML carries all of it as inline styles on the paragraph's element
-(7.49, `html/ParagraphFormatCss.kt`).
+round-trips through markdown loses its paragraph formatting. HTML carries all of it as inline styles on the paragraph's element
+(`html/ParagraphFormatCss.kt`).
