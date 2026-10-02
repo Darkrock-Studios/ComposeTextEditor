@@ -91,6 +91,7 @@ fun CodeEditor(
 	autoFocus: Boolean = false,
 	style: CodeEditorStyle = rememberCodeEditorStyle(),
 	onRichSpanClick: RichSpanClickListener? = null,
+	softWrap: Boolean = false,
 ) {
 	val density = LocalDensity.current
 
@@ -119,8 +120,8 @@ fun CodeEditor(
 			autoFocus = autoFocus,
 			style = style.baseStyle,
 			onRichSpanClick = onRichSpanClick,
-			// Code keeps its lines whole and scrolls sideways.
-			softWrap = false,
+			// Code keeps its lines whole and scrolls sideways unless asked to wrap.
+			softWrap = softWrap,
 			decorateLine = { line: Int, offset: Offset, state: TextEditorState, _: TextEditorStyle ->
 				drawLineNumbers(line, offset, state, style, gutterWidth)
 			}

@@ -5011,6 +5011,25 @@ Shaping is one line per keystroke. These still scale with document length:
   `DecorationCostTest`, `DecorationDrawingTest`, the `decorations` golden;
   `docs/design/decorations.md`, `docs/MIGRATION.md`).
   Spell check and find stay on `updateRichSpans`: moving them is 7.88.
+- [x] **7.87 Syntax highlighting in the code editor demo.** [Opus] The
+  sample's code editor
+  colours code with the Highlights library (`dev.snipme:highlights`, sample
+  only), as a decoration layer (7.86), so the colours stay out of undo,
+  copies and exports. A language picker over Highlights' languages, Kotlin by
+  default; Atom One in the light theme, Darcula in the dark; switches for the
+  highlighting and soft wrap; a 5,000-line sample.
+  Done: after each pause in typing (150 ms) the text is analysed off the main
+  thread and the lines from the first whose colours change to the last are
+  replaced in one step; a result is dropped when the text changed since it was
+  taken. Highlights' analysis grows with the square of the text (about a
+  second for 5,000 lines), and its incremental mode only follows text added at
+  the end, so the sample cuts the file into pieces, at blank lines or lines
+  their text picks, outside the language's block comments and multi-line
+  strings, and analyses only the pieces whose text changed: 5,000 lines take
+  105 ms from nothing and 17 ms after a keystroke, off the main thread, and
+  the apply on it 6 ms and 0.08 ms. Version 1.0.0, as 1.1.0's JVM classes need Java 21
+  and the sample runs on 17 (`SyntaxHighlightingTest`,
+  `SyntaxHighlightingBenchmark`, `CodeEditorScreenshotTest`).
 - [x] **7.88 Spell check and find on decoration layers. S.** [Opus] [Lanes J,
   K] Both find their own overlays by filtering `getAllRichSpans()` by style,
   which builds the whole span set each time, and both public style classes
@@ -5155,3 +5174,4 @@ records results and removes entries that passed.
 | 3.17 | On an iPad with an Apple Pencil (the Simulator here offers no Pencil input), in the iOS sample app: tap, double-tap a word and drag across text with the Pencil. 3.17 added the `expect` `Modifier.stylusHandwriting`, whose non-Android actual in `skikoMain` returns the modifier unchanged | The Pencil places the caret and selects as a finger does, as before | Compiles and the iOS tests pass (2026-10-01, `9f16a8e9`). The Pencil check needs a device |
 | 7.41 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64` and `:ComposeTextEditor:iosSimulatorArm64Test`. `skikoMain` changed: `SkikoTextEditorInputMethodRequest` takes an optional field value, which its `value()` reports while the platform's own field composes; only web passes one, so iOS reads the editor's value as before. Then in the iOS sample app, type a Japanese word with the Japanese (Romaji) keyboard, convert it and commit it | Compiles and the tests pass; the word composes underlined, converts and commits once, as before | |
 | 7.57 | On an iOS device, with VoiceOver on, note what its caret outline shows on the focused editor (the simulator has no VoiceOver) | VoiceOver's outline is expected unchanged (the legacy text input view answers no caret rectangle); record what it shows | The rest passed 2026-10-01 at `4d0a7cae` on the iPhone 17 Pro Max simulator (iOS 26); see 7.57 |
+| 7.86, 7.87 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64` and `:sampleApp:compileKotlinIosSimulatorArm64` (the sample now depends on Highlights 1.0.0, which publishes iOS klibs; core draws decoration text colours as a `SrcAtop` tint in a layer, common code only). Then open the Code Editor demo in the iOS sample app, type in it, toggle Soft wrap, and load the 5,000 lines | Compiles; the code shows Atom One colours (Darcula in dark mode), typing recolours the line after a pause without stutter, the colours stay put while scrolling and wrapping, and emoji keep their colours | |

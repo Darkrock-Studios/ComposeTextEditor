@@ -82,6 +82,7 @@ fun App() {
 
 				Destination.CodeEditor -> CodeEditorDemoUi(
 					navigateTo = ::navigateTo,
+					isDarkMode = (colorScheme == darkColorScheme),
 				)
 
 				Destination.FindDemo -> FindTextEditorDemoUi(
