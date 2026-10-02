@@ -313,7 +313,7 @@ handler regardless of whether they originated from hardware or from the IME.
 
 ### Beyond text: autofill, keyboard content, the stylus
 
-Each follows `BasicTextField` (roadmap 3.17).
+Each follows `BasicTextField`.
 
 - **Autofill.** Compose's autofill manager enters a node only when its
   semantics carry `onFillData`, and describes one to the service only when it
@@ -345,7 +345,9 @@ Each follows `BasicTextField` (roadmap 3.17).
   in common code), then edits as the keyboard's own `setSelection` and
   `commitText` would, in one batch, so behaviors, undo and the expectation
   treat it as a keyboard edit. Removing spaces deletes each run alone, so the
-  text between keeps its styles. No gesture is previewed (roadmap 3.22).
+  text between keeps its styles. A select or delete gesture the keyboard
+  previews highlights the text it would act on, as Compose's text fields do,
+  until the preview ends or the text or selection changes.
 
 ## Desktop
 
@@ -374,15 +376,15 @@ surrounding deletes holds on iOS by construction. The iOS file contributes
 the keyboard traits only: default keyboard, sentence capitalisation,
 autocorrect on, multiline.
 
-What iOS cannot get from the shared request is a Compose `TextLayoutResult`,
-because the editor lays out its own lines. The request answers null there, as
-the interface allows, so features that read per-character geometry from it
-(the spacebar trackpad's floating caret, marked-text rectangles) are
-unavailable until the editor can offer an equivalent (roadmap 4.6). The caret
-and editor rectangles are supplied.
+The editor lays out its own lines, so it has no Compose `TextLayoutResult` of
+its own. UIKit reads per-character geometry from one for the spacebar
+trackpad's floating caret and its own vertical moves, so on iOS the request serves
+the whole-document semantics layout, whose rows break as drawn
+(`accessibility-text-layout.md`); the other platforms get null, as the
+interface allows. The caret and editor rectangles are supplied.
 
-This backend has been compiled and exercised only through the desktop suite's
-coverage of the shared code; the device pass is queued for the Mac.
+The sample app's iOS UI smoke test types through this backend on a simulator; a
+pass on a physical device is still owed.
 
 ## State out on the skiko platforms
 
@@ -410,10 +412,12 @@ no copy, so desktop does nothing. Web keeps a real copy in its textarea,
 and Compose lets a key's default action edit that copy while mirroring the
 editor back only when the editor's value changes, so a key the editor answered
 without that edit (Enter leaving a list) leaves the browser's own line break
-there; web rewrites the textarea from the request's value. iOS does nothing
-for now: Compose's iOS connection tells UIKit nothing about a change made
-during the keyboard's own edit, and the one tool the session has, restarting
-the input method, resets the keyboard (roadmap 4.29).
+there; web rewrites the textarea from the request's value. iOS does nothing:
+Compose's iOS connection tells UIKit nothing about a change made during the
+keyboard's own edit, but UIKit reads the text live through `UITextInput`
+rather than from a copy, so the keyboard's autocorrect and capitalisation
+context follows the edit anyway. Restarting the input method, the one tool the
+session has, would reset the keyboard on every such edit for nothing.
 
 The caret rectangle is measured from the layout when a platform asks for it,
 so an observer re-running at a caret move gets the new position before the
@@ -510,7 +514,7 @@ Android and iOS sessions ask of their keyboards.
 `value()` is the state-out direction, fed by the shared revision described
 above. Composition on desktop browsers and the soft keyboard on mobile
 browsers follow from the session existing; both need a manual pass in real
-browsers (roadmap 4.4, 4.15).
+browsers.
 
 That mirror writes a task after the frame that applied the edit, while the
 browser edits the textarea with each composition update as it arrives, so the

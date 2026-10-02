@@ -101,14 +101,14 @@ this exercises the clipboard's HTML as the block carrier.
 5. Bold body text pasted out must **not** land as an `<h4>` in the target app.
 6. Copy a nested list (Tab to nest an item, then Tab again under it) out of the
    editor into a browser rich-text field, and a nested list from a web page or
-   Google Docs into the editor (7.47). **Expect:** the nesting survives both ways.
+   Google Docs into the editor. **Expect:** the nesting survives both ways.
 7. In Google Docs or Word, write a paragraph with one red word and one word at a
-   larger size, copy it and paste into the Markdown demo in a dark theme (7.46).
+   larger size, copy it and paste into the Markdown demo in a dark theme.
    **Expect:** the red word is red and the large word large; the rest takes the
    editor's own text colour and size, not the source's black and 11 pt.
 8. Centre a paragraph and give another a first-line indent (from code with
    `setParagraphFormat`: the sample has no paragraph controls), copy both into a browser
-   rich-text field, and paste a centred paragraph from Google Docs (7.49).
+   rich-text field, and paste a centred paragraph from Google Docs.
    **Expect:** the alignment and indent survive both ways; a Docs paste keeps
    the editor's own line spacing.
 
@@ -126,7 +126,7 @@ this exercises the clipboard's HTML as the block carrier.
    text (1.5 times, which lands at the default h2's 24 sp) and paste it into a
    paragraph. Copy that line out into a browser rich-text field.
    **Expect:** the word arrives bold inside its sentence, not as a heading on a line
-   of its own (6.26).
+   of its own.
 
 ### 2.6 Context menu parity (#87, #50)
 
@@ -146,14 +146,15 @@ this exercises the clipboard's HTML as the block carrier.
    a word. **Expect:** the menu's corner is at the pointer, not 16 dp to its left.
 5. Select a word, then right-click inside it. **Expect:** the selection stays and the
    menu offers Cut and Copy. Right-click outside it. **Expect:** the caret moves to the
-   click and the selection clears before the menu opens (1.9). In the RichTextView demo
+   click and the selection clears before the menu opens. In the RichTextView demo
    a right-click outside the selection keeps it.
-6. Middle-click in the editor, with and without a selection. **Expect:** the caret and
-   selection do not change (primary-selection paste is not built, 4.23).
+6. Middle-click in the editor, with and without a selection. **Expect:** on Linux the
+   text last selected (the primary selection) is pasted at the click; elsewhere the
+   caret and selection do not change.
 7. Repeat 5 and 6 on Android with a USB or Bluetooth mouse. Android delivers every
    mouse button as a press, which the desktop tests cannot reproduce.
 8. Click outside the editor so it loses focus, then right-click inside it.
-   **Expect:** the menu opens and the editor is focused behind it (1.22): Escape
+   **Expect:** the menu opens and the editor is focused behind it: Escape
    closes the menu and typing lands in the editor. On Android with a mouse, note
    whether the soft keyboard rises for this right-click (focus alone may start the
    input session); a right-click on an already focused editor must not raise it.
@@ -164,7 +165,7 @@ this exercises the clipboard's HTML as the block carrier.
    the typing burst (or trigger export from another thread if you have a harness).
 2. **Expect:** no `ConcurrentModificationException`, no interleaved/garbled export.
 
-### 2.8 Line endings (6.8)
+### 2.8 Line endings
 
 1. Windows: copy three lines from Notepad (CRLF) and paste. Linux or macOS: copy three
    lines of a CRLF file from a terminal (`printf 'a\r\nb\r\nc'`) or an editor that
@@ -177,7 +178,7 @@ this exercises the clipboard's HTML as the block carrier.
    web demo from Notepad and out of it into Notepad (the browser, not the editor,
    supplies CRLF there).
 
-### 2.9 No-break spaces (6.10)
+### 2.9 No-break spaces
 
 1. Desktop. In a word processor or browser rich-text field, type "10", a no-break
    space (Ctrl+Shift+Space in Word and LibreOffice, Option+Space on macOS) and "km",
@@ -191,16 +192,16 @@ this exercises the clipboard's HTML as the block carrier.
 3. Copy a paragraph with bold words and double spaces from Google Docs and paste.
    **Expect:** Find for a phrase typed with ordinary spaces matches it.
 
-### 2.9b Plain paste takes the source's plain text (6.13)
+### 2.9b Plain paste takes the source's plain text
 
-1. Desktop (web and Android once 4.13 and 6.7 read markup). Copy a two-cell table
+1. Desktop, Android and web. Copy a two-cell table
    row from a spreadsheet or web page, then
    Paste as Plain Text (Ctrl/Cmd+Shift+V, or the context menu). **Expect:** the text
    exactly as pasting into a plain text editor gives it (the source's own plain
    text), not the markup's text. Ctrl/Cmd+V still pastes the table's text from the
    markup, cells separated by a tab.
 
-### 2.12 Android rich clipboard (6.7, 6.18)
+### 2.12 Android rich clipboard
 
 1. Markdown demo. Select a line with a bold word and a bulleted line, copy from the
    selection toolbar, and paste at the end. **Expect:** bold and the bullet survive,
@@ -212,7 +213,7 @@ this exercises the clipboard's HTML as the block carrier.
 4. Paste as Plain Text from the menu. **Expect:** the source's own plain text,
    styled like the text where it lands.
 
-### 2.13 Drag and drop (6.12, desktop)
+### 2.13 Drag and drop (desktop)
 
 1. Select a word and drag it elsewhere in the same paragraph and to another line.
    **Expect:** a caret shows where it will land; the word moves, stays selected, and
@@ -220,7 +221,7 @@ this exercises the clipboard's HTML as the block carrier.
    copy, the original stays.
 2. Drop the word back inside its own selection. **Expect:** nothing changes.
    Highlight a word with the demo's Highlight button (a rich span) and drag it
-   elsewhere. **Expect:** it keeps the highlight, moved or copied (6.21).
+   elsewhere. **Expect:** it keeps the highlight, moved or copied.
 3. Click (press and release without moving) inside a selection. **Expect:** the caret
    lands there and the selection goes, on release.
 4. Drag a bold, bulleted line into a browser rich-text field or word processor.
@@ -230,14 +231,14 @@ this exercises the clipboard's HTML as the block carrier.
    the drop caret with its formatting and is selected.
 5b. Hover a drag to the right of a wrapped paragraph's first row. **Expect:** the drop
    caret shows at that row's end, where a click there would put the caret, not at
-   the start of the next row; the text drops there (6.24).
+   the start of the next row; the text drops there.
 6. Right after a drop (inside the editor or into another app), click once in the
    editor. **Expect:** the click places the caret; it is not swallowed or read as a
    drag.
 7. An editor with `enabled = false`: drag its selection into another app.
    **Expect:** a copy; its text never changes. Drop text onto it. **Expect:** refused.
 
-### 2.11 Web clipboard (4.13)
+### 2.11 Web clipboard
 
 In Chrome, Firefox and Safari, against the built demo:
 
@@ -253,25 +254,25 @@ In Chrome, Firefox and Safari, against the built demo:
    the console shows a `ComposeTextEditor: could not read ... the clipboard` warning.
 5. Serve the demo over plain http from another machine (an insecure context) and
    use the context menu's Copy, Cut and Paste. **Expect:** a console warning for
-   each, the text stays where it was after Cut (6.19), and the keyboard chords
+   each, the text stays where it was after Cut, and the keyboard chords
    still work.
 6. Turn on Read only (then, separately, turn off Enabled), select a bold word and
    press Ctrl/Cmd+C, and do the same in the RichTextView demo; paste into Google
    Docs. **Expect:** the word stays bold, with no permission prompt and no console
-   warning (7.39). Try Ctrl+Insert on Windows and Linux too.
+   warning. Try Ctrl+Insert on Windows and Linux too.
 6b. On a touch screen (or a phone's browser with a hardware keyboard), tap into the
    editor so the canvas keeps focus, select a bold word and press Ctrl/Cmd+X (and
    Shift+Delete on Windows and Linux). **Expect:** the word leaves the editor and
-   pastes into Google Docs bold, with no permission prompt (6.27).
+   pastes into Google Docs bold, with no permission prompt.
 
-7. Web demo: click into the editor, press Escape then Tab, then Shift+Tab (4.28).
+7. Web demo: click into the editor, press Escape then Tab, then Shift+Tab.
    **Expect:** no tab character is typed, focus leaves the editor and comes back
    to it, and the keyboard keeps working throughout without a click.
 
-### 2.10 Links (6.9)
+### 2.10 Links
 
 1. Copy a sentence with a link from a web page and paste it into the Markdown demo
-   (desktop; on Android and web once 6.7 lands). **Expect:** the link text shows the
+   (desktop, Android and web). **Expect:** the link text shows the
    link style, and Ctrl/Cmd+click opens the page. Round Trip shows `[text](url)`.
 2. Copy a line with a markdown link out of the editor into a browser rich-text field
    or word processor. **Expect:** a working link, not underlined text alone.
@@ -432,11 +433,11 @@ the platform's double-tap timeout (300 ms on desktop), not the OS mouse setting.
    below scrolls faster; moving back inside stops it. Repeat above the editor.
 9. In a document of long wrapped paragraphs, triple-click a paragraph and drag
    below the editor, holding still. **Expect:** the scroll runs at one even speed
-   with no lurching or jumping back (1.23). Move the mouse back inside and
+   with no lurching or jumping back. Move the mouse back inside and
    release. **Expect:** the view then scrolls to show the caret at the end of the
    last selected paragraph.
 10. Click in the blank space right of a wrapped row, one that wraps mid-word and
-    one that wraps after a space (1.24). **Expect:** the caret at that row's right
+    one that wraps after a space. **Expect:** the caret at that row's right
     edge (after the space), not at the start of the next row; Home goes to that
     row's start. Drag from a word to past the row's end. **Expect:** the whole
     row, trailing space included, is selected. Double-click past the row's end.
@@ -447,7 +448,6 @@ the platform's double-tap timeout (300 ms on desktop), not the OS mouse setting.
 ### 3.8 Web input (built demo)
 
 Run 1 to 6 and 8 in Chrome, Firefox and Safari on desktop, and 7 on phones.
-Roadmap 4.11, 4.12, 4.22, 4.25 and 4.38.
 
 1. Markdown Editor (Blank). Click in the editor and type. Right-click in the
    text, press Escape, and type `;` `=` and a letter. **Expect:** all three
@@ -462,19 +462,19 @@ Roadmap 4.11, 4.12, 4.22, 4.25 and 4.38.
    word. With a browser IME or a phone keyboard, also leave a list this way
    and accept an autocorrect suggestion right after. **Expect:** the second
    Enter ends the list, and nothing lands one character off.
-6. Composition with a real IME (roadmap 4.12; synthetic events already pass):
+6. Composition with a real IME (the browser tests' synthetic events already pass):
    fcitx5 or ibus with Mozc on Linux, the macOS Japanese keyboard, Microsoft
    IME on Windows. Type "nihongo", convert, pick a candidate, commit; repeat
    in the middle of a line and over a selected word; Backspace inside a
    composition. **Expect:** underlined composing text, the candidate window
    at the caret, the chosen word committed once where the caret was.
-7. Phones (roadmap 4.11), Android Chrome with Gboard and iOS Safari: tap the
+7. Phones, Android Chrome with Gboard and iOS Safari: tap the
    editor. **Expect:** the keyboard rises with a capital for the first
    letter, suggestions work, autocorrect replaces the word once, Backspace
    deletes one character, and the caret stays visible above the keyboard.
    Tap an empty part of the page outside the editor: the keyboard may hide;
    tapping the editor brings it back.
-8. Shortcuts on another layout (roadmap 4.38): switch the system to French
+8. Shortcuts on another layout: switch the system to French
    (AZERTY), then German (QWERTZ). Type a word, press Ctrl+Z (Cmd+Z on
    macOS) on the key that types z, then redo with Ctrl+Y on the key that
    types y (Cmd+Shift+Z on macOS). **Expect:** undo, then redo, on the keys
@@ -483,7 +483,7 @@ Roadmap 4.11, 4.12, 4.22, 4.25 and 4.38.
 
 ### 3.9 IME candidate window (desktop)
 
-Roadmap 4.19. With a CJK input method (fcitx5 or ibus with Mozc or Pinyin on
+With a CJK input method (fcitx5 or ibus with Mozc or Pinyin on
 Linux, the macOS Japanese keyboard, Microsoft IME on Windows):
 
 1. Type a composition at the end of a long line, then on a new line, then
@@ -516,11 +516,11 @@ was lengthened specifically so it can be scrolled and flung.
 4. Tap right next to a selection handle. **Expect:** focus and caret placement, not a
    swallowed tap.
 5. Long-press a word, then grab a handle a little off its centre and hold still.
-   **Expect:** the selection does not change on grab (3.2). Drag it: the edge follows
+   **Expect:** the selection does not change on grab. Drag it: the edge follows
    the finger by exactly the distance moved.
 6. Drag the start handle past the end handle, and the end handle past the start.
    **Expect:** the handles cross and the selection runs from the fixed end to the
-   finger, with no jumping (3.1, hammer-editor#956). Dropping one handle exactly on
+   finger, with no jumping (hammer-editor#956). Dropping one handle exactly on
    the other leaves at least a character selected.
 7. Select a short word (two or three letters) and grab the end handle. **Expect:** the
    end handle moves, not the start one.
@@ -531,13 +531,13 @@ was lengthened specifically so it can be scrolled and flung.
    hardware keyboard. **Expect:** it disappears. Mouse clicks never show it.
 10. On Android 9 (API 28) or later, drag a selection handle and the caret handle.
     **Expect:** the system magnifier appears above the finger, showing the row being
-    dragged, follows the finger sideways, and goes when the finger lifts (3.6). Below
+    dragged, follows the finger sideways, and goes when the finger lifts. Below
     API 28 there is none. None on desktop, iOS, or web.
 11. In a long document, drag the end handle below the editor and hold still.
-   **Expect:** it keeps scrolling and the selection keeps growing (3.4); dragging
+   **Expect:** it keeps scrolling and the selection keeps growing; dragging
    back inside stops it. Repeat with the start handle above the editor.
 12. Double-tap a word. **Expect:** the word selects with handles and the keyboard
-    rises (3.7). Double-tap and keep the second finger down, then drag across the
+    rises. Double-tap and keep the second finger down, then drag across the
     line. **Expect:** the selection grows by whole words, the first word always kept,
     the page does not scroll under the finger, and the magnifier follows the moving
     end. Two taps a second apart, or on different words, place the caret twice.
@@ -548,7 +548,7 @@ was lengthened specifically so it can be scrolled and flung.
     the system's long-press setting (Settings > Accessibility > Touch & hold
     delay): the editor follows it.
 14. Long-press a word and lift. **Expect:** Android's floating toolbar appears over
-    the word with Cut, Copy, Paste and Select all (3.8), with the keyboard up. Drag
+    the word with Cut, Copy, Paste and Select all, with the keyboard up. Drag
     a handle. **Expect:** the toolbar hides during the drag and returns when the
     handle drops. Tap Select all. **Expect:** everything selects with handles and
     the toolbar comes back over the visible rows. Scroll. **Expect:** the toolbar
@@ -567,7 +567,7 @@ was lengthened specifically so it can be scrolled and flung.
 17. Long-press a word, then press Back to dismiss the keyboard, and tap a toolbar
     button or another field so the editor loses focus while the handles stay. Drag
     a handle. **Expect:** on the drop the editor is focused again and the keyboard
-    rises, so typing replaces the selection (3.13).
+    rises, so typing replaces the selection.
 18. Put two fingers down on the text and hold. **Expect:** no word selects and the
     keyboard stays down. Pinch or two-finger scroll with both fingers on the text.
     **Expect:** the caret does not move and the keyboard stays down. A second
@@ -621,7 +621,7 @@ System > Keyboard > Physical keyboard: English (US), International style, or
 German, or French).
 
 1. Press the acute dead key (`'` on US International), then `e`. **Expect:** the
-   accent shows underlined after the dead key, and `é` replaces it (4.20). Undo
+   accent shows underlined after the dead key, and `é` replaces it. Undo
    removes the word typed with it.
 2. Dead key then `x`. **Expect:** `´x`. Dead key twice, or dead key then Space.
    **Expect:** one `´`.
@@ -631,20 +631,20 @@ German, or French).
 
 4. Keyboard down, tap a word on the editor's last visible row. **Expect:** the
    keyboard rises and the row stays in view just above it; the app's toolbar
-   does not slide off the top (3.9). Scroll that caret out of view, hide and
+   does not slide off the top. Scroll that caret out of view, hide and
    raise the keyboard. **Expect:** the scroll stays where it was. In a host
    that pads the editor with `imePadding` in an edge-to-edge window, the row
    ends right at the keyboard's top, not a strip above it, and the text does
-   not jump while the keyboard slides (3.16).
+   not jump while the keyboard slides.
 5. Code Editor demo: type a sentence. **Expect:** no capital at its start and no
-   autocorrection; the rich text demo still capitalises and corrects (3.11).
+   autocorrection; the rich text demo still capitalises and corrects.
    With a host setting `KeyboardSettings(imeAction = ImeAction.Send)` and
    `state.onImeAction`, the keyboard shows a Send key that calls the handler,
    and a hardware Enter still starts a line. With `ImeAction.Next` and no
    handler, the key moves focus to the next field.
 6. Markdown demo with Gboard: type a word at the end of a bullet and press the
    keyboard's Enter. **Expect:** a new bullet, the keyboard shifted for it and
-   its suggestion strip not reset (4.27). Enter on the empty bullet, and
+   its suggestion strip not reset. Enter on the empty bullet, and
    Backspace at a bullet's start, leave or demote the list; those may reset the
    keyboard once. Repeat with SwiftKey and Samsung Keyboard: no doubled or lost
    characters on the next word typed after each.
@@ -652,13 +652,13 @@ German, or French).
    handwriting (Android 14 or later), move the caret with the arrow keys and
    by tapping, across rows. **Expect:** what follows the caret (the floating
    candidates, the handwriting insertion marker) follows at once, not one move
-   behind (4.30), and sits at the caret, not above and left of it by the
-   editor's offset in the window (3.10). Scroll the text under a fixed caret.
+   behind, and sits at the caret, not above and left of it by the
+   editor's offset in the window. Scroll the text under a fixed caret.
    **Expect:** the floating candidates follow it, and hide or move off when
    the caret row leaves the editor. In a host whose window pans for the
    keyboard (`adjustPan`) or whose editor sits in a scrolling parent, move the
    view without touching the text. **Expect:** the floating candidates follow
-   at once (4.31); switching Gboard between docked and floating updates them
+   at once; switching Gboard between docked and floating updates them
    too.
 
 Checked on an emulator (2026-09-29, API 36, Gboard active) through
@@ -830,8 +830,7 @@ lower-depth platforms in §1.
 
 ## 8b. Drawing, caret and scrolling
 
-Guards roadmap items 1.8, 1.10, 1.11, 1.17, 1.18, 3.12 and 4.14. Desktop and
-Android unless a step says otherwise.
+Desktop and Android unless a step says otherwise.
 
 1. Rich Text Editor demo: click in the padding left of a line, right of it, and
    above the first line. **Expect:** the caret lands at that row's start, its end,
@@ -854,7 +853,7 @@ Android unless a step says otherwise.
    the thumb pages toward the pointer (and keeps paging while held), and no thumb
    once the document fits (delete most of it).
 
-## 8b1. Read-only with a caret (7.13)
+## 8b1. Read-only with a caret
 
 Rich Text Editor demo, turn the Read only switch (under the title) on.
 
@@ -869,7 +868,7 @@ Rich Text Editor demo, turn the Read only switch (under the title) on.
 3. TalkBack and VoiceOver: the editor is announced as a text field that cannot be
    edited, not as disabled, and its actions offer no paste, cut or set text.
 
-### 8b1a. Growing with the text (7.13)
+### 8b1a. Growing with the text
 
 Rich Text Editor demo, Grow switch on (3 to 8 lines).
 
@@ -880,7 +879,7 @@ Rich Text Editor demo, Grow switch on (3 to 8 lines).
 3. Resize the window narrower (desktop) or rotate (phone). **Expect:** the height
    follows the new wrapping.
 
-### 8b1b. Maximum length and single line (7.13)
+### 8b1b. Maximum length and single line
 
 Rich Text Editor demo.
 
@@ -892,12 +891,12 @@ Rich Text Editor demo.
 2. Turn on Single line. Press Enter, paste two lines. **Expect:** Enter adds nothing;
    the pasted line break becomes a space; the editor is one line tall and grows as the
    line wraps. On Android the soft keyboard shows a Done key instead of a return key,
-   and Done and a hardware Enter both hide it (7.40); turning Single line off brings
+   and Done and a hardware Enter both hide it; turning Single line off brings
    the return key back.
 3. With the keyboard up (Android) or composing with a dead key (desktop), turn
    Read only on and off, and Enabled off and on, without touching the editor.
    **Expect:** the keyboard stays down, and a dead key or an IME composes at once
-   on desktop; a tap then brings the keyboard back (7.37). iOS and the web still
+   on desktop; a tap then brings the keyboard back. iOS and the web still
    need that tap before IME input.
 
 ## 8b2. Saved state (Android)
@@ -998,7 +997,7 @@ tagging, since these change what downstream code compiles against.
 5. Run `./gradlew updateDocs` and confirm Dokka generates cleanly with the new symbols.
 6. Rich Text Editor demo: the header's word count follows typing, paste, cut and undo
    at once, and typing in a pasted document of a few thousand lines stays as smooth
-   with the count showing as without (7.25).
+   with the count showing as without.
 
 ## Sign-off
 

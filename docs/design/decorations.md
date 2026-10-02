@@ -1,10 +1,10 @@
 # Decorations
 
 A decoration is a view of the text, not part of it: a syntax highlighter's
-colours, a linter's underlines, a search's matches. Spell check and find drew
-theirs as rich spans marked `isDecoration` (7.53, 7.54); 7.86 makes that a
-public API any host can use (`com.darkrockstudios.texteditor.decoration`), and
-spell check, diagnostics and find now draw on layers of their own (7.88).
+colours, a linter's underlines, a search's matches. Decoration layers
+(`com.darkrockstudios.texteditor.decoration`) are the public API for them: any host
+can draw on one, and spell check, diagnostics and find each draw on layers of
+their own.
 
 ## Rules
 
@@ -56,7 +56,7 @@ coverage, antialiasing included (`DrawTextTint.kt`). The layer is opened only
 when a row in view has a coloured decoration, once per frame, and holds the
 text alone: the text is drawn in its own pass, after the host's `decorateLine`
 and before every foreground span and the composing underline, so a gutter or a
-margin mark is neither clipped by the layer nor tinted. With wrapping off (7.41)
+margin mark is neither clipped by the layer nor tinted. With wrapping off
 the layer and its tints are opened inside `inContentSpace`, so they scroll
 sideways with the text and stop at the canvas's edges.
 
@@ -83,7 +83,7 @@ rest is finding each stretch's boxes.
 
 ## Spell check, diagnostics and find
 
-Spell check, diagnostics and find each draw on a layer of their own (7.88) and
+Spell check, diagnostics and find each draw on a layer of their own and
 read their marks back with `decorations(layer)` or `decorations(layer, lines)`,
 which build only their own spans, never the whole span set
 (`getAllRichSpans()` builds and hashes every span after any change). Their

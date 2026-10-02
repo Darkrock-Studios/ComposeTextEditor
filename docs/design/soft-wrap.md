@@ -1,4 +1,4 @@
-# Soft wrap off and horizontal scrolling (7.41)
+# Soft wrap off and horizontal scrolling
 
 With wrapping on (the default) every line wraps at the viewport's width and the
 editor scrolls vertically only. With wrapping off a line stays one row however
@@ -47,7 +47,7 @@ that apply the vertical one:
    what spans the full width, a code fence card, a blockquote's background, a
    rule, spans the widest line), and with wrapping off clips sideways to the
    canvas, which is otherwise unclipped. The text with its rich spans, its
-   decorations' tints (7.86) and composing underline (`DrawEditorText`) and the
+   decorations' tints and composing underline (`DrawEditorText`) and the
    selection (`DrawSelection`) draw inside it, in content x and view y as before. The caret and the drop
    caret are drawn from view-space metrics outside it, and are not drawn when
    scrolled out of view sideways (wrapped, a caret past the right edge is still
@@ -64,7 +64,7 @@ With wrapping off `LineShaper` measures with `softWrap = false` and
 `Constraints(minWidth = viewport, maxWidth = Infinity)`: a long line keeps its
 natural width, and a short one the viewport's, so a right-to-left or centred
 line aligns within the viewport as before. A width change still reshapes every
-line lazily (7.48), for that alignment, and so does turning wrapping off; until a
+line lazily, for that alignment, and so does turning wrapping off; until a
 line is reached it keeps its old width, as it keeps its old height, so the range
 grows as the reshape settles.
 
@@ -75,8 +75,8 @@ right width. `RowList` keeps the widest line
 the way it keeps the tops: each `Chunk` holds the widest of its lines, computed
 when the chunk is built, and the directory holds a running maximum per chunk,
 rebuilt from the first touched chunk on a splice, as the tops are. The content
-width is the last entry: a keystroke costs what the directory already costs
-(7.8), and nothing scans the lines. A line shaped with wrapping on records no
+width is the last entry: a keystroke costs what the directory already costs,
+and nothing scans the lines. A line shaped with wrapping on records no
 width, so wrapping on adds one float per chunk and no range.
 
 `TextEditorScrollManager.updateContentWidth` sets the range: from 0 to the
@@ -118,11 +118,11 @@ with its vertical jump.
 The skiko input method's text origin subtracts the scroll; its caret rectangle
 is measured in view space when asked for, and as for a vertical scroll, a scroll
 alone does not ask the platform to read it again. The semantics text layout,
-which the input method also serves (iOS's floating cursor, 7.57), is measured
+which the input method also serves (iOS's floating cursor), is measured
 unwrapped, at least the viewport wide and as wide as the widest line: an
 intrinsic width leaves out an indent, which would break that line. It carries
 neither scroll offset; the input method's text origin does. The screen reader's
-character bounds (`CharacterBounds`, 7.57) subtract the sideways scroll with the
+character bounds (`CharacterBounds`) subtract the sideways scroll with the
 vertical one, in `documentToCanvas`. Android's cursor anchor is watched through the
 caret's view position, so a sideways scroll resends it. The touch toolbar moves
 with a sideways scroll as with a vertical one.
