@@ -16,12 +16,15 @@ import kotlinx.coroutines.launch
  * pointer plus [targetOffset], kept on a row wholly inside the viewport; it gets it on
  * every move and on every frame that scrolls, so the selection follows the text as it
  * moves under the pointer. A handle drag passes the offset from the finger to the text
- * it moves; the scroll still starts at the finger, where the user can reach.
+ * it moves; the scroll still starts at the finger, where the user can reach. A drag that
+ * starts at [startAt] past an edge, on a handle hanging past it, scrolls that way only once
+ * the pointer is further out than it started.
  */
 internal class DragAutoScroll(
 	private val state: TextEditorState,
 	private val scope: CoroutineScope,
 	private val targetOffset: Offset = Offset.Zero,
+	private val startAt: Offset? = null,
 	private val onDrag: (Offset) -> Unit,
 ) {
 	private var pointer = Offset.Zero
@@ -34,9 +37,9 @@ internal class DragAutoScroll(
 		pointer = position
 		// Back inside, the editor's scroll into view is the drag's again, so it is
 		// handed back before this move places the caret.
-		if (overflow(position) == 0f) stop()
+		if (pointerOverflow(position) == 0f) stop()
 		onDrag(clampToViewport(position + targetOffset))
-		if (overflow(position) != 0f && ticker == null) {
+		if (pointerOverflow(position) != 0f && ticker == null) {
 			// This owns the scroll now: the editor's scroll into view would restart
 			// against it every frame for a caret a line drag leaves off screen.
 			state.scrollManager.stopScrolling()
@@ -64,7 +67,7 @@ internal class DragAutoScroll(
 				// A stalled frame (a GC, a hidden window) must not turn into a jump of pages.
 				val seconds = ((frame - lastFrame) / 1_000_000_000f).coerceAtMost(MAX_FRAME_SECONDS)
 				lastFrame = frame
-				val overflow = overflow(pointer)
+				val overflow = pointerOverflow(pointer)
 				if (overflow != 0f) {
 					val wanted = fraction + overflow * SPEED_PER_PX_OUTSIDE * seconds
 					val whole = wanted.toInt()
@@ -77,13 +80,19 @@ internal class DragAutoScroll(
 	}
 
 	/** How far [position] is above (negative) or below (positive) the viewport. */
-	private fun overflow(position: Offset): Float {
+	private fun overflow(position: Offset): Float = overflow(position, top = 0f, bottom = state.viewportSize.height)
+
+	/** How far the pointer at [position] is past the edges that scroll: the viewport's, or [startAt] past them. */
+	private fun pointerOverflow(position: Offset): Float {
 		val height = state.viewportSize.height
-		return when {
-			position.y < 0f -> position.y
-			position.y > height -> position.y - height
-			else -> 0f
-		}
+		val start = startAt?.y ?: return overflow(position, top = 0f, bottom = height)
+		return overflow(position, top = minOf(0f, start), bottom = maxOf(height, start))
+	}
+
+	private fun overflow(position: Offset, top: Float, bottom: Float): Float = when {
+		position.y < top -> position.y - top
+		position.y > bottom -> position.y - bottom
+		else -> 0f
 	}
 
 	/**

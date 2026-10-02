@@ -12,12 +12,17 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.toComposeRect
 import com.darkrockstudios.texteditor.input.ImeCaretGeometry
 import com.darkrockstudios.texteditor.input.ImeCursorSync
+import com.darkrockstudios.texteditor.input.KeyboardContentReceiver
 import com.darkrockstudios.texteditor.input.KeyboardTraceRecorder
 import com.darkrockstudios.texteditor.input.TextEditorInputConnection
 import com.darkrockstudios.texteditor.input.composingAsTextRange
 import com.darkrockstudios.texteditor.input.imeCaretInRoot
 import com.darkrockstudios.texteditor.input.imeSubSequence
 import com.darkrockstudios.texteditor.input.selectionAsTextRange
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 
 /**
  * Android-specific extensions for TextEditorState.
@@ -51,6 +56,30 @@ actual class PlatformTextEditorExtensions actual constructor(
 	/** Token supplied alongside the monitor request; echoed back in `updateExtractedText`. */
 	@Volatile
 	var extractedTextMonitorToken: Int = 0
+
+	/**
+	 * Set through [TextEditorState.keyboardContentReceiver]. Snapshot state: the MIME types
+	 * it advertises are part of what a change restarts input for.
+	 */
+	internal var keyboardContentReceiver: KeyboardContentReceiver? by mutableStateOf(null)
+
+	/**
+	 * Strokes that asked for stylus handwriting, which the input session hands to the
+	 * keyboard. The last is replayed to a session that starts after it, since a stroke on an
+	 * unfocused editor arrives before the session its focus starts.
+	 */
+	private val stylusHandwritingRequests =
+		MutableSharedFlow<Unit>(replay = 1, onBufferOverflow = BufferOverflow.DROP_LATEST)
+
+	internal val stylusHandwriting: Flow<Unit> get() = stylusHandwritingRequests
+
+	internal fun requestStylusHandwriting() {
+		stylusHandwritingRequests.tryEmit(Unit)
+	}
+
+	/** Drops the replayed request once a session has taken it. */
+	@OptIn(ExperimentalCoroutinesApi::class)
+	internal fun forgetStylusHandwriting() = stylusHandwritingRequests.resetReplayCache()
 
 	/** Where the keyboard's calls are traced, set through [TextEditorState.keyboardTrace]. */
 	internal var keyboardTrace: KeyboardTraceRecorder? = null

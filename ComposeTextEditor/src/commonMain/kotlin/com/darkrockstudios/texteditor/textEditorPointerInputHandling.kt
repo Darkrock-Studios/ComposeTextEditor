@@ -74,6 +74,28 @@ internal fun Modifier.textEditorPointerInputHandling(
  */
 private fun PointerInputChange.inContent(origin: Offset): Offset = position - origin
 
+/**
+ * Where a pointer is in text-canvas coordinates. A drag asks it once for each move, in
+ * order: a handle's popup follows its finger by the moves alone ([FollowedFinger]).
+ */
+internal typealias ContentPosition = (PointerInputChange) -> Offset
+
+private fun inContent(origin: Offset): ContentPosition = { it.inContent(origin) }
+
+/**
+ * A finger that went down at [downAt] in the canvas on a handle's popup, followed by its
+ * moves: the popup moves with its handle, so the finger's place in it says nothing of
+ * where it is over the text.
+ */
+internal class FollowedFinger(downAt: Offset) : ContentPosition {
+	private var at = downAt
+
+	override fun invoke(change: PointerInputChange): Offset {
+		at += change.positionChangeIgnoreConsumed()
+		return at
+	}
+}
+
 internal typealias SpanClickSink = (RichSpanClick) -> Unit
 
 /**
@@ -267,7 +289,7 @@ private fun Modifier.handleMouseInput(
 						isShiftPressed = isShiftPressed,
 					)
 					val autoScroll = DragAutoScroll(state, autoScrollScope, onDrag = selection::selectTo)
-					followDrag(autoScroll, down, origin, touchSlop) ?: return@awaitEachGesture
+					followDrag(autoScroll, down, downAt, inContent(origin), touchSlop) ?: return@awaitEachGesture
 				}
 				// A drag inside the slop that still selected something is a drag too.
 				if (pressed == null || state.selector.hasSelection()) return@awaitEachGesture
@@ -395,14 +417,16 @@ private suspend fun AwaitPointerEventScope.awaitMoveOrRelease(
 }
 
 /**
- * Feeds the drag to [autoScroll] until the pointer is released. Returns the release
- * when the pointer came up without having moved past [touchSlop], null otherwise.
- * [consumeAll] consumes every change rather than only the moves, as a handle drag does.
+ * Feeds the drag from [down], at [downAt] in the canvas, to [autoScroll] until the pointer
+ * is released. Returns the release when the pointer came up without having moved past
+ * [touchSlop], null otherwise. [consumeAll] consumes every change rather than only the
+ * moves, as a handle drag does.
  */
 private suspend fun AwaitPointerEventScope.followDrag(
 	autoScroll: DragAutoScroll,
 	down: PointerInputChange,
-	origin: Offset,
+	downAt: Offset,
+	toContent: ContentPosition,
 	touchSlop: Float = 0f,
 	consumeAll: Boolean = false,
 ): PointerInputChange? {
@@ -412,9 +436,10 @@ private suspend fun AwaitPointerEventScope.followDrag(
 			val event = awaitPointerEvent()
 			val change = event.changes.firstOrNull { it.id == down.id } ?: return null
 			if (!change.pressed) return if (dragged) null else change
-			dragged = dragged || event.leavesTap(down, change, touchSlop)
+			val at = toContent(change)
+			dragged = dragged || (at - downAt).getDistance() > touchSlop || event.hasOtherFingerDown(down)
 			if (change.positionChanged()) {
-				autoScroll.update(change.inContent(origin))
+				autoScroll.update(at)
 				change.consume()
 			} else if (consumeAll) {
 				change.consume()
@@ -589,21 +614,37 @@ private fun Modifier.handleHandleDrag(
 				val origin = contentOrigin()
 				val downAt = down.inContent(origin)
 				val touched = touchedHandle(downAt, state, handles) ?: return@awaitEachGesture
-				if (touched.role == HandleRole.Caret) {
-					// A tap on the handle toggles the toolbar, as Android's insertion handle does.
-					val wasShown = touchToolbar?.isShown == true
-					touchToolbar?.hide()
-					val tapped = dragCaretHandle(state, down, origin, autoScrollScope)
-					if (tapped && !wasShown) touchToolbar?.showOnRelease()
-				} else {
-					val isStart = touched.role == HandleRole.Start
-					val handle = SelectionHandle(touched.position, isStart, handles.grabPoint(this, touched))
-					touchToolbar?.hide()
-					dragSelectionHandle(state, handle, down, origin, autoScrollScope)
-					if (state.selector.hasSelection()) touchToolbar?.showOnRelease()
-				}
+				dragTouchHandle(state, touched, handles, down, downAt, inContent(origin), touchToolbar, autoScrollScope)
 			}
 		}
+	}
+}
+
+/**
+ * Drags [touched], grabbed by [down] at [downAt] in the canvas, until the finger lifts.
+ * A tap on the caret handle toggles the toolbar, as Android's insertion handle does.
+ */
+internal suspend fun AwaitPointerEventScope.dragTouchHandle(
+	state: TextEditorState,
+	touched: TouchHandle,
+	handles: HandleLook,
+	down: PointerInputChange,
+	downAt: Offset,
+	toContent: ContentPosition,
+	touchToolbar: TouchToolbar?,
+	autoScrollScope: CoroutineScope,
+) {
+	if (touched.role == HandleRole.Caret) {
+		val wasShown = touchToolbar?.isShown == true
+		touchToolbar?.hide()
+		val tapped = dragCaretHandle(state, down, downAt, toContent, autoScrollScope)
+		if (tapped && !wasShown) touchToolbar?.showOnRelease()
+	} else {
+		val isStart = touched.role == HandleRole.Start
+		val handle = SelectionHandle(touched.position, isStart, handles.grabPoint(this, touched))
+		touchToolbar?.hide()
+		dragSelectionHandle(state, handle, down, downAt, toContent, autoScrollScope)
+		if (state.selector.hasSelection()) touchToolbar?.showOnRelease()
 	}
 }
 
@@ -611,20 +652,20 @@ private suspend fun AwaitPointerEventScope.dragSelectionHandle(
 	state: TextEditorState,
 	handle: SelectionHandle,
 	down: PointerInputChange,
-	origin: Offset,
+	downAt: Offset,
+	toContent: ContentPosition,
 	autoScrollScope: CoroutineScope,
 ) {
 	// A behavior's edit reaching into the selection clears it, and with it the handle.
 	state.finishCompositionIfPointerLeaves(caretAt = null)
 	val selection = state.selector.selection ?: return
 	val anchor = if (handle.isStart) selection.end else selection.start
-	val downAt = down.inContent(origin)
 	val handleAffinity = handleAffinity(handle.isStart)
 	val grabOffset = grabOffset(state, handle.position, downAt, handleAffinity)
 	state.selector.setDraggingHandle(handle.isStart)
 	state.selector.magnifierCenter = magnifierCenter(state, handle.position, downAt + grabOffset, handleAffinity)
 
-	val autoScroll = DragAutoScroll(state, autoScrollScope, grabOffset) { target ->
+	val autoScroll = DragAutoScroll(state, autoScrollScope, grabOffset, startAt = downAt) { target ->
 		// Anything else that changes the selection mid-drag (an edit, an undo) ends it.
 		val current = state.selector.selection
 		if (current == null || (current.start != anchor && current.end != anchor)) {
@@ -647,7 +688,7 @@ private suspend fun AwaitPointerEventScope.dragSelectionHandle(
 			magnifierCenter(state, position, target, handleAffinity(isStart = position isBefore anchor))
 	}
 	try {
-		followDrag(autoScroll, down, origin, consumeAll = true)
+		followDrag(autoScroll, down, downAt, toContent, consumeAll = true)
 	} finally {
 		state.selector.clearDraggingHandle()
 		state.selector.magnifierCenter = null
@@ -663,14 +704,14 @@ private suspend fun AwaitPointerEventScope.dragSelectionHandle(
 private suspend fun AwaitPointerEventScope.dragCaretHandle(
 	state: TextEditorState,
 	down: PointerInputChange,
-	origin: Offset,
+	downAt: Offset,
+	toContent: ContentPosition,
 	autoScrollScope: CoroutineScope,
 ): Boolean {
-	val downAt = down.inContent(origin)
 	val grabOffset = grabOffset(state, state.cursorPosition, downAt, state.cursor.affinity)
 	state.selector.magnifierCenter =
 		magnifierCenter(state, state.cursorPosition, downAt + grabOffset, state.cursor.affinity)
-	val autoScroll = DragAutoScroll(state, autoScrollScope, grabOffset) { target ->
+	val autoScroll = DragAutoScroll(state, autoScrollScope, grabOffset, startAt = downAt) { target ->
 		if (!state.selector.isCaretHandleVisible) {
 			state.selector.magnifierCenter = null
 			return@DragAutoScroll
@@ -681,7 +722,7 @@ private suspend fun AwaitPointerEventScope.dragCaretHandle(
 		state.selector.magnifierCenter = magnifierCenter(state, hit.position, target, hit.affinity)
 	}
 	try {
-		return followDrag(autoScroll, down, origin, viewConfiguration.touchSlop, consumeAll = true) != null
+		return followDrag(autoScroll, down, downAt, toContent, viewConfiguration.touchSlop, consumeAll = true) != null
 	} finally {
 		state.selector.releaseCaretHandle()
 		state.selector.magnifierCenter = null
@@ -885,7 +926,7 @@ private fun Modifier.handleTouchInteractions(
 							touchToolbar == null -> onContextMenuRequest?.invoke(downAt)
 							!touchToolbar.isNative -> touchToolbar.showMenuAt(downAt)
 							touchToolbar.isShown && state.selectionContains(downAt) &&
-									selectionDrag?.start(down.position) == true -> touchToolbar.hide()
+									selectionDrag?.start(down.position, byFinger = true) == true -> touchToolbar.hide()
 							else -> showToolbarOnRelease = true
 						}
 					} else {
@@ -976,7 +1017,7 @@ private suspend fun AwaitPointerEventScope.dragTouchSelection(
 			autoScroll.update(first.inContent(origin))
 			first.consume()
 		}
-		followDrag(autoScroll, down, origin)
+		followDrag(autoScroll, down, down.inContent(origin), inContent(origin))
 	} finally {
 		selection.release()
 	}

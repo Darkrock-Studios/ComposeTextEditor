@@ -12,6 +12,7 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.isEnabled
 import androidx.compose.ui.test.isFocusable
 import androidx.compose.ui.test.isNotEnabled
@@ -74,6 +75,27 @@ class EditorSemanticsTest {
 		press(Key.A, ctrl = true)
 		press(Key.C, ctrl = true)
 		assertEquals("Hello", clipboard.plainText())
+	}
+
+	/**
+	 * Roadmap 3.17: Compose's autofill enters a node with `onFillData` and describes one
+	 * with a content or data type. A prose editor is neither, and declaring
+	 * `ContentDataType.None` would hand the whole document to the autofill service.
+	 */
+	@Suppress("DEPRECATION")
+	@Test
+	fun `the editor publishes nothing autofill reads`() = editorUiTest(
+		initialText = AnnotatedString("Hello"),
+	) {
+		for (key in listOf(
+			SemanticsProperties.ContentType,
+			SemanticsProperties.ContentDataType,
+			SemanticsProperties.FillableData,
+			SemanticsActions.OnFillData,
+			SemanticsActions.OnAutofillText,
+		)) {
+			test.onAllNodes(SemanticsMatcher.keyIsDefined(key), useUnmergedTree = true).assertCountEquals(0)
+		}
 	}
 
 	@Test

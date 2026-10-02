@@ -49,6 +49,66 @@ class EditOperationsDeliveryTest {
 	}
 
 	@Test
+	fun `edits before the document was replaced are left out of the burst`() = runTest {
+		val state = TextEditorState(scope = TestScope(), measurer = mockk(relaxed = true))
+		val bursts = mutableListOf<List<String>>()
+		val collector = launch {
+			state.editOperationBursts.collect { burst -> bursts += burst.map { (it as TextEditOperation.Insert).text.text } }
+		}
+		runCurrent()
+
+		state.insertStringAtCursor("a")
+		state.setText("new")
+		state.insertStringAtCursor("b")
+		runCurrent()
+		state.insertStringAtCursor("c")
+		state.setText("again")
+		runCurrent()
+
+		assertEquals(listOf(listOf("b")), bursts)
+		collector.cancel()
+	}
+
+	@Test
+	fun `a group's edits before its replacement of the document are left out, though a collector runs at once`() =
+		runTest(UnconfinedTestDispatcher()) {
+			val state = TextEditorState(scope = TestScope(), measurer = mockk(relaxed = true))
+			val bursts = mutableListOf<List<String>>()
+			val collector = launch {
+				state.editOperationBursts.collect { burst -> bursts += burst.map { (it as TextEditOperation.Insert).text.text } }
+			}
+
+			state.editGroup {
+				state.insertStringAtCursor("a")
+				state.setText("new")
+				state.insertStringAtCursor("b")
+			}
+
+			assertEquals(listOf(listOf("b")), bursts)
+			collector.cancel()
+		}
+
+	@Test
+	fun `a replacement rolled back leaves the edits before it in the burst`() = runTest {
+		val state = TextEditorState(scope = TestScope(), measurer = mockk(relaxed = true))
+		val bursts = mutableListOf<Int>()
+		val collector = launch { state.editOperationBursts.collect { bursts += it.size } }
+		runCurrent()
+
+		state.insertStringAtCursor("a")
+		runCatching {
+			state.editGroup {
+				state.setText("new")
+				error("refused")
+			}
+		}
+		runCurrent()
+
+		assertEquals(listOf(1), bursts)
+		collector.cancel()
+	}
+
+	@Test
 	fun `a collector run as a group's first edit is announced waits for the rest`() = runTest(UnconfinedTestDispatcher()) {
 		val state = TextEditorState(scope = TestScope(), measurer = mockk(relaxed = true))
 		val bursts = mutableListOf<Pair<Int, String>>()

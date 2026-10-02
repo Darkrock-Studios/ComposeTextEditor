@@ -81,6 +81,7 @@ fun TextEditorDemoUi(
 			rememberSaveableTextEditorState(richSpanStyleSaver = imageSaver)
 		}
 	}
+	LocalEditorPlatformSetup.current(state, imageProvider)
 	// Every demo takes the theme's styles; the plain rich text demo is a rich text editor
 	// with nothing installed, and the others are markdown editors.
 	remember(state, styles) { state.richTextStyles = styles }

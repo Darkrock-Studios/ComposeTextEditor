@@ -6,7 +6,6 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.Density
 import com.darkrockstudios.texteditor.DefaultSelectionHandleColor
 import com.darkrockstudios.texteditor.drawComposingUnderline
-import com.darkrockstudios.texteditor.DrawSelectionHandles
 import com.darkrockstudios.texteditor.TeardropHandles
 import com.darkrockstudios.texteditor.handleAffinity
 import com.darkrockstudios.texteditor.TextEditorStyle
@@ -14,6 +13,7 @@ import com.darkrockstudios.texteditor.effectiveHandleColor
 import com.darkrockstudios.texteditor.state.TextEditorState
 import utils.DrawnShape
 import utils.ShapeKind
+import utils.drawHandles
 import utils.editorUiTest
 import utils.recordDrawing
 import kotlin.test.Test
@@ -23,8 +23,8 @@ import kotlin.test.assertTrue
 /** Touch handles and the composing underline scale with density; nothing is raw pixels. */
 class HandleDensityTest {
 
-	private fun TextEditorState.drawHandles(density: Float): List<DrawnShape> =
-		recordDrawing(viewportSize, Density(density)) { DrawSelectionHandles(this@drawHandles, Color.Red, TeardropHandles) }
+	private fun TextEditorState.handleShapesAt(density: Float): List<DrawnShape> =
+		recordDrawing(viewportSize, Density(density)) { drawHandles(this@handleShapesAt, Color.Red, TeardropHandles) }
 			.filter { it.color == Color.Red }
 
 	@Test
@@ -34,8 +34,8 @@ class HandleDensityTest {
 		longPressAtCharacter(7)
 		assertEquals("world", selectedText, "precondition: a touch selection with handles")
 
-		val at1 = state.drawHandles(1f)
-		val at2 = state.drawHandles(2f)
+		val at1 = state.handleShapesAt(1f)
+		val at2 = state.handleShapesAt(2f)
 
 		assertEquals(listOf(ShapeKind.Path, ShapeKind.Path), at1.map { it.kind })
 		assertEquals(2 * at1.first().bounds.width, at2.first().bounds.width, 0.01f)

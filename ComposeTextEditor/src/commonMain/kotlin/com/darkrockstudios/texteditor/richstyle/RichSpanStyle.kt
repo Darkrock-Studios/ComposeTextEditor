@@ -126,6 +126,10 @@ interface BlockSpanStyle : RichSpanStyle {
 internal val RichSpanStyle.anchorsToLine: Boolean
 	get() = stickyAtStart || this is BlockSpanStyle
 
+/** A decoration that only paints: it shapes, sizes, numbers and anchors no line, so adding or removing one lays nothing out. */
+internal val RichSpanStyle.paintsOnly: Boolean
+	get() = isDecoration && !anchorsToLine && !reshapesLine && !boundToParagraph
+
 data class RichSpan(
 	val range: TextEditorRange,
 	val style: RichSpanStyle

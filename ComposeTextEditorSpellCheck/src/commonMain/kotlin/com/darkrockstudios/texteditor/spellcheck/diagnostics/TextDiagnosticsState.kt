@@ -4,7 +4,7 @@ import androidx.compose.ui.graphics.Color
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.richstyle.RichSpan
-import com.darkrockstudios.texteditor.spellcheck.utils.endWhenInsertedAt
+import com.darkrockstudios.texteditor.spellcheck.computeAffectedRanges
 import com.darkrockstudios.texteditor.spellcheck.utils.replaceFlagged
 import com.darkrockstudios.texteditor.state.TextEditOperation
 import com.darkrockstudios.texteditor.state.TextEditorState
@@ -115,17 +115,23 @@ class TextDiagnosticsState(
 
 	/**
 	 * Removes the underlines an edit touched, ahead of the refresh that checks the edited lines again,
-	 * so none sits on text it no longer describes.
+	 * so none sits on text it no longer describes. Edits that have landed since [operation] must be
+	 * passed with it, through the overload taking a list.
 	 */
 	fun invalidate(operation: TextEditOperation) {
-		val touched = when (operation) {
-			is TextEditOperation.Insert -> TextEditorRange(operation.position, operation.text.text.endWhenInsertedAt(operation.position))
-			is TextEditOperation.Delete -> TextEditorRange(operation.range.start, operation.range.start)
-			is TextEditOperation.Replace -> TextEditorRange(operation.range.start, operation.newText.text.endWhenInsertedAt(operation.range.start))
-			else -> return
+		invalidate(listOf(operation))
+	}
+
+	/**
+	 * Removes the underlines [operations] touched, edits that landed one after another with no other
+	 * since ([TextEditorState.editOperationBursts]): each is read in the text after it, as moved by
+	 * those after it. See the overload for one edit.
+	 */
+	fun invalidate(operations: List<TextEditOperation>) {
+		val doomed = computeAffectedRanges(operations).flatMapTo(LinkedHashSet()) { range ->
+			textState.richSpanManager.getSpansInRange(range).filter { it.style is DiagnosticStyle }
 		}
-		val doomed = diagnosticSpans().filter { it.range.start <= touched.end && touched.start <= it.range.end }
-		if (doomed.isNotEmpty()) textState.updateRichSpans(remove = doomed, add = emptyList())
+		if (doomed.isNotEmpty()) textState.updateRichSpans(remove = doomed.toList(), add = emptyList())
 	}
 
 	/**

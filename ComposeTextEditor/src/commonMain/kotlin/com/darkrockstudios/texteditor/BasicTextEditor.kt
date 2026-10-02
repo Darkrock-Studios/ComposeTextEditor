@@ -1,6 +1,5 @@
 package com.darkrockstudios.texteditor
 
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.overscroll
@@ -27,9 +26,11 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.isSecondaryPressed
@@ -58,11 +59,14 @@ import com.darkrockstudios.texteditor.dragdrop.DrawDropCaret
 import com.darkrockstudios.texteditor.dragdrop.TextDragAndDrop
 import com.darkrockstudios.texteditor.dragdrop.textDragAndDrop
 import com.darkrockstudios.texteditor.input.CaptureViewForIme
+import com.darkrockstudios.texteditor.input.DrawHandwritingPreview
 import com.darkrockstudios.texteditor.input.KeyBindings
 import com.darkrockstudios.texteditor.input.LocalKeyBindings
 import com.darkrockstudios.texteditor.input.TextEditorInputModifierElement
 import com.darkrockstudios.texteditor.input.TextInputRequester
 import com.darkrockstudios.texteditor.input.pastePlainText
+import com.darkrockstudios.texteditor.input.placeCaretForHandwriting
+import com.darkrockstudios.texteditor.input.stylusHandwriting
 import com.darkrockstudios.texteditor.richstyle.BlockSpanStyle
 import com.darkrockstudios.texteditor.state.LayoutUpdate
 import com.darkrockstudios.texteditor.state.LocalImeInsets
@@ -157,6 +161,7 @@ fun BasicTextEditor(
 
 	// Capture platform view for IME cursor synchronization (Android only)
 	CaptureViewForIme(state)
+	PlatformAccessibilityBridge()
 	ClipboardEventsEffect(state)
 	PrimarySelectionEffect(state)
 
@@ -233,11 +238,23 @@ fun BasicTextEditor(
 	}
 	val latestOnLinkClick by rememberUpdatedState(onLinkClick)
 	val hasLinkClick = onLinkClick != null
-	val semanticsModifier = remember(state, enabled, editable, focusRequester, contextMenuActions, contentDescription, hasLinkClick, singleLine) {
-		val openLink: ((String) -> Unit)? = if (hasLinkClick) { url -> latestOnLinkClick?.invoke(url) } else null
+	val canvasPlacement = remember { CanvasPlacement() }
+	val semanticsDocument = remember(state, hasLinkClick) {
+		SemanticsDocument(state, canvasPlacement, if (hasLinkClick) { url -> latestOnLinkClick?.invoke(url) } else null)
+	}
+	val semanticsModifier = remember(state, enabled, editable, focusRequester, contextMenuActions, contentDescription, semanticsDocument, singleLine) {
 		Modifier.editorSemantics(
-			state, enabled, editable, singleLine, inputRequester::editor, focusRequester, contextMenuActions, contentDescription, openLink,
+			state, enabled, editable, singleLine, inputRequester::editor, focusRequester, contextMenuActions, contentDescription, semanticsDocument,
 		)
+	}
+	// A stylus stroke on an unfocused editor writes where it began, as in EditText.
+	val handwritingStroke: (Offset, Boolean) -> Unit = remember(state, focusRequester) {
+		{ start, focused ->
+			if (!focused) {
+				state.placeCaretForHandwriting(start - contentOrigin)
+				focusRequester.requestFocus()
+			}
+		}
 	}
 	val menuPlacement = remember(state, effectiveContextMenuState) {
 		ContextMenuPlacement(state, effectiveContextMenuState)
@@ -357,6 +374,7 @@ fun BasicTextEditor(
 			Box(
 				modifier = editorModifier
 					.focusRequester(focusRequester)
+					.stylusHandwriting(state, editable, handwritingStroke)
 					.requestFocusOnPress(
 						state,
 						focusRequester,
@@ -410,7 +428,9 @@ fun BasicTextEditor(
 				}
 				val dragAndDrop = remember(state) { TextDragAndDrop(state, inputRequester::editor) }
 				dragAndDrop.enabled = editable
-				Canvas(
+				dragAndDrop.textColor = style.textColor
+				// The canvas: a box, so the handles' popups are placed from its content.
+				Box(
 					modifier = Modifier
 						.textDragAndDrop(dragAndDrop)
 						.textEditorPointerIcon(state, linkClicks, contentOrigin = { contentOrigin })
@@ -434,6 +454,7 @@ fun BasicTextEditor(
 						// The content canvas's position, below the padding: the desktop IME places
 						// its candidate window by it, and the touch toolbar its menu.
 						.onGloballyPositioned {
+							canvasPlacement.coordinates = it
 							state.canvasLayoutCoordinates = it
 							state.canvasPositionInRoot = it.positionInRoot()
 							state.updateKeyboardCover(imeInsets.getBottom(density))
@@ -442,32 +463,41 @@ fun BasicTextEditor(
 						.graphicsLayer {
 							clip = false
 						}
+						.drawBehind { drawEditorCanvas(state, style, decorateLine, enabled, dragAndDrop) }
 				) {
-					if (state.isEmpty() && style.placeholderText.isNotEmpty()) {
-						DrawPlaceholderText(state, style)
-					}
-
-					try {
-						DrawEditorText(state, style, decorateLine)
-					} catch (e: IllegalArgumentException) {
-						// Handle resize exception gracefully
-					}
-
-					DrawSelection(state, style.selectionColorFor(state.hasFocus))
-
-					// Like native editors, an editor without focus shows no touch handles.
-					if (state.hasFocus) DrawSelectionHandles(state, style.effectiveHandleColor, handles)
-
-					// A read-only editor holds focus without taking input, and still shows its caret.
-					if (enabled && state.hasFocus) {
-						DrawCursor(state, style.cursorColor, style.cursorWidth)
-					}
-
-					DrawDropCaret(dragAndDrop, state, style.cursorColor, style.cursorWidth)
+					TouchHandlePopups(state, handles, style.effectiveHandleColor, touchToolbar)
 				}
 			}
 		}
 	}
+}
+
+private fun DrawScope.drawEditorCanvas(
+	state: TextEditorState,
+	style: TextEditorStyle,
+	decorateLine: LineDecorator?,
+	enabled: Boolean,
+	dragAndDrop: TextDragAndDrop,
+) {
+	if (state.isEmpty() && style.placeholderText.isNotEmpty()) {
+		DrawPlaceholderText(state, style)
+	}
+
+	try {
+		DrawEditorText(state, style, decorateLine)
+	} catch (e: IllegalArgumentException) {
+		// Handle resize exception gracefully
+	}
+
+	DrawSelection(state, style.selectionColorFor(state.hasFocus))
+	DrawHandwritingPreview(state, style.selectionColorFor(focused = true), style.textColor)
+
+	// A read-only editor holds focus without taking input, and still shows its caret.
+	if (enabled && state.hasFocus) {
+		DrawCursor(state, style.cursorColor, style.cursorWidth)
+	}
+
+	DrawDropCaret(dragAndDrop, state, style.cursorColor, style.cursorWidth)
 }
 
 /**

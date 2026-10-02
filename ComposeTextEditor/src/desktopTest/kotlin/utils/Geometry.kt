@@ -3,6 +3,7 @@ package utils
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextMeasurer
@@ -11,10 +12,12 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import com.darkrockstudios.texteditor.DrawSelection
-import com.darkrockstudios.texteditor.DrawSelectionHandles
+import com.darkrockstudios.texteditor.HandleLook
 import com.darkrockstudios.texteditor.TextEditorStyle
 import com.darkrockstudios.texteditor.cursor.DrawCursor
 import com.darkrockstudios.texteditor.effectiveHeight
+import com.darkrockstudios.texteditor.state.TextEditorState
+import com.darkrockstudios.texteditor.visibleHandles
 import kotlin.math.abs
 import kotlin.test.assertTrue
 import kotlin.test.fail
@@ -46,13 +49,18 @@ fun EditorUiTestScope.drawnCaret(width: Dp = TextEditorStyle().cursorWidth): Rec
 fun EditorUiTestScope.drawnSelection(): List<Rect> =
 	recordDrawing(state.viewportSize, test.density) { DrawSelection(state, Color.Blue) }.map { it.bounds.sorted() }
 
+/** Draws the touch handles up now in [look], in the canvas's coordinates, where their popups put them. */
+internal fun DrawScope.drawHandles(state: TextEditorState, color: Color, look: HandleLook) {
+	for (handle in state.visibleHandles()) look.draw(this, handle, color)
+}
+
 /**
- * What [DrawSelectionHandles] draws now in the editor's handle look and colour, start
- * handle first, or the caret's; a shadow, drawn in other colours, is left out.
+ * What [drawHandles] draws now in the editor's handle look and colour, start handle
+ * first, or the caret's; a shadow, drawn in other colours, is left out.
  */
 @OptIn(ExperimentalTestApi::class)
 fun EditorUiTestScope.drawnHandles(): List<DrawnShape> =
-	recordDrawing(state.viewportSize, test.density) { DrawSelectionHandles(state, Color.Red, handles) }
+	recordDrawing(state.viewportSize, test.density) { drawHandles(state, Color.Red, handles) }
 		.filter { it.color == Color.Red }
 
 /** The box of the editor's visual row [row] in the canvas: its layout's top and height, the viewport wide. */

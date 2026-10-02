@@ -78,6 +78,7 @@ data class RichTextStyles(
 ) {
 	fun getHeaderStyle(level: Int): SpanStyle
 	fun headingLook(level: Int): SpanStyle  // what a heading line bakes (line-blocks.md)
+	fun exportedHeadingLooks(retired: List<RichTextStyles> = emptyList()): List<Set<SpanStyle>>  // what HTML and markdown export leave out of a heading line
 	companion object { val DEFAULT: RichTextStyles; val DEFAULT_DARK: RichTextStyles }
 }
 ```
