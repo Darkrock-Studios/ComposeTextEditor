@@ -13,6 +13,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.darkrockstudios.texteditor.BasicTextEditor
@@ -38,6 +39,7 @@ import com.darkrockstudios.texteditor.spellcheck.diagnostics.DiagnosticStyle
 import com.darkrockstudios.texteditor.spellcheck.diagnostics.TextDiagnosticsState
 import com.darkrockstudios.texteditor.spellcheck.utils.debounceUntilQuiescent
 import com.darkrockstudios.texteditor.spellcheck.utils.debounceUntilQuiescentWithBatch
+import com.darkrockstudios.texteditor.spellcheck.utils.endWhenInsertedAt
 import com.darkrockstudios.texteditor.state.SpanClickType
 import com.darkrockstudios.texteditor.state.TextEditOperation
 import com.darkrockstudios.texteditor.state.TextEditorState
@@ -142,19 +144,17 @@ fun SpellCheckingTextEditor(
 	}
 
 	LaunchedEffect(state) {
-		state.textState.editOperations
-			.collect { operation ->
-				state.invalidateSpellCheckSpans(operation)
-			}
+		state.textState.editOperationBursts.collect(state::invalidateSpellCheckSpans)
 	}
 
 	LaunchedEffect(state) {
-		state.textState.editOperations.debounceUntilQuiescentWithBatch(500.milliseconds)
-			.collect { operations ->
-				val rangesToCheck = computeAffectedRanges(operations)
-				val computedAgainst = state.textState.textLines
-				rangesToCheck.forEach { range ->
-					state.runPartialSpellCheck(range, computedAgainst)
+		val text = state.textState
+		text.editOperations.debounceUntilQuiescentWithBatch(500.milliseconds) { BatchText(text.textLines, text.documentGeneration.value) }
+			.collect { (operations, batchText) ->
+				// A document replaced since has its own full check.
+				if (batchText.generation != text.documentGeneration.value) return@collect
+				computeAffectedRanges(operations).forEach { range ->
+					state.runPartialSpellCheck(range, batchText.lines)
 				}
 			}
 	}
@@ -357,6 +357,9 @@ fun SpellCheckingTextEditor(
 }
 
 /** Opens the menu with these items and trailing items, where the gesture asked for it. */
+/** The text a batch of edits left, and the document it is in. */
+private class BatchText(val lines: List<AnnotatedString>, val generation: Int)
+
 private typealias ShowMenu = (items: List<ContextMenuItem>, trailingItems: List<ContextMenuItem>) -> Unit
 
 private fun RichSpan.isFlag(): Boolean = style is SpellCheckStyle || style is DiagnosticStyle
@@ -381,22 +384,36 @@ private fun dpToPx(dp: Dp): Float {
  * edit addresses the text as it stood when it ran, so the ranges gathered before it are
  * moved by it before its own is merged in.
  *
- * A deletion is checked over the range it deleted, read in the text after it, since that
- * is what [SpellCheckState.invalidateSpellCheckSpans] strips the flags from.
+ * Each edit is checked over the text it wrote, or the point a deletion closed up, which
+ * is where [SpellCheckState.invalidateSpellCheckSpans] strips the flags.
  */
 internal fun computeAffectedRanges(operations: List<TextEditOperation>): List<TextEditorRange> {
+	// Each stored [lineShift] lines above where it stands: an edit on lines above every range
+	// (each of a replace-all's, which goes last to first) moves them all at once.
 	val ranges = mutableListOf<TextEditorRange>()
+	var lineShift = 0
+	var firstLine = Int.MAX_VALUE
 	for (op in operations) {
 		val change = op.textChange() ?: continue
-		for (i in ranges.indices) ranges[i] = change.move(ranges[i])
-		val checked = if (change.newEnd == change.start) TextEditorRange(change.start, change.end) else
-			TextEditorRange(change.start, change.newEnd)
+		val checked = TextEditorRange(change.start, change.newEnd)
+		if (change.end.line < firstLine) {
+			lineShift += change.newEnd.line - change.end.line
+			ranges.add(checked.shifted(-lineShift))
+			firstLine = checked.start.line
+			continue
+		}
+		for (i in ranges.indices) ranges[i] = change.move(ranges[i].shifted(lineShift))
+		lineShift = 0
 		val touching = ranges.filter { it.adjoins(checked) }
 		ranges.removeAll(touching)
 		ranges.add(touching.fold(checked) { acc, r -> acc.merge(r) })
+		firstLine = ranges.minOf { it.start.line }
 	}
-	return ranges
+	return ranges.map { it.shifted(lineShift) }
 }
+
+private fun TextEditorRange.shifted(lines: Int): TextEditorRange =
+	if (lines == 0) this else TextEditorRange(start.copy(line = start.line + lines), end.copy(line = end.line + lines))
 
 /** An edit as the text from [start] to [end] replaced by text ending at [newEnd]. */
 private class TextChange(val start: CharLineOffset, val end: CharLineOffset, val newEnd: CharLineOffset) {
@@ -418,13 +435,6 @@ private fun TextEditOperation.textChange(): TextChange? = when (this) {
 	is TextEditOperation.Delete -> TextChange(range.start, range.end, range.start)
 	is TextEditOperation.Replace -> TextChange(range.start, range.end, newText.text.endWhenInsertedAt(range.start))
 	else -> null
-}
-
-/** Where this text ends once inserted at [start], on the line its last line break leads to. */
-private fun String.endWhenInsertedAt(start: CharLineOffset): CharLineOffset {
-	val lastBreak = lastIndexOf('\n')
-	if (lastBreak < 0) return start.copy(char = start.char + length)
-	return CharLineOffset(start.line + count { it == '\n' }, length - lastBreak - 1)
 }
 
 /**

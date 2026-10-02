@@ -34,10 +34,11 @@ fun TextEditorState.getSpanStylesAtPosition(position: CharLineOffset): Set<SpanS
 
 /**
  * The character styles text inserted at [position] should adopt: those of the
- * character before it, or of the character it sits in front of. With neither (a
- * blank line below a blank line, as every new paragraph starts out), an editor with
- * the styles installed falls back to the body style rather than leaving the text
- * unstyled.
+ * character before it, or of the character it sits in front of. Where that carries no
+ * style or there is none (a blank line below a blank line, as every new paragraph
+ * starts out), an editor with the styles installed falls back to the body style rather
+ * than leaving the text unstyled, unless the document has text and none of it carries
+ * the body style ([fallbackBodyStyle]).
  * Across a line break, the text style a block bakes into its line (a heading's
  * size) comes from [position]'s own line, not from the line above. A link holds only
  * its own characters, as in word processors: text typed past its end (on its line or
@@ -54,11 +55,28 @@ internal fun TextEditorState.getSpanStylesForEditAt(position: CharLineOffset): S
 	val linkStyles = styles.filterTo(HashSet()) { isLinkStyle(it) }
 	if (linkStyles.isNotEmpty() && outsideLinkOf(preceding ?: position, position)) styles = styles - linkStyles
 	if (styles.isNotEmpty()) return styles
-	return setOfNotNull(bodyStyle)
+	return setOfNotNull(fallbackBodyStyle)
+}
+
+/**
+ * Takes [range] out of every link to another destination than [link]'s that covers
+ * some of it, leaving that link's parts before and after: a link placed over text
+ * another link covers would overlap it, and [linkAt] and the serializers would see
+ * either.
+ */
+internal fun TextEditorState.takeOutOfOtherLinks(range: TextEditorRange, link: LinkSpanStyle) {
+	val others = richSpanManager.getSpansInRange(range).filter {
+		it.style is LinkSpanStyle && it.style != link && it.range.start < range.end && range.start < it.range.end
+	}
+	others.forEach { other ->
+		removeRichSpan(other)
+		if (other.range.start < range.start) addRichSpan(other.range.start, range.start, other.style)
+		if (range.end < other.range.end) addRichSpan(range.end, other.range.end, other.style)
+	}
 }
 
 /** Whether [style] is the link style, or one a configuration before this one gave links. */
-private fun TextEditorState.isLinkStyle(style: SpanStyle): Boolean =
+internal fun TextEditorState.isLinkStyle(style: SpanStyle): Boolean =
 	style == richTextStyles.linkStyle || retiredRichTextStyles.any { it.linkStyle == style }
 
 /**

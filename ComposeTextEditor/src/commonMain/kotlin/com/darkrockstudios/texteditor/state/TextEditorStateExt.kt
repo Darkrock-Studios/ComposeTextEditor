@@ -35,13 +35,19 @@ fun TextEditorState.insertTypedString(string: String) {
  * Inserts an [AnnotatedString] as if typed, preserving its styling: replaces any
  * active selection, inserts at the cursor as one undo step, then tells the
  * [EditBehavior] chain where its text landed. A single word joins the typing
- * run around it; a phrase stays a step of its own.
+ * run around it; a phrase stays a step of its own. As for pasted text, a heading's or
+ * code block's look the text beside it lacks stays only on a line that block bakes, and
+ * a link's look only inside a link; a word whose look goes is a step of its own.
  */
 fun TextEditorState.insertTypedString(string: AnnotatedString) {
 	val text = string.normalizeLineEndings()
 	if (text.text == "\n") return insertTypedNewline()
-	typedInput { typedEdit(text, typing = text.text.isOneTypedWord()) { insertStringAtCursor(it) } }
+	typedInput { typedEdit(text, typing = text.text.isOneTypedWord()) { insertStyledAtCursor(it) } }
 }
+
+/** Inserts [text], from outside the document, at the caret ([landingOutsideText]). */
+internal fun TextEditorState.insertStyledAtCursor(text: AnnotatedString): TextEditorRange? =
+	landingOutsideText(text) { insertStringAtCursor(text) }
 
 /**
  * [insertTypedString] past the [EditBehavior] chain, with the typing decision

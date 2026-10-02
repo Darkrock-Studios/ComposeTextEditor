@@ -1,11 +1,16 @@
 package com.darkrockstudios.texteditor.clipboard
 
 import androidx.compose.ui.platform.Clipboard
+import com.darkrockstudios.texteditor.RichTextStyles
+import platform.UIKit.UIPasteboard
 
-/**
- * The markup the paste's [ClipboardHelper.getText] just read. An in-editor copy carries
- * its markup too, which is what keeps its blocks; the caller checks the markup re-parses
- * to the pasted text.
- */
-internal actual suspend fun readClipboardHtml(clipboard: Clipboard): String? =
-	ClipboardHelper.takeLastReadHtml()
+/** One read of the pasteboard: iOS tells the user each time an app reads another's. */
+internal actual suspend fun readClipboardPaste(
+	clipboard: Clipboard,
+	styles: RichTextStyles,
+	allowedLinkSchemes: Set<String>,
+): ClipboardPaste? {
+	val paste = UIPasteboard.generalPasteboard.readStyled(styles, allowedLinkSchemes)
+	val text = paste.text ?: return null
+	return ClipboardPaste(text, paste.html, paste.copyId, paste.document)
+}

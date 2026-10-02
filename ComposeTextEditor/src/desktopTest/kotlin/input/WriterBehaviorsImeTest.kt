@@ -5,6 +5,7 @@ package input
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.input.CommitTextCommand
+import androidx.compose.ui.text.input.DeleteSurroundingTextCommand
 import androidx.compose.ui.text.input.ImeOptions
 import androidx.compose.ui.text.input.SetComposingTextCommand
 import com.darkrockstudios.texteditor.behaviors.AutoLink
@@ -71,6 +72,75 @@ class WriterBehaviorsImeTest {
 		request.onEditCommand(listOf(SetComposingTextCommand("\"hi", 1), CommitTextCommand("\"hi\"", 1)))
 
 		assertEquals("\u201Chi\u201D", text())
+	}
+
+	@Test
+	fun `an edit block's later commands address the text the platform committed`() {
+		state.editBehaviors += SmartPunctuation()
+		request.editText { commitText("a", 1) }
+
+		request.editText {
+			commitText("--", 1)
+			assertEquals("a--", text(), "No behavior runs while the block is open")
+			deleteSurroundingTextInCodePoints(2, 0)
+		}
+
+		assertEquals("a", text())
+	}
+
+	@Test
+	fun `text landed in an edit block is offered once it ends, where it then stands`() {
+		state.editBehaviors += SmartPunctuation()
+		request.editText { commitText("a", 1) }
+
+		request.editText {
+			commitText("--", 1)
+			commitText(" ", 1)
+			commitText("\"", 1)
+		}
+
+		assertEquals("a\u2014 \u201C", text())
+		assertEquals(CharLineOffset(0, 4), state.cursorPosition)
+		state.undo()
+		assertEquals("a\u2014 \"", text())
+		state.undo()
+		assertEquals("a-- \"", text())
+	}
+
+	@Test
+	fun `a composition the block opened after the commit outlives the substitution`() {
+		state.editBehaviors += SmartPunctuation()
+		request.editText { commitText("a", 1) }
+
+		request.editText {
+			commitText("--", 1)
+			setComposingText("x", 1)
+		}
+		assertEquals("a\u2014x", text())
+		assertEquals(CharLineOffset(0, 2), state.composingRange?.start)
+
+		request.editText { setComposingText("xy", 1) }
+		request.editText { commitText("xy", 1) }
+		assertEquals("a\u2014xy", text())
+	}
+
+	@Test
+	fun `a command list's later commands address the text the browser committed`() {
+		state.editBehaviors += SmartPunctuation()
+		request.onEditCommand(listOf(CommitTextCommand("a", 1)))
+
+		request.onEditCommand(listOf(CommitTextCommand("--", 1), DeleteSurroundingTextCommand(2, 0)))
+
+		assertEquals("a", text())
+	}
+
+	@Test
+	fun `text landed in a command list is offered once it ends`() {
+		state.editBehaviors += SmartPunctuation()
+
+		request.onEditCommand(listOf(CommitTextCommand("a--", 1), CommitTextCommand(" ", 1)))
+
+		assertEquals("a\u2014 ", text())
 	}
 
 	@Test

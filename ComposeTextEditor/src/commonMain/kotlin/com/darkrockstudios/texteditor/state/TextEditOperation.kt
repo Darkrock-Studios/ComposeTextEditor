@@ -119,33 +119,29 @@ sealed class TextEditOperation {
 		/** Where [newText] ends once it replaces [range], worked out once for every span it moves. */
 		internal val newTextEnd: CharLineOffset = newText.endWhenInsertedAt(range.start)
 
+		/**
+		 * Positions from [range]'s end on follow [newText]'s end, by the lines it adds or
+		 * removes, as after an insert; one inside keeps its count of characters from the range's
+		 * start, up to [newText]'s end.
+		 */
 		override fun transformOffset(
 			offset: CharLineOffset,
 			state: TextEditorState
 		): CharLineOffset {
-			// If offset is on a different line, keep it unchanged
-			if (offset.line < range.start.line || offset.line > range.end.line) {
-				return offset
+			if (offset < range.start) return offset
+			if (offset >= range.end) {
+				if (offset.line > range.end.line) return offset.copy(line = offset.line + newTextEnd.line - range.end.line)
+				return CharLineOffset(newTextEnd.line, newTextEnd.char + offset.char - range.end.char)
 			}
-
-			// If on start line but before replacement
-			if (offset.line == range.start.line && offset.char < range.start.char) {
-				return offset
-			}
-
-			// If on end line but after replacement
-			if (offset.line == range.end.line && offset.char > range.end.char) {
-				val lengthDelta = newText.length - oldText.length
-				return offset.copy(char = offset.char + lengthDelta)
-			}
-
-			// If within the replacement range
-			if (offset.line == range.start.line) {
-				val relativePos = offset.char - range.start.char
-				return offset.copy(char = range.start.char + relativePos)
-			}
-
-			return offset
+			val old = oldText.text
+			var lineStart = 0
+			repeat(offset.line - range.start.line) { lineStart = old.indexOf('\n', lineStart) + 1 }
+			val fromStart = lineStart + offset.char - (if (offset.line == range.start.line) range.start.char else 0)
+			val kept = fromStart.coerceIn(0, newText.length)
+			val lastBreak = newText.text.lastIndexOf('\n', kept - 1)
+			if (lastBreak < 0) return range.start.copy(char = range.start.char + kept)
+			val breaks = (0 until kept).count { newText.text[it] == '\n' }
+			return CharLineOffset(range.start.line + breaks, kept - lastBreak - 1)
 		}
 	}
 

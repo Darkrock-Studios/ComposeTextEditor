@@ -52,6 +52,26 @@ class TextDropTest {
 	}
 
 	@Test
+	fun `a move dropped at its source's end keeps its own look`() = runTest {
+		val state = TextEditorState(
+			scope = this,
+			measurer = mockk(relaxed = true),
+			initialText = buildAnnotatedString {
+				pushStyle(config.boldStyle)
+				append("bold")
+				pop()
+				append("plain")
+			},
+		)
+		val source = range(at(0, 4), at(0, 9))
+
+		state.dropText(state.getTextInRange(source), html = null, at = at(0, 9), moveFrom = source)
+
+		assertEquals("boldplain", state.text)
+		assertTrue(state.textLines[0].spanStyles.none { it.item == config.boldStyle && it.end > 4 })
+	}
+
+	@Test
 	fun `a move backward across lines takes the text from its place`() = runTest {
 		val state = createState("alpha\nbeta gamma")
 		val source = range(at(1, 5), at(1, 10))

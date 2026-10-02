@@ -19,6 +19,7 @@ import com.darkrockstudios.texteditor.richstyle.RichSpan
 import com.darkrockstudios.texteditor.richstyle.RichSpanStyle
 import com.darkrockstudios.texteditor.richstyle.allowedOn
 import com.darkrockstudios.texteditor.richstyle.atListLevel
+import com.darkrockstudios.texteditor.richstyle.bakedLooks
 import com.darkrockstudios.texteditor.richstyle.demoteLineBlock
 import com.darkrockstudios.texteditor.richstyle.hasLineBlock
 import com.darkrockstudios.texteditor.richstyle.isHeading
@@ -38,8 +39,11 @@ import com.darkrockstudios.texteditor.richstyle.writeLineBlocks
 import com.darkrockstudios.texteditor.utils.appendAnnotatedStrings
 import com.darkrockstudios.texteditor.utils.buildAnnotatedStringWithSpans
 import com.darkrockstudios.texteditor.utils.mergeAnnotatedStrings
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.onSubscription
 
 class TextEditManager(private val state: TextEditorState) {
 	private val spanManager = SpanManager()
@@ -52,6 +56,45 @@ class TextEditManager(private val state: TextEditorState) {
 		extraBufferCapacity = Int.MAX_VALUE,
 	)
 	val editOperations: SharedFlow<TextEditOperation> = _editOperations
+
+	/** How many operations [editOperations] has emitted. */
+	private var announced = 0L
+
+	/** How many it has emitted or will once their transaction commits. */
+	private var applied = 0L
+
+	/** See [TextEditorState.editOperationBursts]. */
+	val editOperationBursts: Flow<List<TextEditOperation>> = flow {
+		var taken = 0L
+		val burst = ArrayList<TextEditOperation>()
+		_editOperations.onSubscription { taken = announced }.collect { operation ->
+			taken++
+			burst += operation
+			if (taken >= applied) {
+				val landed = burst.toList()
+				burst.clear()
+				emit(landed)
+			}
+		}
+	}
+
+	/**
+	 * Emits [operation] on [editOperations] once the transaction commits. Counted as it is
+	 * applied, so a collector run as the first of a transaction's operations is emitted
+	 * knows the rest are coming.
+	 */
+	private fun announce(operation: TextEditOperation) {
+		applied++
+		state.onCommit {
+			announced++
+			_editOperations.tryEmit(operation)
+		}
+	}
+
+	/** Forgets the operations a transaction that threw will never emit. */
+	internal fun dropUnannounced() {
+		applied = announced
+	}
 
 	/** Whether edits are being recorded as typing; null lets the history infer it. */
 	private var typingOverride: Boolean? = null
@@ -217,6 +260,7 @@ class TextEditManager(private val state: TextEditorState) {
 			state.cursor.updatePosition(operation.cursorAfter)
 			state.invalidateCopiedRichSpans()
 			state.richSpanManager.updateSpans(operation, metadata)
+			state.landedInputMoved(operation)
 			if (addToHistory && !isDecoration) {
 				history.recordEdit(
 					operation,
@@ -235,7 +279,7 @@ class TextEditManager(private val state: TextEditorState) {
 			// is still staged, and a subscriber that serializes on the announcement
 			// would write the document as it stood before the edit. Queued before the
 			// continuation's own operation, so the two are announced in order.
-			if (!isDecoration) state.onCommit { _editOperations.tryEmit(operation) }
+			if (!isDecoration) announce(operation)
 
 			if (addToHistory) continueLineBlocks(operation)
 		}
@@ -291,7 +335,10 @@ class TextEditManager(private val state: TextEditorState) {
 
 		val prefixEndIndex = operation.position.char.coerceIn(0, currentLine.length)
 		val prefix = currentLine.subSequence(0, prefixEndIndex)
-		val suffix = currentLine.subSequence(prefixEndIndex, currentLine.length)
+		val suffix = currentLine.subSequence(prefixEndIndex, currentLine.length).let {
+			// A break at the line's start takes its markers down with its text.
+			if (prefixEndIndex > 0) it.withoutLooksOf(lineIndex) else it
+		}
 		val lastInsertedLine = insertLines.last()
 
 		val replacement = ArrayList<AnnotatedString>(insertLines.size)
@@ -492,34 +539,77 @@ class TextEditManager(private val state: TextEditorState) {
 	/**
 	 * Bakes the styles an `inheritStyle` replace takes from the text it replaces
 	 * into its `newText`, so the operation that is applied, recorded, and announced
-	 * carries exactly the styling that lands in the document. Each character of the
-	 * replacement takes the styles of the replaced character at its position; the
-	 * characters past the replaced ones, and a replace of nothing, take the styles
-	 * an insert at the range's end would (the caret's typing style when the caret
-	 * is there). A style merely touching the range is not inherited, so a
-	 * composition after bold text with bold toggled off stays plain. Inherited
-	 * styles layer over the replacement's own.
+	 * carries exactly the styling that lands in the document. Within a line, the
+	 * characters the replacement shares with the replaced text at its start and at
+	 * its end keep their own styles (see [sharedEnds]); each character between takes
+	 * the styles of the replaced character at its position, and those past the
+	 * replaced ones the styles an insert where the replaced ones end would (the
+	 * caret's typing style when the caret is there). The changed characters take a
+	 * link's look only when they replace characters of one link alone, which they then
+	 * stay inside; across a link's edge the link leaves them out. A replace of nothing
+	 * takes the insert's styles. A style merely touching the range is not inherited, so
+	 * a composition after bold text with bold toggled off stays plain. Inherited styles
+	 * layer over the replacement's own. A replace across lines, or one that breaks its
+	 * line,
+	 * inherits by position alone, and none of the looks its lines' blocks bake (see
+	 * [bakedLooks]): the markers of each line the text lands on bake theirs.
 	 */
 	private fun resolveInheritedStyle(operation: TextEditOperation.Replace): TextEditOperation.Replace {
 		if (!operation.inheritStyle) return operation
 		val newText = operation.newText
 		val range = operation.range
-		val insertStyles = if (state.cursorPosition == range.end) state.cursor.styles else state.getSpanStylesForEditAt(range.end)
+		val withinLine = range.isSingleLine() && !newText.contains('\n')
+		val looks = if (withinLine) {
+			emptySet()
+		} else {
+			(range.start.line..range.end.line).flatMapTo(HashSet()) { state.bakedLooks(it) }
+		}
+		fun insertStylesAt(position: CharLineOffset) =
+			(if (state.cursorPosition == range.end && position == range.end) state.cursor.styles else state.getSpanStylesForEditAt(position))
+				.filterTo(LinkedHashSet()) { it !in looks }
 		if (range.start == range.end) {
-			return operation.copy(newText = newText.withInheritedStyles(insertStyles), inheritStyle = false)
+			return operation.copy(newText = newText.withInheritedStyles(insertStylesAt(range.end)), inheritStyle = false)
 		}
 		val replaced = state.getTextInRange(range)
-		val kept = minOf(replaced.length, newText.length)
+		val (prefix, suffix) = if (withinLine) sharedEnds(replaced.text, newText.text) else 0 to 0
+		val oldMiddle = replaced.length - prefix - suffix
+		val newMiddle = newText.length - prefix - suffix
+		val kept = prefix + minOf(oldMiddle, newMiddle)
+		val shift = newText.length - replaced.length
+		val middleStart = range.start.copy(char = range.start.char + prefix)
+		val middleEnd = if (withinLine) middleStart.copy(char = middleStart.char + oldMiddle) else range.end
+		val middleInLink by lazy { oldMiddle > 0 && linkHolds(TextEditorRange(middleStart, middleEnd)) }
+		// The changed characters keep a link's look only inside a link holding them all.
+		fun linkLookOff(style: SpanStyle) = withinLine && oldMiddle > 0 && state.isLinkStyle(style) && !middleInLink
 		val styled = buildAnnotatedString {
 			append(newText)
 			for (span in replaced.spanStyles) {
+				if (span.item in looks) continue
 				val start = span.start.coerceAtMost(kept)
-				val end = span.end.coerceAtMost(kept)
+				val end = (if (linkLookOff(span.item)) span.end.coerceAtMost(prefix) else span.end).coerceAtMost(kept)
 				if (start < end) addStyle(span.item, start, end)
+				val suffixStart = maxOf(span.start, replaced.length - suffix)
+				if (suffixStart < span.end) addStyle(span.item, suffixStart + shift, span.end + shift)
 			}
-			if (newText.length > kept) insertStyles.forEach { addStyle(it, kept, newText.length) }
+			if (newMiddle > oldMiddle) {
+				val extra = insertStylesAt(middleEnd)
+				extra.removeAll { linkLookOff(it) }
+				if (withinLine && middleInLink) {
+					extra += state.getSpanStylesAtPosition(middleEnd.copy(char = middleEnd.char - 1)).filter { state.isLinkStyle(it) }
+				}
+				extra.forEach { addStyle(it, kept, prefix + newMiddle) }
+			}
 		}
 		return operation.copy(newText = styled, inheritStyle = false)
+	}
+
+	/**
+	 * Whether one link holds all of [replaced], one line's characters: characters added
+	 * in their place stay inside the link (see [RichSpanManager]'s placing of a link a
+	 * replace changes).
+	 */
+	private fun linkHolds(replaced: TextEditorRange): Boolean = state.richSpanManager.getSpansInRange(replaced).any {
+		it.style is LinkSpanStyle && it.range.start <= replaced.start && replaced.end <= it.range.end
 	}
 
 	private fun handleMultiLineReplace(
@@ -537,10 +627,11 @@ class TextEditManager(private val state: TextEditorState) {
 		// Extract suffix from the last line
 		val suffix = if (range.end.line < state.textLines.size) {
 			val lastLine = state.textLines[range.end.line]
-			lastLine.subSequence(range.end.char.coerceIn(0, lastLine.length), lastLine.length)
-				.ifEmpty {
-					AnnotatedString("")
-				}
+			val tail = lastLine.subSequence(range.end.char.coerceIn(0, lastLine.length), lastLine.length)
+				.ifEmpty { AnnotatedString("") }
+			// The tail's markers follow it onto a line of the replace's own (see RichSpanManager.replaced).
+			val tailKeepsMarkers = if (newText.contains('\n')) !range.isSingleLine() else range.start.char == 0
+			if (tailKeepsMarkers) tail else tail.withoutLooksOf(range.end.line)
 		} else {
 			AnnotatedString("")
 		}
@@ -568,6 +659,18 @@ class TextEditManager(private val state: TextEditorState) {
 		}
 	}
 
+	/**
+	 * This text, taken from [line], without the looks [line]'s blocks bake into it (see
+	 * [bakedLooks]). Text an edit moves onto a line its own markers do not reach leaves
+	 * them behind: the markers of the line it lands on decide its look, and publishing
+	 * bakes theirs over all of it.
+	 */
+	private fun AnnotatedString.withoutLooksOf(line: Int): AnnotatedString {
+		val looks = state.bakedLooks(line)
+		if (looks.isEmpty() || spanStyles.none { it.item in looks }) return this
+		return withSpanStyles(spanStyles.filter { it.item !in looks })
+	}
+
 	private fun handleMultiLineDelete(operation: TextEditOperation.Delete) {
 		// Add bounds checking for line indices
 		val lines = state.textLines
@@ -588,9 +691,10 @@ class TextEditManager(private val state: TextEditorState) {
 
 		// Process the first and last lines
 		val firstLine = lines[startLine]
-		val lastLine = lines[endLine]
-
 		val startChar = operation.range.start.char.coerceIn(0, firstLine.text.length)
+		// With nothing kept ahead of it, the tail's markers survive the join.
+		val lastLine = if (startChar > 0) lines[endLine].withoutLooksOf(endLine) else lines[endLine]
+
 		val endChar = operation.range.end.char.coerceIn(0, lastLine.text.length)
 
 		if (startLine == 0 && endLine == lines.lastIndex &&
@@ -1009,7 +1113,7 @@ class TextEditManager(private val state: TextEditorState) {
 		fun record(span: RichSpan, isAdd: Boolean) {
 			val operation = TextEditOperation.RichSpan(span.range, span.style, isAdd, cursorBefore = caret, cursorAfter = caret)
 			history.recordEdit(operation, OperationMetadata(), typing = false)
-			state.onCommit { _editOperations.tryEmit(operation) }
+			announce(operation)
 		}
 		(before - after).forEach { record(it, isAdd = false) }
 		recordLineBlocksSince(blocksBefore, caret)

@@ -231,8 +231,8 @@ class InlineStyleSyntaxTest {
 	@Test
 	fun `an indented paragraph continuation keeps its highlight`() {
 		val parsed = "intro\n    ==x== more".toAnnotatedStringFromMarkdown(config)
-		assertEquals("intro\n    x more", parsed.text)
-		assertEquals(listOf(Triple(10, 11, config.highlightStyle)), parsed.styledRanges())
+		assertEquals("intro\nx more", parsed.text)
+		assertEquals(listOf(Triple(6, 7, config.highlightStyle)), parsed.styledRanges())
 	}
 
 	@Test

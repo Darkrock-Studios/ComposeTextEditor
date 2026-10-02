@@ -6,6 +6,7 @@ import androidx.compose.ui.platform.PlatformTextInputSession
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.TextFieldValue
 import com.darkrockstudios.texteditor.state.TextEditorState
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -27,7 +28,7 @@ import kotlin.js.ExperimentalWasmJsInterop
  *
  * The options come from the editor's `keyboardSettings`. Compose maps them to the
  * textarea's input mode and Enter key hint but ignores the capitalisation; see
- * [BackingField.adopt].
+ * [presetAutocapitalize].
  */
 actual class TextEditorTextInputService actual constructor(
 	private val state: TextEditorState
@@ -40,7 +41,18 @@ actual class TextEditorTextInputService actual constructor(
 			session,
 			{ state.skikoImeOptions() },
 			imeResync = SkikoImeResync.Rewrite(field::rewrite),
-			onRun = { options -> launch { field.adopt(options.capitalization) } },
+			onRun = { options ->
+				val autocapitalize = options.capitalization.autocapitalize
+				// onRun runs just before the run starts Compose's input method, which
+				// creates and focuses the field before it suspends.
+				val preset = presetAutocapitalize(BACKING_FIELD, autocapitalize)
+				launch(start = CoroutineStart.UNDISPATCHED) {
+					suspendCancellableCoroutine<Nothing> { continuation ->
+						continuation.invokeOnCancellation { stopPresetting(preset) }
+					}
+				}
+				launch { field.adopt(autocapitalize, preset) }
+			},
 		)
 	}
 }
@@ -66,7 +78,7 @@ private class BackingField {
 	 * held it, would fall to the page body, where no key reaches Compose again until a
 	 * click; so it goes back to the canvas.
 	 */
-	suspend fun adopt(capitalization: KeyboardCapitalization) {
+	suspend fun adopt(autocapitalize: String, preset: JsAny) {
 		// The previous run's field is gone; look for this run's.
 		root = null
 		var found = findRoot()
@@ -77,14 +89,17 @@ private class BackingField {
 			attempts++
 		}
 		val root = found ?: return
-		// Compose sets `autocapitalize="off"` on every backing field whatever the options
-		// say, so the field asks for the editor's capitalisation as soon as it is found. It
-		// is already focused by then; whether a phone keyboard that is already up honours
-		// the change is for the phone pass (roadmap 4.11).
-		setAutocapitalize(root, BACKING_FIELD, capitalization.autocapitalize)
+		// Set already unless the preset missed the field's first focus, in a shadow root
+		// it was not listening on.
+		stopPresetting(preset)
+		setAutocapitalize(root, BACKING_FIELD, autocapitalize)
 		val handle = refocusFromCanvas(root, BACKING_FIELD)
+		val chords = if (platformKeyBindings() === MacKeyBindings) keepCocoaChordsOut(root, BACKING_FIELD) else null
 		suspendCancellableCoroutine<Nothing> { continuation ->
-			continuation.invokeOnCancellation { stopRefocusing(handle) }
+			continuation.invokeOnCancellation {
+				stopRefocusing(handle)
+				chords?.let(::stopKeepingCocoaChordsOut)
+			}
 		}
 	}
 
@@ -187,6 +202,35 @@ private fun stopRefocusing(handle: JsAny): Unit = js(
 }"""
 )
 
+/**
+ * Prevents the default of a Ctrl chord in [root]'s backing field on macOS, where the
+ * field is a Cocoa text view with the Emacs-style bindings (Ctrl+H deletes backward,
+ * Ctrl+T transposes). Compose forwards the chord to the editor, whose bindings answer it,
+ * and turns some of the field's own edits into edits too: a `deleteContentBackward` after
+ * any key but Backspace becomes a second backspace, so Ctrl+H deleted twice in Chrome.
+ * Ctrl types nothing on a Mac, so the field's action is never wanted. A chord inside a
+ * composition is the input method's (Ctrl+J, K and L convert Japanese), and Cmd and
+ * Option chords are left alone: Cmd+C, X and V raise the clipboard events.
+ */
+private fun keepCocoaChordsOut(root: JsAny, selector: String): JsAny? = js(
+	"""{
+	const field = root.querySelector(selector);
+	if (!field) return null;
+	const handle = { field };
+	handle.onKeyDown = (event) => {
+		if (!event.ctrlKey || event.metaKey || event.altKey) return;
+		if (event.isComposing || event.keyCode === 229) return;
+		event.preventDefault();
+	};
+	field.addEventListener('keydown', handle.onKeyDown);
+	return handle;
+}"""
+)
+
+private fun stopKeepingCocoaChordsOut(handle: JsAny): Unit = js(
+	"{ handle.field.removeEventListener('keydown', handle.onKeyDown); }"
+)
+
 /** The `autocapitalize` value for a capitalisation; the browser's default, sentences, when unspecified. */
 private val KeyboardCapitalization.autocapitalize: String
 	get() = when (this) {
@@ -195,6 +239,45 @@ private val KeyboardCapitalization.autocapitalize: String
 		KeyboardCapitalization.Words -> "words"
 		else -> "sentences"
 	}
+
+/**
+ * Compose creates every backing field with `autocapitalize="off"`, whatever the options
+ * say, and focuses it at once, and a phone keyboard reads the attribute as it rises. A
+ * `focusin` is dispatched inside that `focus()` call, before the browser updates its
+ * keyboard, so the first backing field focused after this is given [value] there.
+ *
+ * A focus move inside a shadow tree is reported only inside it, so the listener sits on
+ * the viewport's shadow root, which exists before its field does: the innermost one on
+ * the active element's path holding a canvas (the press that focused the editor focused
+ * its canvas), else every open root in the document.
+ */
+private fun presetAutocapitalize(selector: String, value: String): JsAny = js(
+	"""{
+	const handle = { targets: [] };
+	let element = document.activeElement;
+	while (element && element.shadowRoot) {
+		if (element.shadowRoot.querySelector('canvas')) handle.targets = [element.shadowRoot];
+		element = element.shadowRoot.activeElement;
+	}
+	if (handle.targets.length === 0) {
+		for (const host of document.querySelectorAll('*')) {
+			if (host.shadowRoot) handle.targets.push(host.shadowRoot);
+		}
+	}
+	handle.onFocusIn = (event) => {
+		const target = event.composedPath()[0];
+		if (!(target instanceof Element) || !target.matches(selector)) return;
+		target.setAttribute('autocapitalize', value);
+		for (const each of handle.targets) each.removeEventListener('focusin', handle.onFocusIn, true);
+	};
+	for (const each of handle.targets) each.addEventListener('focusin', handle.onFocusIn, true);
+	return handle;
+}"""
+)
+
+private fun stopPresetting(handle: JsAny): Unit = js(
+	"{ for (const each of handle.targets) each.removeEventListener('focusin', handle.onFocusIn, true); }"
+)
 
 private fun setAutocapitalize(root: JsAny, selector: String, value: String): Unit = js(
 	"""{

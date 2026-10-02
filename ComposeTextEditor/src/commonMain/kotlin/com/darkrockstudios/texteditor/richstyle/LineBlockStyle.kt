@@ -143,7 +143,7 @@ internal val TextEditorState.allBlockRegistry: List<LineBlockStyle>
 
 /**
  * The block styles that exist per configuration. Heading blocks bake the
- * configured heading [androidx.compose.ui.text.SpanStyle] into the line text,
+ * configured heading look ([RichTextStyles.headingLook]) into the line text,
  * so their [LineBlockStyle] instances are scoped to the configuration; the
  * fixed blocks are shared so span-style identity stays global.
  */
@@ -152,7 +152,7 @@ private class LineBlockRegistry(styles: RichTextStyles) {
 		LineBlockStyle(
 			spanStyle = HeaderSpanStyle.of(level),
 			paragraphStyle = HEADER_PARAGRAPH_STYLE,
-			textStyle = styles.getHeaderStyle(level),
+			textStyle = styles.headingLook(level),
 		)
 	}
 	val prefixBlocks: List<LineBlockStyle> =
@@ -171,9 +171,35 @@ private class LineBlockRegistry(styles: RichTextStyles) {
 	/** Every block's paragraph style. A heading's is the default `ParagraphStyle()`. */
 	private val paragraphStyles: Set<ParagraphStyle> = allBlocks.mapTo(HashSet()) { it.paragraphStyle }
 
-	/** See [blockParagraphsRepair]. */
-	fun withBlockParagraphs(text: AnnotatedString, spans: List<RichSpan>): AnnotatedString? {
+	/**
+	 * The styles a span may carry inline: a block's text style equal to one cannot be
+	 * told from the user's own, so it is neither baked again nor left behind (see
+	 * [bakedLooks]). A heading's look never is ([RichTextStyles.headingLook]); a code
+	 * fence's monospace can be.
+	 */
+	private val inlineStyles: Set<SpanStyle> = styles.inlineStyles
+
+	private val body = styles.defaultTextStyle
+
+	/** The text styles [blocks] bake into their line that no inline style shares. */
+	fun bakedLooks(blocks: List<LineBlockStyle>): List<SpanStyle> =
+		blocks.mapNotNull { it.textStyle }.filter { it !in inlineStyles }.distinct()
+
+	/** Every look [bakedLooks] can answer. */
+	val everyBakedLook: Set<SpanStyle> by lazy { bakedLooks(allBlocks).toSet() }
+
+	/** See [blockStylesRepair]. */
+	fun withBlockStyles(text: AnnotatedString, spans: List<RichSpan>): AnnotatedString? {
 		val blocks = blocksOf(spans)
+		val paragraphs = blockParagraphs(text, blocks)
+		val looks = if (text.isEmpty()) emptyList() else bakedLooks(blocks)
+		val spanStyles = looks.fold(text.spanStyles) { runs, look -> bakedOver(runs, look, text.length, body) ?: runs }
+		if (paragraphs == null && spanStyles === text.spanStyles) return null
+		return AnnotatedString(text.text, spanStyles, paragraphs ?: text.paragraphStyles)
+	}
+
+	/** [text]'s paragraph styles as [blocks] want them, or null when it has them already. */
+	private fun blockParagraphs(text: AnnotatedString, blocks: List<LineBlockStyle>): List<AnnotatedString.Range<ParagraphStyle>>? {
 		val existing = text.paragraphStyles
 		val own = existing.count { it.item in paragraphStyles }
 		val right = own == blocks.size && existing.all { run ->
@@ -181,10 +207,33 @@ private class LineBlockRegistry(styles: RichTextStyles) {
 				existing.count { it.item == run.item } == blocks.count { it.paragraphStyle == run.item })
 		}
 		if (right) return null
-		val wanted = blocks.asReversed().map { AnnotatedString.Range(it.paragraphStyle, 0, text.length) } +
+		return blocks.asReversed().map { AnnotatedString.Range(it.paragraphStyle, 0, text.length) } +
 			existing.filter { it.item !in paragraphStyles }
-		return AnnotatedString(text.text, text.spanStyles, wanted)
 	}
+}
+
+/**
+ * [runs] with one run of [look] over the whole line of [length] and no run of the [body]
+ * style after it, or null when they are so already. A span later in the list wins where
+ * two overlap: the heading's size must beat the body's, which a body line joined on
+ * brings after it, and a size the user set inside the heading must still beat the
+ * heading's. So the first run of [look] grows over the whole line where it is, the body
+ * runs after it move before it, and the other runs of [look] go. A line with no run of
+ * [look] takes it last, as [rebuildWithBlock] bakes it.
+ */
+private fun bakedOver(
+	runs: List<AnnotatedString.Range<SpanStyle>>,
+	look: SpanStyle,
+	length: Int,
+	body: SpanStyle,
+): List<AnnotatedString.Range<SpanStyle>>? {
+	val first = runs.indexOfFirst { it.item == look }
+	val whole = AnnotatedString.Range(look, 0, length)
+	if (first < 0) return runs + whole
+	val after = runs.subList(first + 1, runs.size)
+	if (runs[first] == whole && after.none { it.item == look || it.item == body }) return null
+	return runs.subList(0, first) + after.filter { it.item == body } + whole +
+		after.filter { it.item != body && it.item != look }
 }
 
 private const val REGISTRY_CACHE_LIMIT = 8
@@ -288,15 +337,18 @@ internal fun rebuildWithoutBlock(existing: AnnotatedString, block: LineBlockStyl
 	}
 
 /**
- * Rebuilds a line's paragraph styles under [styles]: given a line's text and the spans
+ * Rebuilds a line's block styles under [styles]: given a line's text and the spans
  * starting on it, returns the text with exactly the paragraph styles its blocks want,
- * each over the whole line, or null when it has them already. Stacked blocks nest as
- * [applyDocumentBlocks] leaves them, the first in [allBlockStyles] order innermost.
- * Any run of a block's paragraph style that no marker asks for goes, a host's own
- * `ParagraphStyle()` included, since it is a heading's; any other passes through.
+ * each over the whole line, and each of its blocks' text styles (a heading's look, a
+ * fence's monospace) over the whole line, or null when it has them already. Stacked
+ * blocks nest as [applyDocumentBlocks] leaves them, the first in [allBlockStyles] order
+ * innermost. Any run of a block's paragraph style that no marker asks for goes, a host's
+ * own `ParagraphStyle()` included, since it is a heading's; any other passes through. A
+ * text style no marker asks for stays: a span equal to a heading's look is the user's
+ * own on a line that is no heading, so the edit that moves text off a block strips it.
  */
-internal fun blockParagraphsRepair(styles: RichTextStyles): (AnnotatedString, List<RichSpan>) -> AnnotatedString? =
-	registryFor(styles)::withBlockParagraphs
+internal fun blockStylesRepair(styles: RichTextStyles): (AnnotatedString, List<RichSpan>) -> AnnotatedString? =
+	registryFor(styles)::withBlockStyles
 
 /**
  * What putting one line block on a line comes to: the blocks already there that
@@ -426,6 +478,19 @@ internal fun TextEditorState.planDemoteLineBlock(line: Int, block: LineBlockStyl
 
 /** Returns the [LineBlockStyle] currently attached to [line], or null if none. */
 internal fun TextEditorState.detectLineBlock(line: Int): LineBlockStyle? = lineBlocks(line).firstOrNull()
+
+/**
+ * The text styles [line]'s blocks bake into it (a heading's look, a fence's monospace)
+ * that no inline style shares. Text an edit moves off the line leaves them behind.
+ */
+internal fun TextEditorState.bakedLooks(line: Int): Set<SpanStyle> {
+	val registry = registryFor(richTextStyles)
+	return registry.bakedLooks(registry.blocksOf(richSpanManager.getRichSpansStartingOn(line))).toSet()
+}
+
+/** Every look [bakedLooks] can answer for a line under this state's styles. */
+internal val TextEditorState.everyBakedLook: Set<SpanStyle>
+	get() = registryFor(richTextStyles).everyBakedLook
 
 /** The line blocks currently attached to [line], in [allBlockRegistry] order. */
 internal fun TextEditorState.lineBlocks(line: Int): List<LineBlockStyle> =

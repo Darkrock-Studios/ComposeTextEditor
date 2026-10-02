@@ -7,6 +7,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.darkrockstudios.texteditor.CharLineOffset
+import com.darkrockstudios.texteditor.SelectionHandleShape
 import com.darkrockstudios.texteditor.richstyle.ParagraphFormatSpanStyle
 import com.darkrockstudios.texteditor.richstyle.SpellCheckStyle
 import com.darkrockstudios.texteditor.state.setParagraphFormat
@@ -25,8 +26,14 @@ import kotlin.test.Test
 class GoldenScreenshotTest {
 
 	/** Composes [text], runs [setup] on the UI thread, and compares the editor with golden [name]. */
-	private fun golden(name: String, text: String, width: Dp = 240.dp, setup: EditorUiTestScope.() -> Unit) =
-		editorUiTest(initialText = AnnotatedString(text), width = width, height = 120.dp) {
+	private fun golden(
+		name: String,
+		text: String,
+		width: Dp = 240.dp,
+		handleShape: SelectionHandleShape = SelectionHandleShape.Platform,
+		setup: EditorUiTestScope.() -> Unit,
+	) =
+		editorUiTest(initialText = AnnotatedString(text), width = width, height = 120.dp, handleShape = handleShape) {
 			test.mainClock.autoAdvance = false
 			test.runOnIdle { setup() }
 			// The blink runs on the stopped test clock: show the caret for the capture.
@@ -77,4 +84,37 @@ class GoldenScreenshotTest {
 			state.setParagraphFormat(2..2, ParagraphFormatSpanStyle(spaceBefore = 6.dp, firstLineIndent = 24.sp))
 			caretAt(0, 0)
 		}
+
+	private fun EditorUiTestScope.touchSelection(start: CharLineOffset, end: CharLineOffset) {
+		state.selector.updateSelection(start, end)
+		state.selector.markTouchSelection()
+	}
+
+	@Test
+	fun `teardrop selection handles`() = golden(
+		"handles-teardrop",
+		"first line\nhello world again\nthird line\nfourth",
+		handleShape = SelectionHandleShape.Teardrop,
+	) {
+		touchSelection(CharLineOffset(1, 6), CharLineOffset(1, 11))
+	}
+
+	@Test
+	fun `teardrop caret handle`() = golden(
+		"handles-teardrop-caret",
+		"first line\nhello world again\nthird line\nfourth",
+		handleShape = SelectionHandleShape.Teardrop,
+	) {
+		caretAt(1, 8)
+		state.selector.showCaretHandle()
+	}
+
+	@Test
+	fun `bar selection handles`() = golden(
+		"handles-bar",
+		"first line\nhello world again\nthird line\nfourth",
+		handleShape = SelectionHandleShape.Bar,
+	) {
+		touchSelection(CharLineOffset(1, 6), CharLineOffset(1, 11))
+	}
 }

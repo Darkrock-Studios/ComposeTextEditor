@@ -10,7 +10,8 @@ import com.darkrockstudios.texteditor.input.EditorCommand.Action
 import com.darkrockstudios.texteditor.input.EditorCommand.Motion
 import com.darkrockstudios.texteditor.input.MacKeyBindings
 import com.darkrockstudios.texteditor.input.UNICODE_KEY_CODE_BASE
-import com.darkrockstudios.texteditor.input.hostKeyCodeMayMissLayout
+import com.darkrockstudios.texteditor.input.KeyCodeSource
+import com.darkrockstudios.texteditor.input.hostKeyCodeSource
 import com.darkrockstudios.texteditor.input.layoutKey
 import org.junit.Assume.assumeTrue
 import utils.editorUiTest
@@ -30,6 +31,7 @@ import java.awt.event.KeyEvent.VK_N
 import java.awt.event.KeyEvent.VK_OPEN_BRACKET
 import java.awt.event.KeyEvent.VK_PERIOD
 import java.awt.event.KeyEvent.VK_Q
+import java.awt.event.KeyEvent.VK_S
 import java.awt.event.KeyEvent.VK_SEMICOLON
 import java.awt.event.KeyEvent.VK_SLASH
 import java.awt.event.KeyEvent.VK_U
@@ -84,10 +86,12 @@ class LayoutKeyTest {
 
 	private fun unicode(char: Char): Int = UNICODE_KEY_CODE_BASE + char.code
 
-	private val KeyEvent.onLinux: Key get() = layoutKey(keyCodeMayMissLayout = true)
+	private val KeyEvent.onLinux: Key get() = layoutKey(KeyCodeSource.FirstLayout)
+	private val KeyEvent.onMac: Key get() = layoutKey(KeyCodeSource.CommandlessLayout)
 
-	/** The bindings read the host's path, which follows the layout on Linux only. */
-	private fun onLinuxHost() = assumeTrue(hostKeyCodeMayMissLayout)
+	/** The bindings read the host's path. */
+	private fun onLinuxHost() = assumeTrue(hostKeyCodeSource == KeyCodeSource.FirstLayout)
+	private fun onMacHost() = assumeTrue(hostKeyCodeSource == KeyCodeSource.CommandlessLayout)
 
 	@Test
 	fun `a letter is the one the active layout types`() {
@@ -126,8 +130,50 @@ class LayoutKeyTest {
 	}
 
 	@Test
-	fun `windows and macos keep the reported key until checked`() {
-		assertEquals(Key.X, press(VK_X, extended = VK_Y).layoutKey(keyCodeMayMissLayout = false))
+	fun `windows keeps the reported key`() {
+		assertEquals(Key.X, press(VK_X, extended = VK_Y).layoutKey(KeyCodeSource.ActiveLayout))
+	}
+
+	/*
+	 * macOS: "Dvorak - QWERTY ⌘" types Dvorak and switches to QWERTY while Cmd is held.
+	 * AWT's key code is the Dvorak letter with Cmd held too; the extended key code is what
+	 * the Cmd chord types, as logged on a real keyboard: the key labelled X reports Q and
+	 * extended X, and B reports X and extended B. With Ctrl the extended key code is 0
+	 * and the key code the Dvorak letter. The / key, Dvorak's z, reports Z by the same rule.
+	 */
+
+	@Test
+	fun `on macos a cmd chord is the letter cmd types`() {
+		assertEquals(Key.X, press(VK_Q, extended = VK_X, meta = true).onMac)
+		assertEquals(Key.B, press(VK_X, extended = VK_B, meta = true).onMac)
+	}
+
+	/** So the key labelled Z is the one undo, not the slash key as well. */
+	@Test
+	fun `on macos punctuation cmd types on a letter key is that key`() {
+		assertEquals(Key(VK_SLASH), press(VK_Z, extended = VK_SLASH, meta = true).onMac)
+		assertEquals(Key(VK_SEMICOLON), press(VK_S, extended = VK_SEMICOLON, meta = true).onMac)
+	}
+
+	@Test
+	fun `on macos another script's letter keeps the reported key`() {
+		assertEquals(Key.Z, press(VK_Z, extended = unicode('я'), meta = true).onMac)
+		assertEquals(Key.B, press(VK_B, extended = unicode('ิ'), meta = true).onMac)
+	}
+
+	@Test
+	fun `on macos a chord without an extended key code keeps its key`() {
+		assertEquals(Key.F, press(VK_F, extended = 0, ctrl = true).onMac)
+	}
+
+	@Test
+	fun `dvorak qwerty cmd chords act on the qwerty letters`() {
+		onMacHost()
+		assertEquals(Action.Cut, MacKeyBindings.commandFor(press(VK_Q, extended = VK_X, meta = true)))
+		assertEquals(Action.ToggleBold, MacKeyBindings.commandFor(press(VK_X, extended = VK_B, meta = true)))
+		assertNull(MacKeyBindings.commandFor(press(VK_Z, extended = VK_SLASH, meta = true)))
+		// Ctrl+F on the key that types Dvorak's f.
+		assertEquals(Motion.Right, MacKeyBindings.commandFor(press(VK_F, extended = 0, ctrl = true)))
 	}
 
 	@Test

@@ -24,12 +24,14 @@ class MarkdownParsingTest {
 		val annotatedString = markdownText.toAnnotatedStringFromMarkdown()
 		//println(annotatedString.text)
 
+		// A paragraph's lines drop their leading spaces, as CommonMark reads them; the line of
+		// only spaces between two paragraphs is kept.
 		val expectedString = """Hello World
-   This is bold and italic text.
+This is bold and italic text.
 
 Here's a link in the text.
    
-   Here's some inline code and a code block:
+Here's some inline code and a code block:
 fun hello() {
     println("Hello!")
 }

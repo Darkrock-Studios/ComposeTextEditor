@@ -179,6 +179,23 @@ class ParagraphSeparationTest {
 	}
 
 	@Test
+	fun `a line of only a tab or four spaces after a block keeps its separator out`() = runTest {
+		val e = extension()
+		e.assertRoundTrip(listOf("a", "\t"), "a\n\n\t")
+		e.assertRoundTrip(listOf("a", "    ", "b"), "a\n\n    \nb")
+		e.assertRoundTrip(listOf("a", "\t", "b"), "- a\n\n\t\nb", BulletListSpanStyle.of(0) to listOf(0))
+		e.assertRoundTrip(listOf("a", "\t"), "> a\n\n\t", BlockquoteSpanStyle to listOf(0))
+		e.assertRoundTrip(listOf("a", "\t"), "```\na\n```\n\n\t", CodeFenceSpanStyle to listOf(0))
+	}
+
+	@Test
+	fun `indented code after a line of only spaces still follows a blank line`() = runTest {
+		val e = extension()
+		e.importMarkdown("para\n\n    \n    code")
+		assertEquals(listOf("para", "    ", "    code"), e.lines())
+	}
+
+	@Test
 	fun `importMarkdown reads a file by the separator it is given`() = runTest {
 		val e = extension()
 		e.importMarkdown("one\n\ntwo", ParagraphSeparator.NEWLINE)

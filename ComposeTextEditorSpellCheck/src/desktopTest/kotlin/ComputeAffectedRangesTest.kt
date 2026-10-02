@@ -59,7 +59,7 @@ class ComputeAffectedRangesTest {
 		val typed = insertAt(at(0, 10), "abc")
 		val deleted = delete(range(at(0, 0), at(0, 4)))
 		assertEquals(
-			setOf(range(at(0, 6), at(0, 9)), range(at(0, 0), at(0, 4))),
+			setOf(range(at(0, 6), at(0, 9)), range(at(0, 0), at(0, 0))),
 			computeAffectedRanges(listOf(typed, deleted)).toSet(),
 		)
 	}
@@ -69,21 +69,21 @@ class ComputeAffectedRangesTest {
 		val typed = insertAt(at(3, 2), "abc")
 		val joined = delete(range(at(1, 4), at(2, 0)))
 		assertEquals(
-			setOf(range(at(2, 2), at(2, 5)), range(at(1, 4), at(2, 0))),
+			setOf(range(at(2, 2), at(2, 5)), range(at(1, 4), at(1, 4))),
 			computeAffectedRanges(listOf(typed, joined)).toSet(),
 		)
 	}
 
 	@Test
-	fun `a deletion is checked over the range it deleted`() {
-		assertEquals(listOf(range(at(2, 4), at(3, 2))), computeAffectedRanges(listOf(delete(range(at(2, 4), at(3, 2))))))
+	fun `a deletion is checked at the point it closed up`() {
+		assertEquals(listOf(range(at(2, 4), at(2, 4))), computeAffectedRanges(listOf(delete(range(at(2, 4), at(3, 2))))))
 	}
 
 	@Test
 	fun `an earlier edit the deletion took joins the deletion's range`() {
 		val typed = insertAt(at(0, 5), "abc")
 		val deleted = delete(range(at(0, 3), at(0, 10)))
-		assertEquals(listOf(range(at(0, 3), at(0, 10))), computeAffectedRanges(listOf(typed, deleted)))
+		assertEquals(listOf(range(at(0, 3), at(0, 3))), computeAffectedRanges(listOf(typed, deleted)))
 	}
 
 	@Test
@@ -99,6 +99,28 @@ class ComputeAffectedRangesTest {
 		assertEquals(
 			setOf(range(at(3, 1), at(3, 2)), range(at(1, 2), at(1, 3))),
 			computeAffectedRanges(listOf(typed, replaced)).toSet(),
+		)
+	}
+
+	@Test
+	fun `a replace-all's edits, last to first, each reach where the earlier ones moved them`() {
+		fun replace(line: Int) = TextEditOperation.Replace(
+			range = TextEditorRange(CharLineOffset(line, 1), CharLineOffset(line, 2)),
+			newText = AnnotatedString("x\ny"),
+			oldText = AnnotatedString("a"),
+			cursorBefore = at,
+			cursorAfter = at,
+		)
+		val typed = CharLineOffset(7, 0)
+		val operations = listOf(replace(4), replace(2), replace(0), TextEditOperation.Insert(typed, AnnotatedString("z"), typed, typed))
+
+		assertEquals(
+			listOf(
+				TextEditorRange(CharLineOffset(0, 1), CharLineOffset(1, 1)),
+				TextEditorRange(CharLineOffset(3, 1), CharLineOffset(4, 1)),
+				TextEditorRange(CharLineOffset(6, 1), CharLineOffset(7, 2)),
+			),
+			computeAffectedRanges(operations).sortedBy { it.start },
 		)
 	}
 }

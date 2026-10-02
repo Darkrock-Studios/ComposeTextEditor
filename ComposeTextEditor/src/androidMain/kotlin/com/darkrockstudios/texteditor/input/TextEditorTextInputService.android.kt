@@ -345,7 +345,9 @@ internal class TextEditorInputConnection(
 		// open must not hold back notifications for the next connection.
 		state.platformExtensions.releaseBatchEdits(batchDepth)
 		batchDepth = 0
-		state.clearComposingRange()
+		// The keyboard's finish never arrives for a connection it has left, so a word it was
+		// composing is finished here, which offers it to the behaviors.
+		state.finishComposition()
 		state.platformExtensions.connectionClosed(this)
 	}
 

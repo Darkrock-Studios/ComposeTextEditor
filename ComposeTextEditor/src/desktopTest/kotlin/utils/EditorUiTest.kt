@@ -39,8 +39,12 @@ import com.darkrockstudios.texteditor.BasicTextEditor
 import com.darkrockstudios.texteditor.LocalNativeTextToolbar
 import com.darkrockstudios.texteditor.LocalPointerMenuIsTextToolbar
 import com.darkrockstudios.texteditor.RichSpanClickEventListener
-import com.darkrockstudios.texteditor.handleCenter as drawnHandleCenter
+import com.darkrockstudios.texteditor.HandleLook
+import com.darkrockstudios.texteditor.HandleRole
 import com.darkrockstudios.texteditor.RichSpanClickListener
+import com.darkrockstudios.texteditor.SelectionHandleShape
+import com.darkrockstudios.texteditor.look
+import com.darkrockstudios.texteditor.touchHandles
 import com.darkrockstudios.texteditor.rememberTextEditorStyle
 import com.darkrockstudios.texteditor.clipboard.LocalPrimarySelection
 import com.darkrockstudios.texteditor.clipboard.PrimarySelection
@@ -92,6 +96,7 @@ internal fun editorUiTest(
 	contentDescription: String? = null,
 	readOnly: Boolean = false,
 	primarySelection: PrimarySelection? = null,
+	handleShape: SelectionHandleShape = SelectionHandleShape.Platform,
 	block: EditorUiTestScope.() -> Unit,
 ) = runSkikoComposeUiTest(density = Density(density)) {
 	val clipboard = InMemoryClipboard()
@@ -117,7 +122,7 @@ internal fun editorUiTest(
 					contentPadding = contentPadding,
 					enabled = enabled,
 					autoFocus = autoFocus,
-					style = rememberTextEditorStyle(textStyle = editorTextStyle),
+					style = rememberTextEditorStyle(textStyle = editorTextStyle, handleShape = handleShape),
 					contextMenuState = contextMenuState,
 					contextMenuStrings = contextMenuStrings,
 					onRichSpanClick = onRichSpanClick,
@@ -141,7 +146,7 @@ internal fun editorUiTest(
 	if (enabled && autoFocus) {
 		waitUntil(timeoutMillis = 5_000) { state.hasFocus }
 	}
-	EditorUiTestScope(this, state, clipboard, trailing).block()
+	EditorUiTestScope(this, state, clipboard, trailing, handleShape.look).block()
 }
 
 class FocusFlag {
@@ -149,11 +154,13 @@ class FocusFlag {
 }
 
 @OptIn(ExperimentalTestApi::class)
-class EditorUiTestScope(
+class EditorUiTestScope internal constructor(
 	val test: SkikoComposeUiTest,
 	override val state: TextEditorState,
 	val clipboard: InMemoryClipboard,
 	private val trailing: FocusFlag = FocusFlag(),
+	/** The look of the editor's touch handles, from its style. */
+	internal val handles: HandleLook = SelectionHandleShape.Platform.look,
 ) : FuzzUiDriver {
 	/** Whether the focusable placed after the editor by `trailingFocusable` holds focus. */
 	val trailingFocused: Boolean get() = trailing.focused
@@ -289,16 +296,16 @@ class EditorUiTestScope(
 		test.waitForIdle()
 	}
 
-	/** Where the selection's start or end touch handle is drawn. */
-	fun handleCenter(isStart: Boolean): Offset {
-		val selection = checkNotNull(state.selector.selection) { "no selection, so no handles" }
-		val metrics = state.getPositionForOffset(if (isStart) selection.start else selection.end)
-		return canvasToNode(with(test.density) { drawnHandleCenter(metrics) })
-	}
+	/** Where a finger grabs the selection's start or end touch handle: the middle of its knob. */
+	fun handleCenter(isStart: Boolean): Offset = grabPoint(if (isStart) HandleRole.Start else HandleRole.End)
 
-	/** Where the touch caret handle is drawn, under the caret. */
-	fun caretHandleCenter(): Offset =
-		canvasToNode(with(test.density) { drawnHandleCenter(state.getPositionForOffset(state.cursorPosition)) })
+	/** Where a finger grabs the touch caret handle. */
+	fun caretHandleCenter(): Offset = grabPoint(HandleRole.Caret)
+
+	private fun grabPoint(role: HandleRole): Offset {
+		val handle = checkNotNull(state.touchHandles().firstOrNull { it.role == role }) { "no $role handle up" }
+		return canvasToNode(handles.grabPoint(test.density, handle))
+	}
 
 	/** Drags the touch caret handle so the caret travels to [toChar], then lifts. */
 	fun dragCaretHandle(toChar: Int, steps: Int = 8) {
@@ -458,6 +465,12 @@ class EditorUiTestScope(
 
 	override fun waitForIdle() = test.waitForIdle()
 }
+
+/** The size the character at flat index [charIndex] renders at: its spans merged in order. */
+internal fun TextEditorState.fontSizeAt(charIndex: Int): androidx.compose.ui.unit.TextUnit = getAllText().spanStyles
+	.filter { charIndex >= it.start && charIndex < it.end }
+	.fold(SpanStyle()) { acc, range -> acc.merge(range.item) }
+	.fontSize
 
 /** Gap between the presses of a multi-click: well inside any double-click timeout. */
 private const val MULTI_CLICK_INTERVAL_MS = 50L

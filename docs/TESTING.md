@@ -124,7 +124,7 @@ reports the tests up to date from the previous run.
 `utils/Geometry.kt` (editor desktop tests) runs the editor's draw functions
 against its current state and records the shapes (`utils/DrawRecorder.kt`)
 instead of reading pixels: `drawnCaret()`, `drawnSelection()` and
-`drawnHandleCenters()` inside `editorUiTest`, in the text canvas's coordinates.
+`drawnHandles()` inside `editorUiTest`, in the text canvas's coordinates.
 `independentLayout(text)` lays the same text out with Compose alone at the
 editor's width, the reference to compare against, and `rowBox(row)` is the
 editor's own row. `assertRectEquals` and `assertOffsetEquals` compare within
@@ -137,7 +137,8 @@ holds both before and after the fix, so a different breakage still fails.
 
 `golden/GoldenScreenshotTest.kt` captures a few small scenes in the test font
 (the caret, a selection across wrapped and empty lines, spell check squiggles,
-nested list markers, the composing underline, paragraph spacing) and compares
+nested list markers, the composing underline, paragraph spacing, each touch
+handle shape) and compares
 each with a PNG in `ComposeTextEditor/src/desktopTest/goldens/`. A pixel counts
 as changed when a channel differs by more than 32 of 255, and a scene fails when
 more than 0.1% of its pixels change. A failure writes `<name>-actual.png`,

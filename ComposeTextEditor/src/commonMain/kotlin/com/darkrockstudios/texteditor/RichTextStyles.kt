@@ -1,6 +1,8 @@
 package com.darkrockstudios.texteditor
 
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Fill
+import androidx.compose.ui.text.PlatformSpanStyle
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
@@ -22,7 +24,8 @@ import androidx.compose.ui.unit.sp
  * ([retiredRichTextStyles][com.darkrockstudios.texteditor.state.TextEditorState.retiredRichTextStyles]).
  *
  * [defaultTextStyle] is the body text: the importers lay it over every
- * paragraph, and text typed where the document carries no style takes it.
+ * paragraph, and text typed where the document carries no style takes it, unless
+ * the document has text and none of it carries this style (a host's own content).
  */
 data class RichTextStyles(
 	val defaultTextStyle: SpanStyle = SpanStyle(fontSize = 16.sp),
@@ -61,6 +64,31 @@ data class RichTextStyles(
 			highlightStyle = DEFAULT.highlightStyle.copy(background = Color(0xFF7A6A00)),
 		)
 	}
+
+	/** The styles text carries inline: all but the headings'. */
+	internal val inlineStyles: Set<SpanStyle> = setOf(
+		defaultTextStyle, boldStyle, italicStyle, codeStyle, linkStyle, strikethroughStyle,
+		underlineStyle, highlightStyle, blockquoteStyle,
+	)
+
+	private val headingLooks: List<SpanStyle> = (1..6).map { level ->
+		val style = getHeaderStyle(level)
+		if (style !in inlineStyles) return@map style
+		// Where the inline style it equals sets a platform style, a default draw style marks it;
+		// one that sets both stays unmarked, as ambiguous as before.
+		listOfNotNull(
+			style.copy(platformStyle = PlatformSpanStyle.Default).takeIf { style.platformStyle == null },
+			style.copy(drawStyle = Fill).takeIf { style.drawStyle == null },
+		).firstOrNull { it !in inlineStyles } ?: style
+	}
+
+	/**
+	 * The look a heading of [level] (1 to 6, clamped) bakes into its line: its style
+	 * ([getHeaderStyle]), told apart from an inline style it equals (`header4Style =
+	 * boldStyle`) by the default platform style, which draws nothing, so the heading's look
+	 * and the user's bold inside it stay two runs and leave the line separately.
+	 */
+	fun headingLook(level: Int): SpanStyle = headingLooks[level.coerceIn(1, 6) - 1]
 
 	/** The style of a heading of [level] (1 to 6, clamped). */
 	fun getHeaderStyle(level: Int): SpanStyle {

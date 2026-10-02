@@ -88,6 +88,10 @@ internal fun HtmlTag.spanStyle(config: RichTextStyles): SpanStyle = when (this) 
 	HtmlTag.MARK -> config.highlightStyle
 }
 
+/** What a run of this tag bakes: a heading's look ([RichTextStyles.headingLook]), else [spanStyle]. */
+internal fun HtmlTag.look(config: RichTextStyles): SpanStyle =
+	if (isHeading) config.headingLook(HEADINGS.indexOf(this) + 1) else spanStyle(config)
+
 private val HEADINGS = listOf(HtmlTag.H1, HtmlTag.H2, HtmlTag.H3, HtmlTag.H4, HtmlTag.H5, HtmlTag.H6)
 
 /**
@@ -117,7 +121,7 @@ internal class RetiredStyles(
 	retired: List<RichTextStyles>,
 ) {
 	private val newestFirst = retired.asReversed()
-	private val current = if (retired.isEmpty()) emptySet() else CONFIGURED_STYLES.mapTo(HashSet()) { it(styles) }
+	private val current = if (retired.isEmpty()) emptySet() else styles.inlineStyles
 	private val retiredLinkStyles = retired.mapTo(HashSet()) { it.linkStyle }
 	private val read = HashMap<SpanStyle, SpanStyle>()
 
@@ -133,19 +137,17 @@ internal class RetiredStyles(
 	 * that is also an inline style of its own configuration or of [styles].
 	 */
 	private val headingOnlyLooks: Set<SpanStyle> by lazy {
-		val currentInline = CONFIGURED_STYLES.map { it(styles) }
 		(newestFirst + styles).flatMapTo(HashSet()) { config ->
-			val inline = CONFIGURED_STYLES.map { it(config) }
-			HEADINGS.map { it.spanStyle(config) }.filter { it !in inline && it !in currentInline }
+			HEADINGS.map { it.look(config) }.filter { it !in config.inlineStyles && it !in styles.inlineStyles }
 		}
 	}
 
 	/**
 	 * The spans a [heading] line leaves out, since the heading element stands for them:
 	 * the look it is baked with, and any other heading look that is not also an inline
-	 * style, as text joined from another heading keeps that heading's look.
+	 * style, as text pasted from another heading keeps that heading's look.
 	 */
-	fun headingLooks(heading: HtmlTag): Set<SpanStyle> = headingOnlyLooks + heading.spanStyle(styles)
+	fun headingLooks(heading: HtmlTag): Set<SpanStyle> = headingOnlyLooks + heading.look(styles)
 
 	fun asCurrent(style: SpanStyle): SpanStyle {
 		if (newestFirst.isEmpty() || style in current) return style

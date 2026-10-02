@@ -100,7 +100,9 @@ class EditorActionContext(
     val state: TextEditorState,
     val clipboard: Clipboard,
     val scope: CoroutineScope,
-)
+) {
+    fun <T> asTarget(block: () -> T): T
+}
 
 class EditorActionSpec(
     val action: EditorCommand.Action,
@@ -118,6 +120,12 @@ class EditorActionRegistry {
 `isEnabled` exists for the context menu, which builds its items from a list of
 action ids and asks each spec whether it currently applies, instead of knowing
 what any of them mean.
+
+An action run through an editor's menu or semantics runs as that editor, which
+need not hold focus when several share the state: its line limit and default
+action answer. An action that edits after suspending (fetching text, then
+inserting it) wraps the edit in `asTarget`, which answers with the editor the
+action was run on, wherever focus has moved since.
 
 The core registers its built-ins (`BuiltinEditorActions`) when the state is
 constructed. Nothing else in the library registers an action: the block

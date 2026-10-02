@@ -4,6 +4,7 @@ import androidx.compose.ui.graphics.Color
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.richstyle.RichSpan
+import com.darkrockstudios.texteditor.spellcheck.utils.endWhenInsertedAt
 import com.darkrockstudios.texteditor.spellcheck.utils.replaceFlagged
 import com.darkrockstudios.texteditor.state.TextEditOperation
 import com.darkrockstudios.texteditor.state.TextEditorState
@@ -118,9 +119,9 @@ class TextDiagnosticsState(
 	 */
 	fun invalidate(operation: TextEditOperation) {
 		val touched = when (operation) {
-			is TextEditOperation.Insert -> TextEditorRange(operation.position, operation.position.after(operation.text.text))
+			is TextEditOperation.Insert -> TextEditorRange(operation.position, operation.text.text.endWhenInsertedAt(operation.position))
 			is TextEditOperation.Delete -> TextEditorRange(operation.range.start, operation.range.start)
-			is TextEditOperation.Replace -> TextEditorRange(operation.range.start, operation.range.start.after(operation.newText.text))
+			is TextEditOperation.Replace -> TextEditorRange(operation.range.start, operation.newText.text.endWhenInsertedAt(operation.range.start))
 			else -> return
 		}
 		val doomed = diagnosticSpans().filter { it.range.start <= touched.end && touched.start <= it.range.end }
@@ -183,9 +184,4 @@ class TextDiagnosticsState(
 	private companion object {
 		const val DEFAULT_CACHE_LINES = 4096
 	}
-}
-
-private fun CharLineOffset.after(text: String): CharLineOffset {
-	val breaks = text.count { it == '\n' }
-	return if (breaks == 0) copy(char = char + text.length) else CharLineOffset(line + breaks, text.length - text.lastIndexOf('\n') - 1)
 }

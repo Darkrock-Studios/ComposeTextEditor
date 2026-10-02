@@ -33,12 +33,6 @@ actual object ClipboardHelper {
 	private var eventPaste: Flavors? = null
 	private var eventPastedAt = Double.NEGATIVE_INFINITY
 
-	/**
-	 * The markup the last [getText] read, handed once to [readClipboardHtml] so a
-	 * paste reads the clipboard once: some browsers ask the user on every read.
-	 */
-	private var lastReadHtml: String? = null
-
 	internal fun eventWrote(text: String) {
 		eventWroteAt = now()
 		eventWroteText = text
@@ -53,15 +47,14 @@ actual object ClipboardHelper {
 		clipboard: Clipboard,
 		styles: RichTextStyles,
 		allowedLinkSchemes: Set<String>,
-	): AnnotatedString? {
-		val flavors = takeEventPaste() ?: readFlavors()
-		lastReadHtml = flavors?.html
-		flavors ?: return null
-		flavors.html
-			?.toAnnotatedStringFromHtml(styles, allowedLinkSchemes)
-			?.takeIf { it.text.isNotEmpty() }
-			?.let { return it }
-		return flavors.text?.let(::AnnotatedString)
+	): AnnotatedString? = readPaste(styles, allowedLinkSchemes)?.text
+
+	/** The text a paste takes, preferring the markup, with the markup as parsed for it. */
+	internal suspend fun readPaste(styles: RichTextStyles, allowedLinkSchemes: Set<String>): ClipboardPaste? {
+		val flavors = takeEventPaste() ?: readFlavors() ?: return null
+		val document = flavors.html?.let { parsePasteHtml(it, styles, allowedLinkSchemes) }
+		val text = document?.text ?: flavors.text?.let(::AnnotatedString) ?: return null
+		return ClipboardPaste(text, flavors.html, copyId = null, document)
 	}
 
 	actual suspend fun getPlainText(clipboard: Clipboard): String? {
@@ -94,8 +87,6 @@ actual object ClipboardHelper {
 	actual suspend fun readCopyId(clipboard: Clipboard): Long? = null
 
 	actual val supportsCopyProvenance: Boolean get() = false
-
-	internal fun takeLastReadHtml(): String? = lastReadHtml.also { lastReadHtml = null }
 
 	private class Flavors(val html: String?, val text: String?)
 

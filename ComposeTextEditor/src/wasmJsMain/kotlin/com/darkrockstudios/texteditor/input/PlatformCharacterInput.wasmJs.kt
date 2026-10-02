@@ -6,7 +6,6 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.isCtrlPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.type
-import androidx.compose.ui.input.key.utf16CodePoint
 
 /**
  * The browser delivers a keystroke to exactly one element, so the two typing paths
@@ -34,11 +33,11 @@ import androidx.compose.ui.input.key.utf16CodePoint
 internal actual fun KeyEvent.isCharacterInputCandidate(): Boolean {
 	if (type != KeyEventType.KeyDown) return false
 	if (isCtrlPressed) return false
-	return utf16CodePoint != key.keyCode.toInt() || key.isPlainCharacterKey()
+	return !codePointIsKeyCode || key.isPlainCharacterKey()
 }
 
 /** The keys whose code is also a character they can type: A to Z, 0 to 9, and space. */
 private fun Key.isPlainCharacterKey(): Boolean {
 	val code = keyCode.toInt()
-	return code in 65..90 || code in 48..57 || code == 32
+	return isLetterKey() || code in 48..57 || code == 32
 }

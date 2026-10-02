@@ -3,6 +3,7 @@ package com.darkrockstudios.texteditor.clipboard
 import androidx.compose.ui.platform.Clipboard
 import androidx.compose.ui.text.AnnotatedString
 import com.darkrockstudios.texteditor.html.DEFAULT_LINK_SCHEMES
+import com.darkrockstudios.texteditor.html.HtmlDocument
 import com.darkrockstudios.texteditor.html.toAnnotatedStringFromHtml
 import com.darkrockstudios.texteditor.html.toHtml
 import com.darkrockstudios.texteditor.RichTextStyles
@@ -20,25 +21,11 @@ import platform.UIKit.UIPasteboard
  * back to the plain text; several items paste one per line, as on Android.
  */
 actual object ClipboardHelper {
-	/**
-	 * The markup the last [getText] read, handed once to [readClipboardHtml], so a paste
-	 * reads the pasteboard once: iOS tells the user each time an app reads another's.
-	 */
-	private var lastReadHtml: String? = null
-
-	/** The copy id the last [getText] read, handed once to [readCopyId] for the same reason. */
-	private var lastReadCopyId: Long? = null
-
 	actual suspend fun getText(
 		clipboard: Clipboard,
 		styles: RichTextStyles,
 		allowedLinkSchemes: Set<String>,
-	): AnnotatedString? {
-		val paste = UIPasteboard.generalPasteboard.readStyled(styles, allowedLinkSchemes)
-		lastReadHtml = paste.html
-		lastReadCopyId = paste.copyId
-		return paste.text
-	}
+	): AnnotatedString? = UIPasteboard.generalPasteboard.readStyled(styles, allowedLinkSchemes).text
 
 	actual suspend fun getPlainText(clipboard: Clipboard): String? =
 		UIPasteboard.generalPasteboard.readPlain()
@@ -54,11 +41,9 @@ actual object ClipboardHelper {
 		return true
 	}
 
-	actual suspend fun readCopyId(clipboard: Clipboard): Long? = lastReadCopyId.also { lastReadCopyId = null }
+	actual suspend fun readCopyId(clipboard: Clipboard): Long? = UIPasteboard.generalPasteboard.readCopyId()
 
 	actual val supportsCopyProvenance: Boolean get() = true
-
-	internal fun takeLastReadHtml(): String? = lastReadHtml.also { lastReadHtml = null }
 }
 
 private const val HTML_TYPE = "public.html"
@@ -66,10 +51,15 @@ private const val TEXT_TYPE = "public.utf8-plain-text"
 private const val COPY_ID_TYPE = "com.darkrockstudios.texteditor.copy-id"
 
 /**
- * What a paste read: the text to insert, the markup it came from, and the copy id this
- * editor attached to its own copy.
+ * What a paste read: the text to insert, the markup it came from, the copy id this
+ * editor attached to its own copy, and the markup as parsed where the text came from it.
  */
-internal class PasteboardPaste(val text: AnnotatedString?, val html: String?, val copyId: Long?)
+internal class PasteboardPaste(
+	val text: AnnotatedString?,
+	val html: String?,
+	val copyId: Long?,
+	val document: HtmlDocument? = null,
+)
 
 /**
  * The markup parsed with [styles] where there is some, else the plain text. This
@@ -83,12 +73,21 @@ internal fun UIPasteboard.readStyled(
 ): PasteboardPaste {
 	if (numberOfItems > 1) return PasteboardPaste(allTexts()?.let(::AnnotatedString), html = null, copyId = null)
 	val plain = string?.takeIf { it.isNotEmpty() }
-	val copyId = utf8(COPY_ID_TYPE)?.toLongOrNull()
+	val copyId = readCopyId()
 	val html = utf8(HTML_TYPE)
-	val styled = html?.toAnnotatedStringFromHtml(styles, allowedLinkSchemes)
-		?.takeIf { it.text.isNotEmpty() && (copyId == null || it.text == plain) }
-	return PasteboardPaste(text = styled ?: plain?.let(::AnnotatedString), html = html, copyId = copyId)
+	val document = html?.let { parsePasteHtml(it, styles, allowedLinkSchemes) }
+		?.takeIf { copyId == null || it.text.text == plain }
+	// Markup the text did not come from describes other text, so its blocks cannot apply.
+	return PasteboardPaste(
+		text = document?.text ?: plain?.let(::AnnotatedString),
+		html = html?.takeIf { document != null },
+		copyId = copyId,
+		document = document,
+	)
 }
+
+/** The copy id this editor attached to the pasteboard's content, or null. */
+internal fun UIPasteboard.readCopyId(): Long? = utf8(COPY_ID_TYPE)?.toLongOrNull()
 
 /** The source's own plain text, or the text of its markup where it offered none. */
 internal fun UIPasteboard.readPlain(): String? {

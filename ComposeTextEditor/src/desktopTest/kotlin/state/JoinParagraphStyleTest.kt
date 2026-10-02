@@ -103,7 +103,7 @@ class JoinParagraphStyleTest {
 	}
 
 	@Test
-	fun `quoted lines pasted at a plain line's start are quoted over all of them`() = runTest {
+	fun `quoted lines pasted at a plain line's start leave the line they join plain`() = runTest {
 		val state = editor("> one\n> two\nplain")
 		val copyRange = TextEditorRange(CharLineOffset(0, 0), CharLineOffset(1, 3))
 		val copied = state.getTextInRange(copyRange)
@@ -114,7 +114,7 @@ class JoinParagraphStyleTest {
 		state.insertStringAtCursor(copied)
 		state.pasteRichSpans(CharLineOffset(2, 0), copied)
 
-		assertEquals("> one\n> two\n> one\n> twoplain", state.blockLines())
+		assertEquals("> one\n> two\n> one\ntwoplain", state.blockLines())
 		state.assertParagraphsMatchBlocks()
 	}
 }

@@ -238,7 +238,8 @@ current; the word count does the same.
 ### Observation and extensions
 
 The state exposes a small reactive surface: `editOperations` streams applied
-operations, `cursorDataFlow` snapshots caret position, styles, and selection
+operations (`editOperationBursts` in the lists a collector catches up on, so
+each can be read in the text it left), `cursorDataFlow` snapshots caret position, styles, and selection
 for toolbars (starting with the current one), `wordCount` counts words through
 the same ICU segmentation as word motion and spell check, recounting only the
 lines an edit replaced, and `snapshot()` hands any thread a coherent document
@@ -322,14 +323,15 @@ mice as `Touch`. Mouse-like input places the caret on press, extends with
 shift-click, and counts presses into double and triple clicks (word, then
 line) by the platform's double-tap timeout and touch slop; a plain press inside
 the selection is held instead, and moving past the slop drags the selection
-out through the platform's drag and drop (`dragdrop/`, desktop so far), which
+out through the platform's drag and drop (`dragdrop/`, desktop, Android and web so far), which
 also drops text in; a drag extends by
 whatever unit the press selected, and keeps scrolling while it is held above
 or below the viewport. Only the primary button places the caret or selects;
 the secondary button opens the context menu, keeping a selection it lands
 inside. Finger input places the caret on release and shows a caret handle
-under it, long-presses to select a word or open the context menu, and drags
-the caret and selection handles. A span click is reported on release, when the
+under it, long-presses to select a word or open the context menu (or, inside
+the selection while the platform toolbar is up, to drag it), and drags the
+caret and selection handles. A span click is reported on release, when the
 press and release land on the same span without a drag, so placing the caret
 or selecting never reads as a click; links open by the host's `onLinkClick` on
 Ctrl/Cmd+click in an editor and on a plain click in `RichTextView`, and only

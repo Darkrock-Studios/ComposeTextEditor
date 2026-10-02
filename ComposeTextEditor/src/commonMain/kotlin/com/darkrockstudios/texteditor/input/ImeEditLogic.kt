@@ -122,16 +122,8 @@ internal fun TextEditorState.imeSetComposingRegion(start: Int, end: Int) {
 	}
 }
 
-/**
- * `finishComposingText`: keep the text, drop the composing highlight. Finishing
- * a typed composition commits it, so the typed-text hook is told, as for
- * [imeCommitText]; some keyboards end every word this way.
- */
-internal fun TextEditorState.imeFinishComposing() {
-	val composing = composingRange?.takeIf { composingIsTyped && isWithinDocument(it) }
-	clearComposingRange()
-	if (composing != null) textInputLanded(getStringInRange(composing), composing)
-}
+/** `finishComposingText`: [TextEditorState.finishComposition]; some keyboards end every word this way. */
+internal fun TextEditorState.imeFinishComposing() = finishComposition()
 
 /**
  * `deleteSurroundingText`: delete [beforeLength] chars before the selection and
