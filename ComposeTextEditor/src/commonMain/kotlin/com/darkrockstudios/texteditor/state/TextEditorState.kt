@@ -49,6 +49,7 @@ import com.darkrockstudios.texteditor.input.TabSettings
 import com.darkrockstudios.texteditor.input.imeActionFor
 import com.darkrockstudios.texteditor.input.isWithinDocument
 import com.darkrockstudios.texteditor.RichTextStyles
+import com.darkrockstudios.texteditor.SemanticsLayout
 import com.darkrockstudios.texteditor.richstyle.BlockSpanStyle
 import com.darkrockstudios.texteditor.richstyle.anchorsToLine
 import com.darkrockstudios.texteditor.richstyle.HeaderSpanStyle
@@ -193,6 +194,8 @@ class TextEditorState private constructor(
 		}
 		boundMeasurer = null
 		canvasLayoutCoordinates = null
+		// It holds the departed composition's measurer and a whole-document layout.
+		cachedSemanticsLayout = null
 		// Its watch and timeout ran on the departed scope.
 		selector.hideCaretHandle()
 	}
@@ -714,6 +717,12 @@ class TextEditorState private constructor(
 	 */
 	var lastCursorMetrics: CursorMetrics? = null
 		internal set
+
+	private var cachedSemanticsLayout: SemanticsLayout? = null
+
+	/** The whole-document layout screen readers and iOS's input session read, measured on request. */
+	internal val semanticsLayout: SemanticsLayout
+		get() = cachedSemanticsLayout ?: SemanticsLayout(this).also { cachedSemanticsLayout = it }
 
 	/**
 	 * Layout coordinates of the editor's drawing canvas, captured via
@@ -1877,6 +1886,13 @@ class TextEditorState private constructor(
 
 	/** Whether the rows were laid out for the lines as they are, not left behind them by a skipped pass. */
 	internal val rowsFollowText: Boolean get() = draft == null && lastLayoutLines === textLines
+
+	/** The first row's top, as its `LineWrap` reads it, without building one; zero while the rows lag the text. */
+	internal fun firstRowTop(): Float {
+		val rows = (_lineOffsets as? RowList)?.takeIf { rowsFollowText && it.lineCount > 0 } ?: return 0f
+		val first = rows.layoutOf(0)
+		return (rows.lineTop(0) + first.spaceBefore + first.rowTops[0]).toFloat()
+	}
 
 	/**
 	 * Whether the last completed pass laid out the current lines at [width] against the

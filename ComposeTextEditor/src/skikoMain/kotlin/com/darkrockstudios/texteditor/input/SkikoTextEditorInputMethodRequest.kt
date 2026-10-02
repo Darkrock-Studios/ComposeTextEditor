@@ -165,8 +165,9 @@ internal sealed interface SkikoImeResync {
  * through [editText], iOS through [editText] as well, and web (still on the command
  * list API) through [onEditCommand]; both routes end in [ImeEditLogic].
  *
- * @param exposeTextLayout Serve [textLayoutResult] from a whole-document layout. Only
- *   iOS reads it, for the spacebar trackpad; elsewhere it would be a cost for nothing.
+ * @param exposeTextLayout Serve [textLayoutResult] from the whole-document semantics
+ *   layout. Only iOS reads it, for the spacebar trackpad and UIKit's vertical moves;
+ *   elsewhere it would be a cost for nothing.
  * @param echoesKeys The platform acts on a hardware key after the editor has, moving
  *   the caret for a caret key and typing a tab for Tab, and repeats a held one itself:
  *   UIKit does. Its edits while such a key is held go to [TextEditorState.heldKey]
@@ -175,7 +176,7 @@ internal sealed interface SkikoImeResync {
 internal class SkikoTextEditorInputMethodRequest(
 	private val editorState: TextEditorState,
 	override val imeOptions: ImeOptions,
-	exposeTextLayout: Boolean = false,
+	private val exposeTextLayout: Boolean = false,
 	private val echoesKeys: Boolean = false,
 ) : PlatformTextInputMethodRequest {
 
@@ -203,17 +204,16 @@ internal class SkikoTextEditorInputMethodRequest(
 		if (!action.startsLine) editorState.performImeAction(action)
 	}
 
-	private val documentLayout = if (exposeTextLayout) DocumentTextLayout(editorState) else null
-
 	/**
 	 * The editor draws its own lines, so there is no Compose layout to expose. A platform
-	 * that hit-tests the text itself asks for [exposeTextLayout] and gets a whole-document
-	 * layout built on demand ([DocumentTextLayout]); the others get null, the documented
-	 * "not laid out yet" answer every framework tolerates.
+	 * that hit-tests the text itself asks for [exposeTextLayout] and gets the state's
+	 * [com.darkrockstudios.texteditor.SemanticsLayout], the one screen readers read, whose
+	 * rows break and step as drawn; the others get null, the documented "not laid out
+	 * yet" answer every framework tolerates, as do all before the editor is laid out.
 	 */
 	override val textLayoutResult: () -> TextLayoutResult? = {
 		editorState.textRevision
-		documentLayout?.get()
+		if (exposeTextLayout && editorState.viewportSize.width > 1f) editorState.semanticsLayout.get() else null
 	}
 
 	/** Caret rectangle in root coordinates; positions candidate windows and the web backing input. */
@@ -232,11 +232,16 @@ internal class SkikoTextEditorInputMethodRequest(
 
 	override val textClippingRectInRoot: () -> Rect? = { editorBoundsInRoot() }
 
-	/** Where the document's first line starts, in root coordinates: the viewport origin less the scroll. */
+	/**
+	 * Where [textLayoutResult]'s origin sits, in root coordinates: the canvas origin less
+	 * the scroll, down to the first row's top, where that layout starts. Compose's
+	 * native text input places its caret and selection rectangles by it; the legacy
+	 * input the editor runs on reads it only to know the geometry changed.
+	 */
 	override val unclippedTextOffsetInRoot: () -> Offset? = {
 		attachedCoordinates()?.let { coords ->
 			val origin = coords.positionInRoot()
-			Offset(origin.x, origin.y - editorState.scrollState.value)
+			Offset(origin.x, origin.y - editorState.scrollState.value + editorState.firstRowTop())
 		}
 	}
 

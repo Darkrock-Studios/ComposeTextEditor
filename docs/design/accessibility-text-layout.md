@@ -208,14 +208,29 @@ behaviour stays.
 
 ### iOS: the session's layout becomes the semantics layout
 
-`SkikoTextEditorInputMethodRequest.textLayoutResult` serves `SemanticsDocument`'s
-layout instead of `DocumentTextLayout` (the `SemanticsDocument` is created once per
-editor and handed to the request; `DocumentTextLayout` goes away). Rows then match
+`SkikoTextEditorInputMethodRequest.textLayoutResult` serves the semantics layout
+instead of `DocumentTextLayout`, which goes away. The layout's cache moves out of
+`SemanticsDocument` into `SemanticsLayout`, one per `TextEditorState`
+(`state.semanticsLayout`), which every `SemanticsDocument` and the request read, since
+the request is built from the state alone and the layout depends on nothing else.
+Before the editor is laid out (a width of one pixel) the request answers null, as
+before; the semantics action still measures, since desktop's bridge needs an answer
+there. Rows then match
 the drawn ones in styled documents, and the span-pass reuse applies. The whole-document
 shape per text revision stays, since `NativeTextInputConnection` indexes one layout by
 absolute offsets and is internal. `unclippedTextOffsetInRoot` adds the first row's top
 (`lineOffsets.firstOrNull()?.offset?.y ?: 0f`) so the space above the first paragraph
 is counted; padding and scroll were already right.
+
+Found while doing it: the editor's session asks for no `PlatformImeOptions`, so CMP
+runs it on the legacy `ComposeTextInputConnection`, not `NativeTextInputConnection`.
+That one reads the layout only for the floating cursor (`getCursorRect`, then
+`getOffsetForPosition` relative to it) and UIKit's vertical moves (`getLineForOffset`),
+reads `unclippedTextOffsetInRoot` only to notice a geometry change, and its view
+answers empty caret and selection rectangles. So the row-matched layout reaches the
+floating cursor and vertical moves, and VoiceOver's caret outline stays as it was until
+the editor moves to native text input (`usingNativeTextInput(true)`), a change of the
+whole iOS input path that is not part of this item. The offset is right for that day.
 
 ### Desktop: no seam, 7.36 stays
 

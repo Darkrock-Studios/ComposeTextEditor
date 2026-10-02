@@ -4639,7 +4639,7 @@ Shaping is one line per keystroke. These still scale with document length:
   lines: 80 ms against 30 ms); batches double from one line to 256, so an
   early stop reads at most about twice the lines it reached and a whole scan
   opens a cursor per 256 lines (`SegmentationCostTest`).
-- [ ] **7.57** [Opus] [Lane M] What 7.36 could not match in the semantics text
+- [x] **7.57** [Opus] [Lane M] What 7.36 could not match in the semantics text
   layout: character bounds sit off by the content padding, the space above the
   first paragraph and the editor's scroll offset, since a `TextLayoutResult`
   cannot be offset and moving the semantics node to the content origin would move
@@ -4659,6 +4659,37 @@ Shaping is one line per keystroke. These still scale with document length:
   cache) plus the first row's top. Desktop's bridge never translates bounds and
   has no other seam, so 7.36 stays there (an upstream issue). Web reads nothing.
   Chunks: common provider and host test; Android bridge and device test; iOS.
+  Done: the editor and the read-only view publish `CharacterBounds`, each
+  character's row glyph box past the content padding and the space above the
+  first paragraph, less the scroll, in root coordinates, measuring nothing
+  (`CharacterBoundsTest`: padding, a heading, a rule, indents, a list, wrapped
+  rows, right to left, an emoji, scrolled, no reshaping). Per platform:
+  Android answers TalkBack's character-location extra from it through a
+  wrapper around Compose's delegate, which forwards everything else
+  (`EditorAccessibilityBridgeTest`). Checked on the API 36 emulator
+  (`EditorCharacterLocationsTest`, which the CI emulator job runs): the
+  platform's own request on a padded, scrolled editor gets the drawn glyphs,
+  where Compose alone answered 72 px left of them; the text, a selection, a
+  LINE move and `setText` still answer. Compose checks a request's start
+  against the content description when there is one, so an editor with one
+  (Hammer's) had every range past it refused; the bridge answers them. With
+  TalkBack on in the emulator, TalkBack itself asked for no character
+  locations (it asks only for magnification, braille or Select to Speak, which
+  the run did not drive). iOS: the input session serves the semantics layout
+  (rows as drawn, one cache per state, let go with the composition;
+  `DocumentTextLayout` is gone) placed at the first row's top
+  (`ImeTextLayoutE2eTest`), so the floating cursor and UIKit's vertical moves
+  follow a heading's or an indented paragraph's rows; unverified until the Mac
+  queue row passes. VoiceOver's caret outline is unchanged: the editor runs on
+  Compose's legacy iOS text input, whose view answers empty caret rectangles,
+  and only its native text input reads the layout for them (see the design). Desktop keeps 7.36's layout: its bridge translates nothing and
+  has no other seam (an issue for Compose Multiplatform). Web reads nothing.
+  Limits: a line out of view that the draw has not shaped at a new width yet
+  answers from its provisional rows (Android clips those boxes away); a LINE or
+  PAGE move after an edit still measures the whole document once, which
+  answering those moves from the rows in the bridge would end, worth doing only
+  if a TalkBack user reports line moves lagging in a long document; a block that
+  replaces its text answers the block's row for its characters.
 - [x] **7.58** [Opus] [Lane D] Tab at a list item's start where nesting is
   not allowed does nothing (`handleIndent` in `input/BuiltinEditorActions.kt`),
   because leading spaces in an item did not survive a markdown round trip.
@@ -4882,3 +4913,4 @@ records results and removes entries that passed.
 | 7.8, 7.48 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64` and `:ComposeTextEditor:iosSimulatorArm64Test` (commonMain changed how the lines, rows and spans are stored; no `iosMain` or `skikoMain` change). Then re-time the iOS simulator as 4.21 did (iPhone 17 Pro Max simulator, Debug framework, a 200,000-character document of 2,000 lines of 99 characters, temporary logging): the keyboard's `editText` block and the frames over 20 ms while typing twelve keys, then rotate the device and time the frame the rotation costs and how long the rows take to settle | Before (4.21, `f3b8d8f`): `editText` 9.4 ms median at 200k against 0.7 ms at 2k. A pass: `editText` within a few times the 2k figure, wherever the caret is (desktop went 837 µs to 174 µs, and 2,026 µs to 94 µs with a span on every line); a rotation that shapes only the visible lines at once and settles the rest in the background without the scroll jumping. Record the numbers here and in 7.8 and 7.48 || Partial, 2026-10-01 at `0063e6f6`: compiles, the tests pass, and `editText` is 1.1 ms median at the end of 200k and 1.3 ms at the start (recorded in 7.8). The rotation is left for a person: the simulator tools here cannot rotate the device |
 | 4.26 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64` and `:ComposeTextEditor:iosSimulatorArm64Test`. `skikoMain` changed: `SkikoTextEditorInputMethodRequest` runs each `editText` block and each `onEditCommand` list as one IME batch (`TextEditorState.imeBatch`), so the edit behaviors are offered what landed once the block ends. No `iosMain` change. Then in the iOS sample app with `SmartPunctuation` added to the editor's `editBehaviors`: type `a--`, `"hi"`, `it's` and `...` with the soft keyboard, with autocorrect on, and undo once after the dash | Compiles and the tests pass. The dash, the curly quotes, the apostrophe and the ellipsis appear as the character is typed, the keyboard's suggestions follow the substituted text (no stray characters, nothing doubled or lost when autocorrect rewrites the word before), and one undo gives `a--` back | Compile and tests passed 2026-10-01 at `e6001af2`. The typing check is for a person, with `SmartPunctuation` added to the sample |
 | 3.20 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64` and `:ComposeTextEditor:iosSimulatorArm64Test`. No `iosMain` or `skikoMain` change, but common code now draws the bars in a `Popup` each (`TouchHandlePopups.kt`), which on iOS takes the place of the canvas drawing. Then in the iOS sample app on the simulator: scroll so a line sits on the editor's top edge, double tap a word on it, and drag the start bar by its dot (above the editor) to the left; select a word on the last wholly visible line and drag the end bar by its dot (below the editor) to the right; then scroll the selection out of view and back | Compiles and the tests pass. Each dot draws past the editor's edge and drags its end, with no scroll while the finger stays level; the bars hide once their row's bottom leaves the view and come back with it, leaving no stray bar | |
+| 7.57 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64` and `:ComposeTextEditor:iosSimulatorArm64Test`. A new `expect`, `PlatformAccessibilityBridge()` (commonMain `AccessibilityBridge.kt`), has its non-Android actual in `skikoMain` (does nothing); `skikoMain`'s `SkikoTextEditorInputMethodRequest` now serves the state's `SemanticsLayout` as `textLayoutResult` (`DocumentTextLayout` is gone) and adds the first row's top to `unclippedTextOffsetInRoot`. No `iosMain` change. Then in the iOS sample on a simulator: scroll so the first paragraph is out of view, and drag the spacebar trackpad (the floating cursor) across a heading, an indented paragraph (a list item, or a paragraph format with an indent) and the paragraphs below them; with a hardware keyboard, Up and Down through the same rows. With VoiceOver on, note what its caret outline shows on the focused editor | Compiles and the tests pass. The floating cursor's caret follows the finger along the drawn rows, a heading's taller row and the indent included, and lands where it is drawn on lift; Up and Down keep their column. VoiceOver's outline is expected unchanged (the legacy text input view answers no caret rectangle); record what it shows | |
