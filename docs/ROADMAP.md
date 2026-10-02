@@ -4639,7 +4639,7 @@ Shaping is one line per keystroke. These still scale with document length:
   lines: 80 ms against 30 ms); batches double from one line to 256, so an
   early stop reads at most about twice the lines it reached and a whole scan
   opens a cursor per 256 lines (`SegmentationCostTest`).
-- [ ] **7.57** [Fable] [Lane M] What 7.36 could not match in the semantics text
+- [ ] **7.57** [Opus] [Lane M] What 7.36 could not match in the semantics text
   layout: character bounds sit off by the content padding, the space above the
   first paragraph and the editor's scroll offset, since a `TextLayoutResult`
   cannot be offset and moving the semantics node to the content origin would move
@@ -4647,6 +4647,18 @@ Shaping is one line per keystroke. These still scale with document length:
   request, since a `TextLayoutResult` cannot be put together from the editor's
   per-line layouts. Needs a semantics node or a platform accessibility hook that
   answers character bounds from the rows directly.
+  Designed in `docs/design/accessibility-text-layout.md`. Only Android reads
+  character bounds from the layout per request (TalkBack's character-location
+  extra, a range at a time) and offers a hook: a delegate wrapper installed
+  through `ViewCompat` around Compose's, answering that key from a
+  `CharacterBounds` semantics property the editor publishes, which maps an index
+  to its row's glyph box through the content origin and the scroll (both axes).
+  The layout stays for LINE and PAGE granularity. iOS has no bounds in its
+  accessibility element; VoiceOver's caret geometry is the input session's
+  `textLayoutResult`, which moves to the semantics layout (rows as drawn, one
+  cache) plus the first row's top. Desktop's bridge never translates bounds and
+  has no other seam, so 7.36 stays there (an upstream issue). Web reads nothing.
+  Chunks: common provider and host test; Android bridge and device test; iOS.
 - [x] **7.58** [Opus] [Lane D] Tab at a list item's start where nesting is
   not allowed does nothing (`handleIndent` in `input/BuiltinEditorActions.kt`),
   because leading spaces in an item did not survive a markdown round trip.
