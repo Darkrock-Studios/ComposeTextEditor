@@ -128,12 +128,15 @@ internal fun keyboardCover(canvasBottomInRoot: Float, canvasHeight: Int, windowB
 /**
  * Records that the bottom [px] pixels of the viewport are covered. When the cover grows
  * over the caret of a focused editor, as when the keyboard comes up, the caret scrolls
- * above it.
+ * above it. A caret already out of view stays there: the reader scrolled away from it,
+ * and the cover is measured again, a little larger, as iOS settles the view after a fling.
  */
 internal fun TextEditorState.onObscuredBottomChange(px: Int) {
 	val grew = px > scrollManager.obscuredBottomPx
+	// Against the cover as it was; a scroll to the caret still under way counts as in view.
+	val caretShown = grew && isFocused && scrollManager.isCursorInViewOrScrolling()
 	scrollManager.obscuredBottomPx = px
-	if (grew && isFocused) scrollManager.ensureCursorVisible()
+	if (caretShown) scrollManager.ensureCursorVisible()
 }
 
 /**

@@ -1491,6 +1491,15 @@ Constraints that shape the order:
   typing Returns keeps the caret at the keyboard's top. Android reports
   `WindowInsets.ime` only to edge-to-edge windows, so this also covers 3.9
   there when the host has no `imePadding`; a window that resizes is still 3.9.
+  Found on the iOS simulator (2026-10-01): with the keyboard up, a fling away
+  from the caret stopped and the view scrolled back to the caret. The cover is
+  measured again as the view settles after the fling, a few pixels larger
+  each time (879, 899, 905 px), and any growth scrolled the caret above it.
+  Now only a caret in view, or being scrolled to, as the cover grows is kept
+  above it; one the reader scrolled away from stays away until a key or an
+  edit brings it back (`KeyboardCoverE2eTest`). An editor focused without a
+  tap while its caret is out of view no longer scrolls to it as the keyboard
+  rises.
 - [x] **4.8 Native edit menu. C.** [Opus] [Lane D] [Mac work] A Material
   dropdown is used instead of the platform text toolbar.
   Done. Touch has used the platform toolbar since 3.8 (with 3.18's fixes on

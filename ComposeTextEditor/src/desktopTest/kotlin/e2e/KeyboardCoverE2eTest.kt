@@ -39,6 +39,54 @@ class KeyboardCoverE2eTest {
 		)
 	}
 
+	/**
+	 * On iOS the cover is measured again as the view settles after a fling, a few pixels
+	 * more each time, which threw the view back to the caret the fling had left behind.
+	 */
+	@Test
+	fun `a keyboard growing while the caret is scrolled out of view leaves the scroll alone`() =
+		editorUiTest(initialText = doc) {
+			test.runOnIdle {
+				state.cursor.updatePosition(CharLineOffset(0, 0))
+				state.onObscuredBottomChange(cover)
+			}
+			test.waitForIdle()
+			// The reader scrolls on, away from the caret.
+			val away = test.runOnIdle {
+				kotlinx.coroutines.runBlocking { state.scrollState.scrollTo(state.scrollState.maxValue) }
+				state.scrollState.value
+			}
+			test.waitForIdle()
+			assertTrue(away > 0, "The document scrolls")
+
+			test.runOnIdle { state.onObscuredBottomChange(cover + 20) }
+			test.waitForIdle()
+			test.runOnIdle { state.onObscuredBottomChange(cover + 26) }
+			test.waitForIdle()
+
+			assertEquals(away, state.scrollState.value)
+		}
+
+	@Test
+	fun `a keyboard still rising follows the caret it has begun to scroll to`() = editorUiTest(initialText = doc) {
+		val caret = test.runOnIdle { placeCaretOnLastVisibleRow() }
+		test.waitForIdle()
+
+		// The inset animates: each step lands while the scroll to the caret may still run.
+		test.runOnIdle {
+			state.onObscuredBottomChange(cover / 2)
+			state.onObscuredBottomChange(cover)
+		}
+		test.waitForIdle()
+
+		val row = test.runOnIdle { state.getPositionForOffset(caret) }
+		val uncovered = state.viewportSize.height - cover
+		assertTrue(
+			row.position.y + row.height <= uncovered + 0.5f,
+			"Caret row ends at ${row.position.y + row.height}, under the keyboard's top at $uncovered",
+		)
+	}
+
 	@Test
 	fun `an unfocused editor does not scroll for the keyboard`() = editorUiTest(initialText = doc, autoFocus = false) {
 		test.runOnIdle { placeCaretOnLastVisibleRow() }
