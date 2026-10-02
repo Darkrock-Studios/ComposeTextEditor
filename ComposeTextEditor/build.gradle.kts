@@ -61,6 +61,13 @@ kotlin {
             dependsOn(commonMain)
         }
 
+        val androidMain by getting {
+            dependencies {
+                // AccessibilityDelegateCompat, which Compose already brings at runtime.
+                implementation(libs.androidx.core)
+            }
+        }
+
         val desktopMain by getting {
             dependsOn(skikoMain)
             dependencies {

@@ -161,6 +161,7 @@ fun BasicTextEditor(
 
 	// Capture platform view for IME cursor synchronization (Android only)
 	CaptureViewForIme(state)
+	PlatformAccessibilityBridge()
 	ClipboardEventsEffect(state)
 	PrimarySelectionEffect(state)
 

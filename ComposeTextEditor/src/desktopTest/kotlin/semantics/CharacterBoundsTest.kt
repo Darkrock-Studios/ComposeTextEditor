@@ -9,6 +9,8 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.isRoot
+import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.runComposeUiTest
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
@@ -17,6 +19,7 @@ import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.CharacterBounds
 import com.darkrockstudios.texteditor.CharacterBoundsKey
 import com.darkrockstudios.texteditor.RichTextView
+import com.darkrockstudios.texteditor.characterLocations
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.cursor.getWrapForDrawing
 import com.darkrockstudios.texteditor.effectiveHeight
@@ -288,4 +291,40 @@ class CharacterBoundsTest {
 			)
 		}
 	}
+
+	@Test
+	fun `a platform request for a range is clipped to the editor as Compose clips its own`() = editorUiTest(
+		initialText = AnnotatedString((1..40).joinToString("\n") { "line $it" }),
+		height = 120.dp,
+		contentPadding = PaddingValues(start = 16.dp, top = 8.dp),
+		contentDescription = "Notes",
+	) {
+		test.runOnIdle { state.scrollState.scrollTo(60) }
+		waitForIdle()
+		val root = test.onAllNodes(isRoot(), useUnmergedTree = true).onFirst().fetchSemanticsNode()
+		val editor = editorNode().fetchSemanticsNode()
+		val bounds = editor.config[CharacterBoundsKey]
+		val length = state.getTextLength()
+
+		val all = assertNotNull(root.characterLocations(editor.id, 0, length + 5))
+		assertEquals(length + 5, all.size)
+		// The editor, at the top left of the window, is 400 by 120.
+		val visible = Rect(0f, 0f, 400f, 120f)
+		for (index in 0 until length) {
+			val box = assertNotNull(bounds.boundsOf(index))
+			val expected = if (box.overlaps(visible)) box.intersect(visible) else null
+			assertEquals(expected, all[index], "character $index")
+		}
+		assertTrue(all.take(length).any { it == null }, "precondition: rows scrolled out of view")
+		assertTrue(all.take(length).any { it != null }, "precondition: rows in view")
+		assertTrue(all.drop(length).all { it == null }, "past the text")
+
+		assertNull(root.characterLocations(editor.id, -1, 3), "a negative start")
+		assertNull(root.characterLocations(editor.id, 0, 0), "nothing asked for")
+		assertNull(root.characterLocations(editor.id, length, 1), "a start past the text")
+		assertNotNull(root.characterLocations(editor.id, "Notes".length + 1, 1), "a start past the content description")
+		assertNull(root.characterLocations(root.id, 0, 1), "a node without character bounds")
+		assertNull(root.characterLocations(Int.MAX_VALUE, 0, 1), "no such node")
+	}
+
 }

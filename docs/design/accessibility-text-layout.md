@@ -78,8 +78,9 @@ stay at the layout's position). Document space to the semantics node:
   the top padding), and the first paragraph's `spaceBefore` is in the row's offset, so
   `offset.y - scrollState.value` already covers both; `getPositionForOffset` does this.
 
-Root coordinates are the node's position in root plus that; Android goes on to screen
-with `View.getLocationOnScreen`, which is what Compose's own `localToScreen` uses.
+Root coordinates follow from the canvas's own coordinates; Android goes on to screen
+with the root's `LayoutCoordinates.localToScreen`, which is what Compose's own
+`view.localToScreen` does.
 
 ## Options weighed
 
@@ -176,12 +177,19 @@ provider method (`createAccessibilityNodeInfo`, `findAccessibilityNodeInfosByTex
 EXTRA_DATA_TEXT_CHARACTER_LOCATION_KEY`: find the provider for `id` and, if there is
 one, answer; otherwise forward. The provider is found through public API:
 `(view as RootForTest).semanticsOwner.unmergedRootSemanticsNode`, depth-first for the
-node whose `id` matches, then `config.getOrNull(CharacterBoundsKey)`. The walk is per
-request, which is rare enough. The answer follows Compose's shape: validate
-`start`/`length` as `getBoundingBoxes` does, an `Array<RectF?>(length)`, each
-`boundsOf(start + i)` moved to screen by `view.getLocationOnScreen` and clipped to
-`info.boundsInScreen` (the node's visible bounds, which Compose has already set), null
-when outside, `info.extras.putParcelableArray(key, rects)`.
+node whose `id` matches (the host view's id is the root node's), then
+`config.getOrNull(CharacterBoundsKey)`. The walk is per request, which is rare enough.
+The answer follows Compose's shape (`SemanticsNode.characterLocations` in common code,
+so the desktop tests cover it): a negative start, no length or a start past the text
+are left to Compose, an
+`Array<RectF?>(length)`, each `boundsOf(start + i)` clipped to the node's
+`boundsInRoot` as Compose clips its own, null when outside or past the text, then
+both corners to screen (one canvas-to-root and one root-to-screen matrix per request),
+`info.extras.putParcelableArray(key, rects)`. The start is checked against the node's
+text: Compose checks it against its iterable text, which prefers the content
+description, so for an editor with one (Hammer's, the sample's) Compose refuses every
+range past the description's length, and the bridge answers them. The library
+depends on `androidx.core` directly for this (Compose already brings it at runtime).
 
 `getTextLayoutResult` stays, for two reasons: Compose offers the character-location
 key in `availableExtraData` only while the node has it, and LINE and PAGE granularity
@@ -236,12 +244,15 @@ after a span pass and after an edit at the end, a request leaves every `LineLayo
 identity in the row list as it was (no reshaping). `RichTextView` the same with its
 padding.
 
-Android: the module has host tests only (no Robolectric), so the deterministic check is
-a small device test (new `androidDeviceTest` source set, one test): compose the sample
-editor, `UiAutomation.getRootInActiveWindow()`, find the editor node, call
+Android: the module has host tests only (no Robolectric). The forwarding is a host test
+with mocks (`androidHostTest/semantics/EditorAccessibilityBridgeTest`); the
+deterministic end-to-end check is a device test next to the emulator smoke test
+(`androidApp/src/androidTest/.../EditorCharacterLocationsTest`, which the CI emulator
+job runs): compose an editor, `UiAutomation.getRootInActiveWindow()`, find the editor node, call
 `refreshWithExtraData(EXTRA_DATA_TEXT_CHARACTER_LOCATION_KEY, args)` with a range on a
 scrolled, padded editor and assert the rectangles against the drawn rows through the
-state. Manual check: build the sample, start the API 36 `FastTrackCiRepro` emulator
+state, and check the text, a selection, a LINE move and `setText` still answer through
+the wrapped delegate. Manual check: build the sample, start the API 36 `FastTrackCiRepro` emulator
 read-only on a free port, enable TalkBack
 (`adb shell settings put secure enabled_accessibility_services
 com.google.android.marvin.talkback/com.google.android.marvin.talkback.TalkBackService`

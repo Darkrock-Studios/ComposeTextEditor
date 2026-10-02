@@ -7,6 +7,8 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Matrix
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.findRootCoordinates
+import androidx.compose.ui.semantics.SemanticsNode
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.SemanticsPropertyKey
 import androidx.compose.ui.semantics.SemanticsPropertyReceiver
 import androidx.compose.ui.semantics.contentDescription
@@ -14,6 +16,7 @@ import androidx.compose.ui.semantics.copyText
 import androidx.compose.ui.semantics.cutText
 import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.editableText
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.semantics.getTextLayoutResult
 import androidx.compose.ui.semantics.insertTextAtCursor
 import androidx.compose.ui.semantics.isEditable
@@ -210,6 +213,9 @@ internal interface CharacterBounds {
 	 */
 	fun boundsOf(index: Int): Rect?
 
+	/** [boundsOf] for each of [indices]. */
+	fun boundsOf(indices: IntRange): List<Rect?> = indices.map(::boundsOf)
+
 	/**
 	 * The caret position nearest [position], in root coordinates, as a flat character
 	 * index, or -1 when the text is not laid out.
@@ -222,6 +228,43 @@ internal val CharacterBoundsKey = SemanticsPropertyKey<CharacterBounds>(
 	name = "CharacterBounds",
 	mergePolicy = { parentValue, _ -> parentValue },
 )
+
+/**
+ * What a platform's request for the boxes of [length] characters from [start] of node
+ * [id], somewhere under this one, gets from the node's [CharacterBounds]: as Compose
+ * answers it from `getTextLayoutResult`, each box in root coordinates clipped to the
+ * node's bounds, and null where it falls outside them or past the text. Null when the
+ * node publishes no [CharacterBounds], or for a negative start, no length or a start
+ * past the text, which leaves the request to Compose.
+ *
+ * The start is checked against the node's text, where Compose checks it against the
+ * content description when there is one, and so refuses most of an editor's text.
+ */
+internal fun SemanticsNode.characterLocations(id: Int, start: Int, length: Int): Array<Rect?>? {
+	if (start < 0 || length <= 0) return null
+	val node = findById(id) ?: return null
+	val bounds = node.config.getOrNull(CharacterBoundsKey) ?: return null
+	val text = node.config.getOrNull(SemanticsProperties.EditableText)
+		?: node.config.getOrNull(SemanticsProperties.Text)?.firstOrNull()
+		?: return null
+	if (start >= text.length) return null
+	val visible = node.boundsInRoot
+	val boxes = arrayOfNulls<Rect>(length)
+	val inText = bounds.boundsOf(start until minOf(text.length, start + length))
+	inText.forEachIndexed { i, box -> boxes[i] = box?.takeIf { it.overlaps(visible) }?.intersect(visible) }
+	return boxes
+}
+
+private fun SemanticsNode.findById(id: Int): SemanticsNode? {
+	val pending = ArrayDeque<SemanticsNode>()
+	pending.addLast(this)
+	while (pending.isNotEmpty()) {
+		val node = pending.removeLast()
+		if (node.id == id) return node
+		pending.addAll(node.children)
+	}
+	return null
+}
 
 /**
  * Where the canvas the rows are drawn on was last placed, its origin at the content
@@ -512,15 +555,26 @@ internal class SemanticsDocument(
 	 * lines out of view, after a width change) answers from its provisional rows. A line
 	 * whose block replaces its text answers the block's row.
 	 */
-	override fun boundsOf(index: Int): Rect? {
-		val canvas = canvas.coordinates?.takeIf { it.isAttached } ?: return null
-		if (index < 0 || index >= state.getTextLength() || !state.rowsFollowText) return null
+	override fun boundsOf(index: Int): Rect? = boundsOf(index..index).single()
+
+	override fun boundsOf(indices: IntRange): List<Rect?> {
+		val canvas = canvas.coordinates?.takeIf { it.isAttached }
+		if (canvas == null || !state.rowsFollowText) return indices.map { null }
+		val toRoot = Matrix()
+		canvas.findRootCoordinates().transformFrom(canvas, toRoot)
+		val onCanvas = documentToCanvas()
+		val length = state.getTextLength()
+		return indices.map { index -> if (index in 0 until length) inDocument(index)?.let { toRoot.map(it.translate(onCanvas)) } else null }
+	}
+
+	/** The box of the character at [index], in document space. */
+	private fun inDocument(index: Int): Rect? {
 		val position = state.getOffsetAtCharacter(index)
 		val row = state.lineOffsets.getWrapForDrawing(position, CaretAffinity.Downstream)
 			?.takeIf { it.line == position.line } ?: return null
 		val layout = row.textLayoutResult
 		val laidOut = layout.layoutInput.text.length
-		val inDocument = when {
+		return when {
 			row.richSpans.any { (it.style as? BlockSpanStyle)?.replacesText() == true } ->
 				Rect(0f, row.offset.y, state.viewportSize.width, row.offset.y + row.effectiveHeight)
 			// The draw anchors a line's layout at its paragraph's top.
@@ -530,9 +584,6 @@ internal class SemanticsDocument(
 				.let { Rect(it.left, it.top, it.left, it.bottom) }
 				.translate(row.offset.x, row.paragraphTop)
 		}
-		val toRoot = Matrix()
-		canvas.findRootCoordinates().transformFrom(canvas, toRoot)
-		return toRoot.map(inDocument.translate(documentToCanvas()))
 	}
 
 	override fun indexAt(position: Offset): Int {

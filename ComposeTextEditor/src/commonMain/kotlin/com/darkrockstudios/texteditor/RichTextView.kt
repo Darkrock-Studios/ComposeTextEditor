@@ -74,6 +74,7 @@ fun RichTextView(
 	contextMenuStrings: ContextMenuStrings = ContextMenuStrings.Default,
 ) {
 	LendComposition(state)
+	PlatformAccessibilityBridge()
 	val currentOnLinkClick by rememberUpdatedState(onLinkClick)
 	val linkClicks = remember { LinkClicks.forReadOnly { currentOnLinkClick } }
 	val hasLinkClick = onLinkClick != null
