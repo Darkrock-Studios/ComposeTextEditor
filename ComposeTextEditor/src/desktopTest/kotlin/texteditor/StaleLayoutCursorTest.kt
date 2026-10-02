@@ -84,6 +84,36 @@ class StaleLayoutCursorTest {
 	}
 
 	@Test
+	fun `down from the last laid out row steps a line when the text has more`() {
+		val state = staleState()
+		state.cursor.updatePosition(CharLineOffset(0, 1))
+
+		state.moveCursorDown()
+
+		assertEquals(CharLineOffset(1, 1), state.cursorPosition)
+	}
+
+	@Test
+	fun `up on the first line and down on the last line of a stale layout reach the document ends`() {
+		val state = staleState()
+		state.moveCursorDown()
+		assertEquals(CharLineOffset(2, 5), state.cursorPosition)
+
+		state.cursor.updatePosition(CharLineOffset(0, 2))
+		state.moveCursorUp()
+		assertEquals(CharLineOffset(0, 0), state.cursorPosition)
+	}
+
+	@Test
+	fun `down on the last line of a text shorter than its stale layout reaches the document end`() {
+		val state = shrunkState()
+
+		state.moveCursorDown()
+
+		assertEquals(CharLineOffset(0, 1), state.cursorPosition)
+	}
+
+	@Test
 	fun `line end on a line missing from a stale layout goes to the line end`() {
 		val state = staleState()
 

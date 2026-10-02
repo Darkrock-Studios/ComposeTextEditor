@@ -67,6 +67,9 @@ kotlin {
 				implementation(libs.mockk)
 				implementation(libs.kotlinx.coroutines.test)
 				implementation(libs.kotlinx.coroutines.test.jvm)
+				@OptIn(org.jetbrains.compose.ExperimentalComposeLibrary::class)
+				implementation(compose.uiTest)
+				implementation(compose.desktop.currentOs)
 			}
 		}
 	}

@@ -120,6 +120,14 @@ this exercises the clipboard's HTML as the block carrier.
    rather than doing something destructive; the menu is never empty.
 4. RichTextView demo (read-only): right-click. **Expect:** Copy and Select All work,
    editing actions are absent or disabled. Typing changes nothing.
+5. Select a word, then right-click inside it. **Expect:** the selection stays and the
+   menu offers Cut and Copy. Right-click outside it. **Expect:** the caret moves to the
+   click and the selection clears before the menu opens (1.9). In the RichTextView demo
+   a right-click outside the selection keeps it.
+6. Middle-click in the editor, with and without a selection. **Expect:** the caret and
+   selection do not change (primary-selection paste is not built, 4.23).
+7. Repeat 5 and 6 on Android with a USB or Bluetooth mouse. Android delivers every
+   mouse button as a press, which the desktop tests cannot reproduce.
 
 ### 2.7 Export while editing (#48)
 
@@ -140,14 +148,26 @@ On macOS, verify each:
 | Cmd+C / Cmd+V / Cmd+X | Copy / paste / cut |
 | Cmd+A | Select all |
 | Cmd+Z / Cmd+Shift+Z | Undo / redo |
-| Option+Left / Option+Right | Word-wise motion |
+| Option+Left / Option+Right | Word start / word end (the end of the current word, or of the next one) |
+| Option+Delete (forward delete) | Delete to the word end |
+| Option+Up / Option+Down | Paragraph start (then the previous one's) / paragraph end (then the next one's); with Shift, selects |
 | Cmd+Left / Cmd+Right | Line start / line end |
 | Cmd+Up / Cmd+Down | Document start / end |
 | Option+Backspace | Delete previous word |
 | Cmd+Backspace | Delete to line start |
+| Cmd+Fn+Delete (forward delete) | Delete to the end of the visual row; nothing at the row's end |
+| Ctrl+K | Delete to the end of the paragraph, past any wrap; at its end, join the next paragraph |
+| Ctrl+A / Ctrl+E | Paragraph start / end, past any wrap; with Shift, selects |
+| Ctrl+F / Ctrl+B | One character forward / back; with a selection, collapses it |
+| Ctrl+N / Ctrl+P | One row down / up, keeping the column through a short line |
+| Ctrl+D / Ctrl+H | Delete forward / backward |
+| Ctrl+Y | Nothing (no kill ring yet, 2.11) |
 | Option+8 | Types `{` (unclaimed Option chords must fall through to text) |
+| Cmd+Shift+V / Cmd+Option+Shift+V | Paste as plain text: no copied formatting, takes the style where it lands |
+| Shift+Return | New line |
+| Cmd+Return / Option+Return / Ctrl+Return | Nothing in the editor (left for the host to claim) |
 
-After **Option+Backspace** and **Cmd+Backspace**, press Cmd+Z. **Expect:** the deleted
+After **Option+Backspace**, **Cmd+Backspace** and **Cmd+Fn+Delete**, press Cmd+Z. **Expect:** the deleted
 text returns *and the caret lands at the correct end of it* (this was the undo defect
 fixed alongside #45).
 
@@ -160,19 +180,23 @@ Requires a layout with AltGr: switch the Windows input to Hungarian or Polish.
 2. Polish: AltGr+Z. **Expect:** `ż` typed, not an undo.
 3. With the US layout restored, plain Ctrl+X/V/Z still work.
 
-### 3.3 Custom action binding (#87)
+### 3.3 Formatting chords (#22, #87)
 
-The sample app registers Ctrl+B (Cmd+B on macOS) for bold as the worked example.
+Bold, italic, underline, strikethrough and inline code are built-in actions on
+Ctrl/Cmd+B, I, U, Shift+X and E.
 
 1. Markdown demo. Select a word, press Ctrl/Cmd+B. **Expect:** bold toggles on; the
    toolbar Bold button lights up.
 2. Press it again. **Expect:** bold toggles off.
-3. Toggle bold from the **toolbar button** and confirm the chord and the button agree
+3. Select a range that is partly bold and press Ctrl/Cmd+B. **Expect:** the whole range
+   becomes bold, and the toolbar Bold button lights only once it is.
+4. Toggle bold from the **toolbar button** and confirm the chord and the button agree
    (they share one implementation).
-4. Navigate back to the home menu and re-enter the demo a few times. **Expect:** the
-   chord still works and is registered exactly once (the `DisposableEffect`
-   unregister path).
-5. Press an unbound Ctrl chord (say Ctrl+J). **Expect:** nothing happens and the editor
+5. With no selection, press Ctrl/Cmd+B and type. **Expect:** the typed text is bold;
+   press it again and the text typed after is not.
+6. Repeat 1 and 2 with italic (I), strikethrough (Shift+X) and inline code (E). Export
+   the markdown. **Expect:** `*`, `~~` and backticks where the styles were applied.
+7. Press an unbound Ctrl chord (say Ctrl+J). **Expect:** nothing happens and the editor
    does not become unresponsive; the keystroke is not silently swallowed into text.
 
 ### 3.4 Read-only enforcement (#87)
@@ -180,6 +204,61 @@ The sample app registers Ctrl+B (Cmd+B on macOS) for bold as the worked example.
 1. RichTextView demo. Attempt paste (Ctrl+V), Ctrl+B, backspace, Enter.
 2. **Expect:** the document is unchanged by every one of them. Copy and selection still
    work.
+
+### 3.5 Windows and Linux chords
+
+| Chord | Expected |
+| --- | --- |
+| Ctrl+Shift+V | Paste as plain text: no copied formatting, takes the style where it lands |
+| Ctrl+Insert / Shift+Insert / Shift+Delete | Copy / paste / cut (Shift+Delete with no selection does nothing) |
+| The dedicated Cut, Copy and Paste keys, where the keyboard has them | Cut / copy / paste, on every platform |
+| Shift+Enter | New line |
+| Ctrl+Enter / Ctrl+Shift+Enter / Alt+Enter | Nothing in the editor (left for the host to claim) |
+
+### 3.6 Caret motion
+
+On every desktop platform unless a row names one; the macOS chords are in 3.1.
+
+| Keys | Expected |
+| --- | --- |
+| Left / Right with a selection | The selection collapses to its start / end; the caret moves no further |
+| Up on the first row / Down on the last row | Document start / end; with Shift, selects to it |
+| Up / Down through a short line, in a proportional font | The caret keeps its x on longer lines past the short one; a Left, Right, click or edit starts a new column |
+| Up / Down in a wrapped paragraph | One visual row at a time, never skipping a row |
+| PageDown / PageUp in a long document | The caret moves a viewport's height and keeps its place on screen and its column; the view scrolls with it |
+| PageDown on the last page / PageUp on the first | Document end / start |
+| Arrow down past the viewport bottom while typing | The view scrolls just enough to show the caret's row, with no extra margin |
+| Ctrl+Right / Ctrl+Delete on Linux | To / delete to the end of the word, or of the next one |
+| Ctrl+Right / Ctrl+Delete on Windows | To / delete to the start of the next word |
+| Ctrl+Up | Paragraph start, then the previous paragraph's start; with Shift, selects |
+| Ctrl+Down on Linux | Paragraph end, then the next paragraph's end; with Shift, selects |
+| Ctrl+Down on Windows | The next paragraph's start; from the last paragraph, the document end; with Shift, selects |
+| Ctrl+Up / Ctrl+Down with a selection, no Shift | Jumps from the selection's start / end |
+
+### 3.7 Mouse selection (desktop, and Android with a mouse)
+
+Compare against a native text field on the same machine. The double-click window is
+the platform's double-tap timeout (300 ms on desktop), not the OS mouse setting.
+
+1. Double-click a word and hold the button down. **Expect:** the word is selected
+   before release. Drag right, then left past the start. **Expect:** the selection
+   grows and shrinks by whole words and always keeps the first word.
+2. Triple-click and drag down. **Expect:** whole lines, the first line always kept.
+3. Click, then shift+double-click a later word. **Expect:** the selection runs from
+   the click to the end of that word.
+4. Click twice slowly, or twice a few characters apart. **Expect:** two single
+   clicks, no word selection.
+5. Hover the text. **Expect:** an I-beam over the editor and over a selectable
+   RichTextView.
+6. Markdown demo, over a link: hover, then hold Ctrl (Cmd on macOS) and move the
+   mouse a little. **Expect:** the I-beam turns into a hand only with the key held.
+   Ctrl/Cmd+click opens the link in the browser; a plain click places the caret; a
+   drag that starts on the link selects and opens nothing.
+7. RichTextView demo: click the link. **Expect:** it opens, with a hand shown over
+   it. Drag a selection across it. **Expect:** nothing opens.
+8. In a long document, drag a selection below the editor and hold the mouse still.
+   **Expect:** the editor keeps scrolling and the selection keeps growing; farther
+   below scrolls faster; moving back inside stops it. Repeat above the editor.
 
 ## 4. Touch, focus and the soft keyboard (Android)
 
@@ -206,6 +285,27 @@ was lengthened specifically so it can be scrolled and flung.
    replaced.
 4. Tap right next to a selection handle. **Expect:** focus and caret placement, not a
    swallowed tap.
+5. Long-press a word, then grab a handle a little off its centre and hold still.
+   **Expect:** the selection does not change on grab (3.2). Drag it: the edge follows
+   the finger by exactly the distance moved.
+6. Drag the start handle past the end handle, and the end handle past the start.
+   **Expect:** the handles cross and the selection runs from the fixed end to the
+   finger, with no jumping (3.1, hammer-editor#956). Dropping one handle exactly on
+   the other leaves at least a character selected.
+7. Select a short word (two or three letters) and grab the end handle. **Expect:** the
+   end handle moves, not the start one.
+8. Long-press blank space between words. **Expect:** the caret moves there and no
+   handles appear.
+9. Tap in the text. **Expect:** a single handle appears under the caret. Drag it: the
+   caret follows. Leave it for 4 seconds, or type, or press an arrow key on a
+   hardware keyboard. **Expect:** it disappears. Mouse clicks never show it.
+10. On Android 9 (API 28) or later, drag a selection handle and the caret handle.
+    **Expect:** the system magnifier appears above the finger, showing the row being
+    dragged, follows the finger sideways, and goes when the finger lifts (3.6). Below
+    API 28 there is none. None on desktop, iOS, or web.
+11. In a long document, drag the end handle below the editor and hold still.
+   **Expect:** it keeps scrolling and the selection keeps growing (3.4); dragging
+   back inside stops it. Repeat with the start handle above the editor.
 
 ### 4.3 Spans do not fight the keyboard
 

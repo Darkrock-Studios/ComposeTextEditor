@@ -5,16 +5,17 @@ import com.darkrockstudios.texteditor.state.TextEditorState
 
 /**
  * Platform-specific text input service that handles IME integration.
- * On Android, this creates a PlatformTextInputMethodRequest with InputConnection.
- * On Desktop/WASM, this is a no-op since keyboard input arrives via KEY_TYPED events.
+ * On Android, this creates a PlatformTextInputMethodRequest with an InputConnection.
+ * Desktop, iOS, and WASM start the skiko request shared in `skikoMain` (composed
+ * input, marked text, autocorrect, and on web and iOS plain typing too).
  */
 expect class TextEditorTextInputService(state: TextEditorState) {
 	/**
 	 * Starts the platform-specific input method.
-	 * On Android: Opens the soft keyboard and establishes InputConnection
-	 * On Desktop/WASM: No-op (suspends indefinitely)
+	 * On Android: opens the soft keyboard and establishes an InputConnection.
+	 * On Desktop, iOS, and WASM: starts the platform's input-method session.
 	 *
-	 * This function never returns normally - it suspends until cancelled.
+	 * This function never returns normally: it suspends until cancelled.
 	 */
 	suspend fun startInput(session: PlatformTextInputSession): Nothing
 }

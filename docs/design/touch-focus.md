@@ -203,6 +203,9 @@ The `RichSpanClickListener` KDoc now states the Boolean's real contract
   pan, fling coasts.
 - Spell-check menu policy: tap opens a menu only with a correction to offer,
   other spans delegate to the host listener.
+- A tap reports a span click on release, and only when it lifts on the span it
+  landed on (1.15). The release is still dispatched to the Canvas handler before
+  the container's focus handler, so the popup check above is unchanged.
 - Long press selects and focuses (test-pinned).
 - Focus is skipped only when the tap or long press left a popup showing
   (test-pinned from both sides: popup-opening tap does not focus, span-claimed

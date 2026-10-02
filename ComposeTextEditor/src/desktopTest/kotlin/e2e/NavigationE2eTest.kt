@@ -2,14 +2,20 @@ package e2e
 
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.unit.dp
 import com.darkrockstudios.texteditor.CharLineOffset
+import com.darkrockstudios.texteditor.input.WindowsKeyBindings
+import utils.EditorUiTestScope
 import utils.editorUiTest
+import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /** Cursor movement via arrow keys, Home/End, word jumps, and page keys. */
 class NavigationE2eTest {
+
+	private fun EditorUiTestScope.caretX(): Float = state.getPositionForOffset(state.cursorPosition).position.x
 
 	@Test
 	fun `right and left arrows move the cursor by one character`() = editorUiTest(
@@ -58,7 +64,7 @@ class NavigationE2eTest {
 
 	@Test
 	fun `down arrow keeps the column and up arrow returns`() = editorUiTest(
-		initialText = AnnotatedString("first line\nsecond line"),
+		initialText = AnnotatedString("1234567890\n0987654321"),
 	) {
 		clickAtCharacter(3)
 		press(Key.DirectionDown)
@@ -66,6 +72,101 @@ class NavigationE2eTest {
 
 		press(Key.DirectionUp)
 		assertEquals(CharLineOffset(0, 3), state.cursorPosition)
+	}
+
+	@Test
+	fun `down keeps the caret's x across proportional glyphs`() = editorUiTest(
+		initialText = AnnotatedString("iiiiiiiiii\nWWWWWWWWWW"),
+	) {
+		clickAtCharacter(8)
+		val before = caretX()
+		press(Key.DirectionDown)
+
+		assertEquals(1, state.cursorPosition.line)
+		val halfGlyph = (positionOfCharacter(12).x - positionOfCharacter(11).x) / 2
+		assertTrue(abs(caretX() - before) <= halfGlyph, "caret x moved from $before to ${caretX()}")
+	}
+
+	@Test
+	fun `vertical moves keep the goal column through a short line`() = editorUiTest(
+		initialText = AnnotatedString("1234567890\n12\n1234567890"),
+	) {
+		clickAtCharacter(8)
+		press(Key.DirectionDown)
+		assertEquals(13, cursorIndex)
+		press(Key.DirectionDown)
+		assertEquals(22, cursorIndex)
+		press(Key.DirectionUp)
+		assertEquals(13, cursorIndex)
+		press(Key.DirectionUp)
+		assertEquals(8, cursorIndex)
+	}
+
+	@Test
+	fun `shift down extends by rows and keeps the goal column`() = editorUiTest(
+		initialText = AnnotatedString("1234567890\n12\n1234567890"),
+	) {
+		clickAtCharacter(8)
+		press(Key.DirectionDown, shift = true)
+		press(Key.DirectionDown, shift = true)
+		assertEquals("90\n12\n12345678", selectedText)
+	}
+
+	@Test
+	fun `a horizontal move resets the goal column`() = editorUiTest(
+		initialText = AnnotatedString("1234567890\n12\n1234567890"),
+	) {
+		clickAtCharacter(8)
+		press(Key.DirectionDown)
+		press(Key.DirectionLeft)
+		press(Key.DirectionDown)
+		assertEquals(15, cursorIndex)
+	}
+
+	@Test
+	fun `a click resets the goal column`() = editorUiTest(
+		initialText = AnnotatedString("1234567890\n12\n1234567890"),
+	) {
+		clickAtCharacter(8)
+		press(Key.DirectionDown)
+		clickAtCharacter(12)
+		press(Key.DirectionDown)
+		assertEquals(15, cursorIndex)
+	}
+
+	@Test
+	fun `an edit that leaves the caret in place resets the goal column`() = editorUiTest(
+		initialText = AnnotatedString("1234567890\n12\n1234567890\n1234567890"),
+	) {
+		clickAtCharacter(8)
+		press(Key.DirectionDown)
+		assertEquals(13, cursorIndex)
+		press(Key.Delete)
+		assertEquals(13, cursorIndex)
+		press(Key.DirectionDown)
+		assertEquals(26, cursorIndex)
+	}
+
+	@Test
+	fun `select all resets the goal column`() = editorUiTest(
+		initialText = AnnotatedString("1234567890\n12\n1234567890"),
+	) {
+		clickAtCharacter(8)
+		press(Key.DirectionDown)
+		press(Key.A, ctrl = true)
+		press(Key.DirectionDown)
+		assertEquals(16, cursorIndex)
+	}
+
+	@Test
+	fun `an edit resets the goal column`() = editorUiTest(
+		initialText = AnnotatedString("1234567890\n12\n1234567890"),
+	) {
+		clickAtCharacter(8)
+		press(Key.DirectionDown)
+		typeText("3")
+		press(Key.DirectionDown)
+		assertEquals(18, cursorIndex)
 	}
 
 	@Test
@@ -79,16 +180,54 @@ class NavigationE2eTest {
 	}
 
 	@Test
-	fun `up on the first line and down on the last line are no-ops`() = editorUiTest(
+	fun `up on the first line goes to the document start and down on the last line to its end`() = editorUiTest(
 		initialText = AnnotatedString("Hello\nWorld"),
 	) {
 		clickAtCharacter(2)
 		press(Key.DirectionUp)
-		assertEquals(CharLineOffset(0, 2), state.cursorPosition)
+		assertEquals(CharLineOffset(0, 0), state.cursorPosition)
 
 		clickAtCharacter(8)
 		press(Key.DirectionDown)
-		assertEquals(CharLineOffset(1, 2), state.cursorPosition)
+		assertEquals(CharLineOffset(1, 5), state.cursorPosition)
+	}
+
+	@Test
+	fun `shift up on the first line and shift down on the last line select to the document ends`() = editorUiTest(
+		initialText = AnnotatedString("Hello\nWorld"),
+	) {
+		clickAtCharacter(2)
+		press(Key.DirectionUp, shift = true)
+		assertEquals("He", selectedText)
+
+		clickAtCharacter(8)
+		press(Key.DirectionDown, shift = true)
+		assertEquals("rld", selectedText)
+	}
+
+	@Test
+	fun `up and down reach the document ends only from the first and last visual rows`() = editorUiTest(
+		initialText = AnnotatedString("alpha beta gamma delta epsilon zeta"),
+		width = 120.dp,
+	) {
+		assertTrue(state.lineOffsets.size >= 3, "the paragraph must wrap into at least three rows")
+		val secondRowStart = state.lineOffsets[1].wrapStartsAtIndex
+		clickAtCharacter(secondRowStart + 1)
+		press(Key.DirectionUp)
+		assertTrue(cursorIndex in 1 until secondRowStart, "up from the second row lands on the first, was $cursorIndex")
+		press(Key.DirectionUp)
+		assertEquals(0, cursorIndex)
+
+		val lastRowStart = state.lineOffsets.last().wrapStartsAtIndex
+		val secondLastRowStart = state.lineOffsets[state.lineOffsets.lastIndex - 1].wrapStartsAtIndex
+		clickAtCharacter(secondLastRowStart)
+		press(Key.DirectionDown)
+		assertEquals(lastRowStart, cursorIndex, "down from the second last row's start lands on the last row's start")
+		clickAtCharacter(secondLastRowStart + 2)
+		press(Key.DirectionDown)
+		assertTrue(cursorIndex in lastRowStart + 1 until text.length, "down from mid row lands mid row, was $cursorIndex")
+		press(Key.DirectionDown)
+		assertEquals(text.length, cursorIndex)
 	}
 
 	@Test
@@ -137,8 +276,21 @@ class NavigationE2eTest {
 	}
 
 	@Test
-	fun `ctrl+right jumps word by word`() = editorUiTest(
+	fun `ctrl+right jumps to word ends`() = editorUiTest(
 		initialText = AnnotatedString("The quick brown fox"),
+	) {
+		clickAtCharacter(0)
+		press(Key.DirectionRight, ctrl = true)
+		assertEquals(3, cursorIndex, "first jump lands after 'The'")
+
+		press(Key.DirectionRight, ctrl = true)
+		assertEquals(9, cursorIndex, "second jump lands after 'quick'")
+	}
+
+	@Test
+	fun `ctrl+right on windows jumps to word starts`() = editorUiTest(
+		initialText = AnnotatedString("The quick brown fox"),
+		keyBindings = WindowsKeyBindings,
 	) {
 		clickAtCharacter(0)
 		press(Key.DirectionRight, ctrl = true)
@@ -146,6 +298,15 @@ class NavigationE2eTest {
 
 		press(Key.DirectionRight, ctrl = true)
 		assertEquals(10, cursorIndex, "second jump lands on 'brown'")
+	}
+
+	@Test
+	fun `ctrl+right from a line end goes to the end of the next line's first word`() = editorUiTest(
+		initialText = AnnotatedString("first line\n  second line"),
+	) {
+		clickAtCharacter(10)
+		press(Key.DirectionRight, ctrl = true)
+		assertEquals(19, cursorIndex)
 	}
 
 	@Test
@@ -158,6 +319,47 @@ class NavigationE2eTest {
 
 		press(Key.DirectionLeft, ctrl = true)
 		assertEquals(0, cursorIndex)
+	}
+
+	@Test
+	fun `page down past the last row reaches the document end and page up the start`() = editorUiTest(
+		initialText = AnnotatedString((1..40).joinToString("\n") { "line number $it" }),
+	) {
+		clickAtCharacter(5)
+		repeat(4) { press(Key.PageDown) }
+		assertEquals(text.length, cursorIndex)
+
+		repeat(4) { press(Key.PageUp) }
+		assertEquals(0, cursorIndex)
+	}
+
+	@Test
+	fun `page down keeps the caret's place on screen and the goal column`() = editorUiTest(
+		initialText = AnnotatedString("1234567890\n12\n" + List(60) { "1234567890" }.joinToString("\n")),
+	) {
+		clickAtCharacter(8)
+		press(Key.DirectionDown)
+		assertEquals(13, cursorIndex)
+		val screenY = state.getPositionForOffset(state.cursorPosition).position.y
+
+		press(Key.PageDown)
+		assertTrue(state.cursorPosition.line > 10, "page down moved to line ${state.cursorPosition.line}")
+		assertEquals(8, state.cursorPosition.char, "page down keeps the goal column")
+		assertTrue(state.scrollState.value > 0, "the view scrolls with the caret")
+		assertEquals(screenY, state.getPositionForOffset(state.cursorPosition).position.y, 1f)
+		assertTrue(state.scrollManager.isOffsetVisible(state.cursorPosition))
+	}
+
+	@Test
+	fun `shift page down selects a page`() = editorUiTest(
+		initialText = AnnotatedString((1..40).joinToString("\n") { "line number $it" }),
+	) {
+		clickAtCharacter(0)
+		press(Key.PageDown, shift = true)
+		val line = state.cursorPosition.line
+		assertTrue(line > 5, "shift page down moved to line $line")
+		assertEquals(0, state.getCharacterIndex(state.selector.selection!!.start))
+		assertEquals(cursorIndex, state.getCharacterIndex(state.selector.selection!!.end))
 	}
 
 	@Test

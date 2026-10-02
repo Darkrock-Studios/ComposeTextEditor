@@ -23,6 +23,7 @@ import com.darkrockstudios.texteditor.richstyle.SpellCheckStyle
 import com.darkrockstudios.texteditor.spellcheck.SpellCheckItem
 import com.darkrockstudios.texteditor.spellcheck.SpellCheckMode
 import com.darkrockstudios.texteditor.spellcheck.SpellCheckState
+import com.darkrockstudios.texteditor.spellcheck.SpellCheckStrings
 import com.darkrockstudios.texteditor.spellcheck.SpellCheckingTextEditor
 import com.darkrockstudios.texteditor.spellcheck.api.Correction
 import com.darkrockstudios.texteditor.spellcheck.api.EditorSpellChecker
@@ -51,6 +52,8 @@ fun spellCheckUiTest(
 	height: Dp = 300.dp,
 	spellCheckMenuItems: (SpellCheckItem) -> List<ContextMenuItem> = { emptyList() },
 	diagnosticsChecker: TextDiagnosticsChecker? = null,
+	spellCheckStrings: SpellCheckStrings = SpellCheckStrings.Default,
+	onAddToDictionary: ((String) -> Unit)? = null,
 	block: SpellCheckUiTestScope.() -> Unit,
 ) = runSkikoComposeUiTest {
 	lateinit var state: SpellCheckState
@@ -73,6 +76,8 @@ fun spellCheckUiTest(
 			enabled = enabled,
 			autoFocus = true,
 			spellCheckMenuItems = spellCheckMenuItems,
+			spellCheckStrings = spellCheckStrings,
+			onAddToDictionary = onAddToDictionary,
 			diagnostics = diagnostics,
 		)
 	}
@@ -111,9 +116,11 @@ class SpellCheckUiTestScope(
 
 	/** Right-clicks the character at flat index [charIndex], opening the context menu. */
 	fun rightClickAtCharacter(charIndex: Int) {
-		defeatMultiClickDetection()
 		val position = state.textState.positionOfCharacter(charIndex)
-		test.onNodeWithTag(EDITOR_TEST_TAG).performMouseInput { rightClick(position) }
+		test.onNodeWithTag(EDITOR_TEST_TAG).performMouseInput {
+			defeatMultiClickDetection()
+			rightClick(position)
+		}
 		test.waitForIdle()
 	}
 

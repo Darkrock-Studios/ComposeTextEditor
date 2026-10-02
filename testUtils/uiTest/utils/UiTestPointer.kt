@@ -1,6 +1,7 @@
 package utils
 
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.test.MouseInjectionScope
 import com.darkrockstudios.texteditor.state.TextEditorState
 
 // Pointer input is injected at the tagged editor node, not onRoot(): once a
@@ -17,9 +18,11 @@ fun TextEditorState.positionOfCharacter(charIndex: Int): Offset {
 	return Offset(metrics.position.x, metrics.position.y + metrics.height / 2f)
 }
 
-// The editor's double/triple-click detection compares wall-clock timestamps
-// (Clock.System.now, 300ms window), not the virtual test clock, so gestures
-// issued back-to-back by a fast test read as multi-clicks and word-select.
-fun defeatMultiClickDetection() {
-	Thread.sleep(350)
+/**
+ * Moves the injected event clock past the double-click timeout, so the next press is a
+ * fresh single click. The editor counts clicks by event time, which the test clock
+ * drives, so a fast test would otherwise issue back-to-back clicks as a multi-click.
+ */
+fun MouseInjectionScope.defeatMultiClickDetection() {
+	advanceEventTime(1_000)
 }

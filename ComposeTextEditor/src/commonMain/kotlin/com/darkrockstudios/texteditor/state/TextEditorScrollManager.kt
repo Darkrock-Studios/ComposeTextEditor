@@ -125,15 +125,12 @@ class TextEditorScrollManager(
 		val minScroll = scrollState.minValue
 		val maxScroll = maxOf(minScroll, totalContentHeight - viewportHeight + bottomContentPaddingPx)
 
-		val buffer = 10
-		val targetScroll = if (cursorTop < viewportTop + buffer) {
-			// Scrolling up - align cursor near top
-			(cursorTop - buffer).coerceIn(minScroll, maxScroll)
-		} else if (cursorTop + cursorHeight > viewportTop + viewportHeight - buffer) {
-			// Scrolling down - ensure full cursor height is visible
-			(cursorTop + cursorHeight - viewportHeight + buffer).coerceIn(minScroll, maxScroll)
+		// Just far enough to show the caret's whole row, as native editors scroll.
+		val targetScroll = if (cursorTop < viewportTop) {
+			cursorTop.coerceIn(minScroll, maxScroll)
+		} else if (cursorTop + cursorHeight > viewportTop + viewportHeight) {
+			(cursorTop + cursorHeight - viewportHeight).coerceIn(minScroll, maxScroll)
 		} else {
-			// Cursor already fully visible, maintain current scroll
 			viewportTop
 		}
 

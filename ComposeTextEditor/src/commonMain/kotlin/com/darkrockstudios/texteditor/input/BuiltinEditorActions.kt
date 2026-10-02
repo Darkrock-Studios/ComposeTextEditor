@@ -1,7 +1,9 @@
 package com.darkrockstudios.texteditor.input
 
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.style.TextDecoration
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.clipboard.ClipboardHelper
@@ -9,10 +11,13 @@ import com.darkrockstudios.texteditor.clipboard.applyHtmlPasteBlocks
 import com.darkrockstudios.texteditor.clipboard.readHtmlPasteDocument
 import com.darkrockstudios.texteditor.html.selectionAsHtml
 import com.darkrockstudios.texteditor.input.EditorCommand.Action
+import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
 import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.applyStyleForEditAt
 import com.darkrockstudios.texteditor.state.moveToNextWord
 import com.darkrockstudios.texteditor.state.moveToPreviousWord
+import com.darkrockstudios.texteditor.state.moveToWordEnd
+import com.darkrockstudios.texteditor.state.toggleSpanStyle
 import kotlinx.coroutines.launch
 
 /** One outdent level: a single hard tab, else up to this many spaces. */
@@ -40,7 +45,8 @@ internal fun EditorActionRegistry.registerBuiltinActions() {
 			perform = { it.cutSelection() },
 		)
 	)
-	register(EditorActionSpec(Action.Paste) { it.pasteClipboard() })
+	register(EditorActionSpec(Action.Paste) { it.pasteClipboard(plainText = false) })
+	register(EditorActionSpec(Action.PasteAsPlainText) { it.pasteClipboard(plainText = true) })
 
 	register(
 		EditorActionSpec(
@@ -65,13 +71,38 @@ internal fun EditorActionRegistry.registerBuiltinActions() {
 	register(EditorActionSpec(Action.DeleteWordForward) { ctx ->
 		ctx.state.deleteByMotion { ctx.state.moveToNextWord() }
 	})
+	register(EditorActionSpec(Action.DeleteToWordEnd) { ctx ->
+		ctx.state.deleteByMotion { ctx.state.moveToWordEnd() }
+	})
 	register(EditorActionSpec(Action.DeleteToLineStart) { ctx ->
 		ctx.state.deleteByMotion { ctx.state.cursor.moveToLineStart() }
 	})
+	register(EditorActionSpec(Action.DeleteToLineEnd) { ctx ->
+		ctx.state.deleteByMotion { ctx.state.moveCursorToVisualRowEnd() }
+	})
+	register(EditorActionSpec(Action.DeleteToParagraphEnd) { it.state.deleteToParagraphEnd() })
 
 	register(EditorActionSpec(Action.Indent) { it.state.handleIndent() })
 	register(EditorActionSpec(Action.Outdent) { it.state.handleOutdent() })
 	register(EditorActionSpec(Action.NewLine) { it.state.handleEnter() })
+
+	registerFormattingToggle(Action.ToggleBold) { it.boldStyle }
+	registerFormattingToggle(Action.ToggleItalic) { it.italicStyle }
+	registerFormattingToggle(Action.ToggleUnderline) { UNDERLINE }
+	registerFormattingToggle(Action.ToggleStrikethrough) { it.strikethroughStyle }
+	registerFormattingToggle(Action.ToggleInlineCode) { it.codeStyle }
+}
+
+private val UNDERLINE = SpanStyle(textDecoration = TextDecoration.Underline)
+
+/** Reads the style at invocation, so a later markdown configuration change is honoured. */
+private fun EditorActionRegistry.registerFormattingToggle(
+	action: Action,
+	style: (MarkdownConfiguration) -> SpanStyle,
+) {
+	register(EditorActionSpec(action) { ctx ->
+		ctx.state.toggleSpanStyle(style(ctx.state.markdownConfiguration))
+	})
 }
 
 private fun EditorActionContext.copySelection() {
@@ -100,15 +131,20 @@ private fun EditorActionContext.cutSelection() {
 	}
 }
 
-private fun EditorActionContext.pasteClipboard() {
+/**
+ * [plainText] keeps only the clipboard's characters: no copied styling, rich spans or
+ * block structure, so the text takes the styling of wherever it lands.
+ */
+private fun EditorActionContext.pasteClipboard(plainText: Boolean) {
 	scope.launch {
-		ClipboardHelper.getText(clipboard, state.markdownConfiguration)?.let { text ->
+		ClipboardHelper.getText(clipboard, state.markdownConfiguration)?.let { clipboardText ->
+			val text = if (plainText) AnnotatedString(clipboardText.text) else clipboardText
 			val curSelection = state.selector.selection
 			val insertPosition = curSelection?.start ?: state.cursorPosition
 			// Read the clipboard's HTML before mutating: the text, the in-editor
 			// rich spans and the pasted block structure then land as one revision.
-			val htmlDocument = state.readHtmlPasteDocument(clipboard, text)
-			val clipboardCopyId = ClipboardHelper.readCopyId(clipboard)
+			val htmlDocument = if (plainText) null else state.readHtmlPasteDocument(clipboard, text)
+			val clipboardCopyId = if (plainText) null else ClipboardHelper.readCopyId(clipboard)
 			state.preserveCopiedRichSpansThroughNextEdit()
 			state.withAtomicEdit {
 				if (curSelection != null) {
@@ -116,12 +152,14 @@ private fun EditorActionContext.pasteClipboard() {
 				} else {
 					state.insertStringAtCursor(text)
 				}
-				state.pasteRichSpans(
-					insertPosition,
-					text,
-					clipboardCopyId,
-					requireCopyIdMatch = ClipboardHelper.supportsCopyProvenance,
-				)
+				if (!plainText) {
+					state.pasteRichSpans(
+						insertPosition,
+						text,
+						clipboardCopyId,
+						requireCopyIdMatch = ClipboardHelper.supportsCopyProvenance,
+					)
+				}
 				htmlDocument?.let { state.applyHtmlPasteBlocks(it, insertPosition, text) }
 			}
 			state.selector.clearSelection()
@@ -167,6 +205,32 @@ private fun TextEditorState.deleteByMotion(locateRangeEdge: () -> Unit) {
 		TextEditorRange(origin, edge)
 	}
 	delete(range, cursorBefore = origin)
+}
+
+/**
+ * Past the last character of the caret's visual row. Not the End motion, which on a
+ * wrapped row stops before that character so the caret stays drawn on the row.
+ */
+private fun TextEditorState.moveCursorToVisualRowEnd() {
+	val position = cursorPosition
+	val row = getWrappedLineIndex(position)
+	val nextRow = lineOffsets.getOrNull(row + 1)
+	val end = if (row >= 0 && nextRow != null && nextRow.line == position.line) {
+		nextRow.wrapStartsAtIndex
+	} else {
+		textLines[position.line].length
+	}
+	cursor.updatePosition(position.copy(char = end))
+}
+
+private fun TextEditorState.deleteToParagraphEnd() {
+	val position = cursorPosition
+	val lineLength = textLines[position.line].length
+	if (selector.selection == null && position.char == lineLength) {
+		deleteAtCursor()
+	} else {
+		deleteByMotion { cursor.updatePosition(position.copy(char = lineLength)) }
+	}
 }
 
 private fun TextEditorState.handleIndent() {

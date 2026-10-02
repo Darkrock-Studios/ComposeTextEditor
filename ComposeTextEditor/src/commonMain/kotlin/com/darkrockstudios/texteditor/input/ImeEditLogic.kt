@@ -7,7 +7,7 @@ import com.darkrockstudios.texteditor.state.TextEditorState
 /**
  * Shared IME edit operations used by every platform that drives the editor
  * through a platform input-method connection: the Android `InputConnection` and
- * the desktop `PlatformTextInputMethodRequest`.
+ * the skiko `PlatformTextInputMethodRequest` shared by desktop, iOS, and web.
  *
  * Centralizing these keeps composing-region and cursor semantics byte-for-byte
  * identical across platforms. Each function mutates [TextEditorState] the way the
@@ -236,7 +236,7 @@ private fun TextEditorState.replaceComposingOrInsert(text: String): Int {
 }
 
 /** True if [range] is well-ordered and both endpoints index into the current document. */
-private fun TextEditorState.isWithinDocument(range: TextEditorRange): Boolean {
+internal fun TextEditorState.isWithinDocument(range: TextEditorRange): Boolean {
 	if (!range.validate()) return false
 	if (range.start.line !in textLines.indices || range.end.line !in textLines.indices) return false
 	return range.start.char in 0..textLines[range.start.line].length &&

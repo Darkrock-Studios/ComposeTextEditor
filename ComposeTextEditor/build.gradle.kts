@@ -56,11 +56,26 @@ kotlin {
             }
         }
 
+        // Desktop, iOS, and wasm share Compose's skiko text input API
+        // (PlatformTextInputMethodRequest is the same interface on all three).
+        val skikoMain by creating {
+            dependsOn(commonMain)
+        }
+
         val desktopMain by getting {
+            dependsOn(skikoMain)
             dependencies {
                 implementation(compose.desktop.currentOs)
                 implementation(libs.kotlinx.coroutines.swing)
             }
+        }
+
+        val iosMain by getting {
+            dependsOn(skikoMain)
+        }
+
+        val wasmJsMain by getting {
+            dependsOn(skikoMain)
         }
 
         val androidHostTest by getting {

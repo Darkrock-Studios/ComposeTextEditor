@@ -26,29 +26,7 @@ class FindMatchStyle(
 		lineWrap: LineWrap,
 		textRange: TextRange,
 		state: TextEditorState,
-	) {
-		val lineHeight = layoutResult.multiParagraph.getLineHeight(lineWrap.virtualLineIndex)
-
-		val lineStartOffset = layoutResult.getLineStart(lineWrap.virtualLineIndex)
-		val startX = if (textRange.start <= lineStartOffset) {
-			layoutResult.lineTextLeft(lineWrap.virtualLineIndex, this)
-		} else {
-			layoutResult.getHorizontalPosition(textRange.start, usePrimaryDirection = true)
-		}
-
-		val lineEndOffset = layoutResult.getLineEnd(lineWrap.virtualLineIndex, false)
-		val endX = if (textRange.end >= lineEndOffset) {
-			layoutResult.getLineRight(lineWrap.virtualLineIndex)
-		} else {
-			layoutResult.getHorizontalPosition(textRange.end, usePrimaryDirection = true)
-		}
-
-		drawRect(
-			color = color,
-			topLeft = Offset(x = startX, y = 0f),
-			size = Size(width = endX - startX, height = lineHeight)
-		)
-	}
+	) = drawRangeFill(color, layoutResult, lineWrap, textRange)
 }
 
 /**
@@ -66,27 +44,56 @@ class FindCurrentMatchStyle(
 		lineWrap: LineWrap,
 		textRange: TextRange,
 		state: TextEditorState,
+	) = drawRangeFill(color, layoutResult, lineWrap, textRange)
+}
+
+/** Marks the range a find in selection is limited to, behind the text. */
+internal class FindScopeStyle(
+	private val color: Color = Color(0x1A2196F3)
+) : RichSpanStyle {
+	override val isDecoration: Boolean = true
+
+	override fun DrawScope.drawCustomStyle(
+		layoutResult: TextLayoutResult,
+		lineWrap: LineWrap,
+		textRange: TextRange,
+		state: TextEditorState,
 	) {
-		val lineHeight = layoutResult.multiParagraph.getLineHeight(lineWrap.virtualLineIndex)
-
-		val lineStartOffset = layoutResult.getLineStart(lineWrap.virtualLineIndex)
-		val startX = if (textRange.start <= lineStartOffset) {
-			layoutResult.lineTextLeft(lineWrap.virtualLineIndex, this)
-		} else {
-			layoutResult.getHorizontalPosition(textRange.start, usePrimaryDirection = true)
-		}
-
-		val lineEndOffset = layoutResult.getLineEnd(lineWrap.virtualLineIndex, false)
-		val endX = if (textRange.end >= lineEndOffset) {
-			layoutResult.getLineRight(lineWrap.virtualLineIndex)
-		} else {
-			layoutResult.getHorizontalPosition(textRange.end, usePrimaryDirection = true)
-		}
-
-		drawRect(
-			color = color,
-			topLeft = Offset(x = startX, y = 0f),
-			size = Size(width = endX - startX, height = lineHeight)
-		)
 	}
+
+	override fun DrawScope.drawBackground(
+		layoutResult: TextLayoutResult,
+		lineWrap: LineWrap,
+		textRange: TextRange,
+		state: TextEditorState,
+	) = drawRangeFill(color, layoutResult, lineWrap, textRange)
+}
+
+private fun DrawScope.drawRangeFill(
+	color: Color,
+	layoutResult: TextLayoutResult,
+	lineWrap: LineWrap,
+	textRange: TextRange,
+) {
+	val lineHeight = layoutResult.multiParagraph.getLineHeight(lineWrap.virtualLineIndex)
+
+	val lineStartOffset = layoutResult.getLineStart(lineWrap.virtualLineIndex)
+	val startX = if (textRange.start <= lineStartOffset) {
+		layoutResult.lineTextLeft(lineWrap.virtualLineIndex, this)
+	} else {
+		layoutResult.getHorizontalPosition(textRange.start, usePrimaryDirection = true)
+	}
+
+	val lineEndOffset = layoutResult.getLineEnd(lineWrap.virtualLineIndex, false)
+	val endX = if (textRange.end >= lineEndOffset) {
+		layoutResult.getLineRight(lineWrap.virtualLineIndex)
+	} else {
+		layoutResult.getHorizontalPosition(textRange.end, usePrimaryDirection = true)
+	}
+
+	drawRect(
+		color = color,
+		topLeft = Offset(x = startX, y = 0f),
+		size = Size(width = endX - startX, height = lineHeight)
+	)
 }

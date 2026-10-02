@@ -28,11 +28,15 @@ private val DefaultContentPadding = PaddingValues(16.dp)
  * @param autoFocus Requests focus once when first composed.
  * @param style Colors and text style for the editor and its gutter markers.
  * @param onRichSpanClick Invoked when a rich span (link, list, blockquote, code
- *   block, …) is tapped or right-clicked; see [RichSpanClickListener] for what
- *   the return value does (and does not do).
+ *   block, …) is clicked or tapped; see [RichSpanClick] for when, and
+ *   [RichSpanClickListener] for what the return value does (and does not do).
  * @param keyBindings Chord-to-command mapping, defaulting to [LocalKeyBindings].
  *   Bind chords to actions registered on [TextEditorState.actions] to add
  *   shortcuts of your own.
+ * @param onRichSpanClickEvent The same clicks as [onRichSpanClick], with the
+ *   modifier keys that were held.
+ * @param onLinkClick Opens a link's URL on Ctrl+click, or Cmd+click under the
+ *   macOS [keyBindings]; see [BasicTextEditor].
  */
 @Composable
 fun TextEditor(
@@ -44,6 +48,8 @@ fun TextEditor(
 	style: TextEditorStyle = rememberTextEditorStyle(),
 	onRichSpanClick: RichSpanClickListener? = null,
 	keyBindings: KeyBindings = LocalKeyBindings.current,
+	onRichSpanClickEvent: RichSpanClickEventListener? = null,
+	onLinkClick: ((url: String) -> Unit)? = null,
 ) {
 	Surface(modifier = modifier.focusBorder(state.isFocused && enabled, style)) {
 		BasicTextEditor(
@@ -55,6 +61,8 @@ fun TextEditor(
 			style = style,
 			onRichSpanClick = onRichSpanClick,
 			keyBindings = keyBindings,
+			onRichSpanClickEvent = onRichSpanClickEvent,
+			onLinkClick = onLinkClick,
 		)
 	}
 }

@@ -299,20 +299,15 @@ class TextEditManager(private val state: TextEditorState) {
 					operation.inheritStyle
 				)
 
-				// Remove all affected lines
-				state.removeLines(
+				val leftPlaceholder = state.removeLines(
 					operation.range.start.line,
 					operation.range.end.line - operation.range.start.line + 1
 				)
-				if (newLines.size == 1 && state.isEmpty()) {
-					state.setLine(0, newLines[0])
-				} else {
-					newLines.forEachIndexed { index, line ->
-						if (state.isEmpty() && index == 0) {
-							state.setLine(0, newLines[0])
-						} else {
-							state.insertLine(operation.range.start.line + index, line)
-						}
+				newLines.forEachIndexed { index, line ->
+					if (leftPlaceholder && index == 0) {
+						state.setLine(0, line)
+					} else {
+						state.insertLine(operation.range.start.line + index, line)
 					}
 				}
 			}
@@ -481,8 +476,7 @@ class TextEditManager(private val state: TextEditorState) {
 			val startText = firstLine.text.substring(0, startChar)
 			val endText = lastLine.text.substring(endChar)
 
-			// Remove the lines between start and end
-			state.removeLines(startLine, endLine - startLine + 1)
+			val leftPlaceholder = state.removeLines(startLine, endLine - startLine + 1)
 
 			val newText = buildAnnotatedStringWithSpans { addSpan ->
 				append(startText)
@@ -600,7 +594,7 @@ class TextEditManager(private val state: TextEditorState) {
                     }
 			}
 
-			if (state.isEmpty()) {
+			if (leftPlaceholder) {
 				state.setLine(0, newText)
 			} else {
 				state.insertLine(

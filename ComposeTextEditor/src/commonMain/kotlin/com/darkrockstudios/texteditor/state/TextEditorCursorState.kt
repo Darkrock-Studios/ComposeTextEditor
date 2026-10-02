@@ -35,6 +35,27 @@ class TextEditorCursorState(
 	 */
 	private var stylesSetManually = false
 
+	/**
+	 * The x a run of vertical moves aims for, so passing through a short row does not
+	 * pull the caret left for the rest of the run. Tied to the document it was taken
+	 * in: any edit ends the run, as does any other caret movement.
+	 */
+	private var verticalGoal: VerticalGoal? = null
+
+	private class VerticalGoal(val x: Float, val document: DocumentSnapshot)
+
+	/** The goal x of the vertical run under way, or null when there is none. */
+	internal val verticalGoalX: Float?
+		get() = verticalGoal?.takeIf { it.document === editorState.content }?.x
+
+	internal fun rememberVerticalGoalX(x: Float) {
+		verticalGoal = VerticalGoal(x, editorState.content)
+	}
+
+	internal fun forgetVerticalGoal() {
+		verticalGoal = null
+	}
+
 	private val _stylesFlow = MutableSharedFlow<Set<SpanStyle>>(
 		extraBufferCapacity = 1,
 		onBufferOverflow = BufferOverflow.DROP_OLDEST
@@ -50,6 +71,7 @@ class TextEditorCursorState(
 	fun updatePosition(position: CharLineOffset, updateStyles: Boolean = true) {
 		val oldPosition = _position
 		val newPosition = position.coerceInto(editorState.textLines)
+		verticalGoal = null
 		_position = newPosition
 		_cursorPositionFlow.tryEmit(newPosition)
 

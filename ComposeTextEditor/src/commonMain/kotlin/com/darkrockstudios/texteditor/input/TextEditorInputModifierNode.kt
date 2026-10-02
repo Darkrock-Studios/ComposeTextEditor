@@ -115,12 +115,8 @@ internal class TextEditorInputModifierNode(
 
 		inputSessionJob = coroutineScope.launch {
 			establishTextInputSession {
-				// Start platform-specific input method.
-				// Android: opens the soft keyboard and establishes an InputConnection.
-				// Desktop/iOS: opens a platform input-method session for composed input
-				//   (dead keys, accents, CJK, emoji picker); plain typing on desktop
-				//   still arrives separately as KEY_TYPED.
-				// WASM: suspends indefinitely — browser keyboard events are used instead.
+				// The platform's session: an InputConnection on Android, the shared
+				// skiko request elsewhere. See TextEditorTextInputService.
 				TextEditorTextInputService(state).startInput(this)
 			}
 		}

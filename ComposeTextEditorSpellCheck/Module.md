@@ -38,11 +38,22 @@ fun SpellCheckedEditor(spellChecker: EditorSpellChecker) {
 `SpellCheckingTextEditor` draws the squiggles and wires misspelled-word taps to a
 suggestion menu for you. Toggle checking at runtime with
 `state.setSpellCheckingEnabled(...)`, or fetch suggestions yourself via
-`state.getSuggestions(word)`. To add your own entries to that menu, such as an
-"Add to dictionary" action, pass `spellCheckMenuItems`: it receives the flagged
+`state.getSuggestions(word)`.
+
+The menu offers "Ignore", which stops flagging the word for the session
+(`state.ignoreWord(word)`, listed in `state.ignoredWords`). Pass `onAddToDictionary` to
+also offer "Add to dictionary"; it receives the word to store in your dictionary, and the
+word stops being flagged at once. With `PlatformEditorSpellChecker`, that can be the
+platform checker's own `addToDictionary`. Localize the menu with `spellCheckStrings`.
+
+To add your own entries to that menu, pass `spellCheckMenuItems`: it receives the flagged
 [SpellCheckItem][com.darkrockstudios.texteditor.spellcheck.SpellCheckItem] and returns
 [ContextMenuItem][com.darkrockstudios.texteditor.contextmenu.ContextMenuItem]s rendered
-as their own group after the suggestions.
+after the built-in ones.
+
+A checker serves one language. To switch, create a checker for the new language and pass
+it to `rememberSpellCheckState`, which re-checks the document with it; the ignored words
+carry over.
 
 ## Choosing a backend
 
