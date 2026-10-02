@@ -1998,6 +1998,19 @@ iOS Safari; browser tests run in CI (met: the `browser` job, 4.15).
   the connection closes with no batch left open.
   Hooks run outside a batch (hardware keys, a host's `insertTypedString` or
   `pasteLanded`) are offered at once as before.
+  Checked on the Mac (2026-10-01, `a5e48cad`): compiles and the iOS tests
+  pass. On the iPhone 17 Pro Max simulator (iOS 26) with the soft keyboard and
+  the sample's `SmartPunctuation` switches on, read from the edit operations
+  the sample prints: `A--` is three inserts and one replace of `--` with the
+  dash, and undo gives `A--` back in one step; each `"` and the `'` of `It's`
+  is replaced as it is typed, and `...` becomes the ellipsis; nothing is
+  doubled or lost and the suggestions carry on. That is with iOS's own Smart
+  Punctuation (Settings, General, Keyboard) off. With it on, the default, the
+  keyboard substitutes first: the second dash arrives as one replacement of
+  the whole token (`A-` deleted, `A` and the dash inserted), which is typing
+  to the editor, so `SmartPunctuation` never sees `--` and one undo takes the
+  whole typed run, as a native text view's Undo Typing does. Compose's
+  `ImeOptions` has no trait to turn the keyboard's off.
 - [x] **4.29 iOS ignores IME resync requests. C.** [Opus] [Lane E] [Mac work]
   Compose's iOS connection absorbs a value change made during the keyboard's
   own edit (`TextInputConnection.edit` stores the post-edit value with
@@ -4953,6 +4966,5 @@ records results and removes entries that passed.
 | Item | What to do | A pass looks like | Result |
 | --- | --- | --- | --- |
 | 3.17 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64` and `:ComposeTextEditor:iosSimulatorArm64Test`. A new `expect`, `Modifier.stylusHandwriting` (commonMain `input/StylusHandwriting.kt`), has its non-Android actual in `skikoMain` (returns the modifier unchanged); `BasicTextEditor` applies it. No `iosMain` change | Compiles and the tests pass; an Apple Pencil on an iPad simulator or device still places the caret and selects as before | |
-| 4.26 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64` and `:ComposeTextEditor:iosSimulatorArm64Test`. `skikoMain` changed: `SkikoTextEditorInputMethodRequest` runs each `editText` block and each `onEditCommand` list as one IME batch (`TextEditorState.imeBatch`), so the edit behaviors are offered what landed once the block ends. No `iosMain` change. Then in the iOS sample app with `SmartPunctuation` added to the editor's `editBehaviors`: type `a--`, `"hi"`, `it's` and `...` with the soft keyboard, with autocorrect on, and undo once after the dash | Compiles and the tests pass. The dash, the curly quotes, the apostrophe and the ellipsis appear as the character is typed, the keyboard's suggestions follow the substituted text (no stray characters, nothing doubled or lost when autocorrect rewrites the word before), and one undo gives `a--` back | Compile and tests passed 2026-10-01 at `e6001af2`. The typing check is for a person, with `SmartPunctuation` added to the sample |
 | 3.20 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64` and `:ComposeTextEditor:iosSimulatorArm64Test`. No `iosMain` or `skikoMain` change, but common code now draws the bars in a `Popup` each (`TouchHandlePopups.kt`), which on iOS takes the place of the canvas drawing. Then in the iOS sample app on the simulator: scroll so a line sits on the editor's top edge, double tap a word on it, and drag the start bar by its dot (above the editor) to the left; select a word on the last wholly visible line and drag the end bar by its dot (below the editor) to the right; then scroll the selection out of view and back | Compiles and the tests pass. Each dot draws past the editor's edge and drags its end, with no scroll while the finger stays level; the bars hide once their row's bottom leaves the view and come back with it, leaving no stray bar | |
 | 7.57 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64` and `:ComposeTextEditor:iosSimulatorArm64Test`. A new `expect`, `PlatformAccessibilityBridge()` (commonMain `AccessibilityBridge.kt`), has its non-Android actual in `skikoMain` (does nothing); `skikoMain`'s `SkikoTextEditorInputMethodRequest` now serves the state's `SemanticsLayout` as `textLayoutResult` (`DocumentTextLayout` is gone) and adds the first row's top to `unclippedTextOffsetInRoot`. No `iosMain` change. Then in the iOS sample on a simulator: scroll so the first paragraph is out of view, and drag the spacebar trackpad (the floating cursor) across a heading, an indented paragraph (a list item, or a paragraph format with an indent) and the paragraphs below them; with a hardware keyboard, Up and Down through the same rows. With VoiceOver on, note what its caret outline shows on the focused editor | Compiles and the tests pass. The floating cursor's caret follows the finger along the drawn rows, a heading's taller row and the indent included, and lands where it is drawn on lift; Up and Down keep their column. VoiceOver's outline is expected unchanged (the legacy text input view answers no caret rectangle); record what it shows | |
