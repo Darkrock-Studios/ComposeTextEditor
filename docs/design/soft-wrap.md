@@ -124,6 +124,41 @@ neither carries the vertical one. Android's cursor anchor is watched through the
 caret's view position, so a sideways scroll resends it. The touch toolbar moves
 with a sideways scroll as with a vertical one.
 
+## Testing
+
+With wrapping on, the default, the sideways scroll is always 0, so code that
+forgets it passes every wrapped test. The rule: code that pairs a row's offsets
+(content space) with view or pointer coordinates goes through the conversions
+above, or adds `scrollX` itself. The scrolled variants of the broad tests guard
+it:
+
+- `assertFollowsSidewaysScroll` (`testUtils/uiFuzz`) reads the view at two
+  sideways scrolls and moves each answer back into content x by its scroll: the
+  caret's metrics, `getPositionForOffset` and what points along the caret's row
+  hit must agree. Core's `assertViewFollowsSidewaysScroll` adds the selection
+  drawn in `inContentSpace`, the line decorators' offset, the skiko input
+  method's caret and text origin and the stylus gesture layout, and checks that
+  the caret is drawn at its metrics and not at all once scrolled out of view.
+- The UI storms (`EditorFuzzE2eTest`, the markdown module's
+  `MarkdownUiFuzzFixpointTest`) and the invariant fuzz (`EditorInvariantFuzzTest`,
+  invariant `ViewFollowsSidewaysScroll`) have sideways variants: wrapping off,
+  lines wider than the editor, the view scrolled to a seeded point before the
+  first step and after each, and the check after each.
+- The differential fuzz runs unwrapped against a `BasicTextField` too wide to
+  wrap (a multi-line `BasicTextField` cannot turn wrapping off) and a single line
+  against `BasicTextField`'s, the editor scrolled sideways between strokes. It
+  compares the edits only: no key's result may depend on the scroll.
+- `softwrap/SidewaysGeometryTest` checks scenes at several points of the range:
+  the check above, and pointer input placed from the rows' own layout less the
+  scroll, never through the conversions under test (clicks, a link, the touch
+  handles and toolbar, the magnifier).
+
+Each place that applies the sideways scroll (the conversions, `inContentSpace`,
+the hit test, the magnifier's clamp, the caret's drawing, the touch toolbar, the
+stylus gesture layout, the skiko text origin, the line decorators' offset and the
+drag auto-scroll) was checked against these: with its scroll taken out, at least
+one of them fails. A new place should be checked the same way.
+
 ## Known limits
 
 - The horizontal scroll is not saved with the state, unlike the first visible

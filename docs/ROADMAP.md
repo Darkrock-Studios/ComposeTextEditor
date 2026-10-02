@@ -3597,6 +3597,15 @@ iOS Safari; browser tests run in CI (met: the `browser` job, 4.15).
     caret sideways, with no scrollbar (`LineLimitsE2eTest`).
   - The sample app's switch: done. A Soft wrap switch in the demo, and the Code
     Editor demo unwrapped, its line numbers placed by a fixed x.
+  - Scrolled variants of the broad tests: done. Wrapped, the sideways scroll is
+    0, so code that forgets it passes every wrapped test. The UI storms, the
+    invariant fuzz and the markdown fixpoint storm run with wrapping off,
+    scrolled sideways between steps, and check that the view follows the scroll
+    (`assertViewFollowsSidewaysScroll`); `softwrap/SidewaysGeometryTest` takes
+    the geometry harness through the same check scene by scene. The
+    differential fuzz runs unwrapped, against a `BasicTextField` too wide to
+    wrap, and as a single line. Taking the scroll out of each place that applies
+    it fails at least one (`docs/design/soft-wrap.md`, "Testing").
 
   Done: `softWrap` on the editor composables, `TextEditorState.horizontalScrollState`,
   and `SingleLine` one row scrolling sideways; checked in rendered frames of a
