@@ -26,9 +26,9 @@ import androidx.compose.ui.text.input.TextEditorState as ComposeTextEditorState
 
 /**
  * Starts a Compose skiko input-method session bound to this editor. A platform's
- * `TextEditorTextInputService` hands it that platform's [imeOptions] and nothing else;
- * every edit the platform delivers lands in [ImeEditLogic] through
- * [SkikoTextEditorInputMethodRequest].
+ * `TextEditorTextInputService` hands it that platform's [imeOptions], and whether the
+ * platform needs a text layout to hit-test ([exposeTextLayout]); every edit the platform
+ * delivers lands in [ImeEditLogic] through [SkikoTextEditorInputMethodRequest].
  *
  * The frameworks watch the request's text through `snapshotFlow`, but the document
  * is deliberately not snapshot state. The session therefore bumps a snapshot-backed
@@ -38,8 +38,9 @@ import androidx.compose.ui.text.input.TextEditorState as ComposeTextEditorState
 internal suspend fun TextEditorState.startSkikoInputSession(
 	session: PlatformTextInputSession,
 	imeOptions: ImeOptions,
+	exposeTextLayout: Boolean = false,
 ): Nothing = coroutineScope {
-	val request = SkikoTextEditorInputMethodRequest(this@startSkikoInputSession, imeOptions)
+	val request = SkikoTextEditorInputMethodRequest(this@startSkikoInputSession, imeOptions, exposeTextLayout)
 	launch { editOperations.collect { request.contentRevision++ } }
 	launch { documentGeneration.collect { request.contentRevision++ } }
 	session.startInputMethod(request)
@@ -49,10 +50,14 @@ internal suspend fun TextEditorState.startSkikoInputSession(
  * The one [PlatformTextInputMethodRequest] for the skiko platforms. Desktop drives it
  * through [editText], iOS through [editText] as well, and web (still on the command
  * list API) through [onEditCommand]; both routes end in [ImeEditLogic].
+ *
+ * @param exposeTextLayout Serve [textLayoutResult] from a whole-document layout. Only
+ *   iOS reads it, for the spacebar trackpad; elsewhere it would be a cost for nothing.
  */
 internal class SkikoTextEditorInputMethodRequest(
 	private val editorState: TextEditorState,
 	override val imeOptions: ImeOptions,
+	exposeTextLayout: Boolean = false,
 ) : PlatformTextInputMethodRequest {
 
 	/** Advanced on every content edit; see [startSkikoInputSession]. */
@@ -75,9 +80,15 @@ internal class SkikoTextEditorInputMethodRequest(
 
 	override val onImeAction: ((ImeAction) -> Unit)? = null
 
-	// The editor draws its own lines, so there is no Compose layout to expose. Null is
-	// the documented "not laid out yet" answer and every framework tolerates it.
-	override val textLayoutResult: () -> TextLayoutResult? = { null }
+	private val documentLayout = if (exposeTextLayout) DocumentTextLayout(editorState) else null
+
+	/**
+	 * The editor draws its own lines, so there is no Compose layout to expose. A platform
+	 * that hit-tests the text itself asks for [exposeTextLayout] and gets a whole-document
+	 * layout built on demand ([DocumentTextLayout]); the others get null, the documented
+	 * "not laid out yet" answer every framework tolerates.
+	 */
+	override val textLayoutResult: () -> TextLayoutResult? = { documentLayout?.get() }
 
 	/** Caret rectangle in root coordinates; positions candidate windows and the web backing input. */
 	override val focusedRectInRoot: () -> Rect? = {
@@ -116,10 +127,12 @@ internal class SkikoTextEditorInputMethodRequest(
 	}
 
 	private fun attachedCoordinates(): LayoutCoordinates? {
-		// The coordinates are a plain field. The viewport size is snapshot state that
-		// changes with every resize (a soft keyboard appearing, a rotation), so reading
-		// it lets an observer of the rectangles follow those relayouts.
+		// The coordinates are a plain field. The viewport size and the canvas's position
+		// are snapshot state that change with every resize (a rotation) and move (the
+		// window shifting for a soft keyboard), so reading them lets an observer of the
+		// rectangles follow both.
 		editorState.viewportSize
+		editorState.canvasPositionInRoot
 		return editorState.canvasLayoutCoordinates?.takeIf { it.isAttached }
 	}
 

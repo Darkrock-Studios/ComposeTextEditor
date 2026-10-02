@@ -1,6 +1,7 @@
 package com.darkrockstudios.texteditor.state
 
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.text.style.ResolvedTextDirection
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.LineWrap
 import com.darkrockstudios.texteditor.effectiveHeight
@@ -10,7 +11,7 @@ import com.darkrockstudios.texteditor.effectiveHeight
 // text. Missing cursors step by logical line; updatePosition clamps into the text.
 
 internal fun TextEditorState.moveCursorUp() {
-	val index = getWrappedLineIndex(cursorPosition)
+	val index = cursorRowIndex()
 	val row = lineOffsets.getOrNull(index)
 	when {
 		cursorPosition.line == 0 && (row == null || row.virtualLineIndex == 0) -> moveToDocumentStart()
@@ -20,7 +21,7 @@ internal fun TextEditorState.moveCursorUp() {
 }
 
 internal fun TextEditorState.moveCursorDown() {
-	val index = getWrappedLineIndex(cursorPosition)
+	val index = cursorRowIndex()
 	val nextRow = if (index < 0) null else lineOffsets.getOrNull(index + 1)
 	when {
 		cursorPosition.line == textLines.lastIndex && (nextRow == null || nextRow.line != cursorPosition.line) ->
@@ -32,158 +33,147 @@ internal fun TextEditorState.moveCursorDown() {
 }
 
 /**
+ * Runs [edgeMove], a page move's jump to the document start or end, keeping the
+ * run's goal x, as `BasicTextField` does across a page move: the next Up or Down
+ * returns to the column. Up and Down at the edges measure afresh from the caret,
+ * again as the reference does.
+ */
+private inline fun TextEditorState.keepingVerticalGoal(edgeMove: () -> Unit) {
+	val goalX = verticalGoalOrCaretX()
+	edgeMove()
+	cursor.rememberVerticalGoalX(goalX)
+}
+
+/** The x the vertical run under way aims for, or the caret's own x when one starts. */
+private fun TextEditorState.verticalGoalOrCaretX(): Float =
+	cursor.verticalGoalX ?: getPositionForOffset(cursorPosition, cursor.affinity).position.x
+
+/**
  * Moves the caret onto the visual row at [rowIndex] in [lineOffsets], at the x the
  * current run of vertical moves aims for (the caret's own x when a run starts).
  */
 private fun TextEditorState.moveCursorToRow(rowIndex: Int) {
-	val goalX = cursor.verticalGoalX ?: getPositionForOffset(cursorPosition).position.x
+	val goalX = verticalGoalOrCaretX()
 	val row = lineOffsets[rowIndex]
-	cursor.updatePosition(CharLineOffset(row.line, row.charAtX(goalX)))
+	val (char, affinity) = row.caretAtX(goalX)
+	cursor.updatePosition(CharLineOffset(row.line, char), affinity)
 	cursor.rememberVerticalGoalX(goalX)
 }
 
 /**
- * The caret position on this row nearest to [x]. On a row that wraps, that stops
- * short of the wrap, since a position on the wrap draws on the next row.
+ * The caret position on this row nearest to [x], with the affinity that keeps it
+ * drawn here: upstream when it lands on the wrap that ends the row.
  */
-private fun LineWrap.charAtX(x: Float): Int {
+private fun LineWrap.caretAtX(x: Float): Pair<Int, CaretAffinity> {
 	val layout = textLayoutResult
 	val row = virtualLineIndex
-	val rowEnd = if (row == layout.lineCount - 1) {
-		layout.getLineEnd(row)
-	} else {
-		val wrap = layout.getLineEnd(row)
-		val text = layout.layoutInput.text
-		val step = if (wrap >= 2 && text[wrap - 1].isLowSurrogate() && text[wrap - 2].isHighSurrogate()) 2 else 1
-		maxOf(wrapStartsAtIndex, wrap - step)
-	}
+	val text = layout.layoutInput.text.text
+	val rowEnd = layout.getLineEnd(row)
+	val wraps = row < layout.lineCount - 1
+	// Past a row's far edge the layout's answer is unreliable: on a wrapped row it is
+	// the last glyph's start (the wrap offset belongs to the next row), and on a row
+	// that ends in a run of the other direction it is a position inside that run. The
+	// caret belongs at the row's end.
+	val pastEdge = if (layout.getParagraphDirection(0) == ResolvedTextDirection.Ltr) x >= rowEndX() else x <= rowEndX()
+	if (pastEdge) return rowEnd to if (wraps) CaretAffinity.Upstream else CaretAffinity.Downstream
 	val y = (layout.getLineTop(row) + layout.getLineBottom(row)) / 2f
-	return layout.getOffsetForPosition(Offset(x, y)).coerceIn(wrapStartsAtIndex, rowEnd)
+	val hit = layout.getOffsetForPosition(Offset(x, y)).coerceIn(wrapStartsAtIndex, rowEnd)
+	val char = text.snapToGraphemeBoundary(hit, forward = false)
+	return char to if (wraps && char == rowEnd) CaretAffinity.Upstream else CaretAffinity.Downstream
 }
 
+/**
+ * The x of a caret at [char] drawn on this row. At the wrap that ends the row (an
+ * upstream caret) it is the row's end, where the layout would otherwise answer
+ * with the start of the next row.
+ */
+internal fun LineWrap.caretX(char: Int): Float {
+	val layout = textLayoutResult
+	val safe = char.coerceIn(0, layout.layoutInput.text.length)
+	val atWrap = virtualLineIndex < layout.lineCount - 1 && safe == layout.getLineEnd(virtualLineIndex)
+	return if (atWrap) rowEndX() else layout.getHorizontalPosition(safe, usePrimaryDirection = true)
+}
+
+/**
+ * The x past this row's last glyph, trailing spaces included: the line's own right
+ * edge (left in a right-to-left paragraph) stops before them.
+ */
+private fun LineWrap.rowEndX(): Float {
+	val layout = textLayoutResult
+	val row = virtualLineIndex
+	val last = layout.getLineEnd(row) - 1
+	return if (layout.getParagraphDirection(0) == ResolvedTextDirection.Ltr) {
+		maxOf(layout.getLineRight(row), if (last >= 0) layout.getBoundingBox(last).right else 0f)
+	} else {
+		minOf(layout.getLineLeft(row), if (last >= 0) layout.getBoundingBox(last).left else 0f)
+	}
+}
+
+/** End: the end of the caret's visual row, drawn there even when the row wraps. */
 internal fun TextEditorState.moveCursorToLineEnd() {
 	val (line, _) = cursorPosition
-	val currentWrappedLineIndex = getWrappedLineIndex(cursorPosition)
-	if (currentWrappedLineIndex < 0) {
-		cursor.updatePosition(cursorPosition.copy(char = textLines[line].length))
-		return
-	}
-	val currentWrappedLine = lineOffsets[currentWrappedLineIndex]
-
-	if (currentWrappedLineIndex < lineOffsets.size - 1) {
-		val nextWrappedLine = lineOffsets[currentWrappedLineIndex + 1]
-		if (nextWrappedLine.line == currentWrappedLine.line) {
-			// Go to the end of this virtual line
-			cursor.updatePosition(cursorPosition.copy(char = nextWrappedLine.wrapStartsAtIndex - 1))
-		} else {
-			// Go to the end of this real line
-			cursor.updatePosition(cursorPosition.copy(char = textLines[line].length))
-		}
+	val rowIndex = cursorRowIndex()
+	val nextRow = if (rowIndex < 0) null else lineOffsets.getOrNull(rowIndex + 1)
+	if (nextRow != null && nextRow.line == line) {
+		cursor.updatePosition(cursorPosition.copy(char = nextRow.wrapStartsAtIndex), CaretAffinity.Upstream)
 	} else {
 		cursor.updatePosition(cursorPosition.copy(char = textLines[line].length))
 	}
 }
 
 /**
- * Moves the cursor to the start of the next word, or to the document end if none
- * remains.
+ * The next word start (Windows' Ctrl+Right): the start of the next word on this
+ * line, else the line end; from a line end, the next line's first word start, or
+ * its end when it has none, so an empty line is a stop. Never crosses a line break
+ * and a word in one step (hammer-editor#852).
  */
 fun TextEditorState.moveToNextWord() {
-	// Get document length
-	val totalChars = textLines.sumOf { it.length + 1 } - 1
-	val currentCharIndex = getCharacterIndex(cursorPosition)
-	if (currentCharIndex >= totalChars) return
-
-	var newPosition = currentCharIndex
-
-	// First skip current word if we're in one
-	while (newPosition < totalChars) {
-		val pos = getOffsetAtCharacter(newPosition)
-		val line = textLines[pos.line]
-
-		if (pos.char < line.length && !isWordChar(line, pos.char)) {
-			break
-		}
-		newPosition++
+	val (line, char) = cursorPosition
+	val text = textLines[line].text
+	if (char < text.length) {
+		val next = text.wordRuns().firstOrNull { it.isWord && it.start > char }
+		cursor.updatePosition(CharLineOffset(line, next?.start ?: text.length))
+	} else if (line < textLines.lastIndex) {
+		val nextText = textLines[line + 1].text
+		val first = nextText.wordRuns().firstOrNull { it.isWord }
+		cursor.updatePosition(CharLineOffset(line + 1, first?.start ?: nextText.length))
 	}
-
-	// Then skip non-word characters
-	while (newPosition < totalChars) {
-		val pos = getOffsetAtCharacter(newPosition)
-		val line = textLines[pos.line]
-
-		if (pos.char < line.length && isWordChar(line, pos.char)) {
-			break
-		}
-		newPosition++
-	}
-
-	cursor.updatePosition(getOffsetAtCharacter(newPosition))
 }
 
 /**
- * Moves the cursor to the end of the current word, or of the next one when it is not
- * inside a word, or to the document end if no word remains.
+ * The end of the word the caret is in or before, on this line or a later one, or
+ * the document end when no word remains.
  */
 fun TextEditorState.moveToWordEnd() {
 	var (line, char) = cursorPosition
-	while (!isWordChar(textLines[line], char)) {
-		when {
-			char < textLines[line].length -> char++
-			line < textLines.lastIndex -> {
-				line++
-				char = 0
-			}
-
-			else -> break
-		}
+	while (true) {
+		val end = textLines[line].text.wordRuns().firstOrNull { it.isWord && it.end > char }?.end
+		if (end != null) return cursor.updatePosition(CharLineOffset(line, end))
+		if (line == textLines.lastIndex) return moveToDocumentEnd()
+		line++
+		char = 0
 	}
-	while (isWordChar(textLines[line], char)) char++
-	cursor.updatePosition(CharLineOffset(line, char))
 }
 
 /**
- * Moves the cursor to the start of the current or previous word, or to the
- * document start if already at the beginning.
+ * The start of the word the caret is in or after, on this line or an earlier one,
+ * or the document start when no word precedes it.
  */
 fun TextEditorState.moveToPreviousWord() {
-	// Get current absolute position
-	val currentCharIndex = getCharacterIndex(cursorPosition)
-	if (currentCharIndex == 0) return
-
-	// Convert to offset for easier text access
-	val currentOffset = cursorPosition
-	val currentLine = textLines[currentOffset.line]
-
-	var newPosition = currentCharIndex
-
-	// Handle if we're in whitespace or at word end
-	if (currentOffset.char == 0 ||
-		(currentOffset.char > 0 && !isWordChar(currentLine, currentOffset.char - 1))
-	) {
-		// Move back one to get to potential word
-		newPosition--
+	var (line, char) = cursorPosition
+	while (true) {
+		val start = textLines[line].text.wordRuns().lastOrNull { it.isWord && it.start < char }?.start
+		if (start != null) return cursor.updatePosition(CharLineOffset(line, start))
+		if (line == 0) return moveToDocumentStart()
+		line--
+		char = textLines[line].length
 	}
+}
 
-	// Keep moving back until we hit the start of a word
-	while (newPosition > 0) {
-		val pos = getOffsetAtCharacter(newPosition)
-		val line = textLines[pos.line]
-
-		// If we're at a word char and either:
-		// 1. We're at the start of the line, or
-		// 2. The previous char is not a word char
-		// Then we've found the start of a word
-		if (pos.char < line.length && isWordChar(line, pos.char) &&
-			(pos.char == 0 || !isWordChar(line, pos.char - 1))
-		) {
-			break
-		}
-
-		newPosition--
-	}
-
-	cursor.updatePosition(getOffsetAtCharacter(newPosition))
+/** Whether the caret's paragraph runs right to left; a paragraph the layout has not reached counts as left to right. */
+internal fun TextEditorState.caretParagraphIsRtl(): Boolean {
+	val row = lineOffsets.getOrNull(getWrappedLineIndex(cursorPosition)) ?: return false
+	return row.textLayoutResult.getParagraphDirection(0) == ResolvedTextDirection.Rtl
 }
 
 /** Moves the cursor to the first character of the document. */
@@ -243,7 +233,7 @@ internal fun TextEditorState.moveCursorPageDown() = moveCursorByPage(1)
  * the scroll range allows, and always ends up visible.
  */
 private fun TextEditorState.moveCursorByPage(direction: Int) {
-	val index = getWrappedLineIndex(cursorPosition)
+	val index = cursorRowIndex()
 	val row = lineOffsets.getOrNull(index) ?: return
 	val pageHeight = scrollManager.viewportHeight
 	val targetY = row.offset.y + row.effectiveHeight / 2f + direction * pageHeight
@@ -252,14 +242,14 @@ private fun TextEditorState.moveCursorByPage(direction: Int) {
 		if (it == index) index + direction else it
 	}
 	when {
-		targetY < 0f || targetIndex < 0 -> moveToDocumentStart()
+		targetY < 0f || targetIndex < 0 -> keepingVerticalGoal { moveToDocumentStart() }
 		targetY >= lastRow.offset.y + lastRow.effectiveHeight || targetIndex > lineOffsets.lastIndex ->
-			moveToDocumentEnd()
+			keepingVerticalGoal { moveToDocumentEnd() }
 
 		else -> moveCursorToRow(targetIndex)
 	}
 
-	val newRow = lineOffsets.getOrNull(getWrappedLineIndex(cursorPosition)) ?: return
+	val newRow = lineOffsets.getOrNull(cursorRowIndex()) ?: return
 	val newTop = newRow.offset.y.toInt()
 	val keepsScreenPlace = scrollState.value + newTop - row.offset.y.toInt()
 	val showsRowFrom = minOf(newTop, (newRow.offset.y + newRow.effectiveHeight).toInt() - pageHeight)

@@ -1,11 +1,13 @@
 package e2e
 
+import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.text.AnnotatedString
 import com.darkrockstudios.texteditor.contextmenu.TextEditorContextMenuState
 import com.darkrockstudios.texteditor.richstyle.BulletListSpanStyle
 import com.darkrockstudios.texteditor.richstyle.SpellCheckStyle
 import utils.editorUiTest
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -19,6 +21,7 @@ import kotlin.test.assertTrue
  * returned never enters into it: hosts return `true` liberally just to observe
  * clicks, so the listener's answer cannot mean "do not focus".
  */
+@OptIn(ExperimentalTestApi::class)
 class TouchFocusE2eTest {
 
 	private val document = AnnotatedString("hello world, this is the document text")
@@ -53,6 +56,44 @@ class TouchFocusE2eTest {
 		autoFocus = false,
 	) {
 		clickAtCharacter(4)
+
+		assertTrue(state.isFocused)
+	}
+
+	/**
+	 * The menu a right-click opens acts on the editor, so the editor must hold focus
+	 * behind it and keep it once the menu goes. Skiko's `awaitFirstDown` answers only
+	 * the primary button, so this is the case a focus handler built on it misses.
+	 */
+	@Test
+	fun `a right-click focuses the editor`() {
+		val menuState = TextEditorContextMenuState()
+		editorUiTest(
+			initialText = document,
+			autoFocus = false,
+			contextMenuState = menuState,
+		) {
+			rightClickAtCharacter(4)
+
+			assertTrue(menuState.isVisible, "precondition: the right-click opened the menu")
+			assertTrue(state.isFocused)
+
+			test.runOnIdle { menuState.dismissMenu() }
+			waitForIdle()
+			typeText("X")
+
+			assertTrue(state.isFocused)
+			assertTrue(text.contains("X"), "expected the typed character to land: $text")
+		}
+	}
+
+	/** Any mouse button is an unambiguous press at the editor. */
+	@Test
+	fun `a middle click focuses the editor`() = editorUiTest(
+		initialText = document,
+		autoFocus = false,
+	) {
+		middleClickAtCharacter(4)
 
 		assertTrue(state.isFocused)
 	}
@@ -172,6 +213,96 @@ class TouchFocusE2eTest {
 			assertFalse(state.isFocused, "the keyboard would cover the menu this press opened")
 			assertTrue(selectedText.isNotEmpty(), "the existing selection must survive")
 		}
+	}
+
+	/**
+	 * The second tap of a double tap selects on its down, before the focus handler sees
+	 * the release. It must still count as a selection: a popup the first tap opened
+	 * would otherwise leave a selection with no way to type over it. The clock is held
+	 * so the popup's open animation cannot push the second tap out of the window, and
+	 * so the popup is still showing when the second tap lifts.
+	 */
+	@Test
+	fun `a second tap under a popup the first tap opened selects and focuses`() {
+		val menuState = TextEditorContextMenuState()
+		editorUiTest(
+			initialText = document,
+			autoFocus = false,
+			contextMenuState = menuState,
+			onRichSpanClick = { _, _, offset ->
+				menuState.showMenu(offset)
+				true
+			},
+		) {
+			state.addRichSpan(0, 5, SpellCheckStyle)
+			test.mainClock.autoAdvance = false
+			tapAtCharacter(2)
+			assertTrue(menuState.isVisible, "precondition: the first tap opened the popup")
+
+			tapAtCharacter(2)
+
+			assertEquals("hello", selectedText, "the second tap pairs into a double tap")
+			assertTrue(state.isFocused)
+		}
+	}
+
+	/**
+	 * Touch handles go with focus (1.18), so there is none to drag on an unfocused
+	 * editor: a finger where one stood is a tap, and taps focus.
+	 */
+	@Test
+	fun `with focus gone a finger where the handle stood taps and focuses`() = editorUiTest(
+		initialText = document,
+		autoFocus = false,
+	) {
+		test.runOnIdle {
+			state.selector.startSelection(state.getOffsetAtCharacter(6), isTouch = true)
+			state.selector.updateSelection(state.getOffsetAtCharacter(6), state.getOffsetAtCharacter(11))
+		}
+		waitForIdle()
+		assertFalse(state.isFocused, "precondition: unfocused with a touch selection")
+		val formerHandle = handleCenter(isStart = false)
+
+		panFrom(formerHandle)
+		assertFalse(state.isFocused, "no handle to drag, so the travel is a pan")
+
+		tapAt(formerHandle)
+
+		assertTrue(state.isFocused)
+	}
+
+	/**
+	 * A handle drag travels past touch slop, which alone reads as a pan. What lets the
+	 * focus handler tell it apart, and ask for a dismissed keyboard back on the drop, is
+	 * the touch selection generation, which every move of the drag advances. The handler's
+	 * side of that is pinned by the long-press and double-tap drag tests.
+	 */
+	@Test
+	fun `a handle drag advances the touch selection generation`() = editorUiTest(initialText = document) {
+		longPressAtCharacter(8)
+		val before = state.selector.touchSelectionGeneration
+
+		dragHandle(isStart = false, toChar = 16)
+
+		assertTrue(selectedText.startsWith("world"), "the drag extended the selection: $selectedText")
+		assertTrue(state.selector.touchSelectionGeneration > before)
+		assertTrue(state.isFocused)
+	}
+
+	/** Two fingers are a pinch or a scroll gesture for some ancestor, never a request to type. */
+	@Test
+	fun `a two-finger tap does not focus the editor`() = editorUiTest(
+		initialText = document,
+		autoFocus = false,
+	) {
+		touch {
+			down(0, positionOfCharacter(4))
+			down(1, positionOfCharacter(20))
+			up(0)
+			up(1)
+		}
+
+		assertFalse(state.isFocused)
 	}
 
 	/** Focus survives the gesture that placed it, so typing right after a tap works. */

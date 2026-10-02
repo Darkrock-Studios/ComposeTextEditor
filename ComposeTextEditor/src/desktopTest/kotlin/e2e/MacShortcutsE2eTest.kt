@@ -2,6 +2,8 @@ package e2e
 
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.TextDirection
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.input.MacKeyBindings
 import utils.editorUiTest
@@ -14,6 +16,19 @@ import kotlin.test.assertTrue
  * for word-wise motion, Cmd+Arrow for line and document bounds.
  */
 class MacShortcutsE2eTest {
+
+	@Test
+	fun `cmd+left goes to the line end in a right-to-left paragraph`() = editorUiTest(
+		initialText = AnnotatedString("שלום עולם"),
+		keyBindings = MacKeyBindings,
+		textStyle = TextStyle(textDirection = TextDirection.Content),
+	) {
+		press(Key.MoveHome, ctrl = true)
+		press(Key.DirectionLeft, meta = true)
+		assertEquals(9, cursorIndex, "the visual left of a right-to-left line is its end")
+		press(Key.DirectionRight, meta = true)
+		assertEquals(0, cursorIndex)
+	}
 
 	@Test
 	fun `cmd+c then cmd+v copies and pastes`() = editorUiTest(

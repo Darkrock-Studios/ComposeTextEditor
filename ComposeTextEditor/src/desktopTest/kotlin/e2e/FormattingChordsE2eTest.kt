@@ -58,6 +58,19 @@ class FormattingChordsE2eTest {
 	}
 
 	@Test
+	fun `undo after ctrl+b over a partly bold selection restores the original bold`() =
+		editorUiTest(initialText = partlyBold()) {
+			dragSelect(fromChar = 0, toChar = 5)
+			press(Key.B, ctrl = true)
+			assertTrue((0 until 5).all { bold in stylesAt(it) })
+
+			press(Key.Z, ctrl = true)
+
+			assertTrue((0 until 3).all { bold in stylesAt(it) }, "the bold that was there stays")
+			assertTrue((3 until 11).none { bold in stylesAt(it) })
+		}
+
+	@Test
 	fun `a selection inside a bold run unbolds only the selection`() = editorUiTest(
 		initialText = buildAnnotatedString {
 			append("Hello world")

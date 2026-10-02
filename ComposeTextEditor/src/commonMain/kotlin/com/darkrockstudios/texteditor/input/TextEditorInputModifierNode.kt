@@ -54,6 +54,7 @@ internal class TextEditorInputModifierNode(
 	override fun onDetach() {
 		if (inputRequester?.node === this) inputRequester?.node = null
 		stopTextInputSession()
+		if (isFocused) state.hasFocus = false
 		isFocused = false
 	}
 
@@ -63,6 +64,7 @@ internal class TextEditorInputModifierNode(
 		// reach the keyboard through requestInput, so only a change of focus acts here.
 		if (focusState.isFocused == isFocused) return
 		isFocused = focusState.isFocused
+		state.hasFocus = isFocused
 		syncInputSession(startSession = true)
 	}
 
@@ -160,6 +162,8 @@ internal class TextEditorInputModifierNode(
 		if (isFocused && stateChanged) {
 			stopTextInputSession()
 			this.state.updateFocus(false)
+			this.state.hasFocus = false
+			state.hasFocus = true
 		}
 		this.state = state
 		this.clipboard = clipboard

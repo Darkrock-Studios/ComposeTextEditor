@@ -128,6 +128,11 @@ this exercises the clipboard's HTML as the block carrier.
    selection do not change (primary-selection paste is not built, 4.23).
 7. Repeat 5 and 6 on Android with a USB or Bluetooth mouse. Android delivers every
    mouse button as a press, which the desktop tests cannot reproduce.
+8. Click outside the editor so it loses focus, then right-click inside it.
+   **Expect:** the menu opens and the editor is focused behind it (1.22): Escape
+   closes the menu and typing lands in the editor. On Android with a mouse, note
+   whether the soft keyboard rises for this right-click (focus alone may start the
+   input session); a right-click on an already focused editor must not raise it.
 
 ### 2.7 Export while editing (#48)
 
@@ -228,8 +233,20 @@ On every desktop platform unless a row names one; the macOS chords are in 3.1.
 | PageDown / PageUp in a long document | The caret moves a viewport's height and keeps its place on screen and its column; the view scrolls with it |
 | PageDown on the last page / PageUp on the first | Document end / start |
 | Arrow down past the viewport bottom while typing | The view scrolls just enough to show the caret's row, with no extra margin |
+| Left / Right across an emoji, a family ZWJ sequence, a flag, or "e" plus a combining accent | One step per cluster, never stopping inside one; Shift selects the whole cluster |
+| Backspace after an emoji, a ZWJ sequence, a flag, a skin tone, or a keycap | The whole sequence goes at once |
+| Backspace after a combining accent (type "e" then U+0301, or Vietnamese "ế") | Only the accent goes; the base stays. Delete before the pair removes both |
+| Up / Down / End onto a row that wraps right after an emoji | The caret lands after the emoji, never inside it |
+| End on a row that wraps mid-word (narrow the window) | The caret sits at the end of that row, drawn there, not at the start of the next row; End again stays; Home returns to the row's start; Down moves one row; typing inserts at the wrap |
+| End on a row that wraps after a space | The caret sits after the space at the row's right edge |
+| Down through a wrapped paragraph from a caret at a row's right edge | One row at a time, staying at the right edge |
+| Left / Right, Shift+Left, Ctrl+Left / Ctrl+Right, Cmd+Left on macOS, in an all-Hebrew or all-Arabic paragraph, with the editor's text style set to `TextDirection.Content` (the sample apps leave it unset, so also confirm the paragraph then stays left-to-right based and logical) | The caret moves the way the arrow points: Left goes on through the text, Ctrl+Left to the next word, Cmd+Left to the line's visual left (its end); Home and End, Ctrl+Backspace and Ctrl+Delete stay logical |
+| The same arrows in an English paragraph followed by a Hebrew one | Each paragraph follows its own direction |
 | Ctrl+Right / Ctrl+Delete on Linux | To / delete to the end of the word, or of the next one |
-| Ctrl+Right / Ctrl+Delete on Windows | To / delete to the start of the next word |
+| Ctrl+Right / Ctrl+Delete on Windows | To / delete to the start of the next word; from a line's last word, the line end first, and an empty line is a stop (hammer-editor#852) |
+| Ctrl+Left / Ctrl+Right through "hello, world... (again)" | Word starts and ends only; punctuation is skipped |
+| Ctrl+Left / Ctrl+Right through "don’t", "naïve" typed with a combining mark, "日本語を勉強します", and "a 😀 b" | The contraction and the accented word are one stop each, Japanese steps by dictionary word, the emoji is a stop of its own |
+| Double-click on "don’t", on an emoji, on a comma, on a space after a word | Selects the whole contraction; the whole emoji; nothing; the word before the space |
 | Ctrl+Up | Paragraph start, then the previous paragraph's start; with Shift, selects |
 | Ctrl+Down on Linux | Paragraph end, then the next paragraph's end; with Shift, selects |
 | Ctrl+Down on Windows | The next paragraph's start; from the last paragraph, the document end; with Shift, selects |
@@ -259,6 +276,11 @@ the platform's double-tap timeout (300 ms on desktop), not the OS mouse setting.
 8. In a long document, drag a selection below the editor and hold the mouse still.
    **Expect:** the editor keeps scrolling and the selection keeps growing; farther
    below scrolls faster; moving back inside stops it. Repeat above the editor.
+9. In a document of long wrapped paragraphs, triple-click a paragraph and drag
+   below the editor, holding still. **Expect:** the scroll runs at one even speed
+   with no lurching or jumping back (1.23). Move the mouse back inside and
+   release. **Expect:** the view then scrolls to show the caret at the end of the
+   last selected paragraph.
 
 ## 4. Touch, focus and the soft keyboard (Android)
 
@@ -306,6 +328,43 @@ was lengthened specifically so it can be scrolled and flung.
 11. In a long document, drag the end handle below the editor and hold still.
    **Expect:** it keeps scrolling and the selection keeps growing (3.4); dragging
    back inside stops it. Repeat with the start handle above the editor.
+12. Double-tap a word. **Expect:** the word selects with handles and the keyboard
+    rises (3.7). Double-tap and keep the second finger down, then drag across the
+    line. **Expect:** the selection grows by whole words, the first word always kept,
+    the page does not scroll under the finger, and the magnifier follows the moving
+    end. Two taps a second apart, or on different words, place the caret twice.
+13. Long-press a word and, without lifting, drag along and down a line.
+    **Expect:** the same word-by-word growth as 12, no scrolling under the finger,
+    and the keyboard up when the finger lifts. Drag below the editor and hold.
+    **Expect:** it auto-scrolls. Compare the hold time before the word selects with
+    the system's long-press setting (Settings > Accessibility > Touch & hold
+    delay): the editor follows it.
+14. Long-press a word and lift. **Expect:** Android's floating toolbar appears over
+    the word with Cut, Copy, Paste and Select all (3.8), with the keyboard up. Drag
+    a handle. **Expect:** the toolbar hides during the drag and returns when the
+    handle drops. Tap Select all. **Expect:** everything selects with handles and
+    the toolbar comes back over the visible rows. Scroll. **Expect:** the toolbar
+    moves with the text. Type a letter, or tap the caret handle twice. **Expect:**
+    the toolbar goes.
+15. Blank Markdown demo (empty editor): long-press. **Expect:** the toolbar offers
+    Paste and Select all only, and Paste inserts the clipboard. In a document,
+    long-press an empty line, and separately tap the caret handle after a tap.
+    **Expect:** the same Paste and Select all toolbar; the caret does not move.
+    Copy a word with a long-press and the toolbar's Copy, then tap elsewhere and
+    paste through the toolbar. **Expect:** the word arrives.
+16. Desktop with a touch screen, or a mouse right-click for the menu: long-press
+    empty space or tap the caret handle. **Expect:** the context menu opens with
+    Paste and Select All. Long-press a word. **Expect:** it selects with handles
+    and no menu; a second long-press on the selection opens the menu (unchanged).
+17. Long-press a word, then press Back to dismiss the keyboard, and tap a toolbar
+    button or another field so the editor loses focus while the handles stay. Drag
+    a handle. **Expect:** on the drop the editor is focused again and the keyboard
+    rises, so typing replaces the selection (3.13).
+18. Put two fingers down on the text and hold. **Expect:** no word selects and the
+    keyboard stays down. Pinch or two-finger scroll with both fingers on the text.
+    **Expect:** the caret does not move and the keyboard stays down. A second
+    finger on the host outside the editor is not seen by it, so that case is not
+    covered.
 
 ### 4.3 Spans do not fight the keyboard
 
@@ -465,7 +524,9 @@ Guards #89, #90, #65, #83.
    nonsense words (or switch the checker to a language the text is not in).
    **Expect:** every word gets squiggled and the editor stays responsive. Checking must
    **not** suspend itself, and there is no "resume" state to get stuck in.
-6. Scroll a long spell-checked document quickly. **Expect:** smooth scrolling; squiggles
+6. Type "don’t" with a typographic apostrophe. **Expect:** no squiggle; the word is
+   looked up as "don't".
+7. Scroll a long spell-checked document quickly. **Expect:** smooth scrolling; squiggles
    render correctly deep in the document, not just near the top (#65).
 
 ## 8. Performance and smoke pass
@@ -491,6 +552,32 @@ lower-depth platforms in §1.
    highlights land on the right characters, including on indented lines.
 9. Undo/redo toolbar buttons enable and disable correctly as history is consumed.
 10. Dark mode toggle: everything remains legible.
+
+## 8b. Drawing, caret and scrolling
+
+Guards roadmap items 1.8, 1.10, 1.11, 1.17, 1.18, 3.12 and 4.14. Desktop and
+Android unless a step says otherwise.
+
+1. Rich Text Editor demo: click in the padding left of a line, right of it, and
+   above the first line. **Expect:** the caret lands at that row's start, its end,
+   or the first row under the pointer; nothing is dead.
+2. Select a word. **Expect:** no caret while text is selected; it reappears, shown,
+   the moment the selection collapses.
+3. Put the caret mid-line and press Delete (forward delete) repeatedly, slowly.
+   **Expect:** the caret stays solid while deleting and only blinks once you stop.
+4. Select across an empty line and across several line ends. **Expect:** each line
+   end, and the empty line, shows a narrow highlighted sliver.
+5. Select text, then click another control (desktop) or dismiss focus (Android).
+   **Expect:** the selection turns a dimmed grey; touch handles disappear. Right-
+   clicking a selection must not dim it.
+6. A one-line document. **Expect:** it does not scroll at all.
+7. Android: scroll a long document; pull past its top and bottom. **Expect:** the
+   stretch overscroll; the thin indicator on the right shows while scrolling, is
+   sized to the visible share, and fades shortly after.
+8. Desktop and web (built demo): a long document. **Expect:** a scrollbar along the
+   right edge whose thumb drags the document, a press on the track above or below
+   the thumb pages toward the pointer (and keeps paging while held), and no thumb
+   once the document fits (delete most of it).
 
 ## 9. Consumer API sanity
 

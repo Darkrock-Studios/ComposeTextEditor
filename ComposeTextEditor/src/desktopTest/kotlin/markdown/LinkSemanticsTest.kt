@@ -119,7 +119,7 @@ class LinkSemanticsTest {
 	}
 
 	@Test
-	fun `setLink applies the style and the span and reverts in two undo steps`() {
+	fun `setLink applies the style and the span and reverts in one undo step`() {
 		val extension = editor()
 		val state = extension.editorState
 		state.setText("click here")
@@ -131,12 +131,11 @@ class LinkSemanticsTest {
 		assertEquals("https://example.com", extension.linkAt(CharLineOffset(0, 7)))
 		assertEquals("click [here](https://example.com)", extension.exportAsMarkdown())
 
-		// setLink records two operations (display style, then span), so a full
-		// revert is two undo steps.
-		state.undo()
+		// The display style and the span are one group, so one undo reverts both.
 		state.undo()
 		assertTrue(extension.linkSpans().isEmpty(), "undo must remove the link span")
 		assertEquals("click here", extension.exportAsMarkdown())
+		assertEquals(false, state.canUndo, "setLink is a single step")
 	}
 
 	@Test

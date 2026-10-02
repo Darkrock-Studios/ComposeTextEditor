@@ -97,4 +97,59 @@ class UndoRedoE2eTest {
 		press(Key.Z, ctrl = true)
 		assertEquals(listOf("one", "two"), lines)
 	}
+
+	@Test
+	fun `typing over a selection undoes in one step`() = editorUiTest(
+		initialText = AnnotatedString("The quick brown fox"),
+	) {
+		dragSelect(fromChar = 4, toChar = 9)
+		typeText("slow")
+		assertEquals("The slow brown fox", text)
+
+		press(Key.Z, ctrl = true)
+		assertEquals("The quick brown fox", text)
+		assertFalse(state.canUndo)
+	}
+
+	@Test
+	fun `enter over a selection undoes in one step`() = editorUiTest(
+		initialText = AnnotatedString("The quick brown fox"),
+	) {
+		dragSelect(fromChar = 3, toChar = 10)
+		press(Key.Enter)
+		assertEquals(listOf("The", "brown fox"), lines)
+
+		press(Key.Z, ctrl = true)
+		assertEquals("The quick brown fox", text)
+		assertFalse(state.canUndo)
+	}
+
+	@Test
+	fun `tab over a selection undoes in one step`() = editorUiTest(
+		initialText = AnnotatedString("The quick brown fox"),
+	) {
+		dragSelect(fromChar = 4, toChar = 9)
+		press(Key.Tab)
+		assertEquals("The      brown fox", text)
+
+		press(Key.Z, ctrl = true)
+		assertEquals("The quick brown fox", text)
+		assertFalse(state.canUndo)
+	}
+
+	@Test
+	fun `pasting list items undoes in one step`() = editorUiTest {
+		markdown.importMarkdown("- one\n- two\n- three")
+		waitForIdle()
+		press(Key.A, ctrl = true)
+		press(Key.C, ctrl = true)
+		press(Key.MoveEnd, ctrl = true)
+		press(Key.Enter)
+		press(Key.V, ctrl = true)
+		waitForIdle()
+		assertEquals(listOf("one", "two", "three", "one", "two", "three"), lines)
+
+		press(Key.Z, ctrl = true)
+		assertEquals(listOf("one", "two", "three", ""), lines)
+	}
 }

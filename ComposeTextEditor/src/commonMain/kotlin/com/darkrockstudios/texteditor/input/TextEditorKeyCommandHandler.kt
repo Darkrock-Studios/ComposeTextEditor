@@ -1,5 +1,6 @@
 package com.darkrockstudios.texteditor.input
 
+import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.isMetaPressed
@@ -11,6 +12,8 @@ import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.input.EditorCommand.Action
 import com.darkrockstudios.texteditor.input.EditorCommand.Motion
 import com.darkrockstudios.texteditor.state.TextEditorState
+import com.darkrockstudios.texteditor.state.caretParagraphIsRtl
+import com.darkrockstudios.texteditor.state.insertTypedString
 import com.darkrockstudios.texteditor.state.moveCursorDown
 import com.darkrockstudios.texteditor.state.moveCursorPageDown
 import com.darkrockstudios.texteditor.state.moveCursorPageUp
@@ -55,7 +58,15 @@ internal class TextEditorKeyCommandHandler(
 	): Boolean {
 		if (keyEvent.type != KeyEventType.KeyDown) return false
 
-		val command = keyBindings.commandFor(keyEvent) ?: return false
+		val bound = keyBindings.commandFor(keyEvent) ?: return false
+		// The arrow keys are visual: in a right-to-left paragraph Left moves forward
+		// through the text, as the platform editors and BasicTextField do. Home, End,
+		// the Emacs chords and the deletes stay logical.
+		val command = if (bound is Motion && keyEvent.isHorizontalArrow && state.caretParagraphIsRtl()) {
+			bound.mirrored(keyBindings)
+		} else {
+			bound
+		}
 		if (command !is Motion || !command.isVertical) state.cursor.forgetVerticalGoal()
 
 		return when (command) {
@@ -110,11 +121,7 @@ internal class TextEditorKeyCommandHandler(
 		// Convert code point to string (handles surrogate pairs for supplementary characters)
 		val character = codePointToString(codePoint)
 
-		// Delete selection if any, then insert character
-		if (state.selector.selection != null) {
-			state.selector.deleteSelection()
-		}
-		state.insertStringAtCursor(character)
+		state.insertTypedString(character)
 
 		return true
 	}
@@ -174,6 +181,20 @@ internal class TextEditorKeyCommandHandler(
 
 	private val Motion.isVertical: Boolean
 		get() = this == Motion.Up || this == Motion.Down || this == Motion.PageUp || this == Motion.PageDown
+
+	private val KeyEvent.isHorizontalArrow: Boolean
+		get() = navigationKey == Key.DirectionLeft || navigationKey == Key.DirectionRight
+
+	/** This motion with left and right swapped, for an arrow key in a right-to-left paragraph. */
+	private fun Motion.mirrored(bindings: KeyBindings): Motion = when (this) {
+		Motion.Left -> Motion.Right
+		Motion.Right -> Motion.Left
+		Motion.WordLeft -> bindings.wordForward
+		Motion.WordRight, Motion.WordEnd -> Motion.WordLeft
+		Motion.LineStart -> Motion.LineEnd
+		Motion.LineEnd -> Motion.LineStart
+		else -> this
+	}
 
 	/**
 	 * Converts a Unicode code point to a String.

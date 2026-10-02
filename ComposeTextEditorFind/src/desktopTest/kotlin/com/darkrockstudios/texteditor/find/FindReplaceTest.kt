@@ -160,4 +160,19 @@ class FindReplaceTest {
 		assertEquals("bobcat cat", textState.text)
 		assertEquals(TextEditorRange(CharLineOffset(0, 7), CharLineOffset(0, 10)), find.matches[find.currentMatchIndex])
 	}
+
+	@Test
+	fun `replace all is one undo step`() = runTest {
+		val textState = editor("cat cat\ncat")
+		val find = FindState(textState, backgroundScope)
+		find.search("cat")
+
+		assertEquals(3, find.replaceAll("dog"))
+		assertEquals("dog dog\ndog", textState.text)
+
+		textState.undo()
+
+		assertEquals("cat cat\ncat", textState.text)
+		assertEquals(false, textState.canUndo)
+	}
 }

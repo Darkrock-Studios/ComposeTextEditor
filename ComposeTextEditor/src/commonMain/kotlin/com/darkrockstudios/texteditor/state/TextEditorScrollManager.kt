@@ -20,12 +20,16 @@ class TextEditorScrollManager(
 	private val getLineOffsets: () -> List<LineWrap>,
 	private val getViewportSize: () -> Size,
 	private val getCursorPosition: () -> CharLineOffset,
+	private val getCursorAffinity: () -> CaretAffinity = { CaretAffinity.Downstream },
 	val scrollState: TextEditorScrollState
 ) {
 	private var scrollJob: Job? = null
 
 	var totalContentHeight by mutableStateOf(0)
 		private set
+
+	/** Height of the laid-out rows, which unlike [totalContentHeight] may be under the viewport's. */
+	private var contentHeight = 0
 
 	var topContentPaddingPx: Int = 0
 		set(value) {
@@ -46,34 +50,85 @@ class TextEditorScrollManager(
 	val viewportHeight: Int
 		get() = getViewportSize().height.toInt()
 
+	/**
+	 * How much of the viewport's bottom something drawn over the editor covers, in
+	 * pixels: the soft keyboard on iOS, or on an edge-to-edge Android window. The caret
+	 * counts as off screen there, and the scroll range grows by it so the last line can
+	 * still come above it, as a native text view's content inset does.
+	 */
+	var obscuredBottomPx: Int = 0
+		set(value) {
+			val covered = value.coerceAtLeast(0)
+			if (field != covered) {
+				field = covered
+				applyScrollRange()
+			}
+		}
+
+	/**
+	 * The height a caret row of [rowHeight] is kept inside: the viewport above
+	 * [obscuredBottomPx], or the whole viewport when that leaves no room for the row, and
+	 * only the platform moving the editor can show it.
+	 */
+	private fun caretViewportHeight(rowHeight: Int): Int {
+		val uncovered = viewportHeight - obscuredBottomPx
+		return if (uncovered >= rowHeight) uncovered else viewportHeight
+	}
+
+	/**
+	 * The furthest scroll: the last row and the bottom padding at the viewport's bottom,
+	 * or no scrolling at all when the content and its padding fit. Native editors add no
+	 * room past the last line; the bottom content padding is that room when wanted.
+	 */
+	private val maxScroll: Int
+		get() = maxOf(
+			-topContentPaddingPx,
+			contentHeight + bottomContentPaddingPx + obscuredBottomPx - viewportHeight,
+		)
+
 	private fun applyScrollRange() {
+		scrollState.viewportHeight = viewportHeight
 		scrollState.minValue = -topContentPaddingPx
-		scrollState.maxValue = totalContentHeight - viewportHeight + bottomContentPaddingPx
+		scrollState.maxValue = maxScroll
 	}
 
 	fun updateContentHeight(height: Int) {
+		contentHeight = height
 		totalContentHeight = maxOf(height, viewportHeight)
 		applyScrollRange()
 	}
 
-	fun scrollToTop() {
+	/**
+	 * Set while a drag auto-scroll runs: it owns the scroll then, and a caret it puts off
+	 * screen (a line drag's, at the paragraph end) must not start a scroll against it.
+	 * Every scroll to the caret goes through [ensureCursorVisible], which honours it.
+	 */
+	internal var cursorScrollSuppressed = false
+
+	/** Stops a scroll animation in progress where it is. */
+	internal fun stopScrolling() {
 		scrollJob?.cancel()
+		scrollJob = null
+	}
+
+	fun scrollToTop() {
+		stopScrolling()
 		scrollJob = scope.launch {
 			scrollState.animateScrollTo(scrollState.minValue)
 		}
 	}
 
 	fun scrollToBottom() {
-		scrollJob?.cancel()
+		stopScrolling()
 		scrollJob = scope.launch {
-			scrollState.animateScrollTo(totalContentHeight - viewportHeight + bottomContentPaddingPx)
+			scrollState.animateScrollTo(maxScroll)
 		}
 	}
 
 	fun scrollToPosition(position: Int, animated: Boolean = true) {
-		scrollJob?.cancel()
+		stopScrolling()
 		scrollJob = scope.launch {
-			val scrollToY = position.coerceIn(scrollState.minValue, totalContentHeight)
+			val scrollToY = position.coerceIn(scrollState.minValue, maxScroll)
 			if (animated) {
 				scrollState.animateScrollTo(scrollToY)
 			} else {
@@ -108,58 +163,63 @@ class TextEditorScrollManager(
 	 * [animated] should be false so the follower pane tracks the source 1:1 instead
 	 * of lagging behind a spring per scroll frame.
 	 */
-	fun scrollToPosition(offset: CharLineOffset, top: Boolean = false, animated: Boolean = true) {
+	fun scrollToPosition(offset: CharLineOffset, top: Boolean = false, animated: Boolean = true) =
+		scrollToPosition(offset, CaretAffinity.Downstream, top, animated)
+
+	private fun scrollToPosition(offset: CharLineOffset, affinity: CaretAffinity, top: Boolean, animated: Boolean) {
 		if (offset.line >= getLines().size) return
 
 		if (top) {
-			val targetTop = calculateOffsetYPosition(offset).toInt()
+			val targetTop = calculateOffsetYPosition(offset, affinity).toInt()
 			val minScroll = scrollState.minValue
-			val maxScroll = maxOf(minScroll, totalContentHeight - viewportHeight + bottomContentPaddingPx)
 			scrollToPosition(targetTop.coerceIn(minScroll, maxScroll), animated = animated)
 			return
 		}
 
-		val cursorTop = calculateOffsetYPosition(offset).toInt()
-		val cursorHeight = calculateLineHeight(offset)
+		val cursorTop = calculateOffsetYPosition(offset, affinity).toInt()
+		val cursorHeight = calculateLineHeight(offset, affinity)
 		val viewportTop = scrollState.value
 		val minScroll = scrollState.minValue
-		val maxScroll = maxOf(minScroll, totalContentHeight - viewportHeight + bottomContentPaddingPx)
+		val visibleHeight = caretViewportHeight(cursorHeight)
 
 		// Just far enough to show the caret's whole row, as native editors scroll.
 		val targetScroll = if (cursorTop < viewportTop) {
 			cursorTop.coerceIn(minScroll, maxScroll)
-		} else if (cursorTop + cursorHeight > viewportTop + viewportHeight) {
-			(cursorTop + cursorHeight - viewportHeight).coerceIn(minScroll, maxScroll)
+		} else if (cursorTop + cursorHeight > viewportTop + visibleHeight) {
+			(cursorTop + cursorHeight - visibleHeight).coerceIn(minScroll, maxScroll)
 		} else {
 			viewportTop
 		}
 
 		if(targetScroll != viewportTop) {
-			scrollJob?.cancel()
+			stopScrolling()
 			scrollJob = scope.launch {
 				scrollState.animateScrollTo(targetScroll)
 			}
 		}
 	}
 
+	/** Scrolls to the row the caret is drawn on. */
 	fun scrollToCursor() {
-		scrollToPosition(getCursorPosition())
+		scrollToPosition(getCursorPosition(), getCursorAffinity(), top = false, animated = true)
 	}
 
 	fun ensureCursorVisible() {
-		val cursorPos = getCursorPosition()
-		if (!isOffsetVisible(cursorPos)) {
+		if (cursorScrollSuppressed) return
+		if (!isOffsetVisible(getCursorPosition(), getCursorAffinity())) {
 			scrollToCursor()
 		}
 	}
 
-	fun isOffsetVisible(offset: CharLineOffset): Boolean {
-		val cursorTop = calculateOffsetYPosition(offset).toInt()
-		val cursorHeight = calculateLineHeight(offset)
+	fun isOffsetVisible(offset: CharLineOffset): Boolean = isOffsetVisible(offset, CaretAffinity.Downstream)
+
+	private fun isOffsetVisible(offset: CharLineOffset, affinity: CaretAffinity): Boolean {
+		val cursorTop = calculateOffsetYPosition(offset, affinity).toInt()
+		val cursorHeight = calculateLineHeight(offset, affinity)
 		val cursorBottom = cursorTop + cursorHeight
 
 		val viewPortTop = scrollState.value
-		val viewPortBottom = viewPortTop + viewportHeight
+		val viewPortBottom = viewPortTop + caretViewportHeight(cursorHeight)
 
 		// Check if both top and bottom of cursor are within viewport
 		val topVisible = cursorTop in viewPortTop..viewPortBottom
@@ -173,13 +233,17 @@ class TextEditorScrollManager(
 	 * Content-space Y position (absolute, not viewport-relative) of [offset].
 	 * Inverse of [offsetAtYPosition].
 	 */
-	fun calculateOffsetYPosition(offset: CharLineOffset): Float {
-		return getLineOffsets().getWrapForDrawing(offset)?.offset?.y ?: 0f
+	fun calculateOffsetYPosition(offset: CharLineOffset): Float = calculateOffsetYPosition(offset, CaretAffinity.Downstream)
+
+	private fun calculateOffsetYPosition(offset: CharLineOffset, affinity: CaretAffinity): Float {
+		return getLineOffsets().getWrapForDrawing(offset, affinity)?.offset?.y ?: 0f
 	}
 
 	@VisibleForTesting
-	internal fun calculateLineHeight(offset: CharLineOffset): Int {
-		val wrap = getLineOffsets().getWrapForDrawing(offset) ?: return 1
+	internal fun calculateLineHeight(offset: CharLineOffset): Int = calculateLineHeight(offset, CaretAffinity.Downstream)
+
+	private fun calculateLineHeight(offset: CharLineOffset, affinity: CaretAffinity): Int {
+		val wrap = getLineOffsets().getWrapForDrawing(offset, affinity) ?: return 1
 		return wrap.effectiveHeight.toInt().coerceAtLeast(1)
 	}
 }

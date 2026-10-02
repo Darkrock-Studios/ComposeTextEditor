@@ -3,19 +3,22 @@ package com.darkrockstudios.texteditor
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
+import androidx.compose.foundation.overscroll
+import androidx.compose.foundation.rememberOverscrollEffect
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.scrollable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -26,15 +29,16 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.PointerType
-import androidx.compose.ui.input.pointer.isPrimaryPressed
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.isSecondaryPressed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.LocalTextToolbar
 import androidx.compose.ui.semantics.editableText
 import androidx.compose.ui.semantics.insertTextAtCursor
 import androidx.compose.ui.semantics.onClick
@@ -61,9 +65,14 @@ import com.darkrockstudios.texteditor.richstyle.RichSpan
 import com.darkrockstudios.texteditor.scrollbar.TextEditorScrollbar
 import com.darkrockstudios.texteditor.state.SpanClickType
 import com.darkrockstudios.texteditor.state.TextEditorState
+import com.darkrockstudios.texteditor.state.insertTypedNewline
+import com.darkrockstudios.texteditor.state.typedInput
 import com.darkrockstudios.texteditor.state.rememberTextEditorState
+import com.darkrockstudios.texteditor.state.updateKeyboardCover
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.merge
 import kotlin.time.Duration.Companion.milliseconds
 
 private const val CURSOR_BLINK_SPEED_MS = 500L
@@ -122,6 +131,9 @@ fun BasicTextEditor(
 	val density = LocalDensity.current
 	val layoutDirection = LocalLayoutDirection.current
 
+	// The platform's own: a stretch on Android, Compose's bounce on iOS, none on desktop.
+	val overscrollEffect = rememberOverscrollEffect()
+
 	val inputRequester = remember { TextInputRequester() }
 	val inputModifierElement = remember(state, clipboard, enabled, keyBindings) {
 		TextEditorInputModifierElement(state, clipboard, enabled, keyBindings, inputRequester)
@@ -133,6 +145,9 @@ fun BasicTextEditor(
 			end = contentPadding.calculateEndPadding(layoutDirection),
 		)
 	}
+	val contentOrigin by rememberUpdatedState(
+		with(density) { Offset(contentPadding.calculateLeftPadding(layoutDirection).roundToPx().toFloat(), 0f) }
+	)
 
 	LaunchedEffect(contentPadding, density) {
 		with(density) {
@@ -145,6 +160,16 @@ fun BasicTextEditor(
 		state.density = density
 	}
 
+	// A soft keyboard drawn over the window covers the bottom of the viewport. The
+	// canvas's position feeds the same measure when it moves (see onGloballyPositioned).
+	// Focus decides whose keyboard it is, so a focus change measures again too.
+	val imeInsets by rememberUpdatedState(WindowInsets.ime)
+	LaunchedEffect(state, density) {
+		snapshotFlow { imeInsets.getBottom(density) to state.isFocused }
+			.collect { (keyboardHeight, _) -> state.updateKeyboardCover(keyboardHeight) }
+	}
+	val caretFocusRect = remember(state) { CaretFocusRect(state) }
+
 	// Use provided context menu state or create internal one
 	val internalContextMenuState = remember { TextEditorContextMenuState() }
 	val effectiveContextMenuState = contextMenuState ?: internalContextMenuState
@@ -153,16 +178,33 @@ fun BasicTextEditor(
 		ContextMenuActions(state, clipboard, state.scope, enabled)
 	}
 
+	val textToolbar = LocalTextToolbar.current
+	val nativeTextToolbar = LocalNativeTextToolbar.current
+	val touchToolbar = remember(state, textToolbar, nativeTextToolbar, contextMenuActions, effectiveContextMenuState) {
+		TouchToolbar(state, textToolbar.takeIf { nativeTextToolbar }, contextMenuActions) { offset ->
+			effectiveContextMenuState.showMenu(offset)
+		}
+	}
+	LaunchedEffect(touchToolbar) { touchToolbar.watch() }
+	DisposableEffect(touchToolbar) { onDispose { touchToolbar.hide() } }
+
 	LaunchedEffect(Unit) {
 		if (enabled && autoFocus) {
 			focusRequester.requestFocus()
 		}
 	}
 
-	LaunchedEffect(state.isFocused, state.cursorPosition, enabled) {
-		if (enabled && state.isFocused) {
+	// The blink restarts, caret shown, on focus, on every caret move, when a selection
+	// comes or goes, and on every edit, which may leave the caret in place (forward delete).
+	LaunchedEffect(state, enabled) {
+		if (!enabled) return@LaunchedEffect
+		merge(
+			snapshotFlow { Triple(state.isFocused, state.cursorPosition, state.selector.hasSelection()) },
+			state.editOperations,
+		).collectLatest {
+			if (!state.isFocused) return@collectLatest
 			state.cursor.setVisible()
-			while (state.isFocused) {
+			while (true) {
 				delay(CURSOR_BLINK_SPEED_MS.milliseconds)
 				state.cursor.toggleVisibility()
 			}
@@ -223,16 +265,19 @@ fun BasicTextEditor(
 			modifier = modifier,
 			scrollState = state.scrollState,
 		) { editorModifier ->
+			// The horizontal padding is applied inside the canvas, below its pointer input,
+			// so presses in it reach the text; the vertical padding is scroll range.
 			Box(
 				modifier = editorModifier
-					.padding(horizontalPadding)
 					.focusRequester(focusRequester)
 					.requestFocusOnPress(
+						state,
 						focusRequester,
 						popupIsShowing = { effectiveContextMenuState.isVisible },
 						onRequestInput = inputRequester::requestInput,
 					)
 					.then(inputModifierElement)
+					.then(caretFocusRect.modifier)
 					.focusable(enabled = true, interactionSource = interactionSource)
 					// Publish text-editing semantics so the node is recognized as an editable
 					// text field. This drives accessibility services (VoiceOver/TalkBack read and
@@ -246,8 +291,21 @@ fun BasicTextEditor(
 							true
 						}
 						insertTextAtCursor { newText ->
-							if (state.selector.hasSelection()) state.selector.deleteSelection()
-							state.insertStringAtCursor(newText)
+							if (newText.text == "\n") {
+								state.insertTypedNewline()
+							} else {
+								// Dictated or assistive text: one step that is not typing, since
+								// whole phrases are not something a following keystroke should
+								// join, then told to the behaviors like any typed text.
+								state.typedInput(newText.text) {
+									state.editGroup {
+										state.selector.deleteSelection()
+										state.editManager.recordingAsTyping(false) {
+											state.insertStringAtCursor(newText)
+										}
+									}
+								}
+							}
 							true
 						}
 						setSelection { start, end, _ ->
@@ -268,17 +326,13 @@ fun BasicTextEditor(
 						}
 						onClick { focusRequester.requestFocus(); true }
 					}
-					.background(style.backgroundColor)
-					.onSizeChanged { size ->
-						state.onViewportSizeChange(
-							size.toSize()
-						)
-					}
 					.fillMaxSize()
+					.overscroll(overscrollEffect)
 					.scrollable(
 						orientation = Orientation.Vertical,
 						reverseDirection = false,
 						state = state.scrollState,
+						overscrollEffect = overscrollEffect,
 					)
 			) {
 				// The pointer handler never restarts, so it must reach the listeners the
@@ -297,22 +351,28 @@ fun BasicTextEditor(
 				}
 				Canvas(
 					modifier = Modifier
-						.textEditorPointerIcon(state, linkClicks)
-						.textMagnifier(state)
+						.textEditorPointerIcon(state, linkClicks, contentOrigin = { contentOrigin })
 						.textEditorPointerInputHandling(
 							state = state,
 							onSpanClick = spanClickProxy,
 							onContextMenuRequest = { offset -> effectiveContextMenuState.showMenu(offset) },
 							links = linkClicks,
 							caretHandle = enabled,
+							contentOrigin = { contentOrigin },
+							touchToolbar = touchToolbar,
 						)
-						// Capture the canvas position so the desktop IME can place the
-						// composition/candidate window relative to the cursor.
-						.onGloballyPositioned { state.canvasLayoutCoordinates = it }
-						.size(
-							width = state.viewportSize.width.dp,
-							height = state.viewportSize.height.dp
-						)
+						.padding(horizontalPadding)
+						.textMagnifier(state)
+						.background(style.backgroundColor)
+						.onSizeChanged { size -> state.onViewportSizeChange(size.toSize()) }
+						// The content canvas's position, below the padding: the desktop IME places
+						// its candidate window by it, and the touch toolbar its menu.
+						.onGloballyPositioned {
+							state.canvasLayoutCoordinates = it
+							state.canvasPositionInRoot = it.positionInRoot()
+							state.updateKeyboardCover(imeInsets.getBottom(density))
+						}
+						.fillMaxSize()
 						.graphicsLayer {
 							clip = false
 						}
@@ -327,12 +387,13 @@ fun BasicTextEditor(
 						// Handle resize exception gracefully
 					}
 
-					DrawSelection(state, style.selectionColor)
+					DrawSelection(state, style.selectionColorFor(state.hasFocus))
 
-					DrawSelectionHandles(state)
+					// Like native editors, an editor without focus shows no touch handles.
+					if (state.hasFocus) DrawSelectionHandles(state, style.effectiveHandleColor)
 
-					if (enabled && state.isFocused && state.cursor.isVisible) {
-						DrawCursor(state, style.cursorColor)
+					if (enabled && state.isFocused) {
+						DrawCursor(state, style.cursorColor, style.cursorWidth)
 					}
 				}
 			}
@@ -348,7 +409,10 @@ fun BasicTextEditor(
  * keyboard, so focusing on the down event pops the keyboard over the text every
  * time the user tries to pan. A finger therefore has to lift roughly where it
  * landed before this counts as a tap, which matches how the editor already
- * decides caret placement: mouse on press, finger on release.
+ * decides caret placement: mouse on press, finger on release. A finger that
+ * travelled further still focuses when it selected on the way (a long press or a
+ * double tap dragged on, a handle drag), read from the selection manager's
+ * touch selection generation: a selection has to be typeable over.
  *
  * A tap that opened a popup is skipped as well, reported by [popupIsShowing]. The
  * thing to avoid is a keyboard sliding up over the spell-check suggestions or the
@@ -361,38 +425,42 @@ fun BasicTextEditor(
  * have focus. A right-click only focuses, since it opens the context menu.
  */
 internal fun Modifier.requestFocusOnPress(
+	state: TextEditorState,
 	focusRequester: FocusRequester,
 	popupIsShowing: () -> Boolean,
 	onRequestInput: () -> Unit = {},
-) = pointerInput(Unit) {
+) = pointerInput(state) {
 	val touchSlop = viewConfiguration.touchSlop
 	awaitEachGesture {
-		val down = awaitFirstDown(requireUnconsumed = false)
-
-		// Android reports an external mouse as PointerType.Touch but still fills in
-		// the buttons, so the button state is what actually separates the two.
-		val hasButton = currentEvent.buttons.isPrimaryPressed ||
-				currentEvent.buttons.isSecondaryPressed
-		if (down.type == PointerType.Mouse || hasButton) {
+		// Any button, so a right-click focuses the editor its menu acts on. The Initial
+		// pass, so the generation below is read before the Canvas handler has acted on
+		// the press: a second tap selects its word on the down.
+		val down = awaitAnyPress(PointerEventPass.Initial)
+		if (currentEvent.isMouseLike(down)) {
 			focusRequester.requestFocus()
 			if (!currentEvent.buttons.isSecondaryPressed) onRequestInput()
 			return@awaitEachGesture
 		}
 
+		val generationAtPress = state.selector.touchSelectionGeneration
+		var panned = false
 		while (true) {
 			val event = awaitPointerEvent()
 			val change = event.changes.firstOrNull { it.id == down.id } ?: return@awaitEachGesture
-			if ((change.position - down.position).getDistance() > touchSlop) {
-				// Panning, not pointing.
-				return@awaitEachGesture
-			}
+			// Travel, or a second finger, means a pan or a pinch rather than pointing.
+			panned = panned || event.leavesTap(down, change, touchSlop)
 			if (!change.pressed) {
 				// Safe to read synchronously: the Main pass dispatches child-first, so
-				// the Canvas gesture handler has already run this tap's dispatch (which
-				// opens any menu) before this container-level handler sees the release.
-				if (!popupIsShowing()) {
+				// the Canvas gesture handler has already run this gesture's dispatch
+				// (which opens any menu, or selects) before this container-level
+				// handler sees the release.
+				val selected = state.selector.touchSelectionGeneration != generationAtPress
+				val popup = popupIsShowing()
+				if (selected || (!panned && !popup)) {
 					focusRequester.requestFocus()
-					onRequestInput()
+					// A selection made under an open popup still needs focus to be typed
+					// over, but the keyboard would cover the popup.
+					if (!popup) onRequestInput()
 				}
 				return@awaitEachGesture
 			}

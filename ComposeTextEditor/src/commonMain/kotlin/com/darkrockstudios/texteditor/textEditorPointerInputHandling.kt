@@ -11,6 +11,8 @@ import androidx.compose.ui.composed
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.*
 import androidx.compose.ui.platform.ViewConfiguration
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.dp
 import com.darkrockstudios.texteditor.input.CtrlKeyBindings
 import com.darkrockstudios.texteditor.input.KeyBindings
 import com.darkrockstudios.texteditor.input.MacKeyBindings
@@ -44,12 +46,22 @@ internal fun Modifier.textEditorPointerInputHandling(
 	readOnly: Boolean = false,
 	links: LinkClicks? = null,
 	caretHandle: Boolean = !readOnly,
+	contentOrigin: () -> Offset,
+	touchToolbar: TouchToolbar? = null,
 ): Modifier {
 	return this
-		.handleHandleDrag(state)
-		.handleTouchInteractions(state, onSpanClick, onContextMenuRequest, readOnly, links, caretHandle)
-		.handleMouseInput(state, onSpanClick, onContextMenuRequest, readOnly, links)
+		.handleHandleDrag(state, contentOrigin, touchToolbar)
+		.handleTouchInteractions(
+			state, onSpanClick, onContextMenuRequest, readOnly, links, caretHandle, contentOrigin, touchToolbar,
+		)
+		.handleMouseInput(state, onSpanClick, onContextMenuRequest, readOnly, links, contentOrigin, touchToolbar)
 }
+
+/**
+ * [PointerInputChange.position] in text-canvas coordinates. The pointer node can span the
+ * content padding as well, so its origin sits [origin] above and left of the canvas's.
+ */
+private fun PointerInputChange.inContent(origin: Offset): Offset = position - origin
 
 internal typealias SpanClickSink = (RichSpanClick) -> Unit
 
@@ -93,15 +105,45 @@ internal class LinkClicks(
 	}
 }
 
-private fun PointerEvent.isMouseLike(down: PointerInputChange): Boolean =
+/**
+ * Whether a second finger is down beside [down], which makes the gesture a pinch or a
+ * two-finger scroll rather than a tap or long press. Only pointers that hit the editor's
+ * node appear in an event, so a second finger landing outside the editor is not seen.
+ */
+internal fun PointerEvent.hasOtherFingerDown(down: PointerInputChange): Boolean =
+	changes.any { it.id != down.id && it.pressed }
+
+/** Whether [change], of the pointer that went down at [down], has left the tap: travelled or joined. */
+internal fun PointerEvent.leavesTap(down: PointerInputChange, change: PointerInputChange, touchSlop: Float): Boolean =
+	(change.position - down.position).getDistance() > touchSlop || hasOtherFingerDown(down)
+
+internal fun PointerEvent.isMouseLike(down: PointerInputChange): Boolean =
 	down.type == PointerType.Mouse || buttons.areAnyPressed
 
 /**
- * Counts successive primary presses into single, double, and triple clicks. A press
- * continues the sequence when it lands within the platform's double-tap timeout and
- * touch slop of the previous one.
+ * Waits on [pass] for a press by any pointer or mouse button and returns its change; the
+ * event it came in is [AwaitPointerEventScope.currentEvent]. Not `awaitFirstDown`: on
+ * skiko that ignores every mouse button but the primary one.
  */
-private class ClickCounter(private val viewConfiguration: ViewConfiguration) {
+internal suspend fun AwaitPointerEventScope.awaitAnyPress(
+	pass: PointerEventPass = PointerEventPass.Main,
+): PointerInputChange {
+	while (true) {
+		awaitPointerEvent(pass).changes.firstOrNull { it.changedToDownIgnoreConsumed() }?.let { return it }
+	}
+}
+
+/**
+ * Counts successive presses into single, double, and triple clicks. A press continues
+ * the sequence when it lands within the platform's double-tap timeout and [slop] of the
+ * previous one. A mouse measures the timeout from the previous press; a finger
+ * ([fromRelease]) from the previous lift, as Android's tap detection does.
+ */
+private class ClickCounter(
+	private val viewConfiguration: ViewConfiguration,
+	private val slop: Float = viewConfiguration.touchSlop,
+	private val fromRelease: Boolean = false,
+) {
 	private var lastTime = 0L
 	private var lastPosition: Offset? = null
 	private var clicks = 0
@@ -110,11 +152,15 @@ private class ClickCounter(private val viewConfiguration: ViewConfiguration) {
 		val previous = lastPosition
 		val continues = previous != null &&
 				down.uptimeMillis - lastTime < viewConfiguration.doubleTapTimeoutMillis &&
-				(down.position - previous).getDistance() < viewConfiguration.touchSlop
+				(down.position - previous).getDistance() < slop
 		clicks = if (continues) (clicks + 1).coerceAtMost(3) else 1
 		lastTime = down.uptimeMillis
 		lastPosition = down.position
 		return clicks
+	}
+
+	fun released(up: PointerInputChange) {
+		if (fromRelease) lastTime = up.uptimeMillis
 	}
 
 	fun reset() {
@@ -122,6 +168,9 @@ private class ClickCounter(private val viewConfiguration: ViewConfiguration) {
 		clicks = 0
 	}
 }
+
+/** How far apart two taps may land and still be a double tap: Android's double-tap slop. */
+internal val DOUBLE_TAP_SLOP = 100.dp
 
 /**
  * Every mouse gesture. The primary button places the caret on press (or extends with
@@ -135,17 +184,20 @@ private fun Modifier.handleMouseInput(
 	onContextMenuRequest: ((Offset) -> Unit)?,
 	readOnly: Boolean,
 	links: LinkClicks?,
-): Modifier = pointerInput(state, links) {
+	contentOrigin: () -> Offset,
+	touchToolbar: TouchToolbar?,
+): Modifier = pointerInput(state, links, touchToolbar) {
 	val clickCounter = ClickCounter(viewConfiguration)
 	val touchSlop = viewConfiguration.touchSlop
 	coroutineScope {
 	val autoScrollScope = this
 	awaitEachGesture {
-		// Not awaitFirstDown: on skiko it ignores every mouse button but the primary one.
-		val press = awaitPointerEvent()
-		val down = press.changes.firstOrNull { it.changedToDownIgnoreConsumed() }
-			?: return@awaitEachGesture
+		val down = awaitAnyPress()
+		val press = currentEvent
 		if (!press.isMouseLike(down)) return@awaitEachGesture
+		val origin = contentOrigin()
+		val downAt = down.inContent(origin)
+		touchToolbar?.hide()
 
 		val buttons = press.buttons
 		when {
@@ -154,22 +206,23 @@ private fun Modifier.handleMouseInput(
 				val clicks = clickCounter.register(down)
 				// The second and third press of a multi-click select; only a plain first
 				// press can become a click on what is under it.
-				val pressed = if (clicks == 1 && !isShiftPressed) ClickTarget.at(state, down.position) else null
-				val selection = MouseSelection.press(
+				val pressed = if (clicks == 1 && !isShiftPressed) ClickTarget.at(state, downAt) else null
+				val selection = PointerSelection.press(
 					state,
-					position = down.position,
+					position = downAt,
 					granularity = SelectionGranularity.forClickCount(clicks),
 					isShiftPressed = isShiftPressed,
 				)
 				val autoScroll = DragAutoScroll(state, autoScrollScope, onDrag = selection::selectTo)
-				val release = followDrag(autoScroll, down, touchSlop) ?: return@awaitEachGesture
+				val release = followDrag(autoScroll, down, origin, touchSlop) ?: return@awaitEachGesture
 				// A drag inside the slop that still selected something is a drag too.
 				if (pressed == null || state.selector.hasSelection()) return@awaitEachGesture
-				val released = ClickTarget.at(state, release.position)
+				val releasedAt = release.inContent(origin)
+				val released = ClickTarget.at(state, releasedAt)
 				val modifiers = currentEvent.keyboardModifiers
 				if (pressed.span != null && pressed.span == released.span) {
 					onSpanClick?.invoke(
-						RichSpanClick(pressed.span, SpanClickType.PRIMARY_CLICK, release.position, modifiers)
+						RichSpanClick(pressed.span, SpanClickType.PRIMARY_CLICK, releasedAt, modifiers)
 					)
 				}
 				if (pressed.link != null && pressed.link == released.link && links?.opensOnClick(modifiers) == true) {
@@ -181,13 +234,13 @@ private fun Modifier.handleMouseInput(
 				clickCounter.reset()
 				handleSpanInteraction(
 					state,
-					down.position,
+					downAt,
 					SpanClickType.SECONDARY_CLICK,
 					press.keyboardModifiers,
 					onSpanClick,
 					readOnly,
 				)
-				onContextMenuRequest?.invoke(down.position)
+				onContextMenuRequest?.invoke(downAt)
 			}
 
 			else -> clickCounter.reset()
@@ -197,18 +250,30 @@ private fun Modifier.handleMouseInput(
 }
 
 /**
- * A primary-button selection in progress: the unit the press selected stays selected,
- * and the drag extends from it by the same [granularity]. The caret follows the moving
- * end even in a read-only view, where it is not drawn, because shift+click extends from
- * wherever the caret is.
+ * A pointer selection in progress: the unit the press selected stays selected, and the
+ * drag extends from it by the same [granularity]. The caret follows the moving end even
+ * in a read-only view, where it is not drawn, because shift+click extends from wherever
+ * the caret is. A finger selection ([isTouch]) gets handles and, while dragged, the
+ * magnifier over its moving end.
  */
-private class MouseSelection(
+private class PointerSelection(
 	private val state: TextEditorState,
 	private val anchor: TextEditorRange,
 	private val granularity: SelectionGranularity,
+	private val isTouch: Boolean,
 ) {
 	fun selectTo(position: Offset) {
-		state.selector.selectFromAnchor(anchor, state.getOffsetAtPosition(position), granularity)
+		state.selector.selectFromAnchor(anchor, state.getOffsetAtPosition(position), granularity, isTouch)
+	}
+
+	/** [selectTo] for a finger drag, which also magnifies the end it moves. */
+	fun dragTo(position: Offset) {
+		selectTo(position)
+		state.selector.magnifierCenter = magnifierCenter(state, state.cursorPosition, position)
+	}
+
+	fun release() {
+		state.selector.magnifierCenter = null
 	}
 
 	companion object {
@@ -217,8 +282,9 @@ private class MouseSelection(
 			state: TextEditorState,
 			position: Offset,
 			granularity: SelectionGranularity,
-			isShiftPressed: Boolean,
-		): MouseSelection {
+			isShiftPressed: Boolean = false,
+			isTouch: Boolean = false,
+		): PointerSelection {
 			val anchor = if (isShiftPressed) {
 				val fixed = state.selector.extensionAnchor(state.cursorPosition)
 				TextEditorRange(fixed, fixed)
@@ -226,7 +292,7 @@ private class MouseSelection(
 				state.selector.rangeAt(state.getOffsetAtPosition(position), granularity)
 			}
 			state.selector.hideCaretHandle()
-			return MouseSelection(state, anchor, granularity).also {
+			return PointerSelection(state, anchor, granularity, isTouch).also {
 				it.selectTo(position)
 				state.endCompositionIfPointerLeft()
 			}
@@ -242,6 +308,7 @@ private class MouseSelection(
 private suspend fun AwaitPointerEventScope.followDrag(
 	autoScroll: DragAutoScroll,
 	down: PointerInputChange,
+	origin: Offset,
 	touchSlop: Float = 0f,
 	consumeAll: Boolean = false,
 ): PointerInputChange? {
@@ -251,9 +318,9 @@ private suspend fun AwaitPointerEventScope.followDrag(
 			val event = awaitPointerEvent()
 			val change = event.changes.firstOrNull { it.id == down.id } ?: return null
 			if (!change.pressed) return if (dragged) null else change
+			dragged = dragged || event.leavesTap(down, change, touchSlop)
 			if (change.positionChanged()) {
-				dragged = dragged || (change.position - down.position).getDistance() > touchSlop
-				autoScroll.update(change.position)
+				autoScroll.update(change.inContent(origin))
 				change.consume()
 			} else if (consumeAll) {
 				change.consume()
@@ -277,10 +344,12 @@ private class ClickTarget(val span: RichSpan?, val link: String?) {
 /**
  * The span a click at [offset] answers to. Hit on the character under the pointer; off
  * the text, where there is none (a block image's line, past a row's end), on the
- * nearest caret position.
+ * nearest caret position. Above the first row or below the last there is none.
  */
-private fun TextEditorState.spanAt(offset: Offset): RichSpan? =
-	findSpanAtPosition(characterAt(offset) ?: getOffsetAtPosition(offset))
+private fun TextEditorState.spanAt(offset: Offset): RichSpan? {
+	val character = characterAt(offset)
+	return if (character != null) findSpanAtPosition(character) else findSpanAtPoint(offset)
+}
 
 /**
  * The character under [offset], or null when the pointer is beside a row rather than
@@ -350,6 +419,7 @@ internal fun Modifier.textEditorPointerIcon(
 	state: TextEditorState,
 	links: LinkClicks?,
 	default: PointerIcon? = PointerIcon.Text,
+	contentOrigin: () -> Offset,
 ): Modifier = composed {
 	var icon by remember(state, default) { mutableStateOf(default) }
 	val tracking = pointerInput(state, links, default) {
@@ -358,7 +428,7 @@ internal fun Modifier.textEditorPointerIcon(
 				val event = awaitPointerEvent(PointerEventPass.Initial)
 				val change = event.changes.firstOrNull() ?: continue
 				if (change.type != PointerType.Mouse) continue
-				icon = pointerIconAt(state, change.position, event.keyboardModifiers, links, default)
+				icon = pointerIconAt(state, change.inContent(contentOrigin()), event.keyboardModifiers, links, default)
 			}
 		}
 	}
@@ -369,7 +439,11 @@ internal fun Modifier.textEditorPointerIcon(
  * Link clicks for a read-only view that is not selectable, so has no other pointer
  * handling: a click or tap that lands and lifts on the same link opens it.
  */
-internal fun Modifier.linkClickHandling(state: TextEditorState, links: LinkClicks): Modifier =
+internal fun Modifier.linkClickHandling(
+	state: TextEditorState,
+	links: LinkClicks,
+	contentOrigin: () -> Offset,
+): Modifier =
 	pointerInput(state, links) {
 		val touchSlop = viewConfiguration.touchSlop
 		awaitEachGesture {
@@ -377,17 +451,19 @@ internal fun Modifier.linkClickHandling(state: TextEditorState, links: LinkClick
 			// Android's awaitFirstDown answers every mouse button; only the primary one clicks.
 			val buttons = currentEvent.buttons
 			if (buttons.areAnyPressed && !buttons.isPrimaryPressed) return@awaitEachGesture
-			val link = ClickTarget.at(state, down.position).link ?: return@awaitEachGesture
+			val origin = contentOrigin()
+			val link = ClickTarget.at(state, down.inContent(origin)).link ?: return@awaitEachGesture
 			while (true) {
-				val change = awaitPointerEvent().changes.firstOrNull { it.id == down.id } ?: return@awaitEachGesture
-				if ((change.position - down.position).getDistance() > touchSlop) return@awaitEachGesture
+				val event = awaitPointerEvent()
+				val change = event.changes.firstOrNull { it.id == down.id } ?: return@awaitEachGesture
+				if (event.leavesTap(down, change, touchSlop)) return@awaitEachGesture
 				if (!change.pressed) {
 					val opens = if (currentEvent.isMouseLike(down)) {
 						links.opensOnClick(currentEvent.keyboardModifiers)
 					} else {
 						links.opensOnTap
 					}
-					if (opens && ClickTarget.at(state, change.position).link == link) links.open(link)
+					if (opens && ClickTarget.at(state, change.inContent(origin)).link == link) links.open(link)
 					return@awaitEachGesture
 				}
 			}
@@ -399,20 +475,34 @@ internal fun Modifier.linkClickHandling(state: TextEditorState, links: LinkClick
  * end of the selection is fixed for the whole drag, so the dragged end can cross it. The
  * dragged end moves exactly as far as the finger does from where it grabbed the handle,
  * so grabbing moves nothing. Held above or below the viewport, the drag auto-scrolls like
- * a mouse drag.
+ * a mouse drag. The touch toolbar hides for the drag and comes back when a selection
+ * handle is dropped; the caret handle brings it up only when tapped, as Android's
+ * insertion handle does.
  */
-private fun Modifier.handleHandleDrag(state: TextEditorState): Modifier {
-	return pointerInput(state) {
+private fun Modifier.handleHandleDrag(
+	state: TextEditorState,
+	contentOrigin: () -> Offset,
+	touchToolbar: TouchToolbar?,
+): Modifier {
+	return pointerInput(state, touchToolbar) {
 		coroutineScope {
 			val autoScrollScope = this
 			awaitEachGesture {
 				val down = awaitFirstDown(requireUnconsumed = false)
 				if (currentEvent.isMouseLike(down)) return@awaitEachGesture
-				if (isOnCaretHandle(down.position, state)) {
-					dragCaretHandle(state, down, autoScrollScope)
+				val origin = contentOrigin()
+				val downAt = down.inContent(origin)
+				if (isOnCaretHandle(downAt, state)) {
+					// A tap on the handle toggles the toolbar, as Android's insertion handle does.
+					val wasShown = touchToolbar?.isShown == true
+					touchToolbar?.hide()
+					val tapped = dragCaretHandle(state, down, origin, autoScrollScope)
+					if (tapped && !wasShown) touchToolbar?.show()
 				} else {
-					val handle = findHandleAtPosition(down.position, state) ?: return@awaitEachGesture
-					dragSelectionHandle(state, handle, down, autoScrollScope)
+					val handle = findHandleAtPosition(downAt, state) ?: return@awaitEachGesture
+					touchToolbar?.hide()
+					dragSelectionHandle(state, handle, down, origin, autoScrollScope)
+					if (state.selector.hasSelection()) touchToolbar?.show()
 				}
 			}
 		}
@@ -423,13 +513,15 @@ private suspend fun AwaitPointerEventScope.dragSelectionHandle(
 	state: TextEditorState,
 	handle: SelectionHandle,
 	down: PointerInputChange,
+	origin: Offset,
 	autoScrollScope: CoroutineScope,
 ) {
 	val selection = state.selector.selection ?: return
 	val anchor = if (handle.isStart) selection.end else selection.start
-	val grabOffset = grabOffset(state, handle.position, down)
+	val downAt = down.inContent(origin)
+	val grabOffset = grabOffset(state, handle.position, downAt)
 	state.selector.setDraggingHandle(handle.isStart)
-	state.selector.magnifierCenter = magnifierCenter(state, handle.position, down.position + grabOffset)
+	state.selector.magnifierCenter = magnifierCenter(state, handle.position, downAt + grabOffset)
 	state.endCompositionIfPointerLeft()
 
 	val autoScroll = DragAutoScroll(state, autoScrollScope, grabOffset) { target ->
@@ -454,7 +546,7 @@ private suspend fun AwaitPointerEventScope.dragSelectionHandle(
 		state.selector.magnifierCenter = magnifierCenter(state, position, target)
 	}
 	try {
-		followDrag(autoScroll, down, consumeAll = true)
+		followDrag(autoScroll, down, origin, consumeAll = true)
 	} finally {
 		state.selector.clearDraggingHandle()
 		state.selector.magnifierCenter = null
@@ -464,15 +556,18 @@ private suspend fun AwaitPointerEventScope.dragSelectionHandle(
 /**
  * Drags the touch caret handle, moving the caret. The handle stays up through the drag,
  * and its idle timeout restarts on release. Anything else that moves the caret, edits,
- * selects, or takes focus meanwhile takes the handle away and ends the drag.
+ * selects, or takes focus meanwhile takes the handle away and ends the drag. Returns
+ * whether the finger lifted without dragging: a tap on the handle.
  */
 private suspend fun AwaitPointerEventScope.dragCaretHandle(
 	state: TextEditorState,
 	down: PointerInputChange,
+	origin: Offset,
 	autoScrollScope: CoroutineScope,
-) {
-	val grabOffset = grabOffset(state, state.cursorPosition, down)
-	state.selector.magnifierCenter = magnifierCenter(state, state.cursorPosition, down.position + grabOffset)
+): Boolean {
+	val downAt = down.inContent(origin)
+	val grabOffset = grabOffset(state, state.cursorPosition, downAt)
+	state.selector.magnifierCenter = magnifierCenter(state, state.cursorPosition, downAt + grabOffset)
 	val autoScroll = DragAutoScroll(state, autoScrollScope, grabOffset) { target ->
 		if (!state.selector.isCaretHandleVisible) {
 			state.selector.magnifierCenter = null
@@ -484,7 +579,7 @@ private suspend fun AwaitPointerEventScope.dragCaretHandle(
 		state.endCompositionIfPointerLeft()
 	}
 	try {
-		followDrag(autoScroll, down, consumeAll = true)
+		return followDrag(autoScroll, down, origin, viewConfiguration.touchSlop, consumeAll = true) != null
 	} finally {
 		state.selector.releaseCaretHandle()
 		state.selector.magnifierCenter = null
@@ -511,9 +606,9 @@ private fun magnifierCenter(state: TextEditorState, position: CharLineOffset, ta
 }
 
 /** From the finger at [down] to the middle of [position]'s row: what a handle drag moves. */
-private fun grabOffset(state: TextEditorState, position: CharLineOffset, down: PointerInputChange): Offset {
+private fun grabOffset(state: TextEditorState, position: CharLineOffset, down: Offset): Offset {
 	val edge = state.getPositionForOffset(position)
-	return Offset(edge.position.x, edge.position.y + edge.height / 2f) - down.position
+	return Offset(edge.position.x, edge.position.y + edge.height / 2f) - down
 }
 
 /**
@@ -521,14 +616,14 @@ private fun grabOffset(state: TextEditorState, position: CharLineOffset, down: P
  * drawn handle and a margin, no wider: the handle hangs over the lines below the caret,
  * and a tap or long press there must still reach them.
  */
-private fun isOnCaretHandle(position: Offset, state: TextEditorState): Boolean {
+private fun Density.isOnCaretHandle(position: Offset, state: TextEditorState): Boolean {
 	if (!state.selector.isCaretHandleVisible) return false
-	val center = handleCenter(state.getPositionForOffset(state.cursorPosition))
-	return (position - center).getDistance() < SELECTION_HANDLE_RADIUS * 1.5f
+	val center = handleCenter(state.getPositionForOffset(state.cursorPosition, state.cursor.affinity))
+	return (position - center).getDistance() < CaretHandleHitRadius.toPx()
 }
 
 /** Whether a finger at [position] lands on any touch handle. */
-private fun isOnAnyHandle(position: Offset, state: TextEditorState): Boolean =
+private fun Density.isOnAnyHandle(position: Offset, state: TextEditorState): Boolean =
 	findHandleAtPosition(position, state) != null || isOnCaretHandle(position, state)
 
 /**
@@ -545,36 +640,39 @@ private fun TextEditorState.endCompositionIfPointerLeft() {
 	if (!caretInside) clearComposingRange()
 }
 
-private fun findHandleAtPosition(
+private fun Density.findHandleAtPosition(
 	position: Offset,
 	state: TextEditorState,
 ): SelectionHandle? {
-	// Handles are drawn only for a touch selection, so only then can a finger grab one.
-	if (!state.selector.isTouchSelection) return null
+	// Handles are drawn only for a focused touch selection, so only then can a finger grab one.
+	if (!state.selector.isTouchSelection || !state.hasFocus) return null
 	val selection = state.selector.selection ?: return null
 
 	val startHandlePos = handleCenter(state.getPositionForOffset(selection.start))
 	val endHandlePos = handleCenter(state.getPositionForOffset(selection.end))
+	val hitRadius = SelectionHandleHitRadius.toPx()
 
 	// The hit areas overlap on a short selection, so the nearer handle wins.
 	val toStart = (position - startHandlePos).getDistance()
 	val toEnd = (position - endHandlePos).getDistance()
 	return when {
-		toStart < HANDLE_HIT_RADIUS && toStart <= toEnd -> SelectionHandle(selection.start, true, startHandlePos)
-		toEnd < HANDLE_HIT_RADIUS -> SelectionHandle(selection.end, false, endHandlePos)
+		toStart < hitRadius && toStart <= toEnd -> SelectionHandle(selection.start, true, startHandlePos)
+		toEnd < hitRadius -> SelectionHandle(selection.end, false, endHandlePos)
 		else -> null
 	}
 }
 
 /** Larger than the drawn handle, for easier touch targeting. */
-private const val HANDLE_HIT_RADIUS = 80f
+private val SelectionHandleHitRadius = 30.dp
+
+private val CaretHandleHitRadius = SelectionHandleDiameter / 2 * 1.5f
 
 /**
  * Places the caret for a tap or a right-click, then offers the event to the [RichSpan]
  * under it. A tap reports only when it lifts on the span it landed on, [pressedSpan].
  * Returns whether the caret was placed.
  */
-private fun handleSpanInteraction(
+private fun Density.handleSpanInteraction(
 	state: TextEditorState,
 	offset: Offset,
 	clickType: SpanClickType,
@@ -608,7 +706,15 @@ private fun handleSpanInteraction(
 	return placesCaret
 }
 
-/** Finger taps and long presses. */
+/**
+ * Finger taps, double taps, and long presses. A tap places the caret; a second tap
+ * within the platform's double-tap timeout selects the word under it; a long press
+ * selects the word under it, or brings up the menu when it lands on the selection.
+ * Dragging on from a double tap or a long press extends the selection by word, as
+ * Android's text fields do, and the moves are consumed so the ancestor scrollable does
+ * not pan with them. Once the finger lifts, the [touchToolbar] shows over what was
+ * selected, or over the caret a long press placed, which is how a finger reaches Paste.
+ */
 private fun Modifier.handleTouchInteractions(
 	state: TextEditorState,
 	onSpanClick: SpanClickSink?,
@@ -616,72 +722,140 @@ private fun Modifier.handleTouchInteractions(
 	readOnly: Boolean,
 	links: LinkClicks?,
 	caretHandle: Boolean,
+	contentOrigin: () -> Offset,
+	touchToolbar: TouchToolbar?,
 ): Modifier {
-	return pointerInput(state, links, caretHandle) {
+	return pointerInput(state, links, caretHandle, touchToolbar) {
 		val touchSlop = viewConfiguration.touchSlop
-		awaitEachGesture {
-			val down = awaitFirstDown(requireUnconsumed = false)
-			if (currentEvent.isMouseLike(down)) return@awaitEachGesture
-			if (isOnAnyHandle(down.position, state)) return@awaitEachGesture
-
-			var didLongPress = false
-			var wasDrag = false
-			val pressed = ClickTarget.at(state, down.position)
-			val existingSelection = state.selector.selection
-			val longPressJob = state.scope.launch {
-				delay(500)
-				val wordPosition = state.getOffsetAtPosition(down.position)
-
-				val isOnSelection = existingSelection != null &&
-						(wordPosition isAfterOrEqual existingSelection.start) &&
-						(wordPosition isBeforeOrEqual existingSelection.end)
-
-				if (isOnSelection) {
-					onContextMenuRequest?.invoke(down.position)
-				} else {
-					// Off any word this selects nothing and leaves the caret at the press.
-					val word = state.selector.rangeAt(wordPosition, SelectionGranularity.Word)
-					state.selector.selectFromAnchor(word, wordPosition, SelectionGranularity.Word, isTouch = true)
-					state.endCompositionIfPointerLeft()
+		val longPressTimeout = viewConfiguration.longPressTimeoutMillis
+		val tapCounter = ClickCounter(viewConfiguration, slop = DOUBLE_TAP_SLOP.toPx(), fromRelease = true)
+		coroutineScope {
+			val autoScrollScope = this
+			awaitEachGesture {
+				val down = awaitFirstDown(requireUnconsumed = false)
+				if (currentEvent.isMouseLike(down)) return@awaitEachGesture
+				val origin = contentOrigin()
+				val downAt = down.inContent(origin)
+				if (isOnAnyHandle(downAt, state)) {
+					tapCounter.reset()
+					return@awaitEachGesture
 				}
 
-				didLongPress = true
-			}
+				if (tapCounter.register(down) >= 2) {
+					tapCounter.reset()
+					touchToolbar?.hide()
+					val selection = PointerSelection.press(state, downAt, SelectionGranularity.Word, isTouch = true)
+					dragTouchSelection(state, selection, down, origin, autoScrollScope)
+					touchToolbar?.show()
+					return@awaitEachGesture
+				}
 
-			try {
-				while (true) {
-					val event = awaitPointerEvent()
-					val change = event.changes.firstOrNull { it.id == down.id } ?: break
-					if (!change.pressed) {
-						if (!didLongPress && !wasDrag) {
-							val placed = handleSpanInteraction(
-								state,
-								change.position,
-								SpanClickType.TAP,
-								event.keyboardModifiers,
-								onSpanClick,
-								readOnly,
-								pressedSpan = pressed.span,
-							)
-							if (placed && caretHandle) state.selector.showCaretHandle()
-							if (pressed.link != null && links?.opensOnTap == true &&
-								ClickTarget.at(state, change.position).link == pressed.link
-							) {
-								links.open(pressed.link)
-							}
+				var didLongPress = false
+				var wasDrag = false
+				var longPressSelection: PointerSelection? = null
+				var showToolbarOnRelease = false
+				val pressed = ClickTarget.at(state, downAt)
+				val existingSelection = state.selector.selection
+				val longPressJob = state.scope.launch {
+					delay(longPressTimeout)
+					val wordPosition = state.getOffsetAtPosition(downAt)
+
+					val isOnSelection = existingSelection != null &&
+							(wordPosition isAfterOrEqual existingSelection.start) &&
+							(wordPosition isBeforeOrEqual existingSelection.end)
+
+					if (isOnSelection) {
+						// The toolbar waits for the finger to lift, as after every other
+						// gesture; the fallback menu is modal, so it opens now, under the finger.
+						when {
+							touchToolbar == null -> onContextMenuRequest?.invoke(downAt)
+							touchToolbar.isNative -> showToolbarOnRelease = true
+							else -> touchToolbar.showMenuAt(downAt)
 						}
-						break
+					} else {
+						// Off any word this selects nothing and leaves the caret at the press.
+						longPressSelection =
+							PointerSelection.press(state, downAt, SelectionGranularity.Word, isTouch = true)
+						showToolbarOnRelease = true
 					}
-					// Only a move past touch slop is a drag, so a high-precision touch screen's
-					// micro-movements still tap.
-					if (!wasDrag && (change.position - down.position).getDistance() > touchSlop) {
-						wasDrag = true
-						longPressJob.cancel()
-					}
+
+					didLongPress = true
 				}
-			} finally {
-				longPressJob.cancel()
+
+				try {
+					while (true) {
+						val event = awaitPointerEvent()
+						val change = event.changes.firstOrNull { it.id == down.id } ?: break
+						if (!change.pressed) {
+							if (didLongPress || wasDrag) tapCounter.reset() else tapCounter.released(change)
+							if (showToolbarOnRelease) touchToolbar?.show()
+							if (!didLongPress && !wasDrag) {
+								touchToolbar?.hide()
+								val releasedAt = change.inContent(origin)
+								val placed = handleSpanInteraction(
+									state,
+									releasedAt,
+									SpanClickType.TAP,
+									event.keyboardModifiers,
+									onSpanClick,
+									readOnly,
+									pressedSpan = pressed.span,
+								)
+								if (placed && caretHandle) state.selector.showCaretHandle()
+								if (pressed.link != null && links?.opensOnTap == true &&
+									ClickTarget.at(state, releasedAt).link == pressed.link
+								) {
+									links.open(pressed.link)
+								}
+							}
+							break
+						}
+						val selection = longPressSelection
+						if (selection != null) {
+							tapCounter.reset()
+							dragTouchSelection(state, selection, down, origin, autoScrollScope, first = change)
+							touchToolbar?.show()
+							break
+						}
+						// Only a move past touch slop is a drag, so a high-precision touch screen's
+						// micro-movements still tap. A second finger is a pinch or a scroll for
+						// some ancestor, which Android's gesture detector also takes for neither
+						// a tap nor a long press.
+						if (!wasDrag && event.leavesTap(down, change, touchSlop)) {
+							wasDrag = true
+							tapCounter.reset()
+							longPressJob.cancel()
+						}
+					}
+				} finally {
+					longPressJob.cancel()
+				}
 			}
 		}
+	}
+}
+
+/**
+ * Extends a finger [selection] with the drag from [down] until the finger lifts, auto-
+ * scrolling like a mouse drag. [first] is a move that arrived before the drag was picked
+ * up, which the selection still has to follow.
+ */
+private suspend fun AwaitPointerEventScope.dragTouchSelection(
+	state: TextEditorState,
+	selection: PointerSelection,
+	down: PointerInputChange,
+	origin: Offset,
+	autoScrollScope: CoroutineScope,
+	first: PointerInputChange? = null,
+) {
+	val autoScroll = DragAutoScroll(state, autoScrollScope, onDrag = selection::dragTo)
+	try {
+		if (first != null && first.positionChanged()) {
+			autoScroll.update(first.inContent(origin))
+			first.consume()
+		}
+		followDrag(autoScroll, down, origin)
+	} finally {
+		selection.release()
 	}
 }

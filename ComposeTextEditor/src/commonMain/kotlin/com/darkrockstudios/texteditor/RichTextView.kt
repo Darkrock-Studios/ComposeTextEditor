@@ -5,6 +5,7 @@ import androidx.compose.foundation.focusable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -15,9 +16,11 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.LocalTextToolbar
 import androidx.compose.ui.unit.dp
 import com.darkrockstudios.texteditor.contextmenu.ContextMenuActions
 import com.darkrockstudios.texteditor.contextmenu.ContextMenuStrings
@@ -81,6 +84,15 @@ fun RichTextView(
 		val contextMenuActions = remember(state, clipboard) {
 			ContextMenuActions(state, clipboard, state.scope, enabled = false)
 		}
+		val textToolbar = LocalTextToolbar.current
+		val nativeTextToolbar = LocalNativeTextToolbar.current
+		val touchToolbar = remember(state, textToolbar, nativeTextToolbar, contextMenuActions) {
+			TouchToolbar(state, textToolbar.takeIf { nativeTextToolbar }, contextMenuActions) { offset ->
+				contextMenuState.showMenu(offset)
+			}
+		}
+		LaunchedEffect(touchToolbar) { touchToolbar.watch() }
+		DisposableEffect(touchToolbar) { onDispose { touchToolbar.hide() } }
 
 		TextEditorContextMenuProvider(
 			menuState = contextMenuState,
@@ -94,7 +106,7 @@ fun RichTextView(
 					.focusRequester(focusRequester)
 					// A read-only view never raises a soft keyboard, and its focus exists
 					// only to route copy/select-all shortcuts, so no tap ever suppresses it.
-					.requestFocusOnPress(focusRequester, popupIsShowing = { false })
+					.requestFocusOnPress(state, focusRequester, popupIsShowing = { false })
 					.then(inputModifierElement)
 					.focusable(enabled = true, interactionSource = interactionSource),
 				contentPadding = contentPadding,
@@ -102,6 +114,7 @@ fun RichTextView(
 				isSelectable = true,
 				onContextMenuRequest = { offset -> contextMenuState.showMenu(offset) },
 				linkClicks = linkClicks,
+				touchToolbar = touchToolbar,
 			)
 		}
 	} else {
@@ -113,6 +126,7 @@ fun RichTextView(
 			isSelectable = false,
 			onContextMenuRequest = null,
 			linkClicks = linkClicks,
+			touchToolbar = null,
 		)
 	}
 }
@@ -126,6 +140,7 @@ private fun RichTextViewBody(
 	isSelectable: Boolean,
 	onContextMenuRequest: ((Offset) -> Unit)?,
 	linkClicks: LinkClicks,
+	touchToolbar: TouchToolbar?,
 ) {
 	val density = LocalDensity.current
 	val layoutDirection = LocalLayoutDirection.current
@@ -149,42 +164,53 @@ private fun RichTextViewBody(
 			last.offset.y + last.effectiveHeight
 		} ?: 0f
 
-		Box(modifier = Modifier.padding(contentPadding)) {
-			val selectionModifier = if (isSelectable) {
-				Modifier
-					.textEditorPointerIcon(state, linkClicks)
-					.textMagnifier(state)
-					.textEditorPointerInputHandling(
-						state = state,
-						onContextMenuRequest = onContextMenuRequest,
-						readOnly = true,
-						links = linkClicks,
-					)
-			} else {
-				Modifier
-					.textEditorPointerIcon(state, linkClicks, default = null)
-					.linkClickHandling(state, linkClicks)
+		// The padding goes below the pointer input so presses in it still reach the text.
+		val contentOrigin by rememberUpdatedState(
+			with(density) {
+				Offset(
+					contentPadding.calculateLeftPadding(layoutDirection).roundToPx().toFloat(),
+					contentPadding.calculateTopPadding().roundToPx().toFloat(),
+				)
+			}
+		)
+		val pointerModifier = if (isSelectable) {
+			Modifier
+				.textEditorPointerIcon(state, linkClicks, contentOrigin = { contentOrigin })
+				.textEditorPointerInputHandling(
+					state = state,
+					onContextMenuRequest = onContextMenuRequest,
+					readOnly = true,
+					links = linkClicks,
+					contentOrigin = { contentOrigin },
+					touchToolbar = touchToolbar,
+				)
+				.padding(contentPadding)
+				// The touch toolbar is placed in root coordinates, from the canvas's.
+				.onGloballyPositioned { state.canvasLayoutCoordinates = it }
+				.textMagnifier(state)
+		} else {
+			Modifier
+				.textEditorPointerIcon(state, linkClicks, default = null, contentOrigin = { contentOrigin })
+				.linkClickHandling(state, linkClicks, contentOrigin = { contentOrigin })
+				.padding(contentPadding)
+		}
+
+		Canvas(
+			modifier = pointerModifier
+				.fillMaxWidth()
+				.height(with(density) { contentHeightPx.toDp() })
+				.graphicsLayer { clip = false }
+		) {
+			try {
+				DrawEditorText(state, style, decorateLine = null)
+			} catch (_: IllegalArgumentException) {
+				// Mid-resize layout race; the next frame will recover, mirrors BasicTextEditor.
 			}
 
-			Canvas(
-				modifier = Modifier
-					.fillMaxWidth()
-					.height(with(density) { contentHeightPx.toDp() })
-					.graphicsLayer { clip = false }
-					.then(selectionModifier)
-			) {
-				try {
-					DrawEditorText(state, style, decorateLine = null)
-				} catch (_: IllegalArgumentException) {
-					// Mid-resize layout race; the next frame will recover, mirrors BasicTextEditor.
-				}
-
-				if (isSelectable) {
-					DrawSelection(state, style.selectionColor)
-					DrawSelectionHandles(state)
-				}
+			if (isSelectable) {
+				DrawSelection(state, style.selectionColorFor(state.hasFocus))
+				if (state.hasFocus) DrawSelectionHandles(state, style.effectiveHandleColor)
 			}
 		}
 	}
 }
-

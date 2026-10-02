@@ -3,25 +3,23 @@ package com.darkrockstudios.texteditor.cursor
 import androidx.compose.ui.geometry.Offset
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.LineWrap
+import com.darkrockstudios.texteditor.state.CaretAffinity
 import com.darkrockstudios.texteditor.state.TextEditorState
+import com.darkrockstudios.texteditor.state.caretX
 import com.darkrockstudios.texteditor.utils.lineTextLeft
 
 fun TextEditorState.calculateCursorPosition(): CursorMetrics {
 	val (_, charIndex) = cursorPosition
 
-	val currentWrappedLine = lineOffsets.getWrapForDrawing(cursorPosition)
+	val currentWrappedLine = lineOffsets.getWrapForDrawing(cursorPosition, cursor.affinity)
 		?: return CursorMetrics(position = Offset.Zero, height = 0f)
 
 	val layout = currentWrappedLine.textLayoutResult
 	val virtualLineIndex = currentWrappedLine.virtualLineIndex
 
-	// Clamp charIndex to valid range to handle race conditions when text changes asynchronously
-	val textLength = layout.layoutInput.text.length
-	val safeCharIndex = charIndex.coerceIn(0, textLength)
-
 	// The line's text-left is a floor, not an addition: on an empty indented line
 	// Android already reports the indented position while desktop reports 0.
-	val cursorX = layout.getHorizontalPosition(safeCharIndex, usePrimaryDirection = true)
+	val cursorX = currentWrappedLine.caretX(charIndex)
 		.coerceAtLeast(layout.lineTextLeft(virtualLineIndex, density))
 	val cursorY = currentWrappedLine.offset.y - scrollState.value
 	val lineHeight = layout.multiParagraph.getLineHeight(virtualLineIndex)
@@ -55,6 +53,22 @@ internal fun List<LineWrap>.getWrapForDrawing(position: CharLineOffset): LineWra
 	getOrNull(getWrappedLineIndex(position))
 		?: lastOrNull { it.line <= position.line }
 		?: firstOrNull()
+
+/**
+ * [getWrappedLineIndex], with [affinity] deciding the row at a wrap offset: upstream
+ * is the row that ends at the wrap.
+ */
+internal fun List<LineWrap>.getWrappedLineIndex(position: CharLineOffset, affinity: CaretAffinity): Int {
+	val index = getWrappedLineIndex(position)
+	val row = getOrNull(index) ?: return index
+	// A line's rows are consecutive, so the row before the second or later one is the same line's.
+	val onWrap = row.virtualLineIndex > 0 && row.wrapStartsAtIndex == position.char
+	return if (affinity == CaretAffinity.Upstream && onWrap) index - 1 else index
+}
+
+/** [getWrapForDrawing] on the row [affinity] picks at a wrap offset. */
+internal fun List<LineWrap>.getWrapForDrawing(position: CharLineOffset, affinity: CaretAffinity): LineWrap? =
+	getOrNull(getWrappedLineIndex(position, affinity)) ?: getWrapForDrawing(position)
 
 private fun List<LineWrap>.getWrappedLine(position: CharLineOffset): LineWrap {
 	return last { lineOffset ->

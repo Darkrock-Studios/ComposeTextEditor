@@ -193,7 +193,8 @@ fun SpellCheckingTextEditor(
 			if (onAddToDictionary != null && flagged.none(Char::isWhitespace)) {
 				add(
 					ContextMenuItem(label = spellCheckStrings.addToDictionary) {
-						onAddToDictionary(flagged)
+						// The host's dictionary gets the spelling later lookups use.
+						onAddToDictionary(flagged.forLookup())
 						state.accept(flagged)
 					}
 				)

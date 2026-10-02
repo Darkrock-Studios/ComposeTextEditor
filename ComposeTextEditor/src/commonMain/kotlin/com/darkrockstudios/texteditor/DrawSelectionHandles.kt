@@ -3,15 +3,18 @@ package com.darkrockstudios.texteditor
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import com.darkrockstudios.texteditor.cursor.CursorMetrics
 import com.darkrockstudios.texteditor.state.TextEditorState
 
 internal fun DrawScope.DrawSelectionHandles(
 	state: TextEditorState,
-	handleColor: Color = Color(0xFF2196F3),
+	handleColor: Color,
 ) {
 	if (state.selector.isCaretHandleVisible) {
-		drawHandle(state.getPositionForOffset(state.cursorPosition), handleColor)
+		drawHandle(state.getPositionForOffset(state.cursorPosition, state.cursor.affinity), handleColor)
 		return
 	}
 
@@ -25,9 +28,10 @@ internal fun DrawScope.DrawSelectionHandles(
 }
 
 /** Where the handle for a selection end with [positionMetrics] is drawn: well below its row. */
-internal fun handleCenter(positionMetrics: CursorMetrics): Offset {
+internal fun Density.handleCenter(positionMetrics: CursorMetrics): Offset {
 	val (position, height) = positionMetrics
-	return position.copy(y = position.y + height + SELECTION_HANDLE_OFFSET + SELECTION_HANDLE_RADIUS)
+	val below = SelectionHandleGap.toPx() + SelectionHandleDiameter.toPx() / 2f
+	return position.copy(y = position.y + height + below)
 }
 
 private fun DrawScope.drawHandle(
@@ -36,12 +40,11 @@ private fun DrawScope.drawHandle(
 ) {
 	val position = positionMetrics.position
 	val center = handleCenter(positionMetrics)
-
-	val lineWidth = 6f
+	val radius = SelectionHandleDiameter.toPx() / 2f
 
 	drawCircle(
 		color = color,
-		radius = SELECTION_HANDLE_RADIUS,
+		radius = radius,
 		center = center
 	)
 
@@ -49,13 +52,17 @@ private fun DrawScope.drawHandle(
 	drawLine(
 		color = color,
 		start = Offset(position.x, position.y),
-		end = Offset(position.x, center.y - SELECTION_HANDLE_RADIUS),
-		strokeWidth = lineWidth
+		end = Offset(position.x, center.y - radius),
+		strokeWidth = SelectionHandleStemWidth.toPx()
 	)
 }
 
-internal const val SELECTION_HANDLE_DIAMETER = 52f
-internal const val SELECTION_HANDLE_RADIUS = SELECTION_HANDLE_DIAMETER / 2
+internal val SelectionHandleDiameter: Dp = 20.dp
 
-// Gap between the text bottom and the handle circle
-internal const val SELECTION_HANDLE_OFFSET = 50f
+/** Gap between the text row's bottom and the handle's knob. */
+internal val SelectionHandleGap: Dp = 19.dp
+
+internal val SelectionHandleStemWidth: Dp = 2.dp
+
+/** The handle colour when the style leaves it unspecified. */
+internal val DefaultSelectionHandleColor = Color(0xFF2196F3)

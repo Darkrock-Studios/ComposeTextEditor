@@ -273,8 +273,7 @@ class StateFuzzInterpreter(
 
 			is FuzzOp.PastePlain -> typeOrReplace(op.text)
 
-			// canUndo/canRedo only refresh during layout bookkeeping, which never runs
-			// against the 1x1 mock viewport; undo()/redo() no-op safely on empty stacks.
+			// undo()/redo() no-op safely on empty stacks.
 			is FuzzOp.UndoBurst -> repeat(op.count) { state.undo() }
 
 			is FuzzOp.RedoBurst -> repeat(op.count) { state.redo() }

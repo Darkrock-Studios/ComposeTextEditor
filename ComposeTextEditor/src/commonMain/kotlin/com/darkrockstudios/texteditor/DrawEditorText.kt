@@ -1,12 +1,16 @@
 package com.darkrockstudios.texteditor
 
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.text.drawText
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastForEach
 import com.darkrockstudios.texteditor.richstyle.BlockSpanStyle
 import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.utils.getBoundingBoxes
+import kotlin.math.floor
+import kotlin.math.roundToInt
 
 internal fun DrawScope.DrawEditorText(
 	state: TextEditorState,
@@ -75,10 +79,12 @@ internal fun DrawScope.DrawEditorText(
 	}
 }
 
+private val ComposingUnderlineWidth = 1.dp
+
 /**
  * Draws an underline for the IME composing region (autocomplete preview).
  */
-private fun DrawScope.drawComposingUnderline(
+internal fun DrawScope.drawComposingUnderline(
 	lineWrap: LineWrap,
 	state: TextEditorState,
 	composingRange: TextEditorRange,
@@ -126,15 +132,15 @@ private fun DrawScope.drawComposingUnderline(
 			// Draw underline for each box
 			val scrollY = state.scrollState.value
 			val underlineColor = style.textColor.copy(alpha = 0.6f)
-			val strokeWidth = 2f
+			// Whole pixels, so a thin underline stays crisp instead of blurring over two rows.
+			val thickness = ComposingUnderlineWidth.toPx().roundToInt().coerceAtLeast(1).toFloat()
 
 			boxes.forEach { box ->
-				val y = lineWrap.offset.y - scrollY + box.bottom - strokeWidth
-				drawLine(
+				val top = floor(lineWrap.offset.y - scrollY + box.bottom - thickness)
+				drawRect(
 					color = underlineColor,
-					start = Offset(box.left, y),
-					end = Offset(box.right, y),
-					strokeWidth = strokeWidth
+					topLeft = Offset(box.left, top),
+					size = Size(box.right - box.left, thickness),
 				)
 			}
 		}

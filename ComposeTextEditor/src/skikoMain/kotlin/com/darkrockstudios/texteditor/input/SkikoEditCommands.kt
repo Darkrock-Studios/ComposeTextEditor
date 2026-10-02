@@ -41,8 +41,8 @@ internal fun TextEditorState.applyImeEditCommand(command: EditCommand) {
 
 /**
  * Compose's `BackspaceCommand`: a composition is removed whole, else a selection is,
- * else the code point before the caret goes, through the semantic backspace when it is
- * a single char so an edit behavior can claim it, exactly as the hardware key does.
+ * else the semantic backspace runs, exactly as the hardware key does, so an edit
+ * behavior can claim it and an emoji sequence goes whole.
  */
 internal fun TextEditorState.imeBackspace() {
 	// A range that outlived its document is no composition; committing over it
@@ -52,7 +52,7 @@ internal fun TextEditorState.imeBackspace() {
 		// Committing nothing is one replace of the composition with nothing.
 		composing != null -> imeCommitText("", newCursorPosition = 0)
 		selector.hasSelection() -> selector.deleteSelection()
-		else -> imeDeleteSurroundingTextInCodePoints(1, 0)
+		else -> backspaceAtCursor()
 	}
 }
 

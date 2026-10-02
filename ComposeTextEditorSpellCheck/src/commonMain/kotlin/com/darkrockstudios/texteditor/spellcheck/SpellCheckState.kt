@@ -62,6 +62,9 @@ enum class SpellCheckMode {
  *   them here keeps the caller's dispatcher out of the loop. Span mutations still happen on the
  *   caller's dispatcher once the scan returns.
  */
+/** A word as the dictionary spells it: with a straight apostrophe in place of a typographic one. */
+internal fun String.forLookup(): String = replace('\u2019', '\'')
+
 class SpellCheckState(
 	val textState: TextEditorState,
 	var spellChecker: EditorSpellChecker?,
@@ -254,7 +257,7 @@ class SpellCheckState(
 		val scannedLines = textState.textLines
 		val candidates = textState.wordSegments().filter(::shouldSpellCheck).filterNot(::isAccepted).toList()
 		val misspelled = withContext(scanContext) {
-			candidates.filterNot { sp.isCorrectWord(it.text) }
+			candidates.filterNot { sp.isCorrectWord(it.lookupText) }
 		}
 
 		// Re-check after the async lookups: a concurrent disable must not have its
@@ -326,7 +329,7 @@ class SpellCheckState(
 			computedAgainst = computedAgainst,
 			scan = { region ->
 				val candidates = textState.wordSegmentsInRange(region).filter(::shouldSpellCheck).filterNot(::isAccepted)
-				withContext(scanContext) { candidates.filterNot { sp.isCorrectWord(it.text) } }
+				withContext(scanContext) { candidates.filterNot { sp.isCorrectWord(it.lookupText) } }
 			},
 			move = { segment, diff -> diff.move(segment.range)?.let { segment.copy(range = it) } },
 		) { region, misspelled ->
@@ -431,7 +434,7 @@ class SpellCheckState(
 
 			// Resolve the async lookup first; only mutate spans afterward so a
 			// cancellation can't leave the word's span removed-but-not-restored.
-			val isSpelledCorrectly = isAccepted(segment) || sp.isCorrectWord(segment.text)
+			val isSpelledCorrectly = isAccepted(segment) || sp.isCorrectWord(segment.lookupText)
 
 			if (spellCheckingEnabled) {
 				val diff = LineDiff(computedAgainst, textState.textLines)
@@ -456,6 +459,9 @@ class SpellCheckState(
 		// Skip segments that are purely numeric
 		return !segment.text.all { it.isDigit() }
 	}
+
+	/** The segment's text as the dictionary spells it: with a straight apostrophe. */
+	private val WordSegment.lookupText: String get() = text.forLookup()
 
 	/**
 	 * Remove spell-check decorations affected by an edit operation.
@@ -498,9 +504,10 @@ class SpellCheckState(
 	suspend fun getSuggestions(word: String): List<Suggestion> {
 		val sp = spellChecker ?: return emptyList()
 
-		val wordLevel = sp.suggestions(word, scope = Scope.Word, closestOnly = true)
-		val sentenceLevel = if (!sp.isCorrectWord(word)) {
-			sp.suggestions(word, scope = Scope.Sentence, closestOnly = false)
+		val lookup = word.forLookup()
+		val wordLevel = sp.suggestions(lookup, scope = Scope.Word, closestOnly = true)
+		val sentenceLevel = if (!sp.isCorrectWord(lookup)) {
+			sp.suggestions(lookup, scope = Scope.Sentence, closestOnly = false)
 		} else emptyList()
 
 		val combined = (wordLevel + sentenceLevel)

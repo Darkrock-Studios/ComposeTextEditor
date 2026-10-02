@@ -15,6 +15,10 @@ internal fun DrawScope.DrawPlaceholderText(
 		style = state.textStyle.copy(
 			color = style.placeholderColor,
 		),
-		topLeft = Offset(0f, 0f)
+		topLeft = state.placeholderTopLeft()
 	)
 }
+
+/** Where the placeholder starts: the first line's top, which the top content padding moves down. */
+internal fun TextEditorState.placeholderTopLeft(): Offset =
+	Offset(0f, (lineOffsets.firstOrNull()?.offset?.y ?: 0f) - scrollState.value)

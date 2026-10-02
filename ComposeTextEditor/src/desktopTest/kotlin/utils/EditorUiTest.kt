@@ -1,11 +1,15 @@
 package utils
 
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.LocalClipboard
+import androidx.compose.ui.platform.LocalTextToolbar
+import androidx.compose.ui.platform.TextToolbar
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.MouseButton
@@ -23,12 +27,16 @@ import androidx.compose.ui.test.rightClick
 import androidx.compose.ui.test.runSkikoComposeUiTest
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.darkrockstudios.texteditor.BasicTextEditor
+import com.darkrockstudios.texteditor.LocalNativeTextToolbar
 import com.darkrockstudios.texteditor.RichSpanClickEventListener
 import com.darkrockstudios.texteditor.handleCenter as drawnHandleCenter
 import com.darkrockstudios.texteditor.RichSpanClickListener
+import com.darkrockstudios.texteditor.rememberTextEditorStyle
 import com.darkrockstudios.texteditor.contextmenu.TextEditorContextMenuState
 import com.darkrockstudios.texteditor.input.CtrlKeyBindings
 import com.darkrockstudios.texteditor.input.KeyBindings
@@ -63,8 +71,12 @@ internal fun editorUiTest(
 	onLinkClick: ((String) -> Unit)? = null,
 	contextMenuState: TextEditorContextMenuState? = null,
 	autoFocus: Boolean = enabled,
+	contentPadding: PaddingValues = PaddingValues(0.dp),
+	density: Float = 1f,
+	textToolbar: TextToolbar? = null,
+	textStyle: TextStyle = TextStyle.Default,
 	block: EditorUiTestScope.() -> Unit,
-) = runSkikoComposeUiTest {
+) = runSkikoComposeUiTest(density = Density(density)) {
 	val clipboard = InMemoryClipboard()
 	lateinit var state: TextEditorState
 	setContent {
@@ -72,12 +84,18 @@ internal fun editorUiTest(
 		CompositionLocalProvider(
 			LocalClipboard provides clipboard,
 			LocalKeyBindings provides keyBindings,
+			// The desktop scene's own toolbar is inert; a test that passes one stands it in
+			// for a platform toolbar, and without one the editor falls back to its menu.
+			LocalTextToolbar provides (textToolbar ?: LocalTextToolbar.current),
+			LocalNativeTextToolbar provides (textToolbar != null),
 		) {
 			BasicTextEditor(
 				state = state,
 				modifier = Modifier.size(width, height).testTag(EDITOR_TEST_TAG),
+				contentPadding = contentPadding,
 				enabled = enabled,
 				autoFocus = autoFocus,
+				style = rememberTextEditorStyle(textStyle = textStyle),
 				contextMenuState = contextMenuState,
 				onRichSpanClick = onRichSpanClick,
 				onRichSpanClickEvent = onRichSpanClickEvent,
@@ -169,13 +187,55 @@ class EditorUiTestScope(
 
 	/** Holds a finger on the character at flat index [charIndex] past the long-press threshold. */
 	fun longPressAtCharacter(charIndex: Int) {
-		val position = positionOfCharacter(charIndex)
+		longPressAt(positionOfCharacter(charIndex))
+		editor.performTouchInput { up() }
+		test.waitForIdle()
+	}
+
+	/**
+	 * Puts a finger down at [position] and holds it past the long-press threshold. The
+	 * finger is still down when this returns, for a drag or a lift to follow.
+	 */
+	fun longPressAt(position: Offset) {
 		editor.performTouchInput { down(position) }
 		// The long-press timer is a coroutine on the editor's scope, which the test
 		// clock drives; sleeping the thread would not move it.
 		test.mainClock.advanceTimeBy(800)
 		test.waitForIdle()
-		editor.performTouchInput { up() }
+	}
+
+	/**
+	 * Taps the character at [charIndex] twice in quick succession with a finger, the touch
+	 * word-select gesture. With [toChar], the second tap drags there before lifting.
+	 */
+	fun doubleTapAtCharacter(charIndex: Int, toChar: Int? = null, steps: Int = 4) {
+		val position = positionOfCharacter(charIndex)
+		editor.performTouchInput {
+			down(position)
+			up()
+			advanceEventTime(MULTI_CLICK_INTERVAL_MS)
+			down(position)
+			if (toChar != null) {
+				val delta = positionOfCharacter(toChar) - position
+				for (step in 1..steps) moveTo(position + delta * (step / steps.toFloat()))
+			}
+			up()
+		}
+		test.waitForIdle()
+	}
+
+	/**
+	 * Holds a finger on the character at [fromChar] past the long-press threshold, then
+	 * drags it to [toChar] in [steps] moves and lifts.
+	 */
+	fun longPressDragToCharacter(fromChar: Int, toChar: Int, steps: Int = 4) {
+		val from = positionOfCharacter(fromChar)
+		longPressAt(from)
+		val delta = positionOfCharacter(toChar) - from
+		editor.performTouchInput {
+			for (step in 1..steps) moveTo(from + delta * (step / steps.toFloat()))
+			up()
+		}
 		test.waitForIdle()
 	}
 
@@ -201,11 +261,13 @@ class EditorUiTestScope(
 	/** Where the selection's start or end touch handle is drawn. */
 	fun handleCenter(isStart: Boolean): Offset {
 		val selection = checkNotNull(state.selector.selection) { "no selection, so no handles" }
-		return drawnHandleCenter(state.getPositionForOffset(if (isStart) selection.start else selection.end))
+		val metrics = state.getPositionForOffset(if (isStart) selection.start else selection.end)
+		return canvasToNode(with(test.density) { drawnHandleCenter(metrics) })
 	}
 
 	/** Where the touch caret handle is drawn, under the caret. */
-	fun caretHandleCenter(): Offset = drawnHandleCenter(state.getPositionForOffset(state.cursorPosition))
+	fun caretHandleCenter(): Offset =
+		canvasToNode(with(test.density) { drawnHandleCenter(state.getPositionForOffset(state.cursorPosition)) })
 
 	/** Drags the touch caret handle so the caret travels to [toChar], then lifts. */
 	fun dragCaretHandle(toChar: Int, steps: Int = 8) {
@@ -225,7 +287,7 @@ class EditorUiTestScope(
 	 */
 	fun dragHandle(isStart: Boolean, toChar: Int, steps: Int = 8) {
 		val selection = checkNotNull(state.selector.selection)
-		val from = state.positionOfCharacter(state.getCharacterIndex(if (isStart) selection.start else selection.end))
+		val from = positionOfCharacter(state.getCharacterIndex(if (isStart) selection.start else selection.end))
 		val delta = positionOfCharacter(toChar) - from
 		val grab = handleCenter(isStart)
 		editor.performTouchInput {
@@ -325,8 +387,28 @@ class EditorUiTestScope(
 		test.waitForIdle()
 	}
 
-	/** Pixel position of the character at flat index [charIndex], vertically centered on its line. */
-	fun positionOfCharacter(charIndex: Int): Offset = state.positionOfCharacter(charIndex)
+	/**
+	 * Presses at [from], drags to [to], and releases, both in editor node
+	 * coordinates. Either end may lie outside the editor.
+	 */
+	fun dragBetween(from: Offset, to: Offset) = mouse {
+		moveTo(from)
+		press()
+		moveTo(to)
+		release()
+	}
+
+	/**
+	 * Pixel position of the character at flat index [charIndex], vertically centered on
+	 * its line, in editor node coordinates (content padding included).
+	 */
+	fun positionOfCharacter(charIndex: Int): Offset = canvasToNode(state.positionOfCharacter(charIndex))
+
+	/** Converts a point in the editor's text canvas to editor node coordinates. */
+	fun canvasToNode(canvasPosition: Offset): Offset {
+		val canvas = checkNotNull(state.canvasLayoutCoordinates) { "the editor has not been laid out" }
+		return canvasPosition + canvas.positionInRoot() - editor.fetchSemanticsNode().positionInRoot
+	}
 
 	/**
 	 * Seeds the clipboard with unstyled text, as an external application or a
