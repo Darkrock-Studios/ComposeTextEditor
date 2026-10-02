@@ -75,6 +75,8 @@ class PrimarySelectionTest {
 	private fun EditorUiTestScope.middleClickAndWait(charIndex: Int, landed: EditorUiTestScope.() -> Boolean) {
 		middleClickAtCharacter(charIndex)
 		test.waitUntil(timeoutMillis = 5_000) { landed() }
+		// The paste lands from a coroutine after an off-thread read; let it settle before reading.
+		waitForIdle()
 	}
 
 	@Test
