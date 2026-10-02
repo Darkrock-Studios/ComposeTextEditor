@@ -74,12 +74,13 @@ internal suspend fun TextEditorState.startSkikoInputSession(
 	exposeTextLayout: Boolean = false,
 	echoesKeys: Boolean = false,
 	imeResync: SkikoImeResync = SkikoImeResync.None,
+	composingFieldValue: () -> TextFieldValue? = { null },
 	onRun: CoroutineScope.(ImeOptions) -> Unit = {},
 ): Nothing = coroutineScope {
 	snapshotFlow(imeOptions).collectLatest { options ->
 		coroutineScope {
 			onRun(options)
-			runSkikoInputMethod(session, options, exposeTextLayout, echoesKeys, imeResync)
+			runSkikoInputMethod(session, options, exposeTextLayout, echoesKeys, imeResync, composingFieldValue)
 		}
 	}
 	throw CancellationException("The keyboard options stopped")
@@ -92,16 +93,18 @@ private suspend fun TextEditorState.runSkikoInputMethod(
 	exposeTextLayout: Boolean,
 	echoesKeys: Boolean,
 	imeResync: SkikoImeResync,
+	composingFieldValue: () -> TextFieldValue?,
 ): Nothing = coroutineScope {
 	val request = SkikoTextEditorInputMethodRequest(
 		this@runSkikoInputMethod,
 		imeOptions,
 		exposeTextLayout,
 		echoesKeys,
+		composingFieldValue,
 	)
 	when (imeResync) {
 		SkikoImeResync.None -> Unit
-		is SkikoImeResync.Rewrite -> launch { onImeResync { imeResync.rewrite(request.value()) } }
+		is SkikoImeResync.Rewrite -> launch { onImeResync { imeResync.rewrite(request.editorValue()) } }
 		SkikoImeResync.RestartInput -> return@coroutineScope restartingInputMethod(session, request)
 	}
 	session.startInputMethod(request)
@@ -178,14 +181,28 @@ internal class SkikoTextEditorInputMethodRequest(
 	override val imeOptions: ImeOptions,
 	private val exposeTextLayout: Boolean = false,
 	private val echoesKeys: Boolean = false,
+	private val composingFieldValue: () -> TextFieldValue? = { null },
 ) : PlatformTextInputMethodRequest {
 
 	/** Live view of the editor as the CharSequence + selection + composition Compose expects. */
 	override val state: ComposeTextEditorState = ImeComposeStateAdapter()
 
+	/**
+	 * The editor's value, unless the platform's own field is composing: web mirrors this
+	 * into its textarea a task after the edit it follows, while the browser updates the
+	 * textarea with each composition step as it comes, so the editor's value can be a
+	 * step behind and would rewrite the textarea under the composition, which Chrome then
+	 * drops and starts again. The field's own value makes that mirror a no-op.
+	 */
 	override val value: () -> TextFieldValue = {
+		val editor = editorValue()
+		composingFieldValue() ?: editor
+	}
+
+	/** The editor's text and selection, read so that an observer re-runs on an edit. */
+	internal fun editorValue(): TextFieldValue {
 		editorState.textRevision
-		TextFieldValue(
+		return TextFieldValue(
 			text = editorState.getAllPlainText(),
 			selection = editorState.selectionAsTextRange(),
 		)

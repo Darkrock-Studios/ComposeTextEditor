@@ -3697,6 +3697,25 @@ iOS Safari; browser tests run in CI (met: the `browser` job, 4.15).
   measures, and failed before the fix both ways (the probe on the centre,
   and the stylus area flipping). Dropping the scroll from any of the three
   handwriting conversions still fails ten tests each (checked by hand).
+  The browser test "a Japanese composition shows while composing and commits its
+  conversion once" failed in 2 of the 4 runs after the merge (the composition
+  started four times and never ended): a race older than soft wrap, which the
+  merge's timing only made likelier. Compose's web session mirrors the request's
+  `value()` into its textarea a task after the frame that applied the edit, while
+  the browser edits the textarea with each composition update as it comes. The
+  test's updates arrive a millisecond apart, so a frame can take three of them
+  and the fourth land before the mirror, which then writes the editor's value, a
+  step behind, under the composition; Chrome drops the composition and starts
+  another. Seen by replaying the test's CDP events (`Input.imeSetComposition`,
+  `Input.insertText`) from a Node script against the production demo in the
+  headless Chromium Playwright had cached, each run in a fresh browser context,
+  with the textarea's value setter logged: each failing run logged a write of "にh"
+  over "にほ" mid-composition. The pre-merge build (`e19ff614`) fails the same way
+  (1 of 30 runs there against 6 of 66 at the tip). The request now reports the
+  field's own value while the browser composes in it (the web session follows
+  its composition events), so that mirror writes nothing, and a resync still
+  writes the editor's (`SkikoInputMethodRequestTest`). 0 of 110 runs failed after
+  it, and no write landed mid-composition.
 
 ### Right-to-left and bidirectional text
 
@@ -5134,4 +5153,5 @@ records results and removes entries that passed.
 | Item | What to do | A pass looks like | Result |
 | --- | --- | --- | --- |
 | 3.17 | On an iPad with an Apple Pencil (the Simulator here offers no Pencil input), in the iOS sample app: tap, double-tap a word and drag across text with the Pencil. 3.17 added the `expect` `Modifier.stylusHandwriting`, whose non-Android actual in `skikoMain` returns the modifier unchanged | The Pencil places the caret and selects as a finger does, as before | Compiles and the iOS tests pass (2026-10-01, `9f16a8e9`). The Pencil check needs a device |
+| 7.41 | `./gradlew :ComposeTextEditor:compileKotlinIosSimulatorArm64` and `:ComposeTextEditor:iosSimulatorArm64Test`. `skikoMain` changed: `SkikoTextEditorInputMethodRequest` takes an optional field value, which its `value()` reports while the platform's own field composes; only web passes one, so iOS reads the editor's value as before. Then in the iOS sample app, type a Japanese word with the Japanese (Romaji) keyboard, convert it and commit it | Compiles and the tests pass; the word composes underlined, converts and commits once, as before | |
 | 7.57 | On an iOS device, with VoiceOver on, note what its caret outline shows on the focused editor (the simulator has no VoiceOver) | VoiceOver's outline is expected unchanged (the legacy text input view answers no caret rectangle); record what it shows | The rest passed 2026-10-01 at `4d0a7cae` on the iPhone 17 Pro Max simulator (iOS 26); see 7.57 |

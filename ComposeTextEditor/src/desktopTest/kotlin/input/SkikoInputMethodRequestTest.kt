@@ -565,6 +565,54 @@ class SkikoInputMethodRequestTest {
 		sessionJob.cancel()
 	}
 
+	/**
+	 * The web session mirrors `value()` into its textarea a task after the edit it follows,
+	 * while the browser edits the textarea as each composition update arrives. A mirror of
+	 * the editor taken before the latest update would rewrite the textarea under the
+	 * browser's composition, which Chrome then drops and starts again. While the field
+	 * composes, the request reports the field's own value, so the mirror writes nothing.
+	 */
+	@Test
+	fun `a value mirrored while the platform's field composes is the field's own`() = runTest {
+		val state = TextEditorState(scope = this, measurer = mockk(relaxed = true), initialText = AnnotatedString(""))
+		var fieldComposing = false
+		var field = TextFieldValue("")
+		val captured = CompletableDeferred<PlatformTextInputMethodRequest>()
+		val session = object : PlatformTextInputSession {
+			override suspend fun startInputMethod(request: PlatformTextInputMethodRequest): Nothing {
+				captured.complete(request)
+				awaitCancellation()
+			}
+		}
+		val sessionJob = launch {
+			state.startSkikoInputSession(session, { ImeOptions.Default }, composingFieldValue = { field.takeIf { fieldComposing } })
+		}
+		val request = captured.await()
+		val mirrored = mutableListOf<TextFieldValue>()
+		val mirror = launch { snapshotFlow { request.value() }.collect { mirrored += it } }
+		settle()
+
+		// The browser shows each update in the field at once; the editor takes the first
+		// three in one batch, and the fourth lands in the field before the mirror runs.
+		fieldComposing = true
+		for (step in listOf("n", "に", "にh", "にほ")) field = TextFieldValue(step, TextRange(step.length))
+		request.onEditCommand(listOf("n", "に", "にh").map { SetComposingTextCommand(it, 1) })
+		settle()
+
+		assertEquals("にh", state.getAllText().text)
+		assertEquals(TextFieldValue("にほ", TextRange(2)), mirrored.last())
+
+		request.onEditCommand(listOf(SetComposingTextCommand("にほ", 1)))
+		fieldComposing = false
+		field = TextFieldValue("日本", TextRange(2))
+		request.onEditCommand(listOf(CommitTextCommand("日本", 1)))
+		settle()
+
+		assertEquals(TextFieldValue("日本", TextRange(2)), mirrored.last(), "the editor's own value once the field stops composing")
+		mirror.cancel()
+		sessionJob.cancel()
+	}
+
 	/** An edit that moves no caret still reaches an observer of a request no session wraps. */
 	@Test
 	fun `a request alone makes an edit without a caret move visible`() = runTest {

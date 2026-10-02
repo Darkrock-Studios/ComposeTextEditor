@@ -512,6 +512,14 @@ above. Composition on desktop browsers and the soft keyboard on mobile
 browsers follow from the session existing; both need a manual pass in real
 browsers (roadmap 4.4, 4.15).
 
+That mirror writes a task after the frame that applied the edit, while the
+browser edits the textarea with each composition update as it arrives, so the
+editor's value can be a step behind the textarea, and writing it there mid
+composition makes Chrome drop the composition and start another. While the
+textarea composes (the session follows its `compositionstart` and
+`compositionend`), `value()` reports the textarea's own text and selection, so
+the mirror writes nothing; a resync still writes the editor's value.
+
 ## Rules for new code
 
 - A new IME mutation is implemented once in `ImeEditLogic` and called from
