@@ -137,7 +137,8 @@ allowed; Shift+Tab un-nests one level; Enter continues the list at the same
 level; Enter on an empty nested item un-nests it, and on an empty top-level
 item ends the list; Backspace at the start of a nested item un-nests it, and
 at a top-level item makes it body text. Tab inside an item's text keeps lane
-D's rule (2.9) and inserts the indent text, as Word does. Toggling a list
+D's rule (2.9) and inserts the indent text, as Word does, and so does Tab at the
+start of a list's first item, which has nothing to nest under (7.58). Toggling a list
 kind onto a line that is the other kind keeps its level; onto body text
 starts at level 0.
 

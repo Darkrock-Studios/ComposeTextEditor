@@ -26,9 +26,10 @@ import kotlin.js.ExperimentalWasmJsInterop
  *
  * Without a text area to type into (a disabled or read-only editor, or a selectable
  * `RichTextView`, has no input session, and a touch can leave the canvas focused) the key
- * lands on the canvas, where Compose takes it before the browser fires a `copy` event, so
- * a copy chord there asks the browser for one with `execCommand('copy')` first, still
- * inside the key press. Which canvas is this editor's is not known, only that it is a
+ * lands on the canvas, where Compose takes it before the browser fires a `copy` or `cut`
+ * event, so a copy chord there asks the browser for one with `execCommand('copy')` first,
+ * still inside the key press, and a cut chord in an editor taking input asks with
+ * `execCommand('cut')`. Which canvas is this editor's is not known, only that it is a
  * Compose one (in a shadow root): on a page of several viewports, the one whose editor
  * has focus and a selection answers.
  */
@@ -36,10 +37,10 @@ import kotlin.js.ExperimentalWasmJsInterop
 internal actual fun ClipboardEventsEffect(state: TextEditorState) {
 	val activeTarget = LocalActiveClipEventsTarget.current
 	DisposableEffect(state, activeTarget) {
-		var copyingFromCanvas = false
+		var askedFromCanvas: String? = null
 		val handle = listenForClipboardEvents { type, event ->
-			// The copy the canvas's key press asked for is this editor's wherever it lands.
-			val asked = copyingFromCanvas && type == "copy"
+			// The event the canvas's key press asked for is this editor's wherever it lands.
+			val asked = type == askedFromCanvas
 			if (!(state.isFocused || asked) || !hasClipboardData(event)) return@listenForClipboardEvents false
 			if (!asked) {
 				// Only the event aimed at this viewport's input; one for another element on
@@ -69,15 +70,23 @@ internal actual fun ClipboardEventsEffect(state: TextEditorState) {
 				else -> false
 			}
 		}
-		val keys = listenForCanvasCopyChord(
+		val keys = listenForCanvasClipboardChord(
 			apple = platformKeyBindings() === MacKeyBindings,
-			wanted = { state.hasFocus && state.selector.selection != null && state.actions[Action.Copy] != null },
-			copy = {
-				copyingFromCanvas = true
+			wanted = { command ->
+				val hasSelection = state.selector.selection != null
+				when (command) {
+					"copy" -> state.hasFocus && hasSelection && state.actions[Action.Copy] != null
+					// Cut edits, so only an editor taking input answers it.
+					"cut" -> state.isFocused && hasSelection && state.actions[Action.Cut] != null
+					else -> false
+				}
+			},
+			run = { command ->
+				askedFromCanvas = command
 				try {
-					execCopy()
+					execClipboardCommand(command)
 				} finally {
-					copyingFromCanvas = false
+					askedFromCanvas = null
 				}
 			},
 		)
@@ -89,20 +98,31 @@ internal actual fun ClipboardEventsEffect(state: TextEditorState) {
 }
 
 /**
- * Calls [copy] for each copy chord pressed on a Compose canvas, when [wanted], before the
- * canvas's own key handling runs: Cmd+C on [apple] systems, else Ctrl+C or Ctrl+Insert.
- * Keys are matched by `code`, the physical key, as Compose maps them; without one Compose
- * runs no Copy action either.
+ * Calls [run] with `copy` or `cut` for each copy or cut chord pressed on a Compose canvas,
+ * when [wanted] for it, before the canvas's own key handling runs. Copy is Cmd+C on
+ * [apple] systems, else Ctrl+C or Ctrl+Insert; cut is Cmd+X, else Ctrl+X or Shift+Delete,
+ * as the default key bindings have them (Shift with X is strikethrough). Keys are matched
+ * by `code`, the physical key, as Compose maps them; without one Compose runs no action
+ * either.
  */
-private fun listenForCanvasCopyChord(apple: Boolean, wanted: () -> Boolean, copy: () -> Unit): JsAny = js(
+private fun listenForCanvasClipboardChord(
+	apple: Boolean,
+	wanted: (String) -> Boolean,
+	run: (String) -> Unit,
+): JsAny = js(
 	"""{
 		const listener = (event) => {
 			if (event.defaultPrevented || event.altKey) return;
 			const primary = apple ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey;
-			if (!primary || !(event.code === 'KeyC' || (!apple && event.code === 'Insert'))) return;
+			const bare = !event.ctrlKey && !event.metaKey;
+			let command = null;
+			if (primary && (event.code === 'KeyC' || (!apple && event.code === 'Insert'))) command = 'copy';
+			else if (primary && !event.shiftKey && event.code === 'KeyX') command = 'cut';
+			else if (!apple && bare && event.shiftKey && event.code === 'Delete') command = 'cut';
+			if (command === null) return;
 			const origin = event.composedPath()[0];
 			if (!(origin instanceof HTMLCanvasElement) || !(origin.getRootNode() instanceof ShadowRoot)) return;
-			if (wanted()) copy();
+			if (wanted(command)) run(command);
 		};
 		document.addEventListener('keydown', listener, true);
 		return listener;
@@ -112,18 +132,23 @@ private fun listenForCanvasCopyChord(apple: Boolean, wanted: () -> Boolean, copy
 private fun stopListeningForKeys(listener: JsAny): Unit = js("document.removeEventListener('keydown', listener, true)")
 
 /**
- * Has the browser fire a `copy` event now, as the key press lets the page. WebKit enables
- * the command without a DOM selection only when a `beforecopy` handler prevents its
- * default, so one does for the call.
+ * Has the browser fire a `copy` or `cut` event ([command]) now, as the key press lets the
+ * page. WebKit enables the command without a DOM selection only when a `beforecopy` or
+ * `beforecut` handler prevents its default, so one does for the call. The event's own
+ * default is prevented too: where no handler writes the editor's selection into it, the
+ * browser would otherwise copy, or cut, whatever the page has selected elsewhere, and the
+ * action falls back to `navigator.clipboard` instead.
  */
-private fun execCopy(): Boolean = js(
+private fun execClipboardCommand(command: String): Boolean = js(
 	"""{
-		const enable = (event) => event.preventDefault();
-		document.addEventListener('beforecopy', enable, true);
+		const prevent = (event) => event.preventDefault();
+		document.addEventListener('before' + command, prevent, true);
+		window.addEventListener(command, prevent, true);
 		try {
-			return document.execCommand('copy');
+			return document.execCommand(command);
 		} finally {
-			document.removeEventListener('beforecopy', enable, true);
+			document.removeEventListener('before' + command, prevent, true);
+			window.removeEventListener(command, prevent, true);
 		}
 	}"""
 )

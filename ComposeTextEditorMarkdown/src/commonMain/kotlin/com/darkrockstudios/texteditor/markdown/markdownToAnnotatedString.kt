@@ -4,6 +4,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.buildAnnotatedString
 import com.darkrockstudios.texteditor.RichTextStyles
 import com.darkrockstudios.texteditor.annotatedstring.normalizeLineEndings
+import com.darkrockstudios.texteditor.html.DEFAULT_LINK_SCHEMES
 import com.darkrockstudios.texteditor.html.sanitizeLinkUrl
 import com.fleeksoft.ksoup.nodes.Entities
 import org.intellij.markdown.MarkdownElementTypes
@@ -33,10 +34,13 @@ internal class MarkdownParseResult(
  *
  * @param styles Styling (fonts, colors, weights) applied to the parsed markdown
  * elements; an editor's own are on `TextEditorState.richTextStyles`.
+ * @param allowedLinkSchemes The schemes a link keeps its look for (see
+ * [sanitizeLinkUrl]); an editor's own are on `TextEditorState.allowedLinkSchemes`.
  */
 fun String.toAnnotatedStringFromMarkdown(
-	styles: RichTextStyles = RichTextStyles.DEFAULT
-): AnnotatedString = parseMarkdownWithLinks(styles).annotatedString
+	styles: RichTextStyles = RichTextStyles.DEFAULT,
+	allowedLinkSchemes: Set<String> = DEFAULT_LINK_SCHEMES,
+): AnnotatedString = parseMarkdownWithLinks(styles, allowedLinkSchemes = allowedLinkSchemes).annotatedString
 
 /**
  * Parses like [toAnnotatedStringFromMarkdown] but also reports every inline
@@ -44,8 +48,9 @@ fun String.toAnnotatedStringFromMarkdown(
  * link spans the [AnnotatedString] itself cannot carry.
  */
 internal fun String.parseMarkdownWithLinks(
-	styles: RichTextStyles = RichTextStyles.DEFAULT,
+	styles: RichTextStyles,
 	literalLines: Set<Int>? = null,
+	allowedLinkSchemes: Set<String>,
 ): MarkdownParseResult {
 	val normalized = normalizeLineEndings()
 	val standIns = IndentStandIns.forSource(normalized)
@@ -53,7 +58,7 @@ internal fun String.parseMarkdownWithLinks(
 		.withHighlightTags()
 	val flavour = GFMFlavourDescriptor()
 	val parsedTree = MarkdownParser(flavour).buildMarkdownTreeFromString(source)
-	val context = MarkdownRenderContext(styles)
+	val context = MarkdownRenderContext(styles, allowedLinkSchemes)
 	val annotated = buildAnnotatedString {
 		appendMarkdownChildren(source, parsedTree, 0, context)
 	}
@@ -313,7 +318,10 @@ private fun codeSpanEnd(line: String, start: Int): Int {
  * the matching close tag arrives; a tag still open when its enclosing element
  * ends is closed there, as a browser would.
  */
-internal class MarkdownRenderContext(val styles: RichTextStyles) {
+internal class MarkdownRenderContext(
+	val styles: RichTextStyles,
+	val allowedLinkSchemes: Set<String>,
+) {
 	val links = mutableListOf<ParsedLink>()
 
 	private class OpenTag(val name: String, val pushed: Boolean)
@@ -482,7 +490,7 @@ private fun AnnotatedString.Builder.appendMarkdownNode(
 				}
 				?.getTextInNode(original)?.toString()
 				?.removeSurrounding("<", ">")
-				?.takeIf { sanitizeLinkUrl(it.decodedDestination()) != null }
+				?.takeIf { sanitizeLinkUrl(it.decodedDestination(), context.allowedLinkSchemes) != null }
 			if (url != null) pushStyle(styles.linkStyle)
 			val textStart = length
 			var childOffset = startOffset

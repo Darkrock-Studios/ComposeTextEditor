@@ -18,6 +18,7 @@ import utils.assertBlockState
 import utils.assertRichSpanInvariants
 import utils.editorUiTest
 import utils.selectChars
+import utils.setBlockLines
 import utils.undoAll
 
 /**
@@ -177,10 +178,10 @@ class UndoStormE2eTest {
 	@Test
 	fun `undo storm across block toggles lands on the initial document`() = editorUiTest {
 		typeText("abc\ndef")
-		markdown.editorState.toggleBulletList(0..1)
+		state.toggleBulletList(0..1)
 		press(Key.MoveEnd, ctrl = true)
 		typeText("x")
-		markdown.editorState.toggleBlockquote(0..1)
+		state.toggleBlockquote(0..1)
 
 		undoAll()
 
@@ -201,7 +202,7 @@ class UndoStormE2eTest {
 
 	@Test
 	fun `undo of a paste insert keeps every rich span`() = editorUiTest {
-		markdown.importMarkdown("- alpha\n- bravo")
+		state.setBlockLines("- alpha\n- bravo")
 
 		press(Key.MoveHome, ctrl = true)
 		repeat(2) { press(Key.DirectionRight) }

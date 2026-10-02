@@ -2,7 +2,6 @@ package texteditmanager.undo
 
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
-import com.darkrockstudios.texteditor.markdown.MarkdownExtension
 import com.darkrockstudios.texteditor.richstyle.BulletListSpanStyle
 import com.darkrockstudios.texteditor.state.TextEditorState
 import io.mockk.mockk
@@ -10,6 +9,8 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import utils.blockLines
+import utils.setBlockLines
 
 /**
  * Undo and redo re-apply their inverse operations without recording history.
@@ -99,10 +100,9 @@ class RichSpanSurvivalTests {
 	}
 
 	@Test
-	fun `undo of typing in a markdown list preserves the list markers`() = runTest {
+	fun `undo of typing in a list preserves the list markers`() = runTest {
 		val state = editorState()
-		val extension = MarkdownExtension(state)
-		extension.importMarkdown("- alpha\n- bravo\n- charlie")
+		state.setBlockLines("- alpha\n- bravo\n- charlie")
 		assertEquals(3, state.richSpanManager.getAllRichSpans().size)
 
 		state.cursor.updatePosition(CharLineOffset(0, 5))
@@ -110,6 +110,6 @@ class RichSpanSurvivalTests {
 		state.undo()
 
 		assertEquals(3, state.richSpanManager.getAllRichSpans().size)
-		assertEquals("- alpha\n- bravo\n- charlie", extension.exportAsMarkdown())
+		assertEquals("- alpha\n- bravo\n- charlie", state.blockLines())
 	}
 }

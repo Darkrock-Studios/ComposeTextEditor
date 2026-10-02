@@ -2,11 +2,13 @@ package e2e.torture
 
 import androidx.compose.ui.text.AnnotatedString
 import utils.applyFuzzOpUi
+import utils.blockLines
 import utils.checkCheapInvariants
 import utils.editorUiTest
 import utils.fuzzSeed
 import utils.generateFuzzScript
 import utils.runFuzzScript
+import utils.setBlockLines
 import utils.snapshotOf
 import utils.undoAll
 import kotlin.test.Test
@@ -14,8 +16,10 @@ import kotlin.test.assertEquals
 
 /**
  * The seeded edit storms of EditorStateFuzzTest driven through the composed
- * editor instead: real key events, the clipboard, and the same two invariants.
- * Keyboard-only; a mouse gesture costs a real 350ms sleep, so none are used.
+ * editor instead: real key events and the clipboard. Undo must restore the
+ * origin, and whatever blocks a storm leaves must reload through the importer
+ * seam (`applyDocumentBlocks`, as block lines) as they were. Keyboard-only; a
+ * mouse gesture costs a real 350ms sleep, so none are used.
  */
 class EditorFuzzE2eTest {
 
@@ -42,8 +46,8 @@ class EditorFuzzE2eTest {
 		)
 	}
 
-	private fun markdownFixpoint(seed: Long) = editorUiTest {
-		markdown.importMarkdown("seed line\n- item\n> quoted")
+	private fun blockLinesFixpoint(seed: Long) = editorUiTest {
+		state.setBlockLines("seed line\n- item\n> quoted")
 		val script = generateFuzzScript(seed = fuzzSeed(seed), count = 60)
 
 		runFuzzScript(fuzzSeed(seed), script) { op ->
@@ -51,13 +55,13 @@ class EditorFuzzE2eTest {
 			checkCheapInvariants(state)
 		}
 
-		val first = markdown.exportAsMarkdown()
-		markdown.importMarkdown(first)
-		val second = markdown.exportAsMarkdown()
+		val first = state.blockLines()
+		state.setBlockLines(first)
+		val second = state.blockLines()
 		assertEquals(
 			first,
 			second,
-			"fuzz seed=${fuzzSeed(seed)}: export/import/export must be a fixpoint",
+			"fuzz seed=${fuzzSeed(seed)}: blocks must reload as they were",
 		)
 	}
 
@@ -71,8 +75,11 @@ class EditorFuzzE2eTest {
 	fun `ui undo to origin seed 20260801`() = undoToOrigin(20260801)
 
 	@Test
-	fun `ui markdown fixpoint seed 4243`() = markdownFixpoint(4243)
+	fun `ui undo to origin seed 777`() = undoToOrigin(777)
 
 	@Test
-	fun `ui markdown fixpoint seed 987654321`() = markdownFixpoint(987654321)
+	fun `ui block lines fixpoint seed 4243`() = blockLinesFixpoint(4243)
+
+	@Test
+	fun `ui block lines fixpoint seed 987654321`() = blockLinesFixpoint(987654321)
 }

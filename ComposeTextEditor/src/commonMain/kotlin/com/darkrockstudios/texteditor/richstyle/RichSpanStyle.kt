@@ -62,14 +62,18 @@ interface RichSpanStyle {
 	/**
 	 * Whether a span of this style is an ephemeral view overlay rather than a
 	 * change to the document's content. Content spans (highlight, link, horizontal
-	 * rule, lists — the things that round-trip through markdown) default to
-	 * `false`. Decorations painted by the editor itself — spell-check underlines,
-	 * transient find highlights — override this to `true`.
+	 * rule, lists: the things that round-trip through markdown) default to
+	 * `false`. Decorations painted by the editor itself (spell-check underlines,
+	 * transient find highlights) override this to `true`.
 	 *
 	 * A decoration is structurally invisible: adding or removing one never enters
 	 * the undo history, never clears the redo stack, and never emits on
 	 * [com.darkrockstudios.texteditor.state.TextEditorState.editOperations], so
 	 * consumers watching the edit stream don't mistake an overlay for a real edit.
+	 * Nor does it travel with the text: copies, drags, saved state and loaded
+	 * snapshots leave it out.
+	 * Undo does not bring one back with the text it restores either: its owner draws
+	 * it again from the edit, so a span that holds state of its own should not be one.
 	 */
 	val isDecoration: Boolean get() = false
 

@@ -25,8 +25,9 @@ fun AnnotatedString.toMarkdown(
 
 /**
  * [retiredStyles] are the style configurations the document was styled under
- * before [styles]; a span still carrying one of their configured styles is
- * written as that style's marker, not as its colour or size.
+ * before [styles], oldest first; a span still carrying one of their configured
+ * styles is written as that style's marker (the most recent one's), not as its
+ * colour or size.
  */
 internal fun AnnotatedString.toMarkdown(
 	configuration: MarkdownConfiguration,
@@ -318,7 +319,7 @@ private fun styleMarkers(
 	// something the document says about the text. That holds for a
 	// configuration the document was styled under earlier as well.
 	configuredMarkers(style, config, syntax)?.let { return it }
-	retiredStyles.forEach { retired -> configuredMarkers(style, retired, syntax)?.let { return it } }
+	retiredStyles.asReversed().forEach { retired -> configuredMarkers(style, retired, syntax)?.let { return it } }
 
 	// Legacy heading path for content styled without a HeaderSpanStyle span
 	// (old documents, host apps writing raw font sizes). Checked first so a

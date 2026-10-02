@@ -443,7 +443,7 @@ private fun TextEditorState.linkToOpenAt(position: CharLineOffset): String? =
 	lineOffsets.rowAt(position)
 		?.richSpans
 		?.firstOrNull { it.style is LinkSpanStyle && it.containsPosition(position) }
-		?.let { sanitizeLinkUrl((it.style as LinkSpanStyle).url) }
+		?.let { sanitizeLinkUrl((it.style as LinkSpanStyle).url, allowedLinkSchemes) }
 
 /**
  * The pointer icon for a mouse hovering at [offset] with [modifiers] held: a hand over a

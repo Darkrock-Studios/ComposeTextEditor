@@ -9,7 +9,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import com.darkrockstudios.texteditor.RichTextStyles
 import com.darkrockstudios.texteditor.input.MacKeyBindings
-import com.darkrockstudios.texteditor.markdown.withMarkdown
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -189,17 +188,16 @@ class FormattingChordsE2eTest {
 	}
 
 	@Test
-	fun `formatting uses the markdown configuration and exports as markdown`() = editorUiTest(
+	fun `formatting uses the configured styles`() = editorUiTest(
 		initialText = AnnotatedString("Hello world"),
 	) {
 		val redBold = SpanStyle(fontWeight = FontWeight.Bold, color = Color.Red)
 		state.richTextStyles = config.copy(boldStyle = redBold)
-		val markdown = state.withMarkdown()
 		dragSelect(fromChar = 6, toChar = 11)
 		press(Key.B, ctrl = true)
 		press(Key.I, ctrl = true)
 
 		assertTrue(redBold in stylesAt(6), "got ${stylesAt(6)}")
-		assertEquals("Hello ***world***", markdown.exportAsMarkdown())
+		assertTrue(config.italicStyle in stylesAt(6), "got ${stylesAt(6)}")
 	}
 }

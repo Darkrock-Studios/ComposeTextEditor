@@ -27,6 +27,7 @@ import com.darkrockstudios.texteditor.BasicTextEditor
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.state.LocalImeInsets
 import com.darkrockstudios.texteditor.state.TextEditorState
+import com.darkrockstudios.texteditor.state.caretFocusRect
 import com.darkrockstudios.texteditor.state.rememberTextEditorState
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -137,6 +138,31 @@ class KeyboardInsetE2eTest {
 			val bottom = rowBottom(line)
 			assertTrue(bottom <= 180.5f, "Caret row ends at $bottom, under the keyboard's top at 180")
 		}
+
+	/**
+	 * iOS keeps the focus rect above its keyboard by moving the whole window, and asks for
+	 * the rect in a measure that runs, each frame of the keyboard's slide, before the
+	 * editor is placed for the new height. A rect that trails the keyboard by a frame
+	 * moved the window a little every frame, and the cover then read the moved canvas as
+	 * less covered, so the window stayed up by most of the keyboard's height.
+	 */
+	@Test
+	fun `the focus rect clears the keyboard before the editor is placed for it`() = editorTest(imePadding = false) {
+		caretOnLastVisibleRow()
+
+		test.mainClock.autoAdvance = false
+		for (height in listOf(40, 80, 120)) {
+			val rect = test.runOnIdle {
+				ime.bottom = height
+				state.caretFocusRect()
+			}!!
+			val keyboardTop = 300f - height
+			assertTrue(rect.bottom <= keyboardTop + 0.5f, "Focus rect ends at ${rect.bottom}, under the keyboard's top at $keyboardTop")
+			test.mainClock.advanceTimeByFrame()
+		}
+		test.mainClock.autoAdvance = true
+		test.waitForIdle()
+	}
 
 	@Test
 	fun `the cover goes with the focus`() = editorTest(imePadding = false) {

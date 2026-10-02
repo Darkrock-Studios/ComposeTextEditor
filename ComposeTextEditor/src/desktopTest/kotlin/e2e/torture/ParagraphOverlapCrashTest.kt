@@ -2,13 +2,13 @@ package e2e.torture
 
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
-import com.darkrockstudios.texteditor.markdown.MarkdownExtension
 import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.toggleBulletList
 import com.darkrockstudios.texteditor.state.toggleCodeFence
 import io.mockk.mockk
 import kotlin.test.Test
 import kotlinx.coroutines.test.TestScope
+import utils.setBlockLines
 
 /**
  * Found by EditorStateFuzzTest seed 987654321, hand-shrunk: a delete that joins a
@@ -19,17 +19,14 @@ import kotlinx.coroutines.test.TestScope
  */
 class ParagraphOverlapCrashTest {
 
-	private fun editor(): Pair<TextEditorState, MarkdownExtension> {
-		val state = TextEditorState(scope = TestScope(), measurer = mockk(relaxed = true))
-		return state to MarkdownExtension(state)
-	}
+	private fun editor(): TextEditorState = TextEditorState(scope = TestScope(), measurer = mockk(relaxed = true))
 
 	@Test
 	fun `typing after a delete across a fence to bullet boundary must not crash`() {
-		val (state, markdown) = editor()
-		markdown.importMarkdown("aaa\nbbb\nccc")
-		markdown.editorState.toggleCodeFence(0..1)
-		markdown.editorState.toggleBulletList(2..2)
+		val state = editor()
+		state.setBlockLines("aaa\nbbb\nccc")
+		state.toggleCodeFence(0..1)
+		state.toggleBulletList(2..2)
 
 		state.delete(TextEditorRange(CharLineOffset(1, 1), CharLineOffset(2, 1)))
 		state.cursor.updatePosition(CharLineOffset(1, 1))
@@ -38,10 +35,10 @@ class ParagraphOverlapCrashTest {
 
 	@Test
 	fun `typing after a delete across a bullet to fence boundary must not crash`() {
-		val (state, markdown) = editor()
-		markdown.importMarkdown("aaa\nbbb\nccc")
-		markdown.editorState.toggleBulletList(0..0)
-		markdown.editorState.toggleCodeFence(1..2)
+		val state = editor()
+		state.setBlockLines("aaa\nbbb\nccc")
+		state.toggleBulletList(0..0)
+		state.toggleCodeFence(1..2)
 
 		state.delete(TextEditorRange(CharLineOffset(0, 1), CharLineOffset(1, 1)))
 		state.cursor.updatePosition(CharLineOffset(0, 1))

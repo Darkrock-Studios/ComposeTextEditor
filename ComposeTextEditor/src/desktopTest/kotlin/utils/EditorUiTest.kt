@@ -47,8 +47,6 @@ import com.darkrockstudios.texteditor.input.CtrlKeyBindings
 import com.darkrockstudios.texteditor.input.KeyBindings
 import com.darkrockstudios.texteditor.input.LocalKeyBindings
 import com.darkrockstudios.texteditor.input.MacKeyBindings
-import com.darkrockstudios.texteditor.markdown.MarkdownExtension
-import com.darkrockstudios.texteditor.markdown.withMarkdown
 import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.rememberTextEditorState
 
@@ -154,14 +152,6 @@ class EditorUiTestScope(
 	// Pointer input is injected at the tagged editor node, not onRoot(): once a
 	// context menu popup is open there are two roots and onRoot() refuses to pick.
 	private val editor get() = test.onNodeWithTag(EDITOR_TEST_TAG)
-
-	/**
-	 * Markdown extension for this editor, created on first use. Deliberately a
-	 * per-scope member: TextEditorState hashes by document content, so caching
-	 * extensions in any shared hash-keyed map hands a test another test's editor
-	 * whenever two documents happen to hold equal text.
-	 */
-	val markdown: MarkdownExtension by lazy { state.withMarkdown() }
 
 	/** Plain text of the whole document. */
 	val text: String get() = state.getAllText().text

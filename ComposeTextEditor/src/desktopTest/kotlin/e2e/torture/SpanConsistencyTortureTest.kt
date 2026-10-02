@@ -11,6 +11,7 @@ import com.darkrockstudios.texteditor.state.TextEditorState
 import io.mockk.mockk
 import kotlinx.coroutines.test.TestScope
 import utils.assertRichSpanInvariants
+import utils.setBlockLines
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -140,8 +141,7 @@ class SpanConsistencyTortureTest {
 	@Test
 	fun `replacing across a quoted line keeps spans inside the document`() {
 		val state = editor()
-		val markdown = com.darkrockstudios.texteditor.markdown.MarkdownExtension(state)
-		markdown.importMarkdown("first\n> quoted line here")
+		state.setBlockLines("first\n> quoted line here")
 
 		// Found by EditorStateFuzzTest seed 987654321: a multi-line selection replaced
 		// with shorter single-line text leaves the quote span ending past its line.

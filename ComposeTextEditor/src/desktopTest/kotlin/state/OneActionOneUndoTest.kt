@@ -16,7 +16,6 @@ import com.darkrockstudios.texteditor.input.imeDeleteSurroundingTextInCodePoints
 import com.darkrockstudios.texteditor.input.imePerformNewline
 import com.darkrockstudios.texteditor.input.imeSetComposingRegion
 import com.darkrockstudios.texteditor.input.imeSetComposingText
-import com.darkrockstudios.texteditor.markdown.MarkdownExtension
 import com.darkrockstudios.texteditor.richstyle.LinkSpanStyle
 import com.darkrockstudios.texteditor.richstyle.RichSpan
 import com.darkrockstudios.texteditor.richstyle.RichSpanStyle
@@ -274,7 +273,7 @@ class OneActionOneUndoTest {
 	@Test
 	fun `composing beside a link still folds into one step`() {
 		val state = editor("see link ")
-		MarkdownExtension(state).setLink(
+		state.setLink(
 			TextEditorRange(CharLineOffset(0, 4), CharLineOffset(0, 8)),
 			"https://example.com",
 		)
@@ -420,7 +419,7 @@ class OneActionOneUndoTest {
 	@Test
 	fun `committing a marked word unchanged keeps the link on it`() {
 		val state = editor("see here now")
-		MarkdownExtension(state).setLink(
+		state.setLink(
 			TextEditorRange(CharLineOffset(0, 4), CharLineOffset(0, 8)),
 			"https://example.com",
 		)
@@ -579,7 +578,7 @@ class OneActionOneUndoTest {
 	@Test
 	fun `a marked word rewritten back to itself keeps a step when it took a link with it`() {
 		val state = editor("see here now")
-		MarkdownExtension(state).setLink(
+		state.setLink(
 			TextEditorRange(CharLineOffset(0, 4), CharLineOffset(0, 8)),
 			"https://example.com",
 		)
@@ -675,10 +674,9 @@ class OneActionOneUndoTest {
 	@Test
 	fun `setLink is one step`() {
 		val state = editor("visit here now")
-		val extension = MarkdownExtension(state)
 		val range = TextEditorRange(CharLineOffset(0, 6), CharLineOffset(0, 10))
 
-		extension.editorState.setLink(range, "https://example.com")
+		state.setLink(range, "https://example.com")
 		assertTrue(state.richSpanManager.getAllRichSpans().any { it.style is LinkSpanStyle })
 
 		assertEquals(1, state.undoSteps())

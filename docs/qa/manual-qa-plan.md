@@ -122,6 +122,11 @@ this exercises the clipboard's HTML as the block carrier.
    sized.
 4. In the Blank Markdown demo (empty document, never typed into), paste immediately.
    **Expect:** correctly sized.
+5. From a word processor, copy a sentence with one word bold at 16.5 pt in 11 pt
+   text (1.5 times, which lands at the default h2's 24 sp) and paste it into a
+   paragraph. Copy that line out into a browser rich-text field.
+   **Expect:** the word arrives bold inside its sentence, not as a heading on a line
+   of its own (6.26).
 
 ### 2.6 Context menu parity (#87, #50)
 
@@ -223,6 +228,9 @@ this exercises the clipboard's HTML as the block carrier.
    the copy modifier and it stays.
 5. Drag text from a browser or text editor into the editor. **Expect:** it drops at
    the drop caret with its formatting and is selected.
+5b. Hover a drag to the right of a wrapped paragraph's first row. **Expect:** the drop
+   caret shows at that row's end, where a click there would put the caret, not at
+   the start of the next row; the text drops there (6.24).
 6. Right after a drop (inside the editor or into another app), click once in the
    editor. **Expect:** the click places the caret; it is not swallowed or read as a
    drag.
@@ -251,6 +259,10 @@ In Chrome, Firefox and Safari, against the built demo:
    press Ctrl/Cmd+C, and do the same in the RichTextView demo; paste into Google
    Docs. **Expect:** the word stays bold, with no permission prompt and no console
    warning (7.39). Try Ctrl+Insert on Windows and Linux too.
+6b. On a touch screen (or a phone's browser with a hardware keyboard), tap into the
+   editor so the canvas keeps focus, select a bold word and press Ctrl/Cmd+X (and
+   Shift+Delete on Windows and Linux). **Expect:** the word leaves the editor and
+   pastes into Google Docs bold, with no permission prompt (6.27).
 
 7. Web demo: click into the editor, press Escape then Tab, then Shift+Tab (4.28).
    **Expect:** no tab character is typed, focus leaves the editor and comes back

@@ -35,10 +35,13 @@ import com.darkrockstudios.texteditor.cursor.CursorMetrics
 import com.darkrockstudios.texteditor.cursor.getWrapForDrawing
 import com.darkrockstudios.texteditor.cursor.getWrappedLineIndex
 import com.darkrockstudios.texteditor.effectiveHeight
+import com.darkrockstudios.texteditor.html.DEFAULT_LINK_SCHEMES
+import com.darkrockstudios.texteditor.html.REFUSED_LINK_SCHEMES
 import com.darkrockstudios.texteditor.lastRowAtOrAbove
 import com.darkrockstudios.texteditor.rowAt
 import com.darkrockstudios.texteditor.rowIndexOf
 import com.darkrockstudios.texteditor.input.EditorActionRegistry
+import com.darkrockstudios.texteditor.input.HeldCaretKey
 import com.darkrockstudios.texteditor.input.KeyboardSettings
 import com.darkrockstudios.texteditor.input.KillRing
 import com.darkrockstudios.texteditor.input.imeActionFor
@@ -165,27 +168,49 @@ class TextEditorState(
 	var richTextStyles: RichTextStyles = RichTextStyles.DEFAULT
 		set(value) {
 			val previous = field
+			// Retired first, so an export on another thread that sees the new styles
+			// sees the old ones retired.
+			if (previous != value) retiredStyles = retiredStyles.filter { it != value && it != previous } + previous
 			field = value
 			richTextStylesSet = true
-			if (previous != value) {
-				retiredStyles.remove(value)
-				if (previous !in retiredStyles) retiredStyles += previous
-				rebakeHeaderLines(previous, value)
-			}
+			if (previous != value) rebakeHeaderLines(previous, value)
 			// The typing style is derived from this as well as from the text, so a
 			// swap invalidates it even though the document did not change.
 			cursor.refreshStyles()
 		}
 
-	private val retiredStyles = mutableListOf<RichTextStyles>()
+	// Replaced, never mutated, so an export on another thread reads one whole list.
+	@Volatile
+	private var retiredStyles: List<RichTextStyles> = emptyList()
 
 	/**
-	 * The style configurations this editor was switched away from, each once, oldest
-	 * first, the current one excluded. A span still carrying one of their styles (a
-	 * document is not rewritten on a theme change, so undo keeps matching) is that
-	 * style's marker to a serializer, not the text's own colour or size.
+	 * The style configurations this editor was switched away from, each once, in the
+	 * order they were last switched away from (the most recent last), the current one
+	 * excluded. A span still carrying one of their styles (a document is not rewritten
+	 * on a theme change, so undo keeps matching) is that style's marker to a serializer,
+	 * not the text's own colour or size; a style several of them share is read as the
+	 * most recent one's.
 	 */
 	val retiredRichTextStyles: List<RichTextStyles> get() = retiredStyles
+
+	/**
+	 * The URL schemes a link may use, matched ignoring case: [DEFAULT_LINK_SCHEMES] unless
+	 * the host assigns its own set, such as `DEFAULT_LINK_SCHEMES + "myapp"` for documents
+	 * that link with `myapp://`. A relative URL is always allowed and
+	 * [REFUSED_LINK_SCHEMES] always refused. HTML and markdown import, paste and drop,
+	 * `setLink`, HTML export and copy, a link's open on click and its semantics all read
+	 * it; a link refused at import is gone, so assign it before loading content.
+	 * `rememberSaveableTextEditorState` does not save it, so assign it wherever the
+	 * state is made or restored.
+	 */
+	var allowedLinkSchemes: Set<String>
+		get() = linkSchemes
+		set(value) {
+			linkSchemes = value.toSet()
+		}
+
+	// A copy, so a host's mutable set changed in place cannot change it unseen.
+	private var linkSchemes: Set<String> by mutableStateOf(DEFAULT_LINK_SCHEMES)
 
 	/** Whether [richTextStyles] was assigned, which is what opts typed text into the body style. */
 	internal var richTextStylesSet: Boolean = false
@@ -368,12 +393,12 @@ class TextEditorState(
 	internal fun <T> withAtomicEdit(block: () -> T): T {
 		if (draft != null) return block()
 		draft = content
-		editManager.history.beginGroup()
 		// The caret and selection live outside the draft; a rollback puts them back
 		// too, or they would address the revision that was discarded.
 		val cursorBefore = cursor.position
 		val affinityBefore = cursor.affinity
 		val selectionBefore = selector.selection
+		editManager.history.beginGroup(selectionBefore)
 		val touchSelectionBefore = selector.isTouchSelection
 		var committed = false
 		try {
@@ -393,7 +418,7 @@ class TextEditorState(
 			draft = null
 			committed = true
 			pendingRollbackActions.clear()
-			editManager.history.endGroup(commit = true)
+			editManager.history.endGroup(commit = true, selection = selector.selection)
 			refreshHistoryFlags()
 			// Flush the deferred relayout, then the cursor scroll that must read the
 			// fresh offsets, then the commit actions that announce the edit. All of
@@ -568,6 +593,12 @@ class TextEditorState(
 	 */
 	internal var canvasPositionInRoot by mutableStateOf(Offset.Unspecified)
 
+	/**
+	 * The soft keyboard's height now, in pixels, while the canvas measures its cover; read
+	 * where the cover measured at the last placement may already trail the keyboard.
+	 */
+	internal var currentKeyboardHeight: (() -> Int)? = null
+
 	// Referential: every pass publishes a new list, and comparing two by content would
 	// build every row of both.
 	private var _lineOffsets by mutableStateOf<List<LineWrap>>(emptyList(), referentialEqualityPolicy())
@@ -679,8 +710,8 @@ class TextEditorState(
 
 	/**
 	 * Behaviors consulted before [insertNewlineAtCursor], [backspaceAtCursor] and
-	 * [deleteAtCursor], and told after typed text has landed ([insertTypedString]
-	 * and the IME's commits), in order; the first to claim an edit wins. Every
+	 * [deleteAtCursor], and told after typed text ([insertTypedString] and the IME's
+	 * commits) or a paste has landed, in order; the first to claim an edit wins. Every
 	 * input path reaches these, hardware keys and IME alike.
 	 *
 	 * Pre-loaded with [LineBlockEditBehavior] at index 0, which claims every
@@ -722,20 +753,40 @@ class TextEditorState(
 	/**
 	 * Tells the behaviors that typed [text] has landed at [range], after the
 	 * default edit and any IME caret placement, so a behavior edits on top of the
-	 * finished insert and owns the caret from there. The IME is asked to resync
-	 * only when a behavior changed the document or moved the caret: the edit it
-	 * expected has already happened, so a claim alone leaves its mirror right.
+	 * finished insert and owns the caret from there.
 	 */
 	internal fun textInputLanded(text: String, range: TextEditorRange) {
 		// A lone line break is the Enter key, which has its own hook; the one that
 		// lands here raw (an IME committing "\n" over its composition) is a
 		// replacement of the composition, not typed text.
 		if (text.isEmpty() || text == "\n") return
+		offerLanded(range) { it.onTextInput(this, text, range) }
+	}
+
+	/** Tells the behaviors that pasted [text] has landed at [range], once the paste has committed. */
+	internal fun pasteLanded(text: String, range: TextEditorRange) {
+		if (text.isEmpty()) return
+		offerLanded(range) { it.onPaste(this, text, range) }
+	}
+
+	/**
+	 * Offers text that landed at [range] to the behaviors through [hook]. A behavior
+	 * that changes the text there ends the chain, claimed or not, since [range] no
+	 * longer holds; one that only styles it (a link) leaves it to the next. The IME
+	 * is asked to resync only when a behavior changed the document or moved the
+	 * caret: the edit it expected has already happened, so a claim alone leaves its
+	 * mirror right.
+	 */
+	private fun offerLanded(range: TextEditorRange, hook: (EditBehavior) -> Boolean) {
 		// The working content, so an edit inside a host's open transaction counts.
 		val contentBefore = workingContent
 		val caretBefore = cursorPosition
-		// An edit ends the chain, claimed or not: the range no longer holds.
-		runBehaviors { it.onTextInput(this, text, range) || workingContent !== contentBefore }
+		val lineCount = textLines.size
+		val lines = range.start.line..range.end.line
+		val textBefore = lines.map { textLines[it].text }
+		fun rangeChanged() =
+			textLines.size != lineCount || lines.any { textLines[it].text != textBefore[it - range.start.line] }
+		runBehaviors { hook(it) || rangeChanged() }
 		if (workingContent !== contentBefore || cursorPosition != caretBefore) requestImeResync()
 	}
 
@@ -791,8 +842,22 @@ class TextEditorState(
 	/** What the kill actions deleted, for a yank. */
 	internal val killRing = KillRing()
 
+	/** The caret key held down, for a platform that repeats it on its own. */
+	internal val heldCaretKey = HeldCaretKey()
+
 	/** What Tab and Shift+Tab do: the indent size and character, or moving focus. */
 	var tabSettings: TabSettings by mutableStateOf(TabSettings())
+
+	/** How many undo steps are kept, and how long a pause in typing ends an undo step. */
+	var undoSettings: UndoSettings
+		get() = undoSettingsState
+		set(value) {
+			undoSettingsState = value
+			editManager.history.settings = value
+			// Inside a transaction, its commit refreshes canUndo and canRedo.
+			if (!editManager.history.isGrouping) refreshHistoryFlags()
+		}
+	private var undoSettingsState by mutableStateOf(UndoSettings())
 
 	/** What the soft keyboard is asked for: capitalisation, autocorrect, layout, and the action key. */
 	var keyboardSettings: KeyboardSettings by mutableStateOf(KeyboardSettings())
@@ -808,8 +873,11 @@ class TextEditorState(
 	/** The action key's default, supplied by the composed editor, which can move focus. */
 	internal var defaultImeAction: ((ImeAction) -> Unit)? = null
 
-	internal fun performImeAction(action: ImeAction) {
-		(onImeAction ?: defaultImeAction)?.invoke(action)
+	/** Runs the action key's handler; false when there is none to run. */
+	internal fun performImeAction(action: ImeAction): Boolean {
+		val handler = onImeAction ?: defaultImeAction ?: return false
+		handler(action)
+		return true
 	}
 
 	/** The action key the keyboard shows, which a single line's Enter presses too. */
@@ -1099,7 +1167,10 @@ class TextEditorState(
 
 	/** Inserts a single [char] at the cursor, applying the active typing style. */
 	fun insertCharacterAtCursor(char: Char) {
-		if (char == '\n' || char == '\r') return insertStringAtCursor("\n")
+		if (char == '\n' || char == '\r') {
+			insertStringAtCursor("\n")
+			return
+		}
 		val text = cursor.applyCursorStyle(char.toString())
 		val operation = TextEditOperation.Insert(
 			position = cursorPosition,
@@ -1110,22 +1181,30 @@ class TextEditorState(
 		editManager.applyOperation(operation)
 	}
 
-	/** Inserts plain [string] at the cursor, applying the active typing style. */
-	fun insertStringAtCursor(string: String) = insertStringAtCursor(string.toAnnotatedString())
+	/**
+	 * Inserts plain [string] at the cursor, applying the active typing style.
+	 * @return the range the text landed in (collapsed when none did), or null when the
+	 * input filter refused it.
+	 */
+	fun insertStringAtCursor(string: String): TextEditorRange? = insertStringAtCursor(string.toAnnotatedString())
 
 	/**
 	 * Inserts [text] at the cursor, preserving its character-level spans and applying
 	 * the active typing style. Advances the cursor past the inserted text, accounting
 	 * for any embedded line breaks.
+	 * @return the range the text landed in, which the input filter or line ending
+	 * normalization can make differ from [text] (collapsed when none did), or null when
+	 * the filter refused it.
 	 */
-	fun insertStringAtCursor(text: AnnotatedString) {
+	fun insertStringAtCursor(text: AnnotatedString): TextEditorRange? {
 		val operation = TextEditOperation.Insert(
 			position = cursorPosition,
 			text = cursor.applyCursorStyle(text),
 			cursorBefore = cursorPosition,
 			cursorAfter = text.endWhenInsertedAt(cursorPosition),
 		)
-		editManager.applyOperation(operation)
+		val landed = editManager.applyLanded(operation) as TextEditOperation.Insert? ?: return null
+		return TextEditorRange(landed.position, landed.textEnd)
 	}
 
 	/**
@@ -1153,8 +1232,10 @@ class TextEditorState(
 	 * @param inheritStyle when true, each inserted character adopts the style of the
 	 * replaced character at its position, and any beyond them (or all, when [range]
 	 * is empty) the style an insert at the range's end would take.
+	 * @return the range the text landed in (collapsed when none did), or null when the
+	 * input filter refused it.
 	 */
-	fun replace(range: TextEditorRange, newText: String, inheritStyle: Boolean = false) =
+	fun replace(range: TextEditorRange, newText: String, inheritStyle: Boolean = false): TextEditorRange? =
 		replace(range, newText.toAnnotatedString(), inheritStyle)
 
 	/**
@@ -1163,8 +1244,11 @@ class TextEditorState(
 	 * @param inheritStyle when true, each inserted character also adopts the style of
 	 * the replaced character at its position, and any beyond them (or all, when
 	 * [range] is empty) the style an insert at the range's end would take.
+	 * @return the range the text landed in, which the input filter or line ending
+	 * normalization can make differ from [newText] (collapsed when none did), or null
+	 * when the filter refused it.
 	 */
-	fun replace(range: TextEditorRange, newText: AnnotatedString, inheritStyle: Boolean = false) {
+	fun replace(range: TextEditorRange, newText: AnnotatedString, inheritStyle: Boolean = false): TextEditorRange? {
 		val operation = TextEditOperation.Replace(
 			range = range,
 			newText = newText,
@@ -1191,7 +1275,8 @@ class TextEditorState(
 			inheritStyle = inheritStyle,
 		)
 
-		editManager.applyOperation(operation)
+		val landed = editManager.applyLanded(operation) as TextEditOperation.Replace? ?: return null
+		return TextEditorRange(landed.range.start, landed.newTextEnd)
 	}
 
 	internal fun updateLine(index: Int, text: String) =
@@ -2056,7 +2141,10 @@ class TextEditorState(
 		return copyId
 	}
 
-	/** The rich spans within [range], placed relative to its start, as a copy of it carries them. */
+	/**
+	 * The rich spans within [range], placed relative to its start, as a copy of it carries
+	 * them. Decorations stay with the passes that draw them (spell check, find).
+	 */
 	internal fun preservedRichSpans(range: TextEditorRange): List<PreservedRichSpan> {
 		// getSpansInRange returns spans that merely OVERLAP the copy range. A span
 		// starting before range.start (partial selection of a list item, or a
@@ -2064,6 +2152,7 @@ class TextEditorState(
 		// offset and a corrupt span on paste, so clamp each span to the copy range
 		// and drop any that collapse to empty/inverted.
 		return richSpanManager.getSpansInRange(range).mapNotNull { span ->
+			if (span.style.isDecoration) return@mapNotNull null
 			// A line marker or placeholder block belongs to its line, not to the
 			// characters copied out of it: a fragment of an item's text pastes as
 			// plain text, only a copy covering the whole span carries the marker.

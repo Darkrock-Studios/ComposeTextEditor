@@ -25,11 +25,41 @@ internal fun TextEditorState.isNestingBlank(line: Int): Boolean =
 
 private fun TextEditorState.isQuotedLine(line: Int): Boolean = hasLineBlock(line, Blockquote)
 
+/**
+ * List items moved to new levels, planned over the document and written together:
+ * a selection of items nests with one write of the lines and spans, not one per
+ * item. The level queries read the planned levels, so each move sees the moves
+ * before it.
+ */
+internal class ListMoves(private val state: TextEditorState) {
+	/** Each planned line's block as it stands, and the block it moves to. */
+	private val moves = LinkedHashMap<Int, Pair<LineBlockStyle, LineBlockStyle>>()
+
+	/** The lines planned to move. */
+	val lines: Set<Int> get() = moves.keys
+
+	/** The list block on [line], at its planned level. */
+	fun blockAt(line: Int): LineBlockStyle? = moves[line]?.second ?: state.listBlockAt(line)
+
+	/** Plans the list item on [line] at [level]. */
+	fun move(line: Int, level: Int) {
+		val original = moves[line]?.first ?: state.listBlockAt(line) ?: return
+		val target = original.atListLevel(level)
+		if (target === original) moves.remove(line) else moves[line] = original to target
+	}
+
+	/** Writes every planned move, each item's span and indent together, through the direct path. */
+	fun write() {
+		state.writeLineBlocks(moves.mapNotNull { (line, move) -> state.planLineBlock(line, move.second) })
+		moves.clear()
+	}
+}
+
 /** The level of the list item before [line], skipping blank lines, with [quoted] status; -1 when none. */
-private fun TextEditorState.previousListLevel(line: Int, quoted: Boolean): Int {
+private fun TextEditorState.previousListLevel(line: Int, quoted: Boolean, moves: ListMoves): Int {
 	var i = line - 1
 	while (i >= 0 && isQuotedLine(i) == quoted) {
-		listBlockAt(i)?.let { return it.listLevel!! }
+		moves.blockAt(i)?.let { return it.listLevel!! }
 		if (!isNestingBlank(i)) return -1
 		i--
 	}
@@ -40,26 +70,8 @@ private fun TextEditorState.previousListLevel(line: Int, quoted: Boolean): Int {
  * The deepest level a list item on [line] may have: one below the list item
  * before it, skipping blank lines, with the same quote status; otherwise 0.
  */
-internal fun TextEditorState.allowedListLevel(line: Int): Int =
-	minOf(previousListLevel(line, isQuotedLine(line)) + 1, MAX_LIST_LEVEL)
-
-/**
- * The lines after [line] that a change of its level can reach: the following
- * list items and blank lines with [quoted] status, up to and including the
- * first item at or above [level], which is where [relevelListFollowers] stops.
- */
-private fun TextEditorState.listFollowerLines(line: Int, level: Int, quoted: Boolean): List<Int> {
-	val followers = mutableListOf<Int>()
-	var i = line + 1
-	while (i < textLines.size && isQuotedLine(i) == quoted) {
-		val block = listBlockAt(i)
-		if (block == null && !isNestingBlank(i)) break
-		followers += i
-		if (block != null && block.listLevel!! <= level) break
-		i++
-	}
-	return followers
-}
+private fun TextEditorState.allowedListLevel(line: Int, moves: ListMoves): Int =
+	minOf(previousListLevel(line, isQuotedLine(line), moves) + 1, MAX_LIST_LEVEL)
 
 /**
  * Brings the list items from [from] on back to at most one level below their
@@ -67,15 +79,21 @@ private fun TextEditorState.listFollowerLines(line: Int, level: Int, quoted: Boo
  * was lowered from or cleared at [editedLevel]: the items deeper than
  * [editedLevel] that hung under it all come up by the same amount, and the
  * first item at or above [editedLevel], a sibling, ends the shift. Only lines
- * with [quoted] status are reached. Mutates lines through the direct path;
- * callers record the change.
+ * with [quoted] status are reached. Plans the moves in [moves]; callers write
+ * and record them.
  */
-private fun TextEditorState.relevelListFollowers(from: Int, editedLevel: Int, quoted: Boolean, previousLevel: Int) {
+private fun TextEditorState.relevelListFollowers(
+	from: Int,
+	editedLevel: Int,
+	quoted: Boolean,
+	previousLevel: Int,
+	moves: ListMoves,
+) {
 	var previous = previousLevel
 	var shift = 0
 	for (line in from until textLines.size) {
 		if (isQuotedLine(line) != quoted) return
-		val block = listBlockAt(line)
+		val block = moves.blockAt(line)
 		if (block == null) {
 			if (isNestingBlank(line)) continue else return
 		}
@@ -88,21 +106,11 @@ private fun TextEditorState.relevelListFollowers(from: Int, editedLevel: Int, qu
 			shift += target - allowed
 			target = allowed
 		}
-		if (target != level) setListLevelRaw(line, block, target)
+		if (target != level) moves.move(line, target)
 		previous = target
 		// Once a line stands where it stood, nothing after it is affected.
 		if (shift == 0 && target == level) return
 	}
-}
-
-/** Moves the list item on [line] to [level] through the direct path: the span and the indent together. */
-internal fun TextEditorState.setListLevelRaw(line: Int, block: LineBlockStyle, level: Int) {
-	val target = block.atListLevel(level)
-	if (target === block) return
-	val existing = textLines[line]
-	removeLineBlockSpans(line, block)
-	addLineBlockSpan(line, existing.length, target)
-	updateLine(line, rebuildWithBlock(rebuildWithoutBlock(existing, block), target))
 }
 
 /**
@@ -111,28 +119,30 @@ internal fun TextEditorState.setListLevelRaw(line: Int, block: LineBlockStyle, l
  * before [mutate] is the one whose followers can be orphaned: once [mutate]
  * has run, the items nested under it come up to what it now allows (its new
  * level, or nothing at all when it stopped being a list item with their quote
- * status), the subtree moving together. Every line that can change is
- * captured before [mutate], so undo restores followers exactly.
+ * status), the subtree moving together. Level moves [mutate] plans in the
+ * [ListMoves] it is given are written with the followers', in one write, and
+ * each line is captured before it is first written, so undo restores the
+ * followers exactly.
  */
-internal fun TextEditorState.recordListEdit(targets: List<Int>, mutate: () -> Unit) {
+internal fun TextEditorState.recordListEdit(targets: List<Int>, mutate: (ListMoves) -> Unit) = withAtomicEdit {
+	val cursorBefore = cursorPosition
+	val before = editManager.lineBlocksOf(targets)
+	val moves = ListMoves(this)
 	val last = targets.lastOrNull { listBlockAt(it) != null }
-	if (last == null) {
-		editManager.recordLineBlockChanges(targets, mutate)
-		return
-	}
-	val lastLevel = listBlockAt(last)!!.listLevel!!
-	val quoted = isQuotedLine(last)
-	val followers = listFollowerLines(last, lastLevel, quoted)
-	editManager.recordLineBlockChanges(targets + followers) {
-		mutate()
+	val lastLevel = last?.let { listBlockAt(it)!!.listLevel!! }
+	val quoted = last?.let { isQuotedLine(it) }
+	mutate(moves)
+	if (last != null && lastLevel != null && quoted != null) {
 		val previousLevel = when {
 			isQuotedLine(last) != quoted -> -1
-			listBlockAt(last) != null -> listBlockAt(last)!!.listLevel!!
-			isNestingBlank(last) -> previousListLevel(last, quoted)
-			else -> -1
+			else -> moves.blockAt(last)?.listLevel
+				?: if (isNestingBlank(last)) previousListLevel(last, quoted, moves) else -1
 		}
-		relevelListFollowers(last + 1, lastLevel, quoted, previousLevel)
+		relevelListFollowers(last + 1, lastLevel, quoted, previousLevel, moves)
 	}
+	val followers = editManager.lineBlocksOf(moves.lines.filter { it !in targets })
+	moves.write()
+	editManager.recordLineBlocksSince(before + followers, cursorBefore)
 }
 
 /**
@@ -146,15 +156,16 @@ fun TextEditorState.nestListItems(lines: IntRange): Boolean {
 	val targets = lines.filter { it in textLines.indices && listBlockAt(it) != null }
 	if (targets.isEmpty()) return false
 	var moved = false
+	val moves = ListMoves(this)
 	editManager.recordLineBlockChanges(targets) {
 		targets.forEach { line ->
-			val block = listBlockAt(line) ?: return@forEach
-			val level = block.listLevel!!
-			if (level < allowedListLevel(line)) {
-				setListLevelRaw(line, block, level + 1)
+			val level = moves.blockAt(line)?.listLevel ?: return@forEach
+			if (level < allowedListLevel(line, moves)) {
+				moves.move(line, level + 1)
 				moved = true
 			}
 		}
+		moves.write()
 	}
 	return moved
 }
@@ -170,10 +181,10 @@ fun TextEditorState.unnestListItems(lines: IntRange): Boolean {
 		line in textLines.indices && (listBlockAt(line)?.listLevel ?: 0) > 0
 	}
 	if (targets.isEmpty()) return false
-	recordListEdit(targets) {
+	recordListEdit(targets) { moves ->
 		targets.forEach { line ->
-			val block = listBlockAt(line) ?: return@forEach
-			setListLevelRaw(line, block, block.listLevel!! - 1)
+			val level = moves.blockAt(line)?.listLevel ?: return@forEach
+			moves.move(line, level - 1)
 		}
 	}
 	return true

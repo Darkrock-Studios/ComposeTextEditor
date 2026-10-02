@@ -52,12 +52,13 @@ actual object ClipboardHelper {
 	actual suspend fun getText(
 		clipboard: Clipboard,
 		styles: RichTextStyles,
+		allowedLinkSchemes: Set<String>,
 	): AnnotatedString? {
 		val flavors = takeEventPaste() ?: readFlavors()
 		lastReadHtml = flavors?.html
 		flavors ?: return null
 		flavors.html
-			?.toAnnotatedStringFromHtml(styles)
+			?.toAnnotatedStringFromHtml(styles, allowedLinkSchemes)
 			?.takeIf { it.text.isNotEmpty() }
 			?.let { return it }
 		return flavors.text?.let(::AnnotatedString)

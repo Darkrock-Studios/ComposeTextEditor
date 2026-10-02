@@ -10,9 +10,11 @@ import com.darkrockstudios.texteditor.annotatedstring.normalizeLineEndings
 import com.darkrockstudios.texteditor.annotatedstring.splitAnnotatedString
 import com.darkrockstudios.texteditor.annotatedstring.withInheritedStyles
 import com.darkrockstudios.texteditor.annotatedstring.withSpanStyles
+import com.darkrockstudios.texteditor.input.isWithinDocument
 import com.darkrockstudios.texteditor.richstyle.LineBlockEditBehavior
 import com.darkrockstudios.texteditor.richstyle.LineBlockStyle
 import com.darkrockstudios.texteditor.richstyle.LineBlockWrite
+import com.darkrockstudios.texteditor.richstyle.RichSpan
 import com.darkrockstudios.texteditor.richstyle.RichSpanStyle
 import com.darkrockstudios.texteditor.richstyle.allowedOn
 import com.darkrockstudios.texteditor.richstyle.atListLevel
@@ -52,6 +54,20 @@ class TextEditManager(private val state: TextEditorState) {
 
 	/** Whether edits are being recorded as typing; null lets the history infer it. */
 	private var typingOverride: Boolean? = null
+
+	/** Whether edits rewrite the word an input method is composing. */
+	private var rewritingComposition = false
+
+	/** Records the edits [block] makes as rewriting the word an input method composes, when [rewriting]. */
+	internal fun <T> rewritingComposition(rewriting: Boolean, block: () -> T): T {
+		val previous = rewritingComposition
+		rewritingComposition = rewriting
+		try {
+			return block()
+		} finally {
+			rewritingComposition = previous
+		}
+	}
 
 	/**
 	 * Records the edits [block] makes as [typing] or not, whatever their shape:
@@ -138,24 +154,28 @@ class TextEditManager(private val state: TextEditorState) {
 	}
 
 	fun applyOperation(requested: TextEditOperation, addToHistory: Boolean = true) {
+		applyLanded(requested, addToHistory)
+	}
+
+	/**
+	 * Applies [requested] as [applyOperation] does and returns it as it landed, its text
+	 * as the input filter and line ending normalization left it (one that changes
+	 * nothing is returned unapplied), or null when the filter refused it.
+	 */
+	internal fun applyLanded(requested: TextEditOperation, addToHistory: Boolean = true): TextEditOperation? {
 		val normalized = requested.withNormalizedLineEndings()
 		// Undo and redo replay edits the filter already let through. What a filter
 		// returns is normalised again.
-		val screened = if (addToHistory) screen(normalized)?.withNormalizedLineEndings() ?: return else normalized
+		val screened = if (addToHistory) screen(normalized)?.withNormalizedLineEndings() ?: return null else normalized
 		// Resolved before anything reads it, so what is applied, recorded, and
 		// announced is one and the same operation.
 		val operation = if (screened is TextEditOperation.Replace) resolveInheritedStyle(screened) else screened
 		// An edit of no characters (an IME committing "", an empty selection
 		// deleted) changes nothing, so nothing is applied, recorded, or announced.
-		if (operation.isNoOp()) return
-		// Selection offsets must not outlive a content mutation. Span operations
-		// leave the text untouched, so they keep the selection.
+		if (operation.isNoOp()) return operation
 		val isSpanOperation = operation is TextEditOperation.StyleSpan ||
 				operation is TextEditOperation.RichSpan ||
 				operation is TextEditOperation.LineBlock
-		if (!isSpanOperation && state.selector.selection != null) {
-			state.selector.clearSelection()
-		}
 		// Composing offsets go equally stale when content shifts underneath them.
 		// The IME pipeline re-sets its range after each composition edit, so
 		// clearing here never drops a live composition's freshly set range.
@@ -175,9 +195,15 @@ class TextEditManager(private val state: TextEditorState) {
 		// Published separately they are observable as new text carrying the
 		// previous revision's span line indices.
 		state.withAtomicEdit {
+			// Selection offsets must not outlive a content mutation. Span operations
+			// leave the text untouched, so they keep the selection. Cleared inside the
+			// transaction, which records the selection it began with for undo.
+			if (!isSpanOperation && state.selector.selection != null) {
+				state.selector.clearSelection()
+			}
 			val metadata = when (operation) {
 				is TextEditOperation.Insert -> applyInsert(operation)
-				is TextEditOperation.Delete -> applyDelete(operation)
+				is TextEditOperation.Delete -> applyDelete(addToHistory, operation)
 				is TextEditOperation.Replace -> applyReplace(addToHistory, operation)
 				is TextEditOperation.StyleSpan -> applyStyleOperation(addToHistory, operation)
 				is TextEditOperation.RichSpan -> applyRichSpanOperation(operation)
@@ -191,7 +217,12 @@ class TextEditManager(private val state: TextEditorState) {
 			state.invalidateCopiedRichSpans()
 			state.richSpanManager.updateSpans(operation, metadata)
 			if (addToHistory && !isDecoration) {
-				history.recordEdit(operation, metadata ?: OperationMetadata(), typing = typingOverride)
+				history.recordEdit(
+					operation,
+					metadata ?: OperationMetadata(),
+					typing = typingOverride,
+					rewritesComposition = rewritingComposition,
+				)
 			}
 
 			// Requested inside the transaction so it merges with any layout work the
@@ -207,6 +238,7 @@ class TextEditManager(private val state: TextEditorState) {
 
 			if (addToHistory) continueLineBlocks(operation)
 		}
+		return operation
 	}
 
 	private fun applyInsert(operation: TextEditOperation.Insert): OperationMetadata? {
@@ -277,7 +309,7 @@ class TextEditManager(private val state: TextEditorState) {
 		operation: TextEditOperation.Replace
 	): OperationMetadata? {
 		val metadata = if (addToHistory) {
-			state.captureMetadata(operation.range)
+			state.captureMetadata(operation.range).withLinesBefore(operation.range, operation.newText.contains('\n'))
 		} else {
 			null
 		}
@@ -311,12 +343,14 @@ class TextEditManager(private val state: TextEditorState) {
 		return metadata
 	}
 
-	private fun applyDelete(operation: TextEditOperation.Delete): OperationMetadata {
+	private fun applyDelete(addToHistory: Boolean, operation: TextEditOperation.Delete): OperationMetadata {
 		// Captured whether or not this delete is recorded: the rich span transformer
 		// needs the deleted text to re-anchor spans, and the two non-recording paths
 		// (undo of an insert, redo of a delete) are exactly where spans would
 		// otherwise be dropped.
-		val metadata = state.captureMetadata(operation.range)
+		val metadata = state.captureMetadata(operation.range).let {
+			if (addToHistory) it.withLinesBefore(operation.range, breaks = false) else it
+		}
 
 		when {
 			operation.range.isSingleLine() -> {
@@ -339,6 +373,38 @@ class TextEditManager(private val state: TextEditorState) {
 			}
 		}
 		return metadata
+	}
+
+	/**
+	 * Records the first and last lines of [range] when the edit joins them, or its one
+	 * line when the edit [breaks] it. The lines between are deleted whole, and the
+	 * deleted text brings them back as they were.
+	 */
+	private fun OperationMetadata.withLinesBefore(range: TextEditorRange, breaks: Boolean): OperationMetadata {
+		val lines = when {
+			!range.isSingleLine() -> listOf(range.start.line, range.end.line)
+			breaks -> listOf(range.start.line)
+			else -> return this
+		}
+		return copy(
+			linesBefore = lines.filter { it in state.textLines.indices }.map {
+				LineBefore(it - range.start.line, state.textLines[it], state.lineBlockSpanStyles(it))
+			}
+		)
+	}
+
+	/**
+	 * Writes back [lines], recorded by an edit starting on line [first] that is now
+	 * undone: each whose text is back as it was gets its content and blocks exactly.
+	 */
+	private fun restoreLinesBefore(lines: List<LineBefore>, first: Int) {
+		state.writeLineBlocks(
+			lines.mapNotNull { before ->
+				val line = first + before.offset
+				if (state.textLines.getOrNull(line)?.text != before.content.text) return@mapNotNull null
+				LineBlockWrite(line, before.content, before.blockSpans)
+			}
+		)
 	}
 
 	/**
@@ -883,10 +949,22 @@ class TextEditManager(private val state: TextEditorState) {
 	 */
 	internal fun recordLineBlockChanges(lines: Collection<Int>, mutate: () -> Unit) = state.withAtomicEdit {
 		val cursorBefore = state.cursorPosition
-		val before = lines.distinct().filter { it in state.textLines.indices }.map { line ->
+		val before = lineBlocksOf(lines)
+		mutate()
+		recordLineBlocksSince(before, cursorBefore)
+	}
+
+	/** Each of [lines] as it stands, its content and block span styles, for [recordLineBlocksSince]. */
+	internal fun lineBlocksOf(lines: Collection<Int>): List<Triple<Int, AnnotatedString, List<RichSpanStyle>>> =
+		lines.distinct().filter { it in state.textLines.indices }.map { line ->
 			Triple(line, state.getLine(line), state.lineBlockSpanStyles(line))
 		}
-		mutate()
+
+	/** Records, as one LineBlock entry, how the lines [before] captured have changed since. */
+	internal fun recordLineBlocksSince(
+		before: List<Triple<Int, AnnotatedString, List<RichSpanStyle>>>,
+		cursorBefore: CharLineOffset,
+	) {
 		val changes = before.mapNotNull { (line, content, spans) ->
 			val contentAfter = state.getLine(line)
 			val spansAfter = state.lineBlockSpanStyles(line)
@@ -899,7 +977,7 @@ class TextEditManager(private val state: TextEditorState) {
 				blockSpansAfter = spansAfter,
 			)
 		}
-		if (changes.isEmpty()) return@withAtomicEdit
+		if (changes.isEmpty()) return
 		applyOperation(
 			TextEditOperation.LineBlock(
 				lines = changes,
@@ -907,6 +985,34 @@ class TextEditManager(private val state: TextEditorState) {
 				cursorAfter = cursorBefore,
 			)
 		)
+	}
+
+	/**
+	 * Records what [mutate] does to [lines] as steps of the edit group it runs in: their
+	 * content and block spans as one LineBlock step, and each other content span starting
+	 * on them that went or came (a link, a rule, a paragraph format) as a RichSpan step
+	 * before or after it, so undo puts a removed span back onto the content it was on.
+	 * [mutate] changes them through the direct path, so the RichSpan steps are recorded
+	 * and announced as they landed rather than applied again.
+	 */
+	internal fun recordLineChanges(lines: IntRange, mutate: () -> Unit) = state.withAtomicEdit {
+		fun otherSpans(): Set<RichSpan> = lines.filter { it in state.textLines.indices }.flatMapTo(LinkedHashSet()) { line ->
+			val blockStyles = state.lineBlockSpanStyles(line)
+			state.richSpanManager.getRichSpansStartingOn(line).filter { !it.style.isDecoration && it.style !in blockStyles }
+		}
+		val caret = state.cursorPosition
+		val blocksBefore = lineBlocksOf(lines.toList())
+		val before = otherSpans()
+		mutate()
+		val after = otherSpans()
+		fun record(span: RichSpan, isAdd: Boolean) {
+			val operation = TextEditOperation.RichSpan(span.range, span.style, isAdd, cursorBefore = caret, cursorAfter = caret)
+			history.recordEdit(operation, OperationMetadata(), typing = false)
+			state.onCommit { _editOperations.tryEmit(operation) }
+		}
+		(before - after).forEach { record(it, isAdd = false) }
+		recordLineBlocksSince(blocksBefore, caret)
+		(after - before).forEach { record(it, isAdd = true) }
 	}
 
 	fun undo() {
@@ -924,6 +1030,7 @@ class TextEditManager(private val state: TextEditorState) {
 						state.cursor.updatePosition(entry.cursorBefore)
 					}
 				}
+				select(entry.selectionBefore)
 			}
 			done = true
 		} finally {
@@ -1000,6 +1107,7 @@ class TextEditManager(private val state: TextEditorState) {
 				entry.metadata.preservedRichSpans,
 				operation.range.start
 			)
+			restoreLinesBefore(entry.metadata.linesBefore, operation.range.start.line)
 		}
 	}
 
@@ -1021,6 +1129,7 @@ class TextEditManager(private val state: TextEditorState) {
 					entry.metadata.preservedRichSpans,
 					operation.range.start
 				)
+				restoreLinesBefore(entry.metadata.linesBefore, operation.range.start.line)
 			}
 		}
 	}
@@ -1153,10 +1262,20 @@ class TextEditManager(private val state: TextEditorState) {
 						applyOperation(it.operation, addToHistory = false)
 					}
 				}
+				select(entry.selectionAfter)
 			}
 			done = true
 		} finally {
 			if (!done) history.undo()
+		}
+	}
+
+	/** Selects [range], a selection an undone or redone step recorded, or nothing. */
+	private fun select(range: TextEditorRange?) {
+		if (range != null && state.isWithinDocument(range)) {
+			state.selector.updateSelection(range.start, range.end)
+		} else {
+			state.selector.clearSelection()
 		}
 	}
 

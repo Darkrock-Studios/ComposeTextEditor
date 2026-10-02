@@ -72,5 +72,13 @@ imports. The reasoning is in `docs/design/modules.md`.
    `RichTextStyles`; `AnnotatedString.toMarkdown(configuration, links,
    styles)` keeps the syntax choices first and takes the styles last.
 
-7. **Spell check.** `SpellCheckState.withMarkdown()` is gone (spell check does
+7. **HTML headings come from blocks.** `HtmlExtension.exportAsHtml` and copy
+   write a line as a heading only when it carries a heading block
+   (`HeaderSpanStyle`, which the importers and `toggleHeader` give it), not
+   when its text is bold at a heading's size; text loaded with `setText` from
+   `toAnnotatedStringFromHtml` or `toAnnotatedStringFromMarkdown` has no blocks,
+   so load documents through `importHtml` or `importMarkdown`. The standalone
+   `AnnotatedString.toHtml` still reads a heading's size as the heading.
+
+8. **Spell check.** `SpellCheckState.withMarkdown()` is gone (spell check does
    not depend on markdown): use `spellCheckState.textState.withMarkdown()`.

@@ -13,7 +13,9 @@ import androidx.compose.ui.layout.findRootCoordinates
 import androidx.compose.ui.node.LayoutModifierNode
 import androidx.compose.ui.node.ModifierNodeElement
 import androidx.compose.ui.node.invalidatePlacement
+import androidx.compose.ui.node.requireDensity
 import androidx.compose.ui.unit.Constraints
+import kotlin.math.max
 import kotlin.math.roundToInt
 
 /** The soft keyboard's inset the editor measures its cover by: `WindowInsets.ime`, unless a test stands one in. */
@@ -31,18 +33,19 @@ internal val LocalImeInsets = staticCompositionLocalOf<WindowInsets?> { null }
  * reach the bottom of the window the measure is off.
  */
 internal fun TextEditorState.updateKeyboardCover(keyboardHeight: Int) {
-	val canvas = canvasLayoutCoordinates?.takeIf { it.isAttached } ?: return
-	val covered = if (isFocused) {
-		keyboardCover(
-			canvasBottomInRoot = canvas.localToRoot(Offset(0f, canvas.size.height.toFloat())).y,
-			canvasHeight = canvas.size.height,
-			rootHeight = canvas.findRootCoordinates().size.height,
-			keyboardHeight = keyboardHeight,
-		)
-	} else {
-		0
-	}
-	onObscuredBottomChange(covered)
+	keyboardCoverFor(keyboardHeight)?.let(::onObscuredBottomChange)
+}
+
+/** The cover [updateKeyboardCover] records, or null before the canvas is attached. */
+private fun TextEditorState.keyboardCoverFor(keyboardHeight: Int): Int? {
+	val canvas = canvasLayoutCoordinates?.takeIf { it.isAttached } ?: return null
+	if (!isFocused) return 0
+	return keyboardCover(
+		canvasBottomInRoot = canvas.localToRoot(Offset(0f, canvas.size.height.toFloat())).y,
+		canvasHeight = canvas.size.height,
+		rootHeight = canvas.findRootCoordinates().size.height,
+		keyboardHeight = keyboardHeight,
+	)
 }
 
 /**
@@ -70,9 +73,31 @@ private data class KeyboardCoverElement(
 }
 
 private class KeyboardCoverNode(
-	var state: TextEditorState,
+	state: TextEditorState,
 	var insets: () -> WindowInsets,
 ) : Modifier.Node(), LayoutModifierNode {
+	var state: TextEditorState = state
+		set(value) {
+			if (value === field) return
+			if (isAttached) release(field)
+			field = value
+			if (isAttached) value.currentKeyboardHeight = keyboardHeightNow
+		}
+
+	private val keyboardHeightNow = { if (isAttached) insets().getBottom(requireDensity()) else 0 }
+
+	override fun onAttach() {
+		state.currentKeyboardHeight = keyboardHeightNow
+	}
+
+	override fun onDetach() {
+		release(state)
+	}
+
+	private fun release(state: TextEditorState) {
+		if (state.currentKeyboardHeight === keyboardHeightNow) state.currentKeyboardHeight = null
+	}
+
 	override fun MeasureScope.measure(measurable: Measurable, constraints: Constraints): MeasureResult {
 		val placeable = measurable.measure(constraints)
 		return layout(placeable.width, placeable.height) {
@@ -120,7 +145,15 @@ internal fun TextEditorState.caretFocusRect(): Rect? {
 	if (lineOffsets.isEmpty()) return null
 	val caret = getPositionForOffset(cursorPosition, cursor.affinity)
 	val height = caret.height
-	val uncovered = viewportSize.height - scrollManager.obscuredBottomPx
+	// The platform asks while the keyboard slides, before the canvas is placed for its
+	// new height, so the cover measured then can trail it; this frame's placement scrolls
+	// the caret above the keyboard as it is now.
+	// Under a host's imePadding the keyboard is measured before the padding shrinks the
+	// canvas and overstates the cover; if that leaves no room, the last placement's holds.
+	val coverNow = currentKeyboardHeight?.let { keyboardCoverFor(it()) } ?: 0
+	val measured = viewportSize.height - scrollManager.obscuredBottomPx
+	val uncovered = (viewportSize.height - max(scrollManager.obscuredBottomPx, coverNow))
+		.takeIf { it >= height } ?: measured
 	val top = if (uncovered >= height) caret.position.y.coerceIn(0f, uncovered - height) else caret.position.y
 	return Rect(caret.position.x, top, caret.position.x + 1f, top + height)
 }

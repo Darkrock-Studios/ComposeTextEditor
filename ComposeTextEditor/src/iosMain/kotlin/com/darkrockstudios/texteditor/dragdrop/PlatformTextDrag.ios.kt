@@ -25,7 +25,7 @@ internal actual fun DragAndDropEvent.dragId(): Long? = null
 
 internal actual fun DragAndDropEvent.carriesText(): Boolean = false
 
-internal actual fun DragAndDropEvent.droppedText(styles: RichTextStyles): DroppedText? = null
+internal actual fun DragAndDropEvent.droppedText(styles: RichTextStyles, allowedLinkSchemes: Set<String>): DroppedText? = null
 
 internal actual fun DragAndDropEvent.pointerInRoot(density: Density): Offset? = null
 

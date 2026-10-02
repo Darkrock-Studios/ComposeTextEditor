@@ -17,6 +17,7 @@ import utils.editorUiTest
 import utils.linesWith
 import utils.pasteHtml
 import utils.selectChars
+import utils.setBlockLines
 
 /**
  * Paste-over-selection is the replace path (RichSpanManager.handleReplace), the
@@ -27,7 +28,7 @@ class PasteOverSelectionTortureE2eTest {
 
 	@Test
 	fun `pasting plain text over a mid word selection keeps the bullet`() = editorUiTest {
-		markdown.importMarkdown("- item here")
+		state.setBlockLines("- item here")
 
 		selectChars(2, 4)
 		setPlainClipboardText("XX")
@@ -54,7 +55,7 @@ class PasteOverSelectionTortureE2eTest {
 
 	@Test
 	fun `pasting an html ordered list into a bullet list keeps list types exclusive`() = editorUiTest {
-		markdown.importMarkdown("- one\n- two")
+		state.setBlockLines("- one\n- two")
 
 		selectChars(2, 6)
 		pasteHtml("<ol><li>x</li><li>y</li></ol>")
@@ -71,7 +72,7 @@ class PasteOverSelectionTortureE2eTest {
 
 	@Test
 	fun `typing over a fully selected bulleted item keeps the bullet`() = editorUiTest {
-		markdown.importMarkdown("- item")
+		state.setBlockLines("- item")
 
 		selectChars(0, 4)
 		typeText("X")
@@ -83,7 +84,7 @@ class PasteOverSelectionTortureE2eTest {
 
 	@Test
 	fun `a partial copy of a list item pastes as plain text`() = editorUiTest {
-		markdown.importMarkdown("- item\n> quoted")
+		state.setBlockLines("- item\n> quoted")
 
 		selectChars(1, 3)
 		press(Key.C, ctrl = true)
@@ -101,7 +102,7 @@ class PasteOverSelectionTortureE2eTest {
 
 	@Test
 	fun `copy then an intervening edit then paste applies no stale spans`() = editorUiTest {
-		markdown.importMarkdown("- item\nplain")
+		state.setBlockLines("- item\nplain")
 
 		selectChars(0, 4)
 		press(Key.C, ctrl = true)
@@ -138,7 +139,7 @@ class PasteOverSelectionTortureE2eTest {
 
 	@Test
 	fun `paste over a selection anchored at the item start keeps the bullet anchored`() = editorUiTest {
-		markdown.importMarkdown("- item")
+		state.setBlockLines("- item")
 
 		selectChars(0, 2)
 		setPlainClipboardText("XY")
@@ -157,7 +158,7 @@ class PasteOverSelectionTortureE2eTest {
 
 	@Test
 	fun `multi line paste over a multi line selection rebases the surviving halves`() = editorUiTest {
-		markdown.importMarkdown("> alpha\nbeta\n- gamma")
+		state.setBlockLines("> alpha\nbeta\n- gamma")
 
 		selectChars(2, 13)
 		setPlainClipboardText("XX\nYY")
@@ -171,7 +172,7 @@ class PasteOverSelectionTortureE2eTest {
 
 	@Test
 	fun `undo then redo of a multi line paste is idempotent`() = editorUiTest {
-		markdown.importMarkdown("> alpha\nbeta\n- gamma")
+		state.setBlockLines("> alpha\nbeta\n- gamma")
 
 		selectChars(2, 13)
 		setPlainClipboardText("XX\nYY")
@@ -190,7 +191,7 @@ class PasteOverSelectionTortureE2eTest {
 
 	@Test
 	fun `a foreign paste matching the copy buffer must not resurrect spans`() = editorUiTest {
-		markdown.importMarkdown("- item\nplain")
+		state.setBlockLines("- item\nplain")
 
 		selectChars(0, 4)
 		press(Key.C, ctrl = true)
@@ -212,7 +213,7 @@ class PasteOverSelectionTortureE2eTest {
 	@OptIn(ExperimentalComposeUiApi::class)
 	@Test
 	fun `a copy from another editor instance must not resurrect this buffer`() = editorUiTest {
-		markdown.importMarkdown("- item\nplain")
+		state.setBlockLines("- item\nplain")
 
 		selectChars(0, 4)
 		press(Key.C, ctrl = true)

@@ -87,6 +87,7 @@ internal class TextEditorInputModifierNode(
 		// The focused editor is the one the keyboard types into, so its default answers.
 		if (isFocused) state.defaultImeAction = defaultImeAction else releaseDefaultImeAction(state)
 		keyCommandHandler.onFocusChanged()
+		state.heldCaretKey.clear()
 		syncInputSession(startSession = true)
 	}
 

@@ -9,41 +9,49 @@ import com.darkrockstudios.texteditor.RichTextStyles
  * clipboard's `text/html` flavor.
  *
  * Only styles that map onto the supported tag set survive; anything else is
- * dropped and its text emitted unstyled. Newlines become `<br>`.
+ * dropped and its text emitted unstyled. Newlines become `<br>`. With no blocks
+ * to say which lines are headings, a run bold at a configured heading's size is
+ * written as that heading.
  */
 fun AnnotatedString.toHtml(
 	styles: RichTextStyles = RichTextStyles.DEFAULT
-): String = toHtml(styles, links = emptyList())
+): String = toHtml(styles, links = emptyList(), allowedLinkSchemes = DEFAULT_LINK_SCHEMES, headingsBySize = true)
 
 /** What one character is written under: its tags, inside the link it belongs to. */
 private data class HtmlRun(val tags: List<HtmlTag>, val link: String?)
 
 /**
  * [toHtml] with [links] over this text written as `<a href>`. A link whose
- * destination [sanitizeLinkUrl] refuses is written as its text alone. Over a
- * link, spans of exactly the configured link style are left out: the anchor is
- * what carries that look, while formatting of the link's own still shows.
+ * destination [sanitizeLinkUrl] refuses under [allowedLinkSchemes] is written as its
+ * text alone. Over a link, spans of exactly the configured link style (or a
+ * [retired] one) are left out: the anchor is what carries that look, while
+ * formatting of the link's own still shows. Only with [headingsBySize] is a run
+ * at a heading's size written as a heading; a document's lines take theirs from
+ * their blocks.
  */
 internal fun AnnotatedString.toHtml(
 	styles: RichTextStyles,
 	links: List<HtmlLink>,
+	retired: RetiredStyles = RetiredStyles(styles, emptyList()),
+	allowedLinkSchemes: Set<String>,
+	headingsBySize: Boolean,
 ): String {
 	if (text.isEmpty()) return ""
 
 	val inLink = BooleanArray(text.length)
 	val linkAt = arrayOfNulls<String>(text.length)
 	links.forEach { link ->
-		val url = sanitizeLinkUrl(link.url)
+		val url = sanitizeLinkUrl(link.url, allowedLinkSchemes)
 		for (i in link.start.coerceAtLeast(0) until link.end.coerceAtMost(text.length)) {
 			inLink[i] = true
 			linkAt[i] = url
 		}
 	}
-	val resolved = resolveSpanStyles(except = styles.linkStyle, over = inLink)
+	val resolved = resolveSpanStyles(retired, overLink = inLink)
 	val runCache = HashMap<Pair<SpanStyle, String?>, HtmlRun>()
 	val runs = Array(text.length) { index ->
 		runCache.getOrPut(resolved[index] to linkAt[index]) {
-			HtmlRun(resolved[index].htmlTags(styles).sortedBy { it.ordinal }, linkAt[index])
+			HtmlRun(resolved[index].htmlTags(styles, headingsBySize).sortedBy { it.ordinal }, linkAt[index])
 		}
 	}
 
@@ -132,41 +140,21 @@ private fun AnnotatedString.readsBackAsWritten(start: Int, end: Int, runs: Array
  * over a narrower one that turned bold back off.
  */
 private fun AnnotatedString.resolveSpanStyles(
-	except: SpanStyle? = null,
-	over: BooleanArray? = null,
+	retired: RetiredStyles,
+	overLink: BooleanArray,
 ): Array<SpanStyle> {
 	val resolved = Array(text.length) { SpanStyle() }
 	spanStyles.forEach { range ->
 		val start = range.start.coerceAtLeast(0)
 		val end = range.end.coerceAtMost(text.length)
-		val skippable = over != null && range.item == except
+		val skippable = retired.isLinkStyle(range.item)
+		val style = retired.asCurrent(range.item)
 		for (i in start until end) {
-			if (skippable && over!![i]) continue
-			resolved[i] = resolved[i].merge(range.item)
+			if (skippable && overLink[i]) continue
+			resolved[i] = resolved[i].merge(style)
 		}
 	}
 	return resolved
-}
-
-/**
- * The heading element covering this entire string, or null if the string is not
- * one heading style from end to end.
- *
- * Headings are a span style here rather than a line block, so a document
- * exporter has to ask the text itself whether a line is a heading before it can
- * decide between `<h2>` and wrapping the line in `<p>`.
- *
- * Unlike [toHtml] this accepts a level indistinguishable from emphasized body
- * text, because a whole line carrying nothing but that style is a heading far
- * more often than it is a bold paragraph — and refusing it would make the
- * default h4 unwritable.
- */
-internal fun AnnotatedString.uniformHeadingTag(config: RichTextStyles): HtmlTag? {
-	if (text.isEmpty()) return null
-	val resolved = resolveSpanStyles()
-	val style = resolved[0]
-	if (resolved.any { it != style }) return null
-	return style.headingTagBySize(config)
 }
 
 /** Escapes the characters that would otherwise be read as markup in text content. */

@@ -38,8 +38,18 @@ interface EditBehavior {
 	 * whatever precedes it, and reverts with one undo to exactly what was typed
 	 * (native editors give `--` back when the dash they made of it is undone),
 	 * because the typed text was its own step. Several edits go in one
-	 * [TextEditorState.editGroup] to be one step. A behavior that edits ends the
-	 * chain whether or not it claims, since [range] no longer holds.
+	 * [TextEditorState.editGroup] to be one step. A behavior that changes the text
+	 * ends the chain whether or not it claims, since [range] no longer holds; one
+	 * that only styles it (a link) leaves the chain going.
 	 */
 	fun onTextInput(state: TextEditorState, text: String, range: TextEditorRange): Boolean = false
+
+	/**
+	 * Called once pasted [text] has landed in the document at [range], after the
+	 * paste committed as its own undo step, so an edit a behavior makes here is a
+	 * step of its own: one undo takes it back and keeps the paste. As with
+	 * [onTextInput], a behavior that changes the text ends the chain whether or not
+	 * it claims.
+	 */
+	fun onPaste(state: TextEditorState, text: String, range: TextEditorRange): Boolean = false
 }

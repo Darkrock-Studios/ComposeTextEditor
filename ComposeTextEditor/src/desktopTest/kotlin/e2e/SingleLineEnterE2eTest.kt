@@ -5,10 +5,15 @@ package e2e
 import androidx.compose.foundation.layout.size
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.SkikoComposeUiTest
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.runSkikoComposeUiTest
 import androidx.compose.ui.text.AnnotatedString
@@ -25,7 +30,8 @@ import kotlin.test.assertEquals
 
 /**
  * A single-line editor has no line to start, so Enter is the action key, as it is in a
- * single-line `BasicTextField`, and the action key defaults to Done (roadmap 7.40).
+ * single-line `BasicTextField`, and the action key defaults to Done (roadmap 7.40), which
+ * the semantics offer as the IME action too (7.59).
  */
 class SingleLineEnterE2eTest {
 
@@ -106,5 +112,29 @@ class SingleLineEnterE2eTest {
 			assertEquals(emptyList(), actions)
 			assertEquals(2, state.textLines.size)
 			assertEquals(ImeAction.Send, state.effectiveImeAction())
+		}
+
+	private fun SkikoComposeUiTest.editorNode() =
+		onNode(SemanticsMatcher.keyIsDefined(SemanticsProperties.EditableText), useUnmergedTree = true)
+
+	@Test
+	fun `a single-line editor offers its action key to accessibility, Done by default`() =
+		editorTest(EditorLineLimits.SingleLine) { state ->
+			val actions = mutableListOf<ImeAction>()
+			state.onImeAction = { actions += it }
+
+			editorNode().assert(SemanticsMatcher.expectValue(SemanticsProperties.ImeAction, ImeAction.Done))
+			editorNode().performSemanticsAction(SemanticsActions.OnImeAction)
+
+			state.keyboardSettings = KeyboardSettings(imeAction = ImeAction.Search)
+			waitForIdle()
+			editorNode().assert(SemanticsMatcher.expectValue(SemanticsProperties.ImeAction, ImeAction.Search))
+			editorNode().performSemanticsAction(SemanticsActions.OnImeAction)
+
+			state.keyboardSettings = KeyboardSettings(imeAction = ImeAction.None)
+			waitForIdle()
+			editorNode().assert(SemanticsMatcher.keyNotDefined(SemanticsActions.OnImeAction))
+
+			assertEquals(listOf(ImeAction.Done, ImeAction.Search), actions)
 		}
 }

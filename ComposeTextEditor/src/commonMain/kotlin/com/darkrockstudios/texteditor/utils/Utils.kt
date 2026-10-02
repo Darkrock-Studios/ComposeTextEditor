@@ -20,38 +20,45 @@ internal inline fun <T> measureAndReport(message: String, block: () -> T): T {
 	return value.value
 }
 
+/**
+ * Builds a string whose span styles [block] adds through `addSpan`: runs of one style
+ * that overlap or touch are merged into one span, written where its first run was
+ * added, so the styles keep the order they were added in.
+ */
 internal fun buildAnnotatedStringWithSpans(
 	block: AnnotatedString.Builder.(addSpan: (SpanStyle, Int, Int) -> Unit) -> Unit
 ): AnnotatedString {
 	return buildAnnotatedString {
-		// Track spans by style to detect overlaps
-		val spansByStyle = mutableMapOf<Any, MutableSet<IntRange>>()
+		// Each merged run as start and end (exclusive), in the order first added; a
+		// merged-away run is left null.
+		val runs = ArrayList<Triple<Int, Int, SpanStyle>?>()
+		val runsByStyle = HashMap<SpanStyle, MutableList<Int>>()
 
-		fun addSpanIfNew(item: SpanStyle, start: Int, end: Int) {
-			val ranges = spansByStyle.getOrPut(item) { mutableSetOf() }
-
-			// Check for overlaps
-			val overlapping = ranges.filter { range ->
-				start <= range.last + 1 && end >= range.first - 1
+		fun addSpan(item: SpanStyle, start: Int, end: Int) {
+			val indices = runsByStyle.getOrPut(item) { ArrayList(1) }
+			var mergedStart = start
+			var mergedEnd = end
+			val touching = indices.filter { index ->
+				val run = runs[index]!!
+				run.first <= end && start <= run.second
 			}
-
-			if (overlapping.isNotEmpty()) {
-				// Remove overlapping ranges
-				ranges.removeAll(overlapping.toSet())
-
-				// Create one merged range
-				val newStart = minOf(start, overlapping.minOf { it.first })
-				val newEnd = maxOf(end, overlapping.maxOf { it.last })
-
-				ranges.add(newStart..newEnd)
-				addStyle(item, newStart, newEnd)
+			touching.forEach { index ->
+				val run = runs[index]!!
+				mergedStart = minOf(mergedStart, run.first)
+				mergedEnd = maxOf(mergedEnd, run.second)
+			}
+			val at = touching.firstOrNull()
+			if (at == null) {
+				indices += runs.size
+				runs += Triple(start, end, item)
 			} else {
-				// No overlap - add new range
-				ranges.add(start..end)
-				addStyle(item, start, end)
+				runs[at] = Triple(mergedStart, mergedEnd, item)
+				touching.drop(1).forEach { runs[it] = null }
+				indices.removeAll(touching.drop(1).toSet())
 			}
 		}
 
-		block(::addSpanIfNew)
+		block(::addSpan)
+		runs.forEach { run -> run?.let { (start, end, item) -> addStyle(item, start, end) } }
 	}
 }

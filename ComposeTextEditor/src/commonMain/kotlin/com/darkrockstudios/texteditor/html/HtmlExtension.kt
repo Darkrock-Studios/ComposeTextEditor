@@ -67,6 +67,8 @@ class HtmlExtension(
 			headerLevels = headerLevels,
 			formats = formats,
 			styles = styles,
+			retiredStyles = editorState.retiredRichTextStyles,
+			allowedLinkSchemes = editorState.allowedLinkSchemes,
 		)
 	}
 
@@ -82,6 +84,7 @@ class HtmlExtension(
 			html = html,
 			styles = editorState.richTextStyles,
 			includeImages = provider != null,
+			allowedLinkSchemes = editorState.allowedLinkSchemes,
 		)
 		// One revision, so a concurrent export can't catch the document loaded but
 		// not yet styled.
@@ -108,18 +111,10 @@ class HtmlExtension(
 
 }
 
-/**
- * A line to serialize, paired with the document line its decorations come from.
- *
- * [isWholeLine] is false for the partly covered first and last lines of a copied
- * selection. Only a whole line can be read as a heading by how it is styled: any
- * fragment of a bold run is uniformly styled, and the default h4 is bold at the
- * body size, so the size match cannot tell the two apart.
- */
+/** A line to serialize, paired with the document line its decorations come from. */
 internal class HtmlLine(
 	val text: AnnotatedString,
 	val docLine: Int,
-	val isWholeLine: Boolean = true,
 	/** The links over [text], in its own offsets. */
 	val links: List<HtmlLink> = emptyList(),
 )
@@ -132,8 +127,9 @@ internal fun DocumentSnapshot.paragraphFormats(lines: IntRange): Map<Int, Paragr
 
 /**
  * Gives each line in [formats] its paragraph format, in place of any it had (a pasted
- * paragraph's own replaces the one a paste at a line's start leaves on it), off the undo
- * history as the blocks are.
+ * paragraph's own replaces the one a paste at a line's start leaves on it), through the
+ * direct path as the blocks are; a paste records both in its step
+ * (`TextEditManager.recordLineChanges`).
  */
 internal fun TextEditorState.addParagraphFormats(formats: Map<Int, ParagraphFormatSpanStyle>) {
 	val replaced = mutableListOf<RichSpan>()
@@ -160,7 +156,9 @@ internal fun headerLevelsOf(spans: Set<RichSpan>): Map<Int, Int> =
 /**
  * Writes [lines] as an HTML fragment, taking each line's block structure from
  * [blocks] by its [HtmlLine.docLine]. Shared by whole-document export and by the
- * clipboard, so a copied selection carries the same markup a save would.
+ * clipboard, so a copied selection carries the same markup a save would. A span
+ * carrying one of [retiredStyles]' styles writes as that style's markup, and a link
+ * to a scheme outside [allowedLinkSchemes] as its text alone.
  */
 internal fun renderHtmlFragment(
 	lines: List<HtmlLine>,
@@ -168,9 +166,12 @@ internal fun renderHtmlFragment(
 	headerLevels: Map<Int, Int>,
 	formats: Map<Int, ParagraphFormatSpanStyle>,
 	styles: RichTextStyles,
+	retiredStyles: List<RichTextStyles>,
+	allowedLinkSchemes: Set<String>,
 ): String {
 	val writer = HtmlWriter()
 	val containers = HtmlContainers(blocks, formats)
+	val retired = RetiredStyles(styles, retiredStyles)
 	lines.forEach { line ->
 		writer.openContainers(containers.around(line.docLine))
 		writer.appendLine(
@@ -181,9 +182,10 @@ internal fun renderHtmlFragment(
 				headerLevel = headerLevels[line.docLine],
 				// An item's format is on its `<li>`.
 				format = formats[line.docLine].takeIf { blocks.listBlockAt(line.docLine) == null },
-				isWholeLine = line.isWholeLine,
 				links = line.links,
 				styles = styles,
+				retired = retired,
+				allowedLinkSchemes = allowedLinkSchemes,
 			),
 			inCodeFence = blocks.has(line.docLine, CodeFence),
 		)
@@ -253,9 +255,10 @@ private fun lineHtml(
 	blocks: DocumentBlocks,
 	headerLevel: Int?,
 	format: ParagraphFormatSpanStyle?,
-	isWholeLine: Boolean,
 	links: List<HtmlLink>,
 	styles: RichTextStyles,
+	retired: RetiredStyles,
+	allowedLinkSchemes: Set<String>,
 ): String {
 	// Fenced lines are literal code: running them through `toHtml` would see the
 	// baked-in monospace as an inline code run and wrap every line in `<code>`.
@@ -263,16 +266,11 @@ private fun lineHtml(
 
 	val image = blocks.imageLines[index]
 	val isRule = index in blocks.horizontalRuleLines
-	// A heading's span carries its level; font-size matching remains only as
-	// the fallback for spanless content, and only for a whole line, since any
-	// fragment of a styled run is uniform on its own. A uniformly styled heading
-	// line has no inner formatting left to render, so the tag is written here
-	// rather than by `toHtml`, which declines any heading level it cannot tell
-	// apart from bold body text.
+	// The heading comes from the line's block, never from how its text is sized: bold
+	// text at a heading's size is bold text.
 	val heading = when {
 		isRule || image != null -> null
 		headerLevel != null -> HtmlTag.entries[headerLevel - 1]
-		isWholeLine -> line.uniformHeadingTag(styles)
 		else -> null
 	}
 	val content = when {
@@ -281,8 +279,8 @@ private fun lineHtml(
 			" alt=\"${image.alt.escapeHtmlAttribute()}\">"
 
 		heading != null -> "<${heading.tag}${format.styleAttribute()}>" +
-			"${AnnotatedString(line.text).toHtml(styles, links)}</${heading.tag}>"
-		else -> line.toHtml(styles, links)
+			"${AnnotatedString(line.text).toHtml(styles, links, allowedLinkSchemes = allowedLinkSchemes, headingsBySize = false)}</${heading.tag}>"
+		else -> line.toHtml(styles, links, retired, allowedLinkSchemes, headingsBySize = false)
 	}
 
 	return when {

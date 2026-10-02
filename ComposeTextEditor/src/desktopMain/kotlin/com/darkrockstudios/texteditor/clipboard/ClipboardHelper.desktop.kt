@@ -4,6 +4,7 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.Clipboard
 import androidx.compose.ui.text.AnnotatedString
+import com.darkrockstudios.texteditor.html.DEFAULT_LINK_SCHEMES
 import com.darkrockstudios.texteditor.html.toAnnotatedStringFromHtml
 import com.darkrockstudios.texteditor.html.toHtml
 import com.darkrockstudios.texteditor.RichTextStyles
@@ -19,9 +20,10 @@ actual object ClipboardHelper {
 	actual suspend fun getText(
 		clipboard: Clipboard,
 		styles: RichTextStyles,
+		allowedLinkSchemes: Set<String>,
 	): AnnotatedString? {
 		val transferable = clipboard.getClipEntry()?.nativeClipEntry as? Transferable ?: return null
-		return transferable.readStyledText(styles)
+		return transferable.readStyledText(styles, allowedLinkSchemes)
 	}
 
 	actual suspend fun getPlainText(clipboard: Clipboard): String? {
@@ -64,8 +66,8 @@ private val annotatedStringFlavor = DataFlavor(AnnotatedString::class.java, "Ann
  * The styled text on offer: an in-process copy exactly, else the text of the HTML
  * flavor other applications provide, else the plain text.
  */
-internal fun Transferable.readStyledText(styles: RichTextStyles): AnnotatedString? =
-	readAnnotatedString() ?: readHtml(styles) ?: readPlainText()
+internal fun Transferable.readStyledText(styles: RichTextStyles, allowedLinkSchemes: Set<String>): AnnotatedString? =
+	readAnnotatedString() ?: readHtml(styles, allowedLinkSchemes) ?: readPlainText()
 
 /** Whether this offers text in any flavor [readStyledText] takes. */
 internal fun Transferable.offersText(): Boolean =
@@ -82,8 +84,11 @@ private fun Transferable.readAnnotatedString(): AnnotatedString? = runCatching {
 	getTransferData(annotatedStringFlavor) as? AnnotatedString
 }.getOrNull()
 
-private fun Transferable.readHtml(styles: RichTextStyles): AnnotatedString? =
-	readHtmlMarkup()?.toAnnotatedStringFromHtml(styles)?.takeIf { it.text.isNotEmpty() }
+private fun Transferable.readHtml(
+	styles: RichTextStyles,
+	allowedLinkSchemes: Set<String> = DEFAULT_LINK_SCHEMES,
+): AnnotatedString? =
+	readHtmlMarkup()?.toAnnotatedStringFromHtml(styles, allowedLinkSchemes)?.takeIf { it.text.isNotEmpty() }
 
 private fun Transferable.readPlainText(): AnnotatedString? = runCatching {
 	if (!isDataFlavorSupported(DataFlavor.stringFlavor)) return null

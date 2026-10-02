@@ -6,7 +6,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
-import com.darkrockstudios.texteditor.markdown.MarkdownExtension
 import com.darkrockstudios.texteditor.state.SpanManager
 import com.darkrockstudios.texteditor.state.TextEditorState
 import io.mockk.mockk
@@ -15,6 +14,7 @@ import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import utils.setBlockLines
 
 /**
  * A character style added or removed keeps the indent a list or quote bakes into
@@ -24,10 +24,10 @@ class StyleKeepsParagraphStyleTest {
 
 	private val bold = SpanStyle(fontWeight = FontWeight.Bold)
 
-	private fun TestScope.extension(markdown: String): MarkdownExtension {
-		val e = MarkdownExtension(TextEditorState(scope = this, measurer = mockk(relaxed = true)))
-		e.importMarkdown(markdown)
-		return e
+	private fun TestScope.editor(blockLines: String): TextEditorState {
+		val state = TextEditorState(scope = this, measurer = mockk(relaxed = true))
+		state.setBlockLines(blockLines)
+		return state
 	}
 
 	private fun TextEditorState.wholeLines(first: Int, last: Int) =
@@ -35,7 +35,7 @@ class StyleKeepsParagraphStyleTest {
 
 	@Test
 	fun `bold on a list line keeps its indent, and undo restores the line exactly`() = runTest {
-		val state = extension("- item").editorState
+		val state = editor("- item")
 		val before = state.textLines[0]
 		assertTrue(before.paragraphStyles.isNotEmpty(), "the list line carries no indent; the test proves nothing")
 
@@ -48,7 +48,7 @@ class StyleKeepsParagraphStyleTest {
 
 	@Test
 	fun `bold across quote lines keeps each indent`() = runTest {
-		val state = extension("> one\n> two\n> three").editorState
+		val state = editor("> one\n> two\n> three")
 		val before = state.textLines.toList()
 
 		state.addStyleSpan(state.wholeLines(0, 2), bold)
@@ -64,7 +64,7 @@ class StyleKeepsParagraphStyleTest {
 
 	@Test
 	fun `a quote line typed into comes back equal after bold and undo`() = runTest {
-		val state = extension("> one").editorState
+		val state = editor("> one")
 		state.cursor.updatePosition(CharLineOffset(0, 3))
 		state.insertCharacterAtCursor('s')
 		val before = state.textLines[0]
