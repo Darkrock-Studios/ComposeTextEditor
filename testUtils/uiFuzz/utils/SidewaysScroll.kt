@@ -70,8 +70,9 @@ fun FuzzUiDriver.runUiFuzzScript(
 
 /**
  * One read of the view at a sideways [scroll]: [answer]s given in content x, so they are
- * the same at any scroll. [samples] are content xs around the caret, and [y] the middle
- * of the caret's row in view coordinates.
+ * the same at any scroll. [samples] are content xs around the caret, clear of every edge
+ * and centre of the glyphs on the caret's line, and [y] the middle of the caret's row in
+ * view coordinates.
  */
 class SidewaysRead internal constructor(
 	val scroll: Float,
@@ -108,8 +109,16 @@ fun TextEditorState.assertFollowsSidewaysScroll(read: SidewaysRead.() -> Unit = 
 	val other = if (start > range / 2) start / 3 else range - (range - start) / 3
 	val caret = calculateCursorPosition()
 	val caretX = caret.position.x + start
-	// Off the caret's glyph boundary, and stepping off whole pixels, so no sample sits on a glyph's edge.
-	val samples = (-SAMPLES..SAMPLES).map { caretX + SAMPLE_OFFSET + it * SAMPLE_STEP }.filter { it >= 0f }
+	// Off the caret's glyph boundary and stepping off whole pixels, then moved clear of the
+	// line's glyph edges and centres, where an answer flips. A probe goes to view x and back
+	// to content x through float additions that round differently at the two scrolls, so one
+	// within a float step of an edge or centre answers differently for no fault of the
+	// editor's: a storm's landed 0.000015 px from an l's centre in the macOS and Windows
+	// fonts. The answers are still compared exactly.
+	val flips = answerFlips()
+	val samples = (-SAMPLES..SAMPLES).map { caretX + SAMPLE_OFFSET + it * SAMPLE_STEP }
+		.filter { it >= 0f }
+		.map { clearOf(it, flips) }
 	val y = caret.position.y + caret.height / 2f
 
 	fun readAt(scroll: Int): Map<String, Any?> {
@@ -138,6 +147,37 @@ fun TextEditorState.assertFollowsSidewaysScroll(read: SidewaysRead.() -> Unit = 
 	}
 }
 
+/**
+ * The content xs on the caret's line where what a point hits changes: each glyph's left
+ * edge, centre and right edge, on every row of the line.
+ */
+private fun TextEditorState.answerFlips(): FloatArray {
+	val line = cursorPosition.line
+	val xs = ArrayList<Float>()
+	for (row in lineOffsets) {
+		if (row.line != line) continue
+		val layout = row.textLayoutResult
+		for (index in 0 until layout.layoutInput.text.length) {
+			val box = layout.getBoundingBox(index)
+			xs += row.offset.x + box.left
+			xs += row.offset.x + (box.left + box.right) / 2f
+			xs += row.offset.x + box.right
+		}
+	}
+	return xs.toFloatArray()
+}
+
+/** [x], or the nearest point right of it at least [SAMPLE_CLEARANCE] from each of [flips]. */
+private fun clearOf(x: Float, flips: FloatArray): Float {
+	var at = x
+	// Bounded, for a line of glyphs too narrow to stand clear of.
+	repeat(SAMPLE_NUDGES) {
+		if (flips.none { abs(it - at) < SAMPLE_CLEARANCE }) return at
+		at += SAMPLE_NUDGE
+	}
+	return at
+}
+
 private fun CursorMetrics.inContent(read: SidewaysRead): List<Float> =
 	listOf(read.content(position.x), position.y, height, lineTop, lineBaseline, lineBottom)
 
@@ -153,6 +193,17 @@ private fun sameAnswer(a: Any?, b: Any?): Boolean = when {
 
 private const val TOLERANCE = 0.05f
 private const val SAMPLES = 10
-private const val SAMPLE_STEP = 23.13f
-private const val SAMPLE_OFFSET = 0.37f
+/** A sample's distance from the next: off whole pixels, so samples do not keep to glyph edges. */
+internal const val SAMPLE_STEP = 23.13f
+
+/** The middle sample's distance right of the caret, which stands on a glyph's edge. */
+internal const val SAMPLE_OFFSET = 0.37f
+
+/**
+ * How near a glyph's edge or centre a sample may be: hundreds of float steps at these
+ * magnitudes (one is 0.00006 px at 1,000 px), and far under a glyph's width.
+ */
+private const val SAMPLE_CLEARANCE = 0.02f
+private const val SAMPLE_NUDGE = 0.07f
+private const val SAMPLE_NUDGES = 32
 private const val SIDEWAYS_SALT = 0x51DE_3A75L

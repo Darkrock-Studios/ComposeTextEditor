@@ -3677,17 +3677,23 @@ iOS Safari; browser tests run in CI (met: the `browser` job, 4.15).
   for a sideways drag and scrolling the line to follow, and keeps its place on
   screen a row up in text scrolled sideways; the handles and the edit menu
   sit on a word selected after a sideways scroll.
-  **Fails on the Mac** (2026-10-01, `3ab4bfd0`, macOS desktop JVM, with or
-  without the Mac's own changes): `EditorInvariantFuzzTest`, "sideways
-  invariant fuzz seed 42", after stroke 51, `Type("é")`. "stylus area does
-  not follow the sideways scroll: in content x it is [TextRange(1, 4),
-  TextRange(14, 18), TextRange(29, 32)] at scroll 363 and [TextRange(1, 4),
-  TextRange(15, 18), TextRange(29, 32)] at scroll 121 (range 463)". Replay:
-  `FUZZ_SEED=42 FUZZ_INVARIANTS=NoLoneSurrogate,CaretOnGraphemeBoundary,DownMovesOneRow,LeftThenRightReturns,ViewFollowsSidewaysScroll`,
-  120 strokes, sideways. The other 11 fuzz tests and the rest of the desktop
-  suite pass there. Not looked into: the one-pixel difference (14 against
-  15) may be the Mac's fonts, where the check wants a tolerance, or a real
-  rounding of the area against the scroll.
+  A sideways storm failed on macOS and Windows (2026-10-01,
+  `EditorInvariantFuzzTest`, "sideways invariant fuzz seed 42", after stroke
+  51: the stylus area was [1, 4), [14, 18), [29, 32) at scroll 363 and
+  [1, 4), [15, 18), [29, 32) at scroll 121). The check's fault, not the
+  editor's: the harness probes at content xs it turns into view xs, and
+  `textRangeInArea` adds the scroll back, two float additions that round
+  differently at the two scrolls. With those fonts the probe at 100.506 sat
+  one float step (0.000015 px) from an l's centre at 100.50598, which came
+  back as 100.50598 at one scroll and 100.506 at the other, so the area took
+  the l at one and not the other. `input/HandwritingGestureLayout.kt` rounds
+  nothing. The probes now keep 0.02 px clear of every glyph edge and centre
+  on the caret's line (`assertFollowsSidewaysScroll`, `testUtils/uiFuzz`),
+  and the answers are still compared exactly. `softwrap/SidewaysProbeTest`
+  puts a glyph's centre on a probe with any font, by a letter spacing it
+  measures, and failed before the fix both ways (the probe on the centre,
+  and the stylus area flipping). Dropping the scroll from any of the three
+  handwriting conversions still fails ten tests each (checked by hand).
 
 ### Right-to-left and bidirectional text
 
