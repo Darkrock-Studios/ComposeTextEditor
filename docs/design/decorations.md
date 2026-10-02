@@ -3,7 +3,8 @@
 A decoration is a view of the text, not part of it: a syntax highlighter's
 colours, a linter's underlines, a search's matches. Spell check and find drew
 theirs as rich spans marked `isDecoration` (7.53, 7.54); 7.86 makes that a
-public API any host can use (`com.darkrockstudios.texteditor.decoration`).
+public API any host can use (`com.darkrockstudios.texteditor.decoration`), and
+spell check, diagnostics and find now draw on layers of their own (7.88).
 
 ## Rules
 
@@ -80,18 +81,40 @@ of 40 lines in view tinted, on the benchmark's software canvas. A third of the
 difference is the rectangles, which a GPU canvas fills far faster; most of the
 rest is finding each stretch's boxes.
 
-## Find
+## Spell check, diagnostics and find
 
-`FindState` keeps its highlights and its in-selection scope on its own layer
-(7.88) and reads them back with `decorations(layer)`, which builds only its own
-spans, never the whole span set. A search lays again only the lines whose
-highlights differ from the matches, so after an edit that is the edited lines;
-stepping to the next match, with the text unchanged since the highlights were
-laid, swaps the two lines the current highlight leaves and reaches. The scope,
-which crosses lines, is set whole through `updateRichSpans` rather than split
-per line, so it follows edits as one range. `FindBenchmark` (5,000 lines,
-15,000 matches, 10,000 other spans): an update after an edit 7.2 ms to 3.5 ms,
-a step 5.3 ms to 20 us.
+Spell check, diagnostics and find each draw on a layer of their own (7.88) and
+read their marks back with `decorations(layer)` or `decorations(layer, lines)`,
+which build only their own spans, never the whole span set
+(`getAllRichSpans()` builds and hashes every span after any change). Their
+styles are `DecorationStyle`s of that layer, so none clears another's or a
+host's.
+
+Spell check's layer is `SpellCheckStyle`'s, and diagnostics' is
+`DiagnosticStyle`'s default, each shared by every state of its kind, as their
+styles were matched by class before: a state made for an editor takes over the
+marks an earlier one left, and a style a host makes without a layer is replaced
+and cleared as before. Each `FindState` has a layer of its own, as its styles
+were matched by identity.
+
+A recheck or an invalidation reads its own flags on the lines it covers,
+keeping the flags touching the range (not only those sharing a character with
+it, as `replaceDecorations` by range takes), and swaps them through
+`updateRichSpans`, which takes the paint-only path, as does a full check for
+the whole layer. `SpellCheckBenchmark` (5,000 lines, two flags, two diagnostics
+and three other highlights a line): a diagnostics refresh after an edit 6.1 ms
+to 3.9 ms. A spell recheck after an edit was already line-local (about
+0.17 ms), and a full check's 26 ms is its scan, so neither moves.
+
+In find, a search lays again only the lines whose highlights differ from the
+matches, so after an edit that is the edited lines; stepping to the next match,
+with the text unchanged since the highlights were laid, swaps the two lines the
+current highlight leaves and reaches. The in-selection scope, which crosses
+lines, is added whole (`addRichSpan`) rather than split per line, so it follows
+edits as one range. `FindBenchmark` (5,000 lines, 15,000 matches, 10,000 other
+spans): an update after an edit 7.2 ms to 3.5 ms, a step 5.3 ms to 20 us.
+`DecorationLayerCoexistenceTest` checks the owners leave each other alone and
+read no other's spans.
 
 ## Looks
 

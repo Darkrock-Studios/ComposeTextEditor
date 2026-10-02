@@ -36,6 +36,7 @@ import com.darkrockstudios.texteditor.richstyle.SpellCheckStyle
 import com.darkrockstudios.texteditor.spellcheck.api.Correction
 import com.darkrockstudios.texteditor.spellcheck.api.EditorSpellChecker
 import com.darkrockstudios.texteditor.spellcheck.diagnostics.DiagnosticStyle
+import com.darkrockstudios.texteditor.spellcheck.diagnostics.DiagnosticsLayer
 import com.darkrockstudios.texteditor.spellcheck.diagnostics.TextDiagnosticsState
 import com.darkrockstudios.texteditor.spellcheck.utils.debounceUntilQuiescent
 import com.darkrockstudios.texteditor.spellcheck.utils.debounceUntilQuiescentWithBatch
@@ -375,7 +376,12 @@ private class BatchText(val lines: List<AnnotatedString>, val generation: Int)
 
 private typealias ShowMenu = (items: List<ContextMenuItem>, trailingItems: List<ContextMenuItem>) -> Unit
 
-private fun RichSpan.isFlag(): Boolean = style is SpellCheckStyle || style is DiagnosticStyle
+/** A span of spell check's or diagnostics' own; a style of either on a host's layer is the host's. */
+private fun RichSpan.isFlag(): Boolean = when (val style = style) {
+	is SpellCheckStyle -> style.layer === SpellCheckStyle.layer
+	is DiagnosticStyle -> style.layer === DiagnosticsLayer
+	else -> false
+}
 
 /**
  * The flags covering [position], their ends included: those it lies inside ahead of those

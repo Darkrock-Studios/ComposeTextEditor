@@ -4966,13 +4966,24 @@ Shaping is one line per keystroke. These still scale with document length:
   `DecorationCostTest`, `DecorationDrawingTest`, the `decorations` golden;
   `docs/design/decorations.md`, `docs/MIGRATION.md`).
   Spell check and find stay on `updateRichSpans`: moving them is 7.88.
-- [ ] **7.88 Spell check and find on decoration layers. S.** [Opus] [Lanes J,
+- [x] **7.88 Spell check and find on decoration layers. S.** [Opus] [Lanes J,
   K] Both find their own overlays by filtering `getAllRichSpans()` by style,
   which builds the whole span set each time, and both public style classes
   (`FindMatchStyle`, `SpellCheckStyle`, `DiagnosticStyle`) would need a layer
   to become `DecorationStyle`s, a change to their constructors. Each state
   owning a `DecorationLayer` would let them read and replace their own by line
   (`decorations(layer, lines)`) and drop the scans. Found in 7.86.
+  Done: find, spell check and diagnostics each draw on a layer of their own
+  (a `FindState` each; spell check and diagnostics one each, the default of
+  their styles, which were matched by class) and read their marks with
+  `decorations(layer[, lines])`. Their styles are `DecorationStyle`s taking a
+  layer, the old constructors kept (`docs/MIGRATION.md`). Find lays again only
+  the lines whose highlights changed, and a step swaps two lines. Over 5,000
+  lines a find update after an edit takes 3.5 ms against 7.2 ms, a step 20 us
+  against 5.3 ms, and a diagnostics refresh 3.9 ms against 6.1 ms
+  (`FindBenchmark`, `SpellCheckBenchmark`); none reads or clears another
+  owner's spans (`FindDecorationLayerTest`, `DecorationLayerCoexistenceTest`;
+  `docs/design/decorations.md`).
 
 ## Housekeeping
 

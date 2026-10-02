@@ -26,15 +26,28 @@ carries data for a click. A text colour tints the drawn text, so it wins over a
 colour the text has of its own. `updateRichSpans` with only such spans no
 longer re-resolves the lines they touch. Design: `docs/design/decorations.md`.
 
-## Find on a decoration layer
+## Spell check and find on decoration layers
 
-From the first release after 2.8.0, `FindState` draws its match highlights and
-its in-selection scope on a `DecorationLayer` of its own, and reads and
-replaces them there instead of filtering `getAllRichSpans()`.
-`FindMatchStyle` and `FindCurrentMatchStyle` are `DecorationStyle`s, made with
-a colour and a `layer`; the constructor taking only a colour, which existing
-code calls, puts one on a layer no `FindState` reads or clears. Nothing changes
-on screen.
+From the first release after 2.8.0, find, spell check and diagnostics draw on
+decoration layers, and read and replace their marks there instead of filtering
+`getAllRichSpans()`. Nothing changes on screen, and their styles become
+`DecorationStyle`s:
+
+- `FindMatchStyle` and `FindCurrentMatchStyle` are made with a colour and a
+  `layer`. Each `FindState` draws on a layer of its own; the constructor taking
+  only a colour, which existing code calls, puts a style on a layer no
+  `FindState` reads or clears, which no `FindState` touched before either.
+- `SpellCheckStyle` (core) takes a `layer` in a new protected constructor. The
+  companion, and a subclass made with the no-argument constructor, are on spell
+  check's layer, which `SpellCheckState` replaces and clears as before.
+- `DiagnosticStyle` gains a last parameter, `layer`, defaulting to the layer
+  `TextDiagnosticsState` replaces and clears. It takes part in `equals`. Calls
+  compile unchanged, but code compiled against the old constructor or `copy`
+  must be recompiled.
+
+A `SpellCheckStyle` or `DiagnosticStyle` given a layer of the host's own is
+left to the host: spell check and diagnostics neither clear it nor treat it as
+one of their flags.
 
 ## Single line scrolls sideways; wrapping can be turned off
 
