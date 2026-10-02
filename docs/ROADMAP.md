@@ -3652,6 +3652,17 @@ iOS Safari; browser tests run in CI (met: the `browser` job, 4.15).
   frame 723 and 743 against 733 and 746 us, idle frame 686 and 676 against 672
   and 677 us, a width change 2,460 and 2,595 against 2,500 and 2,582 us; within
   the noise.
+  **Fails on the Mac** (2026-10-01, `3ab4bfd0`, macOS desktop JVM, with or
+  without the Mac's own changes): `EditorInvariantFuzzTest`, "sideways
+  invariant fuzz seed 42", after stroke 51, `Type("é")`. "stylus area does
+  not follow the sideways scroll: in content x it is [TextRange(1, 4),
+  TextRange(14, 18), TextRange(29, 32)] at scroll 363 and [TextRange(1, 4),
+  TextRange(15, 18), TextRange(29, 32)] at scroll 121 (range 463)". Replay:
+  `FUZZ_SEED=42 FUZZ_INVARIANTS=NoLoneSurrogate,CaretOnGraphemeBoundary,DownMovesOneRow,LeftThenRightReturns,ViewFollowsSidewaysScroll`,
+  120 strokes, sideways. The other 11 fuzz tests and the rest of the desktop
+  suite pass there. Not looked into: the one-pixel difference (14 against
+  15) may be the Mac's fonts, where the check wants a tolerance, or a real
+  rounding of the area against the scroll.
 
 ### Right-to-left and bidirectional text
 
