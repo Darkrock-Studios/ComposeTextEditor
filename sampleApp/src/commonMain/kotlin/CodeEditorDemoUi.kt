@@ -1,20 +1,18 @@
 package com.darkrockstudios.texteditor.sample
 
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.material3.Button
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import codeeditor.CodeEditor
@@ -32,12 +30,17 @@ import dev.snipme.highlights.model.SyntaxLanguage
 
 @Composable
 fun CodeEditorDemoUi(
+	demo: Demo,
+	onBack: (() -> Unit)?,
+	isDarkMode: Boolean,
 	modifier: Modifier = Modifier,
-	navigateTo: (Destination) -> Unit,
-	isDarkMode: Boolean = false,
 ) {
 	val style = rememberCodeEditorStyle(
 		placeholderText = "Enter code here",
+		focusedBorderColor = Color.Transparent,
+		unfocusedBorderColor = Color.Transparent,
+		gutterBackgroundColor = MaterialTheme.colorScheme.surfaceContainer,
+		gutterTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
 	)
 	val state: TextEditorState =
 		rememberTextEditorState(SAMPLE_CODE.toAnnotatedString(FontFamily.Monospace))
@@ -59,50 +62,58 @@ fun CodeEditorDemoUi(
 
 	SyntaxHighlighting(state, syntax, language, syntaxTheme(isDarkMode), enabled = highlight)
 
-	Column(modifier = modifier) {
-		Row {
-			Text(
-				"Code Editor",
-				modifier = Modifier.padding(8.dp),
-				style = MaterialTheme.typography.titleLarge,
-				fontWeight = FontWeight.Bold
-			)
-			Spacer(modifier = Modifier.weight(1f))
-			Button(onClick = { navigateTo(Destination.Menu) }) {
-				Text("X")
-			}
-		}
+	fun setLarge(on: Boolean) {
+		large = on
+		state.setText((if (on) largeSample() else SAMPLE_CODE).toAnnotatedString(FontFamily.Monospace))
+	}
 
-		Row(
-			modifier = Modifier.horizontalScroll(rememberScrollState()),
-			verticalAlignment = Alignment.CenterVertically,
-		) {
+	DemoScaffold(
+		demo = demo,
+		onBack = onBack,
+		modifier = modifier,
+		actions = {
 			LanguagePicker(language) { language = it }
-			LabeledSwitch("Highlight", highlight) { highlight = it }
-			LabeledSwitch("Soft wrap", softWrap) { softWrap = it }
-			TextButton(onClick = {
-				large = !large
-				state.setText((if (large) largeSample() else SAMPLE_CODE).toAnnotatedString(FontFamily.Monospace))
-			}) {
-				Text(if (large) "Short sample" else "5,000 lines")
-			}
+			DemoOptionsButton(
+				groups = listOf(
+					DemoOptionGroup(
+						"Editor",
+						listOf(
+							DemoOption("Syntax highlighting", highlight) { highlight = it },
+							DemoOption("Soft wrap", softWrap) { softWrap = it },
+							DemoOption("Large sample", large, supportingText = "About 5,000 lines") { setLarge(it) },
+						),
+					),
+				),
+				modified = !highlight || softWrap || large,
+				onReset = {
+					highlight = true
+					softWrap = false
+					if (large) setLarge(false)
+				},
+			)
+		},
+	) {
+		EditorFrame(
+			focused = state.hasFocus,
+			modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 12.dp).fillMaxSize(),
+		) {
+			CodeEditor(
+				state = state,
+				modifier = Modifier.fillMaxSize(),
+				style = style,
+				softWrap = softWrap,
+			)
 		}
-
-		CodeEditor(
-			state = state,
-			modifier = Modifier.fillMaxSize(),
-			style = style,
-			softWrap = softWrap,
-		)
 	}
 }
 
 @Composable
 private fun LanguagePicker(language: SyntaxLanguage, onPick: (SyntaxLanguage) -> Unit) {
 	var open by remember { mutableStateOf(false) }
-	Box(modifier = Modifier.padding(horizontal = 8.dp)) {
-		OutlinedButton(onClick = { open = true }) {
+	Box {
+		TextButton(onClick = { open = true }) {
 			Text(language.displayName())
+			Icon(Icons.Default.ArrowDropDown, contentDescription = null)
 		}
 		DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
 			syntaxLanguages.forEach { option ->

@@ -8,11 +8,12 @@ import androidx.compose.ui.window.WindowState
 import androidx.compose.ui.window.application
 
 fun main() = application {
-    Window(
-        onCloseRequest = ::exitApplication,
-        title = "Compose Text Editor",
-        state = remember { WindowState(size = DpSize(width = 512.dp, height = 512.dp)) }
-    ) {
-	    App()
-    }
+	Window(
+		onCloseRequest = ::exitApplication,
+		title = "Compose Text Editor",
+		state = remember { WindowState(size = DpSize(width = 1200.dp, height = 800.dp)) }
+	) {
+		window.minimumSize = java.awt.Dimension(360, 480)
+		App()
+	}
 }

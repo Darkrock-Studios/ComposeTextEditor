@@ -4,20 +4,18 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.*
-import androidx.compose.material3.Button
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.SearchOff
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.darkrockstudios.texteditor.TextEditor
 import com.darkrockstudios.texteditor.find.FindBar
 import com.darkrockstudios.texteditor.find.findShortcut
 import com.darkrockstudios.texteditor.find.rememberFindState
-import com.darkrockstudios.texteditor.rememberTextEditorStyle
 import com.darkrockstudios.texteditor.state.rememberTextEditorState
 
 private val FIND_DEMO_TEXT = AnnotatedString(
@@ -46,35 +44,25 @@ Try typing something and see how the search results update in real-time!
 
 @Composable
 fun FindTextEditorDemoUi(
+	demo: Demo,
+	onBack: (() -> Unit)?,
 	modifier: Modifier = Modifier,
-	navigateTo: (Destination) -> Unit,
 ) {
 	val textState = rememberTextEditorState(FIND_DEMO_TEXT)
 	val findState = rememberFindState(textState)
 	var showFindBar by remember { mutableStateOf(false) }
 
-	Column(modifier = modifier) {
-		Row {
-			Text(
-				"Find Demo",
-				modifier = Modifier.padding(8.dp),
-				style = MaterialTheme.typography.titleLarge,
-				fontWeight = FontWeight.Bold
-			)
-			Spacer(modifier = Modifier.weight(1f))
-
-			Button(
-				onClick = { showFindBar = !showFindBar },
-				modifier = Modifier.padding(end = 8.dp)
-			) {
-				Text(if (showFindBar) "Hide Find" else "Show Find (Ctrl+F)")
-			}
-
-			Button(onClick = { navigateTo(Destination.Menu) }) {
-				Text("X")
-			}
-		}
-
+	DemoScaffold(
+		demo = demo,
+		onBack = onBack,
+		modifier = modifier,
+		actions = {
+			ActionButton(
+				icon = if (showFindBar) Icons.Default.SearchOff else Icons.Default.Search,
+				label = if (showFindBar) "Hide find bar" else "Show find bar",
+			) { showFindBar = !showFindBar }
+		},
+	) {
 		AnimatedVisibility(
 			visible = showFindBar,
 			enter = expandVertically(expandFrom = Alignment.Top),
@@ -86,18 +74,18 @@ fun FindTextEditorDemoUi(
 			)
 		}
 
-		val style = rememberTextEditorStyle(
-			placeholderText = "Enter text here",
-			textColor = MaterialTheme.colorScheme.onSurface,
-		)
-
-		TextEditor(
-			state = textState,
-			modifier = Modifier
-				.padding(8.dp)
-				.fillMaxSize()
-				.findShortcut(findState) { showFindBar = !showFindBar },
-			style = style,
-		)
+		EditorFrame(
+			focused = textState.hasFocus,
+			modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 12.dp).fillMaxSize(),
+		) {
+			TextEditor(
+				state = textState,
+				modifier = Modifier
+					.fillMaxSize()
+					.findShortcut(findState) { showFindBar = !showFindBar },
+				style = rememberFramedEditorStyle(placeholderText = "Enter text here"),
+				contentDescription = "Document",
+			)
+		}
 	}
 }

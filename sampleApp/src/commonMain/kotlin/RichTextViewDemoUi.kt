@@ -1,21 +1,17 @@
 package com.darkrockstudios.texteditor.sample
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.darkrockstudios.texteditor.RichTextView
 import com.darkrockstudios.texteditor.RichTextStyles
@@ -37,9 +33,10 @@ A second section after the rule, to verify spacing and span isolation."""
 
 @Composable
 fun RichTextViewDemoUi(
-	modifier: Modifier = Modifier,
-	navigateTo: (Destination) -> Unit,
+	demo: Demo,
+	onBack: (() -> Unit)?,
 	styles: RichTextStyles,
+	modifier: Modifier = Modifier,
 ) {
 	val singleState = rememberMarkdownState(DEMO_MARKDOWN, styles)
 	val cardSamples = listOf(
@@ -57,59 +54,62 @@ fun RichTextViewDemoUi(
 		),
 	)
 
-	Column(modifier = modifier.fillMaxSize()) {
-		Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-			Text(
-				"RichTextView Demo",
-				modifier = Modifier.padding(8.dp),
-				style = MaterialTheme.typography.titleLarge,
-				fontWeight = FontWeight.Bold,
-			)
-			Spacer(modifier = Modifier.weight(1f))
-			Button(onClick = { navigateTo(Destination.Menu) }) { Text("X") }
-		}
-
+	DemoScaffold(demo = demo, onBack = onBack, modifier = modifier) {
 		Column(
 			modifier = Modifier
 				.fillMaxSize()
 				.verticalScroll(rememberScrollState())
-				.padding(16.dp),
-			verticalArrangement = Arrangement.spacedBy(24.dp),
+				.padding(horizontal = 16.dp, vertical = 8.dp),
+			verticalArrangement = Arrangement.spacedBy(12.dp),
 		) {
-			Text(
-				"Selectable RichTextView (drag to select, Ctrl+C to copy, right-click for menu):",
-				style = MaterialTheme.typography.titleMedium
-			)
-			RichTextView(
-				state = singleState,
+			SectionLabel("Selectable", "Drag to select, Ctrl+C to copy, right-click for the menu")
+			Surface(
+				shape = MaterialTheme.shapes.large,
+				color = MaterialTheme.colorScheme.surfaceContainerLow,
 				modifier = Modifier.fillMaxWidth(),
-				isSelectable = true,
-				onLinkClick = LocalUriHandler.current::openUri,
-			)
+			) {
+				RichTextView(
+					state = singleState,
+					modifier = Modifier.padding(20.dp),
+					isSelectable = true,
+					onLinkClick = LocalUriHandler.current::openUri,
+				)
+			}
 
-			HorizontalDivider()
-
-			Text("Inside list-style cards:", style = MaterialTheme.typography.titleMedium)
-			cardSamples.forEach { state ->
-				Box(
-					modifier = Modifier
-						.fillMaxWidth()
-						.border(
-							width = 1.dp,
-							color = MaterialTheme.colorScheme.outlineVariant,
-							shape = RoundedCornerShape(8.dp),
-						)
-						.background(
-							color = MaterialTheme.colorScheme.surfaceContainerLow,
-							shape = RoundedCornerShape(8.dp),
-						)
-						.padding(12.dp),
-				) {
-					RichTextView(state = state, isSelectable = true)
+			SectionLabel("In list cards", "Short documents laid out like feed items")
+			Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+				cardSamples.forEachIndexed { index, state ->
+					Surface(
+						shape = cardShape(index, cardSamples.size),
+						color = MaterialTheme.colorScheme.surfaceContainerHigh,
+						modifier = Modifier.fillMaxWidth(),
+					) {
+						RichTextView(state = state, modifier = Modifier.padding(16.dp), isSelectable = true)
+					}
 				}
 			}
 		}
 	}
+}
+
+@Composable
+private fun SectionLabel(title: String, detail: String) {
+	Column(modifier = Modifier.padding(start = 4.dp, top = 12.dp)) {
+		Text(title, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+		Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+	}
+}
+
+/** Large outer corners and small inner ones, so the cards read as one group. */
+private fun cardShape(index: Int, count: Int): RoundedCornerShape {
+	val outer = 20.dp
+	val inner = 4.dp
+	return RoundedCornerShape(
+		topStart = if (index == 0) outer else inner,
+		topEnd = if (index == 0) outer else inner,
+		bottomStart = if (index == count - 1) outer else inner,
+		bottomEnd = if (index == count - 1) outer else inner,
+	)
 }
 
 @Composable

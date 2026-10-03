@@ -21,6 +21,8 @@ composeBom = "2026.06.01"
 symspellkt = "3.4.0"
 spellcheckerkt = "1.3.2"
 highlights = "1.0.0"
+material3-multiplatform = "1.12.0-alpha03"
+material-kolor = "5.0.1"
 
 maven-publish = "0.37.0"
 dokka = "2.2.0"
@@ -39,6 +41,9 @@ markdown = { module = "org.jetbrains:markdown", version.ref = "markdown" }
 mockk = { module = "io.mockk:mockk", version.ref = "mockk" }
 platform-spellchecker = { module = "com.darkrockstudios:platform-spellcheckerkt", version.ref = "spellcheckerkt" }
 highlights = { module = "dev.snipme:highlights", version.ref = "highlights" }
+material3-multiplatform = { module = "org.jetbrains.compose.material3:material3", version.ref = "material3-multiplatform" }
+compose-ui-backhandler = { module = "org.jetbrains.compose.ui:ui-backhandler", version.ref = "compose-multiplatform" }
+material-kolor = { module = "com.materialkolor:material-kolor", version.ref = "material-kolor" }
 
 lifecycle-runtime-ktx = { group = "androidx.lifecycle", name = "lifecycle-runtime-ktx", version.ref = "lifecycleRuntimeKtx" }
 activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "activityCompose" }

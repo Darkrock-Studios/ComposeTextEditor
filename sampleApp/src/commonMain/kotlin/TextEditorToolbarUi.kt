@@ -1,9 +1,9 @@
 package com.darkrockstudios.texteditor.sample
 
-import androidx.compose.foundation.focusable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Redo
 import androidx.compose.material.icons.automirrored.filled.Undo
@@ -14,6 +14,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.unit.dp
 import com.darkrockstudios.texteditor.CharLineOffset
@@ -96,15 +98,19 @@ fun TextEditorToolbar(
 		state.editOperations.collect { reconcileHorizontalRules(state) }
 	}
 
-	Surface(modifier = modifier.fillMaxWidth()) {
+	Surface(
+		shape = CircleShape,
+		color = MaterialTheme.colorScheme.surfaceContainer,
+		modifier = modifier,
+	) {
 		Row(
 			modifier = Modifier
 				.horizontalScroll(rememberScrollState())
-				.padding(horizontal = 16.dp, vertical = 2.dp),
+				.padding(horizontal = 8.dp, vertical = 4.dp),
 			verticalAlignment = Alignment.CenterVertically
 		) {
 			// History Controls Group
-			Row {
+			Row(verticalAlignment = Alignment.CenterVertically) {
 				ToolbarButton(
 					onClick = state::undo,
 					icon = Icons.AutoMirrored.Filled.Undo,
@@ -112,7 +118,7 @@ fun TextEditorToolbar(
 					enabled = state.canUndo
 				)
 
-				Spacer(modifier = Modifier.width(4.dp))
+				Spacer(modifier = Modifier.width(2.dp))
 
 				ToolbarButton(
 					onClick = state::redo,
@@ -122,14 +128,10 @@ fun TextEditorToolbar(
 				)
 			}
 
-			Spacer(modifier = Modifier.width(12.dp))
-
-			VerticalDivider(modifier = Modifier.height(24.dp))
-
-			Spacer(modifier = Modifier.width(12.dp))
+			ToolbarDivider()
 
 			// Formatting Controls Group
-			Row {
+			Row(verticalAlignment = Alignment.CenterVertically) {
 				FormatButton(
 					onClick = { state.toggleSpanStyle(state.richTextStyles.boldStyle) },
 					icon = Icons.Default.FormatBold,
@@ -137,7 +139,7 @@ fun TextEditorToolbar(
 					isActive = isBoldActive,
 				)
 
-				Spacer(modifier = Modifier.width(4.dp))
+				Spacer(modifier = Modifier.width(2.dp))
 
 				FormatButton(
 					onClick = { state.toggleSpanStyle(state.richTextStyles.italicStyle) },
@@ -147,7 +149,7 @@ fun TextEditorToolbar(
 				)
 
 				if (markdownControls) {
-					Spacer(modifier = Modifier.width(4.dp))
+					Spacer(modifier = Modifier.width(2.dp))
 
 					FormatButton(
 						onClick = { state.toggleSpanStyle(state.richTextStyles.codeStyle) },
@@ -156,7 +158,7 @@ fun TextEditorToolbar(
 						isActive = isCodeActive,
 					)
 
-					Spacer(modifier = Modifier.width(4.dp))
+					Spacer(modifier = Modifier.width(2.dp))
 
 					FormatButton(
 						onClick = { state.toggleSpanStyle(state.richTextStyles.strikethroughStyle) },
@@ -165,7 +167,7 @@ fun TextEditorToolbar(
 						isActive = isStrikethroughActive,
 					)
 
-					Spacer(modifier = Modifier.width(4.dp))
+					Spacer(modifier = Modifier.width(2.dp))
 
 					FormatButton(
 						onClick = {
@@ -184,7 +186,7 @@ fun TextEditorToolbar(
 						enabled = state.selector.hasSelection() || isLinkActive,
 					)
 
-					Spacer(modifier = Modifier.width(4.dp))
+					Spacer(modifier = Modifier.width(2.dp))
 
 					TextLabelButton(
 						onClick = {
@@ -198,7 +200,7 @@ fun TextEditorToolbar(
 						isActive = currentHeaderLevel != 0,
 					)
 
-					Spacer(modifier = Modifier.width(4.dp))
+					Spacer(modifier = Modifier.width(2.dp))
 
 					FormatButton(
 						onClick = { toggleBlockquote(state) },
@@ -207,7 +209,7 @@ fun TextEditorToolbar(
 						isActive = isBlockquoteActive,
 					)
 
-					Spacer(modifier = Modifier.width(4.dp))
+					Spacer(modifier = Modifier.width(2.dp))
 
 					FormatButton(
 						onClick = { toggleBulletList(state) },
@@ -216,7 +218,7 @@ fun TextEditorToolbar(
 						isActive = isBulletListActive,
 					)
 
-					Spacer(modifier = Modifier.width(4.dp))
+					Spacer(modifier = Modifier.width(2.dp))
 
 					FormatButton(
 						onClick = { toggleOrderedList(state) },
@@ -225,7 +227,7 @@ fun TextEditorToolbar(
 						isActive = isOrderedListActive,
 					)
 
-					Spacer(modifier = Modifier.width(4.dp))
+					Spacer(modifier = Modifier.width(2.dp))
 
 					FormatButton(
 						onClick = { toggleCodeFence(state) },
@@ -234,21 +236,15 @@ fun TextEditorToolbar(
 						isActive = isCodeFenceActive,
 					)
 
-					Spacer(modifier = Modifier.width(4.dp))
+					Spacer(modifier = Modifier.width(2.dp))
 
-					FormatButton(
+					ToolbarButton(
 						onClick = { insertHorizontalRule(state) },
 						icon = Icons.Default.HorizontalRule,
 						contentDescription = "Horizontal rule",
-						isActive = false,
 					)
 
-					Spacer(modifier = Modifier.width(12.dp))
-
-					// Font size control group
-					VerticalDivider(modifier = Modifier.height(24.dp))
-
-					Spacer(modifier = Modifier.width(12.dp))
+					ToolbarDivider()
 
 					// Font size decrease button
 					ToolbarButton(
@@ -261,8 +257,8 @@ fun TextEditorToolbar(
 						imageVector = Icons.Default.FormatSize,
 						contentDescription = null,
 						modifier = Modifier
-							.size(20.dp)
-							.padding(horizontal = 4.dp),
+							.padding(horizontal = 4.dp)
+							.size(20.dp),
 						tint = MaterialTheme.colorScheme.onSurfaceVariant
 					)
 
@@ -273,7 +269,7 @@ fun TextEditorToolbar(
 						contentDescription = "Increase Font Size"
 					)
 				} else {
-					Spacer(modifier = Modifier.width(4.dp))
+					Spacer(modifier = Modifier.width(2.dp))
 
 					FormatButton(
 						onClick = { state.toggleSpanStyle(state.richTextStyles.highlightStyle) },
@@ -345,10 +341,10 @@ private fun LinkDialog(
 			) { Text(if (isEditing) "Save" else "Add") }
 		},
 		dismissButton = {
-			Row {
+			Row(verticalAlignment = Alignment.CenterVertically) {
 				if (onRemove != null) {
 					TextButton(onClick = onRemove) { Text("Remove") }
-					Spacer(modifier = Modifier.width(4.dp))
+					Spacer(modifier = Modifier.width(2.dp))
 				}
 				TextButton(onClick = onDismiss) { Text("Cancel") }
 			}
@@ -472,52 +468,49 @@ private fun cycleHeader(
 	}
 }
 
+@Composable
+private fun ToolbarDivider() {
+	VerticalDivider(
+		modifier = Modifier.padding(horizontal = 8.dp).height(24.dp),
+		color = MaterialTheme.colorScheme.outlineVariant,
+	)
+}
+
+// The toolbar's controls never take focus, so the editor keeps its caret and selection.
+private val Unfocusable = Modifier.focusProperties { canFocus = false }
+
 @OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ToolbarTooltip(label: String, content: @Composable () -> Unit) {
+	TooltipBox(
+		positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Below),
+		tooltip = { PlainTooltip { Text(label) } },
+		state = rememberTooltipState(),
+		content = content,
+	)
+}
+
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun ToolbarButton(
 	onClick: () -> Unit,
 	icon: ImageVector,
 	contentDescription: String,
-	isActive: Boolean = false,
 	enabled: Boolean = true,
-	modifier: Modifier = Modifier
 ) {
-	TooltipBox(
-		positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
-		tooltip = { PlainTooltip { Text(contentDescription) } },
-		state = rememberTooltipState(),
-	) {
-		FilledTonalIconButton(
+	ToolbarTooltip(contentDescription) {
+		IconButton(
 			onClick = onClick,
 			enabled = enabled,
-			modifier = modifier
-				.size(32.dp)
-				.focusable(false)
-				.focusProperties {
-					canFocus = false
-				},
-			colors = IconButtonDefaults.filledTonalIconButtonColors(
-				containerColor = if (isActive)
-					MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)
-				else
-					MaterialTheme.colorScheme.surfaceVariant,
-				contentColor = if (isActive)
-					MaterialTheme.colorScheme.primary
-				else
-					MaterialTheme.colorScheme.onSurfaceVariant,
-				disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.38f),
-				disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
-			)
+			shapes = IconButtonDefaults.shapes(),
+			modifier = Unfocusable,
 		) {
-			Icon(
-				imageVector = icon,
-				contentDescription = contentDescription,
-				modifier = Modifier.size(20.dp)
-			)
+			Icon(imageVector = icon, contentDescription = contentDescription)
 		}
 	}
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun FormatButton(
 	onClick: () -> Unit,
@@ -526,52 +519,43 @@ private fun FormatButton(
 	isActive: Boolean,
 	enabled: Boolean = true
 ) {
-	ToolbarButton(
-		onClick = onClick,
-		icon = icon,
-		contentDescription = contentDescription,
-		isActive = isActive,
-		enabled = enabled
-	)
+	ToolbarTooltip(contentDescription) {
+		IconToggleButton(
+			checked = isActive,
+			onCheckedChange = { onClick() },
+			enabled = enabled,
+			shapes = IconButtonDefaults.toggleableShapes(),
+			colors = toolbarToggleColors(),
+			modifier = Unfocusable,
+		) {
+			Icon(imageVector = icon, contentDescription = contentDescription)
+		}
+	}
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun TextLabelButton(
 	onClick: () -> Unit,
 	label: String,
 	contentDescription: String,
 	isActive: Boolean,
-	enabled: Boolean = true,
 ) {
-	TooltipBox(
-		positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
-		tooltip = { PlainTooltip { Text(contentDescription) } },
-		state = rememberTooltipState(),
-	) {
-		FilledTonalButton(
-			onClick = onClick,
-			enabled = enabled,
-			modifier = Modifier
-				.height(32.dp)
-				.focusable(false)
-				.focusProperties { canFocus = false },
-			contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp),
-			colors = ButtonDefaults.filledTonalButtonColors(
-				containerColor = if (isActive)
-					MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)
-				else
-					MaterialTheme.colorScheme.surfaceVariant,
-				contentColor = if (isActive)
-					MaterialTheme.colorScheme.primary
-				else
-					MaterialTheme.colorScheme.onSurfaceVariant,
-			)
+	ToolbarTooltip(contentDescription) {
+		IconToggleButton(
+			checked = isActive,
+			onCheckedChange = { onClick() },
+			shapes = IconButtonDefaults.toggleableShapes(),
+			colors = toolbarToggleColors(),
+			modifier = Unfocusable.semantics { this.contentDescription = contentDescription },
 		) {
-			Text(
-				text = label,
-				style = MaterialTheme.typography.labelLarge,
-			)
+			Text(text = label, style = MaterialTheme.typography.labelLarge)
 		}
 	}
 }
+
+@Composable
+private fun toolbarToggleColors() = IconButtonDefaults.iconToggleButtonColors(
+	checkedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
+	checkedContentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+)
