@@ -329,13 +329,13 @@ private fun styleMarkers(
 
 	// Checked first so a heading's bold never also reads as inline bold.
 	if (headingsBySize && style.fontWeight == FontWeight.Bold && style.fontSize != TextUnit.Unspecified) {
-		val heading = when (style.fontSize.value) {
-			config.header1Style.fontSize.value -> StyleMarkerPair("# ", "\n")
-			config.header2Style.fontSize.value -> StyleMarkerPair("## ", "\n")
-			config.header3Style.fontSize.value -> StyleMarkerPair("### ", "\n")
-			config.header4Style.fontSize.value -> StyleMarkerPair("#### ", "\n")
-			config.header5Style.fontSize.value -> StyleMarkerPair("##### ", "\n")
-			config.header6Style.fontSize.value -> StyleMarkerPair("###### ", "\n")
+		val heading = when (style.fontSize) {
+			config.header1Style.fontSize -> StyleMarkerPair("# ", "\n")
+			config.header2Style.fontSize -> StyleMarkerPair("## ", "\n")
+			config.header3Style.fontSize -> StyleMarkerPair("### ", "\n")
+			config.header4Style.fontSize -> StyleMarkerPair("#### ", "\n")
+			config.header5Style.fontSize -> StyleMarkerPair("##### ", "\n")
+			config.header6Style.fontSize -> StyleMarkerPair("###### ", "\n")
 			else -> null
 		}
 		if (heading != null) return listOf(heading)
