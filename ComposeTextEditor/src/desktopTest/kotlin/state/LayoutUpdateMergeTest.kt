@@ -19,13 +19,45 @@ class LayoutUpdateMergeTest {
 	fun `full absorbs everything`() {
 		assertEquals(LayoutUpdate.Full, LayoutUpdate.Full.mergedWith(partial(1, 2)))
 		assertEquals(LayoutUpdate.Full, partial(1, 2).mergedWith(LayoutUpdate.Full))
+		assertEquals(LayoutUpdate.Full, LayoutUpdate.Full.mergedWith(LayoutUpdate.Reshape))
 	}
 
 	@Test
-	fun `spans only is the identity`() {
+	fun `a reshape over a partial degrades to full`() {
+		assertEquals(LayoutUpdate.Reshape, LayoutUpdate.Reshape.mergedWith(LayoutUpdate.Reshape))
+		assertEquals(LayoutUpdate.Full, LayoutUpdate.Reshape.mergedWith(partial(3, 7, 2)))
+		assertEquals(LayoutUpdate.Full, LayoutUpdate.Spans(1, 2).mergedWith(LayoutUpdate.Reshape))
+	}
+
+	@Test
+	fun `spans only keeps the partial's shaping and respans every line`() {
 		val p = partial(3, 7, 2)
-		assertEquals(p, LayoutUpdate.SpansOnly.mergedWith(p))
-		assertEquals(p, p.mergedWith(LayoutUpdate.SpansOnly))
+		val merged = LayoutUpdate.Partial(3, 7, 2, spansFirst = 0, spansLast = LayoutUpdate.ALL_LINES)
+		assertEquals(merged, LayoutUpdate.SpansOnly.mergedWith(p))
+		assertEquals(merged, p.mergedWith(LayoutUpdate.SpansOnly))
+	}
+
+	@Test
+	fun `a spans range joins a stable partial`() {
+		assertEquals(
+			LayoutUpdate.Partial(2, 4, 0, spansFirst = 7, spansLast = 9),
+			partial(2, 4).mergedWith(LayoutUpdate.Spans(7, 9)),
+		)
+		assertEquals(LayoutUpdate.Spans(2, 9), LayoutUpdate.Spans(2, 4).mergedWith(LayoutUpdate.Spans(7, 9)))
+	}
+
+	@Test
+	fun `a spans range below the shift point degrades to full`() {
+		assertEquals(LayoutUpdate.Full, LayoutUpdate.Spans(12, 13).mergedWith(partial(5, 10, 5)))
+		assertEquals(LayoutUpdate.Full, partial(5, 10, 5).mergedWith(LayoutUpdate.Spans(6, 6)))
+	}
+
+	@Test
+	fun `a spans range above the shift point is kept`() {
+		assertEquals(
+			LayoutUpdate.Partial(5, 10, 5, spansFirst = 2, spansLast = 3),
+			LayoutUpdate.Spans(2, 3).mergedWith(partial(5, 10, 5)),
+		)
 	}
 
 	@Test

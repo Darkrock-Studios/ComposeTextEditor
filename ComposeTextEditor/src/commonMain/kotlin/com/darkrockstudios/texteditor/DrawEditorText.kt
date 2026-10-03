@@ -5,7 +5,6 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.util.fastForEach
 import com.darkrockstudios.texteditor.richstyle.BlockSpanStyle
 import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.utils.getBoundingBoxes
@@ -17,64 +16,63 @@ internal fun DrawScope.DrawEditorText(
 	style: TextEditorStyle,
 	decorateLine: LineDecorator?,
 ) {
-	// Get current scroll position and viewport height
-	val scrollY = state.scrollState.value
 	val viewportHeight = size.height
+	// A reshape still settling leaves lines out of view at their old shape; the ones
+	// about to be drawn are shaped first, which can move the scroll range, so the
+	// scroll is read after.
+	state.scrollState.value.let { state.shapeRowsInView((it - viewportHeight * 0.1f).coerceAtLeast(0f), it + viewportHeight) }
+	val scrollY = state.scrollState.value
 
 	// Calculate visible range with some padding to ensure smooth scrolling
 	val minY = (scrollY - viewportHeight * 0.1f).coerceAtLeast(0f)
 	val maxY = scrollY + viewportHeight
+
+	// Rows run top to bottom, so the ones in view are two binary searches.
+	val rows = state.lineOffsets
+	val firstVisible = rows.firstRowEndingAtOrBelow(minY)
+	val lastVisible = rows.lastRowAtOrAbove(maxY)
+	// Read once: the editor's rows are built on read.
+	val visible = List(maxOf(0, lastVisible - firstVisible + 1)) { rows[firstVisible + it] }
 
 	// Pass 1: paint backgrounds for every visible virtual line BEFORE any text
 	// is drawn. Opaque fills (e.g. a code-fence card) need to land here so the
 	// text painted in pass 2 sits on top instead of being covered. Foreground
 	// rich-span decorations (bullets, borders, underlines) still run in pass 2
 	// after the text so they overlay correctly.
-	state.lineOffsets.fastForEach { virtualLine ->
-		val lineTop = virtualLine.offset.y
-		val lineBottom = lineTop + virtualLine.effectiveHeight
-		if (lineBottom >= minY && lineTop <= maxY) {
-			drawRichSpans(virtualLine, state, phase = RichSpanDrawPhase.Background)
-		}
+	for (virtualLine in visible) {
+		drawRichSpans(virtualLine, state, phase = RichSpanDrawPhase.Background)
 	}
 
 	var lastLine = -1
-	state.lineOffsets.fastForEach { virtualLine ->
-		// Check if this line could be visible
-		val lineTop = virtualLine.offset.y
-		val lineHeight = virtualLine.effectiveHeight
-		val lineBottom = lineTop + lineHeight
-
-		if (lineBottom >= minY && lineTop <= maxY) {
-			if (lastLine != virtualLine.line && state.textLines.size > virtualLine.line) {
-				// drawText paints from sub-line 0 down; anchor at the paragraph top so a
-				// mid-paragraph entry (earlier sub-lines culled above the viewport) doesn't
-				// shift the whole paragraph down by one wrap-line.
-				val offset = Offset(virtualLine.offset.x, virtualLine.paragraphTop - scrollY)
-				decorateLine?.let {
-					decorateLine(virtualLine.line, offset, state, style)
-				}
-
-				val blockReplacesText = virtualLine.richSpans.any {
-					(it.style as? BlockSpanStyle)?.replacesText() == true
-				}
-				if (!blockReplacesText) {
-					drawText(
-						textLayoutResult = virtualLine.textLayoutResult,
-						color = style.textColor,
-						topLeft = offset,
-					)
-				}
-
-				lastLine = virtualLine.line
+	for (virtualLine in visible) {
+		if (lastLine != virtualLine.line && state.textLines.size > virtualLine.line) {
+			// drawText paints from sub-line 0 down; anchor at the paragraph top so a
+			// mid-paragraph entry (earlier sub-lines culled above the viewport) doesn't
+			// shift the whole paragraph down by one wrap-line.
+			val offset = Offset(virtualLine.offset.x, virtualLine.paragraphTop - scrollY)
+			decorateLine?.let {
+				decorateLine(virtualLine.line, offset, state, style)
 			}
 
-			drawRichSpans(virtualLine, state, phase = RichSpanDrawPhase.Foreground)
-
-			// Draw composing underline if this line intersects the composing region
-			state.composingRange?.let { composingRange ->
-				drawComposingUnderline(virtualLine, state, composingRange, style)
+			val blockReplacesText = virtualLine.richSpans.any {
+				(it.style as? BlockSpanStyle)?.replacesText() == true
 			}
+			if (!blockReplacesText) {
+				drawText(
+					textLayoutResult = virtualLine.textLayoutResult,
+					color = style.textColor,
+					topLeft = offset,
+				)
+			}
+
+			lastLine = virtualLine.line
+		}
+
+		drawRichSpans(virtualLine, state, phase = RichSpanDrawPhase.Foreground)
+
+		// Draw composing underline if this line intersects the composing region
+		state.composingRange?.let { composingRange ->
+			drawComposingUnderline(virtualLine, state, composingRange, style)
 		}
 	}
 }

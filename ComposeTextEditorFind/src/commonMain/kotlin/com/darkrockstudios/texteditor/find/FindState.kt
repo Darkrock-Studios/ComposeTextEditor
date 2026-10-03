@@ -73,6 +73,14 @@ class FindState(
 	/** The user's own selection, as it stood before a search moved the selection onto a match. */
 	private var selectionBeforeSearch: TextEditorRange? = null
 
+	/**
+	 * The selection as this session last left it: on a match, or none after [clearSearch]. The
+	 * selector keeps its range object until the selection changes, so an identity check still
+	 * recognises it once a query with no results empties [matches], and a user who selects the
+	 * same range again after selecting something else makes a new object.
+	 */
+	private var sessionSelection: TextEditorRange? = null
+
 	// Job for debounced search on text changes
 	private var searchUpdateJob: Job? = null
 
@@ -107,7 +115,7 @@ class FindState(
 	 */
 	fun search(newQuery: String) {
 		val selection = textState.selector.selection
-		if (selection != _matches.getOrNull(currentMatchIndex)) selectionBeforeSearch = selection
+		if (!isSessionSelection(selection)) selectionBeforeSearch = selection
 		query = newQuery
 
 		if (newQuery.isEmpty()) {
@@ -178,7 +186,7 @@ class FindState(
 		if (inSelection == enabled) return
 		if (enabled) {
 			val selection = textState.selector.selection
-			val scope = if (selection != null && selection == _matches.getOrNull(currentMatchIndex)) {
+			val scope = if (selection != null && isSessionSelection(selection)) {
 				selectionBeforeSearch
 			} else {
 				selection
@@ -270,6 +278,7 @@ class FindState(
 		_matches.clear()
 		currentMatchIndex = -1
 		textState.selector.clearSelection()
+		noteSessionSelection()
 	}
 
 	/**
@@ -281,6 +290,7 @@ class FindState(
 		removeScope()
 		inSelection = false
 		selectionBeforeSearch = null
+		sessionSelection = null
 		clearHighlights()
 		_matches.clear()
 		currentMatchIndex = -1
@@ -289,7 +299,9 @@ class FindState(
 	/**
 	 * Replace the current match with the given text and move to the next match.
 	 * The replacement takes the styling at the start of the text it replaces.
-	 * @param replaceText The text to replace with
+	 * @param replaceText The text to replace with. With [useRegex], `$1`, `${name}` and the
+	 * other group references of Kotlin's `Regex.replace` are expanded, and `\n` and `\t`
+	 * insert a line break and a tab; see the module docs.
 	 * @return true if a replacement was made, false if no current match
 	 */
 	fun replaceCurrent(replaceText: String): Boolean {
@@ -338,7 +350,7 @@ class FindState(
 	 * Replace all matches with the given text, each taking the styling at the start of the text
 	 * it replaces. Matches are found afresh in the current text; where matches overlap, only the
 	 * first is replaced.
-	 * @param replaceText The text to replace with
+	 * @param replaceText The text to replace with, group references expanded as in [replaceCurrent]
 	 * @return The number of replacements made
 	 */
 	fun replaceAll(replaceText: String): Int {
@@ -362,26 +374,41 @@ class FindState(
 
 	/**
 	 * Replaces [targets], in document order and not overlapping, last to first so each
-	 * replacement leaves the earlier ranges where they were, as one undo step. An edit at
-	 * the edge of the find in selection scope would shrink it, so the scope is re-laid over
-	 * what it covered.
+	 * replacement leaves the earlier ranges where they were, as one undo step. With [useRegex],
+	 * group references in [replaceText] are expanded for each match. An edit at the edge of the
+	 * find in selection scope would shrink it, so the scope is re-laid over what it covered.
 	 */
-	private fun replaceRanges(targets: List<TextEditorRange>, replaceText: String) = textState.editGroup {
+	private fun replaceRanges(targets: List<TextEditorRange>, replaceText: String) {
+		val replacements = if (useRegex) {
+			textState.regexReplacements(targets, query, caseSensitive, wholeWord, replaceText)
+		} else {
+			targets.map { replaceText }
+		}
+		textState.editGroup { replaceInGroup(targets.zip(replacements)) }
+	}
+
+	private fun replaceInGroup(replacements: List<Pair<TextEditorRange, String>>) {
 		val scope = scopeRange()
 		val scopeStart = scope?.start?.let(textState::getCharacterIndex)
 		var scopeEnd = scope?.end?.let(textState::getCharacterIndex)
-		targets.asReversed().forEach { match ->
+		replacements.asReversed().forEach { (match, replacement) ->
 			if (scopeEnd != null) {
 				val matchLength = textState.getCharacterIndex(match.end) - textState.getCharacterIndex(match.start)
-				scopeEnd += replaceText.length - matchLength
+				scopeEnd += replacement.length - matchLength
 			}
-			textState.replace(match, styledReplacement(match, replaceText))
+			textState.replace(match, styledReplacement(match, replacement))
 		}
 		if (scopeStart != null && scopeEnd != null) {
 			removeScope()
 			textState.addRichSpan(scopeStart, scopeEnd, scopeStyle)
 		}
 	}
+
+	private fun noteSessionSelection() {
+		sessionSelection = textState.selector.selection
+	}
+
+	private fun isSessionSelection(selection: TextEditorRange?): Boolean = selection === sessionSelection
 
 	/** [replaceText] styled like the character at the start of [range]. */
 	private fun styledReplacement(range: TextEditorRange, replaceText: String): AnnotatedString {
@@ -487,8 +514,8 @@ class FindState(
 
 		val match = _matches[currentMatchIndex]
 
-		// Select the match
 		textState.selector.updateSelection(match.start, match.end)
+		noteSessionSelection()
 
 		// Scroll to make it visible
 		textState.scrollManager.scrollToPosition(match.start)

@@ -26,32 +26,51 @@ internal class ContextMenuPlacement(
 	val modifier: Modifier = Modifier.onGloballyPositioned { frame = it }
 
 	fun showAtContent(offset: Offset) {
+		menuState.showMenu(toMenu(offset))
+	}
+
+	/**
+	 * Lets [TextEditorContextMenuState.showMenuAtText] convert through this placement until
+	 * the returned function is called.
+	 */
+	fun lendTextConversion(): () -> Unit {
+		val conversion: (Offset) -> Offset = ::toMenu
+		menuState.textConversions += conversion
+		return { menuState.textConversions -= conversion }
+	}
+
+	private fun toMenu(offset: Offset): Offset {
 		val canvas = state.canvasLayoutCoordinates?.takeIf { it.isAttached }
 		val frame = frame?.takeIf { it.isAttached }
-		menuState.showMenu(if (canvas != null && frame != null) frame.localPositionOf(canvas, offset) else offset)
+		return if (canvas != null && frame != null) frame.localPositionOf(canvas, offset) else offset
 	}
 
 	/** Below the caret, kept inside the viewport: where the keyboard opens the menu, as native editors do. */
 	fun showAtCaret() {
 		val caret = state.getPositionForOffset(state.cursorPosition, state.cursor.affinity)
-		showAtContent(
-			Offset(
-				caret.position.x.coerceIn(0f, state.viewportSize.width),
-				(caret.position.y + caret.height).coerceIn(0f, state.viewportSize.height),
-			)
+		val below = Offset(
+			caret.position.x.coerceIn(0f, state.viewportSize.width),
+			(caret.position.y + caret.height).coerceIn(0f, state.viewportSize.height),
 		)
+		menuState.showMenu(toMenu(below), emptyList(), emptyList())
+		menuState.onOpenedAtCaret?.invoke(state)
 	}
 }
 
 /**
  * Lets [TextEditorState]'s `editor.showContextMenu` action open [placement]'s menu while
  * this is composed. When several composables show one state, the latest to compose opens.
+ * Also gives [TextEditorContextMenuState.showMenuAtText] its conversion.
  */
 @Composable
 internal fun ContextMenuOpener(state: TextEditorState, placement: ContextMenuPlacement) {
 	DisposableEffect(state, placement) {
 		val opener: () -> Unit = placement::showAtCaret
 		state.contextMenuOpeners += opener
-		onDispose { state.contextMenuOpeners -= opener }
+		val returnConversion = placement.lendTextConversion()
+		onDispose {
+			state.contextMenuOpeners -= opener
+			returnConversion()
+		}
 	}
 }

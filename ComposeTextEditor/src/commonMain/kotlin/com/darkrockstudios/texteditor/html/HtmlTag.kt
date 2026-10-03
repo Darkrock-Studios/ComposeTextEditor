@@ -85,5 +85,5 @@ internal fun HtmlTag.spanStyle(config: MarkdownConfiguration): SpanStyle = when 
 	HtmlTag.STRONG -> config.boldStyle
 	HtmlTag.EM -> config.italicStyle
 	HtmlTag.STRIKE -> config.strikethroughStyle
-	HtmlTag.UNDERLINE -> SpanStyle(textDecoration = TextDecoration.Underline)
+	HtmlTag.UNDERLINE -> config.underlineStyle
 }

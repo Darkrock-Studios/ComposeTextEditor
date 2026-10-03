@@ -110,35 +110,35 @@ data class RichSpan(
 	val style: RichSpanStyle
 ) {
 	fun intersectsWith(lineWrap: LineWrap): Boolean {
-		// If not on the right line, no intersection
-		if (lineWrap.line < range.start.line || lineWrap.line > range.end.line) {
-			return false
-		}
-
-		// Get the effective range for this virtual line segment
 		val lineStart = lineWrap.textLayoutResult.getLineStart(lineWrap.virtualLineIndex)
 		val lineEnd = if (lineWrap.textLayoutResult.lineCount > 0) {
 			lineWrap.textLayoutResult.getLineEnd(lineWrap.virtualLineIndex)
 		} else {
 			lineStart
 		}
+		return intersectsRow(lineWrap.line, lineStart, lineEnd)
+	}
+
+	/** Whether the span covers any of the row of [line] running from [rowStart] to [rowEnd]. */
+	internal fun intersectsRow(line: Int, rowStart: Int, rowEnd: Int): Boolean {
+		if (line < range.start.line || line > range.end.line) return false
 
 		// For single-line spans on the same line
-		if (range.start.line == range.end.line && range.start.line == lineWrap.line) {
+		if (range.start.line == range.end.line && range.start.line == line) {
 			// Empty wrapped line: line-anchored gutter markers (sticky-at-start)
 			// render even when the span is zero-width, so an empty bullet/quote
 			// item keeps its dot/bar. Other styles need the standard positive-
-			// overlap check, which fails on an empty line because `lineEnd == 0`.
-			if (lineEnd == lineStart && range.start.char == 0) {
+			// overlap check, which fails on an empty line because `rowEnd == 0`.
+			if (rowEnd == rowStart && range.start.char == 0) {
 				return style.stickyAtStart || range.end.char > 0
 			}
-			return (range.start.char < lineEnd && range.end.char > lineStart)
+			return (range.start.char < rowEnd && range.end.char > rowStart)
 		}
 
 		// For multi-line spans or wrapped lines:
-		return when (lineWrap.line) {
-			range.start.line -> range.start.char < lineEnd     // First line: span starts before line segment ends
-			range.end.line -> range.end.char > lineStart       // Last line: span ends after line segment starts
+		return when (line) {
+			range.start.line -> range.start.char < rowEnd     // First line: span starts before line segment ends
+			range.end.line -> range.end.char > rowStart       // Last line: span ends after line segment starts
 			else -> true                           // Middle lines are fully covered
 		}
 	}

@@ -11,7 +11,11 @@ import com.darkrockstudios.texteditor.annotatedstring.normalizeLineEndings
  */
 fun TextEditorState.insertTypedCharacter(char: Char) {
 	if (char == '\n' || char == '\r') return insertTypedNewline()
-	typedInput(char.toString()) { typedEdit(typing = true) { insertCharacterAtCursor(char) } }
+	typedInput {
+		typedEdit(AnnotatedString(char.toString()), typing = true) {
+			if (it.length == 1) insertCharacterAtCursor(it[0]) else insertStringAtCursor(it)
+		}
+	}
 }
 
 /**
@@ -24,7 +28,7 @@ fun TextEditorState.insertTypedCharacter(char: Char) {
 fun TextEditorState.insertTypedString(string: String) {
 	val text = string.normalizeLineEndings()
 	if (text == "\n") return insertTypedNewline()
-	typedInput(text) { insertTypedString(text, typing = text.isOneTypedWord()) }
+	typedInput { insertTypedString(text, typing = text.isOneTypedWord()) }
 }
 
 /**
@@ -36,7 +40,7 @@ fun TextEditorState.insertTypedString(string: String) {
 fun TextEditorState.insertTypedString(string: AnnotatedString) {
 	val text = string.normalizeLineEndings()
 	if (text.text == "\n") return insertTypedNewline()
-	typedInput(text.text) { typedEdit(typing = text.text.isOneTypedWord()) { insertStringAtCursor(text) } }
+	typedInput { typedEdit(text, typing = text.text.isOneTypedWord()) { insertStringAtCursor(it) } }
 }
 
 /**
@@ -44,27 +48,34 @@ fun TextEditorState.insertTypedString(string: AnnotatedString) {
  * made by the caller: an IME's composition is typing even when it holds spaces,
  * as pinyin does.
  */
-internal fun TextEditorState.insertTypedString(string: String, typing: Boolean) = typedEdit(typing) {
-	insertStringAtCursor(string)
-}
+internal fun TextEditorState.insertTypedString(string: String, typing: Boolean) =
+	typedEdit(AnnotatedString(string), typing) { insertStringAtCursor(it) }
 
 /**
  * Inserts a line break as if typed: replaces any active selection, then splits the
  * line at the cursor (through the [EditBehavior] chain), as one undo step.
  */
-fun TextEditorState.insertTypedNewline() = editGroup {
-	selector.deleteSelection()
-	insertNewlineAtCursor()
+fun TextEditorState.insertTypedNewline() {
+	// Refused before the selection goes, so a refused Enter changes nothing.
+	if (screenAtSelection(AnnotatedString("\n")) == null) return requestImeResync()
+	editGroup {
+		selector.deleteSelection()
+		insertNewlineAtCursor()
+	}
 }
 
 /**
- * Runs [insert] for typed [text], then reports where it landed: from the
- * selection's start or the caret, to the caret the insert left.
+ * Runs [insert], then reports what it typed and where: from the selection's start or
+ * the caret, to the caret the insert left. The document's text there, since an input
+ * filter may have changed or refused what was typed.
  */
-internal inline fun TextEditorState.typedInput(text: String, insert: () -> Unit) {
+internal inline fun TextEditorState.typedInput(insert: () -> Unit) {
 	val start = selector.selection?.start ?: cursorPosition
+	val before = revision
 	insert()
-	textInputLanded(text, TextEditorRange(start, cursorPosition))
+	if (revision == before || cursorPosition < start) return
+	val range = TextEditorRange(start, cursorPosition)
+	textInputLanded(getStringInRange(range), range)
 }
 
 /**
@@ -72,7 +83,16 @@ internal inline fun TextEditorState.typedInput(text: String, insert: () -> Unit)
  * step, and only the insert is recorded as [typing], so a word joins the run
  * around it whatever its length while the deleted selection never does.
  */
-private inline fun TextEditorState.typedEdit(typing: Boolean, crossinline insert: () -> Unit) = editGroup {
-	selector.deleteSelection()
-	editManager.recordingAsTyping(typing) { insert() }
+private inline fun TextEditorState.typedEdit(
+	text: AnnotatedString,
+	typing: Boolean,
+	crossinline insert: (AnnotatedString) -> Unit,
+) {
+	// Screened over the selection before it goes, so refused typing changes nothing.
+	val admitted = screenAtSelection(text) ?: return requestImeResync()
+	if (admitted != text) requestImeResync()
+	editGroup {
+		selector.deleteSelection()
+		editManager.alreadyScreened { editManager.recordingAsTyping(typing) { insert(admitted) } }
+	}
 }

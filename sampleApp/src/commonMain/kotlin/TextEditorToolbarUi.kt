@@ -72,8 +72,8 @@ fun TextEditorToolbar(
 			isStrikethroughActive = isActive(mardkown.markdownStyles.STRIKETHROUGH)
 			existingLinkSpan = richSpans.firstOrNull { it.style is LinkSpanStyle }
 			isBlockquoteActive = richSpans.any { it.style === BlockquoteSpanStyle }
-			isBulletListActive = richSpans.any { it.style === BulletListSpanStyle }
-			isOrderedListActive = richSpans.any { it.style === OrderedListSpanStyle }
+			isBulletListActive = richSpans.any { it.style is BulletListSpanStyle }
+			isOrderedListActive = richSpans.any { it.style is OrderedListSpanStyle }
 			isCodeFenceActive = richSpans.any { it.style === CodeFenceSpanStyle }
 			currentHeaderLevel = mardkown.headerLevel(position.line) ?: 0
 			isHighlightActive = richSpans.any { it.style == HIGHLIGHT }

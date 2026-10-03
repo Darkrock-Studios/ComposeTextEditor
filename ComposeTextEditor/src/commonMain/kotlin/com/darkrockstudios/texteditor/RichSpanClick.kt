@@ -16,7 +16,9 @@ import com.darkrockstudios.texteditor.state.SpanClickType
  *
  * @property span The span under the pointer.
  * @property type Whether this was a tap, a left-click, or a right-click.
- * @property offset Where the click landed, in editor coordinates.
+ * @property offset Where the click landed, in the text's coordinates: inside the content
+ *   padding, as the state's layout queries take them. To open a menu there, see
+ *   [com.darkrockstudios.texteditor.contextmenu.TextEditorContextMenuState.showMenuAtText].
  * @property keyboardModifiers The modifier keys held when the click was reported.
  */
 data class RichSpanClick(

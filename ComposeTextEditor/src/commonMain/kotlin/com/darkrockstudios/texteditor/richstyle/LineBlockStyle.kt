@@ -53,26 +53,67 @@ internal val Blockquote = LineBlockStyle(
 	markdownPattern = Regex("""^>\s?(.*)$"""),
 )
 
-internal val BulletList = LineBlockStyle(
-	spanStyle = BulletListSpanStyle,
-	paragraphStyle = BULLET_LIST_PARAGRAPH_STYLE,
-	markdownPrefix = { "- " },
-	// `-`, `*`, or `+` followed by at least one space. Nested (indented) bullets
-	// are not yet supported.
-	markdownPattern = Regex("""^[-*+]\s+(.*)$"""),
-)
+/**
+ * The bullet-list blocks by nesting level. Only level 0 carries a markdown
+ * pattern: a nested item's level comes from its indentation, which the
+ * importer resolves before the peel (see `docs/design/line-blocks.md`,
+ * "Nested lists").
+ */
+internal val BULLET_LISTS: List<LineBlockStyle> = List(MAX_LIST_LEVEL + 1) { level ->
+	LineBlockStyle(
+		spanStyle = BulletListSpanStyle.of(level),
+		paragraphStyle = listParagraphStyle(level),
+		markdownPrefix = { "- " },
+		// `-`, `*`, or `+` followed by at least one space.
+		markdownPattern = if (level == 0) Regex("""^[-*+]\s+(.*)$""") else NEVER_MATCHES,
+	)
+}
 
-internal val OrderedList = LineBlockStyle(
-	spanStyle = OrderedListSpanStyle,
-	paragraphStyle = ORDERED_LIST_PARAGRAPH_STYLE,
-	// Always emit incrementing numerals from 1 — markdown renderers normalise
-	// any starting digit, but emitting `1. 2. 3.` matches what humans expect to
-	// see in the source.
-	markdownPrefix = { pos -> "${pos + 1}. " },
-	// Any digit run followed by `.` and at least one space. Nested (indented)
-	// lists aren't supported yet.
-	markdownPattern = Regex("""^\d+\.\s+(.*)$"""),
-)
+/** The ordered-list blocks by nesting level; see [BULLET_LISTS]. */
+internal val ORDERED_LISTS: List<LineBlockStyle> = List(MAX_LIST_LEVEL + 1) { level ->
+	LineBlockStyle(
+		spanStyle = OrderedListSpanStyle.of(level),
+		paragraphStyle = listParagraphStyle(level),
+		// Always emit incrementing numerals from 1: markdown renderers normalise
+		// any starting digit, but emitting `1. 2. 3.` matches what humans expect to
+		// see in the source.
+		markdownPrefix = { pos -> "${pos + 1}. " },
+		// Any digit run followed by `.` and at least one space.
+		markdownPattern = if (level == 0) Regex("""^\d+\.\s+(.*)$""") else NEVER_MATCHES,
+	)
+}
+
+/** The top-level bullet block. */
+internal val BulletList: LineBlockStyle = BULLET_LISTS[0]
+
+/** The top-level ordered block. */
+internal val OrderedList: LineBlockStyle = ORDERED_LISTS[0]
+
+/** Whether this block is a list item, at any level. */
+internal val LineBlockStyle.isList: Boolean
+	get() = spanStyle is BulletListSpanStyle || spanStyle is OrderedListSpanStyle
+
+/** This list block's nesting level, or null for a block that is not a list. */
+internal val LineBlockStyle.listLevel: Int?
+	get() = (spanStyle as? BulletListSpanStyle)?.level ?: (spanStyle as? OrderedListSpanStyle)?.level
+
+/** This list block's kind at [level], or the block itself when it is not a list. */
+internal fun LineBlockStyle.atListLevel(level: Int): LineBlockStyle = when (spanStyle) {
+	is BulletListSpanStyle -> BULLET_LISTS[level.coerceIn(0, MAX_LIST_LEVEL)]
+	is OrderedListSpanStyle -> ORDERED_LISTS[level.coerceIn(0, MAX_LIST_LEVEL)]
+	else -> this
+}
+
+/** The list block this span style stands for, at its level, or null for any other style. */
+internal fun RichSpanStyle.listBlock(): LineBlockStyle? = when (this) {
+	is BulletListSpanStyle -> BULLET_LISTS[level]
+	is OrderedListSpanStyle -> ORDERED_LISTS[level]
+	else -> null
+}
+
+/** The list block on [line], at whatever level, or null. */
+internal fun TextEditorState.listBlockAt(line: Int): LineBlockStyle? =
+	richSpanManager.getRichSpansStartingOn(line).firstNotNullOfOrNull { it.style.listBlock() }
 
 internal val CodeFence = LineBlockStyle(
 	spanStyle = CodeFenceSpanStyle,
@@ -136,9 +177,20 @@ private class LineBlockRegistry(config: MarkdownConfiguration) {
 			textStyle = config.getHeaderStyle(level),
 		)
 	}
+	// Only the level-0 list blocks carry a pattern; the importer resolves a
+	// nested item's level from its indentation and swaps the block itself.
 	val prefixBlocks: List<LineBlockStyle> =
 		listOf(Blockquote) + headers + listOf(OrderedList, BulletList)
-	val allBlocks: List<LineBlockStyle> = prefixBlocks + CodeFence
+	val allBlocks: List<LineBlockStyle> =
+		prefixBlocks + ORDERED_LISTS.drop(1) + BULLET_LISTS.drop(1) + CodeFence
+
+	/** Each block by its span style, which is a per-level singleton compared by identity. */
+	val byStyle: Map<RichSpanStyle, LineBlockStyle> = allBlocks.associateBy { it.spanStyle }
+	private val order: Map<LineBlockStyle, Int> = allBlocks.withIndex().associate { it.value to it.index }
+
+	/** The blocks whose spans [spans] carry, in [allBlocks] order. */
+	fun blocksOf(spans: List<RichSpan>): List<LineBlockStyle> =
+		spans.mapNotNull { byStyle[it.style] }.distinct().sortedBy { order.getValue(it) }
 }
 
 private const val REGISTRY_CACHE_LIMIT = 8
@@ -178,8 +230,8 @@ private fun registryFor(config: MarkdownConfiguration): LineBlockRegistry {
  */
 internal fun conflicts(a: RichSpanStyle, b: RichSpanStyle): Boolean {
 	if (a === b) return false
-	val aList = a === BulletListSpanStyle || a === OrderedListSpanStyle
-	val bList = b === BulletListSpanStyle || b === OrderedListSpanStyle
+	val aList = a is BulletListSpanStyle || a is OrderedListSpanStyle
+	val bList = b is BulletListSpanStyle || b is OrderedListSpanStyle
 	return when {
 		a === CodeFenceSpanStyle || b === CodeFenceSpanStyle -> true
 		a is HeaderSpanStyle -> b is HeaderSpanStyle || bList
@@ -195,33 +247,6 @@ internal fun conflicts(a: RichSpanStyle, b: RichSpanStyle): Boolean {
 internal enum class PlaceholderKind { IMAGE, OTHER }
 
 /**
- * The lines whose content is a placeholder owned by a full-line block span
- * ([BlockSpanStyle.replacesText]) and whose text is still just that
- * placeholder. A line holding real text is not a placeholder no matter which
- * spans it carries: a line merge can re-anchor a rule's span onto a text line,
- * and the text keeps its own formatting there.
- */
-internal fun placeholderKinds(
-	spans: Set<RichSpan>,
-	lines: List<AnnotatedString>,
-): Map<Int, PlaceholderKind> {
-	val kinds = mutableMapOf<Int, PlaceholderKind>()
-	spans.forEach { span ->
-		if ((span.style as? BlockSpanStyle)?.replacesText() != true) return@forEach
-		val line = span.range.start.line
-		if (lines.getOrNull(line)?.isBlank() != true) return@forEach
-		val kind = if (span.style is ImageBlockSpanStyle) {
-			PlaceholderKind.IMAGE
-		} else {
-			PlaceholderKind.OTHER
-		}
-		// When two full-line spans share a line, the stricter policy applies.
-		if (kinds[line] != PlaceholderKind.OTHER) kinds[line] = kind
-	}
-	return kinds
-}
-
-/**
  * Whether this block style may sit on a line of [kind]: null means an ordinary
  * line (anything may), an image takes a stacked quote or one list style
  * (`1. ![shot](url)` is a numbered figure), any other placeholder takes only a
@@ -230,7 +255,7 @@ internal fun placeholderKinds(
 internal fun LineBlockStyle.allowedOn(kind: PlaceholderKind?): Boolean = when {
 	kind == null -> true
 	this === Blockquote -> true
-	kind == PlaceholderKind.IMAGE -> this === BulletList || this === OrderedList
+	kind == PlaceholderKind.IMAGE -> isList
 	else -> false
 }
 
@@ -358,21 +383,27 @@ internal fun TextEditorState.demoteLineBlock(line: Int, block: LineBlockStyle) =
 }
 
 /** Returns the [LineBlockStyle] currently attached to [line], or null if none. */
-internal fun TextEditorState.detectLineBlock(line: Int): LineBlockStyle? =
-	allBlockRegistry.firstOrNull { hasLineBlock(line, it) }
+internal fun TextEditorState.detectLineBlock(line: Int): LineBlockStyle? = lineBlocks(line).firstOrNull()
 
 /** The line blocks currently attached to [line], in [allBlockRegistry] order. */
 internal fun TextEditorState.lineBlocks(line: Int): List<LineBlockStyle> =
-	allBlockRegistry.filter { hasLineBlock(line, it) }
+	registryFor(markdownConfiguration).blocksOf(richSpanManager.getRichSpansStartingOn(line))
 
-/** The line-anchored block span styles currently attached to [line]. */
+/**
+ * The line-anchored block span styles currently attached to [line], with a
+ * fence's language span, which a toggle off the whole fence loses to
+ * normalization and an undo must bring back.
+ */
 internal fun TextEditorState.lineBlockSpanStyles(line: Int): List<RichSpanStyle> =
-	lineBlocks(line).map { it.spanStyle }
+	lineBlocks(line).map { it.spanStyle } +
+		richSpanManager.getRichSpansStartingOn(line).map { it.style }.filterIsInstance<CodeFenceLanguageSpanStyle>()
 
 /**
  * Replaces every line-anchored block span on [line] so that exactly [spanStyles]
  * are attached, spanning the full line content. Used to restore the precise span
- * set captured for an atomic line-block undo/redo.
+ * set captured for an atomic line-block undo/redo. A language span already on
+ * the line is left alone: normalization moved it there for the run it heads,
+ * and an identical one restored on top of it collapses into it.
  */
 internal fun TextEditorState.setLineBlockSpans(
 	line: Int,

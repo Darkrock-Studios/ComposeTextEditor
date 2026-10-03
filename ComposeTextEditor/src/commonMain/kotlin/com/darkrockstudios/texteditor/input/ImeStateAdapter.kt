@@ -1,7 +1,6 @@
 package com.darkrockstudios.texteditor.input
 
 import androidx.compose.ui.text.TextRange
-import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.state.TextEditorState
 
 /**
@@ -16,24 +15,21 @@ import com.darkrockstudios.texteditor.state.TextEditorState
  */
 
 /**
- * The substring `[startIndex, endIndex)` (in flat character indices), built from
- * only the requested range instead of materializing the whole document — so IME
- * queries during composition stay cheap on large documents.
+ * The substring `[startIndex, endIndex)` (in flat character indices, clamped into the
+ * document), read from only the requested range instead of materializing the whole
+ * document, so IME queries during composition stay cheap on large documents.
  */
 internal fun TextEditorState.imeSubSequence(startIndex: Int, endIndex: Int): CharSequence {
-	if (startIndex >= endIndex) return ""
-	return getStringInRange(
-		TextEditorRange(getOffsetAtCharacter(startIndex), getOffsetAtCharacter(endIndex))
-	)
+	val chars = documentChars
+	val start = startIndex.coerceIn(0, chars.length)
+	val end = endIndex.coerceIn(start, chars.length)
+	return if (start < end) chars.subSequence(start, end) else ""
 }
 
 /** A single character at flat index [index], without rebuilding the whole document. */
 internal fun TextEditorState.imeCharAt(index: Int): Char {
-	// Match the CharSequence/String contract: out-of-range indices throw.
-	if (index < 0 || index >= getTextLength()) {
-		throw IndexOutOfBoundsException("index: $index, length: ${getTextLength()}")
-	}
-	return imeSubSequence(index, index + 1)[0]
+	// Throws out of range, as the CharSequence contract asks.
+	return documentChars[index]
 }
 
 /** The current selection as a character-index [TextRange], collapsed to the cursor when none. */

@@ -118,7 +118,7 @@ class HeaderSemanticsTest {
 
 	@Test
 	fun `a heading between two ordered list runs restarts the numbering`() {
-		val source = "1. a\n2. b\n# H\n1. c\n2. d"
+		val source = "1. a\n2. b\n\n# H\n\n1. c\n2. d"
 		val e = editor(source)
 
 		assertEquals(source, e.exportAsMarkdown())

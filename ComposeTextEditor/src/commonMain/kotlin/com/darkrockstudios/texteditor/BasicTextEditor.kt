@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -39,16 +40,9 @@ import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalTextToolbar
-import androidx.compose.ui.semantics.editableText
-import androidx.compose.ui.semantics.insertTextAtCursor
-import androidx.compose.ui.semantics.onClick
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.setSelection
-import androidx.compose.ui.semantics.setText
-import androidx.compose.ui.semantics.textSelectionRange
+import androidx.compose.ui.text.style.TextIndent
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.toSize
-import com.darkrockstudios.texteditor.annotatedstring.normalizeLineEndings
 import com.darkrockstudios.texteditor.clipboard.ClipboardEventsEffect
 import com.darkrockstudios.texteditor.contextmenu.ContextMenuActions
 import com.darkrockstudios.texteditor.contextmenu.ContextMenuOpener
@@ -65,21 +59,19 @@ import com.darkrockstudios.texteditor.input.KeyBindings
 import com.darkrockstudios.texteditor.input.LocalKeyBindings
 import com.darkrockstudios.texteditor.input.TextEditorInputModifierElement
 import com.darkrockstudios.texteditor.input.TextInputRequester
-import com.darkrockstudios.texteditor.input.selectionAsTextRange
 import com.darkrockstudios.texteditor.richstyle.BlockSpanStyle
 import com.darkrockstudios.texteditor.state.LayoutUpdate
 import com.darkrockstudios.texteditor.richstyle.RichSpan
 import com.darkrockstudios.texteditor.scrollbar.TextEditorScrollbar
 import com.darkrockstudios.texteditor.state.SpanClickType
 import com.darkrockstudios.texteditor.state.TextEditorState
-import com.darkrockstudios.texteditor.state.insertTypedNewline
-import com.darkrockstudios.texteditor.state.typedInput
 import com.darkrockstudios.texteditor.state.rememberTextEditorState
 import com.darkrockstudios.texteditor.state.updateKeyboardCover
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.merge
+import kotlin.math.ceil
 import kotlin.time.Duration.Companion.milliseconds
 
 private const val CURSOR_BLINK_SPEED_MS = 500L
@@ -91,9 +83,24 @@ private const val CURSOR_BLINK_SPEED_MS = 500L
  * control, a custom context menu, or per-line decoration.
  *
  * @param state Holds the document, cursor, selection, and undo history.
+ * @param modifier Applied to the editor's outer bounds. To focus the editor from code,
+ *   add a [androidx.compose.ui.focus.FocusRequester] here with
+ *   `Modifier.focusRequester` and call `requestFocus()`, as with any focusable.
  * @param contentPadding Padding between the editor bounds and the text.
- * @param enabled When `false`, the editor is read-only and cannot take focus.
- * @param autoFocus Requests focus once when first composed.
+ * @param enabled When `false`, the editor is disabled: it takes no input, shows no
+ *   caret, and reports itself disabled, with no edit actions, to accessibility
+ *   services. It still takes focus, so its text can be selected and copied.
+ * @param readOnly When `true`, the editor shows its caret, which moves and selects from
+ *   the keyboard, pointer and screen readers, but takes no edits and raises no soft
+ *   keyboard; copy stays available. Accessibility services hear a read-only field
+ *   rather than a disabled one. Ignored when not [enabled].
+ * @param lineLimits How tall the editor is: [EditorLineLimits.Fill], the default, takes
+ *   the height it is given; [EditorLineLimits.MultiLine] grows with the text between a
+ *   minimum and maximum number of lines, then scrolls; [EditorLineLimits.SingleLine]
+ *   keeps the text to one paragraph. For a maximum length or other rules on what may be
+ *   entered, set [TextEditorState.inputFilter].
+ * @param autoFocus Requests focus once when first composed, if [enabled]. For focus at
+ *   any other time, see [modifier].
  * @param style Colors and text style for the editor and its gutter markers.
  * @param contextMenuStrings Localized labels for the built-in context menu.
  * @param contextMenuState Drives context-menu visibility; pass your own to add
@@ -112,6 +119,9 @@ private const val CURSOR_BLINK_SPEED_MS = 500L
  * @param keyBindings Chord-to-command mapping, defaulting to [LocalKeyBindings].
  *   Bind chords to actions registered on [TextEditorState.actions] to add
  *   shortcuts of your own.
+ * @param contentDescription The editor's label for accessibility services, read with
+ *   its text ("Notes, edit box, ..."). Set it here rather than through [modifier]'s
+ *   semantics, which land on a container around the editable node.
  */
 @Composable
 fun BasicTextEditor(
@@ -128,7 +138,13 @@ fun BasicTextEditor(
 	keyBindings: KeyBindings = LocalKeyBindings.current,
 	onRichSpanClickEvent: RichSpanClickEventListener? = null,
 	onLinkClick: ((url: String) -> Unit)? = null,
+	contentDescription: String? = null,
+	readOnly: Boolean = false,
+	lineLimits: EditorLineLimits = EditorLineLimits.Fill,
 ) {
+	// Input, edits and the edit semantics follow this; the caret and navigation follow enabled.
+	val editable = enabled && !readOnly
+
 	// Capture platform view for IME cursor synchronization (Android only)
 	CaptureViewForIme(state)
 	ClipboardEventsEffect(state)
@@ -143,8 +159,8 @@ fun BasicTextEditor(
 	val overscrollEffect = rememberOverscrollEffect()
 
 	val inputRequester = remember { TextInputRequester() }
-	val inputModifierElement = remember(state, clipboard, enabled, keyBindings) {
-		TextEditorInputModifierElement(state, clipboard, enabled, keyBindings, inputRequester)
+	val inputModifierElement = remember(state, clipboard, editable, keyBindings) {
+		TextEditorInputModifierElement(state, clipboard, editable, keyBindings, inputRequester)
 	}
 
 	val horizontalPadding = remember(contentPadding, layoutDirection) {
@@ -156,6 +172,29 @@ fun BasicTextEditor(
 	val contentOrigin by rememberUpdatedState(
 		with(density) { Offset(contentPadding.calculateLeftPadding(layoutDirection).roundToPx().toFloat(), 0f) }
 	)
+
+	// One row of the text style, the unit of the line limits; the measurer is not state,
+	// so a new one is picked up when the style or density changes.
+	val rowHeightPx = remember(style.textStyle, density, state.textMeasurer) {
+		state.textMeasurer.measure(" ", style.textStyle.copy(textIndent = TextIndent.None)).multiParagraph.getLineHeight(0)
+	}
+	// Derived, so layout is invalidated only when the height of the rows changes, not on
+	// every edit.
+	val contentHeightPx = remember(state) {
+		derivedStateOf { state.lineOffsets.lastOrNull()?.let { ceil(it.offset.y + it.effectiveHeight).toInt() } ?: 0 }
+	}
+	val verticalPaddingPx = with(density) {
+		contentPadding.calculateTopPadding().roundToPx() + contentPadding.calculateBottomPadding().roundToPx()
+	}
+	val lineLimitsModifier = remember(lineLimits, verticalPaddingPx, rowHeightPx, contentHeightPx) {
+		Modifier.editorLineLimits(lineLimits, verticalPaddingPx, rowHeightPx) { contentHeightPx.value }
+	}
+
+	DisposableEffect(state, lineLimits) {
+		val singleLine = lineLimits == EditorLineLimits.SingleLine
+		if (singleLine) state.singleLineEditors++
+		onDispose { if (singleLine) state.singleLineEditors-- }
+	}
 
 	LaunchedEffect(contentPadding, density) {
 		with(density) {
@@ -177,13 +216,18 @@ fun BasicTextEditor(
 			.collect { (keyboardHeight, _) -> state.updateKeyboardCover(keyboardHeight) }
 	}
 	val caretFocusRect = remember(state) { CaretFocusRect(state) }
-
 	// Use provided context menu state or create internal one
 	val internalContextMenuState = remember { TextEditorContextMenuState() }
 	val effectiveContextMenuState = contextMenuState ?: internalContextMenuState
 
-	val contextMenuActions = remember(state, clipboard, enabled) {
-		ContextMenuActions(state, clipboard, state.scope, enabled)
+	val contextMenuActions = remember(state, clipboard, editable) {
+		ContextMenuActions(state, clipboard, state.scope, editable)
+	}
+	val latestOnLinkClick by rememberUpdatedState(onLinkClick)
+	val hasLinkClick = onLinkClick != null
+	val semanticsModifier = remember(state, enabled, editable, focusRequester, contextMenuActions, contentDescription, hasLinkClick) {
+		val openLink: ((String) -> Unit)? = if (hasLinkClick) { url -> latestOnLinkClick?.invoke(url) } else null
+		Modifier.editorSemantics(state, enabled, editable, focusRequester, contextMenuActions, contentDescription, openLink)
 	}
 	val menuPlacement = remember(state, effectiveContextMenuState) {
 		ContextMenuPlacement(state, effectiveContextMenuState)
@@ -209,10 +253,10 @@ fun BasicTextEditor(
 	LaunchedEffect(state, enabled) {
 		if (!enabled) return@LaunchedEffect
 		merge(
-			snapshotFlow { Triple(state.isFocused, state.cursorPosition, state.selector.hasSelection()) },
+			snapshotFlow { Triple(state.hasFocus, state.cursorPosition, state.selector.hasSelection()) },
 			state.editOperations,
 		).collectLatest {
-			if (!state.isFocused) return@collectLatest
+			if (!state.hasFocus) return@collectLatest
 			state.cursor.setVisible()
 			while (true) {
 				delay(CURSOR_BLINK_SPEED_MS.milliseconds)
@@ -269,10 +313,10 @@ fun BasicTextEditor(
 		menuState = effectiveContextMenuState,
 		actions = contextMenuActions,
 		strings = contextMenuStrings,
-		enabled = enabled,
+		enabled = editable,
 	) {
 		TextEditorScrollbar(
-			modifier = menuPlacement.modifier.then(modifier),
+			modifier = menuPlacement.modifier.then(modifier).then(lineLimitsModifier),
 			scrollState = state.scrollState,
 		) { editorModifier ->
 			// The horizontal padding is applied inside the canvas, below its pointer input,
@@ -288,55 +332,9 @@ fun BasicTextEditor(
 					)
 					.then(inputModifierElement)
 					.then(caretFocusRect.modifier)
+					// Focusable even when disabled, so a selection can be copied by keyboard.
 					.focusable(enabled = true, interactionSource = interactionSource)
-					// Publish text-editing semantics so the node is recognized as an editable
-					// text field. This drives accessibility services (VoiceOver/TalkBack read and
-					// edit the content) and, on iOS, lets the platform expose the focused editor as
-					// a keyboard-focused text element — without which XCUITest can't type into it.
-					.semantics {
-						editableText = state.getAllText()
-						textSelectionRange = state.selectionAsTextRange()
-						setText { newText ->
-							state.setText(newText)
-							true
-						}
-						insertTextAtCursor { inserted ->
-							val newText = inserted.normalizeLineEndings()
-							if (newText.text == "\n") {
-								state.insertTypedNewline()
-							} else {
-								// Dictated or assistive text: one step that is not typing, since
-								// whole phrases are not something a following keystroke should
-								// join, then told to the behaviors like any typed text.
-								state.typedInput(newText.text) {
-									state.editGroup {
-										state.selector.deleteSelection()
-										state.editManager.recordingAsTyping(false) {
-											state.insertStringAtCursor(newText)
-										}
-									}
-								}
-							}
-							true
-						}
-						setSelection { start, end, _ ->
-							val length = state.getTextLength()
-							val from = start.coerceIn(0, length)
-							val to = end.coerceIn(0, length)
-							if (from == to) {
-								state.cursor.updatePosition(state.getOffsetAtCharacter(from))
-								state.selector.clearSelection()
-							} else {
-								state.selector.updateSelection(
-									state.getOffsetAtCharacter(from),
-									state.getOffsetAtCharacter(to),
-								)
-								state.cursor.updatePosition(state.getOffsetAtCharacter(to))
-							}
-							true
-						}
-						onClick { focusRequester.requestFocus(); true }
-					}
+					.then(semanticsModifier)
 					.fillMaxSize()
 					.overscroll(overscrollEffect)
 					.scrollable(
@@ -361,7 +359,7 @@ fun BasicTextEditor(
 					LinkClicks.forEditor(keyBindings) { currentOnLinkClick }
 				}
 				val dragAndDrop = remember(state) { TextDragAndDrop(state) }
-				dragAndDrop.enabled = enabled
+				dragAndDrop.enabled = editable
 				Canvas(
 					modifier = Modifier
 						.textDragAndDrop(dragAndDrop)
@@ -407,7 +405,8 @@ fun BasicTextEditor(
 					// Like native editors, an editor without focus shows no touch handles.
 					if (state.hasFocus) DrawSelectionHandles(state, style.effectiveHandleColor)
 
-					if (enabled && state.isFocused) {
+					// A read-only editor holds focus without taking input, and still shows its caret.
+					if (enabled && state.hasFocus) {
 						DrawCursor(state, style.cursorColor, style.cursorWidth)
 					}
 

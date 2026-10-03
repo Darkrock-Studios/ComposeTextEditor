@@ -10,6 +10,7 @@ import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.LineWrap
 import com.darkrockstudios.texteditor.cursor.getWrapForDrawing
 import com.darkrockstudios.texteditor.effectiveHeight
+import com.darkrockstudios.texteditor.lastRowAtOrAbove
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -21,7 +22,9 @@ class TextEditorScrollManager(
 	private val getViewportSize: () -> Size,
 	private val getCursorPosition: () -> CharLineOffset,
 	private val getCursorAffinity: () -> CaretAffinity = { CaretAffinity.Downstream },
-	val scrollState: TextEditorScrollState
+	val scrollState: TextEditorScrollState,
+	/** Shapes a line still at an old shape while a reshape settles (7.48), so a scroll to it measures the real rows. */
+	private val ensureLineShaped: (line: Int) -> Unit = {},
 ) {
 	private var scrollJob: Job? = null
 
@@ -101,10 +104,13 @@ class TextEditorScrollManager(
 		applyScrollRange()
 	}
 
+	/** The viewport's height changed while the rows did not. */
+	internal fun onViewportHeightChange() = updateContentHeight(contentHeight)
+
 	/**
 	 * Set while a drag auto-scroll runs: it owns the scroll then, and a caret it puts off
 	 * screen (a line drag's, at the paragraph end) must not start a scroll against it.
-	 * Every scroll to the caret goes through [ensureCursorVisible], which honours it.
+	 * Every scroll to the caret honours it.
 	 */
 	internal var cursorScrollSuppressed = false
 
@@ -128,15 +134,14 @@ class TextEditorScrollManager(
 		}
 	}
 
+	/** Scrolls to [position]; without [animated], at once, before this returns. */
 	fun scrollToPosition(position: Int, animated: Boolean = true) {
 		stopScrolling()
-		scrollJob = scope.launch {
-			val scrollToY = position.coerceIn(scrollState.minValue, maxScroll)
-			if (animated) {
-				scrollState.animateScrollTo(scrollToY)
-			} else {
-				scrollState.scrollTo(scrollToY)
-			}
+		val scrollToY = position.coerceIn(scrollState.minValue, maxScroll)
+		if (animated) {
+			scrollJob = scope.launch { scrollState.animateScrollTo(scrollToY) }
+		} else {
+			scrollState.scrollTo(scrollToY)
 		}
 	}
 
@@ -156,7 +161,7 @@ class TextEditorScrollManager(
 		val lineOffsets = getLineOffsets()
 		if (lineOffsets.isEmpty()) return CharLineOffset(0, 0)
 
-		val wrap = lineOffsets.lastOrNull { it.offset.y <= y } ?: lineOffsets.first()
+		val wrap = lineOffsets[lineOffsets.lastRowAtOrAbove(y).coerceAtLeast(0)]
 		return CharLineOffset(wrap.line, wrap.wrapStartsAtIndex)
 	}
 
@@ -171,6 +176,7 @@ class TextEditorScrollManager(
 
 	private fun scrollToPosition(offset: CharLineOffset, affinity: CaretAffinity, top: Boolean, animated: Boolean) {
 		if (offset.line >= getLines().size) return
+		ensureLineShaped(offset.line)
 
 		if (top) {
 			val targetTop = calculateOffsetYPosition(offset, affinity).toInt()
@@ -179,13 +185,11 @@ class TextEditorScrollManager(
 			return
 		}
 
-		val viewportTop = scrollState.value
 		val targetScroll = scrollShowing(offset, affinity)
-		if(targetScroll != viewportTop) {
-			stopScrolling()
-			scrollJob = scope.launch {
-				scrollState.animateScrollTo(targetScroll)
-			}
+		when {
+			targetScroll != scrollState.value -> scrollToPosition(targetScroll, animated = animated)
+			// In view now: an immediate request keeps it there rather than let a scroll carry it off.
+			!animated -> stopScrolling()
 		}
 	}
 
@@ -205,8 +209,9 @@ class TextEditorScrollManager(
 		}
 	}
 
-	/** Scrolls to the row the caret is drawn on. */
+	/** Scrolls to the row the caret is drawn on, unless a drag auto-scroll owns the scroll ([cursorScrollSuppressed]). */
 	fun scrollToCursor() {
+		if (cursorScrollSuppressed) return
 		val before = scrollJob
 		scrollToPosition(getCursorPosition(), getCursorAffinity(), top = false, animated = true)
 		if (scrollJob !== before) cursorScrollJob = scrollJob
@@ -217,6 +222,7 @@ class TextEditorScrollManager(
 
 	fun ensureCursorVisible() {
 		if (cursorScrollSuppressed) return
+		ensureLineShaped(getCursorPosition().line)
 		if (!isOffsetVisible(getCursorPosition(), getCursorAffinity())) {
 			scrollToCursor()
 		}
@@ -238,6 +244,7 @@ class TextEditorScrollManager(
 		if (cursorScrollSuppressed) return
 		if (scrollJob?.isActive == true && !isScrollingToCursor) return
 		stopScrolling()
+		ensureLineShaped(getCursorPosition().line)
 		if (isOffsetVisible(getCursorPosition(), getCursorAffinity())) return
 		scrollState.scrollTo(scrollShowing(getCursorPosition(), getCursorAffinity()))
 	}

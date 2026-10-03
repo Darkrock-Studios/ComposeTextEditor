@@ -12,6 +12,7 @@ import com.darkrockstudios.texteditor.richstyle.HeaderSpanStyle
 import com.darkrockstudios.texteditor.richstyle.ImageBlockSpanStyle
 import com.darkrockstudios.texteditor.richstyle.ImageProvider
 import com.darkrockstudios.texteditor.richstyle.OrderedList
+import com.darkrockstudios.texteditor.richstyle.OrderedListSpanStyle
 import com.darkrockstudios.texteditor.richstyle.RichSpan
 import com.darkrockstudios.texteditor.richstyle.applyDocumentBlocks
 import com.darkrockstudios.texteditor.richstyle.documentBlocksOf
@@ -168,9 +169,11 @@ internal fun renderHtmlFragment(
 private fun containersFor(line: Int, blocks: DocumentBlocks): List<String> {
 	val containers = mutableListOf<String>()
 	if (blocks.has(line, Blockquote)) containers += "blockquote"
+	// A nested item is written as a sibling; nested containers are 7.47.
+	val list = blocks.listBlockAt(line)
 	when {
-		blocks.has(line, OrderedList) -> containers += "ol"
-		blocks.has(line, BulletList) -> containers += "ul"
+		list?.spanStyle is OrderedListSpanStyle -> containers += "ol"
+		list != null -> containers += "ul"
 		// `<code>` nests inside `<pre>` so a reader that only understands one of
 		// the two still sees a code block.
 		blocks.has(line, CodeFence) -> containers += listOf("pre", "code")
@@ -214,7 +217,7 @@ private fun lineHtml(
 		else -> line.toHtml(configuration, links)
 	}
 
-	val inList = blocks.has(index, BulletList) || blocks.has(index, OrderedList)
+	val inList = blocks.listBlockAt(index) != null
 	return when {
 		inList -> "<li>$content</li>"
 		// Rules, images and headings are block elements in their own right;

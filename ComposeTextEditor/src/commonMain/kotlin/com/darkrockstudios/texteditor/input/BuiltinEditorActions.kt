@@ -3,7 +3,6 @@ package com.darkrockstudios.texteditor.input
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.style.TextDecoration
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.annotatedstring.normalizeLineEndings
@@ -14,9 +13,10 @@ import com.darkrockstudios.texteditor.clipboard.withSizeForPasteAt
 import com.darkrockstudios.texteditor.html.selectionAsHtml
 import com.darkrockstudios.texteditor.input.EditorCommand.Action
 import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
-import com.darkrockstudios.texteditor.richstyle.BulletList
-import com.darkrockstudios.texteditor.richstyle.OrderedList
-import com.darkrockstudios.texteditor.richstyle.hasLineBlock
+import com.darkrockstudios.texteditor.richstyle.listBlockAt
+import com.darkrockstudios.texteditor.richstyle.listLevel
+import com.darkrockstudios.texteditor.richstyle.nestListItems
+import com.darkrockstudios.texteditor.richstyle.unnestListItems
 import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.applyStyleForEditAt
 import com.darkrockstudios.texteditor.state.clearFormatting
@@ -27,6 +27,7 @@ import com.darkrockstudios.texteditor.state.moveToNextWord
 import com.darkrockstudios.texteditor.state.moveToPreviousWord
 import com.darkrockstudios.texteditor.state.moveToPreviousWordStart
 import com.darkrockstudios.texteditor.state.moveToWordEnd
+import com.darkrockstudios.texteditor.state.screenAtSelection
 import com.darkrockstudios.texteditor.state.toggleSpanStyle
 import kotlinx.coroutines.launch
 
@@ -113,7 +114,7 @@ internal fun EditorActionRegistry.registerBuiltinActions() {
 
 	registerFormattingToggle(Action.ToggleBold) { it.boldStyle }
 	registerFormattingToggle(Action.ToggleItalic) { it.italicStyle }
-	registerFormattingToggle(Action.ToggleUnderline) { UNDERLINE }
+	registerFormattingToggle(Action.ToggleUnderline) { it.underlineStyle }
 	registerFormattingToggle(Action.ToggleStrikethrough) { it.strikethroughStyle }
 	registerFormattingToggle(Action.ToggleInlineCode) { it.codeStyle }
 	register(EditorActionSpec(Action.ClearFormatting) { it.state.clearFormatting() })
@@ -125,8 +126,6 @@ internal fun EditorActionRegistry.registerBuiltinActions() {
 		)
 	)
 }
-
-private val UNDERLINE = SpanStyle(textDecoration = TextDecoration.Underline)
 
 /** Reads the style at invocation, so a later markdown configuration change is honoured. */
 private fun EditorActionRegistry.registerFormattingToggle(
@@ -178,7 +177,11 @@ private fun EditorActionContext.pasteClipboard(plainText: Boolean) {
 		clipboardText?.let {
 			val curSelection = state.selector.selection
 			val insertPosition = curSelection?.start ?: state.cursorPosition
-			val text = state.withSizeForPasteAt(insertPosition, it.normalizeLineEndings())
+			val sized = state.withSizeForPasteAt(insertPosition, it.normalizeLineEndings())
+			// Screened first: the copied spans and blocks are placed by the text's own
+			// layout, so text the filter changed pastes plain, and refused text not at all.
+			val text = state.screenAtSelection(sized) ?: return@launch
+			val screened = text != sized
 			// Read the clipboard's HTML before mutating: the text, the in-editor
 			// rich spans and the pasted block structure then land as one revision.
 			val htmlDocument = if (plainText) null else state.readHtmlPasteDocument(clipboard, text)
@@ -190,7 +193,7 @@ private fun EditorActionContext.pasteClipboard(plainText: Boolean) {
 				} else {
 					state.insertStringAtCursor(text)
 				}
-				if (!plainText) {
+				if (!plainText && !screened) {
 					state.pasteRichSpans(
 						insertPosition,
 						text,
@@ -198,7 +201,7 @@ private fun EditorActionContext.pasteClipboard(plainText: Boolean) {
 						requireCopyIdMatch = ClipboardHelper.supportsCopyProvenance,
 					)
 				}
-				htmlDocument?.let { state.applyHtmlPasteBlocks(it, insertPosition, text) }
+				if (!screened) htmlDocument?.let { state.applyHtmlPasteBlocks(it, insertPosition, text) }
 			}
 			state.selector.clearSelection()
 		}
@@ -308,9 +311,13 @@ private fun TextEditorState.handleIndent() = editGroup {
 		indentLineRange(selection.start.line, selection.end.line)
 	} else {
 		val at = selection?.start ?: cursorPosition
-		// A list item has no indent level to take until nested lists exist (roadmap 5.6),
-		// and leading spaces in one do not survive a markdown round trip.
-		if (at.char == 0 && isListItem(at.line)) return@editGroup
+		// At a list item's start Tab nests the item one level (5.6); inside its
+		// text it still inserts, as Word has it. Leading spaces in an item do not
+		// survive a markdown round trip, so a nest that is not allowed does nothing.
+		if (at.char == 0 && isListItem(at.line)) {
+			nestListItems(at.line..at.line)
+			return@editGroup
+		}
 		if (selection != null) {
 			selector.deleteSelection()
 		}
@@ -318,20 +325,25 @@ private fun TextEditorState.handleIndent() = editGroup {
 	}
 }
 
-private fun TextEditorState.isListItem(line: Int): Boolean =
-	hasLineBlock(line, BulletList) || hasLineBlock(line, OrderedList)
+private fun TextEditorState.isListItem(line: Int): Boolean = listBlockAt(line) != null
 
-private fun TextEditorState.handleOutdent() {
+private fun TextEditorState.handleOutdent() = editGroup {
 	val selection = selector.selection
 	if (selection != null) {
+		unnestListItems(selection.start.line..selection.end.line)
 		outdentLineRange(selection.start.line, selection.end.line)
+	} else if ((listBlockAt(cursorPosition.line)?.listLevel ?: 0) > 0) {
+		// Shift+Tab anywhere in a nested item un-nests it, as Google Docs has it;
+		// a top-level item has only its leading spaces to give (2.9).
+		unnestListItems(cursorPosition.line..cursorPosition.line)
 	} else {
 		outdentCurrentLine()
 	}
 }
 
-/** Indents every line in the range but the list items, as Tab at a list item's start does. */
+/** Nests the list items in the range and indents the other lines, as Tab does on each alone. */
 private fun TextEditorState.indentLineRange(startLine: Int, endLine: Int) {
+	nestListItems(startLine..endLine)
 	val lines = (startLine..endLine).filterNot { isListItem(it) }
 	if (lines.isEmpty()) return
 	val prefix = tabSettings.indentText

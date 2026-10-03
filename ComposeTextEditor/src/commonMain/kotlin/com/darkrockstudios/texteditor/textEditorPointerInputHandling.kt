@@ -400,21 +400,18 @@ private fun TextEditorState.spanAt(offset: Offset): RichSpan? {
  */
 private fun TextEditorState.characterAt(offset: Offset): CharLineOffset? {
 	val y = offset.y + scrollState.value
-	var found: LineWrap? = null
-	var previousLine = -1
-	for (wrap in lineOffsets) {
-		// A paragraph's first row carries its top and its whole layout.
-		if (wrap.line == previousLine) continue
-		previousLine = wrap.line
-		val height = wrap.blockHeight ?: wrap.textLayoutResult.size.height.toFloat()
-		if (y >= wrap.offset.y && y <= wrap.offset.y + height) {
-			found = wrap
-			break
-		}
+	val rows = lineOffsets
+	// Every row of a paragraph carries its top and its whole layout. The paragraph with a
+	// row at y is the one hit, unless y is on its top edge, which the one above holds too.
+	val atY = rows.getOrNull(rows.lastRowAtOrAbove(y)) ?: return null
+	val above = rows.getOrNull(rows.lastRowOfLineAtOrBefore(atY.line - 1))
+	fun LineWrap.holds(y: Float): Boolean {
+		val height = blockHeight ?: textLayoutResult.size.height.toFloat()
+		return y >= paragraphTop && y <= paragraphTop + height
 	}
-	if (found == null) return null
+	val found = above?.takeIf { it.holds(y) } ?: atY.takeIf { it.holds(y) } ?: return null
 	val layout = found.textLayoutResult.multiParagraph
-	val relative = Offset(offset.x, y) - found.offset
+	val relative = Offset(offset.x - found.offset.x, y - found.paragraphTop)
 	val row = layout.getLineForVerticalPosition(relative.y)
 	if (relative.x < layout.getLineLeft(row) || relative.x >= layout.getLineRight(row)) return null
 	val caret = layout.getOffsetForPosition(relative)
@@ -429,7 +426,7 @@ private fun TextEditorState.characterAt(offset: Offset): CharLineOffset? {
 
 /** The URL of the [LinkSpanStyle] covering [position], if any. */
 private fun TextEditorState.linkAt(position: CharLineOffset): String? =
-	lineOffsets.lastOrNull { it.line == position.line && position.char >= it.wrapStartsAtIndex }
+	lineOffsets.rowAt(position)
 		?.richSpans
 		?.firstOrNull { it.style is LinkSpanStyle && it.containsPosition(position) }
 		?.let { (it.style as LinkSpanStyle).url }
@@ -634,7 +631,7 @@ private suspend fun AwaitPointerEventScope.dragCaretHandle(
  */
 private fun magnifierCenter(state: TextEditorState, position: CharLineOffset, target: Offset): Offset {
 	val row = state.getPositionForOffset(position)
-	val wrap = state.lineOffsets.lastOrNull { it.line == position.line && position.char >= it.wrapStartsAtIndex }
+	val wrap = state.lineOffsets.rowAt(position)
 	val x = if (wrap == null) {
 		row.position.x
 	} else {

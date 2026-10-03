@@ -28,6 +28,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import com.darkrockstudios.texteditor.BasicTextEditor
 import com.darkrockstudios.texteditor.RichTextView
+import com.darkrockstudios.texteditor.contextmenu.ContextMenuItem
 import com.darkrockstudios.texteditor.contextmenu.ContextMenuStrings
 import com.darkrockstudios.texteditor.contextmenu.TextEditorContextMenuState
 import com.darkrockstudios.texteditor.input.MacKeyBindings
@@ -35,6 +36,7 @@ import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.rememberTextEditorState
 import utils.EditorUiTestScope
 import utils.editorUiTest
+import utils.positionOfCharacter
 import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -124,6 +126,23 @@ class ContextMenuE2eTest {
 		}
 	}
 
+	@Test
+	fun `a point in the text's coordinates opens the menu there, past the padding`() {
+		val menu = TextEditorContextMenuState()
+		editorUiTest(
+			initialText = AnnotatedString("hello world"),
+			contentPadding = PaddingValues(start = 40.dp, top = 10.dp),
+			contextMenuState = menu,
+		) {
+			val inText = state.positionOfCharacter(6)
+			test.runOnUiThread { menu.showMenuAtText(inText) }
+			waitForIdle()
+			val at = assertNotNull(menu.menuPosition.value)
+			val expected = canvasToNode(inText)
+			assertTrue((at - expected).getDistance() < 1f, "menu at $at, character at $expected")
+		}
+	}
+
 	/** The host's modifier sits inside the menu's provider, so its padding shifts the text too. */
 	@Test
 	fun `the menu opens at the pointer past the host's own padding`() = runComposeUiTest {
@@ -161,6 +180,25 @@ class ContextMenuE2eTest {
 			assertTrue(abs(at.x - caret.x) < 1f, "menu x ${at.x}, caret x ${caret.x}")
 			assertTrue(at.y > caret.y, "below the caret's middle")
 			assertEquals(6, cursorIndex, "the caret stays")
+		}
+	}
+
+	@Test
+	fun `the menu the keyboard opens calls its caret hook, and a right-click does not`() {
+		val menu = TextEditorContextMenuState()
+		val openedAt = mutableListOf<Offset?>()
+		menu.onOpenedAtCaret = { openedAt += menu.menuPosition.value }
+		editorUiTest(initialText = AnnotatedString("hello"), contextMenuState = menu) {
+			menu.extraItems.value = listOf(ContextMenuItem("Stale") {})
+			press(Key.F10, shift = true)
+			assertTrue(menu.extraItems.value.isEmpty(), "the keyboard's menu starts with no extra items")
+			assertEquals(1, openedAt.size)
+			assertNotNull(openedAt.single(), "called once the menu is open")
+
+			test.runOnUiThread { menu.dismissMenu() }
+			rightClickAtCharacter(2)
+			assertTrue(menu.isVisible)
+			assertEquals(1, openedAt.size)
 		}
 	}
 

@@ -42,7 +42,8 @@ class LineBlockToggleE2eTest {
 		waitForIdle()
 	}
 
-	private val document = "Chapter One\n\nShe walked in.\n\n---\n\nThe end."
+	// Two blank lines in the file are one in the editor: the first is the block separator.
+	private val document = "Chapter One\n\n\nShe walked in.\n\n\n---\n\n\nThe end."
 
 	@Test
 	fun `select-all bullet toggle bullets the prose and spares the rule`() = editorUiTest {
@@ -56,7 +57,7 @@ class LineBlockToggleE2eTest {
 		assertEquals(listOf(0, 1, 2, 3, 5, 6), state.linesWith(BulletListSpanStyle))
 		assertEquals(listOf(4), state.linesWith(HorizontalRuleSpanStyle))
 		assertEquals(
-			"- Chapter One\n- \n- She walked in.\n- \n---\n- \n- The end.",
+			"- Chapter One\n- \n- She walked in.\n- \n\n---\n\n- \n- The end.",
 			markdown.exportAsMarkdown(),
 		)
 	}
@@ -102,7 +103,7 @@ class LineBlockToggleE2eTest {
 
 		assertEquals(listOf(0, 1, 2, 3, 4, 5, 6), state.linesWith(BlockquoteSpanStyle))
 		assertEquals(
-			"> Chapter One\n> \n> She walked in.\n> \n> ---\n> \n> The end.",
+			"> Chapter One\n>\n> \n> She walked in.\n>\n> \n> ---\n>\n> \n> The end.",
 			markdown.exportAsMarkdown(),
 		)
 	}

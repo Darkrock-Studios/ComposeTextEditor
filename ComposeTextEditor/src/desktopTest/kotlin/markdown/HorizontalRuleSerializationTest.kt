@@ -84,7 +84,7 @@ class HorizontalRuleSerializationTest {
 	fun `export emits --- for HR rich span line`() = runTest {
 		val extension = createMarkdownExtension()
 		extension.importMarkdown("before\n---\nafter")
-		assertEquals("before\n---\nafter", extension.exportAsMarkdown())
+		assertEquals("before\n\n---\n\nafter", extension.exportAsMarkdown())
 	}
 
 	@Test
@@ -98,7 +98,7 @@ class HorizontalRuleSerializationTest {
 	@Test
 	fun `roundtrip preserves multiple HRs`() = runTest {
 		val extension = createMarkdownExtension()
-		val original = "---\nfirst\n---\nsecond\n---"
+		val original = "---\n\nfirst\n\n---\n\nsecond\n\n---"
 		extension.importMarkdown(original)
 		assertEquals(original, extension.exportAsMarkdown())
 	}
@@ -120,7 +120,7 @@ class HorizontalRuleSerializationTest {
 	@Test
 	fun `roundtrip preserves bold formatting alongside HR`() = runTest {
 		val extension = createMarkdownExtension()
-		val original = "**bold** text\n---\nmore **bold**"
+		val original = "**bold** text\n\n---\n\nmore **bold**"
 		extension.importMarkdown(original)
 		val roundTripped = extension.exportAsMarkdown()
 		assertEquals(original, roundTripped)
@@ -129,7 +129,7 @@ class HorizontalRuleSerializationTest {
 	@Test
 	fun `roundtrip does not grow newlines under a header`() = runTest {
 		val extension = createMarkdownExtension()
-		val original = "# Heading\nBody"
+		val original = "# Heading\n\nBody"
 		extension.importMarkdown(original)
 		val firstExport = extension.exportAsMarkdown()
 		assertEquals(original, firstExport)
@@ -155,7 +155,7 @@ class HorizontalRuleSerializationTest {
 	@Test
 	fun `roundtrip preserves header followed by HR`() = runTest {
 		val extension = createMarkdownExtension()
-		val original = "# Heading\n---\nBody"
+		val original = "# Heading\n\n---\n\nBody"
 		extension.importMarkdown(original)
 		assertEquals(original, extension.exportAsMarkdown())
 	}

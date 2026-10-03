@@ -101,7 +101,7 @@ fun CodeEditor(
 		derivedStateOf { gutterWidth(state, style, colWidth) }
 	}
 
-	Surface(modifier = modifier.focusBorder(state.isFocused && enabled, style.baseStyle)) {
+	Surface(modifier = modifier.focusBorder(state.hasFocus && enabled, style.baseStyle)) {
 		BasicTextEditor(
 			state = state,
 			modifier = Modifier

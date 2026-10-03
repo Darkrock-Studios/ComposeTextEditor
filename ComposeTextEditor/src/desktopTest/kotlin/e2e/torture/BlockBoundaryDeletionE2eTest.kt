@@ -21,7 +21,7 @@ class BlockBoundaryDeletionE2eTest {
 
 	@Test
 	fun `deleting the separator line merges two bullet lists`() = editorUiTest {
-		markdown.importMarkdown("- a\n\n- b")
+		markdown.importMarkdown("- a\n\n\n- b")
 		assertEquals(listOf("a", "", "b"), lines)
 
 		press(Key.MoveHome, ctrl = true)

@@ -1,6 +1,7 @@
 package com.darkrockstudios.texteditor.input
 
 import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.AnnotatedString
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.annotatedstring.normalizeLineEndings
 import com.darkrockstudios.texteditor.state.TextEditorState
@@ -9,6 +10,7 @@ import com.darkrockstudios.texteditor.state.followingGraphemeBoundary
 import com.darkrockstudios.texteditor.state.insertTypedNewline
 import com.darkrockstudios.texteditor.state.insertTypedString
 import com.darkrockstudios.texteditor.state.isOneTypedWord
+import com.darkrockstudios.texteditor.state.screenInput
 
 /**
  * Shared IME edit operations used by every platform that drives the editor
@@ -33,9 +35,14 @@ import com.darkrockstudios.texteditor.state.isOneTypedWord
  * `newCursorPosition` contract.
  */
 internal fun TextEditorState.imeCommitText(committed: String, newCursorPosition: Int) {
-	val text = committed.normalizeLineEndings()
+	val normalized = committed.normalizeLineEndings()
 	// The IME counts the carriage returns it sent, which never land.
-	if (text != committed) requestImeResync()
+	if (normalized != committed) requestImeResync()
+	// Screened here as well as when applied, so the caret is placed after what lands.
+	val text = screenImeText(normalized) ?: run {
+		clearComposingRange()
+		return
+	}
 	// A committed bare newline is an Enter: an IME that commits "\n" never produces
 	// a key event, so routing here is the only way an EditBehavior sees it. Requires
 	// the cursor-after-the-insert contract because a claimed newline may insert
@@ -76,8 +83,9 @@ internal fun TextEditorState.imeCommitText(committed: String, newCursorPosition:
  * path dead-key / accent composition flows through on desktop.
  */
 internal fun TextEditorState.imeSetComposingText(composing: String, newCursorPosition: Int) {
-	val text = composing.normalizeLineEndings()
-	if (text != composing) requestImeResync()
+	val normalized = composing.normalizeLineEndings()
+	if (normalized != composing) requestImeResync()
+	val text = screenImeText(normalized) ?: return
 	editGroup {
 		// Composing is typing, even over text the IME marked first: a keyboard that
 		// re-marks the word the caret sits in is letting the user keep typing it.
@@ -148,10 +156,10 @@ internal fun TextEditorState.imeDeleteSurroundingText(beforeLength: Int, afterLe
 /** `deleteSurroundingTextInCodePoints`: same as [imeDeleteSurroundingText] but counted in code points. */
 internal fun TextEditorState.imeDeleteSurroundingTextInCodePoints(beforeLength: Int, afterLength: Int) {
 	val selection = selectionAsTextRange()
-	val fullText = getAllText()
+	val text = documentChars
 	// Both counts stop at the document edge, so they are already bounded.
-	val charsBefore = codePointsToChars(fullText, selection.min, beforeLength, backwards = true)
-	val charsAfter = codePointsToChars(fullText, selection.max, afterLength, backwards = false)
+	val charsBefore = codePointsToChars(text, selection.min, beforeLength, backwards = true)
+	val charsAfter = codePointsToChars(text, selection.max, afterLength, backwards = false)
 	if (!selection.collapsed) {
 		deleteAroundSelection(selection, charsBefore, charsAfter)
 		return
@@ -266,8 +274,37 @@ internal fun TextEditorState.imeSetSelection(start: Int, end: Int) {
 	}
 }
 
+/**
+ * A backspace a keyboard spelled as a selection: it selected [range], which ends at the
+ * caret it started from, and committed nothing over it, as iOS's soft keyboard does for
+ * every backspace. Run as [TextEditorState.backspaceAtCursor] from that caret, so an
+ * [EditBehavior][com.darkrockstudios.texteditor.state.EditBehavior] can claim it and it
+ * joins the backspace run in undo; unclaimed, it removes the keyboard's range, the
+ * cluster the platform's native editor would remove.
+ */
+internal fun TextEditorState.imeBackspaceOver(range: TextRange) {
+	selector.clearSelection()
+	cursor.updatePosition(getOffsetAtCharacter(range.max))
+	backspaceAtCursor(from = getOffsetAtCharacter(range.min))
+}
+
 /** Insert a newline, replacing any selection first (used for IME "enter" actions). */
 internal fun TextEditorState.imePerformNewline() = insertTypedNewline()
+
+/**
+ * [text] as the input filter lets it replace the composition, the selection or nothing
+ * at the caret, so the caret and composition are placed by what lands; null, with the
+ * IME told to resync, when refused. A lone line break is left to the newline path.
+ */
+private fun TextEditorState.screenImeText(text: String): String? {
+	if (text == "\n") return text
+	val range = composingRange?.takeIf { isWithinDocument(it) }
+		?: selector.selection
+		?: TextEditorRange(cursorPosition, cursorPosition)
+	val screened = screenInput(range, AnnotatedString(text))?.text
+	if (screened != text) requestImeResync()
+	return screened
+}
 
 /**
  * Replaces the current composing region with [text], or, when there is no
@@ -349,6 +386,10 @@ private fun codePointsToChars(
 	backwards: Boolean
 ): Int {
 	if (codePointCount <= 0) return 0
+	// Every code point is at least one char, so a count reaching the edge takes all of it
+	// without reading it: IMEs pass Int.MAX_VALUE for "everything".
+	val available = if (backwards) fromIndex else text.length - fromIndex
+	if (codePointCount >= available) return available
 	var charCount = 0
 	var codePointsRemaining = codePointCount
 	if (backwards) {

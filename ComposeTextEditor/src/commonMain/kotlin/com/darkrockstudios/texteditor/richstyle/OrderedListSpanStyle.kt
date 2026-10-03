@@ -8,31 +8,33 @@ import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
-import androidx.compose.ui.text.style.TextIndent
 import androidx.compose.ui.unit.sp
 import com.darkrockstudios.texteditor.LineWrap
 import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.utils.lineTextLeft
 
 /**
- * Decorative rich span that marks a line as a markdown ordered-list item — the
- * numeral (`1.`, `2.`, …) is drawn in the indent gutter while the underlying
- * text continues to render normally (no [BlockSpanStyle.replacesText]
- * semantics). The displayed number comes from [LineWrap.orderedListNumber],
- * which `updateBookKeeping` fills in based on the line's position in a
- * contiguous run of ordered-list lines — so the rendering always reflects the
- * current document without any baked state to keep in sync.
+ * Decorative rich span that marks a line as a markdown ordered-list item at
+ * nesting [level]: the numeral (`1.`, `2.`, …) is drawn in the indent gutter
+ * while the underlying text continues to render normally (no
+ * [BlockSpanStyle.replacesText] semantics). The displayed number comes from
+ * [LineWrap.orderedListNumber], which `updateBookKeeping` fills in from the
+ * line's position in its level's run of ordered-list lines, so the rendering
+ * always reflects the current document without any baked state to keep in
+ * sync. Numbers are decimal at every level, as CommonMark renderers show them.
  *
- * The visual indent is provided by the [ORDERED_LIST_PARAGRAPH_STYLE] applied
- * to the line at import time; this span only paints the number on the first
- * wrapped sub-line (subsequent wraps hang under the text, matching bullet
- * lists).
+ * The visual indent is provided by the level's [listParagraphStyle] applied
+ * to the line; this span only paints the number on the first wrapped sub-line
+ * (subsequent wraps hang under the text, matching bullet lists).
  *
- * Single-line scope: each item in a multi-line ordered list carries its own
- * span. Nested lists are out of scope for now.
+ * Instances are per-level singletons ([of]); block detection compares span
+ * styles by identity, and the companion is level 0, so `OrderedListSpanStyle`
+ * as an expression is the top-level numbered item. Single-line scope: each
+ * item in a list carries its own span. See `docs/design/line-blocks.md`,
+ * "Nested lists".
  */
-data object OrderedListSpanStyle : RichSpanStyle {
-	override val stickyAtStart: Boolean = true
+open class OrderedListSpanStyle private constructor(val level: Int) : RichSpanStyle {
+	override val stickyAtStart: Boolean get() = true
 
 	override fun DrawScope.drawCustomStyle(
 		layoutResult: TextLayoutResult,
@@ -78,15 +80,22 @@ data object OrderedListSpanStyle : RichSpanStyle {
 		)
 	}
 
-	// Pad between the numeral and the text it labels; the gutter width itself is
-	// taken from the layout's actual text-left position (see drawCustomStyle).
-	private const val GUTTER_RIGHT_PAD_SP = 4f
+	override fun toString(): String = "OrderedListSpanStyle(level=$level)"
+
+	companion object : OrderedListSpanStyle(0) {
+		private val deeper: List<OrderedListSpanStyle> = List(MAX_LIST_LEVEL) { OrderedListSpanStyle(it + 1) }
+
+		/** The singleton for [level], coerced into 0..[MAX_LIST_LEVEL]. */
+		fun of(level: Int): OrderedListSpanStyle {
+			val clamped = level.coerceIn(0, MAX_LIST_LEVEL)
+			return if (clamped == 0) this else deeper[clamped - 1]
+		}
+
+		// Pad between the numeral and the text it labels; the gutter width itself is
+		// taken from the layout's actual text-left position (see drawCustomStyle).
+		private const val GUTTER_RIGHT_PAD_SP = 4f
+	}
 }
 
-/**
- * Indent for ordered-list lines. Matches [BULLET_LIST_PARAGRAPH_STYLE] so mixed
- * bullet / ordered runs share one gutter; fits `1.`–`99.` but not larger.
- */
-val ORDERED_LIST_PARAGRAPH_STYLE: ParagraphStyle = ParagraphStyle(
-	textIndent = TextIndent(firstLine = 16.sp, restLine = 16.sp),
-)
+/** The indent of a top-level ordered item: [listParagraphStyle] at level 0. */
+val ORDERED_LIST_PARAGRAPH_STYLE: ParagraphStyle = listParagraphStyle(0)

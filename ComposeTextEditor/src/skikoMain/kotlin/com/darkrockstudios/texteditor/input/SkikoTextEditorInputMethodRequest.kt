@@ -2,9 +2,6 @@
 
 package com.darkrockstudios.texteditor.input
 
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.ExperimentalComposeUiApi
@@ -22,6 +19,7 @@ import androidx.compose.ui.text.input.ImeOptions
 import androidx.compose.ui.text.input.TextEditingScope
 import androidx.compose.ui.text.input.TextFieldValue
 import com.darkrockstudios.texteditor.state.TextEditorState
+import com.darkrockstudios.texteditor.state.precedingGraphemeBoundary
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.cancelAndJoin
@@ -37,9 +35,11 @@ import androidx.compose.ui.text.input.TextEditorState as ComposeTextEditorState
  * [SkikoTextEditorInputMethodRequest].
  *
  * The frameworks watch the request's text through `snapshotFlow`, but the document
- * is deliberately not snapshot state. The session therefore bumps a snapshot-backed
- * revision on every content edit, and the request's text reads fold it in, so an edit
- * that moves no cursor (a forward delete) still reaches the platform's mirror.
+ * is deliberately not snapshot state. The request's text reads fold in
+ * [TextEditorState.textRevision], snapshot state that advances with every text
+ * change, so an edit that moves no cursor (a forward delete) still reaches the
+ * platform's mirror, a keystroke's caret move and edit land in one apply, and a
+ * rich-span change (a spell-check pass) wakes no observer.
  *
  * A resync ([TextEditorState.requestImeResync]) is handed to [imeResync], which says how
  * this platform makes its input method drop what it assumed. It defaults to
@@ -52,8 +52,6 @@ internal suspend fun TextEditorState.startSkikoInputSession(
 	imeResync: SkikoImeResync = SkikoImeResync.None,
 ): Nothing = coroutineScope {
 	val request = SkikoTextEditorInputMethodRequest(this@startSkikoInputSession, imeOptions, exposeTextLayout)
-	launch { editOperations.collect { request.contentRevision++ } }
-	launch { documentGeneration.collect { request.contentRevision++ } }
 	when (imeResync) {
 		SkikoImeResync.None -> Unit
 		is SkikoImeResync.Rewrite -> launch { onImeResync { imeResync.rewrite(request.value()) } }
@@ -129,16 +127,13 @@ internal class SkikoTextEditorInputMethodRequest(
 	exposeTextLayout: Boolean = false,
 ) : PlatformTextInputMethodRequest {
 
-	/** Advanced on every content edit; see [startSkikoInputSession]. */
-	internal var contentRevision by mutableIntStateOf(0)
-
 	/** Live view of the editor as the CharSequence + selection + composition Compose expects. */
 	override val state: ComposeTextEditorState = ImeComposeStateAdapter()
 
 	override val value: () -> TextFieldValue = {
-		contentRevision
+		editorState.textRevision
 		TextFieldValue(
-			text = editorState.getAllText().text,
+			text = editorState.getAllPlainText(),
 			selection = editorState.selectionAsTextRange(),
 		)
 	}
@@ -157,7 +152,10 @@ internal class SkikoTextEditorInputMethodRequest(
 	 * layout built on demand ([DocumentTextLayout]); the others get null, the documented
 	 * "not laid out yet" answer every framework tolerates.
 	 */
-	override val textLayoutResult: () -> TextLayoutResult? = { documentLayout?.get() }
+	override val textLayoutResult: () -> TextLayoutResult? = {
+		editorState.textRevision
+		documentLayout?.get()
+	}
 
 	/** Caret rectangle in root coordinates; positions candidate windows and the web backing input. */
 	override val focusedRectInRoot: () -> Rect? = {
@@ -183,8 +181,10 @@ internal class SkikoTextEditorInputMethodRequest(
 		}
 	}
 
+	private val keyboardBackspace = KeyboardBackspace()
+
 	override val editText: (TextEditingScope.() -> Unit) -> Unit = { block ->
-		SkikoTextEditingScope(editorState).block()
+		SkikoTextEditingScope(editorState, keyboardBackspace).block()
 	}
 
 	private fun attachedCoordinates(): LayoutCoordinates? {
@@ -215,15 +215,26 @@ internal class SkikoTextEditorInputMethodRequest(
 	 * queries stay cheap on large documents.
 	 */
 	private inner class ImeComposeStateAdapter : ComposeTextEditorState {
-		override val length: Int get() = editorState.getTextLength()
-		override fun get(index: Int): Char = editorState.imeCharAt(index)
-		override fun subSequence(startIndex: Int, endIndex: Int): CharSequence =
-			editorState.imeSubSequence(startIndex, endIndex)
+		override val length: Int
+			get() {
+				editorState.textRevision
+				return editorState.getTextLength()
+			}
+
+		override fun get(index: Int): Char {
+			editorState.textRevision
+			return editorState.imeCharAt(index)
+		}
+
+		override fun subSequence(startIndex: Int, endIndex: Int): CharSequence {
+			editorState.textRevision
+			return editorState.imeSubSequence(startIndex, endIndex)
+		}
 
 		override val text: String
 			get() {
-				contentRevision
-				return editorState.getAllText().text
+				editorState.textRevision
+				return editorState.getAllPlainText()
 			}
 
 		override fun toString(): String = text
@@ -232,35 +243,100 @@ internal class SkikoTextEditorInputMethodRequest(
 		// so an edit elsewhere in the document must re-run an observer of these too.
 		override val selection: TextRange
 			get() {
-				contentRevision
+				editorState.textRevision
 				return editorState.selectionAsTextRange()
 			}
 
 		override val composition: TextRange?
 			get() {
-				contentRevision
+				editorState.textRevision
 				return editorState.composingAsTextRange()
 			}
+	}
+}
+
+/**
+ * iOS's soft keyboard deletes backward in two edits: it selects the composed character
+ * before the caret, then deletes the selection, which Compose sends as a commit of
+ * nothing. Seen as edits, that is a selection replaced, which no backspace behavior
+ * hears. This remembers a selection the keyboard took back from a collapsed caret, so
+ * the commit that empties it next can be run as the backspace it is (roadmap 4.33).
+ * Any other edit in between forgets it.
+ */
+private class KeyboardBackspace {
+	private var selected: TextRange? = null
+
+	fun selecting(state: TextEditorState, start: Int, end: Int) {
+		val caret = state.selectionAsTextRange()
+		selected = TextRange(start, end).takeIf {
+			caret.collapsed && end == caret.start && state.composingRange == null &&
+				start == state.clusterStartBefore(end)
+		}
+	}
+
+	/**
+	 * Where the grapheme cluster ending at [index] starts: the unit UIKit selects for one
+	 * backspace. A wider selection is the user's own (a trackpad or Shift selection) and
+	 * is deleted as a selection. At a line start the cluster is the line break.
+	 */
+	private fun TextEditorState.clusterStartBefore(index: Int): Int? {
+		if (index <= 0) return null
+		val at = getOffsetAtCharacter(index)
+		if (at.char == 0) return index - 1
+		return index - at.char + textLines[at.line].text.precedingGraphemeBoundary(at.char)
+	}
+
+	/** The range to backspace over when committing [text] now empties that selection, else null. */
+	fun takeFor(state: TextEditorState, text: CharSequence): TextRange? {
+		val range = selected
+		selected = null
+		return range?.takeIf {
+			text.isEmpty() && state.composingRange == null && state.selectionAsTextRange() == it
+		}
+	}
+
+	fun forget() {
+		selected = null
 	}
 }
 
 /** Bridges Compose's [TextEditingScope] to the shared [ImeEditLogic] operations. */
 private class SkikoTextEditingScope(
 	private val state: TextEditorState,
+	private val keyboardBackspace: KeyboardBackspace,
 ) : TextEditingScope {
 
-	override fun deleteSurroundingTextInCodePoints(lengthBeforeCursor: Int, lengthAfterCursor: Int) =
+	override fun deleteSurroundingTextInCodePoints(lengthBeforeCursor: Int, lengthAfterCursor: Int) {
+		keyboardBackspace.forget()
 		state.imeDeleteSurroundingTextInCodePoints(lengthBeforeCursor, lengthAfterCursor)
+	}
 
-	override fun setSelection(start: Int, end: Int) = state.imeSetSelection(start, end)
+	override fun setSelection(start: Int, end: Int) {
+		keyboardBackspace.selecting(state, start, end)
+		state.imeSetSelection(start, end)
+	}
 
-	override fun commitText(text: CharSequence, newCursorPosition: Int) =
-		state.imeCommitText(text.toString(), newCursorPosition)
+	override fun commitText(text: CharSequence, newCursorPosition: Int) {
+		val backspace = keyboardBackspace.takeFor(state, text)
+		if (backspace != null) {
+			state.imeBackspaceOver(backspace)
+		} else {
+			state.imeCommitText(text.toString(), newCursorPosition)
+		}
+	}
 
-	override fun setComposingRegion(start: Int, end: Int) = state.imeSetComposingRegion(start, end)
+	override fun setComposingRegion(start: Int, end: Int) {
+		keyboardBackspace.forget()
+		state.imeSetComposingRegion(start, end)
+	}
 
-	override fun setComposingText(text: CharSequence, newCursorPosition: Int) =
+	override fun setComposingText(text: CharSequence, newCursorPosition: Int) {
+		keyboardBackspace.forget()
 		state.imeSetComposingText(text.toString(), newCursorPosition)
+	}
 
-	override fun finishComposingText() = state.imeFinishComposing()
+	override fun finishComposingText() {
+		keyboardBackspace.forget()
+		state.imeFinishComposing()
+	}
 }

@@ -130,24 +130,31 @@ internal class FindUiTestScope(
 		test.waitForIdle()
 	}
 
-	/** Presses [key] on the focused node with optional modifiers held. */
+	/**
+	 * Presses [key] on the focused node with optional modifiers held. [primary] is the find
+	 * chords' modifier on this host, as [findShortcut] reads it: Cmd where the host follows
+	 * the macOS conventions, Ctrl elsewhere, so the chord tests hold on every desktop OS.
+	 */
 	fun press(
 		key: Key,
 		ctrl: Boolean = false,
 		shift: Boolean = false,
 		alt: Boolean = false,
 		meta: Boolean = false,
+		primary: Boolean = false,
 	) {
+		val holdCtrl = ctrl || (primary && !usesMacChords)
+		val holdMeta = meta || (primary && usesMacChords)
 		test.onRoot().performKeyInput {
-			if (ctrl) keyDown(Key.CtrlLeft)
+			if (holdCtrl) keyDown(Key.CtrlLeft)
 			if (shift) keyDown(Key.ShiftLeft)
 			if (alt) keyDown(Key.AltLeft)
-			if (meta) keyDown(Key.MetaLeft)
+			if (holdMeta) keyDown(Key.MetaLeft)
 			pressKey(key)
-			if (meta) keyUp(Key.MetaLeft)
+			if (holdMeta) keyUp(Key.MetaLeft)
 			if (alt) keyUp(Key.AltLeft)
 			if (shift) keyUp(Key.ShiftLeft)
-			if (ctrl) keyUp(Key.CtrlLeft)
+			if (holdCtrl) keyUp(Key.CtrlLeft)
 		}
 		test.waitForIdle()
 	}

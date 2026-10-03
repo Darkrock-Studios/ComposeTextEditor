@@ -27,6 +27,18 @@ internal class DocumentBlocks(
 	fun linesFor(block: LineBlockStyle): Set<Int> = blockLines[block] ?: emptySet()
 
 	fun has(line: Int, block: LineBlockStyle): Boolean = line in linesFor(block)
+
+	/** The list block on [line], at whatever level, or null. */
+	fun listBlockAt(line: Int): LineBlockStyle? =
+		listBlocksByLine[line]
+
+	private val listBlocksByLine: Map<Int, LineBlockStyle> by lazy {
+		val byLine = HashMap<Int, LineBlockStyle>()
+		blockLines.forEach { (block, lines) ->
+			if (block.isList) lines.forEach { byLine[it] = block }
+		}
+		byLine
+	}
 }
 
 /** Collects every line-anchored decoration currently attached to this document. */

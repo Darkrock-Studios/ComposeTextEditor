@@ -19,7 +19,7 @@ import com.darkrockstudios.texteditor.state.TextEditorState
  */
 internal class DocumentTextLayout(private val state: TextEditorState) {
 	private data class Key(
-		val text: AnnotatedString,
+		val lines: List<AnnotatedString>,
 		val width: Int,
 		val style: TextStyle,
 		val measurer: TextMeasurer,
@@ -32,10 +32,10 @@ internal class DocumentTextLayout(private val state: TextEditorState) {
 		val width = state.viewportSize.width.toInt()
 		// The viewport starts at 1x1 until the editor is laid out.
 		if (width <= 1) return null
-		val current = Key(state.getAllText(), width, state.textStyle, state.textMeasurer)
+		val current = Key(state.textLines, width, state.textStyle, state.textMeasurer)
 		if (!current.matches(key)) {
 			layout = state.textMeasurer.measure(
-				text = AnnotatedString(current.text.text),
+				text = AnnotatedString(state.getAllPlainText()),
 				style = current.style,
 				constraints = Constraints(maxWidth = width),
 				// Keep the document out of the measurer's cache, which the line layouts use.
@@ -46,8 +46,8 @@ internal class DocumentTextLayout(private val state: TextEditorState) {
 		return layout
 	}
 
-	/** Compares the document by identity: it is memoized per edit, and equality is O(document). */
+	/** Compares the lines by identity: every text edit publishes a new list, and equality is O(document). */
 	private fun Key.matches(other: Key?): Boolean =
-		other != null && text === other.text && width == other.width &&
+		other != null && lines === other.lines && width == other.width &&
 			style == other.style && measurer === other.measurer
 }

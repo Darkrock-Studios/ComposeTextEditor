@@ -35,7 +35,8 @@ And now, it's working, and at this point, working pretty well.
 - ✅ Diagnostics from your own checker (grammar, style), underlined with a menu of fixes
 - ☑️ CommonMark Spec (partial)
   - Inline styles (bold, italics, ect)
-  - Block styles (code fence, lists, images)
+  - Block styles (code fence with its language tag, nested lists, images)
+  - Underline (`<u>`), highlight (`==text==` or `<mark>`), colour and size (`<span style>`)
 
 You can [Give it a try here](https://darkrock-studios.github.io/ComposeTextEditor/), or
 browse
@@ -61,6 +62,14 @@ the [API reference & recipes](https://darkrock-studios.github.io/ComposeTextEdit
   what change was made. This makes managing Spell Check much more efficient as you can just
   respell-check the single word that was changed, rather than everything. (_BTF2 now finally offers this!_)
 - Find & Replace UI: Works exactly as you'd expect.
+- Screen reader support: the editor and `RichTextView` publish their text, selection,
+  links and clipboard actions as `BasicTextField` does.
+- Word count, by the same word segmentation as word motion and spell check.
+- `rememberSaveableTextEditorState`: the document, caret, selection and scroll survive
+  configuration changes and process death (the undo history does not).
+- Editor configuration: read-only with a caret, sizing to the text between minimum
+  and maximum lines, single line, maximum length and input filters. No soft-wrap
+  toggle yet.
 
 #### Platforms
 
@@ -78,7 +87,7 @@ See the [roadmap](docs/ROADMAP.md) for what is planned.
 - Copy/Paste of rich text always strips the formatting (_this is a Compose MP bug_)
 - Right-to-Left text is probably broken
 - Sentence level spell checking is not working as expected
-- Full CommonMark Spec compliance (_nested lists_)
+- Full CommonMark Spec compliance (_tables, task lists, reference links, setext headings and nested quotes stay literal text_)
 
 ## Want to try it?
 

@@ -72,7 +72,7 @@ class CodeFenceSerializationTest {
 	}
 
 	@Test
-	fun `import drops the language tag (v1 lossy)`() = runTest {
+	fun `import keeps the language tag out of the text`() = runTest {
 		val extension = createMarkdownExtension()
 		extension.importMarkdown("```kotlin\nfun foo() {}\n```")
 
@@ -118,7 +118,7 @@ class CodeFenceSerializationTest {
 		val extension = createMarkdownExtension()
 		extension.importMarkdown("intro\n```\ncode line\n```\noutro")
 
-		assertEquals("intro\n```\ncode line\n```\noutro", extension.exportAsMarkdown())
+		assertEquals("intro\n\n```\ncode line\n```\n\noutro", extension.exportAsMarkdown())
 	}
 
 	@Test
@@ -132,7 +132,7 @@ class CodeFenceSerializationTest {
 	@Test
 	fun `export emits separate fences for non-contiguous runs`() = runTest {
 		val extension = createMarkdownExtension()
-		val original = "```\nfirst\n```\nbreak\n```\nsecond\n```"
+		val original = "```\nfirst\n```\n\nbreak\n\n```\nsecond\n```"
 		extension.importMarkdown(original)
 
 		assertEquals(original, extension.exportAsMarkdown())
@@ -146,7 +146,7 @@ class CodeFenceSerializationTest {
 		// Roundtrip should produce a properly closed fence even though the input
 		// didn't have one. Lines are: "before", then fenced "code" + "still in fence".
 		assertEquals(
-			"before\n```\ncode\nstill in fence\n```",
+			"before\n\n```\ncode\nstill in fence\n```",
 			extension.exportAsMarkdown(),
 		)
 	}
@@ -176,11 +176,10 @@ class CodeFenceSerializationTest {
 	}
 
 	@Test
-	fun `roundtrip drops language tag for v1`() = runTest {
+	fun `roundtrip keeps the language tag`() = runTest {
 		val extension = createMarkdownExtension()
 		extension.importMarkdown("```kotlin\nfun greet() {}\n```")
-		// Language tags are intentionally lossy in v1 — bare fence on export.
-		assertEquals("```\nfun greet() {}\n```", extension.exportAsMarkdown())
+		assertEquals("```kotlin\nfun greet() {}\n```", extension.exportAsMarkdown())
 	}
 
 	@Test

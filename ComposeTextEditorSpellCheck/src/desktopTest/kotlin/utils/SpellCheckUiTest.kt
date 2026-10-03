@@ -3,21 +3,34 @@ package utils
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.size
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SkikoComposeUiTest
+import androidx.compose.ui.test.click
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performMouseInput
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.rightClick
 import androidx.compose.ui.test.runSkikoComposeUiTest
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.darkrockstudios.texteditor.EditorLineLimits
+import com.darkrockstudios.texteditor.RichSpanClickEventListener
+import com.darkrockstudios.texteditor.RichSpanClickListener
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.contextmenu.ContextMenuItem
+import com.darkrockstudios.texteditor.input.CtrlKeyBindings
+import com.darkrockstudios.texteditor.input.KeyBindings
 import com.darkrockstudios.texteditor.richstyle.RichSpan
 import com.darkrockstudios.texteditor.richstyle.SpellCheckStyle
 import com.darkrockstudios.texteditor.spellcheck.SpellCheckItem
@@ -54,6 +67,15 @@ fun spellCheckUiTest(
 	diagnosticsChecker: TextDiagnosticsChecker? = null,
 	spellCheckStrings: SpellCheckStrings = SpellCheckStrings.Default,
 	onAddToDictionary: ((String) -> Unit)? = null,
+	onRichSpanClick: RichSpanClickListener? = null,
+	onRichSpanClickEvent: RichSpanClickEventListener? = null,
+	onLinkClick: ((String) -> Unit)? = null,
+	// The Windows and Linux bindings on every host, so Ctrl+click is the link chord.
+	keyBindings: KeyBindings = CtrlKeyBindings,
+	readOnly: Boolean = false,
+	lineLimits: EditorLineLimits = EditorLineLimits.Fill,
+	contentDescription: String? = null,
+	contentPadding: PaddingValues = PaddingValues(0.dp),
 	block: SpellCheckUiTestScope.() -> Unit,
 ) = runSkikoComposeUiTest {
 	lateinit var state: SpellCheckState
@@ -70,15 +92,20 @@ fun spellCheckUiTest(
 			spellChecker = spellChecker,
 			state = state,
 			modifier = Modifier.size(width, height).testTag(EDITOR_TEST_TAG),
-			// Pointer input is injected at the tagged node in text-canvas coordinates,
-			// which only line up when nothing pads the canvas.
-			contentPadding = PaddingValues(0.dp),
+			contentPadding = contentPadding,
 			enabled = enabled,
 			autoFocus = true,
 			spellCheckMenuItems = spellCheckMenuItems,
 			spellCheckStrings = spellCheckStrings,
 			onAddToDictionary = onAddToDictionary,
 			diagnostics = diagnostics,
+			onRichSpanClick = onRichSpanClick,
+			onRichSpanClickEvent = onRichSpanClickEvent,
+			onLinkClick = onLinkClick,
+			keyBindings = keyBindings,
+			readOnly = readOnly,
+			lineLimits = lineLimits,
+			contentDescription = contentDescription,
 		)
 	}
 	waitForIdle()
@@ -102,6 +129,13 @@ class SpellCheckUiTestScope(
 		get() = state.textState.richSpanManager.getAllRichSpans()
 			.count { it.style is SpellCheckStyle }
 
+	/** The words spell check flags, in document order. */
+	val flaggedWords: List<String>
+		get() = state.textState.richSpanManager.getAllRichSpans()
+			.filter { it.style is SpellCheckStyle }
+			.sortedBy { it.range.start }
+			.map { state.textState.getStringInRange(it.range) }
+
 	/** Types printable characters through real desktop key events; `\n` and `\t` become Enter/Tab. */
 	fun typeText(text: String) = test.typeText(text)
 
@@ -114,9 +148,52 @@ class SpellCheckUiTestScope(
 	/** Runs frames until recomposition and pending effects have settled. */
 	fun waitForIdle() = test.waitForIdle()
 
+	/**
+	 * The middle of the character at flat index [charIndex] in the tagged node's coordinates,
+	 * where pointer input is injected: the text canvas sits inside the content padding.
+	 */
+	fun nodePositionOfCharacter(charIndex: Int): Offset {
+		val canvas = checkNotNull(state.textState.canvasLayoutCoordinates).positionInRoot()
+		val node = test.onNodeWithTag(EDITOR_TEST_TAG).fetchSemanticsNode().positionInRoot
+		return state.textState.positionOfCharacter(charIndex) + (canvas - node)
+	}
+
+	/** Left-clicks the character at flat index [charIndex], with Ctrl or Meta held as asked. */
+	fun clickAtCharacter(charIndex: Int, ctrl: Boolean = false, meta: Boolean = false) {
+		val position = nodePositionOfCharacter(charIndex)
+		val held = listOfNotNull(Key.CtrlLeft.takeIf { ctrl }, Key.MetaLeft.takeIf { meta })
+		if (held.isNotEmpty()) test.onRoot().performKeyInput { held.forEach { keyDown(it) } }
+		test.onNodeWithTag(EDITOR_TEST_TAG).performMouseInput {
+			defeatMultiClickDetection()
+			click(position)
+		}
+		if (held.isNotEmpty()) test.onRoot().performKeyInput { held.forEach { keyUp(it) } }
+		test.waitForIdle()
+	}
+
+	/** Taps the character at flat index [charIndex] with a finger. */
+	fun tapAtCharacter(charIndex: Int) {
+		val position = nodePositionOfCharacter(charIndex)
+		test.onNodeWithTag(EDITOR_TEST_TAG).performTouchInput {
+			advanceEventTime(1_000)
+			click(position)
+		}
+		test.waitForIdle()
+	}
+
+	/** Presses [key], with Shift held when [shift]. */
+	fun press(key: Key, shift: Boolean = false) {
+		test.onRoot().performKeyInput {
+			if (shift) keyDown(Key.ShiftLeft)
+			pressKey(key)
+			if (shift) keyUp(Key.ShiftLeft)
+		}
+		test.waitForIdle()
+	}
+
 	/** Right-clicks the character at flat index [charIndex], opening the context menu. */
 	fun rightClickAtCharacter(charIndex: Int) {
-		val position = state.textState.positionOfCharacter(charIndex)
+		val position = nodePositionOfCharacter(charIndex)
 		test.onNodeWithTag(EDITOR_TEST_TAG).performMouseInput {
 			defeatMultiClickDetection()
 			rightClick(position)
@@ -137,6 +214,10 @@ class SpellCheckUiTestScope(
 		test.onNodeWithText(label).performClick()
 		test.waitForIdle()
 	}
+
+	/** Left edge of the menu item labelled [label], in the root's coordinates. */
+	fun menuItemLeft(label: String): Float =
+		test.onNodeWithText(label).fetchSemanticsNode().boundsInRoot.left
 
 	/** Top edge of the menu item labelled [label], for ordering assertions. */
 	fun menuItemTop(label: String): Float =

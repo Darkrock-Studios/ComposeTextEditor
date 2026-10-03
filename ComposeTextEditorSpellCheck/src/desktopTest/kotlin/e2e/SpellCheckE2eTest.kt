@@ -74,6 +74,41 @@ class SpellCheckE2eTest {
 	}
 
 	@Test
+	fun `abbreviations are not checked letter by letter`() {
+		spellCheckUiTest(
+			spellChecker = CountingSpellChecker(correctWords = setOf("the", "in", "fine")),
+			initialText = "the U.S.A. and the U.S.'s zorp, fine e.g. a Ph.D. in x",
+		) {
+			// One letter is never flagged, "a" and "x" included.
+			assertEquals(listOf("and", "zorp"), flaggedWords)
+		}
+	}
+
+	@Test
+	fun `a missing space after a period still flags the typo`() {
+		spellCheckUiTest(
+			spellChecker = CountingSpellChecker(correctWords = setOf("the", "mat")),
+			initialText = "the mat.Teh",
+		) {
+			assertEquals(listOf("Teh"), flaggedWords)
+		}
+	}
+
+	@Test
+	fun `finishing an abbreviation clears the flag on its first part`() {
+		spellCheckUiTest(spellChecker = CountingSpellChecker(correctWords = setOf("fine")), initialText = "fine ") {
+			state.textState.cursor.updatePosition(CharLineOffset(0, 5))
+			typeText("Ph.")
+			letSpellCheckSettle()
+			assertEquals(listOf("Ph"), flaggedWords)
+
+			typeText("D.")
+			letSpellCheckSettle()
+			assertEquals(emptyList(), flaggedWords)
+		}
+	}
+
+	@Test
 	fun `a typed word is checked once, not once per character`() {
 		val words = words(60)
 		val checker = CountingSpellChecker(correctWords = words.toSet())

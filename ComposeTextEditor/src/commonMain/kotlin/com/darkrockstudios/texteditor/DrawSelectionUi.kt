@@ -21,8 +21,7 @@ internal fun DrawScope.DrawSelection(
 	val scroll = state.scrollState.value.toFloat()
 
 	// Rows run top to bottom and line by line, so the first one to draw is a binary search.
-	var index = firstIndex(rows.size) { i ->
-		val wrap = rows[i]
+	var index = rows.firstRowWhere { wrap ->
 		wrap.line >= selection.start.line && wrap.offset.y + wrap.effectiveHeight >= scroll
 	}
 	while (index < rows.size) {
@@ -64,15 +63,4 @@ internal fun DrawScope.DrawSelection(
 			size = Size(endX - startX, wrap.effectiveHeight),
 		)
 	}
-}
-
-/** The first index in `0 until size` where [predicate], false then true across it, holds. */
-private inline fun firstIndex(size: Int, predicate: (Int) -> Boolean): Int {
-	var low = 0
-	var high = size
-	while (low < high) {
-		val mid = (low + high) ushr 1
-		if (predicate(mid)) high = mid else low = mid + 1
-	}
-	return low
 }
