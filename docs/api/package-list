@@ -4,21 +4,23 @@ $dokka.linkExtension:html
 module:Editor
 com.darkrockstudios.texteditor
 com.darkrockstudios.texteditor.annotatedstring
+com.darkrockstudios.texteditor.behaviors
 com.darkrockstudios.texteditor.clipboard
 com.darkrockstudios.texteditor.contextmenu
 com.darkrockstudios.texteditor.cursor
+com.darkrockstudios.texteditor.decoration
 com.darkrockstudios.texteditor.html
 com.darkrockstudios.texteditor.input
-com.darkrockstudios.texteditor.markdown
 com.darkrockstudios.texteditor.richstyle
 com.darkrockstudios.texteditor.scrollbar
 com.darkrockstudios.texteditor.state
 com.darkrockstudios.texteditor.utils
 module:Find & Replace
 com.darkrockstudios.texteditor.find
+module:Markdown
+com.darkrockstudios.texteditor.markdown
 module:Spell Check
 com.darkrockstudios.texteditor.spellcheck
 com.darkrockstudios.texteditor.spellcheck.adapters
 com.darkrockstudios.texteditor.spellcheck.api
 com.darkrockstudios.texteditor.spellcheck.diagnostics
-com.darkrockstudios.texteditor.spellcheck.markdown

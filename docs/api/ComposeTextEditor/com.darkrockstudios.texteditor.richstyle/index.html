@@ -140,7 +140,22 @@
                   </span></span></div>
               <div>
                 <div class="title">
-                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">data </span><span class="token keyword">object </span><a href="-bullet-list-span-style/index.html">BulletListSpanStyle</a> : <a href="-rich-span-style/index.html">RichSpanStyle</a></div><div class="brief "><p class="paragraph">Decorative rich span that marks a line as a markdown bullet-list item — a small filled dot is drawn in the indent gutter while the underlying text continues to render normally (no <a href="-block-span-style/replaces-text.html">BlockSpanStyle.replacesText</a> semantics).</p></div></div></div>
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">class </span><a href="-bullet-list-span-style/index.html">BulletListSpanStyle</a> : <a href="-rich-span-style/index.html">RichSpanStyle</a></div><div class="brief "><p class="paragraph">Decorative rich span that marks a line as a markdown bullet-list item at nesting <a href="../../ComposeTextEditor/com.darkrockstudios.texteditor.richstyle/-bullet-list-span-style/--root--.html">level</a>: a marker is drawn in the indent gutter while the underlying text continues to render normally (no <a href="-block-span-style/replaces-text.html">BlockSpanStyle.replacesText</a> semantics). The marker cycles disc, circle, square by level, as browsers and Google Docs draw nested bullets.</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="651720849%2FClasslikes%2F-556598459" anchor-label="CodeFenceLanguageSpanStyle" id="651720849%2FClasslikes%2F-556598459" data-filterable-set=":ComposeTextEditor/commonMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":ComposeTextEditor/commonMain" data-filterable-set=":ComposeTextEditor/commonMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="-code-fence-language-span-style/index.html"><span>Code</span><wbr><span>Fence</span><wbr><span>Language</span><wbr><span>Span</span><wbr><span><span>Style</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="651720849%2FClasslikes%2F-556598459"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">data </span><span class="token keyword">class </span><a href="-code-fence-language-span-style/index.html">CodeFenceLanguageSpanStyle</a><span class="token punctuation">(</span><span class="parameters "><span class="parameter "><span class="token keyword">val </span>language<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html">String</a></span></span><span class="token punctuation">)</span> : <a href="-rich-span-style/index.html">RichSpanStyle</a></div><div class="brief "><p class="paragraph">The info string of a fenced code block (<code class="lang-kotlin">```kotlin </code>), carried on every line of a run of CodeFenceSpanStyle lines, like the fence marker itself, and written back by the markdown exporter from the run's first line. It paints nothing. Line-block normalization gives every line of a run the run's language and drops a span off a fence or one that is not isWritable, so the model never holds a language the text form cannot express. Set a run's language through <code class="lang-kotlin">MarkdownExtension.setCodeFenceLanguage</code>, which replaces the whole run's spans in one undo step.</p></div></div></div>
                 </div>
               </div>
             </div>
@@ -275,7 +290,7 @@
                   </span></span></div>
               <div>
                 <div class="title">
-                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">object </span><a href="-line-block-edit-behavior/index.html">LineBlockEditBehavior</a> : <a href="../com.darkrockstudios.texteditor.state/-edit-behavior/index.html">EditBehavior</a></div><div class="brief "><p class="paragraph">Smart editing for lines carrying a <a href="../../ComposeTextEditor/com.darkrockstudios.texteditor.richstyle/-line-block-style/index.html">LineBlockStyle</a>: Enter on an empty item exits the block, backspace at its start demotes it, and a split keeps the gutter marker on both halves. See the "Smart editing" section of <code class="lang-kotlin">docs/design/line-blocks.md</code>.</p></div></div></div>
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">object </span><a href="-line-block-edit-behavior/index.html">LineBlockEditBehavior</a> : <a href="../com.darkrockstudios.texteditor.state/-edit-behavior/index.html">EditBehavior</a></div><div class="brief "><p class="paragraph">Smart editing for lines carrying a <a href="../../ComposeTextEditor/com.darkrockstudios.texteditor.richstyle/-line-block-style/index.html">LineBlockStyle</a>: Enter on an empty item exits the block (a nested list item un-nests instead), Enter at a heading's end, empty or not, starts body text, backspace at its start demotes it (a nested list item un-nests), and a split keeps the gutter marker on both halves. See the "Smart editing" and "Nested lists" sections of <code class="lang-kotlin">docs/design/line-blocks.md</code>.</p></div></div></div>
                 </div>
               </div>
             </div>
@@ -305,7 +320,22 @@
                   </span></span></div>
               <div>
                 <div class="title">
-                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">data </span><span class="token keyword">object </span><a href="-ordered-list-span-style/index.html">OrderedListSpanStyle</a> : <a href="-rich-span-style/index.html">RichSpanStyle</a></div><div class="brief "><p class="paragraph">Decorative rich span that marks a line as a markdown ordered-list item — the numeral (<code class="lang-kotlin">1.</code>, <code class="lang-kotlin">2.</code>, …) is drawn in the indent gutter while the underlying text continues to render normally (no <a href="-block-span-style/replaces-text.html">BlockSpanStyle.replacesText</a> semantics). The displayed number comes from <a href="../com.darkrockstudios.texteditor/-line-wrap/ordered-list-number.html">LineWrap.orderedListNumber</a>, which <code class="lang-kotlin">updateBookKeeping</code> fills in based on the line's position in a contiguous run of ordered-list lines — so the rendering always reflects the current document without any baked state to keep in sync.</p></div></div></div>
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">class </span><a href="-ordered-list-span-style/index.html">OrderedListSpanStyle</a> : <a href="-rich-span-style/index.html">RichSpanStyle</a></div><div class="brief "><p class="paragraph">Decorative rich span that marks a line as a markdown ordered-list item at nesting <a href="../../ComposeTextEditor/com.darkrockstudios.texteditor.richstyle/-ordered-list-span-style/--root--.html">level</a>: the numeral (<code class="lang-kotlin">1.</code>, <code class="lang-kotlin">2.</code>, …) is drawn in the indent gutter while the underlying text continues to render normally (no <a href="-block-span-style/replaces-text.html">BlockSpanStyle.replacesText</a> semantics). The displayed number comes from <a href="../com.darkrockstudios.texteditor/-line-wrap/ordered-list-number.html">LineWrap.orderedListNumber</a>, which <code class="lang-kotlin">updateBookKeeping</code> fills in from the line's position in its level's run of ordered-list lines, so the rendering always reflects the current document without any baked state to keep in sync. Numbers are decimal at every level, as CommonMark renderers show them.</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-1876269478%2FClasslikes%2F-556598459" anchor-label="ParagraphFormatSpanStyle" id="-1876269478%2FClasslikes%2F-556598459" data-filterable-set=":ComposeTextEditor/commonMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":ComposeTextEditor/commonMain" data-filterable-set=":ComposeTextEditor/commonMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="-paragraph-format-span-style/index.html"><span>Paragraph</span><wbr><span>Format</span><wbr><span>Span</span><wbr><span><span>Style</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-1876269478%2FClasslikes%2F-556598459"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">data </span><span class="token keyword">class </span><a href="-paragraph-format-span-style/index.html">ParagraphFormatSpanStyle</a><span class="token punctuation">(</span><span class="parameters "><span class="parameter "><span class="token keyword">val </span>spaceBefore<span class="token operator">: </span><a href="https://developer.android.com/reference/kotlin/androidx/compose/ui/unit/Dp.html">Dp</a><span class="token operator"> = </span>Dp.Unspecified<span class="token punctuation">, </span></span><span class="parameter "><span class="token keyword">val </span>spaceAfter<span class="token operator">: </span><a href="https://developer.android.com/reference/kotlin/androidx/compose/ui/unit/Dp.html">Dp</a><span class="token operator"> = </span>Dp.Unspecified<span class="token punctuation">, </span></span><span class="parameter "><span class="token keyword">val </span>textAlign<span class="token operator">: </span><a href="https://developer.android.com/reference/kotlin/androidx/compose/ui/text/style/TextAlign.html">TextAlign</a><span class="token operator">?</span><span class="token operator"> = </span>null<span class="token punctuation">, </span></span><span class="parameter "><span class="token keyword">val </span>indent<span class="token operator">: </span><a href="https://developer.android.com/reference/kotlin/androidx/compose/ui/unit/TextUnit.html">TextUnit</a><span class="token operator"> = </span>TextUnit.Unspecified<span class="token punctuation">, </span></span><span class="parameter "><span class="token keyword">val </span>firstLineIndent<span class="token operator">: </span><a href="https://developer.android.com/reference/kotlin/androidx/compose/ui/unit/TextUnit.html">TextUnit</a><span class="token operator"> = </span>TextUnit.Unspecified<span class="token punctuation">, </span></span><span class="parameter "><span class="token keyword">val </span>lineHeight<span class="token operator">: </span><a href="https://developer.android.com/reference/kotlin/androidx/compose/ui/unit/TextUnit.html">TextUnit</a><span class="token operator"> = </span>TextUnit.Unspecified</span></span><span class="token punctuation">)</span> : <a href="-rich-span-style/index.html">RichSpanStyle</a></div><div class="brief "><p class="paragraph">A paragraph's own formatting: the space above and below it, its alignment, its indents and its line height. One span per line, anchored to the line like a block marker and kept by the same edit rules: it survives an edit within its line, dies with its line, splits with an Enter inside it, and an Enter at the line's start or end carries it onto the new paragraph, as word processors do. Set it with <a href="../com.darkrockstudios.texteditor.state/set-paragraph-format.html">com.darkrockstudios.texteditor.state.setParagraphFormat</a>.</p></div></div></div>
                 </div>
               </div>
             </div>
@@ -350,7 +380,7 @@
                   </span></span></div>
               <div>
                 <div class="title">
-                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">class </span><a href="-spell-check-style/index.html">SpellCheckStyle</a> : <a href="-rich-span-style/index.html">RichSpanStyle</a></div><div class="brief "><p class="paragraph">A <a href="-rich-span-style/index.html">RichSpanStyle</a> that draws a red wavy underline beneath misspelled text.</p></div></div></div>
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">class </span><a href="-spell-check-style/index.html">SpellCheckStyle</a> : <a href="../com.darkrockstudios.texteditor.decoration/-decoration-style/index.html">DecorationStyle</a></div><div class="brief "><p class="paragraph">A <a href="../com.darkrockstudios.texteditor.decoration/-decoration-style/index.html">DecorationStyle</a> that draws a red wavy underline beneath misspelled text, on <a href="../../ComposeTextEditor/com.darkrockstudios.texteditor.richstyle/-spell-check-style/--root--.html">layer</a>.</p></div></div></div>
                 </div>
               </div>
             </div>
@@ -384,7 +414,7 @@
                   </span></span></div>
               <div>
                 <div class="title">
-                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">val </span><a href="-b-u-l-l-e-t_-l-i-s-t_-p-a-r-a-g-r-a-p-h_-s-t-y-l-e.html">BULLET_LIST_PARAGRAPH_STYLE</a><span class="token operator">: </span><a href="https://developer.android.com/reference/kotlin/androidx/compose/ui/text/ParagraphStyle.html">ParagraphStyle</a></div><div class="brief "><p class="paragraph">Visual indent applied to bullet-list lines so the <a href="-bullet-list-span-style/index.html">BulletListSpanStyle</a> dot has room before the text. Identical first-line and rest-line indents give a hanging indent so wrapped lines align under the text rather than under the bullet.</p></div></div></div>
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">val </span><a href="-b-u-l-l-e-t_-l-i-s-t_-p-a-r-a-g-r-a-p-h_-s-t-y-l-e.html">BULLET_LIST_PARAGRAPH_STYLE</a><span class="token operator">: </span><a href="https://developer.android.com/reference/kotlin/androidx/compose/ui/text/ParagraphStyle.html">ParagraphStyle</a></div><div class="brief "><p class="paragraph">The indent of a top-level bullet item: <a href="list-paragraph-style.html">listParagraphStyle</a> at level 0.</p></div></div></div>
                 </div>
               </div>
             </div>
@@ -449,6 +479,66 @@
               </div>
             </div>
           </div>
+<a data-name="152141033%2FProperties%2F-556598459" anchor-label="isListBlock" id="152141033%2FProperties%2F-556598459" data-filterable-set=":ComposeTextEditor/commonMain"></a>
+          <div class="table-row table-row_content" data-togglable="EXTENSION_PROPERTY" data-filterable-current=":ComposeTextEditor/commonMain" data-filterable-set=":ComposeTextEditor/commonMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="is-list-block.html"><span>is</span><wbr><span>List</span><wbr><span><span>Block</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="152141033%2FProperties%2F-556598459"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">val </span><a href="-rich-span-style/index.html">RichSpanStyle</a><span class="token punctuation">.</span><a href="is-list-block.html">isListBlock</a><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html">Boolean</a></div><div class="brief "><p class="paragraph">Whether this span style is a list item's, bullet or ordered, at any level.</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="484622328%2FProperties%2F-556598459" anchor-label="LINE_BLOCK_STYLES" id="484622328%2FProperties%2F-556598459" data-filterable-set=":ComposeTextEditor/commonMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":ComposeTextEditor/commonMain" data-filterable-set=":ComposeTextEditor/commonMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="-l-i-n-e_-b-l-o-c-k_-s-t-y-l-e-s.html"><span>LINE_</span><wbr><span>BLOCK_</span><wbr><span>STYLES</span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="484622328%2FProperties%2F-556598459"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">val </span><a href="-l-i-n-e_-b-l-o-c-k_-s-t-y-l-e-s.html">LINE_BLOCK_STYLES</a><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/-list/index.html">List</a><span class="token operator">&lt;</span><a href="-rich-span-style/index.html">RichSpanStyle</a><span class="token operator">&gt;</span></div><div class="brief "><p class="paragraph">Every line block's span style, in the order a line's blocks resolve: the blockquote, the six headings, the two list kinds at level 0 and then at each deeper level, and the code fence. A format addon that peels block markers off a line peels in this order, so a stack lands as the editor resolves it.</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-628878264%2FProperties%2F-556598459" anchor-label="listLevel" id="-628878264%2FProperties%2F-556598459" data-filterable-set=":ComposeTextEditor/commonMain"></a>
+          <div class="table-row table-row_content" data-togglable="EXTENSION_PROPERTY" data-filterable-current=":ComposeTextEditor/commonMain" data-filterable-set=":ComposeTextEditor/commonMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="list-level.html"><span>list</span><wbr><span><span>Level</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-628878264%2FProperties%2F-556598459"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">val </span><a href="-rich-span-style/index.html">RichSpanStyle</a><span class="token punctuation">.</span><a href="list-level.html">listLevel</a><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a><span class="token operator">?</span></div><div class="brief "><p class="paragraph">This list span style's nesting level, or null for a style that is not a list's.</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="2019765925%2FProperties%2F-556598459" anchor-label="MAX_LIST_LEVEL" id="2019765925%2FProperties%2F-556598459" data-filterable-set=":ComposeTextEditor/commonMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":ComposeTextEditor/commonMain" data-filterable-set=":ComposeTextEditor/commonMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="-m-a-x_-l-i-s-t_-l-e-v-e-l.html"><span>MAX_</span><wbr><span>LIST_</span><wbr><span>LEVEL</span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="2019765925%2FProperties%2F-556598459"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">const </span><span class="token keyword">val </span><a href="-m-a-x_-l-i-s-t_-l-e-v-e-l.html">MAX_LIST_LEVEL</a><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a><span class="token operator"> = </span><span class="token constant">7</span></div><div class="brief "><p class="paragraph">The deepest nesting level a list item can have; deeper markdown clamps to it.</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
 <a data-name="-1995012238%2FProperties%2F-556598459" anchor-label="ORDERED_LIST_PARAGRAPH_STYLE" id="-1995012238%2FProperties%2F-556598459" data-filterable-set=":ComposeTextEditor/commonMain"></a>
           <div class="table-row table-row_content" data-filterable-current=":ComposeTextEditor/commonMain" data-filterable-set=":ComposeTextEditor/commonMain">
             <div class="main-subrow keyValue ">
@@ -459,7 +549,7 @@
                   </span></span></div>
               <div>
                 <div class="title">
-                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">val </span><a href="-o-r-d-e-r-e-d_-l-i-s-t_-p-a-r-a-g-r-a-p-h_-s-t-y-l-e.html">ORDERED_LIST_PARAGRAPH_STYLE</a><span class="token operator">: </span><a href="https://developer.android.com/reference/kotlin/androidx/compose/ui/text/ParagraphStyle.html">ParagraphStyle</a></div><div class="brief "><p class="paragraph">Indent for ordered-list lines. Matches <a href="-b-u-l-l-e-t_-l-i-s-t_-p-a-r-a-g-r-a-p-h_-s-t-y-l-e.html">BULLET_LIST_PARAGRAPH_STYLE</a> so mixed bullet / ordered runs share one gutter; fits <code class="lang-kotlin">1.</code>–<code class="lang-kotlin">99.</code> but not larger.</p></div></div></div>
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">val </span><a href="-o-r-d-e-r-e-d_-l-i-s-t_-p-a-r-a-g-r-a-p-h_-s-t-y-l-e.html">ORDERED_LIST_PARAGRAPH_STYLE</a><span class="token operator">: </span><a href="https://developer.android.com/reference/kotlin/androidx/compose/ui/text/ParagraphStyle.html">ParagraphStyle</a></div><div class="brief "><p class="paragraph">The indent of a top-level ordered item: <a href="list-paragraph-style.html">listParagraphStyle</a> at level 0.</p></div></div></div>
                 </div>
               </div>
             </div>
@@ -468,7 +558,22 @@
       </div>
       <div data-togglable="FUNCTION">
         <h2 class="tableheader">Functions</h2>
-        <div class="table"><a data-name="-1375434594%2FFunctions%2F-556598459" anchor-label="drawDottedUnderline" id="-1375434594%2FFunctions%2F-556598459" data-filterable-set=":ComposeTextEditor/commonMain"></a>
+        <div class="table"><a data-name="225750194%2FFunctions%2F-556598459" anchor-label="applyDocumentBlocks" id="225750194%2FFunctions%2F-556598459" data-filterable-set=":ComposeTextEditor/commonMain"></a>
+          <div class="table-row table-row_content" data-togglable="EXTENSION_FUNCTION" data-filterable-current=":ComposeTextEditor/commonMain" data-filterable-set=":ComposeTextEditor/commonMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="apply-document-blocks.html"><span>apply</span><wbr><span>Document</span><wbr><span><span>Blocks</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="225750194%2FFunctions%2F-556598459"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">fun </span><a href="../com.darkrockstudios.texteditor.state/-text-editor-state/index.html">TextEditorState</a><span class="token punctuation">.</span><a href="apply-document-blocks.html"><span class="token function">applyDocumentBlocks</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">horizontalRuleLines<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/-collection/index.html">Collection</a><span class="token operator">&lt;</span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a><span class="token operator">&gt;</span><span class="token operator"> = </span>emptyList()<span class="token punctuation">, </span></span><span class="parameter ">imageLines<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/-map/index.html">Map</a><span class="token operator">&lt;</span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a><span class="token punctuation">, </span><a href="-image-block-span-style/index.html">ImageBlockSpanStyle</a><span class="token operator">&gt;</span><span class="token operator"> = </span>emptyMap()<span class="token punctuation">, </span></span><span class="parameter ">blockLines<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/-map/index.html">Map</a><span class="token operator">&lt;</span><a href="-rich-span-style/index.html">RichSpanStyle</a><span class="token punctuation">, </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/-collection/index.html">Collection</a><span class="token operator">&lt;</span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a><span class="token operator">&gt;</span><span class="token operator">&gt;</span><span class="token operator"> = </span>emptyMap()<span class="token punctuation">, </span></span><span class="parameter ">richSpans<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/-collection/index.html">Collection</a><span class="token operator">&lt;</span><a href="-rich-span/index.html">RichSpan</a><span class="token operator">&gt;</span><span class="token operator"> = </span>emptyList()</span></span><span class="token punctuation">)</span></div><div class="brief "><p class="paragraph">Attaches the decorations an importer parsed out of a source document: rules on <a href="apply-document-blocks.html">horizontalRuleLines</a>, the images of <a href="apply-document-blocks.html">imageLines</a>, the line blocks of <a href="apply-document-blocks.html">blockLines</a> (keyed by the block's span style, one of <a href="-l-i-n-e_-b-l-o-c-k_-s-t-y-l-e-s.html">LINE_BLOCK_STYLES</a>; any other key is refused) and <a href="apply-document-blocks.html">richSpans</a> (links, fence languages), clamped onto the lines as <a href="../com.darkrockstudios.texteditor.state/-text-editor-state/set-document.html">TextEditorState.setDocument</a> clamps them. A line index past the document and a decoration span are ignored.</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-1375434594%2FFunctions%2F-556598459" anchor-label="drawDottedUnderline" id="-1375434594%2FFunctions%2F-556598459" data-filterable-set=":ComposeTextEditor/commonMain"></a>
           <div class="table-row table-row_content" data-togglable="EXTENSION_FUNCTION" data-filterable-current=":ComposeTextEditor/commonMain" data-filterable-set=":ComposeTextEditor/commonMain">
             <div class="main-subrow keyValue ">
               <div class=""><span class="inline-flex">
@@ -478,7 +583,37 @@
                   </span></span></div>
               <div>
                 <div class="title">
-                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">fun </span><a href="https://developer.android.com/reference/kotlin/androidx/compose/ui/graphics/drawscope/DrawScope.html">DrawScope</a><span class="token punctuation">.</span><a href="draw-dotted-underline.html"><span class="token function">drawDottedUnderline</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">layoutResult<span class="token operator">: </span><a href="https://developer.android.com/reference/kotlin/androidx/compose/ui/text/TextLayoutResult.html">TextLayoutResult</a><span class="token punctuation">, </span></span><span class="parameter ">lineWrap<span class="token operator">: </span><a href="../com.darkrockstudios.texteditor/-line-wrap/index.html">LineWrap</a><span class="token punctuation">, </span></span><span class="parameter ">textRange<span class="token operator">: </span><a href="https://developer.android.com/reference/kotlin/androidx/compose/ui/text/TextRange.html">TextRange</a><span class="token punctuation">, </span></span><span class="parameter ">color<span class="token operator">: </span><a href="https://developer.android.com/reference/kotlin/androidx/compose/ui/graphics/Color.html">Color</a></span></span><span class="token punctuation">)</span></div><div class="brief "><p class="paragraph">Draws a dotted underline in <a href="draw-dotted-underline.html">color</a> beneath <a href="draw-dotted-underline.html">textRange</a> on one wrapped line, for a <a href="-rich-span-style/index.html">RichSpanStyle</a>'s <a href="-rich-span-style/draw-custom-style.html">RichSpanStyle.drawCustomStyle</a>: a quieter mark than <a href="draw-wavy-underline.html">drawWavyUnderline</a>.</p></div></div></div>
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">fun </span><a href="https://developer.android.com/reference/kotlin/androidx/compose/ui/graphics/drawscope/DrawScope.html">DrawScope</a><span class="token punctuation">.</span><a href="draw-dotted-underline.html"><span class="token function">drawDottedUnderline</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">layoutResult<span class="token operator">: </span><a href="https://developer.android.com/reference/kotlin/androidx/compose/ui/text/TextLayoutResult.html">TextLayoutResult</a><span class="token punctuation">, </span></span><span class="parameter ">lineWrap<span class="token operator">: </span><a href="../com.darkrockstudios.texteditor/-line-wrap/index.html">LineWrap</a><span class="token punctuation">, </span></span><span class="parameter ">textRange<span class="token operator">: </span><a href="https://developer.android.com/reference/kotlin/androidx/compose/ui/text/TextRange.html">TextRange</a><span class="token punctuation">, </span></span><span class="parameter ">color<span class="token operator">: </span><a href="https://developer.android.com/reference/kotlin/androidx/compose/ui/graphics/Color.html">Color</a></span></span><span class="token punctuation">)</span></div><div class="brief "><p class="paragraph">Draws a dotted underline in <a href="draw-dotted-underline.html">color</a> beneath <a href="draw-dotted-underline.html">textRange</a> on one wrapped line, for a <a href="-rich-span-style/index.html">RichSpanStyle</a>'s <a href="-rich-span-style/draw-custom-style.html">RichSpanStyle.drawCustomStyle</a>: a quieter mark than <a href="draw-wavy-underline.html">drawWavyUnderline</a>. Like it, a range crossing between left-to-right and right-to-left text gets dots under each stretch it covers.</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-2125055153%2FFunctions%2F-556598459" anchor-label="drawRangeHighlight" id="-2125055153%2FFunctions%2F-556598459" data-filterable-set=":ComposeTextEditor/commonMain"></a>
+          <div class="table-row table-row_content" data-togglable="EXTENSION_FUNCTION" data-filterable-current=":ComposeTextEditor/commonMain" data-filterable-set=":ComposeTextEditor/commonMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="draw-range-highlight.html"><span>draw</span><wbr><span>Range</span><wbr><span><span>Highlight</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-2125055153%2FFunctions%2F-556598459"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">fun </span><a href="https://developer.android.com/reference/kotlin/androidx/compose/ui/graphics/drawscope/DrawScope.html">DrawScope</a><span class="token punctuation">.</span><a href="draw-range-highlight.html"><span class="token function">drawRangeHighlight</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">layoutResult<span class="token operator">: </span><a href="https://developer.android.com/reference/kotlin/androidx/compose/ui/text/TextLayoutResult.html">TextLayoutResult</a><span class="token punctuation">, </span></span><span class="parameter ">lineWrap<span class="token operator">: </span><a href="../com.darkrockstudios.texteditor/-line-wrap/index.html">LineWrap</a><span class="token punctuation">, </span></span><span class="parameter ">textRange<span class="token operator">: </span><a href="https://developer.android.com/reference/kotlin/androidx/compose/ui/text/TextRange.html">TextRange</a><span class="token punctuation">, </span></span><span class="parameter ">color<span class="token operator">: </span><a href="https://developer.android.com/reference/kotlin/androidx/compose/ui/graphics/Color.html">Color</a></span></span><span class="token punctuation">)</span></div><div class="brief "><p class="paragraph">Fills the row's full height in <a href="draw-range-highlight.html">color</a> behind <a href="draw-range-highlight.html">textRange</a> on one wrapped line, for a <a href="-rich-span-style/index.html">RichSpanStyle</a>'s <a href="-rich-span-style/draw-custom-style.html">RichSpanStyle.drawCustomStyle</a> or <a href="-rich-span-style/draw-background.html">RichSpanStyle.drawBackground</a>, as <a href="-highlight-span-style/index.html">HighlightSpanStyle</a> does. A range crossing between left-to-right and right-to-left text gets a box for each stretch of the row it covers.</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="1131031481%2FFunctions%2F-556598459" anchor-label="drawSolidUnderline" id="1131031481%2FFunctions%2F-556598459" data-filterable-set=":ComposeTextEditor/commonMain"></a>
+          <div class="table-row table-row_content" data-togglable="EXTENSION_FUNCTION" data-filterable-current=":ComposeTextEditor/commonMain" data-filterable-set=":ComposeTextEditor/commonMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="draw-solid-underline.html"><span>draw</span><wbr><span>Solid</span><wbr><span><span>Underline</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="1131031481%2FFunctions%2F-556598459"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">fun </span><a href="https://developer.android.com/reference/kotlin/androidx/compose/ui/graphics/drawscope/DrawScope.html">DrawScope</a><span class="token punctuation">.</span><a href="draw-solid-underline.html"><span class="token function">drawSolidUnderline</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">layoutResult<span class="token operator">: </span><a href="https://developer.android.com/reference/kotlin/androidx/compose/ui/text/TextLayoutResult.html">TextLayoutResult</a><span class="token punctuation">, </span></span><span class="parameter ">lineWrap<span class="token operator">: </span><a href="../com.darkrockstudios.texteditor/-line-wrap/index.html">LineWrap</a><span class="token punctuation">, </span></span><span class="parameter ">textRange<span class="token operator">: </span><a href="https://developer.android.com/reference/kotlin/androidx/compose/ui/text/TextRange.html">TextRange</a><span class="token punctuation">, </span></span><span class="parameter ">color<span class="token operator">: </span><a href="https://developer.android.com/reference/kotlin/androidx/compose/ui/graphics/Color.html">Color</a></span></span><span class="token punctuation">)</span></div><div class="brief "><p class="paragraph">Draws a straight underline in <a href="draw-solid-underline.html">color</a> beneath <a href="draw-solid-underline.html">textRange</a> on one wrapped line, for a <a href="-rich-span-style/index.html">RichSpanStyle</a>'s <a href="-rich-span-style/draw-custom-style.html">RichSpanStyle.drawCustomStyle</a>, one line under each stretch of the row the range covers. Whole pixels, so it stays crisp.</p></div></div></div>
                 </div>
               </div>
             </div>
@@ -493,7 +628,67 @@
                   </span></span></div>
               <div>
                 <div class="title">
-                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">fun </span><a href="https://developer.android.com/reference/kotlin/androidx/compose/ui/graphics/drawscope/DrawScope.html">DrawScope</a><span class="token punctuation">.</span><a href="draw-wavy-underline.html"><span class="token function">drawWavyUnderline</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">layoutResult<span class="token operator">: </span><a href="https://developer.android.com/reference/kotlin/androidx/compose/ui/text/TextLayoutResult.html">TextLayoutResult</a><span class="token punctuation">, </span></span><span class="parameter ">lineWrap<span class="token operator">: </span><a href="../com.darkrockstudios.texteditor/-line-wrap/index.html">LineWrap</a><span class="token punctuation">, </span></span><span class="parameter ">textRange<span class="token operator">: </span><a href="https://developer.android.com/reference/kotlin/androidx/compose/ui/text/TextRange.html">TextRange</a><span class="token punctuation">, </span></span><span class="parameter ">color<span class="token operator">: </span><a href="https://developer.android.com/reference/kotlin/androidx/compose/ui/graphics/Color.html">Color</a></span></span><span class="token punctuation">)</span></div><div class="brief "><p class="paragraph">Draws a wavy underline in <a href="draw-wavy-underline.html">color</a> beneath <a href="draw-wavy-underline.html">textRange</a> on one wrapped line, for a <a href="-rich-span-style/index.html">RichSpanStyle</a>'s <a href="-rich-span-style/draw-custom-style.html">RichSpanStyle.drawCustomStyle</a>, as spell check does.</p></div></div></div>
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">fun </span><a href="https://developer.android.com/reference/kotlin/androidx/compose/ui/graphics/drawscope/DrawScope.html">DrawScope</a><span class="token punctuation">.</span><a href="draw-wavy-underline.html"><span class="token function">drawWavyUnderline</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">layoutResult<span class="token operator">: </span><a href="https://developer.android.com/reference/kotlin/androidx/compose/ui/text/TextLayoutResult.html">TextLayoutResult</a><span class="token punctuation">, </span></span><span class="parameter ">lineWrap<span class="token operator">: </span><a href="../com.darkrockstudios.texteditor/-line-wrap/index.html">LineWrap</a><span class="token punctuation">, </span></span><span class="parameter ">textRange<span class="token operator">: </span><a href="https://developer.android.com/reference/kotlin/androidx/compose/ui/text/TextRange.html">TextRange</a><span class="token punctuation">, </span></span><span class="parameter ">color<span class="token operator">: </span><a href="https://developer.android.com/reference/kotlin/androidx/compose/ui/graphics/Color.html">Color</a></span></span><span class="token punctuation">)</span></div><div class="brief "><p class="paragraph">Draws a wavy underline in <a href="draw-wavy-underline.html">color</a> beneath <a href="draw-wavy-underline.html">textRange</a> on one wrapped line, for a <a href="-rich-span-style/index.html">RichSpanStyle</a>'s <a href="-rich-span-style/draw-custom-style.html">RichSpanStyle.drawCustomStyle</a>, as spell check does. A range crossing between left-to-right and right-to-left text gets a wave under each stretch of the row it covers.</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="2122166283%2FFunctions%2F-556598459" anchor-label="isNestingBlank" id="2122166283%2FFunctions%2F-556598459" data-filterable-set=":ComposeTextEditor/commonMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":ComposeTextEditor/commonMain" data-filterable-set=":ComposeTextEditor/commonMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="is-nesting-blank.html"><span>is</span><wbr><span>Nesting</span><wbr><span><span>Blank</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="2122166283%2FFunctions%2F-556598459"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">fun </span><a href="is-nesting-blank.html"><span class="token function">isNestingBlank</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">text<span class="token operator">: </span><a href="https://developer.android.com/reference/kotlin/androidx/compose/ui/text/AnnotatedString.html">AnnotatedString</a><span class="token punctuation">, </span></span><span class="parameter ">spansOnLine<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/-iterable/index.html">Iterable</a><span class="token operator">&lt;</span><a href="-rich-span/index.html">RichSpan</a><span class="token operator">&gt;</span></span></span><span class="token punctuation">)</span><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html">Boolean</a></div><div class="brief "><p class="paragraph">Whether a line with <a href="is-nesting-blank.html">text</a> and <a href="is-nesting-blank.html">spansOnLine</a> is one nesting looks through: blank text with no block but a quote. A format's exporter and importer read the same definition, so what the editor nests, the file holds.</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-1551932600%2FFunctions%2F-556598459" anchor-label="lineBlocksConflict" id="-1551932600%2FFunctions%2F-556598459" data-filterable-set=":ComposeTextEditor/commonMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":ComposeTextEditor/commonMain" data-filterable-set=":ComposeTextEditor/commonMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="line-blocks-conflict.html"><span>line</span><wbr><span>Blocks</span><wbr><span><span>Conflict</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-1551932600%2FFunctions%2F-556598459"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">fun </span><a href="line-blocks-conflict.html"><span class="token function">lineBlocksConflict</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">a<span class="token operator">: </span><a href="-rich-span-style/index.html">RichSpanStyle</a><span class="token punctuation">, </span></span><span class="parameter ">b<span class="token operator">: </span><a href="-rich-span-style/index.html">RichSpanStyle</a></span></span><span class="token punctuation">)</span><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html">Boolean</a></div><div class="brief "><p class="paragraph">Whether two line blocks, identified by their span styles, refuse to share a line. Kind-level so it holds across configuration-scoped heading instances and list levels. The editor's stacking rules:</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="1012673888%2FFunctions%2F-556598459" anchor-label="listParagraphStyle" id="1012673888%2FFunctions%2F-556598459" data-filterable-set=":ComposeTextEditor/commonMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":ComposeTextEditor/commonMain" data-filterable-set=":ComposeTextEditor/commonMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="list-paragraph-style.html"><span>list</span><wbr><span>Paragraph</span><wbr><span><span>Style</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="1012673888%2FFunctions%2F-556598459"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">fun </span><a href="list-paragraph-style.html"><span class="token function">listParagraphStyle</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">level<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a></span></span><span class="token punctuation">)</span><span class="token operator">: </span><a href="https://developer.android.com/reference/kotlin/androidx/compose/ui/text/ParagraphStyle.html">ParagraphStyle</a></div><div class="brief "><p class="paragraph">Visual indent applied to list lines at <a href="list-paragraph-style.html">level</a>, one gutter per level plus one, so the marker has room before the text. Identical first-line and rest-line indents give a hanging indent so wrapped lines align under the text rather than under the marker. Bullet and ordered items share the gutter so mixed runs line up; it fits <code class="lang-kotlin">1.</code> to <code class="lang-kotlin">99.</code> but not larger.</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-1703148045%2FFunctions%2F-556598459" anchor-label="nestListItems" id="-1703148045%2FFunctions%2F-556598459" data-filterable-set=":ComposeTextEditor/commonMain"></a>
+          <div class="table-row table-row_content" data-togglable="EXTENSION_FUNCTION" data-filterable-current=":ComposeTextEditor/commonMain" data-filterable-set=":ComposeTextEditor/commonMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="nest-list-items.html"><span>nest</span><wbr><span>List</span><wbr><span><span>Items</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-1703148045%2FFunctions%2F-556598459"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">fun </span><a href="../com.darkrockstudios.texteditor.state/-text-editor-state/index.html">TextEditorState</a><span class="token punctuation">.</span><a href="nest-list-items.html"><span class="token function">nestListItems</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">lines<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.ranges/-int-range/index.html">IntRange</a></span></span><span class="token punctuation">)</span><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html">Boolean</a></div><div class="brief "><p class="paragraph">Nests each list item in <a href="nest-list-items.html">lines</a> one level, never deeper than one below the item before it (so a selection nests as one block, its first item bounded by the item above the selection). An item's followers stay where they are, its former children now its siblings, as Google Docs has it. One undo step; returns whether any item moved.</p></div></div></div>
                 </div>
               </div>
             </div>
@@ -509,6 +704,21 @@
               <div>
                 <div class="title">
                   <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">fun </span><a href="print-text-layout-result.html"><span class="token function">printTextLayoutResult</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">textLayoutResult<span class="token operator">: </span><a href="https://developer.android.com/reference/kotlin/androidx/compose/ui/text/TextLayoutResult.html">TextLayoutResult</a></span></span><span class="token punctuation">)</span></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="553578508%2FFunctions%2F-556598459" anchor-label="unnestListItems" id="553578508%2FFunctions%2F-556598459" data-filterable-set=":ComposeTextEditor/commonMain"></a>
+          <div class="table-row table-row_content" data-togglable="EXTENSION_FUNCTION" data-filterable-current=":ComposeTextEditor/commonMain" data-filterable-set=":ComposeTextEditor/commonMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="unnest-list-items.html"><span>unnest</span><wbr><span>List</span><wbr><span><span>Items</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="553578508%2FFunctions%2F-556598459"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">fun </span><a href="../com.darkrockstudios.texteditor.state/-text-editor-state/index.html">TextEditorState</a><span class="token punctuation">.</span><a href="unnest-list-items.html"><span class="token function">unnestListItems</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">lines<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.ranges/-int-range/index.html">IntRange</a></span></span><span class="token punctuation">)</span><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html">Boolean</a></div><div class="brief "><p class="paragraph">Un-nests each nested list item in <a href="unnest-list-items.html">lines</a> one level, as Shift+Tab does. Only the selected items move, as in Google Docs; the items nested under the last of them come up with it, so nothing is left deeper than it allows. One undo step; returns whether any item moved.</p></div></div></div>
                 </div>
               </div>
             </div>

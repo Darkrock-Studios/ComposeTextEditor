@@ -1,0 +1,494 @@
+<!doctype html>
+<html class="no-js" lang="en">
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1" charset="UTF-8">
+    <title>MarkdownExtension</title>
+<link href="../../../images/logo-icon.svg" rel="icon" type="image/svg"><script>var pathToRoot = "../../../";</script>
+    <script>document.documentElement.classList.replace("no-js", "js");</script>
+    <script>const storage = localStorage.getItem("dokka-dark-mode")
+      if (storage == null) {
+        const osDarkSchemePreferred = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+        if (osDarkSchemePreferred === true) {
+          document.getElementsByTagName("html")[0].classList.add("theme-dark")
+        }
+      } else {
+        const savedDarkMode = JSON.parse(storage)
+        if (savedDarkMode === true) {
+          document.getElementsByTagName("html")[0].classList.add("theme-dark")
+        }
+      }
+    </script>
+<script type="text/javascript" src="../../../scripts/sourceset_dependencies.js" async></script>
+<link href="../../../styles/style.css" rel="Stylesheet">
+<link href="../../../styles/main.css" rel="Stylesheet">
+<link href="../../../styles/prism.css" rel="Stylesheet">
+<link href="../../../styles/logo-styles.css" rel="Stylesheet">
+<link href="../../../ui-kit/ui-kit.min.css" rel="Stylesheet">
+<script type="text/javascript" src="../../../scripts/safe-local-storage_blocking.js"></script>
+<script type="text/javascript" src="../../../scripts/navigation-loader.js" async></script>
+<script type="text/javascript" src="../../../scripts/platform-content-handler.js" async></script>
+<script type="text/javascript" src="../../../scripts/main.js" defer></script>
+<script type="text/javascript" src="../../../scripts/prism.js" async></script>
+<script type="text/javascript" src="../../../ui-kit/ui-kit.min.js" defer></script></head>
+<body>
+<div class="root">
+    <header class="navigation theme-dark" id="navigation-wrapper" role="banner">
+<a class="library-name--link" href="../../../index.html" tabindex="1">
+                    Compose Text Editor
+            </a>        <button class="navigation-controls--btn navigation-controls--btn_toc ui-kit_mobile-only" id="toc-toggle" type="button">Toggle table of contents
+        </button>
+        <div class="navigation-controls--break ui-kit_mobile-only"></div>
+        <div class="library-version" id="library-version">
+        </div>
+        <div class="navigation-controls">
+        <ul class="filter-section filter-section_loading" id="filter-section" aria-label="Target filter">
+                <button class="platform-tag platform-selector common-like" data-active="" aria-pressed="true" data-filter=":ComposeTextEditorMarkdown/commonMain">common</button>
+            <div class="dropdown filter-section--dropdown" data-role="dropdown" id="filter-section-dropdown">
+                <button class="button button_dropdown filter-section--dropdown-toggle" role="combobox" data-role="dropdown-toggle" aria-controls="platform-tags-listbox" aria-haspopup="listbox" aria-expanded="false" aria-label="Toggle source sets"></button>
+                <ul role="listbox" id="platform-tags-listbox" class="dropdown--list" data-role="dropdown-listbox" aria-label="Target filter">
+                    <div class="dropdown--header"><span>Target filter</span>
+                        <button class="button" data-role="dropdown-toggle" aria-label="Close target filter">
+                            <i class="ui-kit-icon ui-kit-icon_cross"></i>
+                        </button>
+                    </div>
+                        <li role="option" class="dropdown--option platform-selector-option common-like" tabindex="0">
+                            <label class="checkbox">
+                                <input type="checkbox" class="checkbox--input" id=":ComposeTextEditorMarkdown/commonMain" data-filter=":ComposeTextEditorMarkdown/commonMain">
+                                <span class="checkbox--icon"></span>
+                                common
+                            </label>
+                        </li>
+                </ul>
+                <div class="dropdown--overlay"></div>
+            </div>
+        </ul>
+            <button class="navigation-controls--btn navigation-controls--btn_theme" id="theme-toggle-button" type="button">Switch theme
+            </button>
+            <div class="navigation-controls--btn navigation-controls--btn_search" id="searchBar" role="button">Search in
+                API
+            </div>
+        </div>
+    </header>
+    <div id="container">
+        <nav id="leftColumn" class="sidebar" data-item-type="SECTION" data-item-config="{&quot;defaultSize&quot;: 280, &quot;minSize&quot;: 200, &quot;maxSize&quot;: 400}">
+            <a class="toc--skip-link" href="#main">Skip to content</a>
+            <div class="dropdown theme-dark_mobile" data-role="dropdown" id="toc-dropdown">
+                <ul role="listbox" id="toc-listbox" class="dropdown--list dropdown--list_toc-list" data-role="dropdown-listbox" aria-label="Table of contents">
+                    <div class="dropdown--header">
+                            <span>
+                                    Compose Text Editor
+                            </span>
+                        <button class="button" data-role="dropdown-toggle" aria-label="Close table of contents">
+                            <i class="ui-kit-icon ui-kit-icon_cross"></i>
+                        </button>
+                    </div>
+                    <div class="sidebar--inner" id="sideMenu"></div>
+                </ul>
+                <div class="dropdown--overlay"></div>
+            </div>
+        </nav>
+        <div id="resizer" class="resizer" data-item-type="BAR"></div>
+        <div id="main" data-item-type="SECTION" role="main">
+<div class="main-content" data-page-type="classlike" id="content" pageids="Markdown::com.darkrockstudios.texteditor.markdown/MarkdownExtension///PointingToDeclaration//-796721452">
+  <div class="breadcrumbs"><a href="../../index.html">Markdown</a><span class="delimiter">/</span><a href="../index.html">com.darkrockstudios.texteditor.markdown</a><span class="delimiter">/</span><span class="current">MarkdownExtension</span></div>
+  <div class="cover ">
+    <h1 class="cover"><span>Markdown</span><wbr><span><span>Extension</span></span></h1>
+    <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditorMarkdown/commonMain"><div class="symbol monospace"><span class="token keyword">class </span><a href="index.html">MarkdownExtension</a><span class="token punctuation">(</span><span class="parameters "><span class="parameter "><span class="token keyword">val </span>editorState<span class="token operator">: </span><a href="../../../ComposeTextEditor/com.darkrockstudios.texteditor.state/-text-editor-state/index.html">TextEditorState</a><span class="token punctuation">, </span></span><span class="parameter ">initialConfiguration<span class="token operator">: </span><a href="../-markdown-configuration/index.html">MarkdownConfiguration</a><span class="token operator"> = </span>MarkdownConfiguration.DEFAULT<span class="token punctuation">, </span></span><span class="parameter "><span class="token keyword">var </span>imageProvider<span class="token operator">: </span><a href="../../../ComposeTextEditor/com.darkrockstudios.texteditor.richstyle/-image-provider/index.html">ImageProvider</a><span class="token operator">?</span><span class="token operator"> = </span>null</span></span><span class="token punctuation">)</span><span class="source-link-wrapper"><span class="source-link" data-element-type="source-link">(<a href="https://github.com/Darkrock-Studios/ComposeTextEditor/blob/main/ComposeTextEditorMarkdown/src/commonMain/kotlin/com/darkrockstudios/texteditor/markdown/MarkdownExtension.kt#L286">source</a>)</span></span></div><p class="paragraph">Reads and writes the document as markdown: the entry point for using the editor as a markdown editor. The styles the document is rendered and recognised with are the state's <a href="../../../ComposeTextEditor/com.darkrockstudios.texteditor.state/-text-editor-state/rich-text-styles.html">richTextStyles</a>; <a href="markdown-configuration.html">markdownConfiguration</a> holds the syntax choices. The block toggles and queries live on the state (<code class="lang-kotlin">toggleBulletList</code>, <code class="lang-kotlin">headerLevel</code>, <code class="lang-kotlin">setLink</code> and the rest, in <code class="lang-kotlin">com.darkrockstudios.texteditor.state</code>); the members here forward to them for one release.</p></div></div>
+  </div>
+  <div class="tabbedcontent">
+    <div class="tabs-section" tabs-section="tabs-section"><button class="section-tab" data-active="" data-togglable="CONSTRUCTOR,TYPE,PROPERTY,FUNCTION">Members</button></div>
+    <div class="tabs-section-body">
+      <div data-togglable="CONSTRUCTOR">
+        <h2 class="tableheader">Constructors</h2>
+        <div class="table"><a data-name="490324174%2FConstructors%2F-796721452" anchor-label="MarkdownExtension" id="490324174%2FConstructors%2F-796721452" data-filterable-set=":ComposeTextEditorMarkdown/commonMain"></a>
+          <div class="table-row table-row_content" data-togglable="CONSTRUCTOR" data-filterable-current=":ComposeTextEditorMarkdown/commonMain" data-filterable-set=":ComposeTextEditorMarkdown/commonMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="-markdown-extension.html"><span>Markdown</span><wbr><span><span>Extension</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="490324174%2FConstructors%2F-796721452"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditorMarkdown/commonMain"><div class="symbol monospace"><span class="token keyword">constructor</span><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">editorState<span class="token operator">: </span><a href="../../../ComposeTextEditor/com.darkrockstudios.texteditor.state/-text-editor-state/index.html">TextEditorState</a><span class="token punctuation">, </span></span><span class="parameter ">initialConfiguration<span class="token operator">: </span><a href="../-markdown-configuration/index.html">MarkdownConfiguration</a><span class="token operator"> = </span>MarkdownConfiguration.DEFAULT<span class="token punctuation">, </span></span><span class="parameter ">imageProvider<span class="token operator">: </span><a href="../../../ComposeTextEditor/com.darkrockstudios.texteditor.richstyle/-image-provider/index.html">ImageProvider</a><span class="token operator">?</span><span class="token operator"> = </span>null</span></span><span class="token punctuation">)</span></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div data-togglable="PROPERTY">
+        <h2 class="tableheader">Properties</h2>
+        <div class="table"><a data-name="-1677982531%2FProperties%2F-796721452" anchor-label="editorState" id="-1677982531%2FProperties%2F-796721452" data-filterable-set=":ComposeTextEditorMarkdown/commonMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":ComposeTextEditorMarkdown/commonMain" data-filterable-set=":ComposeTextEditorMarkdown/commonMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="editor-state.html"><span>editor</span><wbr><span><span>State</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-1677982531%2FProperties%2F-796721452"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditorMarkdown/commonMain"><div class="symbol monospace"><span class="token keyword">val </span><a href="editor-state.html">editorState</a><span class="token operator">: </span><a href="../../../ComposeTextEditor/com.darkrockstudios.texteditor.state/-text-editor-state/index.html">TextEditorState</a></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-1045351563%2FProperties%2F-796721452" anchor-label="imageProvider" id="-1045351563%2FProperties%2F-796721452" data-filterable-set=":ComposeTextEditorMarkdown/commonMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":ComposeTextEditorMarkdown/commonMain" data-filterable-set=":ComposeTextEditorMarkdown/commonMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="image-provider.html"><span>image</span><wbr><span><span>Provider</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-1045351563%2FProperties%2F-796721452"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditorMarkdown/commonMain"><div class="symbol monospace"><span class="token keyword">var </span><a href="image-provider.html">imageProvider</a><span class="token operator">: </span><a href="../../../ComposeTextEditor/com.darkrockstudios.texteditor.richstyle/-image-provider/index.html">ImageProvider</a><span class="token operator">?</span></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="764997626%2FProperties%2F-796721452" anchor-label="markdownConfiguration" id="764997626%2FProperties%2F-796721452" data-filterable-set=":ComposeTextEditorMarkdown/commonMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":ComposeTextEditorMarkdown/commonMain" data-filterable-set=":ComposeTextEditorMarkdown/commonMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="markdown-configuration.html"><span>markdown</span><wbr><span><span>Configuration</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="764997626%2FProperties%2F-796721452"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditorMarkdown/commonMain"><div class="symbol monospace"><span class="token keyword">var </span><a href="markdown-configuration.html">markdownConfiguration</a><span class="token operator">: </span><a href="../-markdown-configuration/index.html">MarkdownConfiguration</a></div><div class="brief "><p class="paragraph">The syntax choices export writes in and import reads by default.</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-1378068472%2FProperties%2F-796721452" anchor-label="markdownStyles" id="-1378068472%2FProperties%2F-796721452" data-filterable-set=":ComposeTextEditorMarkdown/commonMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":ComposeTextEditorMarkdown/commonMain" data-filterable-set=":ComposeTextEditorMarkdown/commonMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="markdown-styles.html"><span>markdown</span><wbr><span><span>Styles</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-1378068472%2FProperties%2F-796721452"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditorMarkdown/commonMain"><div class="symbol monospace"><span class="token keyword">val </span><a href="markdown-styles.html"><strike>markdownStyles</strike></a><span class="token operator">: </span><a href="../-markdown-styles/index.html">MarkdownStyles</a></div><div class="brief "><p class="paragraph">The styles under their old names; read <a href="../../../ComposeTextEditor/com.darkrockstudios.texteditor.state/-text-editor-state/rich-text-styles.html">TextEditorState.richTextStyles</a>.</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div data-togglable="FUNCTION">
+        <h2 class="tableheader">Functions</h2>
+        <div class="table"><a data-name="1599062403%2FFunctions%2F-796721452" anchor-label="codeFenceLanguage" id="1599062403%2FFunctions%2F-796721452" data-filterable-set=":ComposeTextEditorMarkdown/commonMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":ComposeTextEditorMarkdown/commonMain" data-filterable-set=":ComposeTextEditorMarkdown/commonMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="code-fence-language.html"><span>code</span><wbr><span>Fence</span><wbr><span><span>Language</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="1599062403%2FFunctions%2F-796721452"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditorMarkdown/commonMain"><div class="symbol monospace"><span class="token keyword">fun </span><a href="code-fence-language.html"><span class="token function"><strike>codeFenceLanguage</strike></span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">line<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a></span></span><span class="token punctuation">)</span><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html">String</a><span class="token operator">?</span></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-610827740%2FFunctions%2F-796721452" anchor-label="exportAsMarkdown" id="-610827740%2FFunctions%2F-796721452" data-filterable-set=":ComposeTextEditorMarkdown/commonMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":ComposeTextEditorMarkdown/commonMain" data-filterable-set=":ComposeTextEditorMarkdown/commonMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="export-as-markdown.html"><span>export</span><wbr><span>As</span><wbr><span><span>Markdown</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-610827740%2FFunctions%2F-796721452"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditorMarkdown/commonMain"><div class="symbol monospace"><span class="token keyword">fun </span><a href="export-as-markdown.html"><span class="token function">exportAsMarkdown</span></a><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html">String</a></div><div class="brief "><p class="paragraph">Serializes the document to markdown.</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-81132696%2FFunctions%2F-796721452" anchor-label="headerLevel" id="-81132696%2FFunctions%2F-796721452" data-filterable-set=":ComposeTextEditorMarkdown/commonMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":ComposeTextEditorMarkdown/commonMain" data-filterable-set=":ComposeTextEditorMarkdown/commonMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="header-level.html"><span>header</span><wbr><span><span>Level</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-81132696%2FFunctions%2F-796721452"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditorMarkdown/commonMain"><div class="symbol monospace"><span class="token keyword">fun </span><a href="header-level.html"><span class="token function"><strike>headerLevel</strike></span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">line<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a></span></span><span class="token punctuation">)</span><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a><span class="token operator">?</span></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="495951781%2FFunctions%2F-796721452" anchor-label="importMarkdown" id="495951781%2FFunctions%2F-796721452" data-filterable-set=":ComposeTextEditorMarkdown/commonMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":ComposeTextEditorMarkdown/commonMain" data-filterable-set=":ComposeTextEditorMarkdown/commonMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="import-markdown.html"><span>import</span><wbr><span><span>Markdown</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="495951781%2FFunctions%2F-796721452"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditorMarkdown/commonMain"><div class="symbol monospace"><span class="token keyword">fun </span><a href="import-markdown.html"><span class="token function">importMarkdown</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">markdownText<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html">String</a><span class="token punctuation">, </span></span><span class="parameter ">paragraphSeparator<span class="token operator">: </span><a href="../-paragraph-separator/index.html">ParagraphSeparator</a><span class="token operator"> = </span>markdownConfiguration.paragraphSeparator</span></span><span class="token punctuation">)</span></div><div class="brief "><p class="paragraph">Replaces the document with <a href="import-markdown.html">markdownText</a>. <a href="import-markdown.html">paragraphSeparator</a> says how the text's blank lines are read (see <a href="../-paragraph-separator/index.html">ParagraphSeparator</a>); it defaults to the configuration's, and a host opening a file written under the other rule passes that rule here.</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="1005373822%2FFunctions%2F-796721452" anchor-label="isBlockquote" id="1005373822%2FFunctions%2F-796721452" data-filterable-set=":ComposeTextEditorMarkdown/commonMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":ComposeTextEditorMarkdown/commonMain" data-filterable-set=":ComposeTextEditorMarkdown/commonMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="is-blockquote.html"><span>is</span><wbr><span><span>Blockquote</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="1005373822%2FFunctions%2F-796721452"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditorMarkdown/commonMain"><div class="symbol monospace"><span class="token keyword">fun </span><a href="is-blockquote.html"><span class="token function"><strike>isBlockquote</strike></span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">line<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a></span></span><span class="token punctuation">)</span><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html">Boolean</a></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-1516956371%2FFunctions%2F-796721452" anchor-label="isBulletList" id="-1516956371%2FFunctions%2F-796721452" data-filterable-set=":ComposeTextEditorMarkdown/commonMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":ComposeTextEditorMarkdown/commonMain" data-filterable-set=":ComposeTextEditorMarkdown/commonMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="is-bullet-list.html"><span>is</span><wbr><span>Bullet</span><wbr><span><span>List</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-1516956371%2FFunctions%2F-796721452"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditorMarkdown/commonMain"><div class="symbol monospace"><span class="token keyword">fun </span><a href="is-bullet-list.html"><span class="token function"><strike>isBulletList</strike></span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">line<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a></span></span><span class="token punctuation">)</span><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html">Boolean</a></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-1783792315%2FFunctions%2F-796721452" anchor-label="isCodeFence" id="-1783792315%2FFunctions%2F-796721452" data-filterable-set=":ComposeTextEditorMarkdown/commonMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":ComposeTextEditorMarkdown/commonMain" data-filterable-set=":ComposeTextEditorMarkdown/commonMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="is-code-fence.html"><span>is</span><wbr><span>Code</span><wbr><span><span>Fence</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-1783792315%2FFunctions%2F-796721452"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditorMarkdown/commonMain"><div class="symbol monospace"><span class="token keyword">fun </span><a href="is-code-fence.html"><span class="token function"><strike>isCodeFence</strike></span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">line<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a></span></span><span class="token punctuation">)</span><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html">Boolean</a></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="1498974206%2FFunctions%2F-796721452" anchor-label="isOrderedList" id="1498974206%2FFunctions%2F-796721452" data-filterable-set=":ComposeTextEditorMarkdown/commonMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":ComposeTextEditorMarkdown/commonMain" data-filterable-set=":ComposeTextEditorMarkdown/commonMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="is-ordered-list.html"><span>is</span><wbr><span>Ordered</span><wbr><span><span>List</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="1498974206%2FFunctions%2F-796721452"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditorMarkdown/commonMain"><div class="symbol monospace"><span class="token keyword">fun </span><a href="is-ordered-list.html"><span class="token function"><strike>isOrderedList</strike></span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">line<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a></span></span><span class="token punctuation">)</span><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html">Boolean</a></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="480434494%2FFunctions%2F-796721452" anchor-label="linkAt" id="480434494%2FFunctions%2F-796721452" data-filterable-set=":ComposeTextEditorMarkdown/commonMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":ComposeTextEditorMarkdown/commonMain" data-filterable-set=":ComposeTextEditorMarkdown/commonMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="link-at.html"><span>link</span><wbr><span><span>At</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="480434494%2FFunctions%2F-796721452"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditorMarkdown/commonMain"><div class="symbol monospace"><span class="token keyword">fun </span><a href="link-at.html"><span class="token function"><strike>linkAt</strike></span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">position<span class="token operator">: </span><a href="../../../ComposeTextEditor/com.darkrockstudios.texteditor/-char-line-offset/index.html">CharLineOffset</a></span></span><span class="token punctuation">)</span><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html">String</a><span class="token operator">?</span></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-1206581895%2FFunctions%2F-796721452" anchor-label="listLevel" id="-1206581895%2FFunctions%2F-796721452" data-filterable-set=":ComposeTextEditorMarkdown/commonMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":ComposeTextEditorMarkdown/commonMain" data-filterable-set=":ComposeTextEditorMarkdown/commonMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="list-level.html"><span>list</span><wbr><span><span>Level</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-1206581895%2FFunctions%2F-796721452"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditorMarkdown/commonMain"><div class="symbol monospace"><span class="token keyword">fun </span><a href="list-level.html"><span class="token function"><strike>listLevel</strike></span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">line<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a></span></span><span class="token punctuation">)</span><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a><span class="token operator">?</span></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="609654474%2FFunctions%2F-796721452" anchor-label="nestList" id="609654474%2FFunctions%2F-796721452" data-filterable-set=":ComposeTextEditorMarkdown/commonMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":ComposeTextEditorMarkdown/commonMain" data-filterable-set=":ComposeTextEditorMarkdown/commonMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="nest-list.html"><span>nest</span><wbr><span><span>List</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="609654474%2FFunctions%2F-796721452"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditorMarkdown/commonMain"><div class="symbol monospace"><span class="token keyword">fun </span><a href="nest-list.html"><span class="token function"><strike>nestList</strike></span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">lines<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.ranges/-int-range/index.html">IntRange</a></span></span><span class="token punctuation">)</span><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html">Boolean</a></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="1174220225%2FFunctions%2F-796721452" anchor-label="setCodeFenceLanguage" id="1174220225%2FFunctions%2F-796721452" data-filterable-set=":ComposeTextEditorMarkdown/commonMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":ComposeTextEditorMarkdown/commonMain" data-filterable-set=":ComposeTextEditorMarkdown/commonMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="set-code-fence-language.html"><span>set</span><wbr><span>Code</span><wbr><span>Fence</span><wbr><span><span>Language</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="1174220225%2FFunctions%2F-796721452"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditorMarkdown/commonMain"><div class="symbol monospace"><span class="token keyword">fun </span><a href="set-code-fence-language.html"><span class="token function"><strike>setCodeFenceLanguage</strike></span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">line<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a><span class="token punctuation">, </span></span><span class="parameter ">language<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html">String</a><span class="token operator">?</span></span></span><span class="token punctuation">)</span></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="1050050946%2FFunctions%2F-796721452" anchor-label="setLink" id="1050050946%2FFunctions%2F-796721452" data-filterable-set=":ComposeTextEditorMarkdown/commonMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":ComposeTextEditorMarkdown/commonMain" data-filterable-set=":ComposeTextEditorMarkdown/commonMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="set-link.html"><span>set</span><wbr><span><span>Link</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="1050050946%2FFunctions%2F-796721452"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditorMarkdown/commonMain"><div class="symbol monospace"><span class="token keyword">fun </span><a href="set-link.html"><span class="token function"><strike>setLink</strike></span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">range<span class="token operator">: </span><a href="../../../ComposeTextEditor/com.darkrockstudios.texteditor/-text-editor-range/index.html">TextEditorRange</a><span class="token punctuation">, </span></span><span class="parameter ">url<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html">String</a></span></span><span class="token punctuation">)</span><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html">Boolean</a></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="2142323133%2FFunctions%2F-796721452" anchor-label="toggleBlockquote" id="2142323133%2FFunctions%2F-796721452" data-filterable-set=":ComposeTextEditorMarkdown/commonMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":ComposeTextEditorMarkdown/commonMain" data-filterable-set=":ComposeTextEditorMarkdown/commonMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="toggle-blockquote.html"><span>toggle</span><wbr><span><span>Blockquote</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="2142323133%2FFunctions%2F-796721452"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditorMarkdown/commonMain"><div class="symbol monospace"><span class="token keyword">fun </span><a href="toggle-blockquote.html"><span class="token function"><strike>toggleBlockquote</strike></span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">lines<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.ranges/-int-range/index.html">IntRange</a></span></span><span class="token punctuation">)</span></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="466779884%2FFunctions%2F-796721452" anchor-label="toggleBulletList" id="466779884%2FFunctions%2F-796721452" data-filterable-set=":ComposeTextEditorMarkdown/commonMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":ComposeTextEditorMarkdown/commonMain" data-filterable-set=":ComposeTextEditorMarkdown/commonMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="toggle-bullet-list.html"><span>toggle</span><wbr><span>Bullet</span><wbr><span><span>List</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="466779884%2FFunctions%2F-796721452"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditorMarkdown/commonMain"><div class="symbol monospace"><span class="token keyword">fun </span><a href="toggle-bullet-list.html"><span class="token function"><strike>toggleBulletList</strike></span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">lines<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.ranges/-int-range/index.html">IntRange</a></span></span><span class="token punctuation">)</span></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="742337048%2FFunctions%2F-796721452" anchor-label="toggleCodeFence" id="742337048%2FFunctions%2F-796721452" data-filterable-set=":ComposeTextEditorMarkdown/commonMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":ComposeTextEditorMarkdown/commonMain" data-filterable-set=":ComposeTextEditorMarkdown/commonMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="toggle-code-fence.html"><span>toggle</span><wbr><span>Code</span><wbr><span><span>Fence</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="742337048%2FFunctions%2F-796721452"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditorMarkdown/commonMain"><div class="symbol monospace"><span class="token keyword">fun </span><a href="toggle-code-fence.html"><span class="token function"><strike>toggleCodeFence</strike></span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">lines<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.ranges/-int-range/index.html">IntRange</a></span></span><span class="token punctuation">)</span></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="1760362110%2FFunctions%2F-796721452" anchor-label="toggleHeader" id="1760362110%2FFunctions%2F-796721452" data-filterable-set=":ComposeTextEditorMarkdown/commonMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":ComposeTextEditorMarkdown/commonMain" data-filterable-set=":ComposeTextEditorMarkdown/commonMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="toggle-header.html"><span>toggle</span><wbr><span><span>Header</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="1760362110%2FFunctions%2F-796721452"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditorMarkdown/commonMain"><div class="symbol monospace"><span class="token keyword">fun </span><a href="toggle-header.html"><span class="token function"><strike>toggleHeader</strike></span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">lines<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.ranges/-int-range/index.html">IntRange</a><span class="token punctuation">, </span></span><span class="parameter ">level<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a></span></span><span class="token punctuation">)</span></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-1788476207%2FFunctions%2F-796721452" anchor-label="toggleOrderedList" id="-1788476207%2FFunctions%2F-796721452" data-filterable-set=":ComposeTextEditorMarkdown/commonMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":ComposeTextEditorMarkdown/commonMain" data-filterable-set=":ComposeTextEditorMarkdown/commonMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="toggle-ordered-list.html"><span>toggle</span><wbr><span>Ordered</span><wbr><span><span>List</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-1788476207%2FFunctions%2F-796721452"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditorMarkdown/commonMain"><div class="symbol monospace"><span class="token keyword">fun </span><a href="toggle-ordered-list.html"><span class="token function"><strike>toggleOrderedList</strike></span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">lines<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.ranges/-int-range/index.html">IntRange</a></span></span><span class="token punctuation">)</span></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-41400047%2FFunctions%2F-796721452" anchor-label="unnestList" id="-41400047%2FFunctions%2F-796721452" data-filterable-set=":ComposeTextEditorMarkdown/commonMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":ComposeTextEditorMarkdown/commonMain" data-filterable-set=":ComposeTextEditorMarkdown/commonMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="unnest-list.html"><span>unnest</span><wbr><span><span>List</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-41400047%2FFunctions%2F-796721452"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditorMarkdown/commonMain"><div class="symbol monospace"><span class="token keyword">fun </span><a href="unnest-list.html"><span class="token function"><strike>unnestList</strike></span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">lines<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.ranges/-int-range/index.html">IntRange</a></span></span><span class="token punctuation">)</span><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html">Boolean</a></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+    <div class="footer">
+        <div class="footer--container">
+            <a href="#content" id="go-to-top-link" class="footer--button footer--button_go-to-top"></a>
+            <div class="footer--content">
+                <div>
+                    <span>Generated by </span>
+                    <a class="footer--link footer--link_external" href="https://github.com/Kotlin/dokka">
+                        Dokka
+                    </a>
+                    <div>© 2026 Copyright</div>
+                </div>
+            </div>
+        </div>
+    </div>
+        </div>
+    </div>
+</div>
+</body>
+</html>

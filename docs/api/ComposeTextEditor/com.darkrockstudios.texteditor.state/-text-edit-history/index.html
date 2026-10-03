@@ -93,7 +93,7 @@
   <div class="breadcrumbs"><a href="../../index.html">Editor</a><span class="delimiter">/</span><a href="../index.html">com.darkrockstudios.texteditor.state</a><span class="delimiter">/</span><span class="current">TextEditHistory</span></div>
   <div class="cover ">
     <h1 class="cover"><span>Text</span><wbr><span>Edit</span><wbr><span><span>History</span></span></h1>
-    <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">class </span><a href="index.html">TextEditHistory</a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">maxHistorySize<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a><span class="token operator"> = </span><span class="token constant">1000</span></span></span><span class="token punctuation">)</span><span class="source-link-wrapper"><span class="source-link" data-element-type="source-link">(<a href="https://github.com/Darkrock-Studios/ComposeTextEditor/blob/main/ComposeTextEditor/src/commonMain/kotlin/com/darkrockstudios/texteditor/state/TextEditHistory.kt#L8">source</a>)</span></span></div></div></div>
+    <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">class </span><a href="index.html">TextEditHistory</a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">maxHistorySize<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a><span class="token operator"> = </span><span class="token constant">1000</span></span></span><span class="token punctuation">)</span><span class="source-link-wrapper"><span class="source-link" data-element-type="source-link">(<a href="https://github.com/Darkrock-Studios/ComposeTextEditor/blob/main/ComposeTextEditor/src/commonMain/kotlin/com/darkrockstudios/texteditor/state/TextEditHistory.kt#L20">source</a>)</span></span></div><p class="paragraph">The undo and redo stacks.</p><p class="paragraph">Edits recorded while a group is open (<a href="../../../ComposeTextEditor/com.darkrockstudios.texteditor.state/-text-edit-history/begin-group.html">beginGroup</a> / <a href="../../../ComposeTextEditor/com.darkrockstudios.texteditor.state/-text-edit-history/end-group.html">endGroup</a>) are staged and land as one <a href="../-history-entry/-group/index.html">HistoryEntry.Group</a> when the outermost group commits, so every edit inside one transaction is one undo step. A group of a single edit is recorded as that edit, so typing keeps coalescing.</p></div></div>
   </div>
   <div class="tabbedcontent">
     <div class="tabs-section" tabs-section="tabs-section"><button class="section-tab" data-active="" data-togglable="CONSTRUCTOR,TYPE,PROPERTY,FUNCTION">Members</button></div>
@@ -117,6 +117,25 @@
           </div>
         </div>
       </div>
+      <div data-togglable="PROPERTY">
+        <h2 class="tableheader">Properties</h2>
+        <div class="table"><a data-name="1164400079%2FProperties%2F-556598459" anchor-label="settings" id="1164400079%2FProperties%2F-556598459" data-filterable-set=":ComposeTextEditor/commonMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":ComposeTextEditor/commonMain" data-filterable-set=":ComposeTextEditor/commonMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="settings.html"><span><span>settings</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="1164400079%2FProperties%2F-556598459"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">var </span><a href="settings.html">settings</a><span class="token operator">: </span><a href="../-undo-settings/index.html">UndoSettings</a></div><div class="brief "><p class="paragraph">How many steps are kept and how long a pause ends a typing run.</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
       <div data-togglable="FUNCTION">
         <h2 class="tableheader">Functions</h2>
         <div class="table"><a data-name="-1802185381%2FFunctions%2F-556598459" anchor-label="clear" id="-1802185381%2FFunctions%2F-556598459" data-filterable-set=":ComposeTextEditor/commonMain"></a>
@@ -129,7 +148,7 @@
                   </span></span></div>
               <div>
                 <div class="title">
-                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">fun </span><a href="clear.html"><span class="token function">clear</span></a><span class="token punctuation">(</span><span class="token punctuation">)</span></div></div></div>
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">fun </span><a href="clear.html"><span class="token function">clear</span></a><span class="token punctuation">(</span><span class="token punctuation">)</span></div><div class="brief "><p class="paragraph">Empties both queues and whatever the open group has staged.</p></div></div></div>
                 </div>
               </div>
             </div>
@@ -164,17 +183,17 @@
               </div>
             </div>
           </div>
-<a data-name="314710466%2FFunctions%2F-556598459" anchor-label="recordEdit" id="314710466%2FFunctions%2F-556598459" data-filterable-set=":ComposeTextEditor/commonMain"></a>
+<a data-name="424981443%2FFunctions%2F-556598459" anchor-label="recordEdit" id="424981443%2FFunctions%2F-556598459" data-filterable-set=":ComposeTextEditor/commonMain"></a>
           <div class="table-row table-row_content" data-filterable-current=":ComposeTextEditor/commonMain" data-filterable-set=":ComposeTextEditor/commonMain">
             <div class="main-subrow keyValue ">
               <div class=""><span class="inline-flex">
                   <div><a href="record-edit.html"><span>record</span><wbr><span><span>Edit</span></span></a></div>
-<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="314710466%2FFunctions%2F-556598459"></span>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="424981443%2FFunctions%2F-556598459"></span>
                     <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
                   </span></span></div>
               <div>
                 <div class="title">
-                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">fun </span><a href="record-edit.html"><span class="token function">recordEdit</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">operation<span class="token operator">: </span><a href="../-text-edit-operation/index.html">TextEditOperation</a><span class="token punctuation">, </span></span><span class="parameter ">metadata<span class="token operator">: </span><a href="../-operation-metadata/index.html">OperationMetadata</a></span></span><span class="token punctuation">)</span></div></div></div>
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">fun </span><a href="record-edit.html"><span class="token function">recordEdit</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">operation<span class="token operator">: </span><a href="../-text-edit-operation/index.html">TextEditOperation</a><span class="token punctuation">, </span></span><span class="parameter ">metadata<span class="token operator">: </span><a href="../-operation-metadata/index.html">OperationMetadata</a><span class="token punctuation">, </span></span><span class="parameter ">typing<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html">Boolean</a><span class="token operator">?</span><span class="token operator"> = </span>null<span class="token punctuation">, </span></span><span class="parameter ">rewritesComposition<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html">Boolean</a><span class="token operator"> = </span><span class="token boolean">false</span></span></span><span class="token punctuation">)</span></div><div class="brief "><p class="paragraph">Records <a href="record-edit.html">operation</a>. <a href="record-edit.html">typing</a> says whether the user typed it, whatever its shape (an IME commits whole words and rewrites its composition; a deleted selection is not typing even when it is one character); null infers it, and a single typed or backspaced character counts as typing on its own.</p></div></div></div>
                 </div>
               </div>
             </div>

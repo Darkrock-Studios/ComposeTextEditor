@@ -17,8 +17,8 @@ index plus a character offset within that line. `TextEditorRange` is an ordered
 pair of them. Every selection, span, edit, and cursor position speaks these two
 types. The alternate coordinate is the flat character index over the whole
 document (used by IMEs and find); `TextEditorState` converts between the two
-using a per-revision line-start table, so conversion is an array read, not a
-walk over the document.
+through the line list's running character totals, so conversion is a binary
+search over a few dozen chunks and an array read, not a walk over the document.
 
 The other axis is logical versus visual lines: a logical line (one entry in the
 document) may wrap into several visual rows. Visual rows exist only in layout
@@ -27,8 +27,10 @@ output (`LineWrap`, below); the document model never sees them.
 ### `TextEditorState`: the beating heart
 
 The single source of truth for one editor: document content, cursor, selection,
-scroll, undo history. Apps hoist one via `rememberTextEditorState` and drive
-the editor through it; everything else in the system either feeds it or reads
+scroll, undo history. Apps hoist one via `rememberTextEditorState` (or
+`rememberSaveableTextEditorState`, which saves the text, styles, built-in rich
+spans, caret, selection and top line, but not the undo history) and drive the
+editor through it; everything else in the system either feeds it or reads
 it. It is deliberately a facade: related concerns are delegated to focused
 sub-objects (`cursor`, `selector`, `scrollManager`, `editManager`,
 `richSpanManager`), and the state's own job is to hold the document, run the
@@ -38,10 +40,19 @@ layout pass, and enforce the transaction rules that keep the two consistent.
 
 The document is an immutable value: one `AnnotatedString` per logical line plus
 a flat set of `RichSpan`s, published wholesale on every mutation (see
-"Document model and transactions" below). The snapshot also memoizes the
-indices derived from it (line-start offsets, spans grouped by start line), so
-hot queries stay cheap and survive across revisions that did not invalidate
-them.
+"Document model and transactions" below). The lines are held chunked
+(`LineList`, chunks of 32 to 64 lines with a directory of each chunk's first
+line and first character), so an edit copies the chunk or two it touches and
+shares the rest with the previous revision, and a line's flat character index
+is a prefix total rather than a table rebuilt per revision. The rich spans are
+held the same way (`SpanIndex`: each line's spans by their columns, chunked
+by line, plus a loose set for the few that cross a line break), so an edit
+re-anchors the spans on its own lines and splices the index, and the spans on
+every other line move with their chunk; the whole set is built on first read
+per revision. The whole text as one string is built
+only for the readers that need it (semantics, the skiko input request,
+Android's extracted text), spliced from the last built revision; everything
+else reads characters in place through `chars`.
 
 ### Two span systems
 
@@ -54,12 +65,16 @@ Styling lives in two deliberately separate places:
   duplicates, shifting ranges).
 - **Rich spans** (`RichSpan`: a `TextEditorRange` plus a `RichSpanStyle`) are
   decorations Compose's text stack cannot express: list bullets and numbering,
-  blockquote bars, code-fence cards, links, highlights, spell-check underlines.
+  blockquote bars, code-fence cards, links, highlights, spell-check underlines,
+  and a paragraph's own format (`ParagraphFormatSpanStyle`: spacing above and
+  below, alignment, indents, line height), which draws nothing and is shaped
+  into its line's rows and the gaps around them.
   A `RichSpanStyle` paints itself into the canvas (over the text, or under it
   via `drawBackground`) and declares its behavior: `stickyAtStart` for
   line-anchored gutter markers that must track their whole line,
   `BlockSpanStyle` for spans that own an entire line and its height (images,
-  horizontal rules), and `isDecoration` for view overlays.
+  horizontal rules), `isDecoration` for view overlays, and `isHitTestable`,
+  false for a span that only tints and must leave clicks to what it covers.
 
 The `isDecoration` flag is a load-bearing distinction: content spans (things
 that round-trip through markdown) enter undo history and announce themselves on
@@ -81,17 +96,38 @@ redo restore the caret exactly), and knows how to transform any
 survives an edit.
 
 `TextEditManager.applyOperation` is the single choke point through which every
-operation passes, and it owns the invariant sequencing: clear a selection the
+operation passes, and so the one place the state's `inputFilter` screens an
+edit that adds text (a maximum length, a single line, the host's own rules)
+before it is applied; undo and redo, which replay accepted edits, skip it, and
+so does an entry point that screened first over the whole range it replaces
+(typing over a selection, the IME, paste). It also owns the invariant
+sequencing: clear a selection the
 edit would invalidate, apply the text change inside a transaction, move the
 cursor, re-anchor rich spans, record undo history, derive the layout pass, and
 announce the operation on `editOperations`. Code that mutates lines without
 going through an operation is a bug by definition; it would bypass history,
 span re-anchoring, and the edit stream all at once.
 
-`TextEditHistory` holds the undo and redo stacks. Each entry pairs the
-operation with the `OperationMetadata` needed to reverse it (deleted text,
-deleted spans). Consecutive single-character typing and backspacing coalesce
-into wordwise runs, so undo peels words, not keystrokes.
+`TextEditHistory` holds the undo and redo stacks. An entry is one recorded
+operation paired with the `OperationMetadata` needed to reverse it (deleted
+text, deleted spans, and the lines it joined or broke, which undo writes back
+whole), or a group of them. Consecutive single-character typing
+and backspacing coalesce into wordwise runs, so undo peels words, not
+keystrokes; a pause in typing ends a run too, and `UndoSettings` sets the
+pause and how many steps are kept. IME commits and composition updates are
+recorded as typing whatever their length, so a composed word and its commit
+fold into the run they rewrite rather than leaving one step per keystroke.
+Each step also records the selection before and after it, which undo and redo
+select again.
+
+One transaction is one undo step. Operations recorded inside a
+`withAtomicEdit` are staged and land as a single group entry when the
+outermost transaction commits (a group of one is recorded as that operation,
+so typing keeps coalescing); a throwing transaction drops them with the
+draft. `TextEditorState.editGroup` is the public face of this: a host wraps a
+compound edit in it and gets one undo step that restores text, spans, and
+caret. Undo of a group reverts its operations last to first inside one
+transaction, redo replays them first to last.
 
 How positions (cursor, selection, spans, history) are carried across edits:
 [design/edit-operation-offset-transforms.md](design/edit-operation-offset-transforms.md).
@@ -99,21 +135,48 @@ How positions (cursor, selection, spans, history) are carried across edits:
 ### `RichSpanManager`: keeping spans anchored
 
 The bookkeeper for the document's rich spans. Its two jobs: publish span
-mutations copy-on-write into the snapshot, and re-anchor every span across each
-edit using the operation's own offset transform. It also serves the
-line-indexed queries layout and drawing rely on.
+mutations copy-on-write into the snapshot's per-line index, and re-anchor the
+spans on an edit's own lines (and the loose ones) across each edit using the
+operation's own offset transform, splicing the index so the rest move with
+their lines. It also serves the line-indexed queries layout and drawing rely
+on.
 
 ### The delegates: cursor, selection, scroll
 
 - **`TextEditorCursorState`**: the caret. Its position, blink visibility, and
   the *typing styles*: the set of `SpanStyle`s the next typed character will
   carry, derived from the text around the caret or toggled by toolbar actions.
+  The caret moves by grapheme cluster, never by UTF-16 unit: `TextBreaks`
+  wraps the platform's ICU break iterators (skia's on desktop, iOS and web,
+  `android.icu` on Android) behind one `expect`, and every motion, forward
+  delete, and hit test snaps through it. Backspace is the one asymmetric edit:
+  it removes the previous code point, or a whole emoji sequence, as
+  `BasicTextField` and `EditText` do, so a combining mark comes off its base
+  on its own. Words come from the same place: `wordRuns` segments a line with
+  the platform's ICU word iterator and tags each segment lexical, emoji, or
+  other, and word motion, double-click selection (`findWordSegmentAt`) and the
+  spell checker's candidates (`wordSegments`) all read that one segmentation.
+  The caret also carries an affinity (`CaretAffinity`): a position on a wrap
+  offset belongs to two visual rows, and the affinity says which one the caret
+  is on. Positions stay affinity-free; the motions read the caret's row
+  through `TextEditorState.cursorRowIndex()`, drawing, handles, the touch
+  toolbar and scrolling through the affinity overloads of `getWrapForDrawing`
+  and `getPositionForOffset`, and every move resets the caret to downstream
+  unless it deliberately lands at a row's end (End, a vertical move past the
+  row's end, or a pointer past it, which `pointerHitAt` reports).
 - **`TextEditorSelectionManager`**: the selection range and the gesture state
   behind it (touch handles, drag). Rule: any content mutation clears the
   selection; only span-level operations keep it.
 - **`TextEditorScrollManager`** (with `TextEditorScrollState`): scroll offset,
   total content height, visible-range queries, and `ensureCursorVisible`, which
-  is deferred through transactions so it always reads fresh layout.
+  is deferred through transactions so it always reads fresh layout. The range
+  runs from minus the top padding (the first row below the top padding) to the
+  last row and bottom padding at the viewport's bottom, and is empty when
+  everything fits. A soft keyboard is met two ways: one drawn over the
+  editor is a covered strip the caret is kept above (`KeyboardCover.kt`,
+  measured on the canvas once it is placed for the keyboard's inset), and
+  a window that shrinks the editor instead keeps a caret that was in view in
+  view (`onViewportSizeChange`).
 - **`PlatformTextEditorExtensions`**: per-platform IME glue (Android cursor
   anchor monitoring; empty elsewhere).
 
@@ -124,7 +187,17 @@ The layout pass (`updateBookKeeping`, see below) turns the document into
 paragraph's shaping result, its resolved rich spans, and precomputed draw facts
 (ordered-list numeral, code-fence edge, block height). `LineWrap` is the
 contract between state and view: drawing, hit testing, cursor placement, and
-scrolling consume it and never re-measure text themselves.
+scrolling consume it and never re-measure text themselves. Behind the list is
+a `RowList`: one `LineLayout` per logical line (the shaping result and the
+facts derived for it), chunked like the line list with running row counts and
+heights, so an edit splices the layouts of the lines it touched and every
+other line moves with its chunk; a `LineWrap` is built when it is read. The
+rows run line by line, each line's by wrap start, and top to bottom with no
+gaps, so finding the row that holds a position or sits at a height is a binary
+search (`RowSearch.kt`, answered from the `RowList`'s directory without
+building a row), and a frame reads only the rows in view. A paragraph's
+spacing lies between its last row and the next paragraph's first, outside
+every row, so a point in a gap belongs to the row above it.
 
 ### The view layer
 
@@ -134,18 +207,52 @@ scrollbar, context menu, and IME wiring; `RichTextView` renders the same
 content read-only. Input arrives through platform key, pointer, and IME
 handlers whose only job is translation: raw events become cursor moves,
 selection changes, or `TextEditOperation`s. The view renders what `lineOffsets`
-says and holds no document state of its own.
+says and holds no document state of its own. Content padding belongs to the
+editor: the top and bottom padding are scroll range, and the start and end
+padding are applied inside the canvas, below its pointer input, so a press
+anywhere in the padding reaches the nearest row. The editor fills its height
+unless its `lineLimits` size it to its laid-out rows, read from `lineOffsets`
+in a layout modifier on its outer node.
+
+Accessibility services see the editor through its semantics
+(`EditorSemantics.kt`), modelled on `BasicTextField`'s: the whole text as an
+editable field, the selection, and the actions a screen reader or test drives.
+A disabled editor reports itself disabled and offers no edit actions; a
+read-only one (`readOnly`) shows and moves its caret but is gated exactly as a
+disabled one is for input, menus and edit semantics, and reports itself not
+editable rather than disabled. `isFocused` means focused and taking input;
+`hasFocus` means focused. Its
+`setText` is an edit, not a document load: it replaces only the part of the
+text that differs, as one undo step, so the rest keeps its spans. Copy, cut,
+paste and the long-press menu run through the action registry, as the keyboard
+and context menu do, so a read-only editor refuses the same edits; links ride
+in the text as URL links. `getTextLayoutResult` is a whole-document layout
+measured on request from the editor's rows (each line as the editor shaped it, the
+space between rows as placeholders), because the editor has no single one. `RichTextView`
+publishes the same text and layout as a read-only text (and, when selectable,
+the selection and copy). The
+document is not snapshot state, so the semantics block reads the state's
+`revision`, a snapshot-state counter every published revision advances, to stay
+current; the word count does the same.
 
 ### Observation and extensions
 
 The state exposes a small reactive surface: `editOperations` streams applied
-operations, `cursorDataFlow` snapshots caret position, styles, and selection
-for toolbars, and `snapshot()` hands any thread a coherent document revision.
-Extensions build on exactly this surface plus the public span API: the markdown
-module converts to and from markdown text, and the spell-check and find modules
-(separate artifacts) watch `editOperations` and paint their results as
-decoration rich spans through `updateRichSpans`, without ever touching editor
-internals.
+operations (`editOperationBursts` in the lists a collector catches up on, so
+each can be read in the text it left, leaving out those a `setText` or
+`setDocument` since made stale), `cursorDataFlow` snapshots caret position, styles, and selection
+for toolbars (starting with the current one), `wordCount` counts words through
+the same ICU segmentation as word motion and spell check, recounting only the
+lines an edit replaced, and `snapshot()` hands any thread a coherent document
+revision.
+Extensions build on exactly this surface plus the public span API, the block
+API on the state and the style configuration (`RichTextStyles`): the markdown
+module (a separate artifact) converts to and from markdown text through the
+snapshot and `applyDocumentBlocks`, and the spell-check and find modules watch
+`editOperations` and paint their results as decoration rich spans through
+`updateRichSpans`, without ever touching editor internals. What each module
+owns and the seam between core and a format:
+[design/modules.md](design/modules.md).
 
 ## Input: from raw event to operation
 
@@ -160,12 +267,17 @@ translation paths:
   three ways: bindings know which chord means what, the
   `EditorActionRegistry` on the state knows what an action *does*, and
   `TextEditorKeyCommandHandler` implements only caret motion, because a
-  motion is not something a host can register. Windows/Linux and macOS
+  motion is not something a host can register. The arrow keys are visual:
+  in a paragraph the layout resolves as right-to-left, the handler mirrors
+  the bound motion (Left and Right, the word motions through
+  `KeyBindings.wordForward` and `wordBackward`, line start and end) before running it; Home,
+  End, deletes and the Emacs chords stay logical. Windows/Linux and macOS
   conventions ship as two `KeyBindings` values; hosts can substitute their
   own and register actions for their own chords to bind.
 - **Typed characters.** Printable typing that arrives as raw key events
-  (desktop `KEY_TYPED`, hardware keyboards on Android, browser keydown on
-  wasm) inserts through the same handler, gated by a per-platform predicate
+  (desktop `KEY_TYPED`, hardware keyboards on Android, a browser keydown on
+  wasm while the canvas rather than the input session's textarea holds DOM
+  focus) inserts through the same handler, gated by a per-platform predicate
   for "this event is a typed character", because every platform signals that
   differently and guessing wrong either drops or double-inserts keystrokes.
 - **The IME.** Everything that *composes* text (soft keyboards, autocorrect,
@@ -179,17 +291,23 @@ input session, losing focus (or disabling the editor) cancels it.
 Two extension points hang off this, and they are not interchangeable. An
 **action** is invoked by name, so it needs something to invoke it: a chord, a
 menu item, a toolbar button. An **edit behavior** intercepts one of the
-semantic edits (newline, backspace, forward delete) and may have no trigger at
-all, because an IME can commit a newline or delete a character without ever
-producing a key event. Line-block smart editing is the first behavior, which is
-what makes it reach every input path rather than only the ones that go through
-key handling. Both, and the reasoning for keeping them separate:
-[design/editor-actions.md](design/editor-actions.md).
+semantic edits (typed text, newline, backspace, forward delete) and may have
+no trigger at all, because an IME can commit a word or a newline, or delete a
+character, without ever producing a key event. Line-block smart editing is the
+first behavior, which is what makes it reach every input path rather than only
+the ones that go through key handling; the typed-text hook sees what every
+path commits (never an IME's composing updates) and is what smart punctuation,
+markdown as you type, and auto-link build on; a paste hook is told where a paste
+landed, for auto-link's pasted half. Both, and the reasoning for
+keeping them separate: [design/editor-actions.md](design/editor-actions.md).
 
 The IME contract runs in two directions. Commands flow in, and each one lands
 in a single shared implementation (`ImeEditLogic` in commonMain) so that
 composing-region and cursor semantics are byte-for-byte identical on every
-platform; the per-platform adapters are pure translation. State flows out,
+platform; the per-platform adapters are pure translation. There are two of
+them: the Android `InputConnection`, and one skiko
+`PlatformTextInputMethodRequest` in the `skikoMain` source set shared by
+desktop, iOS, and web, each contributing only its `ImeOptions`. State flows out,
 because an IME keeps its own mirror of the text around the cursor and will
 issue commands against a stale buffer unless it is told about every change.
 On Android every report goes through one flush that compares the finished state
@@ -198,14 +316,30 @@ after any other change, never from inside an edit. The session machinery, the An
 `InputConnection`, and the per-platform differences:
 [design/text-input-sessions.md](design/text-input-sessions.md).
 
-Pointer input is three cooperating handlers on the canvas: caret placement
-and span clicks, drag selection, and multi-click (word, then line). The
-load-bearing distinction is *mouse-like versus finger*, detected from pointer
-buttons rather than pointer type because Android reports external mice as
-`Touch`. Mouse-like input places the caret on press, drags to select, and
-extends with shift-click; finger input places the caret on release,
-long-presses to select a word or open the context menu, and drags selection
-handles.
+Pointer input on the canvas is split by device. One handler owns every mouse
+gesture; two own the finger ones (handle drags, and taps with long
+presses). The load-bearing distinction is *mouse-like versus finger*, detected
+from pointer buttons rather than pointer type because Android reports external
+mice as `Touch`. Mouse-like input places the caret on press, extends with
+shift-click, and counts presses into double and triple clicks (word, then
+line) by the platform's double-tap timeout and touch slop; a plain press inside
+the selection is held instead, and moving past the slop drags the selection
+out through the platform's drag and drop (`dragdrop/`, desktop, Android and web so far), which
+also drops text in; a drag extends by
+whatever unit the press selected, and keeps scrolling while it is held above
+or below the viewport. Only the primary button places the caret or selects;
+the secondary button opens the context menu, keeping a selection it lands
+inside. Finger input places the caret on release and shows a caret handle
+under it, long-presses to select a word or open the context menu (or, inside
+the selection while the platform toolbar is up, to drag it), and drags the
+caret and selection handles. A span click is reported on release, when the
+press and release land on the same span without a drag, so placing the caret
+or selecting never reads as a click; links open by the host's `onLinkClick` on
+Ctrl/Cmd+click in an editor and on a plain click in `RichTextView`, and only
+a destination `sanitizeLinkUrl` allows (relative, and http, https, mailto, tel
+and ftp unless the host sets its own `allowedLinkSchemes` on the state;
+`javascript:`, `data:`, `vbscript:` and `file:` never) reaches it, the same
+allowlist every importer applies.
 
 ## Document model and transactions
 
@@ -214,6 +348,13 @@ plus a flat set of `RichSpan` decorations. Every mutation publishes a whole new
 snapshot, so a reader on any thread always sees a complete, self-consistent
 revision.
 
+Lines are separated by `\n` alone. `TextEditManager.applyOperation` turns
+`\r\n` and a lone `\r` into `\n` in every insert and replace it applies, whoever
+built it, and the paths that load or parse text (`setText`, markdown and HTML
+parsing) do the same, so no line holds a carriage return (`setDocument` alone
+takes its lines as given). Copy writes `\n`; converting to a platform's native line ending is the
+platform clipboard's job (AWT does it on Windows).
+
 `setDocument` is the inverse of `snapshot()`: it loads a snapshot, rich spans
 included, as one revision, so a document moves between editors without a
 markdown round trip. It drops decoration spans, clamps spans onto the incoming
@@ -221,12 +362,15 @@ lines, and clears undo history like any other document load. `setText` keeps
 only character-level spans. Both announce the swap by bumping `documentGeneration`
 once it commits, which is how spell check knows to re-scan.
 
-Edits that must land together run inside `TextEditorState.withAtomicEdit`. The
-transaction accumulates mutations in a draft and publishes them as one revision
-at commit, after line-block normalization. A throwing transaction discards the
-draft along with everything staged against it: the deferred relayout, the
-cursor scroll, and the queued `editOperations` announcements. Nothing observes
-a half-applied edit, and nothing announces an edit that never landed.
+Edits that must land together run inside `TextEditorState.withAtomicEdit`
+(public as `editGroup`). The transaction accumulates mutations in a draft and
+publishes them as one revision at commit, after line-block normalization, and
+records the operations made inside it as one undo step. A throwing transaction
+discards the draft along with everything staged against it: the deferred
+relayout, the cursor scroll, the history entries, and the queued
+`editOperations` announcements, and puts the caret and selection back where
+they were. Nothing observes a half-applied edit, and nothing announces or
+remembers an edit that never landed.
 
 ## Layout: the deferred, incremental relayout pass
 
@@ -240,9 +384,17 @@ Text shaping is by far the most expensive work per edit, so the layout pass
 
 - **Shape only the lines whose content changed.** A `LayoutUpdate` describes
   each pass's dirty range, derived centrally from the edit operation itself;
-  unchanged lines reuse their previous shaping result and only their offsets,
-  spans, and numbering are recomputed. Span overlays (spell-check underlines,
-  find highlights) shape nothing at all.
+  unchanged lines keep their layouts in place, and only the lines whose
+  neighbour-derived facts (list numbering, fence edges) change are touched,
+  the walk stopping at the first line that keeps both its facts and its list
+  counters. Span overlays (spell-check underlines, find highlights) shape
+  nothing at all and re-resolve only their lines, and neither does a viewport
+  that changes only its height (a soft keyboard): rows depend on the width
+  alone. A width change, or a style, measurer or density change, shapes the
+  lines around the viewport at once and the rest in the background between
+  frames, each line keeping its old shape until then, with the scroll
+  anchored to the line at the top of the viewport; drawing and a scroll to
+  the caret shape what they need first.
 - **One pass per logical operation.** Relayouts requested inside a transaction
   merge and flush as a single pass at commit, in a fixed order: publish the
   revision, flush the layout, scroll the cursor against the fresh offsets,
@@ -251,7 +403,7 @@ Text shaping is by far the most expensive work per edit, so the layout pass
 The incremental path is opportunistic, never load-bearing: guards degrade any
 pass that cannot be proven sound to a full relayout, which is always correct.
 Costs are pinned by counting-measurer regression tests (a keystroke shapes one
-line, a spell-check pass shapes zero) and a parity suite holds incremental
+line, a spell-check pass shapes zero, a paste writes the line list once) and a parity suite holds incremental
 output to field-for-field equality with a full pass.
 
 Details: [design/incremental-relayout.md](design/incremental-relayout.md)

@@ -63,7 +63,7 @@ sealed interface EditorCommand {
 }
 ```
 
-A host writes `Action("myapp.toggleBold", isEdit = true)` and binds it from
+A host writes `Action("myapp.insertDate", isEdit = true)` and binds it from
 its own `KeyBindings`. Ids are namespaced by convention (`editor.`,
 `markdown.`, `myapp.`) and the registry is keyed by id string, not object
 identity, so a duplicate id is a detectable collision rather than a silent
@@ -71,6 +71,23 @@ second entry.
 
 `isEdit` sits on the action because the disabled-editor gate needs it before
 dispatch, without having to resolve a handler first.
+
+### Platform tables
+
+Three `KeyBindings` tables ship, and `platformKeyBindings()` picks one for the
+host:
+
+| Table | Used on | Differs in |
+| --- | --- | --- |
+| `CtrlKeyBindings` | Linux, Android, and any other Ctrl host | The base: Ctrl for shortcuts and jumps; going forward stops at ends (GTK, `EditText`) |
+| `WindowsKeyBindings` | Windows desktop, browsers on Windows | Going forward runs on to the next start: Ctrl+Right and Ctrl+Delete to the next word's (`WordRight`, `DeleteWordForward`), Ctrl+Down to the next paragraph's. Word motion stops at line breaks both ways: Ctrl+Left and Ctrl+Backspace from a line start go to the previous line's end (`PreviousWordStart`, `DeleteToPreviousWordStart`) |
+| `MacKeyBindings` | macOS, iPadOS, browsers on macOS | Cmd for shortcuts, Option for word and paragraph jumps; Option+Right and Option+Delete stop at the word end; Cocoa's Emacs-style Ctrl+A, E, F, B, N, P, D, H, K and Y |
+
+Windows and Linux are the same desktop JVM target, so the choice is made at
+runtime from `os.name` (desktop) or the browser's platform and user agent
+(web), not by `expect`/`actual`. `WindowsKeyBindings` delegates everything it
+does not change to `CtrlKeyBindings`, so the two cannot drift apart. A host
+replaces the table through `LocalKeyBindings` or an editor's `keyBindings`.
 
 ### The registry
 
@@ -83,7 +100,9 @@ class EditorActionContext(
     val state: TextEditorState,
     val clipboard: Clipboard,
     val scope: CoroutineScope,
-)
+) {
+    fun <T> asTarget(block: () -> T): T
+}
 
 class EditorActionSpec(
     val action: EditorCommand.Action,
@@ -102,12 +121,139 @@ class EditorActionRegistry {
 action ids and asks each spec whether it currently applies, instead of knowing
 what any of them mean.
 
+An action run through an editor's menu or semantics runs as that editor, which
+need not hold focus when several share the state: its line limit and default
+action answer. An action that edits after suspending (fetching text, then
+inserting it) wraps the edit in `asTarget`, which answers with the editor the
+action was run on, wherever focus has moved since.
+
 The core registers its built-ins (`BuiltinEditorActions`) when the state is
-constructed. Nothing else in the library registers an action:
-`MarkdownExtension` still exposes its toggles as plain functions, and a host
-that wants a markdown chord registers the action itself, as
-`sampleApp/BoldShortcut.kt` does. Having the extension register
-`markdown.toggleBold` and friends from its `init` is the obvious follow-up.
+constructed. Nothing else in the library registers an action: the block
+toggles are plain functions on the state (`toggleBulletList` and the rest of
+`state/TextEditorStateBlockExt.kt`), and a host that wants a chord for one
+registers the action itself.
+
+### Formatting toggles
+
+`editor.toggleBold`, `editor.toggleItalic`, `editor.toggleUnderline`,
+`editor.toggleStrikethrough` and `editor.toggleInlineCode` are built-ins. They
+apply the styles of the state's `richTextStyles`, which the format addons
+read as well, so one action serves a plain editor and a markdown one, and a
+markdown editor exports what it applied.
+Underline has no markdown form and toggles
+`SpanStyle(textDecoration = TextDecoration.Underline)`.
+
+All five follow `TextEditorState.toggleSpanStyle`, which a toolbar calls too:
+
+- A selection carrying the style on every character loses it.
+- Any other selection, including a partly styled one, gains it throughout.
+- A collapsed caret toggles the style for the text typed next; the document is
+  untouched.
+
+Empty lines inside a selection do not count against "every character".
+`hasStyleThroughout` answers the same question for a toolbar's active state, so
+a button lights exactly when pressing it would remove the style. Styles match
+by equality, as `addStyleSpan` and `removeStyleSpan` do.
+
+| Action | Windows, Linux | macOS |
+| --- | --- | --- |
+| Bold | Ctrl+B | Cmd+B |
+| Italic | Ctrl+I | Cmd+I |
+| Underline | Ctrl+U | Cmd+U |
+| Strikethrough | Ctrl+Shift+X | Cmd+Shift+X |
+| Inline code | Ctrl+E | Cmd+E |
+| Clear formatting | Ctrl+\ | Cmd+\ |
+| Unlink | none | none |
+
+Strikethrough follows Google Docs on macOS, Slack and Teams; the other common
+choice, Shift+S, is Save As in most hosts. Inline code follows GitHub and
+Notion. Clear formatting follows Google Docs; Word's Ctrl+Space switches the
+input method on Windows, Linux and macOS. Unlink has no chord common enough to
+claim.
+
+`editor.clearFormatting` (`TextEditorState.clearFormatting`) takes every
+character style off the selection except those structure puts there: a
+heading's or code block's line style and, in a markdown editor, the body text
+style and the link style where a link covers the text. At a collapsed caret it
+sets the style of the text typed next to its line's plain style, like the
+toggles leaving the document alone. `editor.unlink` (`TextEditorState.unlink`) takes off,
+whole, every link the selection touches or the one the caret is in or at the
+edge of, with its link style; its `isEnabled` is false away from a link. Each
+is one undo step.
+
+### Tab
+
+`editor.indent` and `editor.outdent` sit on Tab and Shift+Tab in every table.
+`TextEditorState.tabSettings` (`TabSettings`) configures them:
+
+- `size`, four by default, is how many spaces one indent inserts and one
+  outdent strips. Outdent strips a single leading tab character instead when
+  the line starts with one.
+- `insertTabCharacter` indents with a tab character instead of spaces.
+- `movesFocus` makes Tab and Shift+Tab move focus, as in a form field. The key
+  handler leaves them to the focus system before asking the bindings, so the
+  indent actions stay available to other chords and to host code.
+
+The default keeps Tab indenting, which a writing app wants; `BasicTextField`
+inserts a tab character instead, which a host can choose. Either way the
+keyboard can leave the editor: Tab with Ctrl or Cmd is bound in no table, so
+Ctrl+Tab and Ctrl+Shift+Tab reach the focus system (the GTK, Cocoa and Swing
+convention for a text view that takes Tab), and a Tab after Escape is left to it
+too (CodeMirror's escape, for browsers that keep Ctrl+Tab). Escape arms Tab until
+another key is pressed or focus changes. Alt+Tab still indents where the system
+lets it through, as Option+Tab does in Cocoa.
+
+Tab is list-aware. At a list item's start it nests the item one level, never
+deeper than one below the item above; inside the item's text it
+inserts the indent text. A list's first top-level item has nothing to nest
+under: Google Docs nests it anyway and Word indents the whole list, and the
+line model can do neither, so it takes the indent text, which survives a
+markdown round trip and Shift+Tab takes back. A nested item
+already at its limit is left alone, since Shift+Tab there un-nests it and would
+leave the indent, and so is a blank first item, whose indent would keep Enter
+from ending the list. Tab over several lines treats each line as Tab alone
+does. Shift+Tab at the caret un-nests a nested item and otherwise strips the
+line's leading spaces, list items included; over several lines it does both.
+
+### The kill ring
+
+`editor.deleteToLineStart`, `editor.deleteToLineEnd` and
+`editor.deleteToParagraphEnd` are kills, as Cocoa's `deleteToBeginningOfLine:`,
+`deleteToEndOfLine:` and `deleteToEndOfParagraph:` are: what they delete goes
+in the editor's own kill buffer (`KillRing` on the state), never the clipboard.
+A kill made with the text and the caret as the last kill left them, and no other
+key command between, joins it, after it going forward and in front of it going
+back, so Ctrl+K pressed down a run of lines kills them as one piece; a kill of a
+selection starts afresh. `editor.yank` (Ctrl+Y on macOS) inserts it over any
+selection, as one undo step, keeping its character styling but not its rich
+spans (links, images, list markers), which only Cut and Paste carry. Like
+Cocoa's default the buffer holds one entry, and loading a document empties it.
+The yank is bound on macOS only; elsewhere Ctrl+Y is Redo.
+
+### The context menu
+
+The built-in menu lists, after any host items, Undo and Redo; Cut, Copy, Paste
+and Paste as Plain Text; and Select All, each group behind a divider. An item
+shows when its action is registered and allowed (a read-only editor or view has
+no editing items, so it offers Copy and Select All) and is disabled while its
+spec's `isEnabled` says it has nothing to act on, as native menus grey items out
+rather than drop them. Paste stays enabled, since the clipboard cannot be read
+synchronously. `ContextMenuStrings` holds every label; `TextEditor`,
+`BasicTextEditor` and `RichTextView` take one, and `TextEditor` takes a
+`TextEditorContextMenuState` too.
+
+`editor.showContextMenu` opens it under the caret. It is bound to Shift+F10 and
+the Menu key in `CtrlKeyBindings` (Windows, Linux and Android), and to nothing
+on macOS, which has no such convention. On the web Compose does not name the
+Menu key, and whether the browser leaves Shift+F10 to the page is unverified.
+The composable showing a state registers how to open its menu, and the action's
+`isEnabled` is false while none does. The menu takes Up, Down, Enter and Escape
+once open. An addon with menu items of its own (spell check) can register over
+the action to open its menu instead.
+
+Pointer and touch-toolbar positions are in the text canvas's coordinates; the
+composable converts them through the layout into the menu provider's, so the
+content padding and any padding in the host's modifier are accounted for.
 
 ### Resolution and consumption
 
@@ -141,8 +287,11 @@ built-in.
 ```kotlin
 interface EditBehavior {
     fun onNewline(state: TextEditorState): Boolean = false
+    fun onNewlineLanded(state: TextEditorState, range: TextEditorRange): Boolean = false
     fun onBackspace(state: TextEditorState): Boolean = false
     fun onDeleteForward(state: TextEditorState): Boolean = false
+    fun onTextInput(state: TextEditorState, text: String, range: TextEditorRange): Boolean = false
+    fun onPaste(state: TextEditorState, text: String, range: TextEditorRange): Boolean = false
 }
 ```
 
@@ -151,6 +300,43 @@ list on `TextEditorState`; the first to claim the edit wins. A behavior that
 mutates must route through the edit manager, so its work lands in undo history
 like any other operation (`LineBlockEditBehavior` does this by going through
 `toggleLineBlock` rather than mutating spans directly).
+
+`onTextInput` is the typed-text hook. Like `onNewlineLanded` and `onPaste`,
+and unlike the hooks asked before an edit, it runs *after* the edit: it is told
+where committed text landed. It sees every
+path: a key event's character (`insertTypedString`), an IME commit (the
+whole word a soft keyboard or a candidate window commits, in place of what
+it was composing, or a composition it finishes as it stands), a dictated
+phrase through the accessibility `insertTextAtCursor`, and a host's own
+`insertTypedString`. It never sees an IME's composing updates, which are not
+committed text, and it never sees a paste, which is not typing. A paste goes to
+`onPaste` instead, told where the pasted text landed once the paste (both paste
+actions, so every platform's paste) has committed as its own undo step; an edit
+there is a step of its own, as on the typed-text hook. A drop that is not a move
+within the editor is offered the same way. A host that registers its own paste
+action replaces that offer along with the paste, and makes it by calling
+`pasteLanded` once its paste has committed. A lone typed line break is the Enter
+key and goes to `onNewline` before it lands, never to `onTextInput`; once the
+Enter's own step has put a line break in, `onNewlineLanded` is told where it
+landed, and an edit there is a step of its own. The one exception is an IME
+committing `"\n"` over its own composition, which is a replacement of the
+composition and reaches none of these hooks (see `ImeLineBlockParityTest`).
+
+It runs after rather than before because the default edit is not one thing a
+behavior could reproduce: on the IME path it replaces the composition,
+inherits its styling, and places the caret by the IME's `newCursorPosition`
+contract. Letting it land first means a behavior reads the document around
+`range` and edits on top, owns the caret from there, and the IME is asked to
+resync when it moves the text or the caret. It also gives the undo shape
+native editors have for free: the typed text is its own step, the behavior's
+replacement the next, so one undo of an em dash gives back the two hyphens.
+Several edits go in one `editGroup` to be one step. The chain is skipped for
+edits a behavior makes while handling one, and a behavior that changes the
+text ends the chain whether or not it claims, since the range it was told no
+longer holds; one that only styles it (auto-link's link) leaves the chain
+going, so auto-link and smart punctuation both act on one commit. Smart punctuation, markdown as you type, and auto-link are opt-in
+behaviors on this hook; `TextInputBehaviorTest` shows the shape. The ones core
+ships (`SmartPunctuation`, `AutoLink`) are described in [behaviors.md](behaviors.md).
 
 The chain is consulted inside the public semantic functions, so every caller
 gets it:
@@ -172,7 +358,7 @@ something needs it.
 Line blocks are not a markdown feature. They are a core capability that
 markdown happens to serialize, so the behavior lives in the library
 (`LineBlockEditBehavior` in `richstyle`) and is registered by default;
-`MarkdownExtension` remains a consumer. The semantics documented under
+the markdown module remains a consumer. The semantics documented under
 "Smart editing" in [line-blocks.md](line-blocks.md) are unchanged by where the
 code sits.
 
@@ -228,9 +414,9 @@ word correction. The guards:
   would let an autocorrect rewrite at the top of the document pass as a
   backspace.
 - The code-point variant additionally requires that its request resolved to at
-  most one UTF-16 char, so a one-code-point delete of an astral character never
-  reaches `backspaceAtCursor`, which deletes a single char and would split the
-  surrogate pair.
+  most one UTF-16 char, and either variant goes semantic only when the cluster
+  beside the caret is one char: `backspaceAtCursor` and `deleteAtCursor` take
+  a whole code point, emoji sequence, or cluster, more than the IME asked for.
 - Both semantic routes also run when clamping leaves an empty range. A
   backspace at the very start of the document removes nothing but can still
   exit a line block, which is what the hardware key does; bailing on the empty
@@ -281,12 +467,12 @@ Three seams, in the order you are likely to reach for them.
 chords you do not claim or you lose every built-in:
 
 ```kotlin
-val ToggleBold = EditorCommand.Action("myapp.toggleBold", isEdit = true)
+val InsertDate = EditorCommand.Action("myapp.insertDate", isEdit = true)
 
-state.actions.register(EditorActionSpec(ToggleBold) { it.state.toggleBold() })
+state.actions.register(EditorActionSpec(InsertDate) { it.state.insertStringAtCursor(today()) })
 
 val bindings = KeyBindings { event ->
-    if (event.key == Key.B && event.isCtrlShortcut) ToggleBold
+    if (event.layoutKey == Key.D && event.isCtrlShortcut && event.isShiftPressed) InsertDate
     else platformKeyBindings().commandFor(event)
 }
 
@@ -295,33 +481,32 @@ TextEditor(state = state, keyBindings = bindings)
 
 Use `isCtrlShortcut` rather than `isCtrlPressed`: Windows synthesizes AltGr as
 left-Ctrl plus right-Alt, so a bare Ctrl test steals the layout chords that type
-a character. `sampleApp/BoldShortcut.kt` is this worked out, including picking
-the modifier per platform.
+a character. On macOS shortcuts belong on Cmd (`isMetaPressed`); a host chord
+that should follow the platform checks `platformKeyBindings() === MacKeyBindings`.
+Match on `layoutKey` rather than `key`: on desktop Linux `key` names a letter by
+the first keyboard layout installed, not the active one, so a BÉPO or Dvorak
+user would find the chord on QWERTY's key.
 
 *Replace a built-in.* Register over its id. `editor.paste` bound to a paste that
-strips formatting changes the chord, the context menu and anything else that
-invokes it, because they all resolve through the same registry.
+sanitizes the clipboard changes the chord, the context menu and anything else
+that invokes it, because they all resolve through the same registry. Pasting has
+two actions, `editor.paste` and `editor.pasteAsPlainText`: a host that reroutes
+or disables pasting replaces or unregisters both.
 
 *Intercept an edit.* Implement `EditBehavior` and add it to
 `state.editBehaviors`. Use this, not an action, when the thing you are reacting
 to has no chord: an IME commits a newline without ever producing a key event.
-Note that `withAtomicEdit` and the raw primitives are `internal`, so an
-out-of-module behavior builds on the public edit API (`insertStringAtCursor`,
-`delete`, `replace`) and cannot wrap a primitive in its own transaction.
+An out-of-module behavior builds on the public edit API
+(`insertStringAtCursor`, `delete`, `replace`) and wraps a compound edit in
+`state.editGroup { }`, which makes it one revision and one undo step; the raw
+primitives stay `internal`.
 
 ## Known limitations and follow-ups
 
-- `Action.Indent` / `Action.Outdent` insert and strip literal spaces against a
-  hard-coded `TAB_SIZE = 4` in `BuiltinEditorActions`. Because actions are
-  open these are overridable, so a list-aware Tab or a code-editor indent is a
-  host concern rather than a library change.
-- Behaviors are consulted for newline, backspace and forward delete only.
-  Typed-character interception (auto-pairing quotes and brackets) is the
-  obvious next hook and is deliberately out of scope until something needs it.
-- `EditBehavior` is public but the transactional primitives it would want are
-  not. An out-of-module behavior can claim an edit and can mutate through the
-  public API, but cannot compose several mutations into one revision. Widen
-  this when a host asks for it, rather than guessing at the shape now.
+- A code-editor indent (to the next tab stop, or matching the line above) is a
+  host's own `editor.indent`.
+- Behaviors see typed text, pastes and drops, newline, backspace and forward
+  delete.
 - The IME routing is unverified on real hardware. See "Device verification
   still owed" above; that list should be worked through before a release ships
   this.

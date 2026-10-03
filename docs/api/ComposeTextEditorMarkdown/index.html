@@ -1,0 +1,139 @@
+<!doctype html>
+<html class="no-js" lang="en">
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1" charset="UTF-8">
+    <title>Markdown</title>
+<link href="../images/logo-icon.svg" rel="icon" type="image/svg"><script>var pathToRoot = "../";</script>
+    <script>document.documentElement.classList.replace("no-js", "js");</script>
+    <script>const storage = localStorage.getItem("dokka-dark-mode")
+      if (storage == null) {
+        const osDarkSchemePreferred = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+        if (osDarkSchemePreferred === true) {
+          document.getElementsByTagName("html")[0].classList.add("theme-dark")
+        }
+      } else {
+        const savedDarkMode = JSON.parse(storage)
+        if (savedDarkMode === true) {
+          document.getElementsByTagName("html")[0].classList.add("theme-dark")
+        }
+      }
+    </script>
+<script type="text/javascript" src="../scripts/sourceset_dependencies.js" async></script>
+<link href="../styles/style.css" rel="Stylesheet">
+<link href="../styles/main.css" rel="Stylesheet">
+<link href="../styles/prism.css" rel="Stylesheet">
+<link href="../styles/logo-styles.css" rel="Stylesheet">
+<link href="../ui-kit/ui-kit.min.css" rel="Stylesheet">
+<script type="text/javascript" src="../scripts/safe-local-storage_blocking.js"></script>
+<script type="text/javascript" src="../scripts/navigation-loader.js" async></script>
+<script type="text/javascript" src="../scripts/platform-content-handler.js" async></script>
+<script type="text/javascript" src="../scripts/main.js" defer></script>
+<script type="text/javascript" src="../scripts/prism.js" async></script>
+<script type="text/javascript" src="../ui-kit/ui-kit.min.js" defer></script></head>
+<body>
+<div class="root">
+    <header class="navigation theme-dark" id="navigation-wrapper" role="banner">
+<a class="library-name--link" href="../index.html" tabindex="1">
+                    Compose Text Editor
+            </a>        <button class="navigation-controls--btn navigation-controls--btn_toc ui-kit_mobile-only" id="toc-toggle" type="button">Toggle table of contents
+        </button>
+        <div class="navigation-controls--break ui-kit_mobile-only"></div>
+        <div class="library-version" id="library-version">
+        </div>
+        <div class="navigation-controls">
+        <ul class="filter-section filter-section_loading" id="filter-section" aria-label="Target filter">
+                <button class="platform-tag platform-selector common-like" data-active="" aria-pressed="true" data-filter=":ComposeTextEditorMarkdown/commonMain">common</button>
+            <div class="dropdown filter-section--dropdown" data-role="dropdown" id="filter-section-dropdown">
+                <button class="button button_dropdown filter-section--dropdown-toggle" role="combobox" data-role="dropdown-toggle" aria-controls="platform-tags-listbox" aria-haspopup="listbox" aria-expanded="false" aria-label="Toggle source sets"></button>
+                <ul role="listbox" id="platform-tags-listbox" class="dropdown--list" data-role="dropdown-listbox" aria-label="Target filter">
+                    <div class="dropdown--header"><span>Target filter</span>
+                        <button class="button" data-role="dropdown-toggle" aria-label="Close target filter">
+                            <i class="ui-kit-icon ui-kit-icon_cross"></i>
+                        </button>
+                    </div>
+                        <li role="option" class="dropdown--option platform-selector-option common-like" tabindex="0">
+                            <label class="checkbox">
+                                <input type="checkbox" class="checkbox--input" id=":ComposeTextEditorMarkdown/commonMain" data-filter=":ComposeTextEditorMarkdown/commonMain">
+                                <span class="checkbox--icon"></span>
+                                common
+                            </label>
+                        </li>
+                </ul>
+                <div class="dropdown--overlay"></div>
+            </div>
+        </ul>
+            <button class="navigation-controls--btn navigation-controls--btn_theme" id="theme-toggle-button" type="button">Switch theme
+            </button>
+            <div class="navigation-controls--btn navigation-controls--btn_search" id="searchBar" role="button">Search in
+                API
+            </div>
+        </div>
+    </header>
+    <div id="container">
+        <nav id="leftColumn" class="sidebar" data-item-type="SECTION" data-item-config="{&quot;defaultSize&quot;: 280, &quot;minSize&quot;: 200, &quot;maxSize&quot;: 400}">
+            <a class="toc--skip-link" href="#main">Skip to content</a>
+            <div class="dropdown theme-dark_mobile" data-role="dropdown" id="toc-dropdown">
+                <ul role="listbox" id="toc-listbox" class="dropdown--list dropdown--list_toc-list" data-role="dropdown-listbox" aria-label="Table of contents">
+                    <div class="dropdown--header">
+                            <span>
+                                    Compose Text Editor
+                            </span>
+                        <button class="button" data-role="dropdown-toggle" aria-label="Close table of contents">
+                            <i class="ui-kit-icon ui-kit-icon_cross"></i>
+                        </button>
+                    </div>
+                    <div class="sidebar--inner" id="sideMenu"></div>
+                </ul>
+                <div class="dropdown--overlay"></div>
+            </div>
+        </nav>
+        <div id="resizer" class="resizer" data-item-type="BAR"></div>
+        <div id="main" data-item-type="SECTION" role="main">
+<div class="main-content" id="content" pageids="Markdown::////PointingToDeclaration//-796721452">
+  <div class="breadcrumbs"></div>
+  <div class="cover ">
+    <h1 class="cover"><span><span>Markdown</span></span></h1>
+    <div class="platform-hinted UnderCoverText" data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditorMarkdown/commonMain"><p class="paragraph">Markdown import and export for the Compose Text Editor: install it on a state to use the rich text editor as a markdown editor. The document stays rich text; markdown is the text it is read from and written to.</p><blockquote class="quotation"><p class="paragraph"><strong>Try it live:</strong> <a href="https://darkrock-studios.github.io/ComposeTextEditor/">open the Markdown demo on Wasm »</a></p></blockquote><div class="sample-container"><pre><code class="block lang-kotlin" theme="idea">implementation("com.darkrockstudios:composetexteditor-markdown:2.0.0")</code></pre><span class="copy-tooltip"><div class="copy-popup-wrapper popup-to-left"><span class="copy-popup-icon"></span><span>Content copied to clipboard</span></div><span class="copy-icon"></span></span></div><h2 class="">Recipe</h2><p class="paragraph">Wrap a state with <a href="com.darkrockstudios.texteditor.markdown/with-markdown.html">withMarkdown</a> to import and export GitHub-flavored Markdown:</p><div class="sample-container"><pre><code class="block lang-kotlin" theme="idea">val state = rememberTextEditorState()<br>val markdown = remember(state) { state.withMarkdown() }<br><br>// Import handles both inline (**bold**, *italic*, `code`) and block elements<br>// (headings, lists, blockquotes, code fences, horizontal rules):<br>LaunchedEffect(markdown) {<br>    markdown.importMarkdown(<br>        """<br>        # Title<br><br>        Some **bold** and *italic* text.<br><br>        - one<br>        - two<br>        """.trimIndent()<br>    )<br>}<br><br>TextEditor(state = state)<br><br>// Export the current document back to a Markdown string:<br>val source: String = markdown.exportAsMarkdown()</code></pre><span class="copy-tooltip"><div class="copy-popup-wrapper popup-to-left"><span class="copy-popup-icon"></span><span>Content copied to clipboard</span></div><span class="copy-icon"></span></span></div><p class="paragraph">The styles the document is rendered and recognised with are the editor's own, <a href="../ComposeTextEditor/com.darkrockstudios.texteditor.state/-text-editor-state/rich-text-styles.html">TextEditorState.richTextStyles</a> (a <a href="../ComposeTextEditor/com.darkrockstudios.texteditor/-rich-text-styles/index.html">RichTextStyles</a>); assign them before importing, and change them through the state, which rebakes the headings. <a href="com.darkrockstudios.texteditor.markdown/-markdown-configuration/index.html">MarkdownConfiguration</a> holds the syntax choices CommonMark leaves open: how a highlight is written (<code class="lang-kotlin">==text==</code> or <code class="lang-kotlin">&lt;mark&gt;</code>) and whether a line is a paragraph, with a blank line after it, or a source line.</p><p class="paragraph">The block toggles and queries (<code class="lang-kotlin">toggleBulletList</code>, <code class="lang-kotlin">toggleHeader</code>, <code class="lang-kotlin">headerLevel</code>, <code class="lang-kotlin">setLink</code> and the rest) are on the state, in <code class="lang-kotlin">com.darkrockstudios.texteditor.state</code>, so a toolbar needs no markdown to drive them.</p><p class="paragraph">To format by typing markdown, install <a href="com.darkrockstudios.texteditor.markdown/-markdown-shortcuts/index.html">MarkdownShortcuts</a>: <code class="lang-kotlin">- </code>, <code class="lang-kotlin">1. </code>, <code class="lang-kotlin"># </code> and <code class="lang-kotlin">&gt; </code> at a line's start make the block, <code class="lang-kotlin">**bold**</code> and the other inline syntax the style, and one undo gives back what was typed. It needs no <code class="lang-kotlin">withMarkdown</code>; any rich text editor can take it:</p><div class="sample-container"><pre><code class="block lang-kotlin" theme="idea">state.editBehaviors.add(0, MarkdownShortcuts())</code></pre><span class="copy-tooltip"><div class="copy-popup-wrapper popup-to-left"><span class="copy-popup-icon"></span><span>Content copied to clipboard</span></div><span class="copy-icon"></span></span></div><p class="paragraph">Images are only reconstructed on import when an <a href="../ComposeTextEditor/com.darkrockstudios.texteditor.richstyle/-image-provider/index.html">ImageProvider</a> is supplied (<code class="lang-kotlin">state.withMarkdown(imageProvider = myProvider)</code>); without one every <code class="lang-kotlin">![alt](url)</code> stays literal text.</p><p class="paragraph">To render only inline Markdown into an <code class="lang-kotlin">AnnotatedString</code> (no block handling), use <a href="com.darkrockstudios.texteditor.markdown/to-annotated-string-from-markdown.html">String.toAnnotatedStringFromMarkdown</a>; prefer <code class="lang-kotlin">importMarkdown</code> whenever the source contains block elements. <a href="com.darkrockstudios.texteditor.markdown/to-markdown.html">AnnotatedString.toMarkdown</a> is the inverse.</p><h2 class="">With spell check</h2><p class="paragraph">A spell-checked editor is a <code class="lang-kotlin">TextEditorState</code> underneath:</p><div class="sample-container"><pre><code class="block lang-kotlin" theme="idea">val state = rememberSpellCheckState(spellChecker = spellChecker)<br>val markdown = remember(state) { state.textState.withMarkdown() }<br><br>LaunchedEffect(markdown) { markdown.importMarkdown(source) }</code></pre><span class="copy-tooltip"><div class="copy-popup-wrapper popup-to-left"><span class="copy-popup-icon"></span><span>Content copied to clipboard</span></div><span class="copy-icon"></span></span></div></div></div>
+  </div>
+  <h2 class="">Packages</h2>
+  <div class="table"><a data-name="1084795692%2FPackages%2F-796721452" anchor-label="com.darkrockstudios.texteditor.markdown" id="1084795692%2FPackages%2F-796721452" data-filterable-set=":ComposeTextEditorMarkdown/commonMain"></a>
+    <div class="table-row table-row_platform-tagged" data-filterable-current=":ComposeTextEditorMarkdown/commonMain" data-filterable-set=":ComposeTextEditorMarkdown/commonMain">
+      <div>
+        <div class="main-subrow ">
+          <div class=""><span class="inline-flex">
+              <div><a href="com.darkrockstudios.texteditor.markdown/index.html">com.darkrockstudios.texteditor.markdown</a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="1084795692%2FPackages%2F-796721452"></span>
+                <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+              </span></span></div>
+          <div class="pull-right platform-tags--wrapper">
+            <div class="platform-tags no-gutters">
+              <div class="platform-tag common-like">common</div>
+            </div>
+          </div>
+        </div>
+        <div><span class="brief-comment"><a data-name="1084795692%2FPackages%2F-796721452" anchor-label="com.darkrockstudios.texteditor.markdown" id="1084795692%2FPackages%2F-796721452" data-filterable-set=":ComposeTextEditorMarkdown/commonMain"></a>
+            <p class="paragraph">Markdown import and export: <a href="com.darkrockstudios.texteditor.markdown/with-markdown.html">withMarkdown</a>, <a href="com.darkrockstudios.texteditor.markdown/-markdown-extension/index.html">MarkdownExtension</a>, the syntax choices in <a href="com.darkrockstudios.texteditor.markdown/-markdown-configuration/index.html">MarkdownConfiguration</a>, and the <code class="lang-kotlin">AnnotatedString</code> to Markdown converters.</p>
+          </span></div>
+      </div>
+    </div>
+  </div>
+</div>
+    <div class="footer">
+        <div class="footer--container">
+            <a href="#content" id="go-to-top-link" class="footer--button footer--button_go-to-top"></a>
+            <div class="footer--content">
+                <div>
+                    <span>Generated by </span>
+                    <a class="footer--link footer--link_external" href="https://github.com/Kotlin/dokka">
+                        Dokka
+                    </a>
+                    <div>© 2026 Copyright</div>
+                </div>
+            </div>
+        </div>
+    </div>
+        </div>
+    </div>
+</div>
+</body>
+</html>
