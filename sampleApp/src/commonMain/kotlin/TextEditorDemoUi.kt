@@ -247,7 +247,7 @@ private val NO_SMART_PUNCTUATION = SmartPunctuation(
 )
 
 @Composable
-private fun LabeledSwitch(label: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+internal fun LabeledSwitch(label: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
 	Row(
 		modifier = Modifier
 			.toggleable(value = checked, role = Role.Switch, onValueChange = onCheckedChange)
