@@ -28,17 +28,21 @@ to replace `BasicTextField` with something that solved all of my needs.
 And now, it's working, and at this point, working pretty well.
 
 - ✅ 100% Compose Multiplatform
+- ✅ Behaves like each platform's own text fields: keys, mouse, touch, IME, clipboard
 - ✅ Efficient rendering and editing of long-form text
 - ✅ Rich text with custom spans
 - ✅ Expose scroll state
 - ✅ Spell checking
+- ✅ Decoration layers: your own highlights (find, syntax colours) kept out of undo and export
+- ✅ Screen readers
 - ✅ Diagnostics from your own checker (grammar, style), underlined with a menu of fixes
 - ✅ Block structure: headings, nested lists, blockquotes, code fences, rules, images, links
 - ✅ HTML import, export and clipboard
 - ☑️ Markdown, as an addon (CommonMark, partial)
-  - Inline styles (bold, italics, ect)
+  - Inline styles (bold, italics, etc.)
   - Block styles (code fence with its language tag, nested lists, images)
   - Underline (`<u>`), highlight (`==text==` or `<mark>`), colour and size (`<span style>`)
+  - Opt-in shortcuts that format as you type (`# `, `- `, `**bold**`)
 
 You can [Give it a try here](https://darkrock-studios.github.io/ComposeTextEditor/), or
 browse
@@ -49,12 +53,19 @@ the [API reference & recipes](https://darkrock-studios.github.io/ComposeTextEdit
 ### Features:
 
 - Rich text rendering and editable
-  - Semi-efficient rendering for long form text (_only renders what is visible_)
-  - Semi-efficient data structure for text storage & editing. (_but not nearly as efficient as the
-    Gap Buffer BTF2 uses under the hood_)
-- Cursor movement, clicking, keyboard short cuts, ect
-- Text selection (_highlighting and edit ops_)
-- copy/cut/paste
+  - Only what is visible is drawn, and lines are stored in chunks
+  - A long document lays out the viewport first and settles the rest between frames:
+    a 200,000 character document loads in about 7 ms on desktop
+- Keyboard, mouse and touch behave like the platform's own text fields: grapheme-aware
+  caret and word motion, multi-click selection, the platform's shortcuts (macOS's
+  Emacs-style chords, Linux's primary selection, shortcuts that follow the active
+  keyboard layout), touch handles, magnifier and toolbar, and right-to-left text
+- Input methods: dead keys, CJK composition, autocorrect, and on Android stylus
+  handwriting and keyboard GIFs and stickers (handed to the host)
+- Clipboard with rich text (HTML) on every platform, paste as plain text, and drag and
+  drop on desktop, Android and the web
+- Undo and redo, one step per user action, with an API to group your own edits
+- Paragraph formatting: spacing, alignment, indents and line height
 - Exposed scroll state, so we can render scroll bars (_BTF1 can't do this_)
 - Doesn't copy and return full contents on each edit, so again better for longer form text. (_BTF2
   also works this way, but BTF2 doesn't support AnnotatedString for rich content_)
@@ -63,9 +74,13 @@ the [API reference & recipes](https://darkrock-studios.github.io/ComposeTextEdit
 - Emits edit events: so if a single character is inserted, you can collect a Flow, and know exactly
   what change was made. This makes managing Spell Check much more efficient as you can just
   respell-check the single word that was changed, rather than everything. (_BTF2 now finally offers this!_)
-- Find & Replace UI: Works exactly as you'd expect.
+- Decoration layers: host-owned spans for highlights such as find matches, spell check
+  or syntax colours, which stay out of undo, copies, exports and the text revision.
+- Find & Replace UI: case, whole word, regex, within the selection, F3 and Ctrl+G.
+- Spell check menu with suggestions, Ignore and Add to dictionary.
 - Screen reader support: the editor and `RichTextView` publish their text, selection,
-  links and clipboard actions as `BasicTextField` does.
+  links and clipboard actions as `BasicTextField` does, with character bounds on
+  Android and iOS.
 - Word count, by the same word segmentation as word motion and spell check.
 - `rememberSaveableTextEditorState`: the document, caret, selection and scroll survive
   configuration changes and process death (the undo history does not).
@@ -86,8 +101,8 @@ the [API reference & recipes](https://darkrock-studios.github.io/ComposeTextEdit
 | --- | --- |
 | Desktop (JVM) | Supported |
 | Android | Supported |
-| iOS | Experimental: typing, autocorrect, and CJK composition work in the simulator; the edit menu and a device pass are pending |
-| WASM | Experimental: typing, backspace, and IME composition run through the browser input session; the soft keyboard and real-browser IME passes are pending |
+| iOS | Experimental: typing, autocorrect, CJK composition, the edit menu, loupe and touch handles work in the simulator, with a UI smoke test in CI; a device pass is pending |
+| WASM | Experimental: typing, IME composition, the rich clipboard and drag and drop run through the browser, with typing and composition tested in Chromium in CI; a pass with a phone's soft keyboard is pending |
 
 ### Work left to do:
 
@@ -98,7 +113,7 @@ the [API reference & recipes](https://darkrock-studios.github.io/ComposeTextEdit
 
 Text Editor:
 
-`implementation("com.darkrockstudios:composetexteditor:2.0.0")`
+`implementation("com.darkrockstudios:composetexteditor:2.8.0")`
 
 Markdown addon, to use the editor as a markdown editor (`state.withMarkdown()`), from
 the first release after 2.8.0:
@@ -107,14 +122,16 @@ the first release after 2.8.0:
 
 Spell Checking addon:
 
-`implementation("com.darkrockstudios:composetexteditor-spellcheck:2.0.0")`
+`implementation("com.darkrockstudios:composetexteditor-spellcheck:2.8.0")`
 
 Find & Replace addon:
 
-`implementation("com.darkrockstudios:composetexteditor-find:2.0.0")`
+`implementation("com.darkrockstudios:composetexteditor-find:2.8.0")`
 
-Upgrading from a release where markdown was part of the editor: see
-[docs/MIGRATION.md](docs/MIGRATION.md).
+Upgrading from 2.8.0 or earlier (markdown as its own module, decoration layers,
+shortcuts matched on the keyboard layout): see [docs/MIGRATION.md](docs/MIGRATION.md).
+How the editor is built is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), and how it is
+tested in [docs/TESTING.md](docs/TESTING.md).
 
 On iOS, host the Compose view with `.ignoresSafeArea(.keyboard)` in SwiftUI, as the
 Compose Multiplatform template does. The editor keeps its caret above the keyboard itself;
@@ -125,14 +142,15 @@ Compose apps should; otherwise Android also pans the whole window to the caret. 
 editor keeps its caret in view whether the host pads it by the keyboard's inset
 (`imePadding`) or lets the keyboard cover it. `TextEditorState.keyboardSettings` asks the
 keyboard for its capitalisation, autocorrect, layout and action key; an editor for code
-would turn capitals and autocorrect off. Android honours it so far.
+would turn capitals and autocorrect off. Android, iOS and the web honour it; the web
+ignores autocorrect.
 
 ## Really?
 
-I don't know. Maybe. It might not a permanent solution.
-`BasicTextField2`'s new state based approach and gap-buffer has reach maturity and includes a lot of what I would need
-to replace this, but still cannot handle rich text rendering, still can't emit individual edit events.
-So until those are solved, this is the only solution that I am aware of that ticks every box.
+I don't know. Maybe. It might not be a permanent solution.
+`BasicTextField2`'s new state based approach and gap-buffer has reached maturity and includes a lot of what I would need
+to replace this, but still cannot handle rich text rendering.
+So until that is solved, this is the only solution that I am aware of that ticks every box.
 
 
 [badge-android]: http://img.shields.io/badge/-android-6EDB8D.svg?style=flat

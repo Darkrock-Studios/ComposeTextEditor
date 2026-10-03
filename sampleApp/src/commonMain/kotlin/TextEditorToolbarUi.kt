@@ -110,7 +110,7 @@ fun TextEditorToolbar(
 			verticalAlignment = Alignment.CenterVertically
 		) {
 			// History Controls Group
-			Row {
+			Row(verticalAlignment = Alignment.CenterVertically) {
 				ToolbarButton(
 					onClick = state::undo,
 					icon = Icons.AutoMirrored.Filled.Undo,
@@ -131,7 +131,7 @@ fun TextEditorToolbar(
 			ToolbarDivider()
 
 			// Formatting Controls Group
-			Row {
+			Row(verticalAlignment = Alignment.CenterVertically) {
 				FormatButton(
 					onClick = { state.toggleSpanStyle(state.richTextStyles.boldStyle) },
 					icon = Icons.Default.FormatBold,
@@ -341,7 +341,7 @@ private fun LinkDialog(
 			) { Text(if (isEditing) "Save" else "Add") }
 		},
 		dismissButton = {
-			Row {
+			Row(verticalAlignment = Alignment.CenterVertically) {
 				if (onRemove != null) {
 					TextButton(onClick = onRemove) { Text("Remove") }
 					Spacer(modifier = Modifier.width(2.dp))

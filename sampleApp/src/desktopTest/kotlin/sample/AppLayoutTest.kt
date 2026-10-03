@@ -19,6 +19,11 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.runComposeUiTest
+import androidx.compose.ui.test.runDesktopComposeUiTest
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.Box
@@ -119,5 +124,20 @@ class AppLayoutTest {
 			}
 			screenshot("demo-${demo.name}-dark")
 		}
+	}
+
+	/** The README's screenshot: the wide layout on the Markdown demo, at twice the density. */
+	@Test
+	fun `readme screenshot`() = runDesktopComposeUiTest(width = 2400, height = 1500) {
+		setContent {
+			CompositionLocalProvider(LocalDensity provides Density(2f)) {
+				Box(modifier = Modifier.fillMaxSize().testTag("app")) { App() }
+			}
+		}
+		onNode(hasText("Markdown") and isSelectable()).performClick()
+		waitUntil(timeoutMillis = 5_000) {
+			onAllNodes(hasText(Demo.Markdown.description)).fetchSemanticsNodes().size == 2
+		}
+		screenshot("readme")
 	}
 }
