@@ -19,7 +19,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * Roadmap 3.22: a select or delete gesture the keyboard previews highlights the text it
+ * A select or delete gesture the keyboard previews highlights the text it
  * would act on, as Compose's text fields do: in the selection colour for a select, in the
  * text colour at a fifth of its alpha for a delete, until the preview ends or the text or
  * selection changes.

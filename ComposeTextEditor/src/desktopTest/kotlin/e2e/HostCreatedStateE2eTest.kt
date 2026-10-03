@@ -27,7 +27,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
- * Roadmap 7.24: a host (a view model) creates and loads a state outside composition,
+ * A host (a view model) creates and loads a state outside composition,
  * and the editor that shows it lends it the scope and measurer it needs.
  */
 class HostCreatedStateE2eTest {

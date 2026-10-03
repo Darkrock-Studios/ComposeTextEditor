@@ -27,3 +27,13 @@ actual fun TextEditorScrollbar(
 		)
 	}
 }
+
+/** The same thumb along the bottom edge for a sideways scroll, as a native scroll view shows one. */
+@Composable
+internal actual fun EditorHorizontalScrollbar(scrollState: TextEditorScrollState, modifier: Modifier) =
+	HorizontalScrollIndicator(
+		scrollState = scrollState,
+		modifier = modifier,
+		thumbColor = Color.Gray.copy(alpha = 0.5f),
+		thickness = 3.dp,
+	)

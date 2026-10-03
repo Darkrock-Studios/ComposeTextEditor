@@ -105,6 +105,7 @@ internal fun editorUiTest(
 	spaceAround: Dp = 0.dp,
 	/** Clips the editor to its bounds, as a clipping ancestor would. */
 	clipped: Boolean = false,
+	softWrap: Boolean = true,
 	block: EditorUiTestScope.() -> Unit,
 ) = runSkikoComposeUiTest(density = Density(density)) {
 	val clipboard = InMemoryClipboard()
@@ -141,6 +142,7 @@ internal fun editorUiTest(
 					keyBindings = keyBindings,
 					contentDescription = contentDescription,
 					readOnly = readOnly,
+					softWrap = softWrap,
 				)
 				if (spaceAround > 0.dp) Spacer(Modifier.height(spaceAround))
 				if (trailingFocusable) {
@@ -477,6 +479,8 @@ class EditorUiTestScope internal constructor(
 			.map { it.item }
 
 	override fun waitForIdle() = test.waitForIdle()
+
+	override fun runOnIdle(block: () -> Unit) = test.runOnIdle(block)
 }
 
 /** The size the character at flat index [charIndex] renders at: its spans merged in order. */

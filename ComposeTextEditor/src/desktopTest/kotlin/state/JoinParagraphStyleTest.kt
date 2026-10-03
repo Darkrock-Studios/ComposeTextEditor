@@ -12,7 +12,7 @@ import kotlin.test.assertEquals
 import utils.blockLines
 import utils.setBlockLines
 
-/** Every line carries the paragraph styles its markers want, over all of it, whatever moved its text (6.33). */
+/** Every line carries the paragraph styles its markers want, over all of it, whatever moved its text. */
 class JoinParagraphStyleTest {
 
 	private fun TestScope.editor(blockLines: String): TextEditorState {

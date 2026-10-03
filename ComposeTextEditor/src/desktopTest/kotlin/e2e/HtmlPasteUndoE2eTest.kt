@@ -21,7 +21,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-/** Undo and redo of a pasted HTML document give back its blocks, links and formats with its text (6.5). */
+/** Undo and redo of a pasted HTML document give back its blocks, links and formats with its text. */
 class HtmlPasteUndoE2eTest {
 
 	/** Everything the paste can change: each line as it is styled, and every content span. */

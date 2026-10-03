@@ -12,7 +12,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/** Markdown import agrees with the HTML path's allowlist for link destinations (6.9), a host's schemes included (6.25). */
+/** Markdown import agrees with the HTML path's allowlist for link destinations, a host's schemes included. */
 class MarkdownLinkSafetyTest {
 
 	private fun editor(markdown: String, schemes: Set<String>? = null): MarkdownExtension {

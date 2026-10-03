@@ -22,7 +22,7 @@ import platform.Foundation.dataUsingEncoding
 import platform.UIKit.UIPasteboard
 
 /**
- * The iOS clipboard's reads and writes against a real UIPasteboard (roadmap 4.9). A
+ * The iOS clipboard's reads and writes against a real UIPasteboard. A
  * private one: a test binary is not an app, and the general pasteboard ignores it.
  */
 class ClipboardHelperIosTest {

@@ -43,7 +43,7 @@ import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 /**
- * Roadmap 3.22: the keyboard's previews of select and delete gestures reach the editor's
+ * The keyboard's previews of select and delete gestures reach the editor's
  * highlight, mapped as the gestures are, and end when cancelled, when a gesture is
  * performed, or when the connection closes. The area mapping itself is
  * `HandwritingGestureLayoutTest`'s; here it answers "two" (4 to 7) for any area.

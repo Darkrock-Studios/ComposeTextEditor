@@ -14,7 +14,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * Left and Right move visually through a paragraph's runs of opposite direction (7.33),
+ * Left and Right move visually through a paragraph's runs of opposite direction,
  * as the native fields of every platform do: each press moves the caret one glyph
  * boundary further left or right on screen, wherever that is in the text.
  *

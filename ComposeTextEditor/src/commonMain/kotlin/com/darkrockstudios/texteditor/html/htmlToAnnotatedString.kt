@@ -301,7 +301,7 @@ private class HtmlSpanBuilder(
 	 *
 	 * A line height every one of two or more line-holding elements carries is the
 	 * source's own line spacing (Google Docs writes its 1.38 on every paragraph), as a
-	 * base colour and size are (7.46), so it is left to the editor's.
+	 * base colour and size are, so it is left to the editor's.
 	 */
 	private fun formatsPerLine(text: String, lines: IntArray, formatless: Set<Int>): Map<Int, ParagraphFormatSpanStyle> {
 		val baseLineHeight = lineHoldingLineHeights.takeIf { it.size >= 2 && it.distinct().size == 1 }?.first()
@@ -593,7 +593,7 @@ private class HtmlSpanBuilder(
 	/**
 	 * [runs] with each size made relative to the size most of the text carries, the
 	 * source's body size (Google Docs writes its 11 pt on every run), and so to the
-	 * configuration's body size: pasted text takes the size of wherever it lands (6.18),
+	 * configuration's body size: pasted text takes the size of wherever it lands,
 	 * and a larger word stays as much larger. Headings and code, which set their own
 	 * size, do not count. Text with no size counts as a browser's 16 px.
 	 */

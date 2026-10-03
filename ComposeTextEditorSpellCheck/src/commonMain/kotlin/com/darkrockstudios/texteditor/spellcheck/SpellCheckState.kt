@@ -3,6 +3,7 @@ package com.darkrockstudios.texteditor.spellcheck
 import androidx.compose.ui.text.AnnotatedString
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
+import com.darkrockstudios.texteditor.decoration.decorations
 import com.darkrockstudios.texteditor.richstyle.RichSpan
 import com.darkrockstudios.texteditor.richstyle.SpellCheckStyle
 import com.darkrockstudios.texteditor.spellcheck.api.Correction
@@ -11,11 +12,12 @@ import com.darkrockstudios.texteditor.spellcheck.api.EditorSpellChecker.Scope
 import com.darkrockstudios.texteditor.spellcheck.api.Suggestion
 import com.darkrockstudios.texteditor.spellcheck.utils.LineDiff
 import com.darkrockstudios.texteditor.spellcheck.utils.applyCapitalizationStrategy
+import com.darkrockstudios.texteditor.spellcheck.utils.decorationsTouching
+import com.darkrockstudios.texteditor.spellcheck.utils.decorationsTouchingWithin
 import com.darkrockstudios.texteditor.spellcheck.utils.replaceFlagged
 import com.darkrockstudios.texteditor.state.TextEditOperation
 import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.WordSegment
-import com.darkrockstudios.texteditor.state.getRichSpansInRange
 import com.darkrockstudios.texteditor.state.sentenceSegments
 import com.darkrockstudios.texteditor.state.sentenceSegmentsInRange
 import com.darkrockstudios.texteditor.state.wordSegments
@@ -42,7 +44,9 @@ enum class SpellCheckMode {
  *
  * Manages the spell-check decoration spans rendered in the document and runs full or partial
  * checks through an [EditorSpellChecker]. Each span's style records what it flagged, so the
- * finding moves with the text as the editor re-anchors the span through edits.
+ * finding moves with the text as the editor re-anchors the span through edits. The spans are
+ * on spell check's decoration layer, [SpellCheckStyle]'s, which it reads and replaces by line;
+ * a state made for the same editor later takes over the flags an earlier one left.
  * Span mutations are performed atomically after any asynchronous lookup completes so that a
  * cancelled check never leaves the document with its decorations wiped.
  *
@@ -74,6 +78,9 @@ class SpellCheckState(
 	var spellCheckMode: SpellCheckMode = SpellCheckMode.Word,
 	private val scanContext: CoroutineContext = Dispatchers.Default,
 ) {
+	/** The decoration layer the flags are on; see `docs/design/decorations.md`. */
+	internal val layer = SpellCheckStyle.layer
+
 	/** Words the user chose to ignore this session, through [ignoreWord]. */
 	var ignoredWords: Set<String> = emptySet()
 		private set
@@ -105,7 +112,7 @@ class SpellCheckState(
 		if (value && !wasEnabled) {
 			runFullSpellCheck()
 		} else if (!value) {
-			clearSpellCheck()
+			textState.updateRichSpans(remove = textState.decorations(layer), add = emptyList())
 		}
 	}
 
@@ -162,14 +169,14 @@ class SpellCheckState(
 	 * @param correction The replacement text.
 	 */
 	fun correctSpelling(segment: WordSegment, correction: String) {
-		textState.replaceFlagged(segment.range, correction) { it.style is SpellCheckStyle }
+		textState.replaceFlagged(segment.range, correction, layer)
 	}
 
 	/**
 	 * Apply a sentence-level correction. Its flag is kept as [correctSpelling] keeps a word's.
 	 */
 	fun applySentenceCorrection(correction: Correction, selectedSuggestion: String) {
-		textState.replaceFlagged(correction.range, selectedSuggestion) { it.style is SpellCheckStyle }
+		textState.replaceFlagged(correction.range, selectedSuggestion, layer)
 	}
 
 	/**
@@ -189,7 +196,7 @@ class SpellCheckState(
 	internal fun accept(word: String) {
 		acceptedWords = acceptedWords + word.acceptedForm()
 		acceptedTexts = acceptedTexts + word
-		val doomed = textState.richSpanManager.getAllRichSpans().filter { span ->
+		val doomed = textState.decorations(layer).filter { span ->
 			when (val style = span.style) {
 				is MisspelledWordStyle -> isAcceptedWord(textState.getStringInRange(span.range))
 				is SentenceIssueStyle -> style.correction.originalText in acceptedTexts
@@ -208,12 +215,6 @@ class SpellCheckState(
 	private fun isAccepted(segment: WordSegment): Boolean = isAcceptedWord(segment.text)
 
 	private fun isAccepted(correction: Correction): Boolean = correction.originalText in acceptedTexts
-
-	private fun clearSpellCheck() {
-		val doomed = textState.richSpanManager.getAllRichSpans()
-			.filter { it.style is SpellCheckStyle }
-		textState.updateRichSpans(remove = doomed, add = emptyList())
-	}
 
 	/**
 	 * Run full spell check based on the current mode.
@@ -327,9 +328,7 @@ class SpellCheckState(
 	private fun installFullCheck(add: List<RichSpan>) {
 		// Swap atomically: no suspension points between removal and re-add, and the
 		// batch lands as one measure-free relayout instead of one per span.
-		val doomed = textState.richSpanManager.getAllRichSpans()
-			.filter { it.style is SpellCheckStyle }
-		textState.updateRichSpans(remove = doomed, add = add)
+		textState.updateRichSpans(remove = textState.decorations(layer), add = add)
 	}
 
 	private suspend fun runPartialWordCheck(
@@ -350,10 +349,8 @@ class SpellCheckState(
 			// batch lands as one measure-free relayout instead of one per span.
 			// The scan reaches the nearest word beyond each end of the region.
 			val scanned = misspelled.fold(region) { covered, segment -> covered.merge(segment.range) }
-			val doomed = textState.richSpanManager.getSpansInRange(scanned)
-				.filter { it.style is SpellCheckStyle }
 			textState.updateRichSpans(
-				remove = doomed,
+				remove = textState.decorationsTouching(layer, scanned),
 				add = misspelled.filterNot(::isAccepted).map { RichSpan(it.range, MisspelledWordStyle) },
 			)
 		}
@@ -382,10 +379,8 @@ class SpellCheckState(
 		) { region, corrections ->
 			// Swap atomically: no suspension points between removal and re-add, and the
 			// batch lands as one measure-free relayout instead of one per span.
-			val doomed = textState.richSpanManager.getSpansInRange(region)
-				.filter { it.style is SpellCheckStyle }
 			textState.updateRichSpans(
-				remove = doomed,
+				remove = textState.decorationsTouching(layer, region),
 				add = corrections.filterNot(::isAccepted).map { RichSpan(it.range, SentenceIssueStyle(it)) },
 			)
 		}
@@ -459,12 +454,10 @@ class SpellCheckState(
 				val diff = LineDiff(computedAgainst, textState.textLines)
 				val range = diff.move(segment.range)
 				if (range != null) {
-					val doomed = textState.getRichSpansInRange(range)
-						.filter { it.style is SpellCheckStyle }
 					val add = if (isSpelledCorrectly || isAccepted(segment)) emptyList() else {
 						listOf(RichSpan(range, MisspelledWordStyle))
 					}
-					textState.updateRichSpans(remove = doomed, add = add)
+					textState.updateRichSpans(remove = textState.decorationsTouchingWithin(layer, range), add = add)
 				} else {
 					diff.cover(segment.range)?.let { runPartialWordCheck(it, textState.textLines) }
 				}
@@ -516,7 +509,7 @@ class SpellCheckState(
 	 */
 	fun invalidateSpellCheckSpans(operations: List<TextEditOperation>) {
 		val doomed = computeAffectedRanges(operations)
-			.flatMapTo(LinkedHashSet()) { range -> textState.getRichSpansInRange(range).filter { it.style is SpellCheckStyle } }
+			.flatMapTo(LinkedHashSet()) { range -> textState.decorationsTouchingWithin(layer, range) }
 		if (doomed.isNotEmpty()) textState.updateRichSpans(remove = doomed.toList(), add = emptyList())
 	}
 

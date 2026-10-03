@@ -13,6 +13,7 @@ import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.runSkikoComposeUiTest
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.darkrockstudios.texteditor.BasicTextEditor
 import com.darkrockstudios.texteditor.input.CtrlKeyBindings
@@ -28,7 +29,11 @@ import com.darkrockstudios.texteditor.state.rememberTextEditorState
  * `editorUiTest` is the full harness; this one drives what the markdown suite needs.
  */
 @OptIn(ExperimentalTestApi::class)
-internal fun markdownUiTest(block: MarkdownUiTestScope.() -> Unit) = runSkikoComposeUiTest {
+internal fun markdownUiTest(
+	width: Dp = 400.dp,
+	softWrap: Boolean = true,
+	block: MarkdownUiTestScope.() -> Unit,
+) = runSkikoComposeUiTest {
 	val clipboard = InMemoryClipboard()
 	lateinit var state: TextEditorState
 	setContent {
@@ -39,10 +44,11 @@ internal fun markdownUiTest(block: MarkdownUiTestScope.() -> Unit) = runSkikoCom
 		) {
 			BasicTextEditor(
 				state = state,
-				modifier = Modifier.size(400.dp, 300.dp).testTag(EDITOR_TEST_TAG),
+				modifier = Modifier.size(width, 300.dp).testTag(EDITOR_TEST_TAG),
 				autoFocus = true,
 				style = rememberTextEditorStyle(textStyle = TextStyle.Default.withTestFont()),
 				keyBindings = CtrlKeyBindings,
+				softWrap = softWrap,
 			)
 		}
 	}
@@ -77,4 +83,6 @@ internal class MarkdownUiTestScope(
 	}
 
 	override fun waitForIdle() = test.waitForIdle()
+
+	override fun runOnIdle(block: () -> Unit) = test.runOnIdle(block)
 }

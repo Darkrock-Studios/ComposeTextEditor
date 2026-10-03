@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Opens the OsInputProbe window (0.8), presses real X key events into it with xdotool,
+# Opens the OsInputProbe window, presses real X key events into it with xdotool,
 # and checks what the editor ends up holding. Needs an X11 display with a window
 # manager, the US International layout already set (setxkbmap -layout us -variant intl),
 # and xdotool. Run from the repository root:

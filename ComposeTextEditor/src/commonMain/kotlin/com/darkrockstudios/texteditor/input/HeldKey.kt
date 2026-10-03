@@ -10,8 +10,7 @@ import androidx.compose.ui.input.key.Key
  * without sending the editor another key event. An input session on such a platform
  * hands those edits to [absorbSelection] and [absorbText], which drop the first as the
  * echo of the press and run the editor's own command again for each one after, so a
- * held key follows the editor's rows, word stops and indent rather than UIKit's
- * (roadmap 1.1, 4.6, 2.9).
+ * held key follows the editor's rows, word stops and indent rather than UIKit's.
  */
 internal class HeldKey {
 	/** What the platform sends for the held key. */

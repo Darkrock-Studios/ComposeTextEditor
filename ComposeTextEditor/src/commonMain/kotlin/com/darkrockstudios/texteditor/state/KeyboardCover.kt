@@ -41,19 +41,23 @@ internal fun TextEditorState.updateKeyboardCover(keyboardHeight: Int) {
 private fun TextEditorState.keyboardCoverFor(keyboardHeight: Int): Int? {
 	val canvas = canvasLayoutCoordinates?.takeIf { it.isAttached } ?: return null
 	if (!isFocused || keyboardHeight <= 0) return 0
+	// Where the canvas rests: a rubber band lifting it must not shrink the cover, or the
+	// scroll range with it, and leave the scroll short of the end once it lets go.
+	val frame = canvasFrameCoordinates?.takeIf { it.isAttached } ?: canvas
 	return keyboardCover(
-		canvasBottomInRoot = canvas.localToRoot(Offset(0f, canvas.size.height.toFloat())).y,
-		canvasHeight = canvas.size.height,
+		canvasBottomInRoot = frame.localToRoot(Offset(0f, frame.size.height.toFloat())).y,
+		canvasHeight = frame.size.height,
 		windowBottomInRoot = windowBottomInRoot?.invoke() ?: canvas.findRootCoordinates().size.height.toFloat(),
 		keyboardHeight = keyboardHeight,
 	)
 }
 
 /**
- * Measures the cover (see [updateKeyboardCover]) on the canvas whenever the keyboard's
- * [insets] or the focus change, once the canvas is placed for that change. Both are read
- * in the placement block, so a change re-places the canvas after its ancestors have been
- * laid out: under a host's `imePadding` the inset grows before the padding shrinks the
+ * Measures the cover (see [updateKeyboardCover]) on the canvas's frame, which this
+ * modifies: the editor's box outside its overscroll effect. Measured whenever the
+ * keyboard's [insets] or the focus change, once the frame is placed for that change. Both
+ * are read in the placement block, so a change re-places the frame after its ancestors
+ * have been laid out: under a host's `imePadding` the inset grows before the padding shrinks the
  * editor, and a measure taken any earlier reads the strip the padding is about to take
  * away as covered.
  */
@@ -96,7 +100,10 @@ private class KeyboardCoverNode(
 	}
 
 	private fun release(state: TextEditorState) {
-		if (state.currentKeyboardHeight === keyboardHeightNow) state.currentKeyboardHeight = null
+		if (state.currentKeyboardHeight === keyboardHeightNow) {
+			state.currentKeyboardHeight = null
+			state.canvasFrameCoordinates = null
+		}
 	}
 
 	override fun MeasureScope.measure(measurable: Measurable, constraints: Constraints): MeasureResult {
@@ -105,6 +112,7 @@ private class KeyboardCoverNode(
 			placeable.place(0, 0)
 			// A lookahead pass places before the canvas has its new bounds.
 			if (isLookingAhead) return@layout
+			state.canvasFrameCoordinates = coordinates
 			val keyboardHeight = insets().getBottom(this@measure)
 			// Read here, so a focus change re-places as an inset change does.
 			val focused = state.isFocused
@@ -128,12 +136,15 @@ internal fun keyboardCover(canvasBottomInRoot: Float, canvasHeight: Int, windowB
 /**
  * Records that the bottom [px] pixels of the viewport are covered. When the cover grows
  * over the caret of a focused editor, as when the keyboard comes up, the caret scrolls
- * above it.
+ * above it. A caret already out of view stays there: the reader scrolled away from it,
+ * and the cover is measured again, a little larger, as iOS settles the view after a fling.
  */
 internal fun TextEditorState.onObscuredBottomChange(px: Int) {
 	val grew = px > scrollManager.obscuredBottomPx
+	// Against the cover as it was; a scroll to the caret still under way counts as in view.
+	val caretShown = grew && isFocused && scrollManager.isCursorInViewOrScrolling()
 	scrollManager.obscuredBottomPx = px
-	if (grew && isFocused) scrollManager.ensureCursorVisible()
+	if (caretShown) scrollManager.ensureCursorVisible()
 }
 
 /**

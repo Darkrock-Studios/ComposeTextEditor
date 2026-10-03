@@ -16,8 +16,8 @@ import kotlin.test.assertEquals
 import kotlin.test.assertSame
 
 /**
- * The harnesses lay text out in the bundled test font whatever the host's fonts are
- * (0.9): the layout names the font, and its widths are the font's own. On a host whose
+ * The harnesses lay text out in the bundled test font whatever the host's fonts are:
+ * the layout names the font, and its widths are the font's own. On a host whose
  * sans-serif happens to be Noto Sans only the first check can tell the fonts apart.
  */
 class TestFontTest {

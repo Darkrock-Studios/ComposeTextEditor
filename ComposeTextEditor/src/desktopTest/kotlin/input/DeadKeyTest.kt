@@ -24,7 +24,7 @@ import kotlin.test.assertTrue
 /**
  * Hardware keyboard dead keys as Android delivers them: the accent key's character
  * carries `KeyCharacterMap.COMBINING_ACCENT`, and the editor composes it with the next
- * character (roadmap 4.20). The table stands in for `KeyCharacterMap.getDeadChar`.
+ * character. The table stands in for `KeyCharacterMap.getDeadChar`.
  */
 @OptIn(InternalComposeUiApi::class)
 class DeadKeyTest {

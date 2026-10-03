@@ -18,6 +18,9 @@ interface FuzzUiDriver {
 	fun setPlainClipboardText(value: String)
 
 	fun waitForIdle()
+
+	/** Runs [block] on the UI thread once the editor is idle. */
+	fun runOnIdle(block: () -> Unit)
 }
 
 /**

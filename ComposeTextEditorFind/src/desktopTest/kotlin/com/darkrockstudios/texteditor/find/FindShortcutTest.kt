@@ -35,7 +35,7 @@ class FindShortcutTest {
 
 	/**
 	 * On X11 AWT names a key by the first layout installed; BÉPO's f, on QWERTY's slash,
-	 * reports slash with F as its extended key code (2.7). The core reads that on Linux.
+	 * reports slash with F as its extended key code. The core reads that on Linux.
 	 */
 	@Test
 	fun `the find chords follow the active layout`() {

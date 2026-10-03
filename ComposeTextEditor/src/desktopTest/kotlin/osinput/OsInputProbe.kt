@@ -19,8 +19,8 @@ import utils.TestFontFamily
 import java.io.File
 
 /**
- * A window holding one focused editor, for the nightly real-input job (0.8,
- * `testUtils/osInput/drive.sh`): a driver presses real keys on the display, and this
+ * A window holding one focused editor, for the nightly real-input job
+ * (`testUtils/osInput/drive.sh`): a driver presses real keys on the display, and this
  * writes the document to `<dir>/text` whenever it changes, and `<dir>/ready` once the
  * editor has focus, since nothing outside the process can read the editor.
  *

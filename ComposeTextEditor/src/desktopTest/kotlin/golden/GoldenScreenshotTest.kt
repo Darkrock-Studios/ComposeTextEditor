@@ -26,7 +26,7 @@ import utils.setBlockLines
 import kotlin.test.Test
 
 /**
- * Golden screenshots of the editor in the bundled test font (0.6), for what geometry
+ * Golden screenshots of the editor in the bundled test font, for what geometry
  * assertions cannot see: glyphs, colours, the wavy underline, list markers. Linux only;
  * see `utils/Golden.kt` and docs/TESTING.md for updating them.
  */

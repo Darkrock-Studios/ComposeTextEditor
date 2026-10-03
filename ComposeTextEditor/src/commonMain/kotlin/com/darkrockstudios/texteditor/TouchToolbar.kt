@@ -62,7 +62,10 @@ internal class TouchToolbar(
 	/** The look of the handles drawn, whose bounds the toolbar keeps clear of. */
 	private val handles: () -> HandleLook,
 ) {
-	private data class Anchor(val selection: TextEditorRange?, val caret: CharLineOffset, val scroll: Int)
+	private data class Anchor(val selection: TextEditorRange?, val caret: CharLineOffset, val scroll: Int, val scrollX: Int) {
+		/** Over the same text: a show waiting for the session measures where it is when it shows, scrolled or not. */
+		fun sameText(other: Anchor): Boolean = selection == other.selection && caret == other.caret
+	}
 
 	private var shownFor: Anchor? = null
 
@@ -187,21 +190,22 @@ internal class TouchToolbar(
 				if (!running) return@collect
 				// A frame, so the session's view has taken first responder.
 				if (coroutineContext[MonotonicFrameClock] != null) withFrameNanos { } else yield()
-				if (pendingFor == pending && anchor() == pending && state.hasFocus) show(pendingAt)
+				if (pendingFor == pending && anchor().sameText(pending) && state.hasFocus) show(pendingAt)
 			}
 		}
 		snapshotFlow { anchor() to state.hasFocus }.collect { (anchor, focused) ->
-			pendingFor?.let { pending -> if (!focused || anchor != pending) pendingFor = null }
+			pendingFor?.let { pending -> if (!focused || !anchor.sameText(pending)) pendingFor = null }
 			val shown = shownFor ?: return@collect
 			when {
 				!focused || anchor.selection != shown.selection || anchor.caret != shown.caret -> hide()
 				// A right-click's menu stays with the text under the pointer.
-				anchor.scroll != shown.scroll -> show(shownAt?.let { it.copy(y = it.y - (anchor.scroll - shown.scroll)) })
+				anchor.scroll != shown.scroll || anchor.scrollX != shown.scrollX ->
+					show(shownAt?.let { it - Offset((anchor.scrollX - shown.scrollX).toFloat(), (anchor.scroll - shown.scroll).toFloat()) })
 			}
 		}
 	}
 
-	private fun anchor() = Anchor(state.selector.selection, state.cursorPosition, state.scrollState.value)
+	private fun anchor() = Anchor(state.selector.selection, state.cursorPosition, state.scrollState.value, state.horizontalScrollState.value)
 
 	/**
 	 * The selection's rows, or the caret, in canvas coordinates, kept inside the viewport

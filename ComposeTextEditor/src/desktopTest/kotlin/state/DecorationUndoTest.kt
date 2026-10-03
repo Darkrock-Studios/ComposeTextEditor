@@ -18,7 +18,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/** A decoration on deleted text is an overlay: it neither splits a typing run nor comes back on undo (7.54). */
+/** A decoration on deleted text is an overlay: it neither splits a typing run nor comes back on undo. */
 class DecorationUndoTest {
 
 	private class Flag : RichSpanStyle {

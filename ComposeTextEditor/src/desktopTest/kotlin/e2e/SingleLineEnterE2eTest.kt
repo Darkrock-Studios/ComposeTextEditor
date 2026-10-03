@@ -31,8 +31,8 @@ import kotlin.test.assertEquals
 
 /**
  * A single-line editor has no line to start, so Enter is the action key, as it is in a
- * single-line `BasicTextField`, and the action key defaults to Done (roadmap 7.40), which
- * the semantics offer as the IME action too (7.59).
+ * single-line `BasicTextField`, and the action key defaults to Done, which
+ * the semantics offer as the IME action too.
  */
 class SingleLineEnterE2eTest {
 
@@ -139,7 +139,7 @@ class SingleLineEnterE2eTest {
 			assertEquals(listOf(ImeAction.Done, ImeAction.Search), actions)
 		}
 
-	/** Roadmap 7.66: the line limit is each editor's, not the state's. */
+	/** The line limit is each editor's, not the state's. */
 	@Test
 	fun `a multi-line editor sharing a state with a single-line one keeps its Enter`() =
 		runSkikoComposeUiTest(density = Density(1f)) {

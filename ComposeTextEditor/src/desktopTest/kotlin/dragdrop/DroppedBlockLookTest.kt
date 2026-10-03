@@ -19,7 +19,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/** Dropped text takes the look of the line it lands on, as pasted text does (6.38). */
+/** Dropped text takes the look of the line it lands on, as pasted text does. */
 class DroppedBlockLookTest {
 
 	private val styles = RichTextStyles.DEFAULT

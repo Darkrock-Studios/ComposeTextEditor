@@ -33,8 +33,9 @@ private val DefaultContentPadding = PaddingValues(16.dp)
  *   services. It still takes focus, so its text can be selected and copied.
  * @param readOnly Shows the caret for navigation and selection but takes no edits; see
  *   [BasicTextEditor].
- * @param lineLimits Fills the height given, or grows with the text between a minimum
- *   and maximum number of lines; see [BasicTextEditor].
+ * @param lineLimits Fills the height given, grows with the text between a minimum
+ *   and maximum number of lines, or keeps it to one row that scrolls sideways; see
+ *   [BasicTextEditor].
  * @param autoFocus Requests focus once when first composed, if [enabled].
  * @param style Colors and text style for the editor and its gutter markers.
  * @param onRichSpanClick Invoked when a rich span (link, list, blockquote, code
@@ -52,6 +53,8 @@ private val DefaultContentPadding = PaddingValues(16.dp)
  *   custom items, or leave `null` for the default.
  * @param contentDescription The editor's label for accessibility services; see
  *   [BasicTextEditor].
+ * @param softWrap Whether lines wrap at the editor's width; with `false` a line stays one
+ *   row and the editor scrolls sideways. See [BasicTextEditor].
  */
 @Composable
 fun TextEditor(
@@ -70,6 +73,7 @@ fun TextEditor(
 	contentDescription: String? = null,
 	readOnly: Boolean = false,
 	lineLimits: EditorLineLimits = EditorLineLimits.Fill,
+	softWrap: Boolean = true,
 ) {
 	Surface(modifier = modifier.focusBorder(state.hasFocus && enabled, style)) {
 		BasicTextEditor(
@@ -88,6 +92,7 @@ fun TextEditor(
 			contentDescription = contentDescription,
 			readOnly = readOnly,
 			lineLimits = lineLimits,
+			softWrap = softWrap,
 		)
 	}
 }

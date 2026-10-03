@@ -11,7 +11,7 @@ import kotlinx.coroutines.test.TestScope
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
-/** Roadmap 7.73: a drop follows the line limit of the editor it lands on, not the focused one's. */
+/** A drop follows the line limit of the editor it lands on, not the focused one's. */
 class DropTargetLineLimitTest {
 
 	private fun state(text: String): TextEditorState =

@@ -5,7 +5,7 @@
 
 import XCTest
 
-/// Smoke test on the iOS simulator (roadmap 0.7): typing on the soft keyboard reaches
+/// Smoke test on the iOS simulator: typing on the soft keyboard reaches
 /// the editor through Compose's input session, and the editor's text reads back through
 /// accessibility. The `ios` CI job runs it.
 final class EditorTypingSmokeTests: XCTestCase {

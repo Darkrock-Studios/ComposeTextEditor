@@ -22,7 +22,7 @@ import kotlin.test.assertTrue
 
 private val BOLD = SpanStyle(fontWeight = FontWeight.Bold)
 
-/** Roadmap 3.17: what a handwriting gesture edits, and that it edits as the keyboard does. */
+/** What a handwriting gesture edits, and that it edits as the keyboard does. */
 class HandwritingGestureEditTest {
 
 	private fun editor(text: String): Pair<TextEditorState, TextEditorInputConnection> {

@@ -1,0 +1,184 @@
+# Soft wrap off and horizontal scrolling
+
+With wrapping on (the default) every line wraps at the viewport's width and the
+editor scrolls vertically only. With wrapping off a line stays one row however
+long it is, and the editor scrolls sideways too: what a code editor needs.
+`EditorLineLimits.SingleLine` always works this way, as `BasicTextField`'s single
+line does: one row that follows the caret sideways.
+
+## Public API
+
+- `softWrap: Boolean = true` on `BasicTextEditor`, `TextEditor` and
+  `SpellCheckingTextEditor`, as on `BasicTextField`. `SingleLine` turns it off.
+  The layout is the state's, so, like the single-line limit, wrapping is off
+  while any editor showing the state has it off.
+- `TextEditorState.horizontalScrollState`, a second `TextEditorScrollState`
+  beside `scrollState`: 0 shows the content's left edge, and its maximum is the
+  widest line (plus room for the caret) less the viewport's width. With wrapping
+  on its range is empty.
+- What is documented as view coordinates now accounts for the horizontal scroll
+  as it does for the vertical: `getPositionForOffset`, `calculateCursorPosition`,
+  `CursorMetrics` and `lastCursorMetrics` subtract it, `getOffsetAtPosition` adds
+  it. With wrapping on nothing changes.
+- A `decorateLine` decorator gets the offset the line's text is drawn at, which
+  moves with the horizontal scroll, and is not clipped: a gutter drawn to the
+  left of the canvas places itself by its own x, not by `offset.x`.
+
+## Two spaces
+
+Content space has x from the canvas's left edge at scroll 0 and y from the top
+of the first line; a row's `LineWrap.offset` is in content space (its x is 0).
+View space is the canvas's: content less the two scroll values. Pointer events,
+popups, input method rectangles and accessibility are view space; rows are
+content space.
+
+The horizontal scroll is applied in few places, not at each of the call sites
+that apply the vertical one:
+
+1. **State conversions.** The functions above convert between the spaces, and
+   every consumer that goes through them inherits the offset: the touch handles
+   and their popups (which hide when their anchor leaves the visible bounds, now
+   sideways too), the touch toolbar and context menu, the magnifier, the desktop
+   and web input method's caret rectangle, Android's cursor anchor (whose watch
+   reads the caret, so a sideways scroll sends a new one), drag and drop's drop
+   caret, and the stylus.
+2. **One drawing transform.** `DrawScope.inContentSpace(state) { }` translates
+   by the horizontal scroll, widens the scope's `size` to the content width (so
+   what spans the full width, a code fence card, a blockquote's background, a
+   rule, spans the widest line), and with wrapping off clips sideways to the
+   canvas, which is otherwise unclipped. The text with its rich spans, its
+   decorations' tints and composing underline (`DrawEditorText`) and the
+   selection (`DrawSelection`) draw inside it, in content x and view y as before. The caret and the drop
+   caret are drawn from view-space metrics outside it, and are not drawn when
+   scrolled out of view sideways (wrapped, a caret past the right edge is still
+   pulled back inside). Line decorators run outside it.
+3. **The few places that pair raw rows with a pointer point** add the scroll by
+   hand: the hit test in `textEditorPointerInputHandling` (`characterAt`), the
+   magnifier's clamp to the row, the handwriting gesture layout, the vertical
+   goal x (a column in content x, so Up and Down keep it across a sideways
+   scroll), and the skiko input method's text origin.
+
+## Layout with an unbounded width
+
+With wrapping off `LineShaper` measures with `softWrap = false` and
+`Constraints(minWidth = viewport, maxWidth = Infinity)`: a long line keeps its
+natural width, and a short one the viewport's, so a right-to-left or centred
+line aligns within the viewport as before. A width change still reshapes every
+line lazily, for that alignment, and so does turning wrapping off; until a
+line is reached it keeps its old width, as it keeps its old height, so the range
+grows as the reshape settles.
+
+Each `LineLayout` records its width when it is shaped: its text's extent from the
+side the text starts on to the row's end with its trailing spaces, whatever width
+it was laid out at, so a line not yet reshaped after a width change still has the
+right width. `RowList` keeps the widest line
+the way it keeps the tops: each `Chunk` holds the widest of its lines, computed
+when the chunk is built, and the directory holds a running maximum per chunk,
+rebuilt from the first touched chunk on a splice, as the tops are. The content
+width is the last entry: a keystroke costs what the directory already costs,
+and nothing scans the lines. A line shaped with wrapping on records no
+width, so wrapping on adds one float per chunk and no range.
+
+`TextEditorScrollManager.updateContentWidth` sets the range: from 0 to the
+content width plus one space's width (`lineBreakWidth`, room for the caret and
+a selected line break's sliver past the widest line), less the viewport width.
+
+## Keeping the caret in view
+
+`ensureCursorVisible`, `scrollToCursor`, `snapCursorVisible` and
+`scrollToPosition(offset)` bring the caret's x into view as well as its row,
+moving just far enough, as `BasicTextField` does: typing past the right edge
+scrolls by what was typed, End scrolls to the line's end, Home back to 0. Both
+axes animate in the one scroll job, so stopping it stops both. Whether the caret
+is in view (a resize keeping it there) checks x too.
+
+## Input and the scrollbar
+
+A second `Modifier.scrollable(Orientation.Horizontal)` on the horizontal state,
+enabled with wrapping off. Desktop Compose turns Shift and the wheel into a
+horizontal delta, a trackpad sends one, and a touch drag goes to whichever
+orientation passes the touch slop first. Content space is not mirrored in a
+right-to-left layout, and bare `scrollable` (unlike `horizontalScroll`) does not
+flip for one, so the direction is not reversed.
+
+On desktop and the web Compose's `HorizontalScrollbar` lies over the bottom
+edge of the text while the content is wider than the viewport, unmirrored in a
+right-to-left layout; a single line has none, as `BasicTextField` has none. It
+sits beside the editor's box rather than in it, so a press on it neither focuses
+the editor nor places the caret, and like a soft keyboard's strip
+(`obscuredBottomPx`) the height it covers is kept clear of the caret and added
+to the vertical range. Android and iOS show no sideways indicator. A selection
+drag past the left or right edge auto-scrolls sideways at the vertical one's
+speed, while there is room that way, with the dragged point held inside the
+viewport short of the caret's room. A page move scrolls sideways to the caret
+with its vertical jump.
+
+## Platforms
+
+The skiko input method's text origin subtracts the scroll; its caret rectangle
+is measured in view space when asked for, and as for a vertical scroll, a scroll
+alone does not ask the platform to read it again. The semantics text layout,
+which the input method also serves (iOS's floating cursor), is measured
+unwrapped, at least the viewport wide and as wide as the widest line: an
+intrinsic width leaves out an indent, which would break that line. It carries
+neither scroll offset; the input method's text origin does. The screen reader's
+character bounds (`CharacterBounds`) subtract the sideways scroll with the
+vertical one, in `documentToCanvas`. Android's cursor anchor is watched through the
+caret's view position, so a sideways scroll resends it. The touch toolbar moves
+with a sideways scroll as with a vertical one.
+
+## Testing
+
+With wrapping on, the default, the sideways scroll is always 0, so code that
+forgets it passes every wrapped test. The rule: code that pairs a row's offsets
+(content space) with view or pointer coordinates goes through the conversions
+above, or adds `scrollX` itself. The scrolled variants of the broad tests guard
+it:
+
+- `assertFollowsSidewaysScroll` (`testUtils/uiFuzz`) reads the view at two
+  sideways scrolls and moves each answer back into content x by its scroll: the
+  caret's metrics, `getPositionForOffset` and what points along the caret's row
+  hit must agree. Core's `assertViewFollowsSidewaysScroll` adds the selection
+  drawn in `inContentSpace`, the line decorators' offset, the skiko input
+  method's caret and text origin, the stylus gesture layout and the character
+  bounds, and checks that the caret is drawn at its metrics and not at all once
+  scrolled out of view, and that a decoration's text colour tints only its own
+  glyphs (read from pixels).
+- The UI storms (`EditorFuzzE2eTest`, the markdown module's
+  `MarkdownUiFuzzFixpointTest`) and the invariant fuzz (`EditorInvariantFuzzTest`,
+  invariant `ViewFollowsSidewaysScroll`) have sideways variants: wrapping off,
+  lines wider than the editor, the view scrolled to a seeded point before the
+  first step and after each, and the check after each.
+- The differential fuzz runs unwrapped against a `BasicTextField` too wide to
+  wrap (a multi-line `BasicTextField` cannot turn wrapping off) and a single line
+  against `BasicTextField`'s, the editor scrolled sideways between strokes. It
+  compares the edits only: no key's result may depend on the scroll.
+- `softwrap/SidewaysGeometryTest` checks scenes at several points of the range:
+  the check above, and pointer input placed from the rows' own layout less the
+  scroll, never through the conversions under test (clicks, a link, the touch
+  handles and toolbar, the magnifier).
+
+Each place that applies the sideways scroll (the conversions, `inContentSpace`,
+the hit test, the magnifier's clamp, the caret's drawing, the touch toolbar, the
+stylus gesture layout, the skiko text origin, the line decorators' offset, the
+drag auto-scroll, the character bounds and the text pass that decorations tint,
+inside `inContentSpace`) was checked against these: with its scroll taken out, at least
+one of them fails. A new place should be checked the same way.
+
+## Known limits
+
+- The horizontal scroll is not saved with the state, unlike the first visible
+  line.
+- `RichTextView` always wraps.
+- Scroll 0 is the content's left edge, so a right-to-left line wider than the
+  viewport shows its end until the caret goes to its start; `BasicTextField`'s
+  right-to-left single line shows its start.
+- A visible line is drawn whole, so a very long line costs all its glyphs each
+  frame (Skia clips them).
+- Compose's `Constraints` cannot hold a width past 262,142 pixels, so a line
+  wider than that (some 30,000 characters) wraps there.
+- An unbounded measure reads the line's intrinsic width, a second Skia layout
+  pass over the shaped text, which the tight wrapped measure skips. The intrinsic
+  width leaves out a paragraph's indent, so an indented line it breaks is
+  measured twice more: at the widest width there is, for its text's width, then
+  at that width.

@@ -20,8 +20,8 @@ import utils.editorUiTest
 
 /**
  * The caret geometry Android's cursor anchor info reports: an IME asks for it as soon
- * as the caret moves, before the next frame draws the caret (roadmap 4.30), and places
- * its windows in the view's coordinates, not the canvas's (3.10).
+ * as the caret moves, before the next frame draws the caret, and places
+ * its windows in the view's coordinates, not the canvas's.
  */
 class ImeCaretTest {
 
@@ -101,7 +101,7 @@ class ImeCaretTest {
 		assertFalse(covered.topVisible || covered.bottomVisible)
 	}
 
-	/** A scrolling parent view clips the root itself, which Compose's bounds do not know (4.34). */
+	/** A scrolling parent view clips the root itself, which Compose's bounds do not know. */
 	@Test
 	fun `a caret outside the part of the root the views around it show is hidden`() = editorUiTest(
 		initialText = AnnotatedString("line 1\nline 2"),

@@ -403,7 +403,7 @@ internal class SemanticsDocument(
 		val laidOut = layout.layoutInput.text.length
 		return when {
 			row.richSpans.any { (it.style as? BlockSpanStyle)?.replacesText() == true } ->
-				Rect(0f, row.offset.y, state.viewportSize.width, row.offset.y + row.effectiveHeight)
+				Rect(0f, row.offset.y, blockWidth(), row.offset.y + row.effectiveHeight)
 			// The draw anchors a line's layout at its paragraph's top.
 			position.char < minOf(laidOut, state.textLines[position.line].length) ->
 				layout.getBoundingBox(position.char).translate(row.offset.x, row.paragraphTop)
@@ -420,8 +420,12 @@ internal class SemanticsDocument(
 		return state.getCharacterIndex(state.getOffsetAtPosition(local))
 	}
 
-	/** Where document space's origin sits on the canvas. */
-	private fun documentToCanvas() = Offset(0f, -state.scrollState.value.toFloat())
+	/** How wide a block is drawn: unwrapped, as wide as the content, as `inContentSpace` draws it. */
+	private fun blockWidth() =
+		if (state.softWrap) state.viewportSize.width else state.viewportSize.width + state.horizontalScrollState.maxValue
+
+	/** Where document space's origin sits on the canvas: less both scrolls. */
+	private fun documentToCanvas() = Offset(-state.scrollX, -state.scrollState.value.toFloat())
 }
 
 /**

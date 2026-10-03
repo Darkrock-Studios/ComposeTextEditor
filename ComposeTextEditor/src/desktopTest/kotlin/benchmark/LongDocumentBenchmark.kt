@@ -29,9 +29,9 @@ import org.junit.Assume.assumeTrue
 import kotlin.test.Test
 
 /**
- * Timings on a 200,000-character document (2,000 lines of 99 characters), the size the
- * iOS measurements in roadmap 4.21 used. Skipped unless `CTE_BENCHMARK` is 1, since it
- * is slow and its numbers depend on the machine and its fonts:
+ * Timings on a 200,000-character document (2,000 lines of 99 characters). Skipped
+ * unless `CTE_BENCHMARK` is 1, since it is slow and its numbers depend on the machine
+ * and its fonts:
  *
  * `CTE_BENCHMARK=1 ./gradlew :ComposeTextEditor:desktopTest --tests 'benchmark.LongDocumentBenchmark' --rerun`
  *
@@ -60,7 +60,7 @@ class LongDocumentBenchmark {
 		}.joinToString("\n")
 	}
 
-	private fun editor(lines: Int = 2_000): TextEditorState {
+	private fun editor(lines: Int = 2_000, softWrap: Boolean = true): TextEditorState {
 		val measurer = TextMeasurer(
 			defaultFontFamilyResolver = createFontFamilyResolver(),
 			defaultDensity = Density(1f, 1f),
@@ -68,6 +68,7 @@ class LongDocumentBenchmark {
 		)
 		val state = TextEditorState(scope = scope, measurer = measurer, initialText = AnnotatedString(document(lines)))
 		state.density = Density(1f, 1f)
+		state.softWrap = softWrap
 		state.onViewportSizeChange(viewport)
 		state.isFocused = true
 		state.hasFocus = true
@@ -109,11 +110,17 @@ class LongDocumentBenchmark {
 	}
 
 	@Test
-	fun `long document timings`() {
+	fun `long document timings`() = timings(softWrap = true)
+
+	/** The same with wrapping off: a row per line, scrolling sideways. */
+	@Test
+	fun `long document timings, wrapping off`() = timings(softWrap = false)
+
+	private fun timings(softWrap: Boolean) {
 		assumeTrue("set CTE_BENCHMARK=1 to run", System.getenv("CTE_BENCHMARK") == "1")
-		val state = editor()
+		val state = editor(softWrap = softWrap)
 		val canvas = Canvas(ImageBitmap(viewport.width.toInt(), viewport.height.toInt()))
-		println("BENCHMARK document: ${state.getTextLength()} characters, ${state.textLines.size} lines, ${state.lineOffsets.size} rows")
+		println("BENCHMARK document: ${state.getTextLength()} characters, ${state.textLines.size} lines, ${state.lineOffsets.size} rows, softWrap $softWrap")
 
 		// The caret near the start: the row scans run from the last row back.
 		val nearStart = CharLineOffset(100, 40)
@@ -122,7 +129,7 @@ class LongDocumentBenchmark {
 
 		measure("idle blink frame (draw)", warmup = 200, runs = 500) { state.drawFrame(canvas) }
 		// The same frame over a 2,000-character document, which fills the viewport too.
-		val short = editor(lines = 20).also { it.cursor.updatePosition(CharLineOffset(10, 40)) }
+		val short = editor(lines = 20, softWrap = softWrap).also { it.cursor.updatePosition(CharLineOffset(10, 40)) }
 		measure("idle blink frame, 2k document", warmup = 200, runs = 500) { short.drawFrame(canvas) }
 
 		measure("caret moveRight", warmup = 2_000, runs = 5_000, setup = { state.cursor.updatePosition(nearStart) }) {

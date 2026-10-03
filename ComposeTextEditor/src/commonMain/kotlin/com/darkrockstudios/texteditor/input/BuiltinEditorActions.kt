@@ -356,7 +356,7 @@ private fun TextEditorState.handleIndent() = editGroup {
 		indentLineRange(selection.start.line, selection.end.line)
 	} else {
 		val at = selection?.start ?: cursorPosition
-		// At a list item's start Tab nests the item one level (5.6); inside its
+		// At a list item's start Tab nests the item one level; inside its
 		// text it still inserts, as Word has it.
 		if (at.char == 0 && isListItem(at.line)) {
 			nestListItems(at.line..at.line)
@@ -396,7 +396,7 @@ private fun TextEditorState.handleOutdent() = editGroup {
 		outdentLineRange(selection.start.line, selection.end.line)
 	} else if ((listBlockAt(cursorPosition.line)?.listLevel ?: 0) > 0) {
 		// Shift+Tab anywhere in a nested item un-nests it, as Google Docs has it;
-		// a top-level item has only its leading spaces to give (2.9).
+		// a top-level item has only its leading spaces to give.
 		unnestListItems(cursorPosition.line..cursorPosition.line)
 	} else {
 		outdentCurrentLine()

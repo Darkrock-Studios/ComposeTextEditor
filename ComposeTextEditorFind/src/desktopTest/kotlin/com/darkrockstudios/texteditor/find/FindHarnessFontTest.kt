@@ -8,7 +8,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertSame
 
-/** The find harness lays the editor's text out in the bundled test font whatever the host's fonts are (0.9). */
+/** The find harness lays the editor's text out in the bundled test font whatever the host's fonts are. */
 class FindHarnessFontTest {
 	@Test
 	fun `the harness lays text out in the test font`() {

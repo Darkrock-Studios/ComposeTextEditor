@@ -78,7 +78,7 @@ class AndroidRichClipboardTest {
 		assertNull(readClipboardPaste(clipboard, config, DEFAULT_LINK_SCHEMES)!!.html)
 	}
 
-	/** One read answers the text, the markup as parsed for it, and the copy id (6.39). */
+	/** One read answers the text, the markup as parsed for it, and the copy id. */
 	@Test
 	fun `a paste reads the clip once and carries its markup parsed`() = runTest {
 		val clipboard = clipboardHolding(item("plain bold", "plain <b>bold</b>"), copyId = 42L)
@@ -92,7 +92,7 @@ class AndroidRichClipboardTest {
 		coVerify(exactly = 1) { clipboard.getClipEntry() }
 	}
 
-	/** A paste's read leaves nothing for a later read to answer from (6.39). */
+	/** A paste's read leaves nothing for a later read to answer from. */
 	@Test
 	fun `a clip with no text leaves nothing behind for a later read`() = runTest {
 		val empty = clipboardHolding(item(null, null), copyId = 7L)

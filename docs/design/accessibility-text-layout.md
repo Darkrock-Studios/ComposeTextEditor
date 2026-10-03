@@ -1,11 +1,11 @@
 # Screen-reader character bounds from the editor's rows
 
-Design for roadmap item 7.57, what 7.36 could not do inside `GetTextLayoutResult`:
-the semantics text layout (`SemanticsDocument` in `EditorSemantics.kt`) starts at the
+How screen readers get character bounds from the editor's rows, which
+`GetTextLayoutResult` alone cannot give them: the semantics text layout (`SemanticsDocument` in `EditorSemantics.kt`) starts at the
 first row's top and the text's left edge, so its character bounds miss the content
 padding, the space above the first paragraph and the scroll offset, and a text edit
 shapes the whole document again on the next request (about 100 ms at 200k characters
-on desktop JVM, going by 7.10 and 7.48's whole reshape). A `TextLayoutResult` cannot
+on desktop JVM, going by the cost of a whole reshape). A `TextLayoutResult` cannot
 be offset and cannot be put together from the editor's per-line layouts, so the fix is
 a second channel that answers from the rows, and the layout stays only where a
 platform has no other seam. Compose Multiplatform 1.12.1 sources were read for this.
@@ -72,8 +72,7 @@ paragraph top; `rowTops` differ only where a block makes a row taller, and the g
 stay at the layout's position). Document space to the semantics node:
 
 - x: plus the canvas origin in the node (the start padding, `contentOrigin.x`), less
-  the horizontal scroll when 7.41 adds one (a `scrollX` read with `scrollState.value`
-  today a constant 0).
+  the horizontal scroll (`scrollX`, 0 while lines wrap).
 - y: less `scrollState.value`. The top padding is scroll range (`minValue` is minus
   the top padding), and the first paragraph's `spaceBefore` is in the row's offset, so
   `offset.y - scrollState.value` already covers both; `getPositionForOffset` does this.
@@ -135,17 +134,17 @@ are ignored by every platform bridge, so it is inert off Android.
 `boundsOf(index)`: `state.getOffsetAtCharacter(index)`, the row through
 `lineOffsets.getWrapForDrawing(position, Downstream)`, the box from
 `wrap.textLayoutResult.getBoundingBox(position.char)` moved by `(0, wrap.paragraphTop)`
-into document space, then less the scroll (`documentToCanvas`, the one place a
-horizontal scroll term joins the vertical one) onto the canvas, and through the canvas's
+into document space, then less both scrolls (`documentToCanvas`, the one place
+the horizontal scroll joins the vertical one) onto the canvas, and through the canvas's
 transform to root (`transformFrom`, so a scaled ancestor is mapped as `indexAt` maps
 it). A line break gets the zero-width `getCursorRect` at the row's end. A row whose
 block replaces its text (a rule, an image) answers the block's row, which is what is
-drawn. `indexAt` is the inverse through `getOffsetAtPosition` and `getCharacterIndex`,
+drawn (with wrapping off, as wide as the content, as `inContentSpace` draws it). `indexAt` is the inverse through `getOffsetAtPosition` and `getCharacterIndex`,
 and -1 when there is no answer. Both answer nothing while the rows lag the text (a pass
 skipped while the viewport is collapsed, or inside a transaction).
 
 A request measures nothing. A line the rows have not shaped at the current width yet,
-after 7.48's lazy width pass, answers from its provisional rows: the draw shapes every
+after the lazy width pass, answers from its provisional rows: the draw shapes every
 line in view first, so only lines out of view can be provisional, and Android clips
 their boxes to the node's visible bounds anyway. Shaping one from a request would move
 the scroll and stop a fling under way.
@@ -203,8 +202,8 @@ Fragility: everything used is public API (`ViewCompat`, `AccessibilityDelegateCo
 The assumptions on Compose are that it installs its delegate through `ViewCompat`
 once and never reinstalls it (true in 1.12.1, `AndroidComposeView.android.kt`), and
 that it keeps offering the key for nodes with `GetTextLayoutResult`. If the view is
-not a `RootForTest` or has no delegate, the bridge installs nothing and 7.36's
-behaviour stays.
+not a `RootForTest` or has no delegate, the bridge installs nothing and the semantics
+layout answers alone.
 
 ### iOS: the session's layout becomes the semantics layout
 
@@ -220,7 +219,9 @@ the drawn ones in styled documents, and the span-pass reuse applies. The whole-d
 shape per text revision stays, since `NativeTextInputConnection` indexes one layout by
 absolute offsets and is internal. `unclippedTextOffsetInRoot` adds the first row's top
 (`lineOffsets.firstOrNull()?.offset?.y ?: 0f`) so the space above the first paragraph
-is counted; padding and scroll were already right.
+is counted; padding and both scrolls were already right. With wrapping off the
+layout is measured unwrapped and as wide as the widest line, since an intrinsic width
+leaves out an indent and would break that line.
 
 Found while doing it: the editor's session asks for no `PlatformImeOptions`, so CMP
 runs it on the legacy `ComposeTextInputConnection`, not `NativeTextInputConnection`.
@@ -230,9 +231,9 @@ reads `unclippedTextOffsetInRoot` only to notice a geometry change, and its view
 answers empty caret and selection rectangles. So the row-matched layout reaches the
 floating cursor and vertical moves, and VoiceOver's caret outline stays as it was until
 the editor moves to native text input (`usingNativeTextInput(true)`), a change of the
-whole iOS input path that is not part of this item. The offset is right for that day.
+whole iOS input path that is not part of this design. The offset is right for that day.
 
-### Desktop: no seam, 7.36 stays
+### Desktop: no seam, the semantics layout stays
 
 The bridge translates nothing and reads one layout per call, so neither the offsets
 nor the per-edit shape can be fixed from the library; the start padding could be
@@ -241,7 +242,7 @@ grows by the same amount), but the vertical offset cannot, and half a fix is not
 worth the asymmetry. The upstream fix is for `ComposeAccessibleText` to translate by
 the text's origin inside the node, which needs a semantics property Compose does not
 have; worth an issue against Compose Multiplatform. The lazily measured, per-revision
-cached layout of 7.36 is the right answer until then.
+cached semantics layout is the right answer until then.
 
 ### Web: nothing
 
@@ -257,7 +258,8 @@ spacing. For every character, `boundsOf(i)` equals the drawn glyph box
 break's box sits at its row's end with zero width, an index past the end is null;
 after a span pass and after an edit at the end, a request leaves every `LineLayout`
 identity in the row list as it was (no reshaping). `RichTextView` the same with its
-padding.
+padding. With wrapping off, scrolled sideways, the same per-character check, and
+`assertViewFollowsSidewaysScroll` reads the bounds at two sideways scrolls.
 
 Android: the module has host tests only (no Robolectric). The forwarding is a host test
 with mocks (`androidHostTest/semantics/EditorAccessibilityBridgeTest`); the
@@ -276,7 +278,7 @@ and `accessibility_enabled 1`), turn on magnification following the reading curs
 requests and their ranges while TalkBack reads a scrolled document; line granularity
 still works.
 
-Mac queue (iOS): run the sample on a simulator with Accessibility Inspector, focus the
+iOS, on the Mac: run the sample on a simulator with Accessibility Inspector, focus the
 editor scrolled into a heading, and check the inspector's caret frame sits on the
 drawn caret; drag the spacebar trackpad over a styled document and check the caret
 lands on the drawn rows; type at 200k characters and note the per-keystroke cost is no
@@ -291,8 +293,8 @@ worse than before (one shape, as today).
    calls, the device test source set with one test, the emulator check. About 250
    lines. Medium.
 3. iOS: hand the `SemanticsDocument` to `SkikoTextEditorInputMethodRequest`, drop
-   `DocumentTextLayout`, add the first row's top to `unclippedTextOffsetInRoot`, Mac
-   queue check. About 40 lines. Small.
+   `DocumentTextLayout`, add the first row's top to `unclippedTextOffsetInRoot`, the
+   check on the Mac. About 40 lines. Small.
 4. Later, optional: LINE and PAGE granularity from the rows in the Android bridge,
    which would end the last whole-document shape on Android. Large; only if a TalkBack
    user reports line navigation lag on a long document.

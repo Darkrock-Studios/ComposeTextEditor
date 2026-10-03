@@ -460,7 +460,7 @@ class BasicTextFieldParityTest {
 	)
 
 	// Left and Right through a right-to-left word in left-to-right text are visual, where
-	// BasicTextField is logical (7.33): e2e/VisualArrowE2eTest.kt.
+	// BasicTextField is logical: e2e/VisualArrowE2eTest.kt.
 
 	// Right-to-left paragraphs, with the content-based direction a right-to-left host sets.
 
@@ -504,7 +504,7 @@ class BasicTextFieldParityTest {
 	@Test
 	fun `with the default direction a right-to-left paragraph is left-to-right based for word motion`() = assertMatchesNative(
 		start = EditSnapshot("שלום עולם", caret = 0),
-		// Word motion: the arrows alone are visual (7.33), where BasicTextField is logical.
+		// Word motion: the arrows alone are visual, where BasicTextField is logical.
 		strokes = listOf(CtrlRight, CtrlRight, CtrlLeft),
 	)
 

@@ -21,7 +21,7 @@ import platform.Foundation.NSString
  * Skia's ICU word breaks, as on the other platforms, except for a line in a script ICU
  * breaks by dictionary: skia's ICU on iOS has no dictionaries and splits a run of kanji
  * into single characters, so such a line takes iOS's own breaks from
- * `CFStringTokenizer` (roadmap 1.5). The tokenizer is many times slower, which a scan of
+ * `CFStringTokenizer`. The tokenizer is many times slower, which a scan of
  * every line (word count, spell check) would feel, so other lines stay with skia.
  */
 internal actual fun wordCursor(text: String): BreakCursor = DictionaryAwareBreakCursor(text)

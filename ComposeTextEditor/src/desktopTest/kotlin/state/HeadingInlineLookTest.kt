@@ -23,7 +23,7 @@ import kotlin.test.assertTrue
 import utils.blockLines
 
 /**
- * A heading look equal to an inline style (7.79): the heading bakes it told apart from that
+ * A heading look equal to an inline style: the heading bakes it told apart from that
  * style, so the user's bold inside the heading is theirs and outlives the heading.
  */
 class HeadingInlineLookTest {

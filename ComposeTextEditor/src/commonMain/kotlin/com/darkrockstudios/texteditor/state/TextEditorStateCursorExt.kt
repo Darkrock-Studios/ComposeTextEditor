@@ -1,6 +1,7 @@
 package com.darkrockstudios.texteditor.state
 
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.style.ResolvedTextDirection
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.LineWrap
@@ -46,9 +47,9 @@ private inline fun TextEditorState.keepingVerticalGoal(edgeMove: () -> Unit) {
 	cursor.rememberVerticalGoalX(goalX)
 }
 
-/** The x the vertical run under way aims for, or the caret's own x when one starts. */
+/** The x the vertical run under way aims for, or the caret's own x when one starts; content x, which no scroll moves. */
 private fun TextEditorState.verticalGoalOrCaretX(): Float =
-	cursor.verticalGoalX ?: getPositionForOffset(cursorPosition, cursor.affinity).position.x
+	cursor.verticalGoalX ?: caretContentX(cursorPosition, cursor.affinity) ?: 0f
 
 /**
  * Moves the caret onto the visual row at [rowIndex] in [lineOffsets], at the x the
@@ -106,14 +107,15 @@ internal fun LineWrap.caretX(char: Int, runSide: CaretAffinity? = null): Float {
  * The x past this row's last glyph, trailing spaces included: the line's own right
  * edge (left in a right-to-left paragraph) stops before them.
  */
-internal fun LineWrap.rowEndX(): Float {
-	val layout = textLayoutResult
-	val row = virtualLineIndex
-	val last = layout.getLineEnd(row) - 1
-	return if (layout.getParagraphDirection(0) == ResolvedTextDirection.Ltr) {
-		maxOf(layout.getLineRight(row), if (last >= 0) layout.getBoundingBox(last).right else 0f)
+internal fun LineWrap.rowEndX(): Float = textLayoutResult.rowEndX(virtualLineIndex)
+
+/** [LineWrap.rowEndX] of [row] in this layout. */
+internal fun TextLayoutResult.rowEndX(row: Int): Float {
+	val last = getLineEnd(row) - 1
+	return if (getParagraphDirection(0) == ResolvedTextDirection.Ltr) {
+		maxOf(getLineRight(row), if (last >= 0) getBoundingBox(last).right else 0f)
 	} else {
-		minOf(layout.getLineLeft(row), if (last >= 0) layout.getBoundingBox(last).left else 0f)
+		minOf(getLineLeft(row), if (last >= 0) getBoundingBox(last).left else 0f)
 	}
 }
 
@@ -285,5 +287,5 @@ private fun TextEditorState.moveCursorByPage(direction: Int) {
 		scrollManager.totalContentHeight - pageHeight + scrollManager.bottomContentPaddingPx,
 	)
 	val target = keepsScreenPlace.coerceIn(showsRowFrom, newTop).coerceIn(scrollState.minValue, maxScroll)
-	scrollManager.scrollToPosition(target, animated = false)
+	scrollManager.scrollToKeepingCaret(target)
 }

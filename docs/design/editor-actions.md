@@ -204,11 +204,11 @@ another key is pressed or focus changes. Alt+Tab still indents where the system
 lets it through, as Option+Tab does in Cocoa.
 
 Tab is list-aware. At a list item's start it nests the item one level, never
-deeper than one below the item above (roadmap 5.6); inside the item's text it
+deeper than one below the item above; inside the item's text it
 inserts the indent text. A list's first top-level item has nothing to nest
 under: Google Docs nests it anyway and Word indents the whole list, and the
 line model can do neither, so it takes the indent text, which survives a
-markdown round trip (7.45) and Shift+Tab takes back (7.58). A nested item
+markdown round trip and Shift+Tab takes back. A nested item
 already at its limit is left alone, since Shift+Tab there un-nests it and would
 leave the indent, and so is a blank first item, whose indent would keep Enter
 from ending the list. Tab over several lines treats each line as Tab alone
@@ -506,8 +506,7 @@ primitives stay `internal`.
 - A code-editor indent (to the next tab stop, or matching the line above) is a
   host's own `editor.indent`.
 - Behaviors see typed text, pastes and drops, newline, backspace and forward
-  delete. A typed composition the editor ends itself (a tap outside it, focus loss) offered to `onTextInput`, only one the
-  IME commits or finishes (roadmap 5.9).
+  delete.
 - The IME routing is unverified on real hardware. See "Device verification
   still owed" above; that list should be worked through before a release ships
   this.

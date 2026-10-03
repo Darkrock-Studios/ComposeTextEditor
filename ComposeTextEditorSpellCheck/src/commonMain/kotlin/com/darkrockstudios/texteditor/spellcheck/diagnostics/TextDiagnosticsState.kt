@@ -3,8 +3,11 @@ package com.darkrockstudios.texteditor.spellcheck.diagnostics
 import androidx.compose.ui.graphics.Color
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
+import com.darkrockstudios.texteditor.decoration.clearDecorations
+import com.darkrockstudios.texteditor.decoration.decorations
 import com.darkrockstudios.texteditor.richstyle.RichSpan
 import com.darkrockstudios.texteditor.spellcheck.computeAffectedRanges
+import com.darkrockstudios.texteditor.spellcheck.utils.decorationsTouching
 import com.darkrockstudios.texteditor.spellcheck.utils.replaceFlagged
 import com.darkrockstudios.texteditor.state.TextEditOperation
 import com.darkrockstudios.texteditor.state.TextEditorState
@@ -25,7 +28,9 @@ val DefaultSuggestionColor = Color(0xFFB8860B)
  * line text, so after an edit only the lines that changed go to [TextDiagnosticsChecker.check];
  * [TextDiagnosticsChecker.checkText] sees the whole text every time. Pass it to
  * [com.darkrockstudios.texteditor.spellcheck.SpellCheckingTextEditor], which refreshes it as the text
- * changes and opens a menu of the message and fixes on an underline.
+ * changes and opens a menu of the message and fixes on an underline. The underlines are on the
+ * diagnostics decoration layer, which it reads and replaces by line; a state made for the same
+ * editor later takes over the underlines an earlier one left.
  *
  * @param color Underlines a [DiagnosticSeverity.Error].
  * @param suggestionColor Underlines a [DiagnosticSeverity.Suggestion].
@@ -40,6 +45,9 @@ class TextDiagnosticsState(
 	private val scanContext: CoroutineContext = Dispatchers.Default,
 	private val cacheLines: Int = DEFAULT_CACHE_LINES,
 ) {
+	/** The decoration layer the underlines are on; see `docs/design/decorations.md`. */
+	internal val layer = DiagnosticsLayer
+
 	var checker: TextDiagnosticsChecker? = checker
 		private set
 
@@ -80,7 +88,7 @@ class TextDiagnosticsState(
 	}
 
 	private fun recolor(severity: DiagnosticSeverity, value: Color) {
-		val spans = diagnosticSpans().filter { (it.style as DiagnosticStyle).severity == severity }
+		val spans = textState.decorations(layer).filter { (it.style as? DiagnosticStyle)?.severity == severity }
 		textState.updateRichSpans(
 			remove = spans,
 			add = spans.map { it.copy(style = (it.style as DiagnosticStyle).copy(color = value)) },
@@ -95,7 +103,7 @@ class TextDiagnosticsState(
 		refreshGeneration = textState.documentGeneration.value
 		val current = checker
 		if (current == null) {
-			textState.updateRichSpans(remove = diagnosticSpans(), add = emptyList())
+			textState.clearDecorations(layer)
 			return@withLock
 		}
 		val lines = textState.textLines.map { it.text }
@@ -129,7 +137,7 @@ class TextDiagnosticsState(
 	 */
 	fun invalidate(operations: List<TextEditOperation>) {
 		val doomed = computeAffectedRanges(operations).flatMapTo(LinkedHashSet()) { range ->
-			textState.richSpanManager.getSpansInRange(range).filter { it.style is DiagnosticStyle }
+			textState.decorationsTouching(layer, range)
 		}
 		if (doomed.isNotEmpty()) textState.updateRichSpans(remove = doomed.toList(), add = emptyList())
 	}
@@ -141,12 +149,12 @@ class TextDiagnosticsState(
 	 * flag.
 	 */
 	fun applyFix(span: RichSpan, fix: String) {
-		if (span !in textState.richSpanManager.getAllRichSpans()) return
-		textState.replaceFlagged(span.range, fix) { it.style === span.style }
+		if (span !in textState.decorations(layer, span.range.start.line..span.range.end.line)) return
+		textState.replaceFlagged(span.range, fix, layer) { it.style === span.style }
 	}
 
 	private fun reconcile(textFound: List<List<LineDiagnostic>>?) {
-		val existing = diagnosticSpans().groupBy { it.range.start.line }
+		val existing = textState.decorations(layer).groupBy { it.range.start.line }
 		val remove = mutableListOf<RichSpan>()
 		val add = mutableListOf<RichSpan>()
 		textState.textLines.forEachIndexed { index, line ->
@@ -183,9 +191,6 @@ class TextDiagnosticsState(
 			DiagnosticStyle(message, fixes, if (severity == DiagnosticSeverity.Error) color else suggestionColor, severity),
 		)
 	}
-
-	private fun diagnosticSpans(): List<RichSpan> =
-		textState.richSpanManager.getAllRichSpans().filter { it.style is DiagnosticStyle }
 
 	private companion object {
 		const val DEFAULT_CACHE_LINES = 4096

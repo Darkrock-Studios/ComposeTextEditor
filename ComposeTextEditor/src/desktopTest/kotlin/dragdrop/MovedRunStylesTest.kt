@@ -30,7 +30,7 @@ import kotlin.test.assertTrue
 
 /**
  * A run dragged within the editor lands with its own styles, as Word moves it, rather
- * than taking the formatting where it lands (6.48).
+ * than taking the formatting where it lands.
  */
 @OptIn(ExperimentalComposeUiApi::class)
 class MovedRunStylesTest {

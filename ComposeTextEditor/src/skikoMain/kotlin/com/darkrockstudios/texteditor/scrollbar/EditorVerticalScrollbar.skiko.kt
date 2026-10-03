@@ -1,5 +1,6 @@
 package com.darkrockstudios.texteditor.scrollbar
 
+import androidx.compose.foundation.HorizontalScrollbar
 import androidx.compose.foundation.LocalScrollbarStyle
 import androidx.compose.foundation.MutatePriority
 import androidx.compose.foundation.ScrollbarStyle
@@ -14,12 +15,14 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.LayoutDirection
 import com.darkrockstudios.texteditor.state.TextEditorScrollState
 import kotlin.math.roundToInt
 
 /**
- * Compose's scrollbar reading and driving a [TextEditorScrollState]. Offsets run from the
- * top of the scroll range, which the top content padding puts below zero.
+ * Compose's scrollbar reading and driving a [TextEditorScrollState], either way. Offsets run
+ * from the start of the scroll range, which the top content padding puts below zero.
  */
 internal class TextEditorScrollbarAdapter(
 	private val scrollState: TextEditorScrollState,
@@ -28,7 +31,7 @@ internal class TextEditorScrollbarAdapter(
 		get() = (scrollState.value - scrollState.minValue).toDouble()
 
 	override val viewportSize: Double
-		get() = scrollState.viewportHeight.toDouble()
+		get() = scrollState.viewportLength.toDouble()
 
 	override val contentSize: Double
 		get() = (scrollState.maxValue - scrollState.minValue) + viewportSize
@@ -66,6 +69,23 @@ internal fun EditorWithVerticalScrollbar(
 			style = themedScrollbarStyle(),
 		)
 	}
+}
+
+/**
+ * Compose's desktop scrollbar for the sideways scroll, laid over the bottom of the text:
+ * dragged by its thumb, paging while the track is pressed, and scrolling under a wheel,
+ * styled as the vertical one. The content is not mirrored in a right-to-left layout, so
+ * neither is the bar, which Compose would otherwise flip.
+ */
+@Composable
+internal fun EditorHorizontalScrollbarBar(scrollState: TextEditorScrollState, modifier: Modifier) {
+	val adapter = remember(scrollState) { TextEditorScrollbarAdapter(scrollState) }
+	HorizontalScrollbar(
+		adapter = adapter,
+		modifier = modifier.scrollable(scrollState, Orientation.Horizontal),
+		reverseLayout = LocalLayoutDirection.current == LayoutDirection.Rtl,
+		style = themedScrollbarStyle(),
+	)
 }
 
 @Composable

@@ -15,7 +15,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import utils.setBlockLines
 
-/** Undoing an edit that joined lines gives the lines back as they were (6.28). */
+/** Undoing an edit that joined lines gives the lines back as they were. */
 class UndoLineJoinTest {
 
 	private val bold = SpanStyle(fontWeight = FontWeight.Bold)

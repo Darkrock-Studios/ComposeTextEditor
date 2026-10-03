@@ -26,8 +26,8 @@ import kotlin.test.assertTrue
 /**
  * iOS's spacebar trackpad and VoiceOver's caret outline hit-test the request's text
  * layout, placed at `unclippedTextOffsetInRoot`: the floating cursor starts at
- * `getCursorRect` and follows the finger with `getOffsetForPosition` (roadmap 4.6). The
- * layout is the semantics one (7.57), so its rows sit where the editor draws them, and
+ * `getCursorRect` and follows the finger with `getOffsetForPosition`. The
+ * layout is the semantics one, so its rows sit where the editor draws them, and
  * it is not rebuilt while the finger moves.
  */
 @OptIn(ExperimentalTestApi::class)

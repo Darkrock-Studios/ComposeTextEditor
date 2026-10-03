@@ -21,7 +21,7 @@ import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import utils.InMemoryClipboard
 
-/** Pasted or dropped text keeps a link's look only where the receiving editor takes the link (6.32). */
+/** Pasted or dropped text keeps a link's look only where the receiving editor takes the link. */
 class RefusedLinkLookTest {
 
 	private val styles = RichTextStyles.DEFAULT

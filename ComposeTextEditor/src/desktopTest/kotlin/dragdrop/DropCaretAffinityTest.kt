@@ -21,7 +21,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 
-/** A drag hovering past a wrapped row's end draws its drop caret at that row's end (6.24). */
+/** A drag hovering past a wrapped row's end draws its drop caret at that row's end. */
 class DropCaretAffinityTest {
 
 	@Test
@@ -35,7 +35,7 @@ class DropCaretAffinityTest {
 		assertEquals(state.lineOffsets[1].wrapStartsAtIndex, dnd.dropHit?.position?.char)
 		val dropCaret = drawnDropCaret(dnd)
 		assertEquals(rowTop(0), dropCaret.top, "drawn at the end of row 0, not the start of row 1")
-		// Where a click there puts the caret (1.24).
+		// Where a click there puts the caret.
 		clickAt(canvasToNode(rootPastEndOfRow(0) - state.canvasPositionInRoot))
 		assertRectEquals(assertNotNull(drawnCaret()), dropCaret)
 	}

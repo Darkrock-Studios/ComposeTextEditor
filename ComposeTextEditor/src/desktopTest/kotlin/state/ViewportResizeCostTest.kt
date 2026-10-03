@@ -60,7 +60,7 @@ class ViewportResizeCostTest {
 
 		state.onViewportSizeChange(Size(800f, 300f))
 
-		assertEquals(300, state.scrollState.viewportHeight)
+		assertEquals(300, state.scrollState.viewportLength)
 		assertEquals(lineCount * 20 - 300, state.scrollState.maxValue)
 	}
 

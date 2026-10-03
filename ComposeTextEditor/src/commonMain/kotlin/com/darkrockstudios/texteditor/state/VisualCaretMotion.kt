@@ -9,7 +9,7 @@ import kotlin.math.abs
 
 /**
  * Whether Left and Right move the caret visually through a paragraph's runs of opposite
- * direction (7.33): one glyph boundary further left or right on screen per press, where
+ * direction: one glyph boundary further left or right on screen per press, where
  * the logical order would jump across a run. The decision for every platform lives here.
  *
  * Native fields move visually on each platform the editor runs on, so every platform
@@ -20,7 +20,7 @@ import kotlin.math.abs
  *   directions a hardware keyboard's arrows ask for (not yet checked on a device).
  * - Windows: the Edit and RichEdit controls move visually.
  * - Linux: GTK binds the arrows to `GTK_MOVEMENT_VISUAL_POSITIONS`. Qt defaults to
- *   logical; GTK is the Linux reference here, as for word motion (1.19).
+ *   logical; GTK is the Linux reference here, as for word motion.
  * - Android: `EditText`'s `ArrowKeyMovementMethod` steps with `Layout.getOffsetToLeftOf`
  *   and `getOffsetToRightOf`, which are visual.
  * - Web: Chrome and Safari move visually, and Firefox by default
@@ -28,7 +28,7 @@ import kotlin.math.abs
  *
  * `BasicTextField` alone is logical. Shift extends the selection with the same visual
  * steps; the selection itself stays a logical range. Word moves, Home and End, and the
- * collapse of a selection (1.4) keep their paragraph-direction rules (7.5).
+ * collapse of a selection keep their paragraph-direction rules.
  */
 internal const val ARROW_KEYS_MOVE_VISUALLY = true
 

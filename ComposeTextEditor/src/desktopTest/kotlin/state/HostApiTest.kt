@@ -33,7 +33,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/** Word count, programmatic focus, and the cursor flow's first value (7.25). */
+/** Word count, programmatic focus, and the cursor flow's first value. */
 @OptIn(ExperimentalTestApi::class)
 class HostApiTest {
 

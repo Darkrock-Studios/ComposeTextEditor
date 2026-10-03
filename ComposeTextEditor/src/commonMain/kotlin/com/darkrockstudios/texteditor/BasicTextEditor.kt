@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
@@ -25,6 +26,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.FocusRequester
@@ -71,6 +73,7 @@ import com.darkrockstudios.texteditor.richstyle.BlockSpanStyle
 import com.darkrockstudios.texteditor.state.LayoutUpdate
 import com.darkrockstudios.texteditor.state.LocalImeInsets
 import com.darkrockstudios.texteditor.richstyle.RichSpan
+import com.darkrockstudios.texteditor.scrollbar.EditorHorizontalScrollbar
 import com.darkrockstudios.texteditor.scrollbar.TextEditorScrollbar
 import com.darkrockstudios.texteditor.state.LendComposition
 import com.darkrockstudios.texteditor.state.SpanClickType
@@ -109,8 +112,9 @@ private const val CURSOR_BLINK_SPEED_MS = 500L
  * @param lineLimits How tall the editor is: [EditorLineLimits.Fill], the default, takes
  *   the height it is given; [EditorLineLimits.MultiLine] grows with the text between a
  *   minimum and maximum number of lines, then scrolls; [EditorLineLimits.SingleLine]
- *   keeps the text to one paragraph. For a maximum length or other rules on what may be
- *   entered, set [TextEditorState.inputFilter].
+ *   keeps the text to one paragraph, one row that scrolls sideways, whatever [softWrap]
+ *   says. For a maximum length or other rules on what may be entered, set
+ *   [TextEditorState.inputFilter].
  * @param autoFocus Requests focus once when first composed, if [enabled]. For focus at
  *   any other time, see [modifier].
  * @param style Colors and text style for the editor and its gutter markers.
@@ -127,13 +131,22 @@ private const val CURSOR_BLINK_SPEED_MS = 500L
  *   only places the caret. `null` leaves links to [onRichSpanClick]; pass
  *   `LocalUriHandler.current::openUri` to open them in the browser.
  * @param decorateLine Optional per-line decorator drawn behind each line, keyed by
- *   line index — useful for gutters, current-line highlights, or diff markers.
+ *   line index, useful for gutters, current-line highlights, or diff markers. It
+ *   draws in the text canvas's coordinates, unclipped, and its offset is where the
+ *   line's text is drawn, which with wrapping off ([softWrap], or a single line) moves
+ *   with the sideways scroll: a gutter places itself by its own x.
  * @param keyBindings Chord-to-command mapping, defaulting to [LocalKeyBindings].
  *   Bind chords to actions registered on [TextEditorState.actions] to add
  *   shortcuts of your own.
  * @param contentDescription The editor's label for accessibility services, read with
  *   its text ("Notes, edit box, ..."). Set it here rather than through [modifier]'s
  *   semantics, which land on a container around the editable node.
+ * @param softWrap Whether lines wrap at the editor's width, as in `BasicTextField`. With
+ *   `false` a line stays one row however long, and the editor scrolls sideways
+ *   ([TextEditorState.horizontalScrollState]): to keep the caret in view, by a horizontal
+ *   wheel (Shift and the wheel on desktop) or trackpad, by a drag, and on desktop and the
+ *   web by a scrollbar over the bottom edge of the text. The layout is the state's, so
+ *   wrapping is off while any editor showing the state has it off.
  */
 @Composable
 fun BasicTextEditor(
@@ -153,6 +166,7 @@ fun BasicTextEditor(
 	contentDescription: String? = null,
 	readOnly: Boolean = false,
 	lineLimits: EditorLineLimits = EditorLineLimits.Fill,
+	softWrap: Boolean = true,
 ) {
 	LendComposition(state)
 
@@ -212,6 +226,13 @@ fun BasicTextEditor(
 		onDispose { if (singleLine) state.singleLineEditors-- }
 	}
 
+	// A single line is one row that scrolls sideways, as BasicTextField's is.
+	val wraps = softWrap && !singleLine
+	DisposableEffect(state, wraps) {
+		if (!wraps) state.noWrapEditors++
+		onDispose { if (!wraps) state.noWrapEditors-- }
+	}
+
 	LaunchedEffect(contentPadding, density) {
 		with(density) {
 			state.scrollManager.topContentPaddingPx = contentPadding.calculateTopPadding().roundToPx()
@@ -224,7 +245,8 @@ fun BasicTextEditor(
 	}
 
 	// A soft keyboard drawn over the window covers the bottom of the viewport: measured
-	// on the canvas (measuresKeyboardCover), and again when it moves (onGloballyPositioned).
+	// on the canvas's frame (measuresKeyboardCover), and again when the canvas moves
+	// (onGloballyPositioned).
 	// The local is static and unset outside tests, so the call order stays fixed.
 	val imeInsets by rememberUpdatedState(LocalImeInsets.current ?: WindowInsets.ime)
 	val imeInsetsProvider = remember { { imeInsets } }
@@ -369,103 +391,126 @@ fun BasicTextEditor(
 			modifier = menuPlacement.modifier.then(modifier).then(lineLimitsModifier),
 			scrollState = state.scrollState,
 		) { editorModifier ->
-			// The horizontal padding is applied inside the canvas, below its pointer input,
-			// so presses in it reach the text; the vertical padding is scroll range.
-			Box(
-				modifier = editorModifier
-					.focusRequester(focusRequester)
-					.stylusHandwriting(state, editable, handwritingStroke)
-					.requestFocusOnPress(
-						state,
-						focusRequester,
-						popupIsShowing = { effectiveContextMenuState.isVisible },
-						onRequestInput = inputRequester::requestInput,
-					)
-					.then(inputModifierElement)
-					.then(caretFocusRect.modifier)
-					// Focusable even when disabled, so a selection can be copied by keyboard.
-					.focusable(enabled = true, interactionSource = interactionSource)
-					.then(semanticsModifier)
-					.fillMaxSize()
-					.overscroll(overscrollEffect)
-					.scrollable(
-						orientation = Orientation.Vertical,
-						reverseDirection = false,
-						state = state.scrollState,
-						overscrollEffect = overscrollEffect,
-					)
-			) {
-				// The pointer handler never restarts, so it must reach the listeners the
-				// host passed most recently rather than the ones captured at first composition.
-				val currentOnRichSpanClick by rememberUpdatedState(onRichSpanClick)
-				val currentOnRichSpanClickEvent by rememberUpdatedState(onRichSpanClickEvent)
-				val currentOnLinkClick by rememberUpdatedState(onLinkClick)
-				val spanClickProxy: SpanClickSink = remember {
-					{ click ->
-						currentOnRichSpanClick?.invoke(click.span, click.type, click.offset)
-						currentOnRichSpanClickEvent?.invoke(click)
-					}
-				}
-				val linkClicks = remember(keyBindings) {
-					LinkClicks.forEditor(keyBindings) { currentOnLinkClick }
-				}
-				val primarySelection = LocalPrimarySelection.current
-				val primaryPasteScope = rememberCoroutineScope()
-				val primaryPaste: (() -> Unit)? = remember(state, editable, primarySelection, primaryPasteScope) {
-					if (editable && primarySelection != null) {
-						{
-							// Taken at the click: focus can move between editors sharing the state
-							// while the read is suspended, and the paste keeps to this one's limit.
-							val target = inputRequester.editor
-							primaryPasteScope.launch {
-								val text = primarySelection.readText()?.takeIf { it.isNotEmpty() } ?: return@launch
-								state.asEditor(target) { state.pastePlainText(text) }
-							}
-						}
-					} else {
-						null
-					}
-				}
-				val dragAndDrop = remember(state) { TextDragAndDrop(state, inputRequester::editor) }
-				dragAndDrop.enabled = editable
-				dragAndDrop.textColor = style.textColor
-				// The canvas: a box, so the handles' popups are placed from its content.
+			// The sideways scrollbar lies over the text beside the editor's own box, so a press
+			// on it neither focuses the editor nor places the caret.
+			Box(editorModifier) {
+				// The horizontal padding is applied inside the canvas, below its pointer input,
+				// so presses in it reach the text; the vertical padding is scroll range.
 				Box(
 					modifier = Modifier
-						.textDragAndDrop(dragAndDrop)
-						.textEditorPointerIcon(state, linkClicks, contentOrigin = { contentOrigin })
-						.textEditorPointerInputHandling(
-							state = state,
-							onSpanClick = spanClickProxy,
-							onContextMenuRequest = openPointerMenu,
-							links = linkClicks,
-							caretHandle = enabled,
-							contentOrigin = { contentOrigin },
-							touchToolbar = touchToolbar,
-							selectionDrag = dragAndDrop,
-							primaryPaste = primaryPaste,
-							handles = handles,
+						.focusRequester(focusRequester)
+						.stylusHandwriting(state, editable, handwritingStroke)
+						.requestFocusOnPress(
+							state,
+							focusRequester,
+							popupIsShowing = { effectiveContextMenuState.isVisible },
+							onRequestInput = inputRequester::requestInput,
 						)
-						.padding(horizontalPadding)
-						.textMagnifier(state, style)
-						.background(style.backgroundColor)
-						.onSizeChanged { size -> state.onViewportSizeChange(size.toSize()) }
-						.measuresKeyboardCover(state, imeInsetsProvider)
-						// The content canvas's position, below the padding: the desktop IME places
-						// its candidate window by it, and the touch toolbar its menu.
-						.onGloballyPositioned {
-							canvasPlacement.coordinates = it
-							state.canvasLayoutCoordinates = it
-							state.canvasPositionInRoot = it.positionInRoot()
-							state.updateKeyboardCover(imeInsets.getBottom(density))
-						}
+						.then(inputModifierElement)
+						.then(caretFocusRect.modifier)
+						// Focusable even when disabled, so a selection can be copied by keyboard.
+						.focusable(enabled = true, interactionSource = interactionSource)
+						.then(semanticsModifier)
 						.fillMaxSize()
-						.graphicsLayer {
-							clip = false
-						}
-						.drawBehind { drawEditorCanvas(state, style, decorateLine, enabled, dragAndDrop) }
+						// Outside the overscroll, which can move the canvas.
+						.measuresKeyboardCover(state, imeInsetsProvider)
+						.overscroll(overscrollEffect)
+						.scrollable(
+							orientation = Orientation.Vertical,
+							reverseDirection = false,
+							state = state.scrollState,
+							overscrollEffect = overscrollEffect,
+						)
+						// Content x is not mirrored in a right-to-left layout, and bare scrollable
+						// does not flip for one.
+						.scrollable(
+							orientation = Orientation.Horizontal,
+							state = state.horizontalScrollState,
+							enabled = !state.softWrap,
+						)
 				) {
-					TouchHandlePopups(state, handles, style.effectiveHandleColor, touchToolbar)
+					// The pointer handler never restarts, so it must reach the listeners the
+					// host passed most recently rather than the ones captured at first composition.
+					val currentOnRichSpanClick by rememberUpdatedState(onRichSpanClick)
+					val currentOnRichSpanClickEvent by rememberUpdatedState(onRichSpanClickEvent)
+					val currentOnLinkClick by rememberUpdatedState(onLinkClick)
+					val spanClickProxy: SpanClickSink = remember {
+						{ click ->
+							currentOnRichSpanClick?.invoke(click.span, click.type, click.offset)
+							currentOnRichSpanClickEvent?.invoke(click)
+						}
+					}
+					val linkClicks = remember(keyBindings) {
+						LinkClicks.forEditor(keyBindings) { currentOnLinkClick }
+					}
+					val primarySelection = LocalPrimarySelection.current
+					val primaryPasteScope = rememberCoroutineScope()
+					val primaryPaste: (() -> Unit)? = remember(state, editable, primarySelection, primaryPasteScope) {
+						if (editable && primarySelection != null) {
+							{
+								// Taken at the click: focus can move between editors sharing the state
+								// while the read is suspended, and the paste keeps to this one's limit.
+								val target = inputRequester.editor
+								primaryPasteScope.launch {
+									val text = primarySelection.readText()?.takeIf { it.isNotEmpty() } ?: return@launch
+									state.asEditor(target) { state.pastePlainText(text) }
+								}
+							}
+						} else {
+							null
+						}
+					}
+					val dragAndDrop = remember(state) { TextDragAndDrop(state, inputRequester::editor) }
+					dragAndDrop.enabled = editable
+					dragAndDrop.textColor = style.textColor
+					// The canvas: a box, so the handles' popups are placed from its content.
+					Box(
+						modifier = Modifier
+							.textDragAndDrop(dragAndDrop)
+							.textEditorPointerIcon(state, linkClicks, contentOrigin = { contentOrigin })
+							.textEditorPointerInputHandling(
+								state = state,
+								onSpanClick = spanClickProxy,
+								onContextMenuRequest = openPointerMenu,
+								links = linkClicks,
+								caretHandle = enabled,
+								contentOrigin = { contentOrigin },
+								touchToolbar = touchToolbar,
+								selectionDrag = dragAndDrop,
+								primaryPaste = primaryPaste,
+								handles = handles,
+							)
+							.padding(horizontalPadding)
+							.textMagnifier(state, style)
+							.background(style.backgroundColor)
+							.onSizeChanged { size -> state.onViewportSizeChange(size.toSize()) }
+							// The content canvas's position, below the padding: the desktop IME places
+							// its candidate window by it, and the touch toolbar its menu.
+							.onGloballyPositioned {
+								canvasPlacement.coordinates = it
+								state.canvasLayoutCoordinates = it
+								state.canvasPositionInRoot = it.positionInRoot()
+								state.updateKeyboardCover(imeInsets.getBottom(density))
+							}
+							.fillMaxSize()
+							.graphicsLayer {
+								clip = false
+							}
+							.drawBehind { drawEditorCanvas(state, style, decorateLine, enabled, dragAndDrop) }
+					) {
+						TouchHandlePopups(state, handles, style.effectiveHandleColor, touchToolbar)
+					}
+				}
+				if (state.horizontalScrollState.maxValue > 0 && !singleLine) {
+					EditorHorizontalScrollbar(
+						state.horizontalScrollState,
+						Modifier
+							.align(Alignment.BottomStart)
+							.padding(horizontalPadding)
+							.fillMaxWidth()
+							.onSizeChanged { state.scrollManager.scrollbarBottomPx = it.height },
+					)
+					DisposableEffect(state) { onDispose { state.scrollManager.scrollbarBottomPx = 0 } }
 				}
 			}
 		}

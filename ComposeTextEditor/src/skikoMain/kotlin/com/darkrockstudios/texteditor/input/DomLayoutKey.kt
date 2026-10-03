@@ -34,9 +34,9 @@ internal val KeyEvent.codePointIsKeyCode: Boolean
  * letter, so only a Latin letter moves the key then.
  *
  * Gaps: a dead key on a letter key reads as that key's own capital, so it keeps its QWERTY
- * letter (docs/ROADMAP.md, 4.39); the code point follows Shift, so a key whose capital is
- * another key's letter (Turkish 'ı', 'I') can answer differently with Shift; and Linux
- * reports AltGr without Alt, so its layer counts as the base one.
+ * letter; the code point follows Shift, so a key whose capital is another key's letter
+ * (Turkish 'ı', 'I') can answer differently with Shift; and Linux reports AltGr without
+ * Alt, so its layer counts as the base one.
  */
 internal fun KeyEvent.layoutKeyFromCodePoint(): Key {
 	val key = key

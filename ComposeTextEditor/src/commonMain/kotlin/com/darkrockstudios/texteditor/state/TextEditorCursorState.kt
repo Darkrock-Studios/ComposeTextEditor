@@ -45,7 +45,7 @@ class TextEditorCursorState(
 	private var _runSide by mutableStateOf<CaretAffinity?>(null)
 
 	/**
-	 * Which character's edge the caret draws against after a visual arrow move (7.33): the
+	 * Which character's edge the caret draws against after a visual arrow move: the
 	 * one before its position ([CaretAffinity.Upstream]) or after it. Between runs of
 	 * opposite direction the two are apart on screen. Null, as every other move leaves it,
 	 * draws the caret where the layout puts its position.

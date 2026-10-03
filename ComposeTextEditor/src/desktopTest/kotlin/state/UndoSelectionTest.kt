@@ -15,7 +15,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
-/** Undo gives back the selection a step started from, and redo the one it left (6.4). */
+/** Undo gives back the selection a step started from, and redo the one it left. */
 class UndoSelectionTest {
 
 	private val bold = SpanStyle(fontWeight = FontWeight.Bold)

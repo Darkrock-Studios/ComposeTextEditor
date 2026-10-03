@@ -19,7 +19,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/** A link ends at its last character: text typed after it is plain and outside it (5.10). */
+/** A link ends at its last character: text typed after it is plain and outside it. */
 class LinkEndTypingTest {
 
 	private val url = "https://example.com"

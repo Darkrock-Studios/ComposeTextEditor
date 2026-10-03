@@ -17,7 +17,7 @@ import kotlin.time.Duration.Companion.seconds
 import kotlin.time.measureTime
 import kotlin.test.assertTrue
 
-/** Roadmap 7.20: sentences for the spell checker's sentence mode. */
+/** Sentences for the spell checker's sentence mode. */
 class SentenceSegmentationTest {
 
 	private fun TestScope.editor(text: String) = TextEditorState(

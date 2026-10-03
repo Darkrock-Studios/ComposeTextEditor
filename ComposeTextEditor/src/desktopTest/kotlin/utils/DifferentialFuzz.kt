@@ -9,16 +9,38 @@ import kotlin.math.abs
 import kotlin.random.Random
 import kotlin.test.fail
 
+/** A class of divergence from the reference that [explainDivergence] can name. */
+enum class ParityGap {
+	/** A step or deletion that splits a grapheme cluster, or takes one UTF-16 unit of a longer one. */
+	GraphemeClusters,
+
+	/** Up or Down that misses the reference's row or goal column. */
+	VerticalMotion,
+
+	/** Up on the first row or Down on the last that does not go to the document's start or end. */
+	DocumentEdges,
+
+	/** An unshifted Left or Right that does not collapse the selection. */
+	CollapseSelection,
+
+	/** Word motion or deletion that stops elsewhere than the reference's word breaks. */
+	WordMotion,
+}
+
 /**
- * Roadmap items the editor does not meet yet. A fuzz divergence that one of these
- * explains (see [explainDivergence]) is tolerated: the editor is reset to the
- * reference's state and the script continues. Delete an item here when it lands,
- * and the fuzzer starts failing on that class of divergence.
+ * Gaps the editor is known to have. A fuzz divergence that one of these explains
+ * (see [explainDivergence]) is tolerated: the editor is reset to the reference's
+ * state and the script continues. Delete a gap here once it is closed, and the
+ * fuzzer starts failing on that class of divergence.
  */
-val OPEN_PARITY_ITEMS: Set<String> = emptySet()
+val KNOWN_PARITY_GAPS: Set<ParityGap> = emptySet()
 
 /** Starting text for the Unicode fuzzers: an emoji, a combining mark, and a right-to-left word. */
 const val FUZZ_START_TEXT = "seed line\nsecond line of words\n\uD83D\uDE00 e\u0301 שלום end"
+
+/** [FUZZ_START_TEXT] with lines wider than a narrow editor, for the fuzzers with wrapping off. */
+const val FUZZ_START_TEXT_UNWRAPPED = "seed line, long enough to run on past the right edge of the editor\n" +
+	"second line of words\n\uD83D\uDE00 e\u0301 שלום end, and then more words to scroll sideways to"
 
 /**
  * Text the fuzzer types: plain words, and every kind of multi-unit grapheme
@@ -70,7 +92,7 @@ private fun Stroke.dependsOnRows(): Boolean =
 	isVertical() || (this is Stroke.Press && !ctrl && (key == Key.MoveHome || key == Key.MoveEnd))
 
 /**
- * The roadmap items that explain the editor reaching [editor] where the reference
+ * The gaps that explain the editor reaching [editor] where the reference
  * reached [native], both from [before] by [stroke]. Empty means unexplained.
  * [rows] are the flat offsets where the editor's visual rows start.
  */
@@ -80,32 +102,36 @@ fun explainDivergence(
 	native: EditSnapshot,
 	editor: EditSnapshot,
 	rows: List<Int> = emptyList(),
-): Set<String> = buildSet {
+): Set<ParityGap> = buildSet {
 	val splitsCluster = editor.text.firstLoneSurrogate() != null ||
 		!editor.text.isGraphemeBoundary(editor.caret) ||
 		!editor.text.isGraphemeBoundary(editor.anchor)
-	if (splitsCluster) add("1.1")
+	if (splitsCluster) add(ParityGap.GraphemeClusters)
 	if (stroke !is Stroke.Press) return@buildSet
 	when (stroke.key) {
 		Key.DirectionLeft, Key.DirectionRight -> if (stroke.ctrl) {
-			if (stroke.key == Key.DirectionLeft || crossesWordBreakText(before, native, editor)) add("1.5")
+			if (stroke.key == Key.DirectionLeft || crossesWordBreakText(before, native, editor)) add(ParityGap.WordMotion)
 		} else {
 			val collapses = !stroke.shift && before.hasSelection
-			if (collapses) add("1.4")
+			if (collapses) add(ParityGap.CollapseSelection)
 			// The reference stepped over a cluster of more than one UTF-16 unit.
-			if (!collapses && abs(native.caret - before.caret) > 1) add("1.1")
+			if (!collapses && abs(native.caret - before.caret) > 1) add(ParityGap.GraphemeClusters)
 		}
 
 		Key.Backspace, Key.Delete -> if (stroke.ctrl) {
-			if (stroke.key == Key.Backspace || crossesWordBreakText(before, native, editor)) add("1.5")
+			if (stroke.key == Key.Backspace || crossesWordBreakText(before, native, editor)) add(ParityGap.WordMotion)
 		} else if (!before.hasSelection && before.text.length - native.text.length > 1) {
-			add("1.1")
+			add(ParityGap.GraphemeClusters)
 		}
 
 		Key.DirectionUp, Key.DirectionDown, Key.PageUp, Key.PageDown -> {
 			if (!stroke.isPage()) {
 				val edge = if (stroke.key == Key.DirectionUp) 0 else native.text.length
-				if (native.caret == edge && editor.caret == before.caret) add("1.3") else add("1.2")
+				if (native.caret == edge && editor.caret == before.caret) {
+					add(ParityGap.DocumentEdges)
+				} else {
+					add(ParityGap.VerticalMotion)
+				}
 			}
 		}
 
@@ -129,7 +155,7 @@ private fun DifferentialScope.sameRow(a: EditSnapshot, b: EditSnapshot): Boolean
 
 /**
  * Whether a forward word stroke passed text where the editor's word rule and the
- * reference's word break iterator can disagree (1.5): anything but letters and digits
+ * reference's word break iterator can disagree: anything but letters and digits
  * below the CJK blocks, spaces and line breaks.
  */
 private fun crossesWordBreakText(before: EditSnapshot, native: EditSnapshot, editor: EditSnapshot): Boolean {
@@ -177,7 +203,7 @@ private fun String.icuSegment(offset: Int): Pair<Int, Int> {
 /**
  * Names the `BasicTextField` quirk, if any, behind a divergence where the editor
  * is the one that behaves natively. Each is a place where the reference rule does
- * not hold, recorded in docs/ROADMAP.md under "The reference rule".
+ * not hold, listed in docs/TESTING.md under "The reference rule".
  */
 fun referenceQuirk(
 	before: EditSnapshot,
@@ -252,8 +278,8 @@ fun referenceQuirk(
  * from [start], comparing after every stroke.
  *
  * The reference replays the whole script first, undisturbed. The editor then
- * replays it stroke by stroke; on a divergence explained by an item in
- * [openItems] it is reset to the reference's state and continues, so one known
+ * replays it stroke by stroke; on a divergence explained by a gap in
+ * [knownGaps] it is reset to the reference's state and continues, so one known
  * bug does not end the run. The same happens at a [referenceQuirk], and for a
  * row-dependent stroke when the two widgets wrap the text into different rows
  * (a word wider than a row breaks differently). Any other divergence fails with
@@ -268,24 +294,32 @@ fun referenceQuirk(
  * starts afresh, so a vertical move after typing that followed a vertical move is
  * tolerated.
  *
- * To widen the check once a lane A item lands, delete it from [OPEN_PARITY_ITEMS].
+ * To widen the check once a gap is closed, delete it from [KNOWN_PARITY_GAPS].
  *
- * Returns how often each open item or quirk was tolerated.
+ * [softWrap] and [singleLine] are [differentialUiTest]'s; a single line's script
+ * presses no Enter.
+ *
+ * Returns how often each known gap or quirk was tolerated.
  */
 internal fun differentialFuzz(
 	seed: Long,
 	start: EditSnapshot,
 	count: Int,
 	width: Dp,
-	openItems: Set<String> = OPEN_PARITY_ITEMS,
+	knownGaps: Set<ParityGap> = KNOWN_PARITY_GAPS,
+	softWrap: Boolean = true,
+	singleLine: Boolean = false,
 ): Map<String, Int> {
-	val script = generateStrokeScript(seed, count)
+	val script = generateStrokeScript(seed, count).filter { !singleLine || it != Enter }
 	val tolerated = mutableMapOf<String, Int>()
-	differentialUiTest(initialText = start.text, width = width) {
+	differentialUiTest(initialText = start.text, width = width, softWrap = softWrap, singleLine = singleLine) {
 		assertSameRows()
 		val reference = replayReference(start, script)
 		focusEditor()
 		setEditor(start)
+		val sideways = !softWrap || singleLine
+		val scrolls = sidewaysScrolls(seed)
+		if (sideways) scrollEditorSidewaysAtRandom(scrolls)
 		var before = start
 		var goalColumnLost = false
 		var inVerticalRun = false
@@ -308,10 +342,10 @@ internal fun differentialFuzz(
 			inVerticalRun = stroke.isVertical()
 			if (actual != native) {
 				val rows = editorRows()
-				val explained = explainDivergence(before, stroke, native, actual, rows) intersect openItems
+				val explained = explainDivergence(before, stroke, native, actual, rows) intersect knownGaps
 				val quirk = referenceQuirk(before, stroke, native, actual, rows, upstream)
 				val cause = when {
-					explained.isNotEmpty() -> explained
+					explained.isNotEmpty() -> explained.map { it.name }.toSet()
 					quirk != null -> setOf(quirk)
 					goalColumnLost && stroke.isVertical() -> setOf("reset")
 					// A goal column moves the caret along its row, never onto another one.
@@ -323,8 +357,8 @@ internal fun differentialFuzz(
 
 					stroke.dependsOnRows() && !rowsAgree() -> setOf("reference: rows wrap differently")
 					else -> fail(
-						"differential fuzz seed=$seed diverged at stroke[$index]=$stroke " +
-							"and no open roadmap item explains it (replay with FUZZ_SEED=$seed)\n" +
+						"differential fuzz seed=$seed (softWrap=$softWrap, singleLine=$singleLine) diverged at stroke[$index]=$stroke " +
+							"and no known gap explains it (replay with FUZZ_SEED=$seed)\n" +
 							"before  $before\nnative  $native\neditor  $actual\n" +
 							"recent strokes: ${script.subList(maxOf(0, index - 12), index + 1)}\n" +
 							"tolerated so far: $tolerated"
@@ -335,6 +369,7 @@ internal fun differentialFuzz(
 				goalColumnLost = stroke.isVertical()
 			}
 			before = native
+			if (sideways) scrollEditorSidewaysAtRandom(scrolls)
 		}
 	}
 	return tolerated

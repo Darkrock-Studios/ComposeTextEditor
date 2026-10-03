@@ -22,7 +22,7 @@ import kotlinx.coroutines.test.runTest
  * Export escapes a character only where it would start markdown syntax in
  * its position, so ordinary prose comes out as typed and unsupported syntax
  * kept as literal text on import passes through unchanged. The corpora here
- * are the acceptance test for roadmap 7.14.
+ * are the acceptance test for that rule.
  */
 class ProseEscapingTest {
 

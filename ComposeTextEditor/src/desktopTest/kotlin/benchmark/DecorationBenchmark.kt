@@ -27,7 +27,7 @@ import org.junit.Assume.assumeTrue
 import kotlin.test.Test
 
 /**
- * Timings for decoration layers (7.86) over 5,000 lines of code-like text with a
+ * Timings for decoration layers over 5,000 lines of code-like text with a
  * syntax-colour span on every token, about ten a line, against the same document
  * without them. Skipped unless `CTE_BENCHMARK` is 1:
  *

@@ -36,6 +36,7 @@ import com.darkrockstudios.texteditor.richstyle.SpellCheckStyle
 import com.darkrockstudios.texteditor.spellcheck.api.Correction
 import com.darkrockstudios.texteditor.spellcheck.api.EditorSpellChecker
 import com.darkrockstudios.texteditor.spellcheck.diagnostics.DiagnosticStyle
+import com.darkrockstudios.texteditor.spellcheck.diagnostics.DiagnosticsLayer
 import com.darkrockstudios.texteditor.spellcheck.diagnostics.TextDiagnosticsState
 import com.darkrockstudios.texteditor.spellcheck.utils.debounceUntilQuiescent
 import com.darkrockstudios.texteditor.spellcheck.utils.debounceUntilQuiescentWithBatch
@@ -73,8 +74,9 @@ private val DefaultContentPadding = PaddingValues(start = 8.dp)
  * @param readOnly Shows the caret for navigation and selection but takes no edits; see
  *   [BasicTextEditor]. The menu on a flagged span offers Ignore, Add to dictionary and
  *   [spellCheckMenuItems], but no corrections or fixes.
- * @param lineLimits Fills the height given, or grows with the text between a minimum and
- *   maximum number of lines; see [BasicTextEditor].
+ * @param lineLimits Fills the height given, grows with the text between a minimum and
+ *   maximum number of lines, or keeps it to one row that scrolls sideways; see
+ *   [BasicTextEditor].
  * @param autoFocus Whether the editor requests focus on first composition.
  * @param style The [TextEditorStyle] controlling appearance.
  * @param contextMenuStrings Localized strings for the built-in context menu.
@@ -101,6 +103,8 @@ private val DefaultContentPadding = PaddingValues(start = 8.dp)
  * @param keyBindings Chord-to-command mapping, defaulting to [LocalKeyBindings].
  * @param contentDescription The editor's label for accessibility services; see
  *   [BasicTextEditor].
+ * @param softWrap Whether lines wrap at the editor's width; with `false` a line stays one
+ *   row and the editor scrolls sideways. See [BasicTextEditor].
  */
 @Composable
 fun SpellCheckingTextEditor(
@@ -123,6 +127,7 @@ fun SpellCheckingTextEditor(
 	contentDescription: String? = null,
 	readOnly: Boolean = false,
 	lineLimits: EditorLineLimits = EditorLineLimits.Fill,
+	softWrap: Boolean = true,
 ) {
 	// Corrections and fixes edit the text, so they follow this; Ignore does not. Read when
 	// an item is picked too, since a menu can outlive the editability it opened with.
@@ -360,6 +365,7 @@ fun SpellCheckingTextEditor(
 			contentDescription = contentDescription,
 			readOnly = readOnly,
 			lineLimits = lineLimits,
+			softWrap = softWrap,
 		)
 	}
 }
@@ -370,7 +376,12 @@ private class BatchText(val lines: List<AnnotatedString>, val generation: Int)
 
 private typealias ShowMenu = (items: List<ContextMenuItem>, trailingItems: List<ContextMenuItem>) -> Unit
 
-private fun RichSpan.isFlag(): Boolean = style is SpellCheckStyle || style is DiagnosticStyle
+/** A span of spell check's or diagnostics' own; a style of either on a host's layer is the host's. */
+private fun RichSpan.isFlag(): Boolean = when (val style = style) {
+	is SpellCheckStyle -> style.layer === SpellCheckStyle.layer
+	is DiagnosticStyle -> style.layer === DiagnosticsLayer
+	else -> false
+}
 
 /**
  * The flags covering [position], their ends included: those it lies inside ahead of those

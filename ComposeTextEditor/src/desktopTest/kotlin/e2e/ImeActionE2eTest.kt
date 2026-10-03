@@ -11,7 +11,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
- * The soft keyboard's action key (roadmap 3.11): the host's handler when it has one,
+ * The soft keyboard's action key: the host's handler when it has one,
  * otherwise what Compose's text fields do.
  */
 class ImeActionE2eTest {

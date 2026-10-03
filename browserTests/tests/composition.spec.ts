@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 import { awaitFieldCaret, expectText, openBlankEditor } from './editor';
 import { Ime, recordInputEvents } from './ime';
 
-// Composition in Chromium against the built wasm demo (4.15): a dead key and a
+// Composition in Chromium against the built wasm demo: a dead key and a
 // Japanese composition through the browser's own input method events.
 
 test.beforeEach(async ({ page }) => {
@@ -49,8 +49,10 @@ test('a Japanese composition shows while composing and commits its conversion on
 	expectOneComposition(await events(), '日本');
 });
 
-// Lands at the line end in some runs.
-test.fixme('a composition lands at the caret in the middle of a line (4.35)', async ({ page }) => {
+// A composition started after a caret move by key can land at a stale offset: the
+// field shows it at the caret, then about 15 ms later at the line end, and the session
+// maps that with a stale selection. Lands at the line end in some runs.
+test.fixme('a composition lands at the caret in the middle of a line', async ({ page }) => {
 	const ime = await Ime.attach(page);
 	await page.keyboard.type('ab');
 	await page.keyboard.press('ArrowLeft');
@@ -63,8 +65,8 @@ test.fixme('a composition lands at the caret in the middle of a line (4.35)', as
 	await expectText(page, 'aかb');
 });
 
-// Lands at offset 1 in most runs.
-test.fixme('a composition after Home lands at the line start (4.35)', async ({ page }) => {
+// The same stale offset. Lands at offset 1 in most runs.
+test.fixme('a composition after Home lands at the line start', async ({ page }) => {
 	const ime = await Ime.attach(page);
 	await page.keyboard.type('ab');
 	await page.keyboard.press('Home');

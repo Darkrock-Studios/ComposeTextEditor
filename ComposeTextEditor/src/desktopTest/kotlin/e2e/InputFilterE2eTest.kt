@@ -27,7 +27,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 
-/** Maximum length, input filters, and a single-line editor (7.13). */
+/** Maximum length, input filters, and a single-line editor. */
 @OptIn(ExperimentalTestApi::class)
 class InputFilterE2eTest {
 

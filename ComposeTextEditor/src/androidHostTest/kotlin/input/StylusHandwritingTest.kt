@@ -17,7 +17,7 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/** Roadmap 3.17: when a stylus stroke is handed to the keyboard to write. */
+/** When a stylus stroke is handed to the keyboard to write. */
 class StylusHandwritingTest {
 
 	private val state = TextEditorState(

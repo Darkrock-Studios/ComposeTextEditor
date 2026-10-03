@@ -66,7 +66,8 @@ internal fun TextEditorState.skikoImeOptions(): ImeOptions {
  *
  * A resync ([TextEditorState.requestImeResync]) is handed to [imeResync], which says how
  * this platform makes its input method drop what it assumed. It defaults to
- * [SkikoImeResync.None], which iOS relies on until the device pass decides (roadmap 4.29).
+ * [SkikoImeResync.None], which iOS keeps: UIKit reads the text live through `UITextInput`,
+ * so a restart would only reset the keyboard.
  */
 internal suspend fun TextEditorState.startSkikoInputSession(
 	session: PlatformTextInputSession,
@@ -74,12 +75,13 @@ internal suspend fun TextEditorState.startSkikoInputSession(
 	exposeTextLayout: Boolean = false,
 	echoesKeys: Boolean = false,
 	imeResync: SkikoImeResync = SkikoImeResync.None,
+	composingFieldValue: () -> TextFieldValue? = { null },
 	onRun: CoroutineScope.(ImeOptions) -> Unit = {},
 ): Nothing = coroutineScope {
 	snapshotFlow(imeOptions).collectLatest { options ->
 		coroutineScope {
 			onRun(options)
-			runSkikoInputMethod(session, options, exposeTextLayout, echoesKeys, imeResync)
+			runSkikoInputMethod(session, options, exposeTextLayout, echoesKeys, imeResync, composingFieldValue)
 		}
 	}
 	throw CancellationException("The keyboard options stopped")
@@ -92,16 +94,18 @@ private suspend fun TextEditorState.runSkikoInputMethod(
 	exposeTextLayout: Boolean,
 	echoesKeys: Boolean,
 	imeResync: SkikoImeResync,
+	composingFieldValue: () -> TextFieldValue?,
 ): Nothing = coroutineScope {
 	val request = SkikoTextEditorInputMethodRequest(
 		this@runSkikoInputMethod,
 		imeOptions,
 		exposeTextLayout,
 		echoesKeys,
+		composingFieldValue,
 	)
 	when (imeResync) {
 		SkikoImeResync.None -> Unit
-		is SkikoImeResync.Rewrite -> launch { onImeResync { imeResync.rewrite(request.value()) } }
+		is SkikoImeResync.Rewrite -> launch { onImeResync { imeResync.rewrite(request.editorValue()) } }
 		SkikoImeResync.RestartInput -> return@coroutineScope restartingInputMethod(session, request)
 	}
 	session.startInputMethod(request)
@@ -178,14 +182,28 @@ internal class SkikoTextEditorInputMethodRequest(
 	override val imeOptions: ImeOptions,
 	private val exposeTextLayout: Boolean = false,
 	private val echoesKeys: Boolean = false,
+	private val composingFieldValue: () -> TextFieldValue? = { null },
 ) : PlatformTextInputMethodRequest {
 
 	/** Live view of the editor as the CharSequence + selection + composition Compose expects. */
 	override val state: ComposeTextEditorState = ImeComposeStateAdapter()
 
+	/**
+	 * The editor's value, unless the platform's own field is composing: web mirrors this
+	 * into its textarea a task after the edit it follows, while the browser updates the
+	 * textarea with each composition step as it comes, so the editor's value can be a
+	 * step behind and would rewrite the textarea under the composition, which Chrome then
+	 * drops and starts again. The field's own value makes that mirror a no-op.
+	 */
 	override val value: () -> TextFieldValue = {
+		val editor = editorValue()
+		composingFieldValue() ?: editor
+	}
+
+	/** The editor's text and selection, read so that an observer re-runs on an edit. */
+	internal fun editorValue(): TextFieldValue {
 		editorState.textRevision
-		TextFieldValue(
+		return TextFieldValue(
 			text = editorState.getAllPlainText(),
 			selection = editorState.selectionAsTextRange(),
 		)
@@ -234,14 +252,14 @@ internal class SkikoTextEditorInputMethodRequest(
 
 	/**
 	 * Where [textLayoutResult]'s origin sits, in root coordinates: the canvas origin less
-	 * the scroll, down to the first row's top, where that layout starts. Compose's
+	 * both scrolls, down to the first row's top, where that layout starts. Compose's
 	 * native text input places its caret and selection rectangles by it; the legacy
 	 * input the editor runs on reads it only to know the geometry changed.
 	 */
 	override val unclippedTextOffsetInRoot: () -> Offset? = {
 		attachedCoordinates()?.let { coords ->
 			val origin = coords.positionInRoot()
-			Offset(origin.x, origin.y - editorState.scrollState.value + editorState.firstRowTop())
+			Offset(origin.x - editorState.scrollX, origin.y - editorState.scrollState.value + editorState.firstRowTop())
 		}
 	}
 
@@ -325,7 +343,7 @@ internal class SkikoTextEditorInputMethodRequest(
  * before the caret, then deletes the selection, which Compose sends as a commit of
  * nothing. Seen as edits, that is a selection replaced, which no backspace behavior
  * hears. This remembers a selection the keyboard took back from a collapsed caret, so
- * the commit that empties it next can be run as the backspace it is (roadmap 4.33).
+ * the commit that empties it next can be run as the backspace it is.
  * Any other edit in between forgets it.
  */
 private class KeyboardBackspace {

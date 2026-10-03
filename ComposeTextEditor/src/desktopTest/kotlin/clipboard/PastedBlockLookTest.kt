@@ -23,7 +23,7 @@ import kotlin.test.assertFalse
 
 /**
  * Pasted text takes the look of the line it lands on: a heading's or fence's look it was
- * copied with stays behind unless its own block comes with it (6.38).
+ * copied with stays behind unless its own block comes with it.
  */
 @OptIn(ExperimentalComposeUiApi::class)
 class PastedBlockLookTest {
@@ -130,7 +130,7 @@ class PastedBlockLookTest {
 		state.assertLook(2, body.merge(styles.header2Style))
 	}
 
-	/** Its marker takes a line only where the paste covers the line whole (6.40). */
+	/** Its marker takes a line only where the paste covers the line whole. */
 	@Test
 	fun `a whole heading's text pasted inside a plain line is body text`() = runTest {
 		val (state, actions) = editor("## Title\nhello")
