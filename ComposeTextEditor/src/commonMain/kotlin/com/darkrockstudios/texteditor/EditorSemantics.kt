@@ -45,6 +45,7 @@ import com.darkrockstudios.texteditor.input.selectionAsTextRange
 import com.darkrockstudios.texteditor.input.startsLine
 import com.darkrockstudios.texteditor.richstyle.LinkSpanStyle
 import com.darkrockstudios.texteditor.state.DocumentSnapshot
+import com.darkrockstudios.texteditor.state.FocusedEditor
 import com.darkrockstudios.texteditor.state.RowList
 import com.darkrockstudios.texteditor.state.SpanIndex
 import com.darkrockstudios.texteditor.state.TextEditOperation
@@ -63,14 +64,19 @@ import kotlin.math.abs
  * nothing that edits.
  *
  * `onImeAction` is offered only for an action key other than Enter, the one the
- * keyboard shows ([TextEditorState.effectiveImeAction]): a multi-line editor's default
- * is Enter, a new line, where `BasicTextField`'s default action does nothing either,
- * and a single line's is Done.
+ * keyboard shows ([TextEditorState.effectiveImeAction]) for this editor's own line limit:
+ * a multi-line editor's default is Enter, a new line, where `BasicTextField`'s default
+ * action does nothing either, and a single line's is Done.
+ *
+ * An edit or action here is aimed at this editor, focused or not, so it follows this
+ * [editor]'s line limit and default action rather than the focused one's.
  */
 internal fun Modifier.editorSemantics(
 	state: TextEditorState,
 	enabled: Boolean,
 	editable: Boolean,
+	singleLine: Boolean,
+	editor: () -> FocusedEditor?,
 	focusRequester: FocusRequester,
 	actions: ContextMenuActions,
 	contentDescription: String?,
@@ -89,47 +95,55 @@ internal fun Modifier.editorSemantics(
 		getTextLayoutResult { results -> document.addLayoutTo(results) }
 		clipboardActions(actions)
 		longPressOpensMenu(focusRequester, actions)
-		editorSemanticsEdits(state, enabled, editable)
-		val imeAction = state.effectiveImeAction()
+		editorSemanticsEdits(state, enabled, editable, editor)
+		val imeAction = state.effectiveImeAction(singleLine)
 		if (editable && !imeAction.startsLine) {
-			onImeAction(imeAction) { state.performImeAction(imeAction) }
+			onImeAction(imeAction) { state.asEditor(editor()) { state.performImeAction(imeAction) } }
 		}
 		selectionSemantics(state)
 		onClick { focusRequester.requestFocus(); true }
 	}
 }
 
-private fun SemanticsPropertyReceiver.editorSemanticsEdits(state: TextEditorState, enabled: Boolean, editable: Boolean) {
+private fun SemanticsPropertyReceiver.editorSemanticsEdits(
+	state: TextEditorState,
+	enabled: Boolean,
+	editable: Boolean,
+	editor: () -> FocusedEditor?,
+) {
 	if (!enabled) {
 		disabled()
 	} else if (editable) {
 		setText { newText ->
-			state.replaceAllAsEdit(newText)
+			state.asEditor(editor()) { state.replaceAllAsEdit(newText) }
 			true
 		}
-		insertTextAtCursor { inserted ->
-			val newText = inserted.normalizeLineEndings()
-			if (newText.text == "\n") {
-				state.insertTypedNewline()
-			} else {
-				// Dictated or assistive text: one step that is not typing, since
-				// whole phrases are not something a following keystroke should
-				// join, then told to the behaviors like any typed text.
-				val admitted = state.screenAtSelection(newText) ?: return@insertTextAtCursor false
-				state.typedInput {
-					state.editGroup {
-						state.selector.deleteSelection()
-						state.editManager.alreadyScreened {
-							state.editManager.recordingAsTyping(false) {
-								state.insertStringAtCursor(admitted)
-							}
-						}
-					}
+		insertTextAtCursor { inserted -> state.asEditor(editor()) { insertAtCursor(state, inserted) } }
+	}
+}
+
+private fun insertAtCursor(state: TextEditorState, inserted: AnnotatedString): Boolean {
+	val newText = inserted.normalizeLineEndings()
+	if (newText.text == "\n") {
+		val before = state.revision
+		state.insertTypedNewline()
+		return state.revision != before
+	}
+	// Dictated or assistive text: one step that is not typing, since whole phrases are
+	// not something a following keystroke should join, then told to the behaviors like
+	// any typed text.
+	val admitted = state.screenAtSelection(newText) ?: return false
+	state.typedInput {
+		state.editGroup {
+			state.selector.deleteSelection()
+			state.editManager.alreadyScreened {
+				state.editManager.recordingAsTyping(false) {
+					state.insertStringAtCursor(admitted)
 				}
 			}
-			true
 		}
 	}
+	return true
 }
 
 /** Copy while there is a selection; cut and paste while the editor may be edited. */

@@ -14,9 +14,11 @@ import androidx.compose.ui.platform.Clipboard
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.input.EditorCommand.Action
 import com.darkrockstudios.texteditor.input.EditorCommand.Motion
+import com.darkrockstudios.texteditor.state.ARROW_KEYS_MOVE_VISUALLY
 import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.caretParagraphIsRtl
 import com.darkrockstudios.texteditor.state.insertTypedString
+import com.darkrockstudios.texteditor.state.moveCaretVisually
 import com.darkrockstudios.texteditor.state.moveCursorDown
 import com.darkrockstudios.texteditor.state.moveCursorPageDown
 import com.darkrockstudios.texteditor.state.moveCursorPageUp
@@ -61,13 +63,13 @@ internal class TextEditorKeyCommandHandler(
 		scope: CoroutineScope,
 		enabled: Boolean = true
 	): Boolean {
-		// A held caret key ends when it is let go, or when another key or a modifier changes
+		// A held key ends when it is let go, or when another key or a modifier changes
 		// what the platform's repeats mean; any repeats left are then the platform's own.
 		if (keyEvent.type == KeyEventType.KeyUp) {
-			if (keyEvent.key in modifierKeys) state.heldCaretKey.clear() else state.heldCaretKey.released(keyEvent.key)
+			if (keyEvent.key in modifierKeys) state.heldKey.clear() else state.heldKey.released(keyEvent.key)
 		}
 		if (keyEvent.type != KeyEventType.KeyDown) return false
-		state.heldCaretKey.clear()
+		state.heldKey.clear()
 		// A key with no character (Escape, a function key) ends a dead key's accent, as a
 		// command does; a key with one settles it in handleCharacterInput.
 		if (keyEvent.utf16CodePoint == 0 && keyEvent.key !in modifierKeys) deadKeys.commitPending(state)
@@ -82,12 +84,13 @@ internal class TextEditorKeyCommandHandler(
 			is Motion -> {
 				deadKeys.commitPending(state)
 				val extend = keyEvent.isShiftPressed
-				moveCursor(command, state, extendSelection = extend)
-				state.heldCaretKey.pressed(keyEvent.key) {
+				val visualStep = visualStep(bound, keyEvent)
+				moveCursor(command, state, extendSelection = extend, visualStep)
+				state.heldKey.pressed(keyEvent.key, HeldKey.Echo.Selection) {
 					// Resolved again each step: the caret may have crossed into a paragraph
 					// that runs the other way.
 					val step = visualCommand(bound, keyEvent, state)
-					if (step is Motion) moveCursor(step, state, extendSelection = extend)
+					if (step is Motion) moveCursor(step, state, extendSelection = extend, visualStep)
 				}
 				true
 			}
@@ -100,6 +103,12 @@ internal class TextEditorKeyCommandHandler(
 				if (spec.editsDocument && !enabled) return false
 				deadKeys.commitPending(state)
 				spec.perform(EditorActionContext(state, clipboard, scope))
+				// UIKit types a tab for a plain Tab the editor has already handled.
+				if (keyEvent.key == Key.Tab && !keyEvent.isCtrlPressed && !keyEvent.isAltPressed && !keyEvent.isMetaPressed) {
+					state.heldKey.pressed(keyEvent.key, HeldKey.Echo.Text("\t")) {
+						spec.perform(EditorActionContext(state, clipboard, scope))
+					}
+				}
 				true
 			}
 		}
@@ -108,13 +117,26 @@ internal class TextEditorKeyCommandHandler(
 	/**
 	 * The arrow keys are visual: in a right-to-left paragraph Left moves forward through
 	 * the text, as the platform editors and BasicTextField do. Home, End, the Emacs chords
-	 * and the deletes stay logical.
+	 * and the deletes stay logical. Left and Right themselves step on screen through
+	 * mixed-direction text too ([visualStep]); the mirrored motion still decides which
+	 * edge they collapse a selection to.
 	 */
 	private fun visualCommand(bound: EditorCommand, keyEvent: KeyEvent, state: TextEditorState): EditorCommand =
 		if (bound is Motion && keyEvent.isHorizontalArrow && state.caretParagraphIsRtl()) {
 			bound.mirrored(keyBindings)
 		} else {
 			bound
+		}
+
+	/**
+	 * For a Left or Right arrow while [ARROW_KEYS_MOVE_VISUALLY], whether it steps right on
+	 * screen; null for every other key, which moves as [visualCommand] resolves it.
+	 */
+	private fun visualStep(bound: EditorCommand, keyEvent: KeyEvent): Boolean? =
+		if (ARROW_KEYS_MOVE_VISUALLY && keyEvent.isHorizontalArrow && (bound == Motion.Left || bound == Motion.Right)) {
+			bound == Motion.Right
+		} else {
+			null
 		}
 
 	/**
@@ -181,7 +203,11 @@ internal class TextEditorKeyCommandHandler(
 		return true
 	}
 
-	private fun moveCursor(motion: Motion, state: TextEditorState, extendSelection: Boolean) {
+	/**
+	 * Performs [motion], or with a [visualStep] (a visual arrow's: true for right) a step
+	 * on screen in place of its Left or Right. Collapsing a selection follows [motion].
+	 */
+	private fun moveCursor(motion: Motion, state: TextEditorState, extendSelection: Boolean, visualStep: Boolean? = null) {
 		val initialPosition = state.cursorPosition
 		if (!extendSelection) {
 			val selection = state.selector.selection
@@ -209,8 +235,11 @@ internal class TextEditorKeyCommandHandler(
 		}
 
 		when (motion) {
-			Motion.Left -> state.cursor.moveLeft()
-			Motion.Right -> state.cursor.moveRight()
+			Motion.Left, Motion.Right -> when {
+				visualStep != null -> state.moveCaretVisually(right = visualStep)
+				motion == Motion.Left -> state.cursor.moveLeft()
+				else -> state.cursor.moveRight()
+			}
 			Motion.Up -> state.moveCursorUp()
 			Motion.Down -> state.moveCursorDown()
 			Motion.WordLeft -> state.moveToPreviousWord()

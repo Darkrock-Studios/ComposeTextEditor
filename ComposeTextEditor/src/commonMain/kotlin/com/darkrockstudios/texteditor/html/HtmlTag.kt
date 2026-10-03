@@ -88,6 +88,8 @@ internal fun HtmlTag.spanStyle(config: RichTextStyles): SpanStyle = when (this) 
 	HtmlTag.MARK -> config.highlightStyle
 }
 
+private val HEADINGS = listOf(HtmlTag.H1, HtmlTag.H2, HtmlTag.H3, HtmlTag.H4, HtmlTag.H5, HtmlTag.H6)
+
 /**
  * Each configured style a retired one stands in for, in the order a style equal to
  * several is read as the first, as markdown export reads them. A heading line's style is
@@ -125,6 +127,25 @@ internal class RetiredStyles(
 	 */
 	fun isLinkStyle(style: SpanStyle): Boolean =
 		style == styles.linkStyle || (style in retiredLinkStyles && style !in current)
+
+	/**
+	 * Each heading level's look under [styles] and each retired configuration, but for one
+	 * that is also an inline style of its own configuration or of [styles].
+	 */
+	private val headingOnlyLooks: Set<SpanStyle> by lazy {
+		val currentInline = CONFIGURED_STYLES.map { it(styles) }
+		(newestFirst + styles).flatMapTo(HashSet()) { config ->
+			val inline = CONFIGURED_STYLES.map { it(config) }
+			HEADINGS.map { it.spanStyle(config) }.filter { it !in inline && it !in currentInline }
+		}
+	}
+
+	/**
+	 * The spans a [heading] line leaves out, since the heading element stands for them:
+	 * the look it is baked with, and any other heading look that is not also an inline
+	 * style, as text joined from another heading keeps that heading's look.
+	 */
+	fun headingLooks(heading: HtmlTag): Set<SpanStyle> = headingOnlyLooks + heading.spanStyle(styles)
 
 	fun asCurrent(style: SpanStyle): SpanStyle {
 		if (newestFirst.isEmpty() || style in current) return style

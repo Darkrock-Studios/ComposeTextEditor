@@ -1,5 +1,6 @@
 package com.darkrockstudios.texteditor.state
 
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
@@ -99,6 +100,25 @@ internal val TextEditorState.bodyStyle: SpanStyle?
 /** The styles a heading or code block on [line] gives it. */
 internal fun TextEditorState.lineStyles(line: Int): Set<SpanStyle> =
 	lineBlocks(line).mapNotNullTo(mutableSetOf()) { it.textStyle }
+
+/**
+ * Takes the link style off the parts of [text], just placed at [at], that no link covers:
+ * pasted or dropped text whose link this editor did not take (an in-process copy carries a
+ * link's look but not its destination) would otherwise look like a link and go nowhere.
+ */
+internal fun TextEditorState.removeLinkLookOutsideLinks(at: CharLineOffset, text: AnnotatedString) {
+	val linkStyle = richTextStyles.linkStyle
+	if (text.spanStyles.none { it.item == linkStyle }) return
+	val range = TextEditorRange(at, text.endWhenInsertedAt(at))
+	// Part of the paste, so it keeps the copied rich spans the paste kept.
+	keepingCopiedRichSpans {
+		if (richSpanManager.getSpansInRange(range).none { it.style is LinkSpanStyle }) {
+			removeStyleSpan(range, linkStyle)
+		} else {
+			removeLinkStyleOutsideLinks(range, linkStyle)
+		}
+	}
+}
 
 /** Removes [linkStyle] from the parts of [range] that no link covers. */
 private fun TextEditorState.removeLinkStyleOutsideLinks(range: TextEditorRange, linkStyle: SpanStyle) {

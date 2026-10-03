@@ -8,10 +8,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.graphics.Color
 import com.darkrockstudios.texteditor.RichTextStyles
-import com.darkrockstudios.texteditor.richstyle.HighlightSpanStyle
 import org.jetbrains.compose.ui.tooling.preview.Preview
-
-val HIGHLIGHT = HighlightSpanStyle(Color(0x40FF0000))
 
 enum class Destination {
 	Menu,

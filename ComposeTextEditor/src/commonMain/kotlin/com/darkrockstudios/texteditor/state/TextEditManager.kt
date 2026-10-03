@@ -14,6 +14,7 @@ import com.darkrockstudios.texteditor.input.isWithinDocument
 import com.darkrockstudios.texteditor.richstyle.LineBlockEditBehavior
 import com.darkrockstudios.texteditor.richstyle.LineBlockStyle
 import com.darkrockstudios.texteditor.richstyle.LineBlockWrite
+import com.darkrockstudios.texteditor.richstyle.LinkSpanStyle
 import com.darkrockstudios.texteditor.richstyle.RichSpan
 import com.darkrockstudios.texteditor.richstyle.RichSpanStyle
 import com.darkrockstudios.texteditor.richstyle.allowedOn
@@ -1302,11 +1303,18 @@ class TextEditManager(private val state: TextEditorState) {
 
 			// Bypass the history-recording path: this restoration is itself part of
 			// an undo/redo and must not push a new edit onto the queue. The recorded
-			// offsets predate the undo's text mutation, so land them clamped.
-			state.richSpanManager.addRichSpanClamped(
-				TextEditorRange(startPos, endPos),
-				preserved.style,
-			)
+			// offsets predate the undo's text mutation, so land them clamped. What the
+			// edit left of a link, which the restored text does not grow back into,
+			// gives way to it.
+			val restored = TextEditorRange(startPos, endPos)
+			if (preserved.style is LinkSpanStyle) {
+				state.richSpanManager.removeRichSpans(
+					state.richSpanManager.getSpansInRange(restored).filter {
+						it.style == preserved.style && it.range.start >= startPos && it.range.end <= endPos && it.range != restored
+					}
+				)
+			}
+			state.richSpanManager.addRichSpanClamped(restored, preserved.style)
 		}
 	}
 

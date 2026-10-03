@@ -112,6 +112,37 @@ class TouchToolbarTest {
 		}
 	}
 
+	/**
+	 * The platform's menu needs the input session's view, which a long press on an
+	 * unfocused editor starts only as it focuses it: iOS showed nothing when asked first
+	 * (roadmap 3.18). The menu comes once the session runs.
+	 */
+	@Test
+	fun `a long press on an unfocused editor shows the toolbar once its input session runs`() {
+		lateinit var editorState: TextEditorState
+		var sessionRanAtShow: Boolean? = null
+		val toolbar = object : androidx.compose.ui.platform.TextToolbar by RecordingTextToolbar() {
+			override fun showMenu(
+				rect: androidx.compose.ui.geometry.Rect,
+				onCopyRequested: (() -> Unit)?,
+				onPasteRequested: (() -> Unit)?,
+				onCutRequested: (() -> Unit)?,
+				onSelectAllRequested: (() -> Unit)?,
+			) {
+				sessionRanAtShow = editorState.inputSessionRunning
+			}
+		}
+		editorUiTest(initialText = document, textToolbar = toolbar, autoFocus = false) {
+			editorState = state
+			assertFalse(state.isFocused)
+
+			longPressAtCharacter(8)
+			waitForIdle()
+
+			assertEquals(true, sessionRanAtShow, "the menu came before the input session ran, or not at all")
+		}
+	}
+
 	@Test
 	fun `a double tap shows the toolbar`() {
 		val toolbar = RecordingTextToolbar()
@@ -137,6 +168,54 @@ class TouchToolbarTest {
 			assertNotNull(menu.onPaste)
 			assertNotNull(menu.onSelectAll)
 			assertEquals(8, cursorIndex)
+		}
+	}
+
+	/**
+	 * The release that ends a gesture also asks for the keyboard, after the canvas has
+	 * acted on it, and on iOS that request dismisses an edit menu shown during the
+	 * release: a tap on the caret handle showed nothing (roadmap 3.18). The toolbar comes
+	 * a frame after the release instead.
+	 */
+	@Test
+	fun `the toolbar comes a frame after the release that asks for it`() {
+		val toolbar = RecordingTextToolbar()
+		editorUiTest(initialText = document, textToolbar = toolbar) {
+			tapAtCharacter(8)
+			val handle = caretHandleCenter()
+
+			test.mainClock.autoAdvance = false
+			touch {
+				down(handle)
+				up()
+			}
+			assertNull(toolbar.menu, "not during the release")
+			test.mainClock.advanceTimeByFrame()
+			test.mainClock.autoAdvance = true
+			waitForIdle()
+
+			assertNotNull(toolbar.menu)
+		}
+	}
+
+	@Test
+	fun `a caret moved before the frame-late toolbar drops it`() {
+		val toolbar = RecordingTextToolbar()
+		editorUiTest(initialText = document, textToolbar = toolbar) {
+			tapAtCharacter(8)
+			val handle = caretHandleCenter()
+
+			test.mainClock.autoAdvance = false
+			touch {
+				down(handle)
+				up()
+			}
+			test.runOnIdle { state.cursor.updatePosition(CharLineOffset(0, 2)) }
+			test.mainClock.advanceTimeByFrame()
+			test.mainClock.autoAdvance = true
+			waitForIdle()
+
+			assertNull(toolbar.menu, "the menu was for a caret that has moved")
 		}
 	}
 
@@ -426,6 +505,94 @@ class TouchToolbarTest {
 
 			assertEquals("beta gamma", selectedText)
 			assertFalse(menuState.isVisible)
+		}
+	}
+
+	/**
+	 * On iOS a right-click, from a mouse or a trackpad, opens the edit menu at the pointer,
+	 * as a native text view does, rather than the editor's own menu (roadmap 4.8).
+	 */
+	@Test
+	fun `where the platform's menu answers a pointer, a right-click opens it at the pointer`() {
+		val toolbar = RecordingTextToolbar()
+		val menuState = TextEditorContextMenuState()
+		editorUiTest(
+			initialText = document,
+			textToolbar = toolbar,
+			contextMenuState = menuState,
+			pointerMenuIsTextToolbar = true,
+		) {
+			rightClickAtCharacter(8)
+			waitForIdle()
+
+			val menu = assertNotNull(toolbar.menu, "the platform's menu should open")
+			assertNotNull(menu.onPaste)
+			assertFalse(menuState.isVisible, "the editor's own menu stays shut")
+			val pointer = positionOfCharacter(8)
+			assertEquals(pointer.x, menu.rect.center.x, 1f, "the menu sits at the pointer, not the caret")
+			assertEquals(pointer.y, menu.rect.center.y, 1f)
+		}
+	}
+
+	@Test
+	fun `a right-click on an unfocused editor opens the platform's menu once its session runs`() {
+		lateinit var editorState: TextEditorState
+		var sessionRanAtShow: Boolean? = null
+		val toolbar = object : androidx.compose.ui.platform.TextToolbar by RecordingTextToolbar() {
+			override fun showMenu(
+				rect: androidx.compose.ui.geometry.Rect,
+				onCopyRequested: (() -> Unit)?,
+				onPasteRequested: (() -> Unit)?,
+				onCutRequested: (() -> Unit)?,
+				onSelectAllRequested: (() -> Unit)?,
+			) {
+				sessionRanAtShow = editorState.inputSessionRunning
+			}
+		}
+		editorUiTest(initialText = document, textToolbar = toolbar, autoFocus = false, pointerMenuIsTextToolbar = true) {
+			editorState = state
+			rightClickAtCharacter(8)
+			waitForIdle()
+
+			assertEquals(true, sessionRanAtShow, "the menu came before the input session ran, or not at all")
+		}
+	}
+
+	@Test
+	fun `a right-click that opened the editor's menu with items keeps it`() {
+		val toolbar = RecordingTextToolbar()
+		val menuState = TextEditorContextMenuState()
+		editorUiTest(
+			initialText = document,
+			textToolbar = toolbar,
+			contextMenuState = menuState,
+			pointerMenuIsTextToolbar = true,
+			onRichSpanClickEvent = { click ->
+				menuState.showMenuAtText(click.offset, listOf(com.darkrockstudios.texteditor.contextmenu.ContextMenuItem("Suggestion") {}))
+				true
+			},
+		) {
+			test.runOnIdle {
+				state.addRichSpan(0, 5, com.darkrockstudios.texteditor.richstyle.SpellCheckStyle)
+			}
+			rightClickAtCharacter(2)
+			waitForIdle()
+
+			assertTrue(menuState.isVisible, "the spell-check menu keeps its suggestions")
+			assertNull(toolbar.menu)
+		}
+	}
+
+	@Test
+	fun `elsewhere a right-click opens the editor's menu`() {
+		val toolbar = RecordingTextToolbar()
+		val menuState = TextEditorContextMenuState()
+		editorUiTest(initialText = document, textToolbar = toolbar, contextMenuState = menuState) {
+			rightClickAtCharacter(8)
+			waitForIdle()
+
+			assertTrue(menuState.isVisible)
+			assertNull(toolbar.menu)
 		}
 	}
 }

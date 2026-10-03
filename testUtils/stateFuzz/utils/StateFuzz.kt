@@ -197,7 +197,7 @@ internal fun trimmedStyleRange(text: String, rawA: Int, rawB: Int): Pair<Int, In
 	return start to end
 }
 
-/** Applies [op] directly to the state, the pure-state twin of core's `applyFuzzOpUi`. */
+/** Applies [op] directly to the state, the pure-state twin of `FuzzUiDriver.applyFuzzOpUi` (`testUtils/uiFuzz`). */
 class StateFuzzInterpreter(
 	private val state: TextEditorState,
 ) {

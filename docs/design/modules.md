@@ -252,9 +252,14 @@ fuzz fixpoint (the state fuzz is shared through `testUtils/stateFuzz`; core
 keeps its undo-to-origin storms and checks the UI storms' blocks reload through
 block lines), the markdown link safety and line ending cases, and the export of
 a paragraph format. They use core's public API only, on a state with a mocked
-measurer. Core tests that used `withMarkdown()` only for the toggles or the
-styles use the state's block API and `richTextStyles` instead, and the Android
-and iOS host tests, which used only the configuration, use `RichTextStyles`.
+measurer. The UI storms reach a markdown fixpoint there too (7.65), through a
+small composed harness of the module's own (`markdownUiTest`) on core's public
+API; the script driver (`testUtils/uiFuzz`) and the typing and clipboard helpers
+(`testUtils/uiTest`) are shared with core's harness, which implements the
+driver's `FuzzUiDriver` as the module's does. Core tests that used
+`withMarkdown()` only for the toggles or the styles use the state's block API
+and `richTextStyles` instead, and the Android and iOS host tests, which used
+only the configuration, use `RichTextStyles`.
 
 ## Compatibility
 

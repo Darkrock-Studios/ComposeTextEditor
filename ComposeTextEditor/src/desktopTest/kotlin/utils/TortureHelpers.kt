@@ -28,19 +28,6 @@ fun EditorUiTestScope.richSpansIn(startChar: Int, endChar: Int): Set<RichSpan> =
 		)
 	)
 
-/**
- * Selects the flat character range [fromChar, toChar) directly through the selection
- * manager. Use [EditorUiTestScope.dragSelect] only when the mouse gesture itself is
- * under test; it costs a real 350ms sleep per call.
- */
-fun EditorUiTestScope.selectChars(fromChar: Int, toChar: Int) {
-	state.selector.updateSelection(
-		state.getOffsetAtCharacter(fromChar),
-		state.getOffsetAtCharacter(toChar),
-	)
-	waitForIdle()
-}
-
 /** Presses Ctrl+Z until the undo stack is empty; returns how many undos ran. */
 fun EditorUiTestScope.undoAll(max: Int = 250): Int {
 	var count = 0

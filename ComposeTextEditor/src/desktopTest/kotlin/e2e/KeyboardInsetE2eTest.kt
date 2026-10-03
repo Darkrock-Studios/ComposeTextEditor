@@ -181,4 +181,23 @@ class KeyboardInsetE2eTest {
 		assertEquals(true, state.isFocused)
 		assertEquals(120, state.scrollManager.obscuredBottomPx, "and the editor's again")
 	}
+
+	/**
+	 * Roadmap 4.36: a root that does not reach the window's bottom, as a `ComposeView`
+	 * embedded in Android views, measures the keyboard from the window's bottom, which
+	 * the platform reports in the root's coordinates.
+	 */
+	@Test
+	fun `the keyboard rises from the window's bottom, not the root's`() = editorTest(imePadding = false) {
+		test.runOnIdle { state.windowBottomInRoot = { 1500f } }
+		raiseKeyboard()
+		assertEquals(0, state.scrollManager.obscuredBottomPx, "the keyboard's top is at 1380, under the root")
+
+		test.runOnIdle {
+			state.windowBottomInRoot = { 400f }
+			ime.bottom = 150
+		}
+		test.waitForIdle()
+		assertEquals(50, state.scrollManager.obscuredBottomPx, "the keyboard's top is at 250")
+	}
 }

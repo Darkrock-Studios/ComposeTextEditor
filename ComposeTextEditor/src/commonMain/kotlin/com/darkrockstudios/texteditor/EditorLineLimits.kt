@@ -21,6 +21,11 @@ sealed interface EditorLineLimits {
 	 * wraps and the editor grows with it, since the editor cannot yet scroll sideways as
 	 * `BasicTextField`'s single line does. A document the host loads with line breaks
 	 * keeps them.
+	 *
+	 * The action key and Enter are the editor's own: a multi-line editor showing the same
+	 * state keeps its Enter key. Edits follow the editor holding focus, so that one adds
+	 * lines, which the single-line editor then shows as rows. With no editor focused, the
+	 * host's edits keep line breaks out while any single-line editor shows the state.
 	 */
 	data object SingleLine : EditorLineLimits
 

@@ -46,7 +46,9 @@ class FindState(
 
 	/**
 	 * Whether matches are limited to the selection captured by [toggleInSelection]. The scope
-	 * follows edits; if its text is deleted or the document replaced, this turns off.
+	 * follows edits; if its text is deleted or the document replaced, this turns off. An undo
+	 * that brings back text the scope covered brings the scope back with it, and turns this
+	 * back on if the deletion had turned it off.
 	 */
 	var inSelection: Boolean by mutableStateOf(false)
 		private set
@@ -88,6 +90,21 @@ class FindState(
 	 */
 	private var sessionSelection: TextEditorRange? = null
 
+	/**
+	 * The scope, in flat character indices, as it stood in each document text seen while
+	 * [inSelection] was on, newest last, keyed by the text. Undo restores no decoration, so the
+	 * scope span is gone or moved once an undo brings back text it covered; the text identifies
+	 * the state to restore it from. Edits are not tied to history entries, so the text is the
+	 * one key an undo and the edits it reverts share.
+	 */
+	private val scopeHistory = LinkedHashMap<ScopeKey, Pair<Int, Int>>()
+
+	/** The [TextEditorState.documentGeneration] [scopeHistory] was recorded in. */
+	private var scopeHistoryGeneration = textState.documentGeneration.value
+
+	/** Whether an edit deleted the scope's text while [inSelection] was on. */
+	private var scopeLostToEdit = false
+
 	// Job for debounced search on text changes
 	private var searchUpdateJob: Job? = null
 
@@ -105,6 +122,11 @@ class FindState(
 							refreshSearch()
 						}
 					}
+			}
+			launch {
+				textState.editOperations.collect {
+					if (syncScope()) refreshSearch()
+				}
 			}
 			// A whole-document replacement (setText, setDocument) emits no edit, so
 			// without this the matches would keep describing the old document.
@@ -203,7 +225,9 @@ class FindState(
 		} else {
 			removeScope()
 		}
+		forgetScopeHistory()
 		inSelection = enabled
+		syncScope()
 		rerunSearch()
 	}
 
@@ -245,6 +269,62 @@ class FindState(
 
 	private fun removeScope() {
 		scopeSpans().forEach { textState.removeRichSpan(it) }
+	}
+
+	/**
+	 * Records the scope against the current text or, after an undo, lays it back where this text
+	 * last had it. Returns whether it laid the scope back.
+	 */
+	private fun syncScope(): Boolean {
+		val generation = textState.documentGeneration.value
+		if (generation != scopeHistoryGeneration) {
+			scopeHistoryGeneration = generation
+			forgetScopeHistory()
+		}
+		if (!inSelection && !scopeLostToEdit) return false
+		val key = documentKey()
+		val spans = scopeSpans()
+		val current = spans.firstOrNull()?.range?.let { textState.getCharacterIndex(it.start) to textState.getCharacterIndex(it.end) }
+		val recorded = scopeHistory[key]
+		// Only an undo leaves something to redo; a new edit that happens to bring back an
+		// earlier text is the user's own, and keeps the scope where it now is.
+		if (recorded != null && recorded != current && textState.canRedo && recorded.second <= key.length) {
+			val restored = TextEditorRange(
+				textState.getOffsetAtCharacter(recorded.first),
+				textState.getOffsetAtCharacter(recorded.second),
+			)
+			textState.updateRichSpans(remove = spans, add = listOf(RichSpan(restored, scopeStyle)))
+			inSelection = true
+			scopeLostToEdit = false
+			return true
+		}
+		if (current != null) {
+			scopeHistory.remove(key)
+			scopeHistory[key] = current
+			if (scopeHistory.size > SCOPE_HISTORY_LIMIT) scopeHistory.remove(scopeHistory.keys.first())
+		}
+		return false
+	}
+
+	private fun forgetScopeHistory() {
+		scopeHistory.clear()
+		scopeLostToEdit = false
+	}
+
+	/** The document text's length and 64-bit FNV-1a hash, read off the lines without joining them. */
+	private fun documentKey(): ScopeKey {
+		var hash = FNV_OFFSET_BASIS
+		var length = 0
+		textState.textLines.forEachIndexed { index, line ->
+			if (index > 0) {
+				hash = (hash xor '\n'.code.toLong()) * FNV_PRIME
+				length++
+			}
+			val text = line.text
+			for (char in text) hash = (hash xor char.code.toLong()) * FNV_PRIME
+			length += text.length
+		}
+		return ScopeKey(length, hash)
 	}
 
 	private fun rerunSearch() {
@@ -316,6 +396,7 @@ class FindState(
 		query = ""
 		removeScope()
 		inSelection = false
+		forgetScopeHistory()
 		rememberSelectionBeforeSearch(null)
 		sessionSelection = null
 		clearHighlights()
@@ -329,7 +410,8 @@ class FindState(
 	 * @param replaceText The text to replace with. With [useRegex], `$1`, `${name}` and the
 	 * other group references of Kotlin's `Regex.replace` are expanded, and `\n` and `\t`
 	 * insert a line break and a tab; see the module docs.
-	 * @return true if a replacement was made, false if no current match
+	 * @return true if a replacement was made, false if there is no current match or the editor's
+	 * input filter refused the replacement, which leaves the match current
 	 */
 	fun replaceCurrent(replaceText: String): Boolean {
 		if (currentMatchIndex < 0 || currentMatchIndex >= _matches.size) return false
@@ -339,7 +421,8 @@ class FindState(
 		val highlighted = textState.richSpanManager.getAllRichSpans()
 			.firstOrNull { it.style === currentMatchStyle }?.range
 			?: _matches[currentMatchIndex]
-		val match = highlighted.takeIf { it in findMatches() }
+		val current = findMatches()
+		val match = highlighted.takeIf { it in current }
 		if (match == null) {
 			refreshSearch()
 			return false
@@ -348,7 +431,14 @@ class FindState(
 		// Clear highlights before replacement
 		clearHighlights()
 
-		replaceRanges(listOf(match), replaceText)
+		if (replaceRanges(listOf(match), replaceText).isNotEmpty()) {
+			// The input filter refused it, so the document is as it was: the match stays current.
+			_matches.clear()
+			_matches.addAll(current)
+			currentMatchIndex = current.indexOf(match)
+			updateHighlights()
+			return false
+		}
 
 		// Re-run the search to update matches
 		// The debounced search will also run, but we do it immediately for responsiveness
@@ -378,7 +468,8 @@ class FindState(
 	 * it replaces. Matches are found afresh in the current text; where matches overlap, only the
 	 * first is replaced.
 	 * @param replaceText The text to replace with, group references expanded as in [replaceCurrent]
-	 * @return The number of replacements made
+	 * @return The number of replacements made. Matches the editor's input filter refused are not
+	 * counted and stay as the matches, the first of them current.
 	 */
 	fun replaceAll(replaceText: String): Int {
 		if (query.isEmpty()) return 0
@@ -390,13 +481,17 @@ class FindState(
 
 		clearHighlights()
 
-		replaceRanges(targets, replaceText)
+		val refused = replaceRanges(targets, replaceText)
 
-		// Clear matches since they're all replaced
+		// What the input filter refused stays a match, as long as the other replacements left it one.
+		val stillMatching = if (refused.isEmpty()) emptyList() else refused.intersect(findMatches().toSet()).toList()
 		_matches.clear()
-		currentMatchIndex = -1
+		_matches.addAll(stillMatching)
+		currentMatchIndex = if (stillMatching.isEmpty()) -1 else 0
+		updateHighlights()
+		goToCurrentMatch()
 
-		return targets.size
+		return targets.size - refused.size
 	}
 
 	/**
@@ -404,9 +499,10 @@ class FindState(
 	 * replacement leaves the earlier ranges where they were, as one undo step. With [useRegex],
 	 * group references in [replaceText] are expanded for each match. An edit at the edge of the
 	 * find in selection scope would shrink it, so the scope is re-laid over what it covered, and
-	 * the selection from before the search is carried along the same way.
+	 * the selection from before the search is carried along the same way. Returns the targets the
+	 * input filter refused, in document order, where they are once the rest have landed.
 	 */
-	private fun replaceRanges(targets: List<TextEditorRange>, replaceText: String) {
+	private fun replaceRanges(targets: List<TextEditorRange>, replaceText: String): List<TextEditorRange> {
 		val replacements = if (useRegex) {
 			textState.regexReplacements(targets, query, caseSensitive, wholeWord, replaceText)
 		} else {
@@ -414,19 +510,24 @@ class FindState(
 		}
 		rememberOwnSelection()
 		val before = currentSelectionBeforeSearch()?.let(::flatRange)
-		textState.editGroup { replaceInGroup(targets.zip(replacements), before) }
+		val refused = textState.editGroup { replaceInGroup(targets.zip(replacements), before) }
 		rememberSelectionBeforeSearch(before?.toRange())
+		return refused.mapNotNull { it.toRange() }
 	}
 
-	private fun replaceInGroup(replacements: List<Pair<TextEditorRange, String>>, before: FlatRange?) {
+	/** Returns the matches the input filter refused, where they are once the rest have landed. */
+	private fun replaceInGroup(replacements: List<Pair<TextEditorRange, String>>, before: FlatRange?): List<FlatRange> {
 		val scope = scopeRange()?.let(::flatRange)
+		val refused = mutableListOf<FlatRange>()
 		replacements.asReversed().forEach { (match, replacement) ->
 			val matchStart = textState.getCharacterIndex(match.start)
 			val matchEnd = textState.getCharacterIndex(match.end)
 			// What landed, which line ending normalization or the input filter can make differ
 			// from the replacement; a refused one leaves the match.
-			val landed = textState.replace(match, styledReplacement(match, replacement))
-				?.let { textState.getCharacterIndex(it.end) - matchStart } ?: (matchEnd - matchStart)
+			val landedRange = textState.replace(match, styledReplacement(match, replacement))
+			val landed = landedRange?.let { textState.getCharacterIndex(it.end) - matchStart } ?: (matchEnd - matchStart)
+			refused.forEach { it.follow(matchStart, matchEnd, landed) }
+			if (landedRange == null) refused += FlatRange(matchStart, matchEnd)
 			scope?.follow(matchStart, matchEnd, landed)
 			before?.follow(matchStart, matchEnd, landed)
 		}
@@ -436,6 +537,7 @@ class FindState(
 				add = listOfNotNull(scope.toRange()?.let { RichSpan(it, scopeStyle) }),
 			)
 		}
+		return refused.asReversed()
 	}
 
 	private fun flatRange(range: TextEditorRange) =
@@ -488,10 +590,12 @@ class FindState(
 
 	private fun findMatches(): List<TextEditorRange> {
 		val all = textState.findAll(query, caseSensitive, wholeWord, useRegex)
+		syncScope()
 		if (!inSelection) return all
 		val scope = scopeRange()
 		if (scope == null) {
 			inSelection = false
+			scopeLostToEdit = scopeHistory.isNotEmpty()
 			return all
 		}
 		return all.filter { it.start >= scope.start && it.end <= scope.end }
@@ -587,3 +691,15 @@ class FindState(
 }
 
 private val REGEX_METACHARACTER = Regex("""[\\^$.|?*+()\[\]{}]""")
+
+/** A document text's identity for [FindState]'s scope history: its length and hash. */
+private data class ScopeKey(val length: Int, val hash: Long)
+
+/**
+ * Texts the scope history keeps, one per edit seen (a typed character is one): an undo back to
+ * a text older than this does not bring the scope back.
+ */
+private const val SCOPE_HISTORY_LIMIT = 1000
+
+private const val FNV_OFFSET_BASIS = -0x340d631b7bdddcdbL
+private const val FNV_PRIME = 0x100000001b3L

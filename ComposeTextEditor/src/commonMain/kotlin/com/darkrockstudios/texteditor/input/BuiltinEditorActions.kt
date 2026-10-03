@@ -10,6 +10,7 @@ import com.darkrockstudios.texteditor.clipboard.ClipboardHelper
 import com.darkrockstudios.texteditor.clipboard.applyHtmlPasteBlocks
 import com.darkrockstudios.texteditor.clipboard.readHtmlPasteDocument
 import com.darkrockstudios.texteditor.clipboard.withSizeForPasteAt
+import com.darkrockstudios.texteditor.html.HtmlDocument
 import com.darkrockstudios.texteditor.html.selectionAsHtml
 import com.darkrockstudios.texteditor.input.EditorCommand.Action
 import com.darkrockstudios.texteditor.RichTextStyles
@@ -28,6 +29,7 @@ import com.darkrockstudios.texteditor.state.moveToNextWord
 import com.darkrockstudios.texteditor.state.moveToPreviousWord
 import com.darkrockstudios.texteditor.state.moveToPreviousWordStart
 import com.darkrockstudios.texteditor.state.moveToWordEnd
+import com.darkrockstudios.texteditor.state.removeLinkLookOutsideLinks
 import com.darkrockstudios.texteditor.state.screenAtSelection
 import com.darkrockstudios.texteditor.state.toggleSpanStyle
 import kotlinx.coroutines.CoroutineStart
@@ -194,43 +196,65 @@ private fun EditorActionContext.pasteClipboard(plainText: Boolean) {
 			ClipboardHelper.getPlainText(clipboard)?.let(::AnnotatedString)
 		} else {
 			ClipboardHelper.getText(clipboard, state.richTextStyles, state.allowedLinkSchemes)
-		}
-		clipboardText?.let {
-			val curSelection = state.selector.selection
-			val insertPosition = curSelection?.start ?: state.cursorPosition
-			val sized = state.withSizeForPasteAt(insertPosition, it.normalizeLineEndings())
-			// Screened first: the copied spans and blocks are placed by the text's own
-			// layout, so text the filter changed pastes plain, and refused text not at all.
-			val text = state.screenAtSelection(sized) ?: return@launch
-			val screened = text != sized
-			// Read the clipboard's HTML before mutating: the text, the in-editor
-			// rich spans and the pasted block structure then land as one revision.
-			val htmlDocument = if (plainText) null else state.readHtmlPasteDocument(clipboard, text)
-			val clipboardCopyId = if (plainText) null else ClipboardHelper.readCopyId(clipboard)
-			state.preserveCopiedRichSpansThroughNextEdit()
-			var pastedAt = insertPosition
-			state.withAtomicEdit {
-				// Where the text lands now: the caret may have moved while the clipboard was read.
-				pastedAt = curSelection?.start ?: state.cursorPosition
-				if (curSelection != null) {
-					state.replace(curSelection, state.applyStyleForEditAt(curSelection.start, text))
-				} else {
-					state.insertStringAtCursor(text)
-				}
-				if (!plainText && !screened) {
-					state.pasteRichSpans(
-						insertPosition,
-						text,
-						clipboardCopyId,
-						requireCopyIdMatch = ClipboardHelper.supportsCopyProvenance,
-					)
-				}
-				if (!screened) htmlDocument?.let { state.applyHtmlPasteBlocks(it, insertPosition, text) }
-			}
-			state.selector.clearSelection()
-			state.pasteLanded(text.text, TextEditorRange(pastedAt, text.endWhenInsertedAt(pastedAt)))
-		}
+		}?.normalizeLineEndings() ?: return@launch
+		// Every clipboard read comes before the selection is read: a read can suspend
+		// for a while (the web's permission prompt), and the user can move the caret or
+		// edit meanwhile. Reading the HTML before mutating also lands the text, the
+		// in-editor rich spans and the pasted block structure as one revision.
+		val htmlDocument = if (plainText) null else state.readHtmlPasteDocument(clipboard, clipboardText)
+		val clipboardCopyId = if (plainText) null else ClipboardHelper.readCopyId(clipboard)
+		state.landPaste(clipboardText, htmlDocument, clipboardCopyId, plainText)
 	}
+}
+
+/**
+ * Pastes [text] as [Action.PasteAsPlainText] does, over the selection or at the caret:
+ * the X11 primary selection's middle-click paste.
+ */
+internal fun TextEditorState.pastePlainText(text: String) {
+	landPaste(AnnotatedString(text).normalizeLineEndings(), htmlDocument = null, clipboardCopyId = null, plainText = true)
+}
+
+private fun TextEditorState.landPaste(
+	clipboardText: AnnotatedString,
+	htmlDocument: HtmlDocument?,
+	clipboardCopyId: Long?,
+	plainText: Boolean,
+) {
+	val curSelection = selector.selection
+	val insertPosition = curSelection?.start ?: cursorPosition
+	val sized = withSizeForPasteAt(insertPosition, clipboardText)
+	// Screened first: the copied spans and blocks are placed by the text's own
+	// layout, so text the filter changed pastes plain, and refused text not at all.
+	val text = screenAtSelection(sized) ?: return
+	val screened = text != sized
+	// A composition's range would address the text as it stood before the paste.
+	if (composingRange != null) {
+		clearComposingRange()
+		requestImeResync()
+	}
+	preserveCopiedRichSpansThroughNextEdit()
+	withAtomicEdit {
+		editManager.alreadyScreened {
+			if (curSelection != null) {
+				replace(curSelection, applyStyleForEditAt(curSelection.start, text))
+			} else {
+				insertStringAtCursor(text)
+			}
+		}
+		if (!plainText && !screened) {
+			pasteRichSpans(
+				insertPosition,
+				text,
+				clipboardCopyId,
+				requireCopyIdMatch = ClipboardHelper.supportsCopyProvenance,
+			)
+		}
+		if (!screened) htmlDocument?.let { applyHtmlPasteBlocks(it, insertPosition, text) }
+		removeLinkLookOutsideLinks(insertPosition, text)
+	}
+	selector.clearSelection()
+	pasteLanded(text.text, TextEditorRange(insertPosition, text.endWhenInsertedAt(insertPosition)))
 }
 
 private fun TextEditorState.handleDelete() {

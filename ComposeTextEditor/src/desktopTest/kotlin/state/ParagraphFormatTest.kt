@@ -13,6 +13,7 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.darkrockstudios.texteditor.CharLineOffset
+import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.effectiveHeight
 import com.darkrockstudios.texteditor.richstyle.ParagraphFormatSpanStyle
 import com.darkrockstudios.texteditor.state.TextEditorState
@@ -142,6 +143,91 @@ class ParagraphFormatTest {
 		repeat(5) { state.undo() }
 		assertEquals(format, state.paragraphFormat(1))
 		assertNull(state.paragraphFormat(2))
+	}
+
+	@Test
+	fun `a paste of lines at a paragraph's start keeps its format on both ends, and undo gives it back`() = runTest {
+		val state = TextEditorState(this, shaped().measurer, AnnotatedString("target"))
+		val format = ParagraphFormatSpanStyle(textAlign = TextAlign.Center)
+		state.setParagraphFormat(0..0, format)
+
+		state.cursor.updatePosition(CharLineOffset(0, 0))
+		state.insertStringAtCursor("new\nx")
+		assertEquals(listOf("new", "xtarget"), state.textLines.map { it.text })
+		assertEquals(listOf(format, format), (0..1).map { state.paragraphFormat(it) })
+
+		state.undo()
+		assertEquals(listOf("target"), state.textLines.map { it.text })
+		assertEquals(format, state.paragraphFormat(0))
+
+		state.redo()
+		assertEquals(listOf(format, format), (0..1).map { state.paragraphFormat(it) })
+	}
+
+	@Test
+	fun `a replace bringing lines at a paragraph's start leaves the format as a paste does`() = runTest {
+		val state = TextEditorState(this, shaped().measurer, AnnotatedString("target"))
+		val format = ParagraphFormatSpanStyle(textAlign = TextAlign.Center)
+		state.setParagraphFormat(0..0, format)
+
+		state.replace(TextEditorRange(CharLineOffset(0, 0), CharLineOffset(0, 0)), "new\nx")
+		assertEquals(listOf(format, format), (0..1).map { state.paragraphFormat(it) })
+
+		state.undo()
+		assertEquals(listOf("target"), state.textLines.map { it.text })
+		assertEquals(format, state.paragraphFormat(0))
+
+		state.replace(TextEditorRange(CharLineOffset(0, 0), CharLineOffset(0, 2)), "new\nx")
+		assertEquals(listOf("new", "xrget"), state.textLines.map { it.text })
+		assertEquals(listOf(format, format), (0..1).map { state.paragraphFormat(it) })
+
+		state.undo()
+		assertEquals(listOf("target"), state.textLines.map { it.text })
+		assertEquals(format, state.paragraphFormat(0))
+	}
+
+	@Test
+	fun `a replace bringing lines over an empty or whole paragraph keeps its format on both ends`() = runTest {
+		val format = ParagraphFormatSpanStyle(textAlign = TextAlign.Center)
+		for (text in listOf("", "target")) {
+			val state = TextEditorState(this, shaped().measurer, AnnotatedString(text))
+			state.setParagraphFormat(0..0, format)
+
+			state.replace(TextEditorRange(CharLineOffset(0, 0), CharLineOffset(0, text.length)), "new\nx")
+
+			assertEquals(listOf(format, format), (0..1).map { state.paragraphFormat(it) }, "over '$text'")
+		}
+	}
+
+	@Test
+	fun `three lines at a paragraph's start leave the middle one plain`() = runTest {
+		val state = TextEditorState(this, shaped().measurer, AnnotatedString("target"))
+		val format = ParagraphFormatSpanStyle(textAlign = TextAlign.Center)
+		state.setParagraphFormat(0..0, format)
+
+		state.insertStringAtCursor("a\nb\nc")
+
+		assertEquals(listOf(format, null, format), (0..2).map { state.paragraphFormat(it) })
+	}
+
+	@Test
+	fun `a copied paragraph's format pasted at a paragraph's start replaces the one there`() = runTest {
+		val state = TextEditorState(this, shaped().measurer, AnnotatedString("aaa\nbbb\ntarget"))
+		val right = ParagraphFormatSpanStyle(textAlign = TextAlign.Right)
+		val center = ParagraphFormatSpanStyle(textAlign = TextAlign.Center)
+		state.setParagraphFormat(1..1, right)
+		state.setParagraphFormat(2..2, center)
+		val copyRange = TextEditorRange(CharLineOffset(0, 0), CharLineOffset(1, 3))
+		val copied = state.getTextInRange(copyRange)
+		state.copyRichSpans(copyRange)
+
+		state.cursor.updatePosition(CharLineOffset(2, 0))
+		state.preserveCopiedRichSpansThroughNextEdit()
+		state.insertStringAtCursor(copied)
+		state.pasteRichSpans(CharLineOffset(2, 0), copied)
+
+		assertEquals("bbbtarget", state.textLines[3].text)
+		assertEquals(listOf(right), state.richSpanManager.getRichSpansStartingOn(3).map { it.style })
 	}
 
 	@Test

@@ -35,7 +35,7 @@ private class TextEditorInputMethodRequest(
 	override fun createInputConnection(outAttributes: EditorInfo): InputConnection {
 		val connection = TextEditorInputConnection(state, view)
 		outAttributes.populate(state, connection)
-		return connection
+		return TracingInputConnection(state, connection, outAttributes.inputType, outAttributes.imeOptions)
 	}
 }
 
@@ -44,8 +44,8 @@ private const val SURROUNDING_TEXT_WINDOW = 2048
 
 private fun EditorInfo.populate(state: TextEditorState, connection: TextEditorInputConnection) {
 	val settings = state.keyboardSettings
-	inputType = settings.androidInputType(state.isSingleLine)
-	imeOptions = settings.androidImeOptions(state.isSingleLine)
+	inputType = settings.androidInputType(state.keyboardIsSingleLine)
+	imeOptions = settings.androidImeOptions(state.keyboardIsSingleLine)
 
 	val selection = state.selectionAsTextRange()
 	initialSelStart = selection.start
@@ -91,7 +91,7 @@ internal class TextEditorInputConnection(
 	private var isActive: Boolean = true
 
 	/** The action key the keyboard was opened with; a change restarts input with a new connection. */
-	private val imeAction = state.effectiveImeAction()
+	private val imeAction = state.effectiveImeAction(state.keyboardIsSingleLine)
 	private val actionKey = imeAction.androidEditorAction()
 
 	/** Batch levels this connection holds open on the state, released when it closes. */
@@ -165,14 +165,19 @@ internal class TextEditorInputConnection(
 		beforeLength: Int,
 		afterLength: Int,
 		flags: Int
-	): SurroundingText {
+	): SurroundingText = surroundingText(beforeLength, afterLength).let {
+		SurroundingText(it.text, it.selectionStart, it.selectionEnd, it.offset)
+	}
+
+	/** What [getSurroundingText] answers, in a form a host test can read. */
+	internal fun surroundingText(beforeLength: Int, afterLength: Int): ImeSurroundingText {
 		val selection = state.selectionAsTextRange()
 		val selStart = selection.min
 		val selEnd = selection.max
 		val start = selStart - beforeLength.coerceIn(0, selStart)
 		val end = selEnd + minOf(afterLength.coerceAtLeast(0), (state.getTextLength() - selEnd).coerceAtLeast(0))
 		val text = state.imeSubSequence(start, end).toString()
-		return SurroundingText(text, selStart - start, selEnd - start, start)
+		return ImeSurroundingText(text, selStart - start, selEnd - start, start)
 	}
 
 	// ============ TEXT MUTATION ============
@@ -360,6 +365,8 @@ internal class TextEditorInputConnection(
 		opts: Bundle?
 	): Boolean = false
 }
+
+internal data class ImeSurroundingText(val text: String, val selectionStart: Int, val selectionEnd: Int, val offset: Int)
 
 // ============================================================
 //  ExtractedText projection

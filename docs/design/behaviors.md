@@ -3,9 +3,11 @@
 The opt-in `EditBehavior`s core ships for prose: smart punctuation (roadmap
 5.2) and auto-link (5.4). They live in the `behaviors` package, are off by
 default, and a host turns one on by adding it to `TextEditorState.editBehaviors`.
+Markdown shortcuts (5.3) follow the same rules but live in the markdown module,
+since markdown is a storage detail core does not know.
 Each builds on the typed-text hook, `EditBehavior.onTextInput`, described in
 [editor-actions.md](editor-actions.md), "Edit behaviors"; auto-link also uses
-`onNewline` and the paste hook, `onPaste`.
+the line break hook, `onNewlineLanded`, and the paste hook, `onPaste`.
 
 ## Shared rules
 
@@ -87,9 +89,8 @@ Whether the keyboard's converted characters reach the editor is the Mac queue's
 ## Auto-link
 
 ```kotlin
-// Ahead of LineBlockEditBehavior, so Enter on a list item or quote links too.
-state.editBehaviors.add(0, AutoLink())
-state.editBehaviors.add(0, AutoLink(pasted = false)) // typed URLs only
+state.editBehaviors.add(AutoLink())
+state.editBehaviors.add(AutoLink(pasted = false)) // typed URLs only
 ```
 
 `typed` links a URL once it is complete: when a space (or any whitespace)
@@ -99,8 +100,10 @@ is typed that cannot belong to it (`(see https://example.com)` links at the
 once the paste lands; both paste actions, Paste and Paste as Plain Text, are
 offered, so every platform's paste is. A paste is judged out to the runs of
 text it joins, so a URL pasted against `/docs/intro` links whole, and one
-pasted into the middle of a word is not a URL at all. A host that registers its
-own paste action, or a drop, offers nothing (roadmap 5.12).
+pasted into the middle of a word is not a URL at all. A drop is offered as a
+paste, unless it moves text within the editor. A host that registers its own
+paste action offers its paste by calling `TextEditorState.pasteLanded` once it
+has committed.
 
 What counts as a URL, and where it ends:
 
@@ -121,12 +124,12 @@ What counts as a URL, and where it ends:
 - Only a destination `sanitizeLinkUrl` allows is linked (the allowlist every
   importer applies), so extending the allowlist extends auto-link.
 
-The link is `setLink`'s: the state's link style and a `LinkSpanStyle`. A typed
-or pasted link is its own undo step after the text, so one undo takes the link
-off and keeps the text, as in Word. A link made by Enter shares the Enter's
-step, since `onNewline` runs before the line break inside the same undo group:
-one undo takes back both the line break and the link, keeping the URL (roadmap
-5.11). Text already linked (a rich paste's links), inline code and code blocks
+The link is `setLink`'s: the state's link style and a `LinkSpanStyle`. A link
+is its own undo step after the text, paste or line break that completed it, so
+one undo takes the link off and keeps the text, as in Word. Enter's link comes
+from `onNewlineLanded`, told once the line break has landed, so the behavior
+links on Enter wherever it sits in the chain, a list item's or quote's Enter
+included. Text already linked (a rich paste's links), inline code and code blocks
 are left alone; nothing to link makes no undo step.
 
 A link only styles the text, so the behavior never claims the input: the chain
@@ -137,9 +140,54 @@ Typed URLs reach the behavior the same way on every input path: a keyboard
 that composes the URL as one word and commits it, then commits the space, is
 the space trigger; one that commits `"https://example.com "` whole is too.
 
-Text typed at a link's end joins the link, and after Enter it takes the link's
-style (roadmap 5.10). That is the editor's typing style, not this behavior's,
-but a pasted URL ends at the caret, so text typed straight after the paste joins
-the link until 5.10 is fixed; a typed URL is linked only once a space or
-bracket follows it, so it is not affected.
+A link holds only its own characters: text typed at its end, or after Enter
+there, is plain and outside it, so text typed straight after a pasted URL does
+not join the link (roadmap 5.10).
 
+## Markdown shortcuts
+
+`MarkdownShortcuts`, in `ComposeTextEditorMarkdown`: markdown typed into a rich
+text editor becomes the formatting, the markers disappearing, as in Notion,
+Typora and Google Docs' autoformat. Not core: a WYSIWYG host like Hammer keeps
+markdown out of the writer's way, so the behavior ships with the format.
+
+```kotlin
+// Ahead of LineBlockEditBehavior, so Enter on a fence line reaches it.
+state.editBehaviors.add(0, MarkdownShortcuts())
+state.editBehaviors.add(0, MarkdownShortcuts(inline = false)) // blocks only
+```
+
+| Switch | Typed | Becomes |
+| --- | --- | --- |
+| `blocks` | `- `, `* ` or `+ ` at a line's start | a bullet item |
+| `blocks` | a number and `. ` or `) ` | an ordered item (numbered by its place, not the typed number) |
+| `blocks` | one to six `#` and a space | a heading of that level |
+| `blocks` | `> ` | a quote; a list marker typed after it stacks |
+| `blocks` | three backticks, a language, then Enter | a code block in that language |
+| `inline` | `**text**` or `__text__` | bold |
+| `inline` | `*text*` or `_text_` | italic |
+| `inline` | `` `text` `` | inline code |
+| `inline` | `~~text~~` | struck through |
+| `inline` | `==text==` | highlighted |
+
+- **A block marker** converts when its space is typed and the text before the
+  caret is the marker alone, so typing it before a line's text converts that
+  line. A marker the line's blocks refuse (a heading on a list item, a list on
+  a heading) or already has stays text.
+- **An inline span** converts when its closer is typed. The opener is the
+  nearest run of the delimiter before the closer, and only one as long as the
+  closer opens, so `**bold*` waits for the second asterisk and `*a **b*` for
+  the bold's closer. The opener starts a word (a line's start, whitespace or
+  punctuation before it; a `*` may also follow a letter of a script written
+  without spaces), the closer is not followed by more of a word, and neither
+  has whitespace just inside it, so `snake_case`, `2*3*` and `a * b *` stay
+  text. A closer inside an unclosed backtick waits for the code span; a span
+  around inline code converts. Text typed after the conversion is not in its
+  style.
+- **A fence line** beside an existing code block stays text, since the block
+  would take the line into its run and its language.
+- **A commit** converts what it ends with, as a keystroke would at that
+  point: a keyboard committing `**word**` or `- ` whole converts it, while a
+  dictated phrase with markdown inside it stays text.
+- **A horizontal rule** has no shortcut: `---` is a literal separator in prose
+  as often as a rule, and smart punctuation keeps it as typed.

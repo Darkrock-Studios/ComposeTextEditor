@@ -26,6 +26,7 @@ import com.darkrockstudios.texteditor.cursor.calculateCursorPosition
 import com.darkrockstudios.texteditor.cursor.caretRect
 import com.darkrockstudios.texteditor.html.selectionAsHtml
 import com.darkrockstudios.texteditor.richstyle.BlockSpanStyle
+import com.darkrockstudios.texteditor.state.FocusedEditor
 import com.darkrockstudios.texteditor.state.PointerHit
 import com.darkrockstudios.texteditor.state.TextEditorState
 import kotlin.random.Random
@@ -35,9 +36,13 @@ import kotlin.random.Random
  * with the platform's modifier), and dropping text in, its own selection included.
  *
  * The pointer handling starts a drag ([startSelectionDrag]) when a mouse press inside
- * the selection moves past the slop, as native editors do.
+ * the selection moves past the slop, as native editors do. A drop follows the line limit
+ * of [editor], the editor it lands on, which need not hold focus.
  */
-internal class TextDragAndDrop(private val state: TextEditorState) {
+internal class TextDragAndDrop(
+	private val state: TextEditorState,
+	private val editor: () -> FocusedEditor? = { null },
+) {
 	/** Whether drops edit this editor; a read-only one only lets its text be dragged out as a copy. */
 	var enabled: Boolean = true
 
@@ -115,7 +120,10 @@ internal class TextDragAndDrop(private val state: TextEditorState) {
 	 * spans its markup cannot carry from its source, which it still holds, as a paste
 	 * takes them from the copy.
 	 */
-	internal fun dropAt(at: CharLineOffset, content: DroppedText, dragId: Long?, copy: Boolean): Boolean {
+	internal fun dropAt(at: CharLineOffset, content: DroppedText, dragId: Long?, copy: Boolean): Boolean =
+		state.asEditor(editor()) { dropHere(at, content, dragId, copy) }
+
+	private fun dropHere(at: CharLineOffset, content: DroppedText, dragId: Long?, copy: Boolean): Boolean {
 		val ours = outgoing?.takeIf { it.id == dragId }
 		ours?.droppedHere = true
 		val source = ours?.takeIf { state.holds(it.range, it.text) }

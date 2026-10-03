@@ -368,6 +368,105 @@ class FindInSelectionTest {
 	}
 
 	@Test
+	fun `undoing the deletion of the scoped text brings the scope back`() = runTest {
+		val textState = editor("cat\ncat cat\ncat")
+		val find = FindState(textState, backgroundScope)
+		runCurrent()
+		textState.select(CharLineOffset(1, 0), CharLineOffset(1, 7))
+		find.toggleInSelection(true)
+		find.search("cat")
+
+		textState.replace(TextEditorRange(CharLineOffset(1, 0), CharLineOffset(1, 7)), "")
+		runCurrent()
+		textState.undo()
+		advanceTimeBy(400)
+		runCurrent()
+
+		assertTrue(find.inSelection)
+		assertEquals(listOf(1, 1), find.matchLines)
+	}
+
+	@Test
+	fun `undo after the deletion turned it off turns it back on`() = runTest {
+		val textState = editor("cat\ncat cat\ncat")
+		val find = FindState(textState, backgroundScope)
+		runCurrent()
+		textState.select(CharLineOffset(1, 0), CharLineOffset(1, 7))
+		find.toggleInSelection(true)
+		find.search("cat")
+
+		textState.replace(TextEditorRange(CharLineOffset(1, 0), CharLineOffset(1, 7)), "")
+		advanceTimeBy(400)
+		runCurrent()
+		assertFalse(find.inSelection)
+
+		textState.undo()
+		advanceTimeBy(400)
+		runCurrent()
+
+		assertTrue(find.inSelection)
+		assertEquals(listOf(1, 1), find.matchLines)
+	}
+
+	@Test
+	fun `text an undo restores at the scope's start is inside it`() = runTest {
+		val textState = editor("cat\ncat cat\ncat")
+		val find = FindState(textState, backgroundScope)
+		runCurrent()
+		textState.select(CharLineOffset(1, 0), CharLineOffset(1, 7))
+		find.toggleInSelection(true)
+		find.search("cat")
+
+		textState.replace(TextEditorRange(CharLineOffset(1, 0), CharLineOffset(1, 4)), "")
+		runCurrent()
+		textState.undo()
+		advanceTimeBy(400)
+		runCurrent()
+
+		assertEquals(listOf(1, 1), find.matchLines)
+	}
+
+	@Test
+	fun `retyping the deleted text keeps the scope off`() = runTest {
+		val textState = editor("cat\ncat cat\ncat")
+		val find = FindState(textState, backgroundScope)
+		runCurrent()
+		textState.select(CharLineOffset(1, 0), CharLineOffset(1, 7))
+		find.toggleInSelection(true)
+		find.search("cat")
+
+		textState.replace(TextEditorRange(CharLineOffset(1, 0), CharLineOffset(1, 7)), "")
+		advanceTimeBy(400)
+		runCurrent()
+		textState.replace(TextEditorRange(CharLineOffset(1, 0), CharLineOffset(1, 0)), "cat cat")
+		advanceTimeBy(400)
+		runCurrent()
+
+		assertFalse(find.inSelection)
+		assertEquals(4, find.matchCount)
+	}
+
+	@Test
+	fun `undo does not bring back a scope turned off`() = runTest {
+		val textState = editor("cat\ncat cat\ncat")
+		val find = FindState(textState, backgroundScope)
+		runCurrent()
+		textState.select(CharLineOffset(1, 0), CharLineOffset(1, 7))
+		find.toggleInSelection(true)
+		find.search("cat")
+		find.toggleInSelection(false)
+
+		textState.replace(TextEditorRange(CharLineOffset(1, 0), CharLineOffset(1, 7)), "")
+		runCurrent()
+		textState.undo()
+		advanceTimeBy(400)
+		runCurrent()
+
+		assertFalse(find.inSelection)
+		assertEquals(4, find.matchCount)
+	}
+
+	@Test
 	fun `turning it off searches the whole document`() = runTest {
 		val textState = editor("cat\ncat cat\ncat")
 		val find = FindState(textState, backgroundScope)

@@ -11,10 +11,14 @@ import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.caretX
 import com.darkrockstudios.texteditor.utils.lineTextLeft
 
-fun TextEditorState.calculateCursorPosition(): CursorMetrics = calculateCursorPosition(cursorPosition, cursor.affinity)
+fun TextEditorState.calculateCursorPosition(): CursorMetrics = calculateCursorPosition(cursorPosition, cursor.affinity, cursor.runSide)
 
 /** Where a caret at [position] on the row [affinity] picks is drawn: the caret's, or a drop caret's. */
-internal fun TextEditorState.calculateCursorPosition(position: CharLineOffset, affinity: CaretAffinity): CursorMetrics {
+internal fun TextEditorState.calculateCursorPosition(
+	position: CharLineOffset,
+	affinity: CaretAffinity,
+	runSide: CaretAffinity? = null,
+): CursorMetrics {
 	val charIndex = position.char
 
 	val currentWrappedLine = lineOffsets.getWrapForDrawing(position, affinity)
@@ -25,7 +29,7 @@ internal fun TextEditorState.calculateCursorPosition(position: CharLineOffset, a
 
 	// The line's text-left is a floor, not an addition: on an empty indented line
 	// Android already reports the indented position while desktop reports 0.
-	val cursorX = currentWrappedLine.caretX(charIndex)
+	val cursorX = currentWrappedLine.caretX(charIndex, runSide)
 		.coerceAtLeast(layout.lineTextLeft(virtualLineIndex, density))
 	val cursorY = currentWrappedLine.offset.y - scrollState.value
 	val lineHeight = layout.multiParagraph.getLineHeight(virtualLineIndex)

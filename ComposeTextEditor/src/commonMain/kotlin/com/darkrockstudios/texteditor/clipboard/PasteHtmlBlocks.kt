@@ -21,9 +21,10 @@ import com.darkrockstudios.texteditor.state.TextEditorState
  * takes, and an export sampling the document in that window would serialize it that
  * way.
  *
- * Null when the re-parse does not reproduce the text that was actually inserted: the
- * paste then came from somewhere else, a plain-text flavor or a clipboard that changed
- * underneath us, and the line numbers describe a document that was never pasted.
+ * Null when the re-parse does not reproduce [pastedText], the clipboard's text as read:
+ * the paste then came from somewhere else, a plain-text flavor or a clipboard that
+ * changed underneath us, and the line numbers describe a document that was never
+ * pasted. Text the input filter changes takes no blocks either; the caller checks that.
  */
 internal suspend fun TextEditorState.readHtmlPasteDocument(
 	clipboard: Clipboard,

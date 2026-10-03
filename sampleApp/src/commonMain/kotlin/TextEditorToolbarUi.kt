@@ -18,18 +18,21 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.unit.dp
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
+import com.darkrockstudios.texteditor.html.sanitizeLinkUrl
 import com.darkrockstudios.texteditor.richstyle.*
 import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.getRichSpansAtPosition
 import com.darkrockstudios.texteditor.state.getRichSpansInRange
 import com.darkrockstudios.texteditor.state.hasStyleThroughout
 import com.darkrockstudios.texteditor.state.headerLevel
+import com.darkrockstudios.texteditor.state.setLink
 import com.darkrockstudios.texteditor.state.toggleBlockquote
 import com.darkrockstudios.texteditor.state.toggleBulletList
 import com.darkrockstudios.texteditor.state.toggleCodeFence
 import com.darkrockstudios.texteditor.state.toggleHeader
 import com.darkrockstudios.texteditor.state.toggleOrderedList
 import com.darkrockstudios.texteditor.state.toggleSpanStyle
+import com.darkrockstudios.texteditor.state.unlink
 import markdown.decreaseFontSize
 import markdown.increaseFontSize
 
@@ -74,13 +77,18 @@ fun TextEditorToolbar(
 			isItalicActive = isActive(state.richTextStyles.italicStyle)
 			isCodeActive = isActive(state.richTextStyles.codeStyle)
 			isStrikethroughActive = isActive(state.richTextStyles.strikethroughStyle)
-			existingLinkSpan = richSpans.firstOrNull { it.style is LinkSpanStyle }
+			// The span lookup counts edges; a selection ending where a link starts does not touch it.
+			val selected = selection?.takeIf { it.start != it.end }
+			existingLinkSpan = richSpans.firstOrNull {
+				it.style is LinkSpanStyle &&
+					(selected == null || (it.range.start < selected.end && selected.start < it.range.end))
+			}
 			isBlockquoteActive = richSpans.any { it.style === BlockquoteSpanStyle }
 			isBulletListActive = richSpans.any { it.style is BulletListSpanStyle }
 			isOrderedListActive = richSpans.any { it.style is OrderedListSpanStyle }
 			isCodeFenceActive = richSpans.any { it.style === CodeFenceSpanStyle }
 			currentHeaderLevel = state.headerLevel(position.line) ?: 0
-			isHighlightActive = richSpans.any { it.style == HIGHLIGHT }
+			isHighlightActive = isActive(state.richTextStyles.highlightStyle)
 		}
 	}
 
@@ -268,19 +276,10 @@ fun TextEditorToolbar(
 					Spacer(modifier = Modifier.width(4.dp))
 
 					FormatButton(
-						onClick = {
-							state.selector.selection?.let { range ->
-								if (isHighlightActive) {
-									state.removeRichSpan(range.start, range.end, HIGHLIGHT)
-								} else {
-									state.addRichSpan(range.start, range.end, HIGHLIGHT)
-								}
-							}
-						},
+						onClick = { state.toggleSpanStyle(state.richTextStyles.highlightStyle) },
 						icon = Icons.Default.Highlight,
 						contentDescription = "Highlight",
 						isActive = isHighlightActive,
-						enabled = state.selector.hasSelection()
 					)
 				}
 			}
@@ -292,6 +291,7 @@ fun TextEditorToolbar(
 		LinkDialog(
 			initialUrl = (request.existingSpan?.style as? LinkSpanStyle)?.url ?: "",
 			isEditing = isEditing,
+			isAllowed = { sanitizeLinkUrl(it, state.allowedLinkSchemes) != null },
 			onConfirm = { url ->
 				applyLink(state, request, url)
 				linkDialogState = null
@@ -316,6 +316,7 @@ private data class LinkDialogRequest(
 private fun LinkDialog(
 	initialUrl: String,
 	isEditing: Boolean,
+	isAllowed: (String) -> Boolean,
 	onConfirm: (String) -> Unit,
 	onRemove: (() -> Unit)?,
 	onDismiss: () -> Unit,
@@ -331,12 +332,16 @@ private fun LinkDialog(
 				label = { Text("URL") },
 				placeholder = { Text("https://example.com") },
 				singleLine = true,
+				isError = url.isNotBlank() && !isAllowed(url),
+				supportingText = if (url.isNotBlank() && !isAllowed(url)) {
+					{ Text("Not a link the editor allows") }
+				} else null,
 			)
 		},
 		confirmButton = {
 			TextButton(
 				onClick = { onConfirm(url) },
-				enabled = url.isNotBlank(),
+				enabled = url.isNotBlank() && isAllowed(url),
 			) { Text(if (isEditing) "Save" else "Add") }
 		},
 		dismissButton = {
@@ -356,11 +361,9 @@ private fun applyLink(
 	request: LinkDialogRequest,
 	url: String,
 ) {
-	request.existingSpan?.let { state.removeRichSpan(it) }
-	state.removeStyleSpan(request.range, state.richTextStyles.linkStyle)
-	if (url.isNotBlank()) {
-		state.addStyleSpan(request.range, state.richTextStyles.linkStyle)
-		state.addRichSpan(request.range.start, request.range.end, LinkSpanStyle(url))
+	state.editGroup {
+		state.unlink()
+		if (url.isNotBlank()) state.setLink(request.range, url)
 	}
 }
 

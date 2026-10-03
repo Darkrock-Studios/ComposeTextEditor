@@ -8,12 +8,12 @@ import androidx.compose.ui.input.key.isAltPressed
 import androidx.compose.ui.input.key.isCtrlPressed
 import androidx.compose.ui.input.key.isMetaPressed
 import androidx.compose.ui.input.key.isShiftPressed
-import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onInterceptKeyBeforeSoftKeyboard
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import com.darkrockstudios.texteditor.input.MacKeyBindings
 import com.darkrockstudios.texteditor.input.isCtrlShortcut
+import com.darkrockstudios.texteditor.input.layoutKey
 import com.darkrockstudios.texteditor.input.platformKeyBindings
 
 /**
@@ -79,9 +79,10 @@ internal fun findChordFor(event: KeyEvent, mac: Boolean): FindChord? {
 	}
 	val unmodified = !event.isCtrlPressed && !event.isMetaPressed && !event.isAltPressed
 	val forward = !event.isShiftPressed
+	val key = event.layoutKey
 	return when {
-		event.key == Key.F && primary && forward -> FindChord.Toggle
-		(event.key == Key.F3 && unmodified) || (event.key == Key.G && primary) ->
+		key == Key.F && primary && forward -> FindChord.Toggle
+		(key == Key.F3 && unmodified) || (key == Key.G && primary) ->
 			if (forward) FindChord.Next else FindChord.Previous
 
 		else -> null

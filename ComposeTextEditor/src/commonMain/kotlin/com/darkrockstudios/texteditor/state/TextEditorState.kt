@@ -41,7 +41,7 @@ import com.darkrockstudios.texteditor.lastRowAtOrAbove
 import com.darkrockstudios.texteditor.rowAt
 import com.darkrockstudios.texteditor.rowIndexOf
 import com.darkrockstudios.texteditor.input.EditorActionRegistry
-import com.darkrockstudios.texteditor.input.HeldCaretKey
+import com.darkrockstudios.texteditor.input.HeldKey
 import com.darkrockstudios.texteditor.input.KeyboardSettings
 import com.darkrockstudios.texteditor.input.KillRing
 import com.darkrockstudios.texteditor.input.imeActionFor
@@ -50,6 +50,7 @@ import com.darkrockstudios.texteditor.RichTextStyles
 import com.darkrockstudios.texteditor.richstyle.BlockSpanStyle
 import com.darkrockstudios.texteditor.richstyle.HeaderSpanStyle
 import com.darkrockstudios.texteditor.richstyle.LineBlockEditBehavior
+import com.darkrockstudios.texteditor.richstyle.LinkSpanStyle
 import com.darkrockstudios.texteditor.richstyle.ParagraphFormatSpanStyle
 import com.darkrockstudios.texteditor.richstyle.RichSpan
 import com.darkrockstudios.texteditor.richstyle.RichSpanStyle
@@ -59,6 +60,7 @@ import com.darkrockstudios.texteditor.richstyle.headerBlock
 import com.darkrockstudios.texteditor.richstyle.lineBlocksConflict
 import com.darkrockstudios.texteditor.richstyle.lineBlocks
 import com.darkrockstudios.texteditor.richstyle.normalizeLineBlocks
+import com.darkrockstudios.texteditor.richstyle.repairBlockParagraphs
 import com.darkrockstudios.texteditor.richstyle.rebuildWithBlock
 import com.darkrockstudios.texteditor.richstyle.rebuildWithoutBlock
 import kotlinx.coroutines.CoroutineScope
@@ -68,6 +70,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.onSubscription
 import kotlin.concurrent.Volatile
+import kotlin.coroutines.CoroutineContext
 import kotlin.math.ceil
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -99,18 +102,97 @@ import kotlinx.coroutines.yield
  *
  * Coordinates are [CharLineOffset]s and [TextEditorRange]s; convert to and from flat
  * character indices with [getCharacterIndex]/[getOffsetAtCharacter].
+ *
+ * Inside composition, [rememberTextEditorState] creates one. A host that holds the
+ * document outside composition (a view model) creates one with the constructor that
+ * takes only the text, loads and edits it there, and passes it to the editor later.
  */
-class TextEditorState(
-	val scope: CoroutineScope,
-	measurer: TextMeasurer,
-	initialText: AnnotatedString? = null
+class TextEditorState private constructor(
+	initialScope: CoroutineScope,
+	measurer: TextMeasurer?,
+	initialText: AnnotatedString?,
+	/** Whether the editor showing this state lends it its scope and measurer. */
+	internal val borrowsComposition: Boolean,
 ) {
-	var textMeasurer: TextMeasurer = measurer
+	/**
+	 * A state bound to [scope], which runs its scrolls and other work and should follow
+	 * the composition showing it (`rememberCoroutineScope`), and laid out by [measurer].
+	 */
+	constructor(
+		scope: CoroutineScope,
+		measurer: TextMeasurer,
+		initialText: AnnotatedString? = null,
+	) : this(scope, measurer, initialText, borrowsComposition = false)
+
+	/**
+	 * A state that can be created outside composition, as a view model holds one: the
+	 * text, styles, edits and undo all work before it is shown, on the main thread like
+	 * any Compose state. The editor or view that shows it lends it its composition's
+	 * scope and text measurer, and a later one, after a configuration change, lends its
+	 * own. With none showing it, [scope] is cancelled, so a scroll asked for then is
+	 * dropped, and [textMeasurer] throws.
+	 */
+	constructor(initialText: AnnotatedString? = null) :
+			this(UnboundScope, null, initialText, borrowsComposition = true)
+
+	/** The compositions lending a borrowing state their scope and measurer, the latest last. */
+	private val lenders = mutableListOf<CompositionLender>()
+
+	/**
+	 * Runs the state's scrolls and other work. For a state made outside composition,
+	 * this forwards to the scope of the latest composition showing it.
+	 */
+	val scope: CoroutineScope = if (!borrowsComposition) initialScope else object : CoroutineScope {
+		override val coroutineContext: CoroutineContext
+			get() = (lenders.lastOrNull()?.scope ?: UnboundScope).coroutineContext
+	}
+
+	private var boundMeasurer: TextMeasurer? = measurer
+
+	/**
+	 * Lays out the text. A state made outside composition has one only while an editor
+	 * or view shows it, lent as that composes, so a composable reading it before the
+	 * editor that shows the state has composed throws.
+	 */
+	var textMeasurer: TextMeasurer
+		get() = boundMeasurer
+			?: error("This TextEditorState borrows its TextMeasurer from the editor showing it, and none is showing it")
 		internal set(value) {
-			field = value
+			boundMeasurer = value
 			invalidateLayoutInputs()
 			updateBookKeeping(LayoutUpdate.Reshape)
 		}
+
+	/**
+	 * Lends a borrowing state the scope and measurer of a composition showing it, read
+	 * there at once; the layout the measurer changes follows on its next set.
+	 */
+	internal fun bindComposition(lender: CompositionLender) {
+		lenders.remove(lender)
+		lenders += lender
+		if (boundMeasurer !== lender.measurer) {
+			boundMeasurer = lender.measurer
+			invalidateLayoutInputs()
+		}
+	}
+
+	/**
+	 * Takes back what [lender] lent when its composition leaves: another composition
+	 * still showing the state lends its own, and with none left the state lets go of
+	 * what would keep the departed composition alive.
+	 */
+	internal fun unbindComposition(lender: CompositionLender) {
+		if (!lenders.remove(lender)) return
+		val next = lenders.lastOrNull()
+		if (next != null) {
+			if (boundMeasurer !== next.measurer) textMeasurer = next.measurer
+			return
+		}
+		boundMeasurer = null
+		canvasLayoutCoordinates = null
+		// Its watch and timeout ran on the departed scope.
+		selector.hideCaretHandle()
+	}
 
 	var textStyle: TextStyle = TextStyle.Default
 		internal set(value) {
@@ -289,16 +371,55 @@ class TextEditorState(
 		untouchedAfter = minOf(untouchedAfter, unchangedAfter)
 	}
 
-	/** [snapshot] with the line-block invariants repaired over the lines changed since the last publish. */
+	/**
+	 * [snapshot] with the line-block invariants repaired over the lines changed since the
+	 * last publish, and the layout told of the lines the repair rewrote.
+	 */
 	private fun normalized(snapshot: DocumentSnapshot): DocumentSnapshot {
 		val lines = snapshot.lines.size
 		val first = minOf(untouchedBefore, lines)
 		val end = lines - minOf(untouchedAfter, lines)
-		val result = normalizeLineBlocks(snapshot, richTextStyles, first until end, spansChanged)
+		val blocks = normalizeLineBlocks(snapshot, richTextStyles, first until end, spansChanged)
+		val paragraphs = repairBlockParagraphs(blocks, richTextStyles, first until end)
 		untouchedBefore = Int.MAX_VALUE
 		untouchedAfter = Int.MAX_VALUE
 		spansChanged = false
-		return result
+		// Normalization can rewrite lines no operation declared dirty, so a rewrite
+		// invalidates any deferred partial relayout.
+		if (blocks !== snapshot) {
+			invalidateLayoutInputs()
+		} else if (paragraphs != null) {
+			reshapeAtCommit(paragraphs.lines)
+		}
+		return paragraphs?.snapshot ?: blocks
+	}
+
+	/**
+	 * Has the layout pass pending at commit shape [lines] too, lines of the revision it
+	 * commits. Widening a pass's remeasured range over lines it would have reused is
+	 * sound, but a pass that moves lines also moves the settling walks by its range, so
+	 * one that moves lines takes only lines inside that range. Any other case, and a
+	 * publish outside a transaction, invalidates the layout.
+	 */
+	private fun reshapeAtCommit(lines: IntRange) {
+		val pending = pendingLayoutUpdate
+		if (draft != null && pending == null) {
+			pendingLayoutUpdate = LayoutUpdate.Partial(lines.first, lines.last, 0)
+			return
+		}
+		if (draft == null || pending !is LayoutUpdate.Partial) {
+			if (pending !is LayoutUpdate.Full) invalidateLayoutInputs()
+			return
+		}
+		val shapes = pending.remeasureFirst <= pending.remeasureLast
+		when {
+			shapes && lines.first >= pending.remeasureFirst && lines.last <= pending.remeasureLast -> Unit
+			pending.lineDelta != 0 -> invalidateLayoutInputs()
+			else -> pendingLayoutUpdate = pending.copy(
+				remeasureFirst = if (shapes) minOf(pending.remeasureFirst, lines.first) else lines.first,
+				remeasureLast = if (shapes) maxOf(pending.remeasureLast, lines.last) else lines.last,
+			)
+		}
 	}
 
 	private val _revision = mutableIntStateOf(0)
@@ -407,13 +528,7 @@ class TextEditorState(
 			// can commit a revision violating the placeholder-line invariant. A
 			// transaction that mutated nothing skips the scan and the republish.
 			draft?.let {
-				if (it !== content) {
-					val normalized = normalized(it)
-					// Normalization can rewrite lines no operation declared dirty,
-					// so a rewrite invalidates any deferred partial relayout.
-					if (normalized !== it) invalidateLayoutInputs()
-					content = normalized
-				}
+				if (it !== content) content = normalized(it)
 			}
 			draft = null
 			committed = true
@@ -512,10 +627,7 @@ class TextEditorState(
 		if (draft != null) {
 			draft = transform(workingContent)
 		} else {
-			val transformed = transform(content)
-			val normalized = normalized(transformed)
-			if (normalized !== transformed) invalidateLayoutInputs()
-			content = normalized
+			content = normalized(transform(content))
 		}
 	}
 
@@ -551,6 +663,13 @@ class TextEditorState(
 
 	/** Whether a composed editor runs a platform input session for this state. */
 	internal var hasInputSession = false
+
+	/**
+	 * Whether the platform's input session has started, which on iOS makes its input view
+	 * the first responder that hosts the edit menu. Snapshot state, so the touch toolbar
+	 * can wait for it; [hasInputSession] is set earlier, when a session is launched.
+	 */
+	internal var inputSessionRunning by mutableStateOf(false)
 
 	/**
 	 * The current IME composing region (for autocomplete preview).
@@ -598,6 +717,13 @@ class TextEditorState(
 	 * where the cover measured at the last placement may already trail the keyboard.
 	 */
 	internal var currentKeyboardHeight: (() -> Int)? = null
+
+	/**
+	 * The window's bottom in the root's coordinates, which a soft keyboard rises from, where
+	 * the platform knows the root may not reach it (Android's `ComposeView` embedded in
+	 * views). Null takes the root's bottom.
+	 */
+	internal var windowBottomInRoot: (() -> Float)? = null
 
 	// Referential: every pass publishes a new list, and comparing two by content would
 	// build every row of both.
@@ -711,13 +837,14 @@ class TextEditorState(
 	/**
 	 * Behaviors consulted before [insertNewlineAtCursor], [backspaceAtCursor] and
 	 * [deleteAtCursor], and told after typed text ([insertTypedString] and the IME's
-	 * commits) or a paste has landed, in order; the first to claim an edit wins. Every
-	 * input path reaches these, hardware keys and IME alike.
+	 * commits), a line break or a paste has landed, in order; the first to claim an
+	 * edit wins. Every input path reaches these, hardware keys and IME alike.
 	 *
 	 * Pre-loaded with [LineBlockEditBehavior] at index 0, which claims every
 	 * newline and column-0 backspace on a block line, so a behavior appended
-	 * after it never sees those edits. Use `add(0, behavior)` to run first, or
-	 * remove it outright for plain line breaks.
+	 * after it is not asked before those edits, though it is told where a line
+	 * break landed. Use `add(0, behavior)` to run first, or remove it outright for
+	 * plain line breaks.
 	 */
 	val editBehaviors: MutableList<EditBehavior> = mutableListOf(LineBlockEditBehavior)
 
@@ -763,10 +890,29 @@ class TextEditorState(
 		offerLanded(range) { it.onTextInput(this, text, range) }
 	}
 
-	/** Tells the behaviors that pasted [text] has landed at [range], once the paste has committed. */
-	internal fun pasteLanded(text: String, range: TextEditorRange) {
+	/** Tells the behaviors that a typed line break has landed at [range], once it has committed. */
+	internal fun newlineLanded(range: TextEditorRange) {
+		offerLanded(range) { it.onNewlineLanded(this, range) }
+	}
+
+	/**
+	 * Tells the [editBehaviors] that pasted [text] has landed at [range]
+	 * ([EditBehavior.onPaste]). The paste actions and a drop call it; a host that
+	 * performs a paste of its own, having replaced the paste actions, calls it once
+	 * that paste has committed, outside its own [editGroup] or transaction, so an
+	 * edit a behavior makes is an undo step of its own. [range] is where [text]
+	 * now stands in the document; one outside it throws.
+	 */
+	fun pasteLanded(text: String, range: TextEditorRange) {
+		require(holdsRange(range)) { "range $range is not in the document" }
 		if (text.isEmpty()) return
 		offerLanded(range) { it.onPaste(this, text, range) }
+	}
+
+	private fun holdsRange(range: TextEditorRange): Boolean {
+		val (start, end) = range
+		return start.line >= 0 && start <= end && end.line < textLines.size &&
+			start.char in 0..textLines[start.line].length && end.char in 0..textLines[end.line].length
 	}
 
 	/**
@@ -842,8 +988,8 @@ class TextEditorState(
 	/** What the kill actions deleted, for a yank. */
 	internal val killRing = KillRing()
 
-	/** The caret key held down, for a platform that repeats it on its own. */
-	internal val heldCaretKey = HeldCaretKey()
+	/** The key held down that the editor acted on, for a platform that acts on it as well. */
+	internal val heldKey = HeldKey()
 
 	/** What Tab and Shift+Tab do: the indent size and character, or moving focus. */
 	var tabSettings: TabSettings by mutableStateOf(TabSettings())
@@ -870,18 +1016,44 @@ class TextEditorState(
 	 */
 	var onImeAction: ((ImeAction) -> Unit)? = null
 
-	/** The action key's default, supplied by the composed editor, which can move focus. */
-	internal var defaultImeAction: ((ImeAction) -> Unit)? = null
+	/** The composed editor holding focus, which the keyboard and keys reach; null when none holds it. */
+	internal var focusedEditor: FocusedEditor? by mutableStateOf(null)
+
+	/**
+	 * The editor an edit or action is aimed at while [asEditor] runs, which may not hold
+	 * focus (a drop, an accessibility service's edit); not snapshot state, since it lasts
+	 * only for that call.
+	 */
+	private var targetEditor: FocusedEditor? = null
+
+	/** The editor whose line limit and default action answer: the target, else the focused one. */
+	private val answeringEditor: FocusedEditor? get() = targetEditor ?: focusedEditor
+
+	/**
+	 * Runs [block] with [editor]'s line limit and default action standing in for the
+	 * focused editor's, for an edit aimed at [editor]. Null leaves the focused editor's.
+	 */
+	internal fun <T> asEditor(editor: FocusedEditor?, block: () -> T): T {
+		if (editor == null) return block()
+		val previous = targetEditor
+		targetEditor = editor
+		try {
+			return block()
+		} finally {
+			targetEditor = previous
+		}
+	}
 
 	/** Runs the action key's handler; false when there is none to run. */
 	internal fun performImeAction(action: ImeAction): Boolean {
-		val handler = onImeAction ?: defaultImeAction ?: return false
+		val handler = onImeAction ?: answeringEditor?.defaultImeAction ?: return false
 		handler(action)
 		return true
 	}
 
 	/** The action key the keyboard shows, which a single line's Enter presses too. */
-	internal fun effectiveImeAction(): ImeAction = keyboardSettings.imeActionFor(isSingleLine)
+	internal fun effectiveImeAction(singleLine: Boolean = isSingleLine): ImeAction =
+		keyboardSettings.imeActionFor(singleLine)
 
 	/**
 	 * Screens every edit that adds text, from the user or the editing functions, but not
@@ -889,13 +1061,20 @@ class TextEditorState(
 	 */
 	var inputFilter: EditorInputFilter? by mutableStateOf(null)
 
-	/**
-	 * How many composed editors show this state with a single-line limit; while any does,
-	 * [EditorInputFilter.SingleLine] screens ahead of [inputFilter].
-	 */
+	/** How many composed editors show this state with a single-line limit. */
 	internal var singleLineEditors by mutableIntStateOf(0)
 
-	internal val isSingleLine: Boolean get() = singleLineEditors > 0
+	/**
+	 * Whether the action key and edits follow a single line: the limit of the editor an
+	 * edit is aimed at ([asEditor]) or else the focused one, or with neither (or a view that
+	 * takes no input), whether any composed editor is single-line, so the host's own edits
+	 * keep line breaks out of a lone single-line editor. While true,
+	 * [EditorInputFilter.SingleLine] screens ahead of [inputFilter].
+	 */
+	internal val isSingleLine: Boolean get() = answeringEditor?.singleLine ?: (singleLineEditors > 0)
+
+	/** [isSingleLine] for the keyboard, which is always the focused editor's, whatever an edit is aimed at. */
+	internal val keyboardIsSingleLine: Boolean get() = focusedEditor?.singleLine ?: (singleLineEditors > 0)
 
 	internal val effectiveInputFilter: EditorInputFilter?
 		get() {
@@ -1070,29 +1249,53 @@ class TextEditorState(
 
 	/**
 	 * Inserts a line break at the cursor, splitting the current line, unless an
-	 * [EditBehavior] claims the edit first.
+	 * [EditBehavior] claims the edit first, then tells the behaviors where a line
+	 * break landed. With a selection active, the behaviors are not told.
 	 */
 	fun insertNewlineAtCursor() {
+		val selected = selector.selection != null
+		val landed = splitAtCursor() ?: return
+		if (!selected) newlineLanded(landed)
+	}
+
+	/**
+	 * [insertNewlineAtCursor] without telling the behaviors where the line break
+	 * landed: returns where it did, from the break to the caret it left, or null when
+	 * no plain line break went in.
+	 */
+	internal fun splitAtCursor(): TextEditorRange? {
 		// Asked before the behaviors, which would otherwise mark a line the split never made.
 		if (screenInput(TextEditorRange(cursorPosition, cursorPosition), AnnotatedString("\n")) == null) {
-			return requestImeResync()
+			requestImeResync()
+			return null
 		}
-		if (claimedByBehavior { it.onNewline(this) }) return
-		insertNewlineRaw()
+		landedBreak = null
+		if (!claimedByBehavior { it.onNewline(this) }) insertNewlineRaw()
+		return landedBreak
 	}
+
+	/** Where the last [insertNewlineRaw], or a split nested in a behavior's claim, broke a line. */
+	private var landedBreak: TextEditorRange? = null
 
 	/**
 	 * Splits the line at the cursor with no [EditBehavior] consulted, for a
 	 * behavior that needs the plain split as part of the edit it is claiming.
 	 */
 	internal fun insertNewlineRaw() {
+		val position = cursorPosition
+		val lineCount = textLines.size
 		val operation = TextEditOperation.Insert(
-			position = cursorPosition,
+			position = position,
 			text = cursor.applyCursorStyle("\n"),
-			cursorBefore = cursorPosition,
-			cursorAfter = CharLineOffset(cursorPosition.line + 1, 0)
+			cursorBefore = position,
+			cursorAfter = CharLineOffset(position.line + 1, 0)
 		)
 		editManager.asEnter { editManager.applyOperation(operation) }
+		// An input filter can turn the line break into something else: only one line
+		// that ends where the break went in is a plain break.
+		if (textLines.size == lineCount + 1 && textLines[position.line].length == position.char) {
+			landedBreak = TextEditorRange(position, CharLineOffset(position.line + 1, 0))
+		}
 	}
 
 	/**
@@ -1485,12 +1688,16 @@ class TextEditorState(
 	fun getPositionForOffset(position: CharLineOffset): CursorMetrics =
 		getPositionForOffset(position, CaretAffinity.Downstream)
 
-	/** [getPositionForOffset] on the row [affinity] picks at a wrap offset. */
+	/**
+	 * [getPositionForOffset] on the row [affinity] picks at a wrap offset. The caret's own
+	 * position is where the caret is drawn, against its [TextEditorCursorState.runSide].
+	 */
 	internal fun getPositionForOffset(position: CharLineOffset, affinity: CaretAffinity): CursorMetrics {
 		val currentWrappedLine = lineOffsets.getWrapForDrawing(position, affinity)
 			?: return CursorMetrics(position = Offset.Zero, height = 0f)
 
-		val cursorX = currentWrappedLine.caretX(position.char)
+		val runSide = if (position == cursorPosition && affinity == cursor.affinity) cursor.runSide else null
+		val cursorX = currentWrappedLine.caretX(position.char, runSide)
 		val cursorY = currentWrappedLine.offset.y - scrollState.value
 
 		val lineHeight = currentWrappedLine.effectiveHeight
@@ -1621,8 +1828,9 @@ class TextEditorState(
 		}
 
 		// Defer until the viewport has a real size; the 1×1 sentinel forces character-wide wraps.
+		// Likewise while a state made outside composition has no editor lending a measurer.
 		// The skipped pass leaves the rows behind the text, so the next one must be full.
-		if (viewportSize.width <= 1f || viewportSize.height <= 1f) {
+		if (viewportSize.width <= 1f || viewportSize.height <= 1f || boundMeasurer == null) {
 			invalidateLayoutInputs()
 			return
 		}
@@ -2230,8 +2438,9 @@ class TextEditorState(
 
 	/**
 	 * Adds [spans], captured by [preservedRichSpans], relative to [insertPosition]. One a
-	 * span of the same style already covers is left out: inserting beside or inside that
-	 * span stretched it over the inserted text.
+	 * span of the same style already covers is left out: inserting inside that span, or
+	 * beside one that grows at its edge, stretched it over the inserted text. A link
+	 * landing against a link to the same place joins it, since a link does not grow.
 	 */
 	internal fun addPreservedRichSpans(insertPosition: CharLineOffset, spans: List<PreservedRichSpan>) = withAtomicEdit {
 		spans.forEach { preserved ->
@@ -2264,7 +2473,25 @@ class TextEditorState(
 			val covered = richSpanManager.getSpansInRange(TextEditorRange(startPos, endPos)).any {
 				it.style == preserved.style && it.range.start <= startPos && it.range.end >= endPos
 			}
-			if (!covered) addRichSpan(startPos, endPos, preserved.style)
+			if (covered) return@forEach
+			if (preserved.style is LinkSpanStyle) {
+				val touching = richSpanManager.getSpansInRange(TextEditorRange(startPos, endPos)).filter {
+					it.style == preserved.style && (it.range.end == startPos || it.range.start == endPos)
+				}
+				if (touching.isNotEmpty()) {
+					touching.forEach { removeRichSpan(it) }
+					addRichSpan(minOf(startPos, touching.minOf { it.range.start }), maxOf(endPos, touching.maxOf { it.range.end }), preserved.style)
+					return@forEach
+				}
+			}
+			// A line has one paragraph format: a copied one replaces the one the paste
+			// left on its line.
+			if (preserved.style.boundToParagraph) {
+				richSpanManager.getRichSpansStartingOn(startPos.line)
+					.filter { it.style::class == preserved.style::class && it.style != preserved.style }
+					.forEach { removeRichSpan(it) }
+			}
+			addRichSpan(startPos, endPos, preserved.style)
 		}
 	}
 
@@ -2395,8 +2622,17 @@ class TextEditorState(
 	}
 }
 
+/** The scope of a borrowing state no composition has lent one: cancelled, so what it launches never runs. */
+private val UnboundScope = CoroutineScope(Job().apply { cancel() })
+
 // Process-wide so two editors in one window can never mint the same id; copies
 // only happen on the UI thread, so a plain increment is race-free in practice.
 // Starts at random because an id leaves the process on the clipboard, and another
 // app embedding the editor must not mint the one this copy carries.
 private var nextCopyId: Long = kotlin.random.Random.nextLong()
+
+/**
+ * What the focused editor lends its state: the action key's [defaultImeAction], which can
+ * move focus from that editor, and its line limit, null for a view that takes no input.
+ */
+internal data class FocusedEditor(val defaultImeAction: (ImeAction) -> Unit, val singleLine: Boolean?)

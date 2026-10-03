@@ -104,11 +104,14 @@ internal fun TextEditorState.imeSetComposingText(composing: String, newCursorPos
 	}
 }
 
-/** `setComposingRegion`: mark an existing text range as the composing region. */
+/**
+ * `setComposingRegion`: mark an existing text range as the composing region. The bounds
+ * may come reversed, which `BaseInputConnection` puts in order.
+ */
 internal fun TextEditorState.imeSetComposingRegion(start: Int, end: Int) {
 	val len = getTextLength()
-	val s = start.coerceIn(0, len)
-	val e = end.coerceIn(0, len)
+	val s = minOf(start, end).coerceIn(0, len)
+	val e = maxOf(start, end).coerceIn(0, len)
 	if (s < e) {
 		// Some keyboards re-anchor the composition they are typing before they
 		// commit it; that keeps it typed. Marking any other text does not.

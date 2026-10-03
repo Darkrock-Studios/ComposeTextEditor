@@ -504,7 +504,7 @@ class SkikoInputMethodRequestTest {
 				awaitCancellation()
 			}
 		}
-		val sessionJob = launch { state.startSkikoInputSession(session, ImeOptions.Default) }
+		val sessionJob = launch { state.startSkikoInputSession(session, { ImeOptions.Default }) }
 		val request = captured.await()
 
 		val seen = mutableListOf<String>()
@@ -538,7 +538,7 @@ class SkikoInputMethodRequestTest {
 				awaitCancellation()
 			}
 		}
-		val sessionJob = launch { state.startSkikoInputSession(session, ImeOptions.Default) }
+		val sessionJob = launch { state.startSkikoInputSession(session, { ImeOptions.Default }) }
 		val request = captured.await()
 		state.cursor.updatePosition(CharLineOffset(0, 3))
 		var evaluations = 0
@@ -631,7 +631,7 @@ class SkikoInputMethodRequestTest {
 		session: PlatformTextInputSession,
 		resync: SkikoImeResync,
 	): Job {
-		val job = launch { state.startSkikoInputSession(session, ImeOptions.Default, imeResync = resync) }
+		val job = launch { state.startSkikoInputSession(session, { ImeOptions.Default }, imeResync = resync) }
 		settle()
 		return job
 	}

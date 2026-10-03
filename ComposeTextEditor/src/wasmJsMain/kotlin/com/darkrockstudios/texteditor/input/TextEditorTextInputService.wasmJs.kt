@@ -3,11 +3,9 @@
 package com.darkrockstudios.texteditor.input
 
 import androidx.compose.ui.platform.PlatformTextInputSession
-import androidx.compose.ui.text.input.ImeOptions
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.TextFieldValue
 import com.darkrockstudios.texteditor.state.TextEditorState
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -27,20 +25,25 @@ import kotlin.js.ExperimentalWasmJsInterop
  * hands DOM focus straight back. The textarea is also the one platform copy of the text
  * that can go stale without the editor's value changing, so an IME resync rewrites it.
  *
- * Compose maps the options to a multiline textarea with a plain text input mode, and
- * ignores the capitalisation; see [BackingField.adopt].
+ * The options come from the editor's `keyboardSettings`. Compose maps them to the
+ * textarea's input mode and Enter key hint but ignores the capitalisation; see
+ * [BackingField.adopt].
  */
 actual class TextEditorTextInputService actual constructor(
 	private val state: TextEditorState
 ) {
-	actual suspend fun startInput(session: PlatformTextInputSession): Nothing = coroutineScope {
+	actual suspend fun startInput(session: PlatformTextInputSession): Nothing {
 		val field = BackingField()
-		launch { field.adopt() }
-		state.startSkikoInputSession(session, webImeOptions, imeResync = SkikoImeResync.Rewrite(field::rewrite))
+		// A change of keyboard settings starts the input method again, and Compose
+		// replaces its textarea, so each run adopts the new one.
+		state.startSkikoInputSession(
+			session,
+			{ state.skikoImeOptions() },
+			imeResync = SkikoImeResync.Rewrite(field::rewrite),
+			onRun = { options -> launch { field.adopt(options.capitalization) } },
+		)
 	}
 }
-
-private val webImeOptions = ImeOptions(capitalization = KeyboardCapitalization.Sentences)
 
 /** The class Compose's `DomInputStrategy` gives the backing textarea. */
 private const val BACKING_FIELD = ".compose-backing-field"
@@ -49,17 +52,8 @@ private const val BACKING_FIELD = ".compose-backing-field"
 private class BackingField {
 	private var root: JsAny? = null
 
-	/**
-	 * The root, looked up on first use. Compose sets `autocapitalize="off"` on every
-	 * backing field whatever the options say, so the field asks for sentence capitals as
-	 * soon as it is found, as the Android and iOS sessions do. The field is already
-	 * focused by then; whether a phone keyboard that is already up honours the change is
-	 * for the phone pass (roadmap 4.11).
-	 */
-	private fun findRoot(): JsAny? = root ?: backingFieldRoot(BACKING_FIELD)?.also {
-		root = it
-		capitalizeSentences(it, BACKING_FIELD)
-	}
+	/** The root holding the current run's field, looked up on first use. */
+	private fun findRoot(): JsAny? = root ?: backingFieldRoot(BACKING_FIELD)?.also { root = it }
 
 	/**
 	 * Finds the field, which the session creates when it starts, a dispatch or two after
@@ -72,7 +66,9 @@ private class BackingField {
 	 * held it, would fall to the page body, where no key reaches Compose again until a
 	 * click; so it goes back to the canvas.
 	 */
-	suspend fun adopt() {
+	suspend fun adopt(capitalization: KeyboardCapitalization) {
+		// The previous run's field is gone; look for this run's.
+		root = null
 		var found = findRoot()
 		var attempts = 1
 		while (found == null && attempts < ROOT_LOOKUP_ATTEMPTS) {
@@ -81,6 +77,11 @@ private class BackingField {
 			attempts++
 		}
 		val root = found ?: return
+		// Compose sets `autocapitalize="off"` on every backing field whatever the options
+		// say, so the field asks for the editor's capitalisation as soon as it is found. It
+		// is already focused by then; whether a phone keyboard that is already up honours
+		// the change is for the phone pass (roadmap 4.11).
+		setAutocapitalize(root, BACKING_FIELD, capitalization.autocapitalize)
 		val handle = refocusFromCanvas(root, BACKING_FIELD)
 		suspendCancellableCoroutine<Nothing> { continuation ->
 			continuation.invokeOnCancellation { stopRefocusing(handle) }
@@ -186,10 +187,19 @@ private fun stopRefocusing(handle: JsAny): Unit = js(
 }"""
 )
 
-private fun capitalizeSentences(root: JsAny, selector: String): Unit = js(
+/** The `autocapitalize` value for a capitalisation; the browser's default, sentences, when unspecified. */
+private val KeyboardCapitalization.autocapitalize: String
+	get() = when (this) {
+		KeyboardCapitalization.None -> "off"
+		KeyboardCapitalization.Characters -> "characters"
+		KeyboardCapitalization.Words -> "words"
+		else -> "sentences"
+	}
+
+private fun setAutocapitalize(root: JsAny, selector: String, value: String): Unit = js(
 	"""{
 	const field = root.querySelector(selector);
-	if (field) field.setAttribute('autocapitalize', 'sentences');
+	if (field) field.setAttribute('autocapitalize', value);
 }"""
 )
 

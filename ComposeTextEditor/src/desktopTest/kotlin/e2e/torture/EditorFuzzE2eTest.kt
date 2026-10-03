@@ -78,8 +78,14 @@ class EditorFuzzE2eTest {
 	fun `ui undo to origin seed 777`() = undoToOrigin(777)
 
 	@Test
+	fun `ui undo to origin seed 27`() = undoToOrigin(27)
+
+	@Test
 	fun `ui block lines fixpoint seed 4243`() = blockLinesFixpoint(4243)
 
 	@Test
 	fun `ui block lines fixpoint seed 987654321`() = blockLinesFixpoint(987654321)
+
+	@Test
+	fun `ui block lines fixpoint seed 27`() = blockLinesFixpoint(27)
 }

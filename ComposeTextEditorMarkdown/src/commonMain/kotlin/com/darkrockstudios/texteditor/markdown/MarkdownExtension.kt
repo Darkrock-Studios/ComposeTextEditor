@@ -214,8 +214,15 @@ private val INDENT_ENTITIES_ONLY = Regex("""^(?:&nbsp;|&NonBreakingSpace;|&Tab;|
 /**
  * Empty for a line of only indent entities (a foreign spacer line): its indent would be
  * all it held, and a line of only whitespace is a blank line, which export writes as one.
+ * A list item or heading ([holdsWhitespace]) keeps the entities, without the raw
+ * whitespace after them: export writes such a body of whitespace as entities alone,
+ * since CommonMark reads a marker followed by whitespace as an empty one.
  */
-private fun String.withoutIndentOnlyText(): String = if (INDENT_ENTITIES_ONLY.matches(this)) "" else this
+private fun String.withoutIndentOnlyText(holdsWhitespace: Boolean = false): String = when {
+	!INDENT_ENTITIES_ONLY.matches(this) -> this
+	holdsWhitespace -> trimEnd(' ', '\t')
+	else -> ""
+}
 
 private val RESIDUAL_BULLET_MARKER = Regex("""^([-*+])(\s)""")
 private val RESIDUAL_QUOTE_MARKER = Regex("""^>""")
@@ -381,15 +388,13 @@ class MarkdownExtension(
 		// Code fences wrap a contiguous run with ` ``` ` markers rather than
 		// per-line prefixes; track open/close state across iterations.
 		var inCodeFence = false
-		// A legacy font-size heading's markdown ends with its own line break.
-		var previousEndsWithNewline = false
 		for (lineIndex in lines.indices) {
 			val lineLength = lines[lineIndex].length
 			val end = cursor + lineLength
 			val isFenceLine = isFence(lineIndex)
 
 			if (lineIndex > 0) {
-				if (!previousEndsWithNewline) sb.append('\n')
+				sb.append('\n')
 				// Close a fence when leaving; the marker sits on its own line.
 				if (inCodeFence && !isFenceLine) {
 					sb.append("```\n")
@@ -408,7 +413,11 @@ class MarkdownExtension(
 				inCodeFence = true
 			}
 
-			val lineMarkdown = when {
+			// Fenced lines take no per-line block prefixes: a fence stacks with
+			// nothing, which the block model enforces.
+			val list = if (isFenceLine) null else listStyleAt(lineIndex)?.let(listSyntax::getValue)
+			val headingLevel = headerLevel(lineIndex)
+			val inlineMarkdown = when {
 				has(lineIndex, HorizontalRuleSpanStyle) -> "---"
 				imageLines.containsKey(lineIndex) -> {
 					val style = imageLines.getValue(lineIndex)
@@ -421,10 +430,11 @@ class MarkdownExtension(
 				isFenceLine -> text.substring(cursor, end)
 
 				else -> {
-					// A heading's baked display style must not reach the inline
-					// serializer: it would also match the legacy font-size branch
-					// and emit a second `# ` inline.
-					val baked = listOfNotNull(headerLevel(lineIndex)?.let { styles.getHeaderStyle(it) })
+					// A heading's baked display style, under this configuration or a
+					// retired one, is the block's look, not bold text at a size.
+					val baked = headingLevel
+						?.let { level -> (retiredStyles + styles).map { it.getHeaderStyle(level) } }
+						.orEmpty()
 					// Link spans live on the state, not in the AnnotatedString, so
 					// the serializer is handed this line's links in line-local
 					// character offsets.
@@ -442,12 +452,19 @@ class MarkdownExtension(
 					}
 					annotated.subSequence(cursor, end)
 						.withoutSpanStyles(baked)
-						.toMarkdown(markdownConfiguration, links, styles, retiredStyles)
+						.toMarkdown(markdownConfiguration, links, styles, retiredStyles, headingsBySize = false)
 				}
 			}
-			// Fenced lines take no per-line block prefixes: a fence stacks with
-			// nothing, which the block model enforces.
-			val list = if (isFenceLine) null else listStyleAt(lineIndex)?.let(listSyntax::getValue)
+			// CommonMark reads a marker followed by whitespace alone as an empty
+			// item or heading, so that whitespace is written as indent entities.
+			val lineMarkdown = if (
+				(list != null || headingLevel != null) && inlineMarkdown.isNotEmpty() &&
+				inlineMarkdown.all { it == ' ' || it == '\t' }
+			) {
+				inlineMarkdown.map(::leadingIndentEntity).joinToString("")
+			} else {
+				inlineMarkdown
+			}
 			if (!isFenceLine) {
 				prefixBlocks.forEach { block ->
 					if (has(lineIndex, block.style)) sb.append(block.prefix(0))
@@ -479,7 +496,6 @@ class MarkdownExtension(
 				contentOffsets += indent + prefix.length
 			}
 			sb.append(lineMarkdown)
-			previousEndsWithNewline = lineMarkdown.endsWith('\n')
 			cursor = end + 1
 		}
 		// Close an unfinished fence at EOF; the closing marker needs its own line
@@ -555,7 +571,8 @@ class MarkdownExtension(
 
 				peeled.blocks.isNotEmpty() -> {
 					record(peeled.blocks)
-					peeled.body.withoutIndentOnlyText().escapeResidualMarker()
+					val holdsWhitespace = peeled.blocks.any { it.isList || it.style is HeaderSpanStyle }
+					peeled.body.withoutIndentOnlyText(holdsWhitespace).escapeResidualMarker()
 				}
 
 				else -> line.withoutIndentOnlyText()

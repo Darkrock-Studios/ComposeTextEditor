@@ -11,6 +11,7 @@ import com.darkrockstudios.texteditor.html.parseHtmlDocument
 import com.darkrockstudios.texteditor.state.PreservedRichSpan
 import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.endWhenInsertedAt
+import com.darkrockstudios.texteditor.state.removeLinkLookOutsideLinks
 import com.darkrockstudios.texteditor.state.screenInput
 
 /**
@@ -22,8 +23,12 @@ import com.darkrockstudios.texteditor.state.screenInput
  * The input filter screens the text; with [whole], as for a move, which deletes the
  * source whatever lands, text it would change is refused rather than dropped in part.
  *
- * Returns the dropped range, or null when nothing changed: a move dropped inside the
- * text it moves, or text the filter refused.
+ * Once it has committed, a drop that is not a move is offered to the behaviors as a
+ * paste ([TextEditorState.pasteLanded]), so a behavior's edit is a step of its own.
+ *
+ * Returns the range the drop placed the text at, before any behavior's edit, or null
+ * when nothing changed: a move dropped inside the text it moves, or text the filter
+ * refused.
  */
 internal fun TextEditorState.dropText(
 	text: AnnotatedString,
@@ -50,7 +55,7 @@ internal fun TextEditorState.dropText(
 		requestImeResync()
 	}
 
-	return editGroup {
+	val dropped = editGroup {
 		// The earlier edit goes last, so the other's position still holds when it runs.
 		val insertAt = if (moveFrom != null && at >= moveFrom.end) {
 			insertAt(at, normalized, document, spans)
@@ -61,10 +66,13 @@ internal fun TextEditorState.dropText(
 			insertAt(at, normalized, document, spans)
 			at
 		}
-		val dropped = TextEditorRange(insertAt, normalized.endWhenInsertedAt(insertAt))
-		selector.updateSelection(dropped.start, dropped.end)
-		dropped
+		val placed = TextEditorRange(insertAt, normalized.endWhenInsertedAt(insertAt))
+		selector.updateSelection(placed.start, placed.end)
+		placed
 	}
+	// A move is not new text, so it keeps the formatting it had.
+	if (moveFrom == null) pasteLanded(normalized.text, dropped)
+	return dropped
 }
 
 private fun TextEditorState.insertAt(
@@ -78,6 +86,7 @@ private fun TextEditorState.insertAt(
 	editManager.alreadyScreened { insertStringAtCursor(text) }
 	richSpans?.let { addPreservedRichSpans(at, it) }
 	document?.let { applyHtmlPasteBlocks(it, at, text) }
+	removeLinkLookOutsideLinks(at, text)
 }
 
 /** This position once [removed], which ends at or before it, is gone. */

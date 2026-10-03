@@ -36,6 +36,7 @@ class LineTextLeftTest {
 		every { layout.getLineLeft(any()) } returns lineLeft
 		every { layout.getHorizontalPosition(0, true) } returns horizontalAtLineStart
 		every { layout.multiParagraph.getParagraphDirection(any()) } returns ResolvedTextDirection.Ltr
+		every { layout.getBidiRunDirection(any()) } returns ResolvedTextDirection.Ltr
 		every { layout.layoutInput.text } returns text
 		every { layout.layoutInput.style } returns TextStyle.Default
 	}

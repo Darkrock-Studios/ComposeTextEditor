@@ -279,6 +279,7 @@ built-in.
 ```kotlin
 interface EditBehavior {
     fun onNewline(state: TextEditorState): Boolean = false
+    fun onNewlineLanded(state: TextEditorState, range: TextEditorRange): Boolean = false
     fun onBackspace(state: TextEditorState): Boolean = false
     fun onDeleteForward(state: TextEditorState): Boolean = false
     fun onTextInput(state: TextEditorState, text: String, range: TextEditorRange): Boolean = false
@@ -292,8 +293,9 @@ mutates must route through the edit manager, so its work lands in undo history
 like any other operation (`LineBlockEditBehavior` does this by going through
 `toggleLineBlock` rather than mutating spans directly).
 
-`onTextInput` is the typed-text hook, and unlike the other three it runs
-*after* the edit: it is told where committed text landed. It sees every
+`onTextInput` is the typed-text hook. Like `onNewlineLanded` and `onPaste`,
+and unlike the hooks asked before an edit, it runs *after* the edit: it is told
+where committed text landed. It sees every
 path: a key event's character (`insertTypedString`), an IME commit (the
 whole word a soft keyboard or a candidate window commits, in place of what
 it was composing, or a composition it finishes as it stands), a dictated
@@ -302,11 +304,15 @@ phrase through the accessibility `insertTextAtCursor`, and a host's own
 committed text, and it never sees a paste, which is not typing. A paste goes to
 `onPaste` instead, told where the pasted text landed once the paste (both paste
 actions, so every platform's paste) has committed as its own undo step; an edit
-there is a step of its own, as on the typed-text hook. A host that registers its
-own paste action replaces that offer along with the paste. A lone typed line break is the Enter
-key and goes to `onNewline`, never to `onTextInput`; the one exception is an
-IME committing `"\n"` over its own composition, which is a replacement of
-the composition and reaches neither hook (see `ImeLineBlockParityTest`).
+there is a step of its own, as on the typed-text hook. A drop that is not a move
+within the editor is offered the same way. A host that registers its own paste
+action replaces that offer along with the paste, and makes it by calling
+`pasteLanded` once its paste has committed. A lone typed line break is the Enter
+key and goes to `onNewline` before it lands, never to `onTextInput`; once the
+Enter's own step has put a line break in, `onNewlineLanded` is told where it
+landed, and an edit there is a step of its own. The one exception is an IME
+committing `"\n"` over its own composition, which is a replacement of the
+composition and reaches none of these hooks (see `ImeLineBlockParityTest`).
 
 It runs after rather than before because the default edit is not one thing a
 behavior could reproduce: on the IME path it replaces the composition,
@@ -458,7 +464,7 @@ val InsertDate = EditorCommand.Action("myapp.insertDate", isEdit = true)
 state.actions.register(EditorActionSpec(InsertDate) { it.state.insertStringAtCursor(today()) })
 
 val bindings = KeyBindings { event ->
-    if (event.key == Key.D && event.isCtrlShortcut && event.isShiftPressed) InsertDate
+    if (event.layoutKey == Key.D && event.isCtrlShortcut && event.isShiftPressed) InsertDate
     else platformKeyBindings().commandFor(event)
 }
 
@@ -469,6 +475,9 @@ Use `isCtrlShortcut` rather than `isCtrlPressed`: Windows synthesizes AltGr as
 left-Ctrl plus right-Alt, so a bare Ctrl test steals the layout chords that type
 a character. On macOS shortcuts belong on Cmd (`isMetaPressed`); a host chord
 that should follow the platform checks `platformKeyBindings() === MacKeyBindings`.
+Match on `layoutKey` rather than `key`: on desktop Linux `key` names a letter by
+the first keyboard layout installed, not the active one, so a BÉPO or Dvorak
+user would find the chord on QWERTY's key.
 
 *Replace a built-in.* Register over its id. `editor.paste` bound to a paste that
 sanitizes the clipboard changes the chord, the context menu and anything else
@@ -488,9 +497,8 @@ primitives stay `internal`.
 
 - A code-editor indent (to the next tab stop, or matching the line above) is a
   host's own `editor.indent`.
-- Behaviors see typed text, pastes, newline, backspace and forward delete. A
-  drop is not offered to `onPaste`. Nor is a typed composition the editor ends
-  itself (a tap outside it, focus loss) offered to `onTextInput`, only one the
+- Behaviors see typed text, pastes and drops, newline, backspace and forward
+  delete. A typed composition the editor ends itself (a tap outside it, focus loss) offered to `onTextInput`, only one the
   IME commits or finishes (roadmap 5.9).
 - The IME routing is unverified on real hardware. See "Device verification
   still owed" above; that list should be worked through before a release ships

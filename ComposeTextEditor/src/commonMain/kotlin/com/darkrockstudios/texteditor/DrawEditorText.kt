@@ -7,7 +7,7 @@ import androidx.compose.ui.text.drawText
 import androidx.compose.ui.unit.dp
 import com.darkrockstudios.texteditor.richstyle.BlockSpanStyle
 import com.darkrockstudios.texteditor.state.TextEditorState
-import com.darkrockstudios.texteditor.utils.getBoundingBoxes
+import com.darkrockstudios.texteditor.utils.getRunBoxes
 import kotlin.math.floor
 import kotlin.math.roundToInt
 
@@ -124,17 +124,17 @@ internal fun DrawScope.drawComposingUnderline(
 		}
 
 		if (localStart < localEnd) {
-			// Get bounding boxes for the composing text
-			val boxes = textLayoutResult.getBoundingBoxes(localStart, localEnd)
+			// One box per stretch of the row: mixed-direction text can split the range.
+			val boxes = textLayoutResult.getRunBoxes(lineWrap.virtualLineIndex, localStart, localEnd)
 
-			// Draw underline for each box
 			val scrollY = state.scrollState.value
 			val underlineColor = style.textColor.copy(alpha = 0.6f)
 			// Whole pixels, so a thin underline stays crisp instead of blurring over two rows.
 			val thickness = ComposingUnderlineWidth.toPx().roundToInt().coerceAtLeast(1).toFloat()
 
+			// The boxes are in the paragraph layout's coordinates, which the text is drawn from.
 			boxes.forEach { box ->
-				val top = floor(lineWrap.offset.y - scrollY + box.bottom - thickness)
+				val top = floor(lineWrap.paragraphTop - scrollY + box.bottom - thickness)
 				drawRect(
 					color = underlineColor,
 					topLeft = Offset(box.left, top),

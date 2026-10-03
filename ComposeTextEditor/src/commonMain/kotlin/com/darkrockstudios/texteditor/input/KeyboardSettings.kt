@@ -10,8 +10,10 @@ import androidx.compose.ui.text.input.KeyboardType
  * The defaults suit prose; an editor for code would turn [capitalization] and
  * [autoCorrect] off. Keyboards treat all of it as a hint.
  *
- * Android honours every field, and a change reaches a keyboard already up. iOS and the
- * web keep their own fixed options for now.
+ * Android, iOS and the web honour every field, and a change reaches a keyboard already
+ * up: Android updates its input, and iOS and the web start theirs again, which on iOS
+ * also raises a keyboard the user had dismissed. The web ignores [autoCorrect], which
+ * its text area cannot ask for.
  *
  * An editor with [EditorLineLimits.SingleLine][com.darkrockstudios.texteditor.EditorLineLimits.SingleLine]
  * asks for single-line text, as a single-line `BasicTextField` does: its default action
