@@ -25,10 +25,35 @@ export const inputField = (page: Page) => page.locator('textarea');
 /** The editor's node in the accessibility tree. */
 export const editorNode = (page: Page) => page.getByRole('textbox', { name: 'Document' });
 
+/**
+ * The demo list's entry for [title], a button named by its title and then its description.
+ */
+export const demoEntry = (page: Page, title: string) =>
+	page.getByRole('button', { name: new RegExp(`^${title}\\b`) });
+
+/**
+ * Opens the demo [title] from the list, and waits for its editor to be the only one, holding
+ * text that [isItsText] accepts. The list opens beside a demo that has an editor of its own,
+ * which stays on screen until the click lands.
+ */
+export async function openDemo(page: Page, title: string, isItsText: (text: string) => boolean) {
+	await page.goto('/');
+	await clickThroughCanvas(page, demoEntry(page, title));
+	await expect
+		.poll(async () => {
+			try {
+				return (await editorNode(page).count()) === 1 && isItsText(await documentText(page));
+			} catch {
+				// The editor left the page between the two reads.
+				return false;
+			}
+		})
+		.toBe(true);
+}
+
 /** Opens the demo's blank editor and focuses it with a click near its top left. */
 export async function openBlankEditor(page: Page) {
-	await page.goto('/');
-	await clickThroughCanvas(page, page.getByRole('button', { name: 'Markdown Editor (Blank)' }));
+	await openDemo(page, 'Blank document', text => text === '');
 	await clickThroughCanvas(page, editorNode(page), { x: 20, y: 20 });
 	await expect(inputField(page)).toBeFocused();
 }

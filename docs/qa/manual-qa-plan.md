@@ -4,9 +4,9 @@ Covers the 47 commits landed on `main` since `v2.3.1`. Each section names the PR
 guards so a failure can be traced back to the change that introduced the risk.
 
 Run everything in the **sample app** (`:sampleApp`) unless a step says otherwise. The
-demos referenced by name are the buttons on the home menu: Rich Text Editor, Markdown
-Text Editor, Markdown Editor (Blank), Spell Check, Code Editor, Find Demo,
-RichTextView.
+demos referenced by name are the entries in its demo list: Rich text, Markdown, Blank
+document, Code editor, Spell check, Find, Read-only view (the RichTextView demo). A
+demo's switches are in its Options menu, the sliders button in its title bar.
 
 ## 0. Pre-flight (automated, before any manual work)
 
@@ -449,7 +449,7 @@ the platform's double-tap timeout (300 ms on desktop), not the OS mouse setting.
 
 Run 1 to 6 and 8 in Chrome, Firefox and Safari on desktop, and 7 on phones.
 
-1. Markdown Editor (Blank). Click in the editor and type. Right-click in the
+1. Blank document demo. Click in the editor and type. Right-click in the
    text, press Escape, and type `;` `=` and a letter. **Expect:** all three
    insert at the right-click position.
 2. Click the toolbar's Bold button, then type `;=a`. **Expect:** typed at the
@@ -672,7 +672,7 @@ Guards #57, #63, #66–#74, #78, #80.
 
 ### 5.1 Round-trip fidelity (the Roundtrip button)
 
-Markdown demo has a **Roundtrip** button that exports to markdown and re-imports.
+Markdown demo has a **Markdown round trip** button (in its title bar) that exports to markdown and re-imports.
 Press it after each of these and confirm the document is unchanged:
 
 1. Baseline demo document, untouched.
@@ -855,7 +855,7 @@ Desktop and Android unless a step says otherwise.
 
 ## 8b1. Read-only with a caret
 
-Rich Text Editor demo, turn the Read only switch (under the title) on.
+Rich text demo, turn on Read only in its Options menu.
 
 1. Desktop and web: click in the text. **Expect:** the caret shows and blinks; the
    arrows, Home, End, word and page motions move it; Shift with them selects; Ctrl+A
@@ -870,7 +870,7 @@ Rich Text Editor demo, turn the Read only switch (under the title) on.
 
 ### 8b1a. Growing with the text
 
-Rich Text Editor demo, Grow switch on (3 to 8 lines).
+Rich text demo, Grow with content on in its Options menu (3 to 8 lines).
 
 1. Empty the document. **Expect:** the editor is three lines tall.
 2. Type line after line. **Expect:** it grows a line at a time from the fourth,
@@ -883,7 +883,7 @@ Rich Text Editor demo, Grow switch on (3 to 8 lines).
 
 Rich Text Editor demo.
 
-1. Turn on 280 max. Type, paste a long text, dictate (Android, iOS), and on Android
+1. Turn on Limit to 280 characters. Type, paste a long text, dictate (Android, iOS), and on Android
    type with Gboard's suggestions. **Expect:** the document stops at 280 characters; a
    paste that does not fit is cut to what fits; the keyboard's own view of the text
    stays right (no doubled or lost letters after the cut); one undo removes a cut
@@ -901,7 +901,7 @@ Rich Text Editor demo.
 
 ## 8b2. Saved state (Android)
 
-Markdown Editor (Blank) demo, which uses `rememberSaveableTextEditorState`. Enable
+Blank document demo, which uses `rememberSaveableTextEditorState`. Enable
 Developer options > Don't keep activities.
 
 1. Type a few paragraphs; make a heading, a bullet list, a quote, a code fence, bold,
@@ -921,7 +921,7 @@ Access Bridge (Windows) or the AT-SPI bridge (Linux), which must be enabled firs
 
 ### 8c.1 A disabled editor
 
-1. Rich Text Editor demo, turn the Enabled switch (under the title) off (the toolbar hides with it,
+1. Rich text demo, turn Enabled off in its Options menu (the toolbar hides with it,
    since it edits the state directly).
 2. TalkBack and VoiceOver (iOS): move accessibility focus to the editor. **Expect:**
    the text is read, and the editor is announced as disabled (TalkBack: "disabled";

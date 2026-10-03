@@ -1,13 +1,11 @@
 package com.darkrockstudios.texteditor.sample
 
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.selection.toggleable
-import androidx.compose.material3.Button
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Switch
-import androidx.compose.material3.Text
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.SyncAlt
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -17,9 +15,6 @@ import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.EditorLineLimits
@@ -30,7 +25,6 @@ import com.darkrockstudios.texteditor.behaviors.AutoLink
 import com.darkrockstudios.texteditor.behaviors.SmartPunctuation
 import com.darkrockstudios.texteditor.markdown.MarkdownShortcuts
 import com.darkrockstudios.texteditor.markdown.withMarkdown
-import com.darkrockstudios.texteditor.rememberTextEditorStyle
 import com.darkrockstudios.texteditor.richstyle.ImageBlockSpanStyle
 import com.darkrockstudios.texteditor.richstyle.RichSpanStyle
 import com.darkrockstudios.texteditor.richstyle.SpellCheckStyle
@@ -48,10 +42,11 @@ enum class DemoContent {
 
 @Composable
 fun TextEditorDemoUi(
-	modifier: Modifier = Modifier,
-	navigateTo: (Destination) -> Unit,
+	demo: Demo,
+	onBack: (() -> Unit)?,
 	demoContent: DemoContent,
 	styles: RichTextStyles,
+	modifier: Modifier = Modifier,
 ) {
 	val imageProvider = rememberDemoImageProvider()
 	val state: TextEditorState = when (demoContent) {
@@ -114,128 +109,174 @@ fun TextEditorDemoUi(
 		}
 	}
 
-	var enabled by remember { mutableStateOf(true) }
-	var readOnly by remember { mutableStateOf(false) }
-	var grow by remember { mutableStateOf(false) }
-	var singleLine by remember { mutableStateOf(false) }
-	var softWrap by remember { mutableStateOf(true) }
-	var limited by remember { mutableStateOf(false) }
-	val editable = enabled && !readOnly
-	LaunchedEffect(state, limited) {
-		state.inputFilter = if (limited) EditorInputFilter.maxLength(280) else null
+	var options by remember { mutableStateOf(EditorOptions()) }
+	val editable = options.enabled && !options.readOnly
+	LaunchedEffect(state, options.limited) {
+		state.inputFilter = if (options.limited) EditorInputFilter.maxLength(280) else null
 	}
-	var punctuation by remember { mutableStateOf(NO_SMART_PUNCTUATION) }
-	LaunchedEffect(state, punctuation) {
+	LaunchedEffect(state, options.punctuation) {
 		state.editBehaviors.removeAll { it is SmartPunctuation }
-		if (punctuation != NO_SMART_PUNCTUATION) state.editBehaviors += punctuation
+		if (options.punctuation != NO_SMART_PUNCTUATION) state.editBehaviors += options.punctuation
 	}
-	var autoLink by remember { mutableStateOf(AutoLink(typed = false, pasted = false)) }
-	LaunchedEffect(state, autoLink) {
+	LaunchedEffect(state, options.autoLink) {
 		state.editBehaviors.removeAll { it is AutoLink }
 		// Ahead of the line block behavior, so Enter on a list item links too.
-		if (autoLink.typed || autoLink.pasted) state.editBehaviors.add(0, autoLink)
+		if (options.autoLink.typed || options.autoLink.pasted) state.editBehaviors.add(0, options.autoLink)
 	}
-	var markdownShortcuts by remember { mutableStateOf(false) }
-	LaunchedEffect(state, markdownShortcuts) {
+	LaunchedEffect(state, options.markdownShortcuts) {
 		state.editBehaviors.removeAll { it is MarkdownShortcuts }
 		// Ahead of the line block behavior, so Enter on a fence line reaches it.
-		if (markdownShortcuts) state.editBehaviors.add(0, MarkdownShortcuts())
+		if (options.markdownShortcuts) state.editBehaviors.add(0, MarkdownShortcuts())
 	}
 
-	Column(modifier = modifier) {
-		Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-			Text(
-				"Compose Text Editor",
-				modifier = Modifier.padding(8.dp).weight(1f),
-				style = MaterialTheme.typography.titleLarge,
-				fontWeight = FontWeight.Bold,
-				maxLines = 1,
-				overflow = TextOverflow.Ellipsis,
-			)
-			Text("${state.wordCount} words", style = MaterialTheme.typography.labelMedium)
-			if (editable && markdownExtension != null) {
-				Button(
-					onClick = {
-						val markdown = markdownExtension.exportAsMarkdown()
-						println("Roundtrip export:\n$markdown")
-						markdownExtension.importMarkdown(markdown)
-					},
-					modifier = Modifier.padding(end = 8.dp),
-				) { Text("Roundtrip") }
-			}
-			Button(onClick = { navigateTo(Destination.Menu) }) {
-				Text("X")
-			}
-		}
-
-		Row(
-			modifier = Modifier.horizontalScroll(rememberScrollState()),
-			verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-		) {
+	DemoScaffold(
+		demo = demo,
+		onBack = onBack,
+		modifier = modifier,
+		actions = {
 			// The editor's enabled and read-only flags gate user input only; the toolbar and
-			// Roundtrip act on the state directly, so they hide with them.
-			LabeledSwitch("Enabled", enabled) { enabled = it }
-			if (enabled) LabeledSwitch("Read only", readOnly) { readOnly = it }
-			LabeledSwitch("Grow", grow) { grow = it }
-			LabeledSwitch("Single line", singleLine) { singleLine = it }
-			LabeledSwitch("Soft wrap", softWrap) { softWrap = it }
-			LabeledSwitch("280 max", limited) { limited = it }
-			LabeledSwitch("Curly \"quotes\"", punctuation.doubleQuotes) {
-				punctuation = punctuation.copy(doubleQuotes = it)
+			// the round trip act on the state directly, so they hide with them.
+			if (editable && markdownExtension != null) {
+				ActionButton(Icons.Default.SyncAlt, "Markdown round trip") {
+					val markdown = markdownExtension.exportAsMarkdown()
+					println("Roundtrip export:\n$markdown")
+					markdownExtension.importMarkdown(markdown)
+				}
 			}
-			LabeledSwitch("Curly 'quotes'", punctuation.singleQuotes) {
-				punctuation = punctuation.copy(singleQuotes = it)
-			}
-			LabeledSwitch("-- em dash", punctuation.emDashes) { punctuation = punctuation.copy(emDashes = it) }
-			LabeledSwitch("a - b en dash", punctuation.enDashes) { punctuation = punctuation.copy(enDashes = it) }
-			LabeledSwitch("... ellipsis", punctuation.ellipses) { punctuation = punctuation.copy(ellipses = it) }
-			LabeledSwitch("Link typed URLs", autoLink.typed) { autoLink = autoLink.copy(typed = it) }
-			LabeledSwitch("Link pasted URLs", autoLink.pasted) { autoLink = autoLink.copy(pasted = it) }
-			if (markdownExtension != null) {
-				LabeledSwitch("Markdown shortcuts", markdownShortcuts) { markdownShortcuts = it }
-			}
-		}
-
+			DemoOptionsButton(
+				groups = editorOptionGroups(options, markdown = markdownExtension != null) { options = it },
+				modified = options != EditorOptions(),
+				onReset = { options = EditorOptions() },
+			)
+		},
+	) {
 		if (editable) {
 			TextEditorToolbar(
 				state = state,
 				markdownControls = markdownExtension != null,
+				modifier = Modifier.padding(horizontal = 12.dp),
 			)
 		}
 
 		val uriHandler = LocalUriHandler.current
-		val style = rememberTextEditorStyle(
-			placeholderText = "Enter text here",
-			textColor = MaterialTheme.colorScheme.onSurface,
-		)
+		val style = rememberFramedEditorStyle(placeholderText = "Enter text here")
+		// A grown editor must not be made to fill the height.
+		val fills = !options.grow && !options.singleLine
 
-		TextEditor(
-			state = state,
+		EditorFrame(
+			focused = state.hasFocus,
 			modifier = Modifier
-				.padding(8.dp)
-				// A grown editor must not be made to fill the height.
-				.then(if (grow || singleLine) Modifier.fillMaxWidth() else Modifier.fillMaxSize()),
-			style = style,
-			enabled = enabled,
-			readOnly = readOnly,
-			lineLimits = when {
-				singleLine -> EditorLineLimits.SingleLine
-				grow -> EditorLineLimits.MultiLine(minLines = 3, maxLines = 8)
-				else -> EditorLineLimits.Fill
-			},
-			softWrap = softWrap,
-			contentDescription = "Document",
-			onRichSpanClick = { span, clickType, _ ->
-				when (clickType) {
-					SpanClickType.TAP -> println("Touch tap on span: $span")
-					SpanClickType.PRIMARY_CLICK -> println("Left click on span: $span")
-					SpanClickType.SECONDARY_CLICK -> println("Right click on span: $span")
-				}
-				true
-			},
-			onLinkClick = uriHandler::openUri,
-		)
+				.padding(start = 12.dp, end = 12.dp, top = 8.dp)
+				.fillMaxWidth()
+				.then(if (fills) Modifier.weight(1f) else Modifier),
+		) {
+			TextEditor(
+				state = state,
+				modifier = if (fills) Modifier.fillMaxSize() else Modifier.fillMaxWidth(),
+				style = style,
+				enabled = options.enabled,
+				readOnly = options.readOnly,
+				lineLimits = when {
+					options.singleLine -> EditorLineLimits.SingleLine
+					options.grow -> EditorLineLimits.MultiLine(minLines = 3, maxLines = 8)
+					else -> EditorLineLimits.Fill
+				},
+				softWrap = options.softWrap,
+				contentDescription = "Document",
+				onRichSpanClick = { span, clickType, _ ->
+					when (clickType) {
+						SpanClickType.TAP -> println("Touch tap on span: $span")
+						SpanClickType.PRIMARY_CLICK -> println("Left click on span: $span")
+						SpanClickType.SECONDARY_CLICK -> println("Right click on span: $span")
+					}
+					true
+				},
+				onLinkClick = uriHandler::openUri,
+			)
+		}
+
+		if (!fills) Spacer(modifier = Modifier.weight(1f))
+		StatusBar("${state.wordCount} words")
 	}
+}
+
+private data class EditorOptions(
+	val enabled: Boolean = true,
+	val readOnly: Boolean = false,
+	val singleLine: Boolean = false,
+	val grow: Boolean = false,
+	val softWrap: Boolean = true,
+	val limited: Boolean = false,
+	val punctuation: SmartPunctuation = NO_SMART_PUNCTUATION,
+	val autoLink: AutoLink = AutoLink(typed = false, pasted = false),
+	val markdownShortcuts: Boolean = false,
+)
+
+private fun editorOptionGroups(
+	options: EditorOptions,
+	markdown: Boolean,
+	onChange: (EditorOptions) -> Unit,
+): List<DemoOptionGroup> {
+	val punctuation = options.punctuation
+	val autoLink = options.autoLink
+	return listOfNotNull(
+		DemoOptionGroup(
+			"Editor",
+			listOf(
+				DemoOption("Enabled", options.enabled) { onChange(options.copy(enabled = it)) },
+				DemoOption("Read only", options.readOnly, enabled = options.enabled) {
+					onChange(options.copy(readOnly = it))
+				},
+				DemoOption("Single line", options.singleLine) { onChange(options.copy(singleLine = it)) },
+				DemoOption("Grow with content", options.grow, supportingText = "3 to 8 lines") {
+					onChange(options.copy(grow = it))
+				},
+				DemoOption("Soft wrap", options.softWrap) { onChange(options.copy(softWrap = it)) },
+				DemoOption("Limit to 280 characters", options.limited) { onChange(options.copy(limited = it)) },
+			),
+		),
+		DemoOptionGroup(
+			"Smart punctuation",
+			listOf(
+				DemoOption("Curly double quotes", punctuation.doubleQuotes, supportingText = "\"a\" to \u201Ca\u201D") {
+					onChange(options.copy(punctuation = punctuation.copy(doubleQuotes = it)))
+				},
+				DemoOption("Curly single quotes", punctuation.singleQuotes, supportingText = "'a' to \u2018a\u2019") {
+					onChange(options.copy(punctuation = punctuation.copy(singleQuotes = it)))
+				},
+				DemoOption("Em dashes", punctuation.emDashes, supportingText = "-- to \u2014") {
+					onChange(options.copy(punctuation = punctuation.copy(emDashes = it)))
+				},
+				DemoOption("En dashes", punctuation.enDashes, supportingText = "a - b to a \u2013 b") {
+					onChange(options.copy(punctuation = punctuation.copy(enDashes = it)))
+				},
+				DemoOption("Ellipses", punctuation.ellipses, supportingText = "... to \u2026") {
+					onChange(options.copy(punctuation = punctuation.copy(ellipses = it)))
+				},
+			),
+		),
+		DemoOptionGroup(
+			"Links",
+			listOf(
+				DemoOption("Link typed URLs", autoLink.typed) {
+					onChange(options.copy(autoLink = autoLink.copy(typed = it)))
+				},
+				DemoOption("Link pasted URLs", autoLink.pasted) {
+					onChange(options.copy(autoLink = autoLink.copy(pasted = it)))
+				},
+			),
+		),
+		if (markdown) {
+			DemoOptionGroup(
+				"Markdown",
+				listOf(
+					DemoOption("Markdown shortcuts", options.markdownShortcuts, supportingText = "Format as you type: **bold**, # heading") {
+						onChange(options.copy(markdownShortcuts = it))
+					},
+				),
+			)
+		} else null,
+	)
 }
 
 private val NO_SMART_PUNCTUATION = SmartPunctuation(
@@ -245,16 +286,3 @@ private val NO_SMART_PUNCTUATION = SmartPunctuation(
 	enDashes = false,
 	ellipses = false,
 )
-
-@Composable
-internal fun LabeledSwitch(label: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
-	Row(
-		modifier = Modifier
-			.toggleable(value = checked, role = Role.Switch, onValueChange = onCheckedChange)
-			.padding(horizontal = 8.dp),
-		verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-	) {
-		Text(label, modifier = Modifier.padding(end = 4.dp))
-		Switch(checked = checked, onCheckedChange = null)
-	}
-}

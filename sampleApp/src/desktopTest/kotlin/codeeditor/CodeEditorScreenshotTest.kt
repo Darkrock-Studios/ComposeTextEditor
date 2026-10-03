@@ -11,13 +11,18 @@ import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.captureToImage
-import androidx.compose.ui.test.assertIsOn
+import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.pressKey
+import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.runComposeUiTest
 import androidx.compose.ui.unit.dp
 import com.darkrockstudios.texteditor.sample.CodeEditorDemoUi
+import com.darkrockstudios.texteditor.sample.Demo
 import java.io.File
 import javax.imageio.ImageIO
 import kotlin.math.abs
@@ -34,7 +39,7 @@ class CodeEditorScreenshotTest {
 		setContent {
 			MaterialTheme(colorScheme = if (darkMode) darkColorScheme() else lightColorScheme()) {
 				Surface(modifier = Modifier.size(720.dp, 640.dp).testTag("demo")) {
-					CodeEditorDemoUi(navigateTo = {}, isDarkMode = darkMode)
+					CodeEditorDemoUi(demo = Demo.Code, onBack = null, isDarkMode = darkMode)
 				}
 			}
 		}
@@ -53,10 +58,12 @@ class CodeEditorScreenshotTest {
 		}
 		waitUntil(timeoutMillis = 10_000) { keywordPixels() > 50 }
 		if (wrap) {
+			onNodeWithContentDescription("Options").performClick()
 			onNodeWithText("Soft wrap").performClick()
 			waitForIdle()
 			// The data class line wraps, and its keywords keep their colour.
-			onNodeWithText("Soft wrap").assertIsOn()
+			onNodeWithText("Soft wrap").assertIsSelected()
+			onNodeWithText("Soft wrap").performKeyInput { pressKey(Key.Escape) }
 			waitUntil(timeoutMillis = 10_000) { keywordPixels() > 50 }
 		}
 		val file = File("build/screenshots/$name.png")

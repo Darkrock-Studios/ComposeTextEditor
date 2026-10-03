@@ -17,7 +17,11 @@ final class EditorTypingSmokeTests: XCTestCase {
         let app = XCUIApplication()
         app.launch()
 
-        app.buttons["Markdown Editor (Blank)"].tap()
+        // A list entry's label is its title then its description.
+        app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label BEGINSWITH %@", "Blank document"))
+            .firstMatch
+            .tap()
 
         let editor = app.descendants(matching: .any)["Document"]
         XCTAssertTrue(editor.waitForExistence(timeout: 20), "the blank editor did not open")
