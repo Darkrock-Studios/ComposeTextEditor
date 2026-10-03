@@ -108,19 +108,19 @@ the [API reference & recipes](https://darkrock-studios.github.io/ComposeTextEdit
 
 Text Editor:
 
-`implementation("com.darkrockstudios:composetexteditor:3.0.0")`
+`implementation("com.darkrockstudios:composetexteditor:3.0.1")`
 
 Markdown addon, to use the editor as a markdown editor (`state.withMarkdown()`):
 
-`implementation("com.darkrockstudios:composetexteditor-markdown:3.0.0")`
+`implementation("com.darkrockstudios:composetexteditor-markdown:3.0.1")`
 
 Spell Checking addon:
 
-`implementation("com.darkrockstudios:composetexteditor-spellcheck:3.0.0")`
+`implementation("com.darkrockstudios:composetexteditor-spellcheck:3.0.1")`
 
 Find & Replace addon:
 
-`implementation("com.darkrockstudios:composetexteditor-find:3.0.0")`
+`implementation("com.darkrockstudios:composetexteditor-find:3.0.1")`
 
 Upgrading from 2.x (markdown as its own module, decoration layers,
 shortcuts matched on the keyboard layout): see [docs/MIGRATION.md](docs/MIGRATION.md).
