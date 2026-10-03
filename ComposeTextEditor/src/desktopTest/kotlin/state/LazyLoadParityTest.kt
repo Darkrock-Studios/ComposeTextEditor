@@ -3,21 +3,27 @@ package state
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.font.createFontFamilyResolver
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.LineWrap
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.richstyle.CodeFenceSpanStyle
 import com.darkrockstudios.texteditor.richstyle.HighlightSpanStyle
 import com.darkrockstudios.texteditor.richstyle.OrderedListSpanStyle
+import com.darkrockstudios.texteditor.richstyle.ParagraphFormatSpanStyle
 import com.darkrockstudios.texteditor.richstyle.RichSpan
 import com.darkrockstudios.texteditor.state.DocumentSnapshot
 import com.darkrockstudios.texteditor.state.TextEditorState
 import kotlinx.coroutines.test.TestScope
 import kotlin.math.abs
+import kotlin.math.floor
 import kotlin.math.roundToInt
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -61,10 +67,12 @@ class LazyLoadParityTest {
 		return DocumentSnapshot(lines, spans)
 	}
 
-	private fun editor(viewportHeight: Float): TextEditorState {
+	private fun editor(viewportHeight: Float, document: DocumentSnapshot = document()): TextEditorState {
 		val state = TextEditorState(scope = TestScope(), measurer = measurer())
+		// For a paragraph format's spacing, which is in dp.
+		state.density = Density(1f, 1f)
 		state.onViewportSizeChange(Size(width, viewportHeight))
-		state.setDocument(document())
+		state.setDocument(document)
 		return state
 	}
 
@@ -106,11 +114,40 @@ class LazyLoadParityTest {
 		fun lineTop() = state.scrollManager.calculateOffsetYPosition(CharLineOffset(line, 0))
 		// The scroll is whole pixels, so the line's top can sit half of one off it.
 		state.scrollState.scrollTo(lineTop().roundToInt())
-		assertTrue(abs(lineTop() - state.scrollState.value) <= 0.5f)
+		val before = lineTop() - state.scrollState.value
+		assertTrue(abs(before) <= 0.5f)
 
 		state.settleLayout()
-		val drift = lineTop() - state.scrollState.value
+		// Each slice scrolls to the whole pixel nearest the anchor, so the line can move by half of one.
+		val drift = lineTop() - state.scrollState.value - before
 		assertTrue(abs(drift) <= 0.5f, "the top line drifted $drift px while the lines above it settled")
+	}
+
+	@Test
+	fun `half a pixel of the line above does not take the anchor from the top line`() {
+		val line = 200
+		// One row a line, so every top is a sum of row heights, but the line above is far
+		// taller shaped than estimated; [shift] spaces every line below line 1.
+		fun document(shift: Dp) = DocumentSnapshot(
+			(0 until lineCount).map { index ->
+				if (index == line - 1) AnnotatedString("x$index", SpanStyle(fontSize = 40.sp)) else AnnotatedString("x$index")
+			},
+			setOf(RichSpan(TextEditorRange(CharLineOffset(1, 0), CharLineOffset(1, 2)), ParagraphFormatSpanStyle(spaceAfter = shift))),
+		)
+		fun TextEditorState.lineTop(at: Int) = scrollManager.calculateOffsetYPosition(CharLineOffset(at, 0))
+		val unshifted = editor(viewportHeight = 600f, document(0.dp)).lineTop(line)
+		// Puts the line's top half a pixel below a whole one, whatever the platform's font metrics.
+		val shift = (1.5f - (unshifted - floor(unshifted))) % 1f
+		val state = editor(viewportHeight = 600f, document(shift.dp))
+		val top = state.lineTop(line)
+		assertEquals(0.5f, top - floor(top))
+		state.scrollState.scrollTo(floor(top).toInt())
+		val aboveHeight = top - state.lineTop(line - 1)
+
+		state.settleLayout()
+		assertTrue(state.lineTop(line) - state.lineTop(line - 1) > aboveHeight + 1f, "the line above should grow as it settles, or the test proves nothing")
+		val drift = state.lineTop(line) - state.scrollState.value - 0.5f
+		assertTrue(abs(drift) <= 0.5f, "the top line drifted $drift px, following the half pixel of the line above it")
 	}
 
 	@Test

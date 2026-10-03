@@ -394,7 +394,7 @@ left behind cannot stand in, and shape now):
    viewport first, else the nearer of two walks continuing above and below
    it from where they left off; a viewport that jumped past them leaves a
    band behind, which one sweep finds when both walks run out. Every slice
-   scrolls so the anchor line (that of the first row showing at least half a
+   scrolls so the anchor line (that of the first row showing more than half a
    pixel) keeps the offset it had when the settling began, so what is on
    screen stays put whichever side the slice was on; the offset is kept
    across slices rather than read back from each whole-pixel scroll, which
