@@ -2141,6 +2141,14 @@ class TextEditorState private constructor(
 			return
 		}
 
+		if (partial == null) {
+			val provisional = layoutLazily(lines, spans)
+			if (provisional != null) {
+				publishRows(provisional)
+				reshapeLazily(provisional)
+				return
+			}
+		}
 		val laidOut = if (partial == null) layoutAll(lines, spans) else layoutPartial(previous!!, partial, lines, spans)
 		if (laidOut === previous) return
 		if (partial == null) {
@@ -2159,6 +2167,8 @@ class TextEditorState private constructor(
 	private fun publishRows(laidOut: RowList) {
 		rows = laidOut
 		_lineOffsets = laidOut
+		// A pass that moves lines leaves the anchor's line index behind; a slice sets it again.
+		settleAnchor = null
 		// Rounded up so the last row's fraction of a pixel is still in reach.
 		scrollManager.updateContentHeight(ceil(laidOut.lastRowBottom()).toInt())
 		// A space past the widest line leaves room for the caret and a selected line break.
@@ -2175,6 +2185,16 @@ class TextEditorState private constructor(
 	private var settleAbove = -1
 	private var settleBelow = Int.MAX_VALUE
 
+	/** The line at the top of the viewport and the scroll's offset within it, as of [scroll]. */
+	private class SettleAnchor(val line: Int, val offset: Double, val scroll: Int)
+
+	/**
+	 * What the settling slices keep in place. Kept across slices rather than derived from
+	 * each one's scroll: a slice scrolls to a whole pixel, and an anchor read back from
+	 * that pixel would drift by up to half of one per slice.
+	 */
+	private var settleAnchor: SettleAnchor? = null
+
 	/**
 	 * Reshapes lazily: the lines with a row in the viewport, and a viewport's
 	 * worth beyond each edge, are shaped now; every other line keeps its layout at the
@@ -2188,7 +2208,7 @@ class TextEditorState private constructor(
 		val keepCaret = isFocused && scrollManager.isCursorInViewOrScrolling()
 		val scroll = scrollState.value.toFloat()
 		val viewportHeight = viewportSize.height
-		val anchorLine = previous.lineOfRow(previous.searchLastRowAtOrAbove(scroll).coerceAtLeast(0))
+		val anchorLine = previous.anchorLineAt(scroll)
 		val anchorOffset = scroll - previous.lineTop(anchorLine)
 		val first = previous.lineOfRow(previous.searchFirstRowEndingAtOrBelow(scroll - viewportHeight).coerceAtMost(previous.size - 1))
 		val last = previous.lineOfRow(previous.searchLastRowAtOrAbove(scroll + 2 * viewportHeight).coerceAtLeast(0))
@@ -2200,6 +2220,7 @@ class TextEditorState private constructor(
 		// Kept in the top padding when it was there, else within the anchor line.
 		val within = anchorOffset.toDouble().coerceIn(minOf(anchorOffset.toDouble(), 0.0), (settled.layoutOf(anchorLine).height - 1).coerceAtLeast(0f).toDouble())
 		scrollState.scrollTo((settled.lineTop(anchorLine) + within).roundToInt())
+		settleAnchor = SettleAnchor(anchorLine, within, scrollState.value)
 		settleAbove = first - 1
 		settleBelow = last + 1
 		if (first > 0 || last < previous.lineCount - 1) {
@@ -2217,10 +2238,18 @@ class TextEditorState private constructor(
 	private fun isProvisional(rows: RowList, line: Int): Boolean = rows.layoutOf(line).generation != layoutInputGeneration
 
 	/**
+	 * The line to keep in place while rows settle: that of the first row showing at least
+	 * half a pixel at [scroll]. A row ending within that of the scroll is not the one the
+	 * eye reads as the top, and keeping it in place would move the one that is by
+	 * whatever its own height was off.
+	 */
+	private fun RowList.anchorLineAt(scroll: Float): Int = lineOfRow(searchFirstRowEndingAtOrBelow(scroll + 0.5f).coerceIn(0, size - 1))
+
+	/**
 	 * Shapes lines [first] through [last] at the current inputs, keeping their facts,
-	 * and splices them in. The scroll moves by whatever that moved the top of the line
-	 * at the top of the viewport, so what is on screen stays where it is; an animated
-	 * scroll under way would write over that, so it is stopped.
+	 * and splices them in. The scroll follows the line at the top of the viewport, at the
+	 * offset within it the settling started with, so what is on screen stays where it is;
+	 * an animated scroll under way would write over that, so it is stopped.
 	 */
 	private fun reshapeLines(first: Int, last: Int) {
 		val current = rows ?: return
@@ -2230,8 +2259,11 @@ class TextEditorState private constructor(
 		val shaper = LineShaper()
 		val inputs = lineInputs()
 		val scrollBefore = scrollState.value
-		val topLine = if (current.size == 0) 0 else current.lineOfRow(current.searchLastRowAtOrAbove(scrollBefore.toFloat()).coerceIn(0, current.size - 1))
-		val topBefore = current.lineTop(topLine)
+		// Derived afresh once anything else has scrolled.
+		val anchor = settleAnchor?.takeIf { it.scroll == scrollBefore && it.line < current.lineCount } ?: run {
+			val topLine = if (current.size == 0) 0 else current.anchorLineAt(scrollBefore.toFloat())
+			SettleAnchor(topLine, scrollBefore - current.lineTop(topLine), scrollBefore)
+		}
 		val layouts = ArrayList<LineLayout>(last - first + 1)
 		for (line in first..last) {
 			val onLine = spans.spansOn(line)
@@ -2240,11 +2272,12 @@ class TextEditorState private constructor(
 		}
 		val settled = current.splice(first, last + 1, layouts, spans)
 		publishRows(settled)
-		val shift = (settled.lineTop(topLine) - topBefore).roundToInt()
-		if (shift != 0) {
+		val target = (settled.lineTop(anchor.line) + anchor.offset).roundToInt()
+		if (target != scrollBefore) {
 			scrollManager.stopScrolling()
-			scrollState.scrollTo(scrollBefore + shift)
+			scrollState.scrollTo(target)
 		}
+		settleAnchor = SettleAnchor(anchor.line, anchor.offset, scrollState.value)
 	}
 
 	/**
@@ -2324,6 +2357,35 @@ class TextEditorState private constructor(
 
 	/** The inputs of one pass besides the shaping: density, viewport width, the paragraph spacing in pixels and the wrapping. */
 	private fun lineInputs() = LineInputs(density, viewportSize.width, density?.run { paragraphSpacing.toPx() } ?: 0f, softWrap)
+
+	/**
+	 * A long document's pass without the shaping: every line gets a provisional layout
+	 * standing in for its own, with its facts derived in line order as a full pass derives
+	 * them, so the lines in view can be shaped now and the rest settle between frames
+	 * (section 12 of `docs/design/incremental-relayout.md`). Null when the document is
+	 * short enough, or the viewport tall enough, to shape at once: the lazy pass shapes
+	 * three viewports of lines anyway, so under that it only adds the settling.
+	 */
+	private fun layoutLazily(lines: LineList, spans: SpanIndex): RowList? {
+		if (lines.size < LAZY_LAYOUT_MIN_LINES) return null
+		val lengths = IntArray(lines.size) { lines[it].length }
+		var longest = 0
+		for (line in 1 until lines.size) if (lengths[line] > lengths[longest]) longest = line
+		// Invisible, so a provisional row drawn before its line is shaped shows nothing
+		// rather than the longest line's text.
+		val text = lines[longest].text
+		val sentinel = LineShaper().shape(AnnotatedString(text, listOf(AnnotatedString.Range(SpanStyle(color = Color.Transparent), 0, text.length))))
+		val facts = LineFacts(spans)
+		val inputs = lineInputs()
+		val layouts = ArrayList<LineLayout>(lines.size)
+		for (line in 0 until lines.size) {
+			facts.next(line)
+			val onLine = spans.spansOn(line)
+			layouts += LineLayout.provisional(sentinel, lengths[line], line, onLine, onLine.paragraphFormat(line), inputs, facts)
+		}
+		val provisional = RowList.of(layouts, spans)
+		return provisional.takeIf { it.lastRowBottom() > 3 * viewportSize.height }
+	}
 
 	/** A full pass: every line shaped, every fact derived in line order. */
 	private fun layoutAll(lines: LineList, spans: SpanIndex): RowList {
@@ -2955,6 +3017,12 @@ class TextEditorState private constructor(
 		setText(initialText ?: AnnotatedString(""))
 	}
 }
+
+/**
+ * The fewest lines a pass lays out lazily, shaping the lines around the viewport now and
+ * the rest between frames: under this, shaping every line costs a frame at most.
+ */
+internal const val LAZY_LAYOUT_MIN_LINES = 256
 
 /** The scope of a borrowing state no composition has lent one: cancelled, so what it launches never runs. */
 private val UnboundScope = CoroutineScope(Job().apply { cancel() })

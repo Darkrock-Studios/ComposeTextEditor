@@ -127,6 +127,17 @@ class LongDocumentBenchmark {
 		state.cursor.updatePosition(nearStart)
 		state.scrollManager.scrollState.scrollTo(state.scrollManager.calculateOffsetYPosition(nearStart).toInt())
 
+		// A load lays the document out: the lines around the viewport now, the rest settling.
+		val text = document()
+		measure("load (setText and first layout)", warmup = 3, runs = 10) { state.setText(text) }
+		measure("load, settled", warmup = 3, runs = 10) {
+			state.setText(text)
+			state.settleLayout()
+		}
+		state.cursor.updatePosition(nearStart)
+		state.scrollManager.scrollState.scrollTo(state.scrollManager.calculateOffsetYPosition(nearStart).toInt())
+		state.settleLayout()
+
 		measure("idle blink frame (draw)", warmup = 200, runs = 500) { state.drawFrame(canvas) }
 		// The same frame over a 2,000-character document, which fills the viewport too.
 		val short = editor(lines = 20, softWrap = softWrap).also { it.cursor.updatePosition(CharLineOffset(10, 40)) }

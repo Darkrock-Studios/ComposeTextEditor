@@ -71,6 +71,25 @@ internal class LineLayout(
 		fun of(layout: TextLayoutResult, line: Int, spans: List<RichSpan>, format: ParagraphFormatSpanStyle?, inputs: LineInputs, facts: LineFacts, generation: Int): LineLayout =
 			of(layout, line, spans, format, inputs, facts.orderedListNumber, facts.codeFenceBoundary, facts.counters, generation)
 
+		/**
+		 * The layout of a line not shaped yet, standing in until the settling reshape
+		 * reaches it: [sentinel], the pass's one shaping of its longest line, with as many
+		 * of its rows as [length] characters fill at the sentinel's characters per row.
+		 * Every index within the line is one within the sentinel, so the caret and a hit
+		 * test on the line get an answer, approximate as any provisional row's is. See
+		 * `docs/design/incremental-relayout.md`, section 12.
+		 */
+		fun provisional(sentinel: TextLayoutResult, length: Int, line: Int, spans: List<RichSpan>, format: ParagraphFormatSpanStyle?, inputs: LineInputs, facts: LineFacts): LineLayout {
+			val sentinelRows = maxOf(1, sentinel.multiParagraph.lineCount)
+			val perRow = maxOf(1, (sentinel.layoutInput.text.length + sentinelRows - 1) / sentinelRows)
+			var rows = ((length + perRow) / perRow).coerceIn(1, sentinelRows)
+			// A row the sentinel starts past the line's end is none of the line's.
+			while (rows > 1 && sentinel.getLineStart(rows - 1) > length) rows--
+			val rowStarts = IntArray(rows) { sentinel.getLineStart(it) }
+			val rowEnds = IntArray(rows) { if (it == rows - 1) length else minOf(sentinel.getLineEnd(it), length) }
+			return resolve(sentinel, line, rowStarts, rowEnds, spans, format, inputs, facts.orderedListNumber, facts.codeFenceBoundary, facts.counters, UNSHAPED_GENERATION)
+		}
+
 		private fun of(
 			layout: TextLayoutResult,
 			line: Int,
@@ -137,6 +156,9 @@ internal class LineLayout(
 
 	}
 }
+
+/** The [LineLayout.generation] of a line never shaped: under no pass's inputs, so provisional under every one. */
+internal const val UNSHAPED_GENERATION = Int.MIN_VALUE
 
 /**
  * How wide the text of this layout's widest row is, from the side the paragraph starts on

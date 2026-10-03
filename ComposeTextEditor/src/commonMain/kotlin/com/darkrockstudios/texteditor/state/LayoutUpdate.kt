@@ -6,7 +6,11 @@ package com.darkrockstudios.texteditor.state
  * the pass can re-measure only those and reuse the previous layout for the rest.
  */
 internal sealed class LayoutUpdate {
-	/** Re-measure every line, now. A document load, and the fallback when a partial pass cannot be trusted. */
+	/**
+	 * Re-measure every line: a document load, and the fallback when a partial pass cannot
+	 * be trusted. Now, unless the document is long, when the lines around the viewport
+	 * are measured now and the rest settle between frames, each provisional until then.
+	 */
 	data object Full : LayoutUpdate()
 
 	/**

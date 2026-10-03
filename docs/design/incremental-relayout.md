@@ -394,8 +394,11 @@ left behind cannot stand in, and shape now):
    viewport first, else the nearer of two walks continuing above and below
    it from where they left off; a viewport that jumped past them leaves a
    band behind, which one sweep finds when both walks run out. Every slice
-   moves the scroll by whatever it moved the top line's top, so what is on
-   screen stays put whichever side the slice was on. When the job finishes
+   scrolls so the anchor line (that of the first row showing at least half a
+   pixel) keeps the offset it had when the settling began, so what is on
+   screen stays put whichever side the slice was on; the offset is kept
+   across slices rather than read back from each whole-pixel scroll, which
+   would drift it by up to half a pixel a slice. When the job finishes
    it scrolls the caret into view if the editor is focused. A new `Reshape`
    cancels the job and starts over; an edit's partial pass shapes its own
    lines at the current inputs and leaves the job running, since the row
@@ -414,13 +417,11 @@ whose range settles as heights do) reads what is there. The total content
 height is provisional the same way, as it is in a browser during a resize.
 
 The first layout of a document (no rows yet), a guard degradation, and a
-`Full` posted explicitly stay synchronous: `Full` keeps its meaning of "shape
-everything now", which the parity test and the tests that count a full pass
-depend on, and a document with no old layouts has nothing provisional to
-show. Tests and benchmarks call `settleLayout()` to run the job to the end
-synchronously. `LazyReshapeCostTest` pins the lines a width change shapes at
-once, the settling, the anchoring, an edit during settling, and the forcing
-from drawing and the caret scroll.
+`Full` posted explicitly shape everything now when the document is short, and
+lay it out lazily otherwise (section 12). Tests and benchmarks call
+`settleLayout()` to run the job to the end synchronously. `LazyReshapeCostTest`
+pins the lines a width change shapes at once, the settling, the anchoring, an
+edit during settling, and the forcing from drawing and the caret scroll.
 
 ## 11. Paragraph spacing and formatting
 
@@ -479,3 +480,40 @@ Markdown has no paragraph spacing, alignment, indent or line height: export
 writes the text without them and import reads none, so a document that
 round-trips through markdown loses its paragraph formatting. HTML carries all of it as inline styles on the paragraph's element
 (`html/ParagraphFormatCss.kt`).
+
+## 12. Lazy load
+
+A full pass (a load, a `Full` the guards degraded to) shaped every line before
+the first frame: about 55 us a line on desktop JVM, so 110 ms for 2,000 lines
+and half a second for a novel, on the UI thread. Section 10's machinery
+already lets rows stand in while lines settle; what it lacked was a row for a
+line never shaped, since a `LineLayout` carries a `TextLayoutResult` and every
+consumer reads it.
+
+A long document (at least `LAZY_LAYOUT_MIN_LINES`, 256, and more than three
+viewports tall at the estimate below; a shorter one, or one in a viewport
+tall enough to show it, shapes at once as before) gets a **provisional
+layout** per line instead: one shaping of the document's longest line, the
+sentinel, shared by every line. A line's rows are as many of the sentinel's
+as its length fills at the sentinel's characters per row, the sentinel's wrap
+starts with the line's end clipped on, so its row count and height are an
+estimate from its length and the running totals place the lines after it.
+Every character index within a line is one within the sentinel, so the caret,
+a hit test and a semantics query on an unshaped line get an answer where a
+row shaped under older inputs would have given one, and as approximate. The
+sentinel is shaped in a transparent colour: a provisional row that reached the
+canvas would draw nothing rather than the longest line's text. The facts are
+derived for every line in the usual walk, since they need no shaping, and the
+generation is `UNSHAPED_GENERATION`, which no pass's inputs ever match.
+
+The pass then runs as a width change does (section 10): the lines with a row
+in the viewport and a viewport beyond each edge are shaped now, the scroll is
+anchored to its top line, and the settling job shapes the rest a slice at a
+time, the viewport first. Drawing forces the rows it draws, the caret scroll
+forces the caret's line, and an edit during settling shapes its own lines.
+Once settled, the rows are the ones a synchronous pass would have produced:
+the same shaper, the same facts. `LazyLoadCostTest` pins what a load shapes
+at once, what settling adds, and that a short document or a tall viewport
+still shapes at once; `LazyLoadParityTest` compares the settled rows of a
+lazy load with a pass that shaped everything, and checks the scroll anchoring
+across the settling.
