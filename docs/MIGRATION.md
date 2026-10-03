@@ -1,7 +1,7 @@
 # Migration
 
-What changes for a host, such as Hammer, upgrading from 2.8.0 to the next
-release. Two changes need code: markdown moved into its own module, and a
+What changes for a host, such as Hammer, upgrading from 2.8.0 to
+3.0.0. Two changes need code: markdown moved into its own module, and a
 host's own key bindings should match letters on `layoutKey`. The rest is new
 API that existing code does not need to touch, with notes for a host that
 adopts it.
