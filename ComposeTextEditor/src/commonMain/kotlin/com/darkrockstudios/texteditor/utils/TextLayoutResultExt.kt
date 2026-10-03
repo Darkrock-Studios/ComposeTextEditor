@@ -6,6 +6,7 @@ import androidx.compose.ui.graphics.PathSegment
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.style.ResolvedTextDirection
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.sp
 import kotlin.math.max
 import kotlin.math.min
 
@@ -45,8 +46,19 @@ fun TextLayoutResult.lineTextLeft(lineIndex: Int, density: Density?): Float {
 	val indent = layoutInput.text.paragraphStyles.firstOrNull()?.item?.textIndent?.firstLine
 		?: layoutInput.style.textIndent?.firstLine
 		?: return measured
-	return max(measured, with(density) { indent.toPx() })
+	val indentPx = with(density) {
+		when {
+			indent.isSp -> indent.toPx()
+			// The platforms resolve an em indent against the paragraph's font size.
+			indent.isEm -> indent.value * (layoutInput.style.fontSize.takeIf { it.isSp } ?: DEFAULT_FONT_SIZE).toPx()
+			else -> return measured
+		}
+	}
+	return max(measured, indentPx)
 }
+
+/** What Compose lays text out at when the style sets no size. */
+private val DEFAULT_FONT_SIZE = 14.sp
 
 /**
  * The boxes the characters in [start, end) cover on row [lineIndex], left to right, as

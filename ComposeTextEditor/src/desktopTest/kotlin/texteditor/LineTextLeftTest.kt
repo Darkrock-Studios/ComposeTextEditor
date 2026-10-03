@@ -9,6 +9,7 @@ import androidx.compose.ui.text.style.ResolvedTextDirection
 import androidx.compose.ui.text.style.TextIndent
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import com.darkrockstudios.texteditor.utils.lineTextLeft
 import io.mockk.every
@@ -31,6 +32,7 @@ class LineTextLeftTest {
 		text: AnnotatedString,
 		lineLeft: Float,
 		horizontalAtLineStart: Float,
+		style: TextStyle = TextStyle.Default,
 	): TextLayoutResult = mockk<TextLayoutResult>().also { layout ->
 		every { layout.getLineStart(any()) } returns 0
 		every { layout.getLineLeft(any()) } returns lineLeft
@@ -38,10 +40,10 @@ class LineTextLeftTest {
 		every { layout.multiParagraph.getParagraphDirection(any()) } returns ResolvedTextDirection.Ltr
 		every { layout.getBidiRunDirection(any()) } returns ResolvedTextDirection.Ltr
 		every { layout.layoutInput.text } returns text
-		every { layout.layoutInput.style } returns TextStyle.Default
+		every { layout.layoutInput.style } returns style
 	}
 
-	private fun indentedEmptyLine(): AnnotatedString = buildAnnotatedString {
+	private fun indentedEmptyLine(indent: TextIndent = this.indent): AnnotatedString = buildAnnotatedString {
 		withStyle(ParagraphStyle(textIndent = indent)) { append("") }
 	}
 
@@ -61,6 +63,25 @@ class LineTextLeftTest {
 		val layout = layout(indentedEmptyLine(), lineLeft = 0f, horizontalAtLineStart = 0f)
 
 		assertEquals(24f, layout.lineTextLeft(0, density), 0.5f)
+	}
+
+	@Test
+	fun `an em indent on an empty line resolves against the paragraph font size`() {
+		val layout = layout(
+			indentedEmptyLine(TextIndent(firstLine = 1.5.em)),
+			lineLeft = 0f,
+			horizontalAtLineStart = 0f,
+			style = TextStyle(fontSize = 16.sp),
+		)
+
+		assertEquals(24f, layout.lineTextLeft(0, density), 0.5f)
+	}
+
+	@Test
+	fun `an em indent with no font size set uses the layout default`() {
+		val layout = layout(indentedEmptyLine(TextIndent(firstLine = 1.em)), lineLeft = 0f, horizontalAtLineStart = 0f)
+
+		assertEquals(14f, layout.lineTextLeft(0, density), 0.5f)
 	}
 
 	@Test
