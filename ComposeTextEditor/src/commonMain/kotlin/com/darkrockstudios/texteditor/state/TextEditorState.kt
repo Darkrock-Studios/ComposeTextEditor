@@ -2238,12 +2238,12 @@ class TextEditorState private constructor(
 	private fun isProvisional(rows: RowList, line: Int): Boolean = rows.layoutOf(line).generation != layoutInputGeneration
 
 	/**
-	 * The line to keep in place while rows settle: that of the first row showing at least
-	 * half a pixel at [scroll]. A row ending within that of the scroll is not the one the
+	 * The line to keep in place while rows settle: that of the first row showing more
+	 * than half a pixel at [scroll]. A row showing no more than that is not the one the
 	 * eye reads as the top, and keeping it in place would move the one that is by
 	 * whatever its own height was off.
 	 */
-	private fun RowList.anchorLineAt(scroll: Float): Int = lineOfRow(searchFirstRowEndingAtOrBelow(scroll + 0.5f).coerceIn(0, size - 1))
+	private fun RowList.anchorLineAt(scroll: Float): Int = lineOfRow(searchFirstRowEndingBelow(scroll + 0.5f).coerceIn(0, size - 1))
 
 	/**
 	 * Shapes lines [first] through [last] at the current inputs, keeping their facts,

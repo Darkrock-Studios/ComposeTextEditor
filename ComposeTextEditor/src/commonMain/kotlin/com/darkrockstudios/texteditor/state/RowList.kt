@@ -335,6 +335,9 @@ internal class RowList private constructor(
 	/** Index of the first row whose bottom is at or below content-space [y], or the row count when none reaches it. */
 	fun searchFirstRowEndingAtOrBelow(y: Float): Int = firstRowIndexWhere { rowBottomOf(it) >= y }
 
+	/** Index of the first row whose bottom is below content-space [y], or the row count when none passes it. */
+	fun searchFirstRowEndingBelow(y: Float): Int = firstRowIndexWhere { rowBottomOf(it) > y }
+
 	/** The same predicate `RowSearch.firstRowWhere` runs, over row indices instead of rows. */
 	private inline fun firstRowIndexWhere(predicate: (Int) -> Boolean): Int {
 		var low = 0

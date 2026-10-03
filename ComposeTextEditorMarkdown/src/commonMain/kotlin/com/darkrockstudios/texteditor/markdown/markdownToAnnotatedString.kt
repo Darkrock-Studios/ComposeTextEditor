@@ -98,10 +98,12 @@ private class IndentStandIns private constructor(val space: Char, val tab: Char)
 		return source.lines().mapIndexed { index, line ->
 			val match = LEADING_INDENT_ENTITIES.find(line)
 			if (match == null || index in literal) return@mapIndexed line
-			val run = match.groups[2]!!
-			line.substring(0, run.range.first) +
-				INDENT_ENTITY.findAll(run.value).joinToString("") { if (it.value.isTabEntity()) "$tab" else "$space" } +
-				line.substring(run.range.last + 1)
+			// MatchGroup.range is JVM only; group 2 follows the always-present prefix group and ends the match.
+			val prefix = match.groups[1]!!.value
+			val run = match.groups[2]!!.value
+			prefix +
+				INDENT_ENTITY.findAll(run).joinToString("") { if (it.value.isTabEntity()) "$tab" else "$space" } +
+				line.substring(match.range.last + 1)
 		}.joinToString("\n")
 	}
 
