@@ -104,11 +104,6 @@ the [API reference & recipes](https://darkrock-studios.github.io/ComposeTextEdit
 | iOS | Beta: typing, autocorrect, CJK composition, the edit menu, loupe and touch handles |
 | WASM | Beta: typing, IME composition, the rich clipboard and drag and drop |
 
-### Work left to do:
-
-- Full CommonMark Spec compliance (_tables, task lists, reference links, setext headings and nested quotes stay literal text_)
-- Drag and drop on iOS (_Compose does not expose where a drop lands there yet_)
-
 ## Want to try it?
 
 Text Editor:
