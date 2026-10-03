@@ -5,6 +5,7 @@ import com.darkrockstudios.texteditor.input.EditorActionContext
 import com.darkrockstudios.texteditor.input.EditorActionSpec
 import com.darkrockstudios.texteditor.input.EditorCommand
 import com.darkrockstudios.texteditor.input.EditorCommand.Action
+import com.darkrockstudios.texteditor.state.FocusedEditor
 import com.darkrockstudios.texteditor.state.TextEditorState
 import kotlinx.coroutines.CoroutineScope
 
@@ -21,6 +22,19 @@ class ContextMenuActions(
 	private val scope: CoroutineScope,
 	private val enabled: Boolean = true,
 ) {
+	/** The editor these actions are aimed at, focused or not; null for the focused one. */
+	private var editor: () -> FocusedEditor? = { null }
+
+	internal constructor(
+		state: TextEditorState,
+		clipboard: Clipboard,
+		scope: CoroutineScope,
+		enabled: Boolean,
+		editor: () -> FocusedEditor?,
+	) : this(state, clipboard, scope, enabled) {
+		this.editor = editor
+	}
+
 	private fun context() = EditorActionContext(state, clipboard, scope)
 
 	/** Actions that mutate are refused outright while the editor is read-only. */
@@ -37,16 +51,20 @@ class ContextMenuActions(
 	 * Whether [action] is available and currently has work to do; false disables its
 	 * menu item.
 	 */
-	fun canPerform(action: EditorCommand.Action): Boolean =
-		permitted(state.actions[action])?.isEnabled?.invoke(context()) == true
+	fun canPerform(action: EditorCommand.Action): Boolean {
+		val spec = permitted(state.actions[action]) ?: return false
+		return state.asEditor(editor()) { spec.isEnabled(context()) }
+	}
 
 	/**
 	 * Runs [action] if it is registered and allowed. The read-only check lives
 	 * here, not in the menu, so a host item built on this cannot mutate a
-	 * disabled editor the keyboard already refuses to edit.
+	 * disabled editor the keyboard already refuses to edit. It follows this editor's
+	 * line limit and default action, whichever editor on the state holds focus.
 	 */
 	fun perform(action: EditorCommand.Action) {
-		permitted(state.actions[action])?.perform?.invoke(context())
+		val spec = permitted(state.actions[action]) ?: return
+		state.asEditor(editor()) { spec.perform(context()) }
 	}
 
 	fun canCut(): Boolean = canPerform(Action.Cut)

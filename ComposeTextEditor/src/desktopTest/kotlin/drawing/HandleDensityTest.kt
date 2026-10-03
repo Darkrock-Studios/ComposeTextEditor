@@ -7,6 +7,8 @@ import androidx.compose.ui.unit.Density
 import com.darkrockstudios.texteditor.DefaultSelectionHandleColor
 import com.darkrockstudios.texteditor.drawComposingUnderline
 import com.darkrockstudios.texteditor.DrawSelectionHandles
+import com.darkrockstudios.texteditor.TeardropHandles
+import com.darkrockstudios.texteditor.handleAffinity
 import com.darkrockstudios.texteditor.TextEditorStyle
 import com.darkrockstudios.texteditor.effectiveHandleColor
 import com.darkrockstudios.texteditor.state.TextEditorState
@@ -22,7 +24,8 @@ import kotlin.test.assertTrue
 class HandleDensityTest {
 
 	private fun TextEditorState.drawHandles(density: Float): List<DrawnShape> =
-		recordDrawing(viewportSize, Density(density)) { DrawSelectionHandles(this@drawHandles, Color.Red) }
+		recordDrawing(viewportSize, Density(density)) { DrawSelectionHandles(this@drawHandles, Color.Red, TeardropHandles) }
+			.filter { it.color == Color.Red }
 
 	@Test
 	fun `touch handles are twice as big at twice the density`() = editorUiTest(
@@ -33,22 +36,13 @@ class HandleDensityTest {
 
 		val at1 = state.drawHandles(1f)
 		val at2 = state.drawHandles(2f)
-		val knobs1 = at1.filter { it.kind == ShapeKind.Circle }
-		val knobs2 = at2.filter { it.kind == ShapeKind.Circle }
-		val stems1 = at1.filter { it.kind == ShapeKind.Line }
-		val stems2 = at2.filter { it.kind == ShapeKind.Line }
 
-		assertEquals(2, knobs1.size)
-		assertEquals(2 * knobs1.first().bounds.width, knobs2.first().bounds.width, 0.01f)
-		assertEquals(2 * stems1.first().strokeWidth, stems2.first().strokeWidth, 0.01f)
-		val rowBottom = state.getPositionForOffset(state.selector.selection!!.start)
-			.let { it.position.y + it.height }
-		assertEquals(
-			2 * (knobs1.first().bounds.top - rowBottom),
-			knobs2.first().bounds.top - rowBottom,
-			0.01f,
-			"the gap below the row doubles too",
-		)
+		assertEquals(listOf(ShapeKind.Path, ShapeKind.Path), at1.map { it.kind })
+		assertEquals(2 * at1.first().bounds.width, at2.first().bounds.width, 0.01f)
+		assertEquals(2 * at1.first().bounds.height, at2.first().bounds.height, 0.01f)
+		val rowBottom = state.getPositionForOffset(state.selector.selection!!.start).lineBottom
+		assertEquals(rowBottom, at1.first().bounds.top, 0.01f, "the handle hangs from the row's bottom")
+		assertEquals(rowBottom, at2.first().bounds.top, 0.01f, "at any density")
 	}
 
 	@Test
@@ -57,8 +51,9 @@ class HandleDensityTest {
 		density = 3f,
 	) {
 		longPressAtCharacter(7)
-		// 85 px is past the old raw 80 px radius but inside 30 dp at 3x.
-		val grab = handleCenter(isStart = false) + Offset(85f, 0f)
+		val end = state.getPositionForOffset(state.selector.selection!!.end, handleAffinity(isStart = false))
+		// 38 dp right of and below the end's corner: past the 25 dp handle, inside its 40 dp target.
+		val grab = canvasToNode(Offset(end.position.x + 114f, end.lineBottom + 114f))
 		val step = positionOfCharacter(16).x - positionOfCharacter(11).x
 
 		touch {

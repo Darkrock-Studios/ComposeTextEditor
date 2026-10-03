@@ -5,10 +5,12 @@ import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.Clipboard
 import androidx.compose.ui.platform.asAwtTransferable
 import androidx.compose.ui.text.AnnotatedString
-import com.darkrockstudios.texteditor.html.DEFAULT_LINK_SCHEMES
 import com.darkrockstudios.texteditor.html.toAnnotatedStringFromHtml
 import com.darkrockstudios.texteditor.html.toHtml
 import com.darkrockstudios.texteditor.RichTextStyles
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import java.awt.Toolkit
 import java.awt.datatransfer.DataFlavor
 import java.awt.datatransfer.Transferable
 import java.awt.datatransfer.UnsupportedFlavorException
@@ -22,11 +24,10 @@ actual object ClipboardHelper {
 		clipboard: Clipboard,
 		styles: RichTextStyles,
 		allowedLinkSchemes: Set<String>,
-	): AnnotatedString? = clipboard.readTransferable()?.readStyledText(styles, allowedLinkSchemes)
+	): AnnotatedString? = clipboard.readClipboard { it.readStyledText(styles, allowedLinkSchemes) }
 
-	actual suspend fun getPlainText(clipboard: Clipboard): String? {
-		val transferable = clipboard.readTransferable() ?: return null
-		return transferable.readPlainText()?.text?.takeIf { it.isNotEmpty() }
+	actual suspend fun getPlainText(clipboard: Clipboard): String? = clipboard.readClipboard { transferable ->
+		transferable.readPlainText()?.text?.takeIf { it.isNotEmpty() }
 			?: transferable.readHtml(RichTextStyles.DEFAULT)?.text
 	}
 
@@ -47,26 +48,31 @@ actual object ClipboardHelper {
 		false
 	}
 
-	actual suspend fun readCopyId(clipboard: Clipboard): Long? {
-		val transferable = clipboard.readTransferable() ?: return null
-		return runCatching {
-			if (!transferable.isDataFlavorSupported(copyIdFlavor)) return null
-			transferable.getTransferData(copyIdFlavor) as? Long
-		}.getOrNull()
-	}
+	actual suspend fun readCopyId(clipboard: Clipboard): Long? = clipboard.readClipboard { it.readCopyId() }
 
 	actual val supportsCopyProvenance: Boolean get() = true
 }
 
 private val annotatedStringFlavor = DataFlavor(AnnotatedString::class.java, "AnnotatedString")
 
+/** Null when headless. */
+private val awtSystemClipboard: java.awt.datatransfer.Clipboard? by lazy {
+	runCatching { Toolkit.getDefaultToolkit().systemClipboard }.getOrNull()
+}
+
 /**
- * The clipboard's content, or null when it cannot be read. AWT throws while another
- * application holds the system clipboard open (Windows), and Compose passes that on.
+ * What [decode] makes of the clipboard's content, or null when it cannot be read. AWT
+ * throws while another application holds the system clipboard open (Windows), and
+ * Compose passes that on. The system clipboard is read and decoded off the calling
+ * thread: an X11 transfer waits on the owner, for seconds if it hangs.
  */
 @OptIn(ExperimentalComposeUiApi::class)
-internal suspend fun Clipboard.readTransferable(): Transferable? = try {
-	getClipEntry()?.asAwtTransferable
+internal suspend fun <T> Clipboard.readClipboard(decode: (Transferable) -> T?): T? = try {
+	if (nativeClipboard === awtSystemClipboard) {
+		withContext(Dispatchers.IO) { getClipEntry()?.asAwtTransferable?.let(decode) }
+	} else {
+		getClipEntry()?.asAwtTransferable?.let(decode)
+	}
 } catch (e: CancellationException) {
 	throw e
 } catch (e: Exception) {
@@ -79,11 +85,29 @@ internal suspend fun Clipboard.readTransferable(): Transferable? = try {
  * flavor other applications provide, else the plain text.
  */
 internal fun Transferable.readStyledText(styles: RichTextStyles, allowedLinkSchemes: Set<String>): AnnotatedString? =
-	readAnnotatedString() ?: readHtml(styles, allowedLinkSchemes) ?: readPlainText()
+	readAnnotatedString()
+		?: readHtmlMarkup()?.let { parsePasteHtml(it, styles, allowedLinkSchemes) }?.text
+		?: readPlainText()
+
+/** [readStyledText] with the markup, as parsed where the text came from it, and the copy id. */
+internal fun Transferable.readPaste(styles: RichTextStyles, allowedLinkSchemes: Set<String>): ClipboardPaste? {
+	val html = readHtmlMarkup()
+	val copyId = readCopyId()
+	readAnnotatedString()?.let { return ClipboardPaste(it, html, copyId) }
+	val document = html?.let { parsePasteHtml(it, styles, allowedLinkSchemes) }
+	val text = document?.text ?: readPlainText() ?: return null
+	return ClipboardPaste(text, html, copyId, document)
+}
 
 /** Whether this offers text in any flavor [readStyledText] takes. */
 internal fun Transferable.offersText(): Boolean =
 	transferDataFlavors.any { it.match(annotatedStringFlavor) || it.isHtmlStringFlavor() || it.match(DataFlavor.stringFlavor) }
+
+/** The copy id this editor attached, or null when another application wrote this. */
+internal fun Transferable.readCopyId(): Long? = runCatching {
+	if (!isDataFlavorSupported(ClipboardHelper.copyIdFlavor)) return null
+	getTransferData(ClipboardHelper.copyIdFlavor) as? Long
+}.getOrNull()
 
 /** The markup on the `text/html` flavor, or null when there is none. */
 internal fun Transferable.readHtmlMarkup(): String? = runCatching {
@@ -96,11 +120,8 @@ private fun Transferable.readAnnotatedString(): AnnotatedString? = runCatching {
 	getTransferData(annotatedStringFlavor) as? AnnotatedString
 }.getOrNull()
 
-private fun Transferable.readHtml(
-	styles: RichTextStyles,
-	allowedLinkSchemes: Set<String> = DEFAULT_LINK_SCHEMES,
-): AnnotatedString? =
-	readHtmlMarkup()?.toAnnotatedStringFromHtml(styles, allowedLinkSchemes)?.takeIf { it.text.isNotEmpty() }
+private fun Transferable.readHtml(styles: RichTextStyles): AnnotatedString? =
+	readHtmlMarkup()?.toAnnotatedStringFromHtml(styles)?.takeIf { it.text.isNotEmpty() }
 
 private fun Transferable.readPlainText(): AnnotatedString? = runCatching {
 	if (!isDataFlavorSupported(DataFlavor.stringFlavor)) return null

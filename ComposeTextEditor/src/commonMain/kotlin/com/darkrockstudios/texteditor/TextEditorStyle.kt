@@ -87,7 +87,27 @@ data class TextEditorStyle(
 	val unfocusedSelectionColor: Color = Color.Unspecified,
 	/** Colour of the touch selection and caret handles. `Color.Unspecified` falls back to a blue. */
 	val handleColor: Color = Color.Unspecified,
+	/** Shape of the touch selection and caret handles, and so where a finger takes them. */
+	val handleShape: SelectionHandleShape = SelectionHandleShape.Platform,
 )
+
+/** How the touch selection and caret handles look. */
+enum class SelectionHandleShape {
+	/** The running platform's: [Bar] on iOS, [Teardrop] everywhere else. */
+	Platform,
+
+	/**
+	 * Android's, which `BasicTextField` draws there: a disc with one square corner at the
+	 * end it marks, hanging below the row, and a teardrop pointing up under the caret.
+	 */
+	Teardrop,
+
+	/**
+	 * iOS's: a bar the row's height at each end of the selection, with a dot above the
+	 * start and below the end. No caret handle is drawn; the caret itself is dragged.
+	 */
+	Bar,
+}
 
 internal val TextEditorStyle.effectiveHandleColor: Color
 	get() = handleColor.takeOrElse { DefaultSelectionHandleColor }
@@ -140,12 +160,13 @@ fun rememberTextEditorStyle(
 	unfocusedSelectionColor: Color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f),
 	handleColor: Color = MaterialTheme.colorScheme.primary,
 	paragraphSpacing: Dp = 0.dp,
+	handleShape: SelectionHandleShape = SelectionHandleShape.Platform,
 ): TextEditorStyle = remember(
 	textColor, backgroundColor, placeholderText, placeholderColor,
 	cursorColor, selectionColor, focusedBorderColor, unfocusedBorderColor, textStyle,
 	bulletColor, blockquoteBarColor, blockquoteBackgroundColor, orderedListMarkerColor,
 	codeFenceBackgroundColor, codeFenceBorderColor, cursorWidth, unfocusedSelectionColor, handleColor,
-	paragraphSpacing,
+	paragraphSpacing, handleShape,
 ) {
 	TextEditorStyle(
 		textColor = textColor,
@@ -167,5 +188,6 @@ fun rememberTextEditorStyle(
 		unfocusedSelectionColor = unfocusedSelectionColor,
 		handleColor = handleColor,
 		paragraphSpacing = paragraphSpacing,
+		handleShape = handleShape,
 	)
 }

@@ -51,6 +51,8 @@ import com.darkrockstudios.texteditor.state.SpanIndex
 import com.darkrockstudios.texteditor.state.TextEditOperation
 import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.applyStyleForEditAt
+import com.darkrockstudios.texteditor.state.insertStyledAtCursor
+import com.darkrockstudios.texteditor.state.landingOutsideText
 import com.darkrockstudios.texteditor.state.insertTypedNewline
 import com.darkrockstudios.texteditor.state.screenAtSelection
 import com.darkrockstudios.texteditor.state.typedInput
@@ -138,7 +140,7 @@ private fun insertAtCursor(state: TextEditorState, inserted: AnnotatedString): B
 			state.selector.deleteSelection()
 			state.editManager.alreadyScreened {
 				state.editManager.recordingAsTyping(false) {
-					state.insertStringAtCursor(admitted)
+					state.insertStyledAtCursor(admitted)
 				}
 			}
 		}
@@ -489,15 +491,18 @@ internal fun TextEditorState.replaceAllAsEdit(text: AnnotatedString) {
 			middle.isEmpty() -> delete(range)
 			// An insertion, not a replace of nothing: only an insert keeps a line's
 			// block marker at its start.
-			range.start == range.end -> editManager.applyOperation(
-				TextEditOperation.Insert(
-					position = start,
-					text = middle,
-					cursorBefore = cursorPosition,
-					cursorAfter = start.after(middle.text),
-				)
-			)
-			else -> replace(range, middle)
+			range.start == range.end -> landingOutsideText(middle) {
+				val landed = editManager.applyLanded(
+					TextEditOperation.Insert(
+						position = start,
+						text = middle,
+						cursorBefore = cursorPosition,
+						cursorAfter = start.after(middle.text),
+					)
+				) as TextEditOperation.Insert?
+				landed?.let { TextEditorRange(it.position, it.textEnd) }
+			}
+			else -> landingOutsideText(middle) { replace(range, middle) }
 		}
 	}
 	// What landed, which an input filter may have changed; the caret ends after it.

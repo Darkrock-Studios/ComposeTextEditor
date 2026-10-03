@@ -120,4 +120,25 @@ class HeadingInlineFormattingHtmlTest {
 
 		assertEquals("<h4>a <strong>b</strong></h4>", state.withHtml().exportAsHtml())
 	}
+
+	@Test
+	fun `a bold word inside a heading whose look is bold writes as bold`() {
+		val state = state()
+		val bold = RichTextStyles.DEFAULT.boldStyle
+		state.richTextStyles = RichTextStyles(header4Style = bold)
+		state.setText(AnnotatedString("one two", listOf(AnnotatedString.Range(bold, 4, 7))))
+		state.toggleHeader(0..0, 4)
+
+		assertEquals("<h4>one <strong>two</strong></h4>", state.withHtml().exportAsHtml())
+	}
+
+	@Test
+	fun `a heading whose look is bold writes no bold of its own`() {
+		val state = state()
+		state.richTextStyles = RichTextStyles(header4Style = RichTextStyles.DEFAULT.boldStyle)
+		state.setText("one two")
+		state.toggleHeader(0..0, 4)
+
+		assertEquals("<h4>one two</h4>", state.withHtml().exportAsHtml())
+	}
 }

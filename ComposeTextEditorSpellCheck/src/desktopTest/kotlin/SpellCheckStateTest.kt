@@ -300,6 +300,30 @@ class SpellCheckStateTest {
 	}
 
 	@Test
+	fun `a partial check over lines past the document's end checks the lines it has`() = runTest {
+		textState.setText("aaa teh")
+		spellChecker.correctWords = setOf("aaa")
+		val state = SpellCheckState(textState, spellChecker, scanContext = EmptyCoroutineContext)
+
+		state.runPartialSpellCheck(TextEditorRange(CharLineOffset(0, 2), CharLineOffset(2, 4)))
+
+		assertEquals(listOf("teh"), spellCheckedText())
+	}
+
+	@Test
+	fun `a check at a point re-flags the word beyond it once`() = runTest {
+		textState.setText("teh wrd")
+		textState.addRichSpan(range(0, 3), SpellCheckStyle)
+		textState.addRichSpan(range(4, 7), SpellCheckStyle)
+		val state = SpellCheckState(textState, spellChecker, scanContext = EmptyCoroutineContext)
+
+		state.runPartialSpellCheck(range(3, 3))
+
+		assertEquals(2, textState.richSpanManager.getAllRichSpans().size)
+		assertEquals(listOf("teh", "wrd"), spellCheckedText())
+	}
+
+	@Test
 	fun `a partial check queued behind another follows a line inserted above its range`() = runTest {
 		textState.setText("aaa\nbbb\nccc")
 		val gate = CompletableDeferred<Unit>()
@@ -446,6 +470,97 @@ class SpellCheckStateTest {
 
 		val remaining = textState.richSpanManager.getAllRichSpans().filter { it.style is SpellCheckStyle }
 		assertEquals(listOf(1), remaining.map { it.range.start.line })
+	}
+
+	@Test
+	fun `a burst's earlier edit is read where its later edits moved it`() = runTest {
+		val textState = editorWithCounter(MeasureCounter())
+		val spellCheckState = SpellCheckState(textState, spellChecker)
+		textState.setText("aaa\nbbb\nccc\nddd")
+		for (line in 0..3) {
+			textState.addRichSpan(TextEditorRange(CharLineOffset(line, 0), CharLineOffset(line, 3)), SpellCheckStyle)
+		}
+
+		val operations = mutableListOf<TextEditOperation>()
+		val collector = launch { textState.editOperations.collect { operations += it } }
+		runCurrent()
+		// As a replace-all's, last to first: the second adds a line above the first
+		textState.replace(TextEditorRange(CharLineOffset(2, 1), CharLineOffset(2, 1)), "x")
+		textState.replace(TextEditorRange(CharLineOffset(0, 1), CharLineOffset(0, 1)), "x\ny")
+		runCurrent()
+		collector.cancel()
+
+		spellCheckState.invalidateSpellCheckSpans(operations)
+
+		val remaining = textState.richSpanManager.getAllRichSpans().filter { it.style is SpellCheckStyle }
+		assertEquals(listOf("bbb", "ddd"), remaining.map { textState.getStringInRange(it.range) })
+	}
+
+	/** [text] with a flag on each of [flagged], once [edit] has run and been invalidated. */
+	private fun TestScope.flagsAfter(text: String, flagged: List<String>, edit: (TextEditorState) -> Unit): List<String> {
+		textState.setText(text)
+		flagged.forEach { word ->
+			val start = text.indexOf(word)
+			textState.addRichSpan(TextEditorRange(CharLineOffset(0, start), CharLineOffset(0, start + word.length)), SpellCheckStyle)
+		}
+		val operations = mutableListOf<TextEditOperation>()
+		val collector = launch { textState.editOperations.collect { operations += it } }
+		runCurrent()
+		edit(textState)
+		runCurrent()
+		collector.cancel()
+		operations.forEach(spellCheckState::invalidateSpellCheckSpans)
+		return spellCheckedText()
+	}
+
+	private fun range(from: Int, to: Int) = TextEditorRange(CharLineOffset(0, from), CharLineOffset(0, to))
+
+	@Test
+	fun `a deletion before flagged words leaves their flags`() = runTest {
+		assertEquals(
+			listOf("teh", "wrd"),
+			flagsAfter("xxxxxxxx aa teh wrd", listOf("teh", "wrd")) { it.delete(range(0, 9)) },
+		)
+	}
+
+	@Test
+	fun `a deletion that trims a flagged word strips its flag`() = runTest {
+		assertEquals(
+			listOf("wrd"),
+			flagsAfter("teh wrd", listOf("teh", "wrd")) { it.delete(range(2, 3)) },
+		)
+	}
+
+	@Test
+	fun `a deletion that joins two flagged words strips both flags`() = runTest {
+		assertEquals(
+			emptyList(),
+			flagsAfter("teh xx wrd", listOf("teh", "wrd")) { it.delete(range(3, 7)) },
+		)
+	}
+
+	@Test
+	fun `a deletion inside a flagged word strips its flag`() = runTest {
+		assertEquals(
+			listOf("wrd"),
+			flagsAfter("tehh wrd", listOf("tehh", "wrd")) { it.delete(range(2, 3)) },
+		)
+	}
+
+	@Test
+	fun `a replacement before a flagged word leaves its flag`() = runTest {
+		assertEquals(
+			listOf("teh"),
+			flagsAfter("aaaaaaaa teh", listOf("teh")) { it.replace(range(0, 8), "b") },
+		)
+	}
+
+	@Test
+	fun `a replacement's text that runs into a flagged word strips its flag`() = runTest {
+		assertEquals(
+			emptyList(),
+			flagsAfter("aaaa teh", listOf("teh")) { it.replace(range(0, 5), "b") },
+		)
 	}
 
 	private fun lineRange(line: Int) =

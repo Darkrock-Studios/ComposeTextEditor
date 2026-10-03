@@ -49,7 +49,8 @@ internal fun TextEditorState.skikoImeOptions(): ImeOptions {
  * Starts a Compose skiko input-method session bound to this editor. A platform's
  * `TextEditorTextInputService` hands it that platform's [imeOptions], read as snapshot
  * state: when they change, the input method starts again with the new ones, as Android
- * restarts its input for new settings, calling [onRun] with them for each run. It also
+ * restarts its input for new settings, calling [onRun] with them for each run, just
+ * before the run starts the platform's input method and in the same dispatch. It also
  * hands whether the
  * platform needs a text layout to hit-test ([exposeTextLayout]), whether it acts on a
  * hardware key itself as well ([echoesKeys]), and [imeResync]; every
@@ -189,8 +190,9 @@ internal class SkikoTextEditorInputMethodRequest(
 		)
 	}
 
+	/** One list is one batch: its later commands address the text as the browser holds it. */
 	override val onEditCommand: (List<EditCommand>) -> Unit = { commands ->
-		commands.forEach { editorState.applyImeEditCommand(it) }
+		editorState.imeBatch { commands.forEach { editorState.applyImeEditCommand(it) } }
 	}
 
 	/**
@@ -240,8 +242,9 @@ internal class SkikoTextEditorInputMethodRequest(
 
 	private val keyboardBackspace = KeyboardBackspace()
 
+	/** One block is one batch: its later commands address the text as the platform holds it. */
 	override val editText: (TextEditingScope.() -> Unit) -> Unit = { block ->
-		SkikoTextEditingScope(editorState, keyboardBackspace, echoesKeys).block()
+		editorState.imeBatch { SkikoTextEditingScope(editorState, keyboardBackspace, echoesKeys).block() }
 	}
 
 	private fun attachedCoordinates(): LayoutCoordinates? {

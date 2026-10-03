@@ -172,7 +172,7 @@ re-anchoring after an edit. The repair is deterministic and outside undo
 history, and since only blank lines classify as placeholders, the most it can
 ever discard is a marker on empty content.
 
-After it, `repairBlockParagraphs` gives each of those lines exactly the
+After it, `repairBlockStyles` gives each of those lines exactly the
 paragraph styles its markers want, each over the whole line; a paragraph style
 no block uses passes through. A line's text and its markers move separately: a
 join keeps one line's markers while each piece brings its own indent over its
@@ -182,6 +182,22 @@ indents before their markers. Compose lays out each paragraph style run as a
 paragraph of its own and rejects a line where two overlap, so the markers
 decide. A run of a block's paragraph style no marker asks for goes, a host's
 own `ParagraphStyle()` included, since that is a heading's.
+
+The same repair bakes each block's text style (a heading's look, a fence's
+monospace) over the whole line, after any run of the body style so the
+heading's size wins, and before the spans the user set inside it. It never
+strips a text style no marker asks for, since a span equal to a heading's look
+on a plain line is the user's own. The edit that moves text strips instead:
+text landing on a line its own markers do not reach (a join's tail kept after
+another line's head, a split's tail, text a replace across lines or a breaking
+replace inherits) leaves its source line's blocks' text styles behind, and the
+markers where it lands bake theirs. A heading whose style equals an inline
+style (`header4Style = boldStyle`) bakes `RichTextStyles.headingLook`, that
+style with the default platform style, which draws nothing but keeps it
+unequal: the span model merges equal styles, so a look equal to the user's
+bold would take it along wherever it went. A fence's monospace equal to an
+inline style cannot be told from the user's own, so it is neither baked by the
+repair nor left behind by a move.
 
 ## Serialization
 
@@ -277,7 +293,11 @@ elsewhere on a line stays literal text, as before, a typed `&nbsp;` is
 escaped (`\&nbsp;`) by the 7.14 rules, and fenced lines keep their
 whitespace as written. A foreign line of only such entities (a spacer)
 reads as an empty line, unless it is a list item or heading, which holds
-the entities' whitespace. Rejected: a non-breaking space character, which
+the entities' whitespace. Raw leading spaces and tabs on a foreign
+paragraph's line drop on every line, the first's and each continuation's, as
+CommonMark strips them; export never writes them, so this touches only foreign
+files. A line of only whitespace stays (7.70), and a fenced line keeps its
+whitespace as written. Rejected: a non-breaking space character, which
 is invisible in the file and reads back as content rather than indent; and
 no form (stripping the indent), which loses text on every save.
 

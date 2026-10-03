@@ -211,7 +211,7 @@ class ParagraphFormatTest {
 	}
 
 	@Test
-	fun `a copied paragraph's format pasted at a paragraph's start replaces the one there`() = runTest {
+	fun `a copied paragraph's format stays off the paragraph its last line joins`() = runTest {
 		val state = TextEditorState(this, shaped().measurer, AnnotatedString("aaa\nbbb\ntarget"))
 		val right = ParagraphFormatSpanStyle(textAlign = TextAlign.Right)
 		val center = ParagraphFormatSpanStyle(textAlign = TextAlign.Center)
@@ -227,7 +227,28 @@ class ParagraphFormatTest {
 		state.pasteRichSpans(CharLineOffset(2, 0), copied)
 
 		assertEquals("bbbtarget", state.textLines[3].text)
-		assertEquals(listOf(right), state.richSpanManager.getRichSpansStartingOn(3).map { it.style })
+		assertEquals(listOf(center), state.richSpanManager.getRichSpansStartingOn(3).map { it.style })
+	}
+
+	@Test
+	fun `a copied paragraph pasted whole at a paragraph's start replaces the format there`() = runTest {
+		val state = TextEditorState(this, shaped().measurer, AnnotatedString("bbb\ntarget"))
+		val right = ParagraphFormatSpanStyle(textAlign = TextAlign.Right)
+		val center = ParagraphFormatSpanStyle(textAlign = TextAlign.Center)
+		state.setParagraphFormat(0..0, right)
+		state.setParagraphFormat(1..1, center)
+		val copyRange = TextEditorRange(CharLineOffset(0, 0), CharLineOffset(1, 0))
+		val copied = state.getTextInRange(copyRange)
+		state.copyRichSpans(copyRange)
+
+		state.cursor.updatePosition(CharLineOffset(1, 0))
+		state.preserveCopiedRichSpansThroughNextEdit()
+		state.insertStringAtCursor(copied)
+		state.pasteRichSpans(CharLineOffset(1, 0), copied)
+
+		assertEquals(listOf("bbb", "bbb", "target"), state.textLines.map { it.text })
+		assertEquals(listOf(right), state.richSpanManager.getRichSpansStartingOn(1).map { it.style })
+		assertEquals(listOf(center), state.richSpanManager.getRichSpansStartingOn(2).map { it.style })
 	}
 
 	@Test

@@ -5,7 +5,9 @@ import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.Clipboard
 import androidx.compose.ui.platform.NativeClipboard
 import com.darkrockstudios.texteditor.clipboard.ClipboardHelper
-import com.darkrockstudios.texteditor.clipboard.readClipboardHtml
+import com.darkrockstudios.texteditor.RichTextStyles
+import com.darkrockstudios.texteditor.clipboard.readClipboardPaste
+import com.darkrockstudios.texteditor.html.DEFAULT_LINK_SCHEMES
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertNull
@@ -25,6 +27,6 @@ class ClipboardReadFailureTest {
 		assertNull(ClipboardHelper.getText(BusyClipboard))
 		assertNull(ClipboardHelper.getPlainText(BusyClipboard))
 		assertNull(ClipboardHelper.readCopyId(BusyClipboard))
-		assertNull(readClipboardHtml(BusyClipboard))
+		assertNull(readClipboardPaste(BusyClipboard, RichTextStyles.DEFAULT, DEFAULT_LINK_SCHEMES))
 	}
 }

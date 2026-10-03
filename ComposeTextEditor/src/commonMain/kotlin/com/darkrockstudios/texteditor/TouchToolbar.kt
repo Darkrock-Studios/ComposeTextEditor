@@ -59,6 +59,8 @@ internal class TouchToolbar(
 	private val fallback: (Offset) -> Unit,
 	/** Whether this editor runs an input session when focused: an editable one, not a view. */
 	private val takesInput: () -> Boolean = { false },
+	/** The look of the handles drawn, whose bounds the toolbar keeps clear of. */
+	private val handles: () -> HandleLook,
 ) {
 	private data class Anchor(val selection: TextEditorRange?, val caret: CharLineOffset, val scroll: Int)
 
@@ -100,7 +102,7 @@ internal class TouchToolbar(
 		pendingFor = null
 		if (toolbar == null) {
 			if (state.selector.selection == null) {
-				val caret = contentRect()
+				val caret = contentRect(coverHandles = false)
 				fallback(Offset(caret.left, caret.bottom))
 			}
 			return
@@ -203,9 +205,12 @@ internal class TouchToolbar(
 
 	/**
 	 * The selection's rows, or the caret, in canvas coordinates, kept inside the viewport
-	 * so the platform places its toolbar by the visible rows rather than off screen.
+	 * so the platform places its toolbar by the visible rows rather than off screen. With
+	 * [coverHandles] it reaches over the touch handles above and below them too, as
+	 * Android's `TextView` adds its handles' height, so a toolbar placed beside the rows
+	 * does not cover them.
 	 */
-	private fun contentRect(): Rect {
+	private fun contentRect(coverHandles: Boolean = true): Rect {
 		val selection = state.selector.selection
 		// A bare caret anchors on the row it is drawn on.
 		val caret = state.getPositionForOffset(state.cursorPosition, state.cursor.affinity)
@@ -214,13 +219,24 @@ internal class TouchToolbar(
 		val sameRow = start.position.y == end.position.y
 		val left = if (sameRow) minOf(start.position.x, end.position.x) else 0f
 		val right = if (sameRow) maxOf(start.position.x, end.position.x) else state.viewportSize.width
+		var top = start.position.y
+		var bottom = end.position.y + end.height
+		val density = state.density?.takeIf { coverHandles }
+		if (density != null) {
+			val look = handles()
+			for (handle in state.visibleHandles()) {
+				val drawn = look.drawnBounds(density, handle) ?: continue
+				top = minOf(top, drawn.top)
+				bottom = maxOf(bottom, drawn.bottom)
+			}
+		}
 		val width = state.viewportSize.width
 		val height = state.viewportSize.height
 		return Rect(
 			left.coerceIn(0f, width),
-			start.position.y.coerceIn(0f, height),
+			top.coerceIn(0f, height),
 			right.coerceIn(0f, width),
-			(end.position.y + end.height).coerceIn(0f, height),
+			bottom.coerceIn(0f, height),
 		)
 	}
 

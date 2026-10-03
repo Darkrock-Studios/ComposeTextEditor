@@ -6,7 +6,11 @@ From the first release after 2.8.0, the built-in key bindings match letter
 chords on `KeyEvent.layoutKey` (`com.darkrockstudios.texteditor.input`)
 rather than `KeyEvent.key`. On desktop Linux, `key` names a letter by the
 first keyboard layout installed, not the active one, so on BÉPO or Dvorak the
-two can name different letters for the same key. A host's own `KeyBindings`
+two can name different letters for the same key. On desktop macOS `key` names
+a letter by what the key types without Cmd, so under "Dvorak - QWERTY ⌘" it
+names the Dvorak letter where the Cmd chord is the QWERTY one. In a browser `key` is always
+the key's US QWERTY position, so on any other layout (AZERTY, QWERTZ, BÉPO,
+Dvorak) they differ for every letter a layout moves. A host's own `KeyBindings`
 that tests `event.key` and delegates the rest to `platformKeyBindings()` should
 test `event.layoutKey` instead, or its chords and the built-in ones land on
 different keys:
@@ -103,3 +107,11 @@ imports. The reasoning is in `docs/design/modules.md`.
 
 8. **Spell check.** `SpellCheckState.withMarkdown()` is gone (spell check does
    not depend on markdown): use `spellCheckState.textState.withMarkdown()`.
+
+9. **A heading style equal to an inline style.** A heading line carries
+   `RichTextStyles.headingLook(level)`, which is `getHeaderStyle(level)` unless
+   that equals an inline style (`header4Style = boldStyle`); then it is the
+   same look with the default platform style, so the user's bold inside the
+   heading stays theirs when the heading goes. Code that finds a heading's look
+   among a line's spans compares with `headingLook(level)`. Bold removed inside
+   such a heading no longer removes the heading's look, as with any heading.

@@ -7,13 +7,13 @@ import androidx.compose.ui.draganddrop.DragAndDropTransferData
 import androidx.compose.ui.draganddrop.DragAndDropTransferable
 import androidx.compose.ui.draganddrop.awtTransferable
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.node.DelegatableNode
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.Density
 import com.darkrockstudios.texteditor.clipboard.AnnotatedStringTransferable
 import com.darkrockstudios.texteditor.clipboard.ClipboardHelper
 import com.darkrockstudios.texteditor.clipboard.offersText
-import com.darkrockstudios.texteditor.clipboard.readHtmlMarkup
-import com.darkrockstudios.texteditor.clipboard.readStyledText
+import com.darkrockstudios.texteditor.clipboard.readPaste
 import com.darkrockstudios.texteditor.RichTextStyles
 import java.awt.dnd.DropTargetDragEvent
 import java.awt.dnd.DropTargetDropEvent
@@ -28,7 +28,7 @@ internal actual val platformDragsText: Boolean = true
 @OptIn(ExperimentalComposeUiApi::class)
 internal actual fun textDragTransferData(
 	text: AnnotatedString,
-	html: String,
+	html: String?,
 	dragId: Long,
 	styles: RichTextStyles,
 	allowMove: Boolean,
@@ -55,10 +55,15 @@ internal actual fun DragAndDropEvent.carriesText(): Boolean =
 	runCatching { awtTransferable.offersText() }.getOrDefault(false)
 
 @OptIn(ExperimentalComposeUiApi::class)
-internal actual fun DragAndDropEvent.droppedText(styles: RichTextStyles, allowedLinkSchemes: Set<String>): DroppedText? {
+internal actual fun DragAndDropEvent.droppedText(
+	styles: RichTextStyles,
+	allowedLinkSchemes: Set<String>,
+	ownDrag: Boolean,
+	target: DelegatableNode?,
+): DroppedText? {
 	val transferable = runCatching { awtTransferable }.getOrNull() ?: return null
-	val text = transferable.readStyledText(styles, allowedLinkSchemes) ?: return null
-	return DroppedText(text, transferable.readHtmlMarkup())
+	val paste = transferable.readPaste(styles, allowedLinkSchemes) ?: return null
+	return DroppedText(paste.text, paste.html, paste.document)
 }
 
 /** AWT reports the location in the root's points, which Compose scales by the density. */

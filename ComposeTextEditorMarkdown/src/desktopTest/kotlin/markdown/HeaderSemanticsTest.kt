@@ -1,11 +1,13 @@
 package markdown
 
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.RichTextStyles
 import com.darkrockstudios.texteditor.TextEditorRange
+import com.darkrockstudios.texteditor.html.HtmlExtension
 import com.darkrockstudios.texteditor.markdown.MarkdownExtension
 import com.darkrockstudios.texteditor.markdown.toAnnotatedStringFromMarkdown
 import com.darkrockstudios.texteditor.markdown.toMarkdown
@@ -210,6 +212,43 @@ class HeaderSemanticsTest {
 		)
 
 		assertEquals("## Title", e.exportAsMarkdown())
+	}
+
+	@Test
+	fun `a heading look equal to bold keeps a bold word inside the heading`() {
+		val state = TextEditorState(scope = TestScope(), measurer = mockk(relaxed = true))
+		state.richTextStyles = RichTextStyles.DEFAULT.copy(header4Style = RichTextStyles.DEFAULT.boldStyle)
+		val e = MarkdownExtension(state).apply { importMarkdown("#### one **two**") }
+
+		assertEquals("#### one **two**", e.exportAsMarkdown())
+
+		e.editorState.toggleHeader(0..0, 4)
+
+		assertEquals("one **two**", e.exportAsMarkdown())
+	}
+
+	@Test
+	fun `a bold word equal to a retired configuration's heading look stays bold`() {
+		val state = TextEditorState(scope = TestScope(), measurer = mockk(relaxed = true))
+		state.richTextStyles = RichTextStyles.DEFAULT.copy(
+			header4Style = SpanStyle(fontWeight = FontWeight.Bold),
+			boldStyle = SpanStyle(fontWeight = FontWeight.Bold, color = Color.Red),
+		)
+		val e = MarkdownExtension(state).apply { importMarkdown("#### one two") }
+		state.richTextStyles = RichTextStyles.DEFAULT
+		state.addStyleSpan(TextEditorRange(CharLineOffset(0, 4), CharLineOffset(0, 7)), RichTextStyles.DEFAULT.boldStyle)
+
+		assertEquals("#### one **two**", e.exportAsMarkdown())
+		val html = HtmlExtension(state).exportAsHtml()
+		assertTrue("<strong>two</strong>" in html, html)
+	}
+
+	@Test
+	fun `a heading joined onto another heading exports as one heading line`() {
+		val e = editor("## Title\n\n### Sub")
+		e.editorState.delete(TextEditorRange(CharLineOffset(0, 5), CharLineOffset(1, 0)))
+
+		assertEquals("## TitleSub", e.exportAsMarkdown())
 	}
 
 	@Test

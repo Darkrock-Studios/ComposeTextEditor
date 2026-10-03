@@ -446,8 +446,8 @@ the platform's double-tap timeout (300 ms on desktop), not the OS mouse setting.
 
 ### 3.8 Web input (built demo)
 
-Run 1 to 6 in Chrome, Firefox and Safari on desktop, and 7 on phones.
-Roadmap 4.11, 4.12, 4.22 and 4.25.
+Run 1 to 6 and 8 in Chrome, Firefox and Safari on desktop, and 7 on phones.
+Roadmap 4.11, 4.12, 4.22, 4.25 and 4.38.
 
 1. Markdown Editor (Blank). Click in the editor and type. Right-click in the
    text, press Escape, and type `;` `=` and a letter. **Expect:** all three
@@ -474,6 +474,12 @@ Roadmap 4.11, 4.12, 4.22 and 4.25.
    deletes one character, and the caret stays visible above the keyboard.
    Tap an empty part of the page outside the editor: the keyboard may hide;
    tapping the editor brings it back.
+8. Shortcuts on another layout (roadmap 4.38): switch the system to French
+   (AZERTY), then German (QWERTZ). Type a word, press Ctrl+Z (Cmd+Z on
+   macOS) on the key that types z, then redo with Ctrl+Y on the key that
+   types y (Cmd+Shift+Z on macOS). **Expect:** undo, then redo, on the keys
+   the layout labels; Ctrl on QWERTY's Z key under AZERTY (which types w)
+   does nothing.
 
 ### 3.9 IME candidate window (desktop)
 

@@ -18,6 +18,15 @@ the line break hook, `onNewlineLanded`, and the paste hook, `onPaste`.
   offered, so a keyboard sees its own composition untouched until it commits.
   A committed word is processed character by character, as if typed, so a
   keyboard committing `it's` whole gets the same result as one typing it.
+  A typed composition the editor ends itself (a tap or drag outside it, focus
+  loss, the Android connection closing) is offered as finished too (5.9),
+  since the keyboard's own finish, coming later, finds nothing.
+- **The pointer owns the caret.** A pointer leaving a composition finishes it
+  before its own placement is read: the behavior's edit lands first, then the
+  caret or selection goes where the pointer is on the substituted text, as it
+  would after the keyboard's finish. A selection the pointer makes (a
+  double-click, a drag) is therefore never cleared by the edit. On focus loss
+  and a connection closing the caret stays, mapped across the edit.
 - **One undo gives back what was typed.** The behavior edits on top of the
   typed text, which was already its own step, so the first undo reverts only
   the substitution: `--` typed, an em dash shown, undo shows `--` again.
@@ -29,6 +38,12 @@ the line break hook, `onNewlineLanded`, and the paste hook, `onPaste`.
   stays where the input left it, mapped across the rewrite.
 - **The IME is resynced** after an edit on top of its commit (4.25, 4.27), so
   its mirror of the text holds the substituted characters.
+- **Never mid-batch.** Text that lands while an IME batch is open (Android's
+  `beginBatchEdit`, a skiko `editText` block, a web command list) is offered
+  once the outermost batch ends, where it then stands, because the batch's
+  later commands address the text as the keyboard's mirror holds it (4.26). A
+  landed text a later command rewrote or removed is not offered. The pre-edit
+  hooks (`onNewline`, `onBackspace`, `onDeleteForward`) decide at once.
 
 ## Smart punctuation
 

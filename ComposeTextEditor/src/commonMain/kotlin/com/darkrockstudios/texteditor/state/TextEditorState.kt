@@ -44,10 +44,12 @@ import com.darkrockstudios.texteditor.input.EditorActionRegistry
 import com.darkrockstudios.texteditor.input.HeldKey
 import com.darkrockstudios.texteditor.input.KeyboardSettings
 import com.darkrockstudios.texteditor.input.KillRing
-import com.darkrockstudios.texteditor.input.imeActionFor
 import com.darkrockstudios.texteditor.input.TabSettings
+import com.darkrockstudios.texteditor.input.imeActionFor
+import com.darkrockstudios.texteditor.input.isWithinDocument
 import com.darkrockstudios.texteditor.RichTextStyles
 import com.darkrockstudios.texteditor.richstyle.BlockSpanStyle
+import com.darkrockstudios.texteditor.richstyle.anchorsToLine
 import com.darkrockstudios.texteditor.richstyle.HeaderSpanStyle
 import com.darkrockstudios.texteditor.richstyle.LineBlockEditBehavior
 import com.darkrockstudios.texteditor.richstyle.LinkSpanStyle
@@ -60,7 +62,7 @@ import com.darkrockstudios.texteditor.richstyle.headerBlock
 import com.darkrockstudios.texteditor.richstyle.lineBlocksConflict
 import com.darkrockstudios.texteditor.richstyle.lineBlocks
 import com.darkrockstudios.texteditor.richstyle.normalizeLineBlocks
-import com.darkrockstudios.texteditor.richstyle.repairBlockParagraphs
+import com.darkrockstudios.texteditor.richstyle.repairBlockStyles
 import com.darkrockstudios.texteditor.richstyle.rebuildWithBlock
 import com.darkrockstudios.texteditor.richstyle.rebuildWithoutBlock
 import kotlinx.coroutines.CoroutineScope
@@ -244,8 +246,9 @@ class TextEditorState private constructor(
 	 * Assigning the styles, the default included, also makes
 	 * [RichTextStyles.defaultTextStyle] the style of text typed where the document
 	 * carries none, as the importers give every paragraph that style; an editor never
-	 * assigned them types in [textStyle] alone. The format extensions assign them when
-	 * installed.
+	 * assigned them types in [textStyle] alone, as does one whose text the host set
+	 * without that style anywhere, so new text matches it. The format extensions assign
+	 * them when installed.
 	 */
 	var richTextStyles: RichTextStyles = RichTextStyles.DEFAULT
 		set(value) {
@@ -297,6 +300,9 @@ class TextEditorState private constructor(
 	/** Whether [richTextStyles] was assigned, which is what opts typed text into the body style. */
 	internal var richTextStylesSet: Boolean = false
 		private set
+
+	/** [fallbackBodyStyle]'s last scan, for the lines and styles it read. */
+	internal var bodyStyleScan: BodyStyleScan? = null
 
 	/**
 	 * Swaps every heading line's baked display style from [previous]'s to
@@ -380,7 +386,7 @@ class TextEditorState private constructor(
 		val first = minOf(untouchedBefore, lines)
 		val end = lines - minOf(untouchedAfter, lines)
 		val blocks = normalizeLineBlocks(snapshot, richTextStyles, first until end, spansChanged)
-		val paragraphs = repairBlockParagraphs(blocks, richTextStyles, first until end)
+		val styled = repairBlockStyles(blocks, richTextStyles, first until end)
 		untouchedBefore = Int.MAX_VALUE
 		untouchedAfter = Int.MAX_VALUE
 		spansChanged = false
@@ -388,10 +394,10 @@ class TextEditorState private constructor(
 		// invalidates any deferred partial relayout.
 		if (blocks !== snapshot) {
 			invalidateLayoutInputs()
-		} else if (paragraphs != null) {
-			reshapeAtCommit(paragraphs.lines)
+		} else if (styled != null) {
+			reshapeAtCommit(styled.lines)
 		}
-		return paragraphs?.snapshot ?: blocks
+		return styled?.snapshot ?: blocks
 	}
 
 	/**
@@ -522,6 +528,7 @@ class TextEditorState private constructor(
 		editManager.history.beginGroup(selectionBefore)
 		val touchSelectionBefore = selector.isTouchSelection
 		var committed = false
+		var announced = false
 		try {
 			val result = block()
 			// Every publish passes through line-block normalization, so no caller
@@ -549,6 +556,7 @@ class TextEditorState private constructor(
 			val actions = pendingCommitActions.toList()
 			pendingCommitActions.clear()
 			actions.forEach { it() }
+			announced = true
 			return result
 		} finally {
 			// The throwing path discards everything staged: the draft, the relayout,
@@ -558,6 +566,7 @@ class TextEditorState private constructor(
 			pendingLayoutUpdate = null
 			pendingCursorScroll = false
 			pendingCommitActions.clear()
+			if (!announced) editManager.dropUnannounced()
 			if (!committed) {
 				untouchedBefore = Int.MAX_VALUE
 				untouchedAfter = Int.MAX_VALUE
@@ -887,12 +896,12 @@ class TextEditorState private constructor(
 		// lands here raw (an IME committing "\n" over its composition) is a
 		// replacement of the composition, not typed text.
 		if (text.isEmpty() || text == "\n") return
-		offerLanded(range) { it.onTextInput(this, text, range) }
+		offerLanded(range) { behavior, at -> behavior.onTextInput(this, text, at) }
 	}
 
 	/** Tells the behaviors that a typed line break has landed at [range], once it has committed. */
 	internal fun newlineLanded(range: TextEditorRange) {
-		offerLanded(range) { it.onNewlineLanded(this, range) }
+		offerLanded(range) { behavior, at -> behavior.onNewlineLanded(this, at) }
 	}
 
 	/**
@@ -906,7 +915,7 @@ class TextEditorState private constructor(
 	fun pasteLanded(text: String, range: TextEditorRange) {
 		require(holdsRange(range)) { "range $range is not in the document" }
 		if (text.isEmpty()) return
-		offerLanded(range) { it.onPaste(this, text, range) }
+		offerLanded(range) { behavior, at -> behavior.onPaste(this, text, at) }
 	}
 
 	private fun holdsRange(range: TextEditorRange): Boolean {
@@ -922,8 +931,23 @@ class TextEditorState private constructor(
 	 * is asked to resync only when a behavior changed the document or moved the
 	 * caret: the edit it expected has already happened, so a claim alone leaves its
 	 * mirror right.
+	 *
+	 * While an IME batch is open ([beginImeBatch]) the offer waits for its end: the
+	 * batch's later commands address the text as the keyboard's mirror holds it, which
+	 * an edit a behavior made would shift under them. [hook] is given the range the
+	 * text stands at when offered.
 	 */
-	private fun offerLanded(range: TextEditorRange, hook: (EditBehavior) -> Boolean) {
+	private fun offerLanded(range: TextEditorRange, hook: (EditBehavior, TextEditorRange) -> Boolean) {
+		// Edits a behavior makes while handling one are never offered, deferred or not.
+		if (behaviorDepth > 0) return
+		if (imeBatchDepth > 0) {
+			landedInBatch += LandedInput(range, getStringInRange(range), hook)
+			return
+		}
+		offerLandedNow(range, hook)
+	}
+
+	private fun offerLandedNow(range: TextEditorRange, hook: (EditBehavior, TextEditorRange) -> Boolean) {
 		// The working content, so an edit inside a host's open transaction counts.
 		val contentBefore = workingContent
 		val caretBefore = cursorPosition
@@ -932,8 +956,132 @@ class TextEditorState private constructor(
 		val textBefore = lines.map { textLines[it].text }
 		fun rangeChanged() =
 			textLines.size != lineCount || lines.any { textLines[it].text != textBefore[it - range.start.line] }
-		runBehaviors { hook(it) || rangeChanged() }
+		// A selection standing when a composition the editor ends is offered (a handle
+		// grabbed, focus lost) outlives the behaviors' edits, which clear it as any edit
+		// does, unless an edit reached into it.
+		heldSelection = selector.selection?.takeIf { holdsRange(it) }?.let { BatchRange(it, getStringInRange(it)) }
+		try {
+			runBehaviors { hook(it, range) || rangeChanged() }
+			val held = heldSelection
+			if (held != null && selector.selection == null && held.holds()) {
+				selector.updateSelection(held.range.start, held.range.end)
+			}
+		} finally {
+			heldSelection = null
+		}
 		if (workingContent !== contentBefore || cursorPosition != caretBefore) requestImeResync()
+	}
+
+	/** A range that moves with the edits of the open IME batch, and the text it held when noted. */
+	private open class BatchRange(var range: TextEditorRange, val text: String)
+
+	/** Text that landed while an IME batch was open, to be offered to the behaviors once it ends. */
+	private class LandedInput(
+		range: TextEditorRange,
+		text: String,
+		val hook: (EditBehavior, TextEditorRange) -> Boolean,
+	) : BatchRange(range, text)
+
+	/** A composition open when the batch's landed input is offered, put back after the behaviors' edits. */
+	private class HeldComposition(range: TextEditorRange, text: String, val typed: Boolean) : BatchRange(range, text)
+
+	private val landedInBatch = ArrayDeque<LandedInput>()
+	private var heldComposition: HeldComposition? = null
+	private var heldSelection: BatchRange? = null
+
+	/**
+	 * Depth of the IME batches open on this editor: Android's `beginBatchEdit`, a skiko
+	 * edit block, a web command list. Edits apply at once inside one; only what the
+	 * behaviors are offered waits for the outermost batch to end.
+	 */
+	internal var imeBatchDepth: Int = 0
+		private set
+
+	internal fun beginImeBatch() {
+		imeBatchDepth++
+	}
+
+	/**
+	 * Ends the innermost IME batch, offering what landed in it to the behaviors before
+	 * the outermost one is left, so a platform that holds its notifications back for a
+	 * batch reports the behaviors' edits with it. Returns true once no batch is open.
+	 */
+	internal fun endImeBatch(): Boolean {
+		if (imeBatchDepth == 0) return true
+		try {
+			if (imeBatchDepth == 1) offerLandedInBatch()
+		} finally {
+			imeBatchDepth--
+		}
+		return imeBatchDepth == 0
+	}
+
+	/**
+	 * Drops [count] batch levels for a keyboard that went away with a batch open: its
+	 * text is in the document already. What landed in them is dropped unoffered once
+	 * no batch is open; while a successor's batch still is, it is offered at that
+	 * batch's end, where it then stands, since the levels nest and no entry is one
+	 * connection's alone.
+	 */
+	internal fun releaseImeBatches(count: Int) {
+		imeBatchDepth = (imeBatchDepth - count).coerceAtLeast(0)
+		if (imeBatchDepth == 0) landedInBatch.clear()
+	}
+
+	/** Runs [block] as one IME batch. */
+	internal inline fun imeBatch(block: () -> Unit) {
+		beginImeBatch()
+		try {
+			block()
+		} finally {
+			endImeBatch()
+		}
+	}
+
+	/**
+	 * Offers each text that landed in the batch, in order, where it stands now: one the
+	 * batch's later commands (or an earlier offer's behavior) rewrote or removed is no
+	 * longer what the user typed, so it is not offered.
+	 */
+	private fun offerLandedInBatch() {
+		if (landedInBatch.isEmpty()) return
+		// A composition the batch opened after the text landed outlives the behaviors'
+		// edits, which clear it as any edit does: the keyboard goes on composing it.
+		heldComposition = composingRange?.takeIf { holdsRange(it) }
+			?.let { HeldComposition(it, getStringInRange(it), composingIsTyped) }
+		try {
+			while (landedInBatch.isNotEmpty()) {
+				val landed = landedInBatch.removeFirst()
+				if (landed.holds()) offerLandedNow(landed.range, landed.hook)
+			}
+			val held = heldComposition
+			if (held != null && composingRange == null && held.holds()) {
+				updateComposingRange(getCharacterIndex(held.range.start), getCharacterIndex(held.range.end), held.typed)
+			}
+		} finally {
+			heldComposition = null
+		}
+	}
+
+	/** Whether the range still holds the text it was noted with. */
+	private fun BatchRange.holds(): Boolean = holdsRange(range) && getStringInRange(range) == text
+
+	/** Moves the open batch's ranges across [operation], as the rich spans move. */
+	internal fun landedInputMoved(operation: TextEditOperation) {
+		if (landedInBatch.isEmpty() && heldComposition == null && heldSelection == null) return
+		// Text put in right at a range's end follows it rather than joining it.
+		val editStart = when (operation) {
+			is TextEditOperation.Insert -> operation.position
+			is TextEditOperation.Replace -> operation.range.start
+			else -> null
+		}
+		fun BatchRange.move() {
+			val end = if (range.end == editStart) range.end else operation.transformOffset(range.end, this@TextEditorState)
+			range = TextEditorRange(operation.transformOffset(range.start, this@TextEditorState), end)
+		}
+		landedInBatch.forEach { it.move() }
+		heldComposition?.move()
+		heldSelection?.move()
 	}
 
 	// In-editor rich-span clipboard. The system clipboard only carries the
@@ -976,6 +1124,15 @@ class TextEditorState private constructor(
 	 * Collect this to observe the edit stream; decoration-only changes are excluded.
 	 */
 	val editOperations = editManager.editOperations
+
+	/**
+	 * [editOperations] as a collector catches up with them: each list holds, in order, the
+	 * operations applied since the collector took the last, so the text it reads then is the
+	 * one after the list's last. Several can land before a collector runs (a find
+	 * replace-all's), each addressing the text as it stood when it ran. Collect on the
+	 * dispatcher that edits the document.
+	 */
+	val editOperationBursts = editManager.editOperationBursts
 
 	/**
 	 * Everything this editor can be asked to do, keyed by action id, pre-loaded
@@ -1027,7 +1184,7 @@ class TextEditorState private constructor(
 	private var targetEditor: FocusedEditor? = null
 
 	/** The editor whose line limit and default action answer: the target, else the focused one. */
-	private val answeringEditor: FocusedEditor? get() = targetEditor ?: focusedEditor
+	internal val answeringEditor: FocusedEditor? get() = targetEditor ?: focusedEditor
 
 	/**
 	 * Runs [block] with [editor]'s line limit and default action standing in for the
@@ -1197,13 +1354,28 @@ class TextEditorState private constructor(
 		}
 	}
 
-	/** Sets [isFocused]; losing focus also clears any pending IME composing region. */
+	/**
+	 * Sets [isFocused]; losing focus also finishes any IME composition ([finishComposition]).
+	 * Not while an IME batch is open: what is offered then waits for the batch, and the
+	 * keyboard that left mid-batch never ends it, so its text is dropped unoffered when the
+	 * connection closes. The close finishes the composition instead, once the batch is released.
+	 */
 	fun updateFocus(focused: Boolean) {
 		isFocused = focused
-		// Clear composing state when focus is lost
-		if (!focused) {
-			clearComposingRange()
-		}
+		if (!focused && imeBatchDepth == 0) finishComposition()
+	}
+
+	/**
+	 * Ends the IME composition, keeping its text: the keyboard's `finishComposingText`,
+	 * and the editor's own endings (a pointer leaving it, focus loss, an Android
+	 * connection closing), after which the keyboard's finish finds nothing. Finishing
+	 * a typed composition commits the user's word, so the typed-text hook is told, as
+	 * for a commit. Text the keyboard merely marked is dropped silently.
+	 */
+	internal fun finishComposition() {
+		val composing = composingRange?.takeIf { composingIsTyped && isWithinDocument(it) }
+		clearComposingRange()
+		if (composing != null) textInputLanded(getStringInRange(composing), composing)
 	}
 
 	/**
@@ -2364,8 +2536,7 @@ class TextEditorState private constructor(
 			// A line marker or placeholder block belongs to its line, not to the
 			// characters copied out of it: a fragment of an item's text pastes as
 			// plain text, only a copy covering the whole span carries the marker.
-			val lineAnchored = span.style.stickyAtStart || span.style is BlockSpanStyle
-			if (lineAnchored &&
+			if (span.style.anchorsToLine &&
 				(span.range.start < range.start || span.range.end > range.end)
 			) {
 				return@mapNotNull null
@@ -2430,10 +2601,19 @@ class TextEditorState private constructor(
 		clipboardCopyId: Long? = null,
 		requireCopyIdMatch: Boolean = false,
 	) = withAtomicEdit {
-		val copied = copiedRichSpans ?: return@withAtomicEdit
-		if (copied.text != pastedText.text) return@withAtomicEdit
-		if (requireCopyIdMatch && clipboardCopyId != copied.copyId) return@withAtomicEdit
-		addPreservedRichSpans(insertPosition, copied.spans)
+		copiedRichSpansFor(pastedText, clipboardCopyId, requireCopyIdMatch)?.let { addPreservedRichSpans(insertPosition, it) }
+	}
+
+	/** The rich spans [pasteRichSpans] would re-apply for [pastedText], or null. */
+	internal fun copiedRichSpansFor(
+		pastedText: AnnotatedString,
+		clipboardCopyId: Long?,
+		requireCopyIdMatch: Boolean,
+	): List<PreservedRichSpan>? {
+		val copied = copiedRichSpans ?: return null
+		if (copied.text != pastedText.text) return null
+		if (requireCopyIdMatch && clipboardCopyId != copied.copyId) return null
+		return copied.spans
 	}
 
 	/**
@@ -2441,6 +2621,8 @@ class TextEditorState private constructor(
 	 * span of the same style already covers is left out: inserting inside that span, or
 	 * beside one that grows at its edge, stretched it over the inserted text. A link
 	 * landing against a link to the same place joins it, since a link does not grow.
+	 * A line's marker, block or format takes only lines the insert covers whole: text
+	 * landing inside a line without its line break takes that line as it is (6.40).
 	 */
 	internal fun addPreservedRichSpans(insertPosition: CharLineOffset, spans: List<PreservedRichSpan>) = withAtomicEdit {
 		spans.forEach { preserved ->
@@ -2458,11 +2640,15 @@ class TextEditorState private constructor(
 				else
 					preserved.relativeEnd.char
 			)
-			// A copied block takes a pasted line from whatever block there refuses to
-			// share it, a list the paste continued onto a pasted heading. The line the
-			// paste began in keeps its own.
+			if (preserved.style.anchorsToLine &&
+				(startPos.char != 0 || endPos.char != textLines.getOrNull(endPos.line)?.length)
+			) {
+				return@forEach
+			}
+			// A copied block takes a line it covers whole from whatever block there refuses
+			// to share it, a list the paste continued onto a pasted heading.
 			val block = allBlockRegistry.firstOrNull { it.spanStyle === preserved.style }
-			if (block != null && preserved.relativeStart.lineDiff > 0 && startPos.char == 0) {
+			if (block != null) {
 				val refusing = lineBlocks(startPos.line).filter { lineBlocksConflict(block.spanStyle, it.spanStyle) }
 				if (refusing.isNotEmpty()) {
 					editManager.recordLineBlockChanges(listOf(startPos.line)) {
@@ -2475,6 +2661,7 @@ class TextEditorState private constructor(
 			}
 			if (covered) return@forEach
 			if (preserved.style is LinkSpanStyle) {
+				takeOutOfOtherLinks(TextEditorRange(startPos, endPos), preserved.style)
 				val touching = richSpanManager.getSpansInRange(TextEditorRange(startPos, endPos)).filter {
 					it.style == preserved.style && (it.range.end == startPos || it.range.start == endPos)
 				}

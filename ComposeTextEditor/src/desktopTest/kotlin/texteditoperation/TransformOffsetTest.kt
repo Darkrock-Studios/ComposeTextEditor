@@ -313,6 +313,66 @@ class TextEditOperationTest {
 		assertEquals(CharLineOffset(3, 0), result)
 	}
 
+	private fun replace(from: CharLineOffset, to: CharLineOffset, old: String, new: String) = TextEditOperation.Replace(
+		range = TextEditorRange(from, to),
+		oldText = AnnotatedString(old),
+		newText = AnnotatedString(new),
+		cursorBefore = to,
+		cursorAfter = to,
+	)
+
+	@Test
+	fun `Replace - a later line shifts by the lines the replacement adds`() {
+		val operation = replace(CharLineOffset(1, 5), CharLineOffset(1, 10), "hello", "a\nb\nc")
+
+		assertEquals(CharLineOffset(4, 2), operation.transformOffset(CharLineOffset(2, 2), testState))
+	}
+
+	@Test
+	fun `Replace - a later line shifts up by the lines the replacement removes`() {
+		val operation = replace(CharLineOffset(0, 2), CharLineOffset(2, 1), "ne1\nline2\nl", "x")
+
+		assertEquals(CharLineOffset(1, 4), operation.transformOffset(CharLineOffset(3, 4), testState))
+	}
+
+	@Test
+	fun `Replace - the rest of the last line follows the new text's end`() {
+		val operation = replace(CharLineOffset(1, 2), CharLineOffset(2, 3), "ne2\nlin", "ab\ncdef")
+
+		assertEquals(CharLineOffset(2, 6), operation.transformOffset(CharLineOffset(2, 5), testState))
+	}
+
+	@Test
+	fun `Replace - a position inside keeps its count of characters from the range's start`() {
+		val operation = replace(CharLineOffset(1, 2), CharLineOffset(2, 3), "ne2\nlin", "abcd\nefgh")
+
+		// Five and six characters past the start: at "i" and "n" before, at "e" and "f" after.
+		assertEquals(CharLineOffset(2, 0), operation.transformOffset(CharLineOffset(2, 1), testState))
+		assertEquals(CharLineOffset(2, 1), operation.transformOffset(CharLineOffset(2, 2), testState))
+	}
+
+	@Test
+	fun `Replace - a position inside past the new text lands at its end`() {
+		val operation = replace(CharLineOffset(1, 0), CharLineOffset(2, 3), "line2\nlin", "x")
+
+		assertEquals(CharLineOffset(1, 1), operation.transformOffset(CharLineOffset(2, 1), testState))
+	}
+
+	@Test
+	fun `Replace - the range's end follows the new text's end`() {
+		val operation = replace(CharLineOffset(1, 5), CharLineOffset(1, 10), "hello", "wonderful")
+
+		assertEquals(CharLineOffset(1, 14), operation.transformOffset(CharLineOffset(1, 10), testState))
+		assertEquals(CharLineOffset(1, 5), operation.transformOffset(CharLineOffset(1, 5), testState))
+	}
+
+	@Test
+	fun `Replace - of nothing moves its point as an insert does`() {
+		val operation = replace(CharLineOffset(1, 3), CharLineOffset(1, 3), "", "abc")
+
+		assertEquals(CharLineOffset(1, 6), operation.transformOffset(CharLineOffset(1, 3), testState))
+	}
+
 	// Edge cases
 	@Test
 	fun `Insert - transform offset at start of document`() {

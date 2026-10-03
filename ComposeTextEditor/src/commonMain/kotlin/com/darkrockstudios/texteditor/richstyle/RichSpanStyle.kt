@@ -122,6 +122,10 @@ interface BlockSpanStyle : RichSpanStyle {
 	fun replacesText(): Boolean = true
 }
 
+/** A line's marker, block or format: it belongs to its line, not to the characters on it. */
+internal val RichSpanStyle.anchorsToLine: Boolean
+	get() = stickyAtStart || this is BlockSpanStyle
+
 data class RichSpan(
 	val range: TextEditorRange,
 	val style: RichSpanStyle

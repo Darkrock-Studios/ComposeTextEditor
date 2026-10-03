@@ -7,8 +7,9 @@ import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.annotatedstring.normalizeLineEndings
 import com.darkrockstudios.texteditor.clipboard.ClipboardHelper
-import com.darkrockstudios.texteditor.clipboard.applyHtmlPasteBlocks
-import com.darkrockstudios.texteditor.clipboard.readHtmlPasteDocument
+import com.darkrockstudios.texteditor.clipboard.htmlPasteDocument
+import com.darkrockstudios.texteditor.clipboard.readClipboardPaste
+import com.darkrockstudios.texteditor.clipboard.settleLanded
 import com.darkrockstudios.texteditor.clipboard.withSizeForPasteAt
 import com.darkrockstudios.texteditor.html.HtmlDocument
 import com.darkrockstudios.texteditor.html.selectionAsHtml
@@ -25,11 +26,11 @@ import com.darkrockstudios.texteditor.state.endWhenInsertedAt
 import com.darkrockstudios.texteditor.state.linksAtSelection
 import com.darkrockstudios.texteditor.state.unlink
 import com.darkrockstudios.texteditor.state.insertTypedNewline
+import com.darkrockstudios.texteditor.state.landingOutsideText
 import com.darkrockstudios.texteditor.state.moveToNextWord
 import com.darkrockstudios.texteditor.state.moveToPreviousWord
 import com.darkrockstudios.texteditor.state.moveToPreviousWordStart
 import com.darkrockstudios.texteditor.state.moveToWordEnd
-import com.darkrockstudios.texteditor.state.removeLinkLookOutsideLinks
 import com.darkrockstudios.texteditor.state.screenAtSelection
 import com.darkrockstudios.texteditor.state.toggleSpanStyle
 import kotlinx.coroutines.CoroutineStart
@@ -191,19 +192,21 @@ private fun EditorActionContext.writeSelection(selection: TextEditorRange): susp
  * block structure, so the text takes the styling of wherever it lands.
  */
 private fun EditorActionContext.pasteClipboard(plainText: Boolean) {
+	// Taken now: the read can suspend while focus moves to another editor on this state.
+	val target = state.answeringEditor
 	scope.launch {
-		val clipboardText = if (plainText) {
-			ClipboardHelper.getPlainText(clipboard)?.let(::AnnotatedString)
-		} else {
-			ClipboardHelper.getText(clipboard, state.richTextStyles, state.allowedLinkSchemes)
-		}?.normalizeLineEndings() ?: return@launch
-		// Every clipboard read comes before the selection is read: a read can suspend
-		// for a while (the web's permission prompt), and the user can move the caret or
-		// edit meanwhile. Reading the HTML before mutating also lands the text, the
-		// in-editor rich spans and the pasted block structure as one revision.
-		val htmlDocument = if (plainText) null else state.readHtmlPasteDocument(clipboard, clipboardText)
-		val clipboardCopyId = if (plainText) null else ClipboardHelper.readCopyId(clipboard)
-		state.landPaste(clipboardText, htmlDocument, clipboardCopyId, plainText)
+		// The clipboard is read before the selection is: a read can suspend for a while
+		// (the web's permission prompt), and the user can move the caret or edit
+		// meanwhile. Reading the HTML before mutating also lands the text, the in-editor
+		// rich spans and the pasted block structure as one revision.
+		if (plainText) {
+			ClipboardHelper.getPlainText(clipboard)?.let { state.asEditor(target) { state.pastePlainText(it) } }
+			return@launch
+		}
+		val paste = readClipboardPaste(clipboard, state.richTextStyles, state.allowedLinkSchemes) ?: return@launch
+		val clipboardText = paste.text.normalizeLineEndings()
+		val htmlDocument = state.htmlPasteDocument(paste.html, clipboardText, paste.document)
+		state.asEditor(target) { state.landPaste(clipboardText, htmlDocument, paste.copyId, plainText = false) }
 	}
 }
 
@@ -242,16 +245,12 @@ private fun TextEditorState.landPaste(
 				insertStringAtCursor(text)
 			}
 		}
-		if (!plainText && !screened) {
-			pasteRichSpans(
-				insertPosition,
-				text,
-				clipboardCopyId,
-				requireCopyIdMatch = ClipboardHelper.supportsCopyProvenance,
-			)
+		val richSpans = if (plainText || screened) {
+			null
+		} else {
+			copiedRichSpansFor(text, clipboardCopyId, requireCopyIdMatch = ClipboardHelper.supportsCopyProvenance)
 		}
-		if (!screened) htmlDocument?.let { applyHtmlPasteBlocks(it, insertPosition, text) }
-		removeLinkLookOutsideLinks(insertPosition, text)
+		settleLanded(insertPosition, text, richSpans, htmlDocument.takeIf { !screened })
 	}
 	selector.clearSelection()
 	pasteLanded(text.text, TextEditorRange(insertPosition, text.endWhenInsertedAt(insertPosition)))
@@ -312,10 +311,12 @@ private fun TextEditorState.yank() {
 	val text = killRing.text ?: return
 	editManager.recordingAsTyping(false) {
 		val selection = selector.selection
-		if (selection != null) {
-			replace(selection, applyStyleForEditAt(selection.start, text))
-		} else {
-			insertStringAtCursor(text)
+		landingOutsideText(text) {
+			if (selection != null) {
+				replace(selection, applyStyleForEditAt(selection.start, text))
+			} else {
+				insertStringAtCursor(text)
+			}
 		}
 	}
 	selector.clearSelection()

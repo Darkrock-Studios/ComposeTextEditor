@@ -6,7 +6,9 @@ import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.size
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -23,19 +25,26 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import com.darkrockstudios.texteditor.BasicTextEditor
+import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.EditorLineLimits
+import com.darkrockstudios.texteditor.input.EditorActionSpec
+import com.darkrockstudios.texteditor.input.EditorCommand
 import com.darkrockstudios.texteditor.input.KeyboardSettings
 import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.rememberTextEditorState
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.launch
+import utils.InMemoryClipboard
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
 /**
- * Roadmap 7.73: with two editors on one state, an edit aimed at the editor without focus
- * (an accessibility service's) follows that editor's line limit and default action, not
+ * Roadmap 7.73 and 7.75: with two editors on one state, an edit aimed at the editor without
+ * focus (an accessibility service's) follows that editor's line limit and default action, not
  * the focused one's.
  */
 class SharedStateTargetE2eTest {
+	private val clipboard = InMemoryClipboard()
 
 	/** A single-line editor, then a focused multi-line one, then a plain focus target. */
 	private fun sharedTest(block: SkikoComposeUiTest.(TextEditorState) -> Unit) =
@@ -43,19 +52,21 @@ class SharedStateTargetE2eTest {
 			lateinit var state: TextEditorState
 			setContent {
 				state = rememberTextEditorState(initialText = AnnotatedString("hello"))
-				Column {
-					BasicTextEditor(
-						state = state,
-						modifier = Modifier.size(300.dp, 40.dp),
-						lineLimits = EditorLineLimits.SingleLine,
-					)
-					BasicTextEditor(
-						state = state,
-						modifier = Modifier.size(300.dp, 100.dp),
-						autoFocus = true,
-						lineLimits = EditorLineLimits.MultiLine(),
-					)
-					Box(Modifier.size(10.dp).testTag("after").focusable())
+				CompositionLocalProvider(LocalClipboard provides clipboard) {
+					Column {
+						BasicTextEditor(
+							state = state,
+							modifier = Modifier.size(300.dp, 40.dp),
+							lineLimits = EditorLineLimits.SingleLine,
+						)
+						BasicTextEditor(
+							state = state,
+							modifier = Modifier.size(300.dp, 100.dp),
+							autoFocus = true,
+							lineLimits = EditorLineLimits.MultiLine(),
+						)
+						Box(Modifier.size(10.dp).testTag("after").focusable())
+					}
 				}
 			}
 			waitForIdle()
@@ -84,6 +95,29 @@ class SharedStateTargetE2eTest {
 	}
 
 	@Test
+	fun `PasteText on the unfocused single-line editor keeps to one line`() = sharedTest { state ->
+		clipboard.setPlainText("new\nline ")
+		state.cursor.updatePosition(CharLineOffset(0, 0))
+
+		editors()[0].performSemanticsAction(SemanticsActions.PasteText)
+		waitForIdle()
+
+		assertEquals(1, state.textLines.size)
+		assertEquals("new line hello", state.getAllText().text)
+	}
+
+	@Test
+	fun `PasteText on the focused multi-line editor still adds lines`() = sharedTest { state ->
+		clipboard.setPlainText("new\nline ")
+		state.cursor.updatePosition(CharLineOffset(0, 0))
+
+		editors()[1].performSemanticsAction(SemanticsActions.PasteText)
+		waitForIdle()
+
+		assertEquals("new\nline hello", state.getAllText().text)
+	}
+
+	@Test
 	fun `SetText on the focused multi-line editor still adds lines`() = sharedTest { state ->
 		editors()[1].performSemanticsAction(SemanticsActions.SetText) { it(AnnotatedString("one\ntwo")) }
 		waitForIdle()
@@ -101,5 +135,48 @@ class SharedStateTargetE2eTest {
 
 		editors()[1].assertIsFocused()
 		onNodeWithTag("after").assertIsNotFocused()
+	}
+
+	/** Registers a paste that inserts what [fetched] gives it once it arrives. */
+	private fun TextEditorState.registerSuspendingPaste(fetched: CompletableDeferred<String>) {
+		actions.register(
+			EditorActionSpec(EditorCommand.Action.Paste) { context ->
+				context.scope.launch {
+					val text = fetched.await()
+					context.asTarget { context.state.insertStringAtCursor(text) }
+				}
+			}
+		)
+		cursor.updatePosition(CharLineOffset(0, 0))
+	}
+
+	@Test
+	fun `a host action that edits after suspending follows the unfocused editor it was run on`() = sharedTest { state ->
+		val fetched = CompletableDeferred<String>()
+		state.registerSuspendingPaste(fetched)
+
+		editors()[0].performSemanticsAction(SemanticsActions.PasteText)
+		waitForIdle()
+		fetched.complete("new\nline ")
+		waitForIdle()
+
+		assertEquals(1, state.textLines.size)
+		assertEquals("new line hello", state.getAllText().text)
+	}
+
+	@Test
+	fun `a host action that edits after suspending follows the editor it was run on, not the one focused since`() = sharedTest { state ->
+		val fetched = CompletableDeferred<String>()
+		state.registerSuspendingPaste(fetched)
+
+		editors()[1].performSemanticsAction(SemanticsActions.PasteText)
+		waitForIdle()
+		editors()[0].performSemanticsAction(SemanticsActions.OnClick)
+		waitForIdle()
+		editors()[0].assertIsFocused()
+		fetched.complete("new\nline ")
+		waitForIdle()
+
+		assertEquals("new\nline hello", state.getAllText().text)
 	}
 }

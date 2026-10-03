@@ -3,8 +3,10 @@ package com.darkrockstudios.texteditor.state
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.SaverScope
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.ParagraphStyle
+import androidx.compose.ui.text.PlatformSpanStyle
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.buildAnnotatedString
@@ -274,10 +276,13 @@ private fun SpanStyle.encode(): ArrayList<Any> = arrayListOf(
 	baselineShift?.multiplier ?: Float.NaN,
 	fontFamily.genericName(),
 	fontFeatureSettings ?: "",
+	// The marks of a heading's look (RichTextStyles.headingLook).
+	(if (platformStyle != null) 1 else 0) or (if (drawStyle == Fill) 2 else 0),
 )
 
 private fun decodeSpanStyle(saved: List<*>): SpanStyle {
 	val decoration = saved[5] as Int
+	val marks = saved.getOrNull(12) as? Int ?: 0
 	return SpanStyle(
 		color = Color((saved[0] as Long).toULong()),
 		fontSize = textUnit(saved[1] as Int, saved[2] as Float),
@@ -294,6 +299,8 @@ private fun decodeSpanStyle(saved: List<*>): SpanStyle {
 		baselineShift = (saved[9] as Float).takeUnless { it.isNaN() }?.let { BaselineShift(it) },
 		fontFamily = genericFamily(saved[10] as String),
 		fontFeatureSettings = (saved[11] as String).ifEmpty { null },
+		platformStyle = if (marks and 1 != 0) PlatformSpanStyle.Default else null,
+		drawStyle = if (marks and 2 != 0) Fill else null,
 	)
 }
 

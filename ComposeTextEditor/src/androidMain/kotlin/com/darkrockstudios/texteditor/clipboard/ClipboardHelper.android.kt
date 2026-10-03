@@ -8,6 +8,7 @@ import androidx.compose.ui.platform.Clipboard
 import androidx.compose.ui.platform.toClipEntry
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.buildAnnotatedString
+import com.darkrockstudios.texteditor.html.HtmlDocument
 import com.darkrockstudios.texteditor.html.toAnnotatedStringFromHtml
 import com.darkrockstudios.texteditor.html.toHtml
 import com.darkrockstudios.texteditor.RichTextStyles
@@ -23,40 +24,19 @@ actual object ClipboardHelper {
 	private const val COPY_ID_EXTRA = "com.darkrockstudios.texteditor.COPY_ID"
 	private const val TAG = "ClipboardHelper"
 
-	/**
-	 * The clip the last [getText] read, which a paste's [readClipboardHtml] and
-	 * [readCopyId] reuse: Android 12 and later tell the user each time an app reads
-	 * another app's clip.
-	 */
-	internal var pasteClip: ClipData? = null
-		private set
-
 	actual suspend fun getText(
 		clipboard: Clipboard,
 		styles: RichTextStyles,
 		allowedLinkSchemes: Set<String>,
-	): AnnotatedString? {
-		val clipData = clipboard.getClipEntry()?.clipData
-		pasteClip = clipData
-		val items = clipData?.items() ?: return null
+	): AnnotatedString? = clipboard.getClipEntry()?.clipData?.let { readPaste(it, styles, allowedLinkSchemes) }?.text
+
+	/** [clip] as a paste reads it ([readStyledItems]), with the copy id. */
+	internal fun readPaste(clip: ClipData, styles: RichTextStyles, allowedLinkSchemes: Set<String>): ClipboardPaste? {
+		val copyId = clip.copyId()
 		// This editor's own copy must paste the characters it copied, which the in-editor
-		// span buffer matches against; markup that re-parses to other text loses its
-		// styling rather than change them.
-		val ours = clipData.copyId() != null
-		val styled = items.mapNotNull { item ->
-			val text = item.text?.toString()
-			item.htmlText
-				?.toAnnotatedStringFromHtml(styles, allowedLinkSchemes)
-				?.takeIf { it.text.isNotEmpty() && (!ours || it.text == text) }
-				?: text?.let(::AnnotatedString)
-		}
-		if (styled.isEmpty()) return null
-		return styled.singleOrNull() ?: buildAnnotatedString {
-			styled.forEachIndexed { index, text ->
-				if (index > 0) append('\n')
-				append(text)
-			}
-		}
+		// span buffer matches against.
+		val read = clip.readStyledItems(styles, allowedLinkSchemes, ours = copyId != null) ?: return null
+		return ClipboardPaste(read.text, read.html, copyId, read.document)
 	}
 
 	actual suspend fun getPlainText(clipboard: Clipboard): String? {
@@ -95,11 +75,7 @@ actual object ClipboardHelper {
 		}
 	}
 
-	actual suspend fun readCopyId(clipboard: Clipboard): Long? {
-		val clipData = pasteClip ?: clipboard.getClipEntry()?.clipData
-		pasteClip = null
-		return clipData?.copyId()
-	}
+	actual suspend fun readCopyId(clipboard: Clipboard): Long? = clipboard.getClipEntry()?.clipData?.copyId()
 
 	actual val supportsCopyProvenance: Boolean get() = true
 
@@ -108,5 +84,48 @@ actual object ClipboardHelper {
 		return if (extras.containsKey(COPY_ID_EXTRA)) extras.getLong(COPY_ID_EXTRA, 0L) else null
 	}
 
-	private fun ClipData.items(): List<ClipData.Item> = (0 until itemCount).map(::getItemAt)
 }
+
+internal fun ClipData.items(): List<ClipData.Item> = (0 until itemCount).map(::getItemAt)
+
+/** What a clip's items read as: the text, and the markup it came from, parsed. */
+internal class StyledItems(val text: AnnotatedString, val html: String?, val document: HtmlDocument?)
+
+/**
+ * The items of a clip pasted or dropped: each item's markup, or its text where it has none,
+ * or what [readUri] reads of an item that has only a URI (a dropped file), one item per
+ * line, as `TextView` takes them. [ours], this editor's own copy or drag, takes an item's
+ * markup only where it re-parses to the item's text, since its rich spans are matched
+ * against that. The markup comes along only where the text came from it: other markup
+ * describes other text, so its blocks cannot apply.
+ */
+internal fun ClipData.readStyledItems(
+	styles: RichTextStyles,
+	allowedLinkSchemes: Set<String>,
+	ours: Boolean,
+	readUri: (ClipData.Item) -> ItemContent? = { null },
+): StyledItems? {
+	val read = items().mapNotNull { item ->
+		val text = item.text?.toString()
+		val markup = item.htmlText?.takeIf { it.isNotEmpty() }
+		val fromUri = if (text == null && markup == null && item.uri != null) readUri(item) else null
+		val html = markup ?: fromUri?.html
+		val document = html
+			?.let { parsePasteHtml(it, styles, allowedLinkSchemes) }
+			?.takeIf { !ours || text == null || it.text.text == text }
+		val styled = document?.text ?: (text ?: fromUri?.text)?.let(::AnnotatedString) ?: return@mapNotNull null
+		StyledItems(styled, html.takeIf { document != null }, document)
+	}
+	read.singleOrNull()?.let { return it }
+	if (read.isEmpty()) return null
+	val joined = buildAnnotatedString {
+		read.forEachIndexed { index, item ->
+			if (index > 0) append('\n')
+			append(item.text)
+		}
+	}
+	return StyledItems(joined, html = null, document = null)
+}
+
+/** What an item that is neither text nor markup holds: markup, or else text. */
+internal class ItemContent(val text: String?, val html: String?)

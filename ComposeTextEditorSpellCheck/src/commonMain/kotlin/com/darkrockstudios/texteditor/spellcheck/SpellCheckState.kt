@@ -348,7 +348,9 @@ class SpellCheckState(
 		) { region, misspelled ->
 			// Swap atomically: no suspension points between removal and re-add, and the
 			// batch lands as one measure-free relayout instead of one per span.
-			val doomed = textState.richSpanManager.getSpansInRange(region)
+			// The scan reaches the nearest word beyond each end of the region.
+			val scanned = misspelled.fold(region) { covered, segment -> covered.merge(segment.range) }
+			val doomed = textState.richSpanManager.getSpansInRange(scanned)
 				.filter { it.style is SpellCheckStyle }
 			textState.updateRichSpans(
 				remove = doomed,
@@ -406,7 +408,8 @@ class SpellCheckState(
 		move: (T, LineDiff) -> T?,
 		install: (TextEditorRange, List<T>) -> Unit,
 	) {
-		var region = range
+		// A range past the last line never moves through a LineDiff, so settling it would spin.
+		var region = range.within(computedAgainst) ?: return
 		var regionLines = computedAgainst
 		while (true) {
 			if (spellCheckingEnabled.not()) return
@@ -495,27 +498,26 @@ class SpellCheckState(
 	 * Called as edits stream in so stale decorations disappear immediately, ahead of the debounced
 	 * re-check. No-op for span and line-block operations, which move no text.
 	 *
+	 * The flags have already moved with the edit, so they are read in the text after it: those
+	 * over or touching the text it wrote, or the point a deletion closed up. A flag on a word
+	 * beside it goes too, and comes back with the re-check. Edits that have landed since
+	 * [operation] must be passed with it, through the overload taking a list.
+	 *
 	 * @param operation The [TextEditOperation] that mutated the document.
 	 */
 	fun invalidateSpellCheckSpans(operation: TextEditOperation) {
-		val range: TextEditorRange = when (operation) {
-			is TextEditOperation.Delete -> operation.range
-			is TextEditOperation.Insert -> TextEditorRange(
-				operation.position,
-				operation.position
-			)
+		invalidateSpellCheckSpans(listOf(operation))
+	}
 
-			is TextEditOperation.Replace -> operation.range
-			is TextEditOperation.StyleSpan,
-			is TextEditOperation.RichSpan,
-			is TextEditOperation.LineBlock -> return
-		}
-
-		val doomed = range.affectedLineWraps(textState).flatMap { vLine ->
-			textState.getWrappedLine(vLine).richSpans
-				.filter { it.style is SpellCheckStyle && range.intersects(it.range) }
-		}
-		textState.updateRichSpans(remove = doomed, add = emptyList())
+	/**
+	 * Remove the spell-check decorations [operations] affected, edits that landed one after
+	 * another with no other since: each is read in the text after it, as moved by those after
+	 * it. See the overload for one edit.
+	 */
+	fun invalidateSpellCheckSpans(operations: List<TextEditOperation>) {
+		val doomed = computeAffectedRanges(operations)
+			.flatMapTo(LinkedHashSet()) { range -> textState.getRichSpansInRange(range).filter { it.style is SpellCheckStyle } }
+		if (doomed.isNotEmpty()) textState.updateRichSpans(remove = doomed.toList(), add = emptyList())
 	}
 
 	/**
@@ -561,6 +563,14 @@ private fun TextEditorRange.acrossDots(lines: List<AnnotatedString>): TextEditor
 	val from = if (startLine.dotsOnToLetter(start.char - 1, -1)) start.copy(char = start.char - 2) else start
 	val to = if (endLine.dotsOnToLetter(end.char, 1)) end.copy(char = end.char + 2) else end
 	return TextEditorRange(from, to)
+}
+
+/** The range with either end past [lines] brought back to their end; null when there are none. */
+private fun TextEditorRange.within(lines: List<AnnotatedString>): TextEditorRange? {
+	if (lines.isEmpty()) return null
+	val documentEnd = CharLineOffset(lines.lastIndex, lines.last().length)
+	fun CharLineOffset.inside() = if (line > lines.lastIndex) documentEnd else this
+	return TextEditorRange(start.inside(), end.inside())
 }
 
 /** The range widened to the start of its first line and the end of its last, within [lines]. */

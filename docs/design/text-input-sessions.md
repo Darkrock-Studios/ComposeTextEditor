@@ -156,6 +156,17 @@ immediately, batch or no batch, as they do in `EditText`; a batch only holds
 back notifications until the outermost one ends. Every single command also
 runs in its own batch, so batched and unbatched commands end the same way.
 
+A batch holds back one more thing: what the edit behaviors are offered. The
+batch's later commands address the text as the keyboard's mirror holds it,
+so an edit a behavior made on top of a commit would shift under them (a
+`deleteSurroundingText(2, 0)` meant for `--` takes the character before the
+dash made of it). `TextEditorState` counts the batches (`beginImeBatch` /
+`endImeBatch`; the skiko `editText` block and the web command list count as
+one each), queues what landed with its text, moves the queued ranges across
+the batch's later edits, and offers each that still holds its text when the
+outermost batch ends, before Android leaves the batch, so the flush after it
+reports the behaviors' edits and the resync in one go (`docs/design/behaviors.md`).
+
 Applying immediately is a robustness decision. Queuing commands until the
 outermost batch ends (what androidx's legacy `RecordingInputConnection` did,
 and this editor once copied) makes the editor the one place where a keyboard's
@@ -403,6 +414,11 @@ What the browser delivers, and when (`DomInputStrategy` and
 - Events are batched and replayed on the next animation frame, in timestamp
   order, so a Backspace `keydown` that Compose consumed suppresses the
   textarea's own `deleteContentBackward`.
+- Only the Backspace key does: on macOS the textarea is a Cocoa text view
+  with the Emacs-style Ctrl bindings, so Ctrl+H's own `deleteContentBackward`
+  became a second backspace. The session prevents the default of a Ctrl
+  chord's `keydown` there (not inside a composition, nor with Cmd or Option),
+  leaving the chord to the editor's bindings.
 
 Which path owns plain typing therefore follows DOM focus, and the browser gives
 a keystroke to one element only. With the textarea focused, typing is
@@ -476,8 +492,9 @@ browsers (roadmap 4.4, 4.15).
 - Never notify the `InputMethodManager` from an edit path. Reports go through
   `ImeCursorSync.flush`, at a batch end or posted; if the IME's mirror is
   stale, fix what the flush compares or when it runs, do not add a push.
-- A batch edit suppresses notifications, nothing more. Undo coalescing is
-  `TextEditHistory`'s business, and the two must not be conflated.
+- A batch edit suppresses notifications and defers what the edit behaviors
+  are offered, nothing more. Undo coalescing is `TextEditHistory`'s business,
+  and the two must not be conflated.
 - Session start and stop belong to the modifier node; other code asks for
   input through `TextInputRequester` and never establishes or cancels input
   sessions itself.
