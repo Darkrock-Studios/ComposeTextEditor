@@ -388,9 +388,9 @@ internal class MarkdownRenderContext(
 		try {
 			body()
 		} finally {
-			val base = scopeBases.removeLast()
+			val base = scopeBases.removeAt(scopeBases.lastIndex)
 			while (openTags.size > base) {
-				if (openTags.removeLast().pushed) builder.pop()
+				if (openTags.removeAt(openTags.lastIndex).pushed) builder.pop()
 			}
 		}
 	}
@@ -408,7 +408,7 @@ internal class MarkdownRenderContext(
 				val base = scopeBases.lastOrNull() ?: 0
 				val top = openTags.lastOrNull()
 				if (openTags.size > base && top?.name == parsed.name) {
-					openTags.removeLast()
+					openTags.removeAt(openTags.lastIndex)
 					if (top.pushed) builder.pop()
 				} else if (openTags.none { it.name == parsed.name }) {
 					return false
