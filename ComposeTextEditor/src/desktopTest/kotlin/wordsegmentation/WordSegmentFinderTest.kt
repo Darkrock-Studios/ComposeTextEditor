@@ -140,9 +140,25 @@ class WordSegmentFinderTest {
 	fun `test word with period`() {
 		textState.setText("U.S.A.")
 		val result = textState.findWordSegmentAt(CharLineOffset(0, 3))
-		assertEquals("U.S.A.", result?.text)
-		assertEquals(0, result?.range?.start?.char)
-		assertEquals(6, result?.range?.end?.char)
+		assertEquals("S", result?.text)
+		assertEquals(2, result?.range?.start?.char)
+		assertEquals(3, result?.range?.end?.char)
+	}
+
+	@Test
+	fun `an emoji is selectable as a word`() {
+		textState.setText("a \uD83D\uDC68\u200D\uD83D\uDC69\u200D\uD83D\uDC67 b")
+		val result = textState.findWordSegmentAt(CharLineOffset(0, 4))
+		assertEquals("\uD83D\uDC68\u200D\uD83D\uDC69\u200D\uD83D\uDC67", result?.text)
+		assertEquals(2, result?.range?.start?.char)
+		assertEquals(10, result?.range?.end?.char)
+	}
+
+	@Test
+	fun `a position on punctuation between words selects nothing`() {
+		textState.setText("a , b")
+		assertEquals(null, textState.findWordSegmentAt(CharLineOffset(0, 2)))
+		assertEquals("a", textState.findWordSegmentAt(CharLineOffset(0, 1))?.text)
 	}
 
 	@Test

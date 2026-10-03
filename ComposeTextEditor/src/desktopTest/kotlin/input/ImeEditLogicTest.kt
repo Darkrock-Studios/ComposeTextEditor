@@ -129,6 +129,28 @@ class ImeEditLogicTest {
 		assertEquals("", text(), "Deleting one code point must remove both surrogate halves")
 	}
 
+	/** The keyboard's count is the contract; only a plain one-char delete takes the semantic route. */
+	@Test
+	fun `deleteSurroundingText of one char takes only that char out of a cluster`() {
+		state.setText("é👍🏽")
+		moveCursorToCharIndex(0)
+		state.imeDeleteSurroundingText(beforeLength = 0, afterLength = 1)
+		assertEquals("́👍🏽", text())
+
+		moveCursorToCharIndex(5)
+		state.imeDeleteSurroundingTextInCodePoints(beforeLength = 1, afterLength = 0)
+		assertEquals("́👍", text())
+	}
+
+	@Test
+	fun `deleteSurroundingText of one plain char still runs the semantic delete`() {
+		state.setText("ab")
+		moveCursorToCharIndex(2)
+		state.imeDeleteSurroundingText(beforeLength = 1, afterLength = 0)
+		assertEquals("a", text())
+		assertEquals(1, cursorCharIndex())
+	}
+
 	@Test
 	fun `finishComposing clears the composing region without altering the text`() {
 		state.imeSetComposingText("abc", newCursorPosition = 1)

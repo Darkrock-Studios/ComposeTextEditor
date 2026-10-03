@@ -34,6 +34,24 @@ class TextEditManager(private val state: TextEditorState) {
 	)
 	val editOperations: SharedFlow<TextEditOperation> = _editOperations
 
+	/** Whether edits are being recorded as typing; null lets the history infer it. */
+	private var typingOverride: Boolean? = null
+
+	/**
+	 * Records the edits [block] makes as [typing] or not, whatever their shape:
+	 * an IME commit is a word the user typed, a deleted selection is not typing
+	 * even when it is one character.
+	 */
+	internal fun <T> recordingAsTyping(typing: Boolean, block: () -> T): T {
+		val previous = typingOverride
+		typingOverride = typing
+		try {
+			return block()
+		} finally {
+			typingOverride = previous
+		}
+	}
+
 	/**
 	 * Derives the layout work [operation] requires, expressed against the post-edit
 	 * document. The op-declared line delta is cross-checked against the counts the
@@ -97,7 +115,13 @@ class TextEditManager(private val state: TextEditorState) {
 		else LayoutUpdate.Partial(lines.min(), lines.max(), 0)
 	}
 
-	fun applyOperation(operation: TextEditOperation, addToHistory: Boolean = true) {
+	fun applyOperation(requested: TextEditOperation, addToHistory: Boolean = true) {
+		// Resolved before anything reads it, so what is applied, recorded, and
+		// announced is one and the same operation.
+		val operation = if (requested is TextEditOperation.Replace) resolveInheritedStyle(requested) else requested
+		// An edit of no characters (an IME committing "", an empty selection
+		// deleted) changes nothing, so nothing is applied, recorded, or announced.
+		if (operation.isNoOp()) return
 		// Selection offsets must not outlive a content mutation. Span operations
 		// leave the text untouched, so they keep the selection.
 		val isSpanOperation = operation is TextEditOperation.StyleSpan ||
@@ -129,7 +153,7 @@ class TextEditManager(private val state: TextEditorState) {
 				is TextEditOperation.Insert -> applyInsert(operation)
 				is TextEditOperation.Delete -> applyDelete(operation)
 				is TextEditOperation.Replace -> applyReplace(addToHistory, operation)
-				is TextEditOperation.StyleSpan -> applyStyleOperation(operation)
+				is TextEditOperation.StyleSpan -> applyStyleOperation(addToHistory, operation)
 				is TextEditOperation.RichSpan -> applyRichSpanOperation(operation)
 				is TextEditOperation.LineBlock -> applyLineBlockOperation(operation)
 			}
@@ -141,7 +165,7 @@ class TextEditManager(private val state: TextEditorState) {
 			state.invalidateCopiedRichSpans()
 			state.richSpanManager.updateSpans(operation, metadata)
 			if (addToHistory && !isDecoration) {
-				history.recordEdit(operation, metadata ?: OperationMetadata())
+				history.recordEdit(operation, metadata ?: OperationMetadata(), typing = typingOverride)
 			}
 
 			// Requested inside the transaction so it merges with any layout work the
@@ -257,36 +281,13 @@ class TextEditManager(private val state: TextEditorState) {
 			// Single line replacement (no newlines in range or new text)
 			operation.range.isSingleLine() && !operation.newText.contains('\n') -> {
 				val line = state.textLines[operation.range.start.line]
-
-				// Handle inherited styles if needed
-				val inheritedStyles = if (operation.inheritStyle) {
-					line.spanStyles.filter { span ->
-						span.start <= operation.range.end.char &&
-								span.end >= operation.range.start.char
-					}.map { it.item }.toSet()
-				} else {
-					emptySet()
-				}
-
-				// Create new text with inherited styles if needed
-				val newText = if (inheritedStyles.isNotEmpty()) {
-					buildAnnotatedString {
-						append(operation.newText)
-						inheritedStyles.forEach { style ->
-							addStyle(style, 0, operation.newText.length)
-						}
-					}
-				} else {
-					operation.newText
-				}
-
 				state.setLine(
 					operation.range.start.line,
 					handleReplace(
 						line,
 						operation.range.start.char,
 						operation.range.end.char,
-						newText
+						operation.newText
 					)
 				)
 			}
@@ -296,7 +297,6 @@ class TextEditManager(private val state: TextEditorState) {
 					state,
 					operation.range,
 					operation.newText,
-					operation.inheritStyle
 				)
 
 				val leftPlaceholder = state.removeLines(
@@ -346,11 +346,45 @@ class TextEditManager(private val state: TextEditorState) {
 		return metadata
 	}
 
+	private fun TextEditOperation.isNoOp(): Boolean = when (this) {
+		is TextEditOperation.Insert -> text.isEmpty()
+		is TextEditOperation.Delete -> range.start == range.end
+		is TextEditOperation.Replace -> range.start == range.end && newText.isEmpty()
+		else -> false
+	}
+
+	/**
+	 * Bakes the styles an `inheritStyle` replace takes from the text it replaces
+	 * into its `newText`, so the operation that is applied, recorded, and announced
+	 * carries exactly the styling that lands in the document. On one line every
+	 * span touching the range is inherited; across lines, every span the range
+	 * overlaps. Inherited styles layer over the replacement's own.
+	 */
+	private fun resolveInheritedStyle(operation: TextEditOperation.Replace): TextEditOperation.Replace {
+		if (!operation.inheritStyle) return operation
+		val newText = operation.newText
+		val inherited = if (operation.range.isSingleLine() && !newText.contains('\n')) {
+			state.textLines[operation.range.start.line].spanStyles.filter { span ->
+				span.start <= operation.range.end.char && span.end >= operation.range.start.char
+			}.map { it.item }.toSet()
+		} else {
+			getStyles(operation.range)
+		}
+		val styled = if (inherited.isEmpty()) {
+			newText
+		} else {
+			buildAnnotatedString {
+				append(newText)
+				inherited.forEach { addStyle(it, 0, newText.length) }
+			}
+		}
+		return operation.copy(newText = styled, inheritStyle = false)
+	}
+
 	private fun handleMultiLineReplace(
 		state: TextEditorState,
 		range: TextEditorRange,
 		newText: AnnotatedString,
-		inheritStyle: Boolean
 	): List<AnnotatedString> {
 		// Extract prefix from the first line
 		val firstLine = state.textLines[range.start.line]
@@ -358,12 +392,6 @@ class TextEditManager(private val state: TextEditorState) {
 			firstLine.subSequence(0, range.start.char.coerceIn(0, firstLine.length)).ifEmpty {
 				AnnotatedString("")
 			}
-
-		val inheritedStyles = if (inheritStyle) {
-			getStyles(range)
-		} else {
-			emptySet()
-		}
 
 		// Extract suffix from the last line
 		val suffix = if (range.end.line < state.textLines.size) {
@@ -377,16 +405,7 @@ class TextEditManager(private val state: TextEditorState) {
 		}
 
 		return if (newText.contains('\n')) {
-			val newLines = if (inheritStyle) {
-				buildAnnotatedStringWithSpans { addSpan ->
-					append(newText.text)
-					inheritedStyles.forEach { style ->
-						addSpan(style, 0, newText.length)
-					}
-				}.splitAnnotatedString()
-			} else {
-				newText.splitAnnotatedString()
-			}
+			val newLines = newText.splitAnnotatedString()
 
 			buildList {
 				add(spanManager.appendAnnotatedStrings(prefix, newLines.first()))
@@ -401,18 +420,7 @@ class TextEditManager(private val state: TextEditorState) {
 			listOf(
 				buildAnnotatedString {
 					append(prefix)
-					if (inheritStyle) {
-						append(
-							buildAnnotatedStringWithSpans { addSpan ->
-								append(newText.text)
-								inheritedStyles.forEach { style ->
-									addSpan(style, 0, newText.length)
-								}
-							}
-						)
-					} else {
-						append(newText)
-					}
+					append(newText)
 					append(suffix)
 				}
 			)
@@ -605,7 +613,16 @@ class TextEditManager(private val state: TextEditorState) {
 		}
 	}
 
-	private fun applyStyleOperation(operation: TextEditOperation.StyleSpan): OperationMetadata? {
+	private fun applyStyleOperation(addToHistory: Boolean, operation: TextEditOperation.StyleSpan): OperationMetadata {
+		// Captured before the change: undo puts these back rather than inverting
+		// the operation, which would strip styling the range already carried.
+		val before = if (addToHistory) {
+			(operation.range.start.line..operation.range.end.line)
+				.filter { it in state.textLines.indices }
+				.associateWith { state.textLines[it].spanStyles }
+		} else {
+			emptyMap()
+		}
 		if (operation.range.isSingleLine()) {
 			if (operation.isAdd) {
 				val updatedLine = spanManager.applySingleLineSpanStyle(
@@ -656,7 +673,7 @@ class TextEditManager(private val state: TextEditorState) {
 			}
 		}
 
-		return null
+		return OperationMetadata(spanStylesBefore = before)
 	}
 
 	private fun applyRichSpanOperation(operation: TextEditOperation.RichSpan): OperationMetadata? {
@@ -736,15 +753,36 @@ class TextEditManager(private val state: TextEditorState) {
 	}
 
 	fun undo() {
-		history.undo()?.let { entry ->
-			when (entry.operation) {
-				is TextEditOperation.Insert -> undoInsert(entry.operation, entry)
-				is TextEditOperation.Delete -> undoDelete(entry, entry.operation)
-				is TextEditOperation.Replace -> undoReplace(entry.operation, entry)
-				is TextEditOperation.StyleSpan -> undoStyleSpan(entry.operation)
-				is TextEditOperation.RichSpan -> undoRichSpan(entry.operation)
-				is TextEditOperation.LineBlock -> undoLineBlock(entry.operation)
+		check(!history.isGrouping) { "undo inside an edit group" }
+		val entry = history.undo() ?: return
+		var done = false
+		try {
+			// One revision for the whole step: a group's edits are reverted last to
+			// first, each against the document the next-later one left behind.
+			state.withAtomicEdit {
+				when (entry) {
+					is HistoryEntry.Edit -> undoEdit(entry)
+					is HistoryEntry.Group -> {
+						entry.entries.asReversed().forEach(::undoEdit)
+						state.cursor.updatePosition(entry.cursorBefore)
+					}
+				}
 			}
+			done = true
+		} finally {
+			// The document was rolled back, so the step is still applied: put it back.
+			if (!done) history.redo()
+		}
+	}
+
+	private fun undoEdit(entry: HistoryEntry.Edit) {
+		when (val operation = entry.operation) {
+			is TextEditOperation.Insert -> undoInsert(operation, entry)
+			is TextEditOperation.Delete -> undoDelete(entry, operation)
+			is TextEditOperation.Replace -> undoReplace(operation, entry)
+			is TextEditOperation.StyleSpan -> undoStyleSpan(operation, entry.metadata)
+			is TextEditOperation.RichSpan -> undoRichSpan(operation)
+			is TextEditOperation.LineBlock -> undoLineBlock(operation)
 		}
 	}
 
@@ -756,15 +794,14 @@ class TextEditManager(private val state: TextEditorState) {
 			state.cursor.releaseManualStyles()
 			state.cursor.updatePosition(operation.cursorBefore)
 			state.invalidateCopiedRichSpans()
-			// Requested inside the transaction so the commit flushes one pass; this
-			// also refreshes canUndo/canRedo after the history pop.
+			// Requested inside the transaction so the commit flushes one pass.
 			state.updateBookKeeping(lineBlockLayoutUpdate(operation.lines))
 		}
 	}
 
 	private fun undoReplace(
 		operation: TextEditOperation.Replace,
-		entry: HistoryEntry
+		entry: HistoryEntry.Edit
 	) {
 		// Calculate the current range of the replaced text
 		val undoRange = if (operation.newText.contains('\n')) {
@@ -811,7 +848,7 @@ class TextEditManager(private val state: TextEditorState) {
 	}
 
 	private fun undoDelete(
-		entry: HistoryEntry,
+		entry: HistoryEntry.Edit,
 		operation: TextEditOperation.Delete
 	) {
 		entry.metadata.deletedText?.let { deletedText ->
@@ -834,7 +871,7 @@ class TextEditManager(private val state: TextEditorState) {
 
 	private fun undoInsert(
 		operation: TextEditOperation.Insert,
-		entry: HistoryEntry
+		entry: HistoryEntry.Edit
 	) {
 		val endPosition = if (operation.text.contains('\n')) {
 			val lines = operation.text.text.split('\n')
@@ -861,17 +898,67 @@ class TextEditManager(private val state: TextEditorState) {
 		)
 	}
 
-	private fun undoStyleSpan(operation: TextEditOperation.StyleSpan) {
-		// Create inverse operation - if it was adding a style, we remove it and vice versa
-		val inverseOperation = TextEditOperation.StyleSpan(
-			range = operation.range,
+	/**
+	 * Undoes a style operation with its exact inverse: the style is removed only
+	 * where the operation added it, or put back only where the operation removed
+	 * it, as read from the styles each line carried before. A blind inverse over
+	 * the whole range would strip styling the range already had (bold applied over
+	 * a partly bold selection). Each piece is an ordinary operation through the
+	 * pipeline, so what consumers are told is what changed.
+	 */
+	private fun undoStyleSpan(operation: TextEditOperation.StyleSpan, metadata: OperationMetadata) {
+		val pieces = exactInverseOf(operation, metadata.spanStylesBefore)
+		state.withAtomicEdit {
+			pieces.forEach { applyOperation(it, addToHistory = false) }
+			// An operation that changed nothing still moved the caret.
+			state.cursor.updatePosition(operation.cursorBefore)
+		}
+	}
+
+	/**
+	 * The inverse of [operation] as the operations that undo exactly what it did,
+	 * given [before], the styles each line had.
+	 */
+	private fun exactInverseOf(
+		operation: TextEditOperation.StyleSpan,
+		before: Map<Int, List<AnnotatedString.Range<SpanStyle>>>,
+	): List<TextEditOperation.StyleSpan> {
+		fun inverse(range: TextEditorRange) = TextEditOperation.StyleSpan(
+			range = range,
 			style = operation.style,
 			isAdd = !operation.isAdd,
 			cursorBefore = operation.cursorAfter,
-			cursorAfter = operation.cursorBefore
+			cursorAfter = operation.cursorBefore,
 		)
+		return before.entries.sortedBy { it.key }.flatMap { (line, spans) ->
+			val lineLength = state.textLines.getOrNull(line)?.length ?: return@flatMap emptyList()
+			val start = if (line == operation.range.start.line) operation.range.start.char else 0
+			val end = if (line == operation.range.end.line) operation.range.end.char else lineLength
+			val had = spans.filter { it.item == operation.style }
+				.map { maxOf(it.start, start) until minOf(it.end, end) }
+				.filter { !it.isEmpty() }
+				.sortedBy { it.first }
+			// Adding touched what was not styled; removing touched what was.
+			val touched = if (operation.isAdd) (start until end).minus(had) else had.mergedRuns()
+			touched.map { inverse(TextEditorRange(CharLineOffset(line, it.first), CharLineOffset(line, it.last + 1))) }
+		}
+	}
 
-		applyOperation(inverseOperation, addToHistory = false)
+	private fun List<IntRange>.mergedRuns(): List<IntRange> = fold(mutableListOf()) { runs, run ->
+		val last = runs.lastOrNull()
+		if (last != null && run.first <= last.last + 1) runs[runs.lastIndex] = last.first..maxOf(last.last, run.last)
+		else runs += run
+		runs
+	}
+
+	/** The parts of this range not covered by [runs]. */
+	private fun IntRange.minus(runs: List<IntRange>): List<IntRange> = buildList {
+		var from = first
+		for (run in runs.mergedRuns()) {
+			if (run.first > from) add(from until run.first)
+			from = maxOf(from, run.last + 1)
+		}
+		if (from <= last) add(from..last)
 	}
 
 	private fun undoRichSpan(operation: TextEditOperation.RichSpan) {
@@ -887,8 +974,21 @@ class TextEditManager(private val state: TextEditorState) {
 	}
 
 	fun redo() {
-		history.redo()?.let { entry ->
-			applyOperation(entry.operation, addToHistory = false)
+		check(!history.isGrouping) { "redo inside an edit group" }
+		val entry = history.redo() ?: return
+		var done = false
+		try {
+			state.withAtomicEdit {
+				when (entry) {
+					is HistoryEntry.Edit -> applyOperation(entry.operation, addToHistory = false)
+					is HistoryEntry.Group -> entry.entries.forEach {
+						applyOperation(it.operation, addToHistory = false)
+					}
+				}
+			}
+			done = true
+		} finally {
+			if (!done) history.undo()
 		}
 	}
 

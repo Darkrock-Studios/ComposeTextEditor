@@ -201,24 +201,53 @@ The `RichSpanClickListener` KDoc now states the Boolean's real contract
 
 - Focus on lift for finger, on press for mouse. Device-confirmed: no keyboard on
   pan, fling coasts.
+- Every mouse button focuses on press, the secondary one included (1.22). The
+  focus handler reads the press event itself rather than through
+  `awaitFirstDown`, which on skiko answers only the primary button.
 - Spell-check menu policy: tap opens a menu only with a correction to offer,
   other spans delegate to the host listener.
 - A tap reports a span click on release, and only when it lifts on the span it
   landed on (1.15). The release is still dispatched to the Canvas handler before
   the container's focus handler, so the popup check above is unchanged.
-- Long press selects and focuses (test-pinned).
+- Long press selects and focuses (test-pinned). A double tap selects the word
+  too, and dragging on from either extends by word (3.7). Such a drag travels
+  past touch slop, which alone would read as a pan, so the container handler
+  also focuses when the gesture selected: `TextEditorSelectionManager.
+  touchSelectionGeneration` advances on every finger selection, and the handler
+  compares it between press and release. This is still an editor-observable
+  outcome, not a listener's answer, and it needs no consumption. The handler
+  reads the press on the Initial pass, because a second tap selects its word on
+  the down and the Main pass would sample the generation after the bump. A
+  gesture that selected focuses even when a popup is showing, since a selection
+  must be typeable over, but then does not ask for the soft keyboard, which
+  would cover the popup; the popup check alone guards gestures that selected
+  nothing.
+- The platform text toolbar (3.8) is not a popup in this sense: it is not
+  routed through `contextMenuState`, so `popupIsShowing` never sees it, and a
+  long press that selects gets both the toolbar and the keyboard, as native
+  Android does. Where there is no platform toolbar the context menu stands in,
+  and only at a bare caret: it is modal, and after every selection it would eat
+  the next tap and, through the popup check, the keyboard.
 - Focus is skipped only when the tap or long press left a popup showing
   (test-pinned from both sides: popup-opening tap does not focus, span-claimed
   tap with no popup does). Bullets and blockquotes focus by touch again.
 - The markdown demo document is long enough to fling and puts blocks below the
   fold.
 
-Deliberately not addressed, tracked as follow-ups:
+Formerly open, closed by 3.13:
 
-- Dragging a selection handle cannot restore focus once it is lost (needs the
-  same "gesture completed, restore focus" design as popup dismissal).
-- The orphaned long-press job when a second finger lands mid-gesture. Pre-dates
-  this branch; exists on `main`.
+- Dragging a selection handle to restore focus is moot: 1.18 drops the handles
+  with focus, so an unfocused editor has none to grab, and a finger where one
+  stood is an ordinary tap, which focuses (test-pinned). A drag still advances
+  the touch selection generation on every move (test-pinned), so a drop focuses
+  like any selecting gesture even under a popup and asks for a dismissed
+  keyboard back, unless a popup is showing.
+- A second finger landing mid-gesture cancels the long press and the tap in the
+  gesture handler, and reads as a pan in the focus handler, so a pinch or a
+  two-finger scroll neither selects nor raises the keyboard. Only pointers that
+  hit the editor's node reach its handlers, so this sees a second finger on the
+  editor, not one on the host around it. The long-press job is cancelled in a
+  `finally` whenever its gesture ends, so it cannot be orphaned.
 
 ## Verification assets
 
@@ -229,7 +258,8 @@ Deliberately not addressed, tracked as follow-ups:
   claimed-tap-still-focuses and long-press-on-selection tests go red, the other
   eight stay green.
 - Harness additions in `EditorUiTest`: `tapAt`, `tapAtCharacter`, `panFrom`,
-  `longPressAtCharacter`, `autoFocus` and `contextMenuState` parameters. Gotchas
+  `longPressAtCharacter`, `doubleTapAtCharacter`, `longPressDragToCharacter`,
+  `autoFocus` and `contextMenuState` parameters. Gotchas
   recorded: the long-press timer is a coroutine on the editor's scope driven by
   the virtual test clock, so tests must use `mainClock.advanceTimeBy`, never
   `Thread.sleep`; and pointer input is injected at the tagged editor node, not

@@ -68,7 +68,7 @@ the [API reference & recipes](https://darkrock-studios.github.io/ComposeTextEdit
 | --- | --- |
 | Desktop (JVM) | Supported |
 | Android | Supported |
-| iOS | Experimental: soft keyboard input is incomplete |
+| iOS | Experimental: typing, autocorrect, and CJK composition work in the simulator; the edit menu and a device pass are pending |
 | WASM | Experimental: typing, backspace, and IME composition run through the browser input session; the soft keyboard and real-browser IME passes are pending |
 
 See the [roadmap](docs/ROADMAP.md) for what is planned.
@@ -93,6 +93,10 @@ Spell Checking addon:
 Find & Replace addon:
 
 `implementation("com.darkrockstudios:composetexteditor-find:2.0.0")`
+
+On iOS, host the Compose view with `.ignoresSafeArea(.keyboard)` in SwiftUI, as the
+Compose Multiplatform template does. The editor keeps its caret above the keyboard itself;
+letting SwiftUI shrink the view as well moves the content twice.
 
 ## Really?
 

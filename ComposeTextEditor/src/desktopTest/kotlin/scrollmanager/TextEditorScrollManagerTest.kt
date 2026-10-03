@@ -457,6 +457,92 @@ class TextEditorScrollManagerTest {
 	}
 
 	@Test
+	fun `test a caret under the covered bottom is off screen and scrolls above it`() = testScope.runTest {
+		val scrollState = createMockScrollState()
+		val lineWraps = createTestLineWraps(10)
+
+		val manager = TextEditorScrollManager(
+			scope = testScope,
+			scrollState = scrollState,
+			getLines = { List(10) { AnnotatedString("Line $it") } },
+			getViewportSize = { Size(100f, 100f) }, // Shows 5 lines
+			getCursorPosition = { CharLineOffset(3, 5) },
+			getLineOffsets = { lineWraps }
+		)
+		manager.updateContentHeight(200)
+		// A keyboard over the bottom two rows leaves three uncovered.
+		manager.obscuredBottomPx = 40
+
+		// Line 3 spans y=60..80: inside the viewport, but under the keyboard.
+		every { scrollState.value } returns 0
+		assertFalse(manager.isOffsetVisible(CharLineOffset(3, 5)))
+
+		val scrollSlot = slot<Int>()
+		coEvery { scrollState.animateScrollTo(capture(scrollSlot)) } returns Unit
+
+		manager.ensureCursorVisible()
+		testScope.advanceUntilIdle()
+
+		// cursorTop(60) + cursorHeight(20) - uncovered height(60)
+		assertTrue(scrollSlot.isCaptured)
+		assertEquals(20, scrollSlot.captured)
+	}
+
+	@Test
+	fun `test the covered bottom extends the scroll range so the last line can clear it`() = testScope.runTest {
+		val scrollState = createMockScrollState()
+		val lineWraps = createTestLineWraps(10)
+
+		val manager = TextEditorScrollManager(
+			scope = testScope,
+			scrollState = scrollState,
+			getLines = { List(10) { AnnotatedString("Line $it") } },
+			getViewportSize = { Size(100f, 100f) },
+			getCursorPosition = { CharLineOffset(9, 5) },
+			getLineOffsets = { lineWraps }
+		)
+		manager.updateContentHeight(200)
+		manager.obscuredBottomPx = 40
+
+		// contentHeight(200) + covered(40) - viewportHeight(100)
+		verify { scrollState.maxValue = 140 }
+
+		every { scrollState.value } returns 0
+		every { scrollState.maxValue } returns 140
+		val scrollSlot = slot<Int>()
+		coEvery { scrollState.animateScrollTo(capture(scrollSlot)) } returns Unit
+
+		manager.ensureCursorVisible()
+		testScope.advanceUntilIdle()
+
+		// The last line (y=180..200) ends at the keyboard's top: 200 - 60.
+		assertTrue(scrollSlot.isCaptured)
+		assertEquals(140, scrollSlot.captured)
+	}
+
+	@Test
+	fun `test a covered bottom that leaves no room for the caret row is ignored`() = testScope.runTest {
+		val scrollState = createMockScrollState()
+		val lineWraps = createTestLineWraps(10)
+
+		val manager = TextEditorScrollManager(
+			scope = testScope,
+			scrollState = scrollState,
+			getLines = { List(10) { AnnotatedString("Line $it") } },
+			getViewportSize = { Size(100f, 100f) },
+			getCursorPosition = { CharLineOffset(3, 5) },
+			getLineOffsets = { lineWraps }
+		)
+		manager.updateContentHeight(200)
+		// Ten pixels uncovered cannot hold a 20 pixel row: the platform must move the
+		// editor instead, so the caret keeps the whole viewport.
+		manager.obscuredBottomPx = 90
+
+		every { scrollState.value } returns 0
+		assertTrue(manager.isOffsetVisible(CharLineOffset(3, 5)))
+	}
+
+	@Test
 	fun `test offset missing from a stale layout uses the nearest wrap above`() = testScope.runTest {
 		val scrollState = createMockScrollState()
 		val lineWraps = createTestLineWraps(3, lineHeight = 30f)

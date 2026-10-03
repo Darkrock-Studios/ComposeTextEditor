@@ -13,11 +13,23 @@ import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 
+/**
+ * Which row the caret draws on when its position is a wrap offset: [Downstream]
+ * puts it at the start of the row after the wrap, [Upstream] at the end of the row
+ * before it. Anywhere else the two name the same row.
+ */
+enum class CaretAffinity { Downstream, Upstream }
+
 class TextEditorCursorState(
 	private val editorState: TextEditorState
 ) {
 	private var _position by mutableStateOf(CharLineOffset(0, 0))
 	val position: CharLineOffset get() = _position
+
+	private var _affinity by mutableStateOf(CaretAffinity.Downstream)
+
+	/** The row the caret draws on at a wrap offset; every move resets it to [CaretAffinity.Downstream]. */
+	val affinity: CaretAffinity get() = _affinity
 
 	private var _isVisible by mutableStateOf(true)
 	val isVisible: Boolean get() = _isVisible
@@ -68,10 +80,25 @@ class TextEditorCursorState(
 	)
 	val positionFlow: SharedFlow<CharLineOffset> = _cursorPositionFlow
 
-	fun updatePosition(position: CharLineOffset, updateStyles: Boolean = true) {
+	/**
+	 * Moves the caret to [position], clamped into the document. Not snapped to a
+	 * grapheme boundary: typing a ZWJ sequence one code point at a time in front of
+	 * an emoji passes through a caret inside the joined cluster, so each movement
+	 * and hit-test path snaps for itself.
+	 */
+	fun updatePosition(position: CharLineOffset, updateStyles: Boolean = true) =
+		updatePosition(position, CaretAffinity.Downstream, updateStyles)
+
+	/** [updatePosition], then the row the caret draws on: End on a wrapped row places it [CaretAffinity.Upstream]. */
+	internal fun updatePosition(position: CharLineOffset, affinity: CaretAffinity) =
+		updatePosition(position, affinity, updateStyles = true)
+
+	private fun updatePosition(position: CharLineOffset, affinity: CaretAffinity, updateStyles: Boolean) {
 		val oldPosition = _position
 		val newPosition = position.coerceInto(editorState.textLines)
 		verticalGoal = null
+		// Before the scroll request below, which reads the row the caret is on.
+		_affinity = affinity
 		_position = newPosition
 		_cursorPositionFlow.tryEmit(newPosition)
 
@@ -161,22 +188,57 @@ class TextEditorCursorState(
 		}
 	}
 
+	/** Moves the caret back [n] grapheme clusters, a line break counting as one. */
 	fun moveLeft(n: Int = 1) {
-		val currentCharIndex = editorState.getCharacterIndex(position)
-		val newCharIndex = maxOf(currentCharIndex - n, 0)
-		updatePosition(editorState.getOffsetAtCharacter(newCharIndex))
+		val lines = editorState.textLines
+		var (line, char) = position.coerceInto(lines)
+		var remaining = n
+		while (remaining > 0) {
+			if (char > 0) {
+				graphemeCursor(lines[line].text).use { breaks ->
+					while (remaining > 0 && char > 0) {
+						char = breaks.preceding(char).coerceAtLeast(0)
+						remaining--
+					}
+				}
+			} else if (line > 0) {
+				line--
+				char = lines[line].length
+				remaining--
+			} else {
+				break
+			}
+		}
+		updatePosition(CharLineOffset(line, char))
 	}
 
+	/** Moves the caret forward [n] grapheme clusters, a line break counting as one. */
 	fun moveRight(n: Int = 1) {
-		val currentCharIndex = editorState.getCharacterIndex(position)
-		val totalChars = editorState.textLines.sumOf { it.length + 1 } - 1
-		val newCharIndex = minOf(currentCharIndex + n, totalChars)
-		updatePosition(editorState.getOffsetAtCharacter(newCharIndex))
+		val lines = editorState.textLines
+		var (line, char) = position.coerceInto(lines)
+		var remaining = n
+		while (remaining > 0) {
+			val length = lines[line].length
+			if (char < length) {
+				graphemeCursor(lines[line].text).use { breaks ->
+					while (remaining > 0 && char < length) {
+						char = breaks.following(char).let { if (it == BreakCursor.DONE) length else it }
+						remaining--
+					}
+				}
+			} else if (line < lines.lastIndex) {
+				line++
+				char = 0
+				remaining--
+			} else {
+				break
+			}
+		}
+		updatePosition(CharLineOffset(line, char))
 	}
 
 	fun moveToLineStart() {
-		val wrapStart = editorState.lineOffsets.getOrNull(editorState.getWrappedLineIndex(position))
-			?.wrapStartsAtIndex ?: 0
+		val wrapStart = editorState.lineOffsets.getOrNull(editorState.cursorRowIndex())?.wrapStartsAtIndex ?: 0
 		updatePosition(position.copy(char = wrapStart))
 	}
 }

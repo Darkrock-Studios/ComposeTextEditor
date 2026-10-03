@@ -70,7 +70,12 @@ The semantics they pin down:
 
 - `commitText` replaces the composing region when there is one, otherwise
   replaces the selection or inserts at the cursor, then always ends
-  composition (even when no text changed).
+  composition (even when no text changed). Once the text has landed and the
+  caret is placed, the `EditBehavior` chain is told where (`onTextInput`); a
+  behavior that edits on top owns the caret and the IME is asked to resync.
+  `setComposingText` never tells it: composing updates are not committed
+  text. `finishComposingText` over a typed composition does, since it
+  commits the composition as it stands.
 - `setComposingText` is the same replacement, but the inserted text becomes
   the new composing region (rendered underlined). This is the path dead-key
   and accent composition takes.
@@ -91,9 +96,20 @@ themselves when told of the move; one that does not would type over the old
 composing word, wherever it is. A caret placed inside the composition keeps
 it, since some keyboards edit mid-composition. `deleteSurroundingText` counts
 from the selection's edges and leaves the selection itself in place, as the
-Android contract requires. And each of these functions is a single ordinary
-mutation through the edit manager: nothing here coalesces undo. Batching
-(below) suppresses notifications only.
+Android contract requires. Each of these functions is one undo step (a
+commit over a selection groups its delete and insert), and `setComposingText`
+is recorded as typing: a composition's updates and its commit fold into the
+typing run they rewrite, so a composed word plus its commit undoes as one
+step and joins the typing around it as a plain typed word does. A commit is
+typing only when what it replaces was composed (`composingIsTyped`); a commit
+over text the IME merely marked with `setComposingRegion` is the shape of an
+autocorrect and stays its own step, so undo gives back what was typed. The
+protocol cannot tell a keyboard correcting the word it is composing from a
+CJK keyboard committing the candidate for what it is composing, nor a
+keyboard that re-marks a word and rewrites it through `setComposingText`
+from one letting the user keep typing that word, so both fold into the run:
+undo removes the word rather than reverting the correction. Batching (below)
+suppresses notifications only.
 
 ## Android
 

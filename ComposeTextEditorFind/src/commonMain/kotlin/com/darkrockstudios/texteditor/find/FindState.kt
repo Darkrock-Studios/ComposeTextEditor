@@ -362,10 +362,11 @@ class FindState(
 
 	/**
 	 * Replaces [targets], in document order and not overlapping, last to first so each
-	 * replacement leaves the earlier ranges where they were. An edit at the edge of the find in
-	 * selection scope would shrink it, so the scope is re-laid over what it covered.
+	 * replacement leaves the earlier ranges where they were, as one undo step. An edit at
+	 * the edge of the find in selection scope would shrink it, so the scope is re-laid over
+	 * what it covered.
 	 */
-	private fun replaceRanges(targets: List<TextEditorRange>, replaceText: String) {
+	private fun replaceRanges(targets: List<TextEditorRange>, replaceText: String) = textState.editGroup {
 		val scope = scopeRange()
 		val scopeStart = scope?.start?.let(textState::getCharacterIndex)
 		var scopeEnd = scope?.end?.let(textState::getCharacterIndex)

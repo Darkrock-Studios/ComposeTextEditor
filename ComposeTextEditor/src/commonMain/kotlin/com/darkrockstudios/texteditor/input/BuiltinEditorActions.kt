@@ -14,6 +14,7 @@ import com.darkrockstudios.texteditor.input.EditorCommand.Action
 import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
 import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.applyStyleForEditAt
+import com.darkrockstudios.texteditor.state.insertTypedNewline
 import com.darkrockstudios.texteditor.state.moveToNextWord
 import com.darkrockstudios.texteditor.state.moveToPreviousWord
 import com.darkrockstudios.texteditor.state.moveToWordEnd
@@ -204,16 +205,18 @@ private fun TextEditorState.deleteByMotion(locateRangeEdge: () -> Unit) {
 	} else {
 		TextEditorRange(origin, edge)
 	}
-	delete(range, cursorBefore = origin)
+	// Never typing, even over one character: a backspace after it is its own step.
+	editManager.recordingAsTyping(false) { delete(range, cursorBefore = origin) }
 }
 
 /**
- * Past the last character of the caret's visual row. Not the End motion, which on a
- * wrapped row stops before that character so the caret stays drawn on the row.
+ * Past the last character of the caret's visual row, as a plain position: on a
+ * wrapped row that is the wrap offset, which End places upstream and this leaves
+ * downstream, since it only bounds a delete.
  */
 private fun TextEditorState.moveCursorToVisualRowEnd() {
 	val position = cursorPosition
-	val row = getWrappedLineIndex(position)
+	val row = cursorRowIndex()
 	val nextRow = lineOffsets.getOrNull(row + 1)
 	val end = if (row >= 0 && nextRow != null && nextRow.line == position.line) {
 		nextRow.wrapStartsAtIndex
@@ -233,7 +236,7 @@ private fun TextEditorState.deleteToParagraphEnd() {
 	}
 }
 
-private fun TextEditorState.handleIndent() {
+private fun TextEditorState.handleIndent() = editGroup {
 	val selection = selector.selection
 	if (selection != null && selection.start.line != selection.end.line) {
 		indentLineRange(selection.start.line, selection.end.line)
@@ -317,9 +320,4 @@ private fun leadingOutdentWidth(line: AnnotatedString): Int {
 	return count
 }
 
-private fun TextEditorState.handleEnter() {
-	if (selector.selection != null) {
-		selector.deleteSelection()
-	}
-	insertNewlineAtCursor()
-}
+private fun TextEditorState.handleEnter() = insertTypedNewline()

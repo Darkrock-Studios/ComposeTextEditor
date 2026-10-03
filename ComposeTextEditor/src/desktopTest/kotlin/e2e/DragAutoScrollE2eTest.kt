@@ -1,11 +1,13 @@
 package e2e
 
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.text.AnnotatedString
 import utils.editorUiTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
@@ -154,5 +156,100 @@ class DragAutoScrollE2eTest {
 
 		assertEquals(scrollAfterReturn, state.scrollState.value)
 		mouse(fresh = false) { release() }
+	}
+}
+
+/**
+ * A line drag puts the caret at the end of the paragraph under the pointer, which in a
+ * long wrapped paragraph is a row outside the viewport (a word drag does the same only
+ * for a word wider than the row, broken across rows). The editor's own scroll into view
+ * must stay out of it while the auto-scroll runs: the auto-scroll is the only scroller
+ * then, and the caret is revealed once it stops.
+ */
+@OptIn(ExperimentalTestApi::class)
+class LineDragAutoScrollE2eTest {
+
+	// Each paragraph is many viewports tall whatever the system font, so a line drag's
+	// caret (the paragraph end) starts off screen; the tests assert it before relying on it.
+	private val paragraphs = AnnotatedString(
+		(0 until 8).joinToString("\n") { p -> (0 until 400).joinToString(" ") { "p${p}w$it" } },
+	)
+
+	@Test
+	fun `a line drag held below the viewport scrolls at a steady rate`() = editorUiTest(initialText = paragraphs) {
+		test.mainClock.autoAdvance = false
+		val viewportHeight = state.viewportSize.height
+		mouse {
+			moveTo(positionOfCharacter(2))
+			press()
+			release()
+			advanceEventTime(50)
+			press()
+			release()
+			advanceEventTime(50)
+			press()
+			moveTo(Offset(20f, viewportHeight + 40f))
+		}
+		assertTrue(selectedText.startsWith("p0w0 p0w1"), "a line drag: $selectedText")
+		assertFalse(state.scrollManager.isOffsetVisible(state.cursorPosition), "the caret is off screen: ${state.cursorPosition}")
+		test.mainClock.advanceTimeBy(100)
+		val deltas = (0 until 6).map {
+			val before = state.scrollState.value
+			test.mainClock.advanceTimeBy(200)
+			state.scrollState.value - before
+		}
+
+		val mean = deltas.average()
+		assertTrue(mean > 0, "expected scrolling: $deltas")
+		assertTrue(deltas.all { it.toDouble() in (mean * 0.7)..(mean * 1.3) }, "expected an even pace: $deltas")
+		mouse(fresh = false) { release() }
+	}
+
+	/** Released outside, the drag leaves the caret at a paragraph end the auto-scroll never reached. */
+	@Test
+	fun `releasing a line drag outside reveals the caret`() = editorUiTest(initialText = paragraphs) {
+		test.mainClock.autoAdvance = false
+		val viewportHeight = state.viewportSize.height
+		mouse {
+			moveTo(positionOfCharacter(2))
+			press()
+			release()
+			advanceEventTime(50)
+			press()
+			release()
+			advanceEventTime(50)
+			press()
+			moveTo(Offset(20f, viewportHeight + 40f))
+		}
+		test.mainClock.advanceTimeBy(300)
+		assertFalse(state.scrollManager.isOffsetVisible(state.cursorPosition), "precondition: the caret is off screen")
+
+		mouse(fresh = false) { release() }
+		test.mainClock.autoAdvance = true
+		waitForIdle()
+
+		assertTrue(state.scrollManager.isOffsetVisible(state.cursorPosition))
+	}
+
+	/** The caret is scrolled into view again once the auto-scroll is over. */
+	@Test
+	fun `after the drag the caret scrolls into view as usual`() = editorUiTest(initialText = paragraphs) {
+		test.mainClock.autoAdvance = false
+		val viewportHeight = state.viewportSize.height
+		mouse {
+			moveTo(positionOfCharacter(2))
+			press()
+			moveTo(Offset(20f, viewportHeight + 40f))
+		}
+		test.mainClock.advanceTimeBy(500)
+		mouse(fresh = false) { release() }
+		test.mainClock.autoAdvance = true
+		waitForIdle()
+		state.scrollState.scrollTo(0)
+		waitForIdle()
+
+		press(Key.DirectionRight)
+
+		assertTrue(state.scrollManager.isOffsetVisible(state.cursorPosition))
 	}
 }

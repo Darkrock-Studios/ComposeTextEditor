@@ -90,11 +90,12 @@ class TextEditorWordSegmentationTest {
 		)
 	}
 
+	/** ICU's word rules break letters at a period, so an abbreviation is its letters. */
 	@Test
 	fun `test abbreviations`() {
 		assertSegments(
 			"U.S.A. Ph.D",
-			listOf("U.S.A.", "Ph.D")
+			listOf("U", "S", "A", "Ph", "D")
 		)
 
 		assertSegments(
@@ -104,7 +105,7 @@ class TextEditorWordSegmentationTest {
 
 		assertSegments(
 			"i.e. e.g. etc.",
-			listOf("i.e.", "e.g.", "etc")
+			listOf("i", "e", "e", "g", "etc")
 		)
 	}
 
@@ -112,12 +113,12 @@ class TextEditorWordSegmentationTest {
 	fun `test mixed word types`() {
 		assertSegments(
 			"The U.S.A.'s self-aware Ph.D. student",
-			listOf("The", "U.S.A.'s", "self", "aware", "Ph.D.", "student")
+			listOf("The", "U", "S", "A", "s", "self", "aware", "Ph", "D", "student")
 		)
 
 		assertSegments(
 			"It's a real-time e.g. don't-know-what",
-			listOf("It's", "a", "real", "time", "e.g.", "don't", "know", "what")
+			listOf("It's", "a", "real", "time", "e", "g", "don't", "know", "what")
 		)
 	}
 
@@ -125,8 +126,16 @@ class TextEditorWordSegmentationTest {
 	fun `test possessives with abbreviations`() {
 		assertSegments(
 			"U.S.'s example, NASA's work",
-			listOf("U.S.'s", "example", "NASA's", "work")
+			listOf("U", "S", "s", "example", "NASA's", "work")
 		)
+	}
+
+	@Test
+	fun `typographic apostrophes, combining marks and cjk`() {
+		assertSegments("don\u2019t won\u2019t", listOf("don\u2019t", "won\u2019t"))
+		assertSegments("n\u0303o pin\u0303a", listOf("n\u0303o", "pin\u0303a"))
+		assertSegments("日本語を勉強します", listOf("日本語", "を", "勉強", "し", "ます"))
+		assertSegments("a \uD83D\uDE00 b", listOf("a", "b"))
 	}
 
 	@Test
@@ -175,7 +184,7 @@ class TextEditorWordSegmentationTest {
             Line-two
             U.S.A.'s
             """.trimIndent(),
-			listOf("Line", "one", "Line", "two", "U.S.A.'s")
+			listOf("Line", "one", "Line", "two", "U", "S", "A", "s")
 		)
 	}
 

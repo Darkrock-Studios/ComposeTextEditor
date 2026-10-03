@@ -1,5 +1,6 @@
 package e2e.differential
 
+import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.unit.dp
 import utils.Backspace
 import utils.CtrlBackspace
@@ -113,6 +114,12 @@ class BasicTextFieldParityTest {
 	)
 
 	@Test
+	fun `up and down at the document ends measure the next move from the caret`() = assertMatchesNative(
+		start = EditSnapshot("abcdef\nabcdef\nabcdef", caret = 10),
+		strokes = listOf(Up, Up, Down, Down, Down, Down, Up),
+	)
+
+	@Test
 	fun `down on the last row goes to the document end`() = assertMatchesNative(
 		start = EditSnapshot("Hello\nWorld", caret = 8),
 		strokes = listOf(Down),
@@ -123,14 +130,20 @@ class BasicTextFieldParityTest {
 		start = EditSnapshot("abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz", caret = 0),
 		strokes = listOf(End),
 		width = 80.dp,
-		divergesUntil = "1.6",
 	)
 
 	@Test
-	fun `end on a row wrapped at a space stops before the space`() = assertMatchesNative(
-		start = EditSnapshot("hello world again", caret = 0),
-		strokes = listOf(End),
-		width = 60.dp,
+	fun `shift end on a row wrapped mid-word selects to the wrap`() = assertMatchesNative(
+		start = EditSnapshot("abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz", caret = 2),
+		strokes = listOf(ShiftEnd),
+		width = 80.dp,
+	)
+
+	@Test
+	fun `down with a goal x past a row wrapped mid-word lands on the wrap`() = assertMatchesNative(
+		start = EditSnapshot("ab\nabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz", caret = 2),
+		strokes = listOf(Down),
+		width = 80.dp,
 	)
 
 	@Test
@@ -251,8 +264,43 @@ class BasicTextFieldParityTest {
 	@Test
 	fun `a typographic apostrophe stays inside the word`() = assertMatchesNative(
 		start = EditSnapshot("go don’t stop", caret = 8),
-		strokes = listOf(CtrlLeft),
-		divergesUntil = "1.5",
+		strokes = listOf(CtrlLeft, CtrlRight, CtrlShiftLeft),
+	)
+
+	@Test
+	fun `word motion treats a combining mark as part of its word`() = assertMatchesNative(
+		start = EditSnapshot("a n\u0303o pin\u0303a b", caret = 0),
+		strokes = listOf(CtrlRight, CtrlRight, CtrlRight, CtrlLeft, CtrlLeft),
+	)
+
+	@Test
+	fun `word motion stops at each emoji`() = assertMatchesNative(
+		start = EditSnapshot("ab \uD83D\uDE00\uD83D\uDC4D\uD83C\uDFFD cd", caret = 0),
+		strokes = listOf(CtrlRight, CtrlRight, CtrlRight, CtrlRight, CtrlLeft, CtrlLeft, CtrlLeft),
+	)
+
+	@Test
+	fun `ctrl backspace and ctrl delete take one emoji at a time`() = assertMatchesNative(
+		start = EditSnapshot("ab \uD83D\uDE00\uD83D\uDE00 cd", caret = 5),
+		strokes = listOf(CtrlDelete, CtrlBackspace),
+	)
+
+	@Test
+	fun `word motion steps through cjk by dictionary word`() = assertMatchesNative(
+		start = EditSnapshot("日本語を勉強します", caret = 0),
+		strokes = listOf(CtrlRight, CtrlRight, CtrlRight, CtrlLeft),
+	)
+
+	@Test
+	fun `word motion crosses lines and empty lines`() = assertMatchesNative(
+		start = EditSnapshot("one two\n\nthree", caret = 7),
+		strokes = listOf(CtrlRight, CtrlLeft, CtrlLeft, CtrlLeft),
+	)
+
+	@Test
+	fun `ctrl shift left across hebrew selects the word`() = assertMatchesNative(
+		start = EditSnapshot("abc שלום def", caret = 8),
+		strokes = listOf(CtrlShiftLeft, CtrlShiftLeft),
 	)
 
 	// Paragraph stops
@@ -306,14 +354,12 @@ class BasicTextFieldParityTest {
 	fun `right and left step over an emoji whole`() = assertMatchesNative(
 		start = EditSnapshot("a\uD83D\uDE00b", caret = 1),
 		strokes = listOf(Right, Left),
-		divergesUntil = "1.1",
 	)
 
 	@Test
 	fun `backspace after an emoji removes it whole`() = assertMatchesNative(
 		start = EditSnapshot("a\uD83D\uDE00b", caret = 3),
 		strokes = listOf(Backspace),
-		divergesUntil = "1.1",
 	)
 
 	@Test
@@ -326,35 +372,85 @@ class BasicTextFieldParityTest {
 	fun `delete before an emoji removes it whole`() = assertMatchesNative(
 		start = EditSnapshot("a\uD83D\uDE00b", caret = 1),
 		strokes = listOf(Delete),
-		divergesUntil = "1.1",
 	)
 
 	@Test
 	fun `shift right selects an emoji whole`() = assertMatchesNative(
 		start = EditSnapshot("a\uD83D\uDE00b", caret = 1),
 		strokes = listOf(ShiftRight),
-		divergesUntil = "1.1",
 	)
 
 	@Test
 	fun `right steps over a zwj sequence whole`() = assertMatchesNative(
 		start = EditSnapshot("a\uD83D\uDC68\u200D\uD83D\uDC69\u200D\uD83D\uDC67b", caret = 1),
 		strokes = listOf(Right),
-		divergesUntil = "1.1",
 	)
 
 	@Test
 	fun `right steps over a flag whole`() = assertMatchesNative(
 		start = EditSnapshot("a\uD83C\uDDEF\uD83C\uDDF5b", caret = 1),
 		strokes = listOf(Right),
-		divergesUntil = "1.1",
 	)
 
 	@Test
 	fun `right steps over a combining mark with its base`() = assertMatchesNative(
 		start = EditSnapshot("ae\u0301b", caret = 1),
 		strokes = listOf(Right),
-		divergesUntil = "1.1",
+	)
+
+	@Test
+	fun `backspace after a zwj sequence removes it whole`() = assertMatchesNative(
+		start = EditSnapshot("a\uD83D\uDC68\u200D\uD83D\uDC69\u200D\uD83D\uDC67b", caret = 9),
+		strokes = listOf(Backspace),
+	)
+
+	@Test
+	fun `backspace after a flag removes it whole`() = assertMatchesNative(
+		start = EditSnapshot("a\uD83C\uDDEF\uD83C\uDDF5b", caret = 5),
+		strokes = listOf(Backspace),
+	)
+
+	@Test
+	fun `backspace after a skin tone modifier removes the emoji whole`() = assertMatchesNative(
+		start = EditSnapshot("a\uD83D\uDC4D\uD83C\uDFFDb", caret = 5),
+		strokes = listOf(Backspace),
+	)
+
+	@Test
+	fun `backspace after a keycap removes it whole`() = assertMatchesNative(
+		start = EditSnapshot("a1\uFE0F\u20E3b", caret = 4),
+		strokes = listOf(Backspace),
+	)
+
+	@Test
+	fun `delete before a combining mark removes the base with its mark`() = assertMatchesNative(
+		start = EditSnapshot("ae\u0301b", caret = 1),
+		strokes = listOf(Delete),
+	)
+
+	@Test
+	fun `left steps back over a zwj sequence whole`() = assertMatchesNative(
+		start = EditSnapshot("a\uD83D\uDC68\u200D\uD83D\uDC69\u200D\uD83D\uDC67b", caret = 9),
+		strokes = listOf(Left, Left, Right),
+	)
+
+	@Test
+	fun `shift left selects a combining mark with its base`() = assertMatchesNative(
+		start = EditSnapshot("ae\u0301b", caret = 3),
+		strokes = listOf(ShiftLeft, ShiftLeft),
+	)
+
+	@Test
+	fun `left and right step over cjk one character at a time`() = assertMatchesNative(
+		start = EditSnapshot("日本語", caret = 0),
+		strokes = listOf(Right, Right, Left),
+	)
+
+	@Test
+	fun `down onto a row ending in an emoji lands after it`() = assertMatchesNative(
+		start = EditSnapshot("ab\nabcdefghijkl \uD83D\uDE00\uD83D\uDE00\uD83D\uDE00\uD83D\uDE00 xyz", caret = 2),
+		strokes = listOf(End, Down),
+		width = 120.dp,
 	)
 
 	@Test
@@ -367,6 +463,51 @@ class BasicTextFieldParityTest {
 	fun `a right-to-left word inside left-to-right text moves logically`() = assertMatchesNative(
 		start = EditSnapshot("abc שלום def", caret = 2),
 		strokes = listOf(Right, Right, Right, Right, Left),
+	)
+
+	// Right-to-left paragraphs, with the content-based direction a right-to-left host sets.
+
+	@Test
+	fun `left moves forward through a right-to-left paragraph`() = assertMatchesNative(
+		start = EditSnapshot("שלום עולם", caret = 0),
+		strokes = listOf(Right, Left, Left, Right),
+		textDirection = TextDirection.Content,
+	)
+
+	@Test
+	fun `shift left selects forward and ctrl arrows mirror in a right-to-left paragraph`() = assertMatchesNative(
+		start = EditSnapshot("שלום עולם טוב", caret = 0),
+		strokes = listOf(ShiftLeft, ShiftLeft, CtrlShiftLeft, CtrlLeft, CtrlRight, CtrlRight),
+		textDirection = TextDirection.Content,
+	)
+
+	@Test
+	fun `left and right collapse a selection to its far edge in a right-to-left paragraph`() = assertMatchesNative(
+		start = EditSnapshot("שלום עולם", anchor = 2, caret = 6),
+		strokes = listOf(Left, ShiftLeft, ShiftLeft, Right),
+		textDirection = TextDirection.Content,
+	)
+
+	@Test
+	fun `home and end stay logical in a right-to-left paragraph`() = assertMatchesNative(
+		start = EditSnapshot("שלום עולם", caret = 4),
+		strokes = listOf(Home, End, ShiftHome),
+		textDirection = TextDirection.Content,
+	)
+
+	/** No spaces, so the rows wrap mid-word and the reference's trailing-space stop cannot differ. */
+	@Test
+	fun `up and down keep the x in a wrapped right-to-left paragraph`() = assertMatchesNative(
+		start = EditSnapshot("שלוםעולםטובמאודהיוםומחרשלוםעולםטוב", caret = 2),
+		strokes = listOf(Down, Down, Up, Home, Down, Down, End, Up),
+		width = 120.dp,
+		textDirection = TextDirection.Content,
+	)
+
+	@Test
+	fun `with the default direction a right-to-left paragraph is left-to-right based and logical`() = assertMatchesNative(
+		start = EditSnapshot("שלום עולם", caret = 0),
+		strokes = listOf(Right, Right, Left, CtrlRight),
 	)
 
 	@Test

@@ -59,7 +59,8 @@ Styling lives in two deliberately separate places:
   via `drawBackground`) and declares its behavior: `stickyAtStart` for
   line-anchored gutter markers that must track their whole line,
   `BlockSpanStyle` for spans that own an entire line and its height (images,
-  horizontal rules), and `isDecoration` for view overlays.
+  horizontal rules), `isDecoration` for view overlays, and `isHitTestable`,
+  false for a span that only tints and must leave clicks to what it covers.
 
 The `isDecoration` flag is a load-bearing distinction: content spans (things
 that round-trip through markdown) enter undo history and announce themselves on
@@ -88,10 +89,22 @@ announce the operation on `editOperations`. Code that mutates lines without
 going through an operation is a bug by definition; it would bypass history,
 span re-anchoring, and the edit stream all at once.
 
-`TextEditHistory` holds the undo and redo stacks. Each entry pairs the
-operation with the `OperationMetadata` needed to reverse it (deleted text,
-deleted spans). Consecutive single-character typing and backspacing coalesce
-into wordwise runs, so undo peels words, not keystrokes.
+`TextEditHistory` holds the undo and redo stacks. An entry is one recorded
+operation paired with the `OperationMetadata` needed to reverse it (deleted
+text, deleted spans), or a group of them. Consecutive single-character typing
+and backspacing coalesce into wordwise runs, so undo peels words, not
+keystrokes. IME commits and composition updates are recorded as typing
+whatever their length, so a composed word and its commit fold into the run
+they rewrite rather than leaving one step per keystroke.
+
+One transaction is one undo step. Operations recorded inside a
+`withAtomicEdit` are staged and land as a single group entry when the
+outermost transaction commits (a group of one is recorded as that operation,
+so typing keeps coalescing); a throwing transaction drops them with the
+draft. `TextEditorState.editGroup` is the public face of this: a host wraps a
+compound edit in it and gets one undo step that restores text, spans, and
+caret. Undo of a group reverts its operations last to first inside one
+transaction, redo replays them first to last.
 
 How positions (cursor, selection, spans, history) are carried across edits:
 [design/edit-operation-offset-transforms.md](design/edit-operation-offset-transforms.md).
@@ -108,12 +121,33 @@ line-indexed queries layout and drawing rely on.
 - **`TextEditorCursorState`**: the caret. Its position, blink visibility, and
   the *typing styles*: the set of `SpanStyle`s the next typed character will
   carry, derived from the text around the caret or toggled by toolbar actions.
+  The caret moves by grapheme cluster, never by UTF-16 unit: `TextBreaks`
+  wraps the platform's ICU break iterators (skia's on desktop, iOS and web,
+  `android.icu` on Android) behind one `expect`, and every motion, forward
+  delete, and hit test snaps through it. Backspace is the one asymmetric edit:
+  it removes the previous code point, or a whole emoji sequence, as
+  `BasicTextField` and `EditText` do, so a combining mark comes off its base
+  on its own. Words come from the same place: `wordRuns` segments a line with
+  the platform's ICU word iterator and tags each segment lexical, emoji, or
+  other, and word motion, double-click selection (`findWordSegmentAt`) and the
+  spell checker's candidates (`wordSegments`) all read that one segmentation.
+  The caret also carries an affinity (`CaretAffinity`): a position on a wrap
+  offset belongs to two visual rows, and the affinity says which one the caret
+  is on. Positions stay affinity-free; the motions read the caret's row
+  through `TextEditorState.cursorRowIndex()`, drawing, handles, the touch
+  toolbar and scrolling through the affinity overloads of `getWrapForDrawing`
+  and `getPositionForOffset`, and every move resets the caret to downstream
+  unless it deliberately lands at a row's end (End, or a vertical move past
+  the row's end).
 - **`TextEditorSelectionManager`**: the selection range and the gesture state
   behind it (touch handles, drag). Rule: any content mutation clears the
   selection; only span-level operations keep it.
 - **`TextEditorScrollManager`** (with `TextEditorScrollState`): scroll offset,
   total content height, visible-range queries, and `ensureCursorVisible`, which
-  is deferred through transactions so it always reads fresh layout.
+  is deferred through transactions so it always reads fresh layout. The range
+  runs from minus the top padding (the first row below the top padding) to the
+  last row and bottom padding at the viewport's bottom, and is empty when
+  everything fits.
 - **`PlatformTextEditorExtensions`**: per-platform IME glue (Android cursor
   anchor monitoring; empty elsewhere).
 
@@ -134,7 +168,10 @@ scrollbar, context menu, and IME wiring; `RichTextView` renders the same
 content read-only. Input arrives through platform key, pointer, and IME
 handlers whose only job is translation: raw events become cursor moves,
 selection changes, or `TextEditOperation`s. The view renders what `lineOffsets`
-says and holds no document state of its own.
+says and holds no document state of its own. Content padding belongs to the
+editor: the top and bottom padding are scroll range, and the start and end
+padding are applied inside the canvas, below its pointer input, so a press
+anywhere in the padding reaches the nearest row.
 
 ### Observation and extensions
 
@@ -160,7 +197,11 @@ translation paths:
   three ways: bindings know which chord means what, the
   `EditorActionRegistry` on the state knows what an action *does*, and
   `TextEditorKeyCommandHandler` implements only caret motion, because a
-  motion is not something a host can register. Windows/Linux and macOS
+  motion is not something a host can register. The arrow keys are visual:
+  in a paragraph the layout resolves as right-to-left, the handler mirrors
+  the bound motion (Left and Right, the word motions through
+  `KeyBindings.wordForward`, line start and end) before running it; Home,
+  End, deletes and the Emacs chords stay logical. Windows/Linux and macOS
   conventions ship as two `KeyBindings` values; hosts can substitute their
   own and register actions for their own chords to bind.
 - **Typed characters.** Printable typing that arrives as raw key events
@@ -180,12 +221,14 @@ input session, losing focus (or disabling the editor) cancels it.
 Two extension points hang off this, and they are not interchangeable. An
 **action** is invoked by name, so it needs something to invoke it: a chord, a
 menu item, a toolbar button. An **edit behavior** intercepts one of the
-semantic edits (newline, backspace, forward delete) and may have no trigger at
-all, because an IME can commit a newline or delete a character without ever
-producing a key event. Line-block smart editing is the first behavior, which is
-what makes it reach every input path rather than only the ones that go through
-key handling. Both, and the reasoning for keeping them separate:
-[design/editor-actions.md](design/editor-actions.md).
+semantic edits (typed text, newline, backspace, forward delete) and may have
+no trigger at all, because an IME can commit a word or a newline, or delete a
+character, without ever producing a key event. Line-block smart editing is the
+first behavior, which is what makes it reach every input path rather than only
+the ones that go through key handling; the typed-text hook sees what every
+path commits (never an IME's composing updates) and is what smart punctuation,
+markdown as you type, and auto-link build on. Both, and the reasoning for
+keeping them separate: [design/editor-actions.md](design/editor-actions.md).
 
 The IME contract runs in two directions. Commands flow in, and each one lands
 in a single shared implementation (`ImeEditLogic` in commonMain) so that
@@ -233,12 +276,15 @@ lines, and clears undo history like any other document load. `setText` keeps
 only character-level spans. Both announce the swap by bumping `documentGeneration`
 once it commits, which is how spell check knows to re-scan.
 
-Edits that must land together run inside `TextEditorState.withAtomicEdit`. The
-transaction accumulates mutations in a draft and publishes them as one revision
-at commit, after line-block normalization. A throwing transaction discards the
-draft along with everything staged against it: the deferred relayout, the
-cursor scroll, and the queued `editOperations` announcements. Nothing observes
-a half-applied edit, and nothing announces an edit that never landed.
+Edits that must land together run inside `TextEditorState.withAtomicEdit`
+(public as `editGroup`). The transaction accumulates mutations in a draft and
+publishes them as one revision at commit, after line-block normalization, and
+records the operations made inside it as one undo step. A throwing transaction
+discards the draft along with everything staged against it: the deferred
+relayout, the cursor scroll, the history entries, and the queued
+`editOperations` announcements, and puts the caret and selection back where
+they were. Nothing observes a half-applied edit, and nothing announces or
+remembers an edit that never landed.
 
 ## Layout: the deferred, incremental relayout pass
 

@@ -28,6 +28,7 @@ import com.darkrockstudios.texteditor.annotatedstring.toAnnotatedString
 import com.darkrockstudios.texteditor.coerceInto
 import com.darkrockstudios.texteditor.cursor.CursorMetrics
 import com.darkrockstudios.texteditor.cursor.getWrapForDrawing
+import com.darkrockstudios.texteditor.cursor.getWrappedLineIndex
 import com.darkrockstudios.texteditor.effectiveHeight
 import com.darkrockstudios.texteditor.input.EditorActionRegistry
 import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
@@ -44,6 +45,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlin.concurrent.Volatile
+import kotlin.math.ceil
 import kotlin.math.min
 
 /**
@@ -88,6 +90,24 @@ class TextEditorState(
 				invalidateLayoutInputs()
 				updateBookKeeping()
 			}
+		}
+
+	private var lineBreakWidthKey: Pair<TextMeasurer, TextStyle>? = null
+	private var lineBreakWidthPx = 0f
+
+	/**
+	 * Width of the sliver a selected line break draws: one space in [textStyle], with
+	 * no indent, which layout strips from the style as well.
+	 */
+	internal val lineBreakWidth: Float
+		get() {
+			val key = textMeasurer to textStyle
+			if (key != lineBreakWidthKey) {
+				lineBreakWidthPx = textMeasurer.measure(" ", textStyle.copy(textIndent = TextIndent.None))
+					.size.width.toFloat()
+				lineBreakWidthKey = key
+			}
+			return lineBreakWidthPx
 		}
 
 	/**
@@ -214,16 +234,27 @@ class TextEditorState(
 	 * paired with span line indices from the previous revision, which serializes
 	 * block markers onto the wrong lines.
 	 *
+	 * The revision is also one undo step: edits recorded inside are staged by the
+	 * history and land together when the transaction commits (see [editGroup]).
+	 *
 	 * Re-entrant: a nested call joins the outer transaction and commits with it. A
 	 * throwing [block] discards the draft and leaves [content] on the previous
 	 * revision, because a half-applied revision would keep serializing block markers
-	 * onto the wrong lines long after the failure rather than only during it. State
-	 * outside the document that the block changed is put back by its [onRollback]
-	 * actions.
+	 * onto the wrong lines long after the failure rather than only during it. The
+	 * caret and selection return to where they were, other state outside the
+	 * document is put back by the block's [onRollback] actions, and the staged
+	 * history entries are dropped with the draft.
 	 */
 	internal fun <T> withAtomicEdit(block: () -> T): T {
 		if (draft != null) return block()
 		draft = content
+		editManager.history.beginGroup()
+		// The caret and selection live outside the draft; a rollback puts them back
+		// too, or they would address the revision that was discarded.
+		val cursorBefore = cursor.position
+		val affinityBefore = cursor.affinity
+		val selectionBefore = selector.selection
+		val touchSelectionBefore = selector.isTouchSelection
 		var committed = false
 		try {
 			val result = block()
@@ -242,6 +273,8 @@ class TextEditorState(
 			draft = null
 			committed = true
 			pendingRollbackActions.clear()
+			editManager.history.endGroup(commit = true)
+			refreshHistoryFlags()
 			// Flush the deferred relayout, then the cursor scroll that must read the
 			// fresh offsets, then the commit actions that announce the edit. All of
 			// this runs only on the committing path.
@@ -259,8 +292,8 @@ class TextEditorState(
 			return result
 		} finally {
 			// The throwing path discards everything staged: the draft, the relayout,
-			// the scroll, and the queued actions, which would announce an edit that
-			// no longer exists.
+			// the scroll, the history entries, and the queued actions, which would
+			// announce an edit that no longer exists.
 			draft = null
 			pendingLayoutUpdate = null
 			pendingCursorScroll = false
@@ -269,8 +302,43 @@ class TextEditorState(
 				val rollbacks = pendingRollbackActions.asReversed().toList()
 				pendingRollbackActions.clear()
 				rollbacks.forEach { it() }
+				// After the rollbacks: a document load's rollback restores the entries
+				// it cleared, staged ones included, and those go with the draft too.
+				editManager.history.endGroup(commit = false)
+				// Cleared first, which also drops any touch mode the block left pending.
+				selector.clearSelection()
+				if (selectionBefore != null) {
+					selector.updateSelection(selectionBefore.start, selectionBefore.end)
+					if (touchSelectionBefore) selector.markTouchSelection()
+				}
+				cursor.updatePosition(cursorBefore, affinityBefore)
 			}
 		}
+	}
+
+	/**
+	 * Runs [block] as one undo step and one published revision: every edit made
+	 * inside, through any of the editing functions, is reverted by a single [undo]
+	 * and re-applied by a single [redo], which restore the text, the spans, and the
+	 * caret from before and after the group.
+	 *
+	 * Nested groups join the outermost one. A group of one typed character
+	 * coalesces with surrounding typing as the character alone would, and typing
+	 * right after a group that ended in a typed character (a character typed over a
+	 * selection) continues that group's step. If [block] throws, the document is
+	 * left as it was, nothing is recorded, and the redo stack is untouched. [canUndo]
+	 * and [canRedo] reflect the step once the group has committed, not before, and
+	 * calling [undo] or [redo] inside the block is an error.
+	 *
+	 * The built-in compound edits (a rich paste, a link) already run in a group; a
+	 * host uses this for its own, such as a find-and-replace-all or a template
+	 * insertion.
+	 */
+	fun <T> editGroup(block: () -> T): T = withAtomicEdit(block)
+
+	private fun refreshHistoryFlags() {
+		_canUndo = editManager.history.hasUndoLevels()
+		_canRedo = editManager.history.hasRedoLevels()
 	}
 
 	/**
@@ -323,12 +391,27 @@ class TextEditorState(
 	var isFocused by mutableStateOf(false)
 
 	/**
+	 * Whether the editor holds focus, enabled or not. [isFocused] also requires it
+	 * enabled, as it means the editor takes input; a read-only view is never that.
+	 */
+	internal var hasFocus by mutableStateOf(false)
+
+	/**
 	 * The current IME composing region (for autocomplete preview).
 	 * When non-null, this text should be rendered with an underline.
 	 * This is set by the Android InputConnection during text composition.
 	 */
 	var composingRange: TextEditorRange? by mutableStateOf(null)
 		internal set
+
+	/**
+	 * Whether [composingRange] holds text the IME typed itself (`setComposingText`),
+	 * as opposed to existing text it marked (`setComposingRegion`, the shape of an
+	 * autocorrect). Only the former's commit is the user's own typing for undo.
+	 * Written only with the range, so the two cannot disagree.
+	 */
+	internal var composingIsTyped = false
+		private set
 
 	/**
 	 * Last calculated cursor pixel metrics.
@@ -345,6 +428,13 @@ class TextEditorState(
 	 */
 	var canvasLayoutCoordinates: LayoutCoordinates? = null
 		internal set
+
+	/**
+	 * Where the canvas sits in the root, as snapshot state. [canvasLayoutCoordinates] is
+	 * a plain field and stays the same object when the canvas moves, so observers of the
+	 * input method's rectangles read this to follow moves as well as resizes.
+	 */
+	internal var canvasPositionInRoot by mutableStateOf(Offset.Unspecified)
 
 	private var _lineOffsets by mutableStateOf(emptyList<LineWrap>())
 
@@ -420,6 +510,7 @@ class TextEditorState(
 		getLines = { textLines },
 		getViewportSize = { viewportSize },
 		getCursorPosition = { cursorPosition },
+		getCursorAffinity = { cursor.affinity },
 		getLineOffsets = { _lineOffsets },
 	)
 
@@ -432,8 +523,9 @@ class TextEditorState(
 
 	/**
 	 * Behaviors consulted before [insertNewlineAtCursor], [backspaceAtCursor] and
-	 * [deleteAtCursor], in order; the first to claim an edit wins. Every input
-	 * path reaches these three, hardware keys and IME alike.
+	 * [deleteAtCursor], and told after typed text has landed ([insertTypedString]
+	 * and the IME's commits), in order; the first to claim an edit wins. Every
+	 * input path reaches these, hardware keys and IME alike.
 	 *
 	 * Pre-loaded with [LineBlockEditBehavior] at index 0, which claims every
 	 * newline and column-0 backspace on a block line, so a behavior appended
@@ -456,17 +548,39 @@ class TextEditorState(
 	 * of the text can express.
 	 */
 	private fun claimedByBehavior(hook: (EditBehavior) -> Boolean): Boolean {
-		if (behaviorDepth > 0) return false
+		val claimed = runBehaviors(hook)
+		if (claimed) requestImeResync()
+		return claimed
+	}
 
+	private fun runBehaviors(hook: (EditBehavior) -> Boolean): Boolean {
+		if (behaviorDepth > 0) return false
 		behaviorDepth++
-		val claimed = try {
+		return try {
 			editBehaviors.toList().any(hook)
 		} finally {
 			behaviorDepth--
 		}
+	}
 
-		if (claimed) requestImeResync()
-		return claimed
+	/**
+	 * Tells the behaviors that typed [text] has landed at [range], after the
+	 * default edit and any IME caret placement, so a behavior edits on top of the
+	 * finished insert and owns the caret from there. The IME is asked to resync
+	 * only when a behavior changed the document or moved the caret: the edit it
+	 * expected has already happened, so a claim alone leaves its mirror right.
+	 */
+	internal fun textInputLanded(text: String, range: TextEditorRange) {
+		// A lone line break is the Enter key, which has its own hook; the one that
+		// lands here raw (an IME committing "\n" over its composition) is a
+		// replacement of the composition, not typed text.
+		if (text.isEmpty() || text == "\n") return
+		// The working content, so an edit inside a host's open transaction counts.
+		val contentBefore = workingContent
+		val caretBefore = cursorPosition
+		// An edit ends the chain, claimed or not: the range no longer holds.
+		runBehaviors { it.onTextInput(this, text, range) || workingContent !== contentBefore }
+		if (workingContent !== contentBefore || cursorPosition != caretBefore) requestImeResync()
 	}
 
 	// In-editor rich-span clipboard. The system clipboard only carries the
@@ -578,11 +692,13 @@ class TextEditorState(
 
 		clearHistory()
 		val previousComposing = composingRange
+		val previousComposingTyped = composingIsTyped
 		val previousSelection = selector.selection
-		composingRange = null
+		clearComposingRange()
 		selector.clearSelection()
 		onRollback {
 			composingRange = previousComposing
+			composingIsTyped = previousComposingTyped
 			previousSelection?.let { selector.updateSelection(it.start, it.end) }
 		}
 		updateBookKeeping()
@@ -597,12 +713,10 @@ class TextEditorState(
 	 */
 	private fun clearHistory() {
 		val restore = editManager.history.clearRestorably()
-		_canUndo = false
-		_canRedo = false
+		refreshHistoryFlags()
 		onRollback {
 			restore()
-			_canUndo = editManager.history.hasUndoLevels()
-			_canRedo = editManager.history.hasRedoLevels()
+			refreshHistoryFlags()
 		}
 	}
 
@@ -611,7 +725,7 @@ class TextEditorState(
 		isFocused = focused
 		// Clear composing state when focus is lost
 		if (!focused) {
-			composingRange = null
+			clearComposingRange()
 		}
 	}
 
@@ -621,14 +735,16 @@ class TextEditorState(
 	 * @param startIndex Character index of composing start, or -1 to clear
 	 * @param endIndex Character index of composing end, or -1 to clear
 	 */
-	internal fun updateComposingRange(startIndex: Int, endIndex: Int) {
-		composingRange = if (startIndex >= 0 && endIndex > startIndex) {
+	internal fun updateComposingRange(startIndex: Int, endIndex: Int, typed: Boolean = false) {
+		val range = if (startIndex >= 0 && endIndex > startIndex) {
 			val startOffset = getOffsetAtCharacter(startIndex)
 			val endOffset = getOffsetAtCharacter(endIndex)
 			TextEditorRange(startOffset, endOffset)
 		} else {
 			null
 		}
+		composingRange = range
+		composingIsTyped = range != null && typed
 	}
 
 	/**
@@ -636,6 +752,7 @@ class TextEditorState(
 	 */
 	internal fun clearComposingRange() {
 		composingRange = null
+		composingIsTyped = false
 	}
 
 	/**
@@ -675,24 +792,27 @@ class TextEditorState(
 	}
 
 	/**
-	 * Deletes the character before the cursor, merging with the previous line when
-	 * at column 0, unless an [EditBehavior] claims the edit first.
+	 * Deletes the code point before the cursor, or a whole emoji sequence (see
+	 * [backspaceStart]), merging with the previous line when at column 0, unless an
+	 * [EditBehavior] claims the edit first.
 	 */
 	fun backspaceAtCursor() {
 		if (claimedByBehavior { it.onBackspace(this) }) return
 
 		if (cursorPosition.char > 0) {
+			val start = textLines[cursorPosition.line].text.backspaceStart(cursorPosition.char)
 			val deleteRange = TextEditorRange(
-				CharLineOffset(cursorPosition.line, cursorPosition.char - 1),
+				CharLineOffset(cursorPosition.line, start),
 				cursorPosition
 			)
 
 			val operation = TextEditOperation.Delete(
 				range = deleteRange,
 				cursorBefore = cursorPosition,
-				cursorAfter = CharLineOffset(cursorPosition.line, cursorPosition.char - 1)
+				cursorAfter = CharLineOffset(cursorPosition.line, start)
 			)
-			editManager.applyOperation(operation)
+			// Typing whatever the cluster's length, so an emoji joins the backspace run.
+			editManager.recordingAsTyping(true) { editManager.applyOperation(operation) }
 		} else if (cursorPosition.line > 0) {
 			val previousLineLength = textLines[cursorPosition.line - 1].length
 			val deleteRange = TextEditorRange(
@@ -710,17 +830,18 @@ class TextEditorState(
 	}
 
 	/**
-	 * Deletes the character after the cursor, merging the next line into the current
-	 * one when at end of line (forward delete), unless an [EditBehavior] claims the
-	 * edit first.
+	 * Deletes the grapheme cluster after the cursor, merging the next line into the
+	 * current one when at end of line (forward delete), unless an [EditBehavior]
+	 * claims the edit first.
 	 */
 	fun deleteAtCursor() {
 		if (claimedByBehavior { it.onDeleteForward(this) }) return
 
-		if (cursorPosition.char < textLines[cursorPosition.line].length) {
+		val lineText = textLines[cursorPosition.line].text
+		if (cursorPosition.char < lineText.length) {
 			val deleteRange = TextEditorRange(
 				cursorPosition,
-				CharLineOffset(cursorPosition.line, cursorPosition.char + 1)
+				CharLineOffset(cursorPosition.line, lineText.followingGraphemeBoundary(cursorPosition.char))
 			)
 
 			val operation = TextEditOperation.Delete(
@@ -728,7 +849,7 @@ class TextEditorState(
 				cursorBefore = cursorPosition,
 				cursorAfter = cursorPosition
 			)
-			editManager.applyOperation(operation)
+			editManager.recordingAsTyping(true) { editManager.applyOperation(operation) }
 		} else if (cursorPosition.line < textLines.size - 1) {
 			val deleteRange = TextEditorRange(
 				cursorPosition,
@@ -787,7 +908,10 @@ class TextEditorState(
 		editManager.applyOperation(operation)
 	}
 
-	/** Deletes the text covered by [range], leaving the cursor at the range start. */
+	/**
+	 * Deletes the text covered by [range], leaving the cursor at the range start.
+	 * A collapsed [range] covers nothing and is no edit at all.
+	 */
 	fun delete(range: TextEditorRange) = delete(range, cursorBefore = cursorPosition)
 
 	/**
@@ -966,6 +1090,13 @@ class TextEditorState(
 		}
 	}
 
+	/**
+	 * The index into [lineOffsets] of the row the caret is drawn on, or -1 if none
+	 * matches. At a wrap offset the caret's affinity picks the row; every other read
+	 * of the caret's row goes through here.
+	 */
+	internal fun cursorRowIndex(): Int = _lineOffsets.getWrappedLineIndex(cursorPosition, cursor.affinity)
+
 	/** Returns the [LineWrap] (visual line) that contains [position]. */
 	fun getWrappedLine(position: CharLineOffset): LineWrap {
 		return _lineOffsets.last { lineOffset ->
@@ -989,16 +1120,15 @@ class TextEditorState(
 	 * Returns the [CursorMetrics] (pixel position and line height) for the caret at
 	 * [CharLineOffset] [position], accounting for the current scroll offset.
 	 */
-	fun getPositionForOffset(position: CharLineOffset): CursorMetrics {
-		val (_, charIndex) = position
+	fun getPositionForOffset(position: CharLineOffset): CursorMetrics =
+		getPositionForOffset(position, CaretAffinity.Downstream)
 
-		val currentWrappedLine = lineOffsets.getWrapForDrawing(position)
+	/** [getPositionForOffset] on the row [affinity] picks at a wrap offset. */
+	internal fun getPositionForOffset(position: CharLineOffset, affinity: CaretAffinity): CursorMetrics {
+		val currentWrappedLine = lineOffsets.getWrapForDrawing(position, affinity)
 			?: return CursorMetrics(position = Offset.Zero, height = 0f)
 
-		val layout = currentWrappedLine.textLayoutResult
-		val safeCharIndex = charIndex.coerceIn(0, layout.layoutInput.text.length)
-
-		val cursorX = layout.getHorizontalPosition(safeCharIndex, usePrimaryDirection = true)
+		val cursorX = currentWrappedLine.caretX(position.char)
 		val cursorY = currentWrappedLine.offset.y - scrollState.value
 
 		val lineHeight = currentWrappedLine.effectiveHeight
@@ -1011,37 +1141,54 @@ class TextEditorState(
 
 	/**
 	 * Maps a pixel [Offset] within the editor (e.g. a tap location) to the nearest
-	 * [CharLineOffset], accounting for scroll. Clamps to the end of the last line when
-	 * the point falls below all content.
+	 * [CharLineOffset], accounting for scroll. A point above the first row hits the
+	 * first row and a point below the last row hits the last row; x is hit-tested on
+	 * that row either way, as native text fields do.
 	 */
 	fun getOffsetAtPosition(offset: Offset): CharLineOffset {
 		if (_lineOffsets.isEmpty()) return CharLineOffset(0, 0)
 
-		// Add scroll offset to the input y coordinate
-		val adjustedOffset = offset.copy(y = offset.y + scrollState.value)
+		val contentY = offset.y + scrollState.value
+		val row = _lineOffsets[rowIndexAtY(contentY)]
+		val lineLength = textLines.getOrNull(row.line)?.length
+			?: return CharLineOffset(textLines.lastIndex, textLines.last().length)
 
-		var curRealLine: LineWrap = _lineOffsets[0]
+		// Hit-test inside the row itself, so a point above, below, or in a block
+		// line's extra height lands on that row's text line.
+		val paragraph = row.textLayoutResult.multiParagraph
+		val lineHeight = paragraph.getLineHeight(row.virtualLineIndex)
+		val yInLine = (contentY - row.offset.y).coerceIn(0f, (lineHeight - 1f).coerceAtLeast(0f))
+		val charPos = paragraph.getOffsetForPosition(
+			Offset(offset.x - row.offset.x, paragraph.getLineTop(row.virtualLineIndex) + yInLine)
+		)
+		val lineText = textLines[row.line].text
+		// Skia already answers on a cluster boundary; the snap guards the caret invariant.
+		return CharLineOffset(row.line, lineText.snapToGraphemeBoundary(min(charPos, lineLength), forward = false))
+	}
 
-		// Find the line that contains the offset
-		for (lineWrap in _lineOffsets) {
-			if (lineWrap.line != curRealLine.line) {
-				curRealLine = lineWrap
-			}
-			val textLayoutResult = lineWrap.textLayoutResult
+	/**
+	 * The [RichSpan] under a pointer at [offset], in the same coordinates as
+	 * [getOffsetAtPosition]. Unlike that mapping, a point above the first row, below
+	 * the last row, or in the side padding is over no span.
+	 */
+	internal fun findSpanAtPoint(offset: Offset): RichSpan? {
+		val first = _lineOffsets.firstOrNull() ?: return null
+		val last = _lineOffsets.last()
+		val contentY = offset.y + scrollState.value
+		if (contentY < first.offset.y || contentY >= last.offset.y + last.effectiveHeight) return null
+		if (offset.x < 0f || offset.x > viewportSize.width) return null
+		return findSpanAtPosition(getOffsetAtPosition(offset))
+	}
 
-			// Full paragraph height — using a single sub-line's height misses clicks past the first wrap.
-			val paragraphHeight = lineWrap.blockHeight ?: textLayoutResult.size.height.toFloat()
-
-			val relativeOffset = adjustedOffset - lineWrap.offset
-			if (adjustedOffset.y in curRealLine.offset.y..(curRealLine.offset.y + paragraphHeight)) {
-				val charPos = textLayoutResult.multiParagraph.getOffsetForPosition(relativeOffset)
-				return CharLineOffset(lineWrap.line, min(charPos, textLines[lineWrap.line].length))
-			}
+	/** Index of the last row whose top is at or above content-space [y], or 0 above them all. */
+	private fun rowIndexAtY(y: Float): Int {
+		var low = 0
+		var high = _lineOffsets.lastIndex
+		while (low < high) {
+			val mid = (low + high + 1) ushr 1
+			if (_lineOffsets[mid].offset.y <= y) low = mid else high = mid - 1
 		}
-
-		// If we're below all lines, return position at end of last line
-		val lastLine = textLines.lastIndex
-		return CharLineOffset(lastLine, textLines[lastLine].length)
+		return low
 	}
 
 	/**
@@ -1282,12 +1429,10 @@ class TextEditorState(
 		}
 
 		_lineOffsets = offsets
-		scrollManager.updateContentHeight(yOffset.toInt())
+		// Rounded up so the last row's fraction of a pixel is still in reach.
+		scrollManager.updateContentHeight(ceil(yOffset).toInt())
 		lastLayoutLineCount = textLines.size
 		lastLayoutGeneration = layoutInputGeneration
-
-		_canUndo = editManager.history.hasUndoLevels()
-		_canRedo = editManager.history.hasRedoLevels()
 	}
 
 	/**
@@ -1356,12 +1501,13 @@ class TextEditorState(
 	}
 
 	/**
-	 * Returns the [RichSpan] covering [position], or null if none does. Useful for
-	 * hit-testing taps on a list item or code fence.
+	 * Returns the hit-testable [RichSpan] covering [position], or null if none does.
+	 * Useful for hit-testing taps on a list item or code fence. A style whose
+	 * [RichSpanStyle.isHitTestable] is false is never returned.
 	 *
 	 * Spans nest, so several can cover one position and only one can answer. Content
 	 * spans (link, highlight) go first, then the editor's own decorations (spell
-	 * check squiggle, find match), then the line-anchored marker of the heading, list
+	 * check squiggle), then the line-anchored marker of the heading, list
 	 * item, blockquote or code fence the line belongs to. Within a tier the span
 	 * covering the least of the clicked line wins, so the marker answers only where
 	 * nothing more specific does.
@@ -1373,7 +1519,7 @@ class TextEditorState(
 		} ?: return null
 
 		return lineWrap.richSpans
-			.filter { it.containsPosition(position) }
+			.filter { it.style.isHitTestable && it.containsPosition(position) }
 			.minWithOrNull(hitTestOrder(position.line))
 	}
 

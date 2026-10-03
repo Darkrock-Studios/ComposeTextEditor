@@ -64,6 +64,14 @@ class TextEditorSelectionManager(
 	 */
 	internal var magnifierCenter: Offset? by mutableStateOf(null)
 
+	/**
+	 * Advances every time a finger gesture selects or moves a selection. The focus handler
+	 * compares it across a gesture: a finger that travels past touch slop is a pan unless
+	 * it selected on the way, as a long press or a handle drag does.
+	 */
+	internal var touchSelectionGeneration: Int = 0
+		private set
+
 	// Where the touch caret handle stands, and the document it was put in.
 	private class CaretHandleAnchor(val position: CharLineOffset, val content: DocumentSnapshot)
 
@@ -237,6 +245,7 @@ class TextEditorSelectionManager(
 		state.cursor.updatePosition(caret)
 		updateSelection(start, end)
 		if (start != end) _isTouchSelection = isTouch
+		if (isTouch) touchSelectionGeneration++
 	}
 
 	private fun makeRange(start: CharLineOffset, end: CharLineOffset): TextEditorRange {
@@ -250,6 +259,11 @@ class TextEditorSelectionManager(
 	fun clearSelection() {
 		nextSelectionIsTouch = false
 		updateSelectionRange(null)
+	}
+
+	/** Gives the selection touch handles, for one made by the touch toolbar's Select all. */
+	internal fun markTouchSelection() {
+		if (_selection != null) _isTouchSelection = true
 	}
 
 	fun selectAll() {
@@ -269,7 +283,9 @@ class TextEditorSelectionManager(
 
 	fun deleteSelection() {
 		val selection = selection ?: return
-		state.delete(selection)
+		// A deleted selection is its own step even when it is one character: not
+		// a backspace, so a backspace after it never joins it.
+		state.editManager.recordingAsTyping(false) { state.delete(selection) }
 		clearSelection()
 	}
 

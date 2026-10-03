@@ -4,7 +4,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.isSpecified
+import androidx.compose.ui.graphics.takeOrElse
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 
 /**
  * The colors and text style applied to a [TextEditor]. Any `Color.Unspecified` field
@@ -24,6 +28,12 @@ data class TextEditorStyle(
 	val selectionColor: Color = Color.Unspecified,
 	val focusedBorderColor: Color = Color.Unspecified,
 	val unfocusedBorderColor: Color = Color.Unspecified,
+	/**
+	 * Its `textDirection` sets each paragraph's direction. Left unspecified, every
+	 * paragraph follows the app's layout direction, as in `BasicTextField`; set
+	 * `TextDirection.Content` to resolve each paragraph from its first strong character,
+	 * so a right-to-left paragraph in a left-to-right app lays out right to left.
+	 */
 	val textStyle: TextStyle = TextStyle.Default,
 	/**
 	 * Color of the bullet-list dot drawn in the gutter. `Color.Unspecified` falls
@@ -62,7 +72,27 @@ data class TextEditorStyle(
 	 * `Color.Unspecified` falls back to `Color.Gray.copy(alpha = 0.55f)`.
 	 */
 	val codeFenceBorderColor: Color = Color.Unspecified,
+	/** Width of the caret. The default matches `BasicTextField`'s. */
+	val cursorWidth: Dp = 2.dp,
+	/**
+	 * Selection colour while the editor does not have focus, dimmed as native editors
+	 * dim it. `Color.Unspecified` falls back to [selectionColor] at half its alpha.
+	 */
+	val unfocusedSelectionColor: Color = Color.Unspecified,
+	/** Colour of the touch selection and caret handles. `Color.Unspecified` falls back to a blue. */
+	val handleColor: Color = Color.Unspecified,
 )
+
+internal val TextEditorStyle.effectiveHandleColor: Color
+	get() = handleColor.takeOrElse { DefaultSelectionHandleColor }
+
+/** The selection colour for an editor that has focus, or lacks it. */
+internal fun TextEditorStyle.selectionColorFor(focused: Boolean): Color = when {
+	focused -> selectionColor
+	unfocusedSelectionColor.isSpecified -> unfocusedSelectionColor
+	selectionColor.isSpecified -> selectionColor.copy(alpha = selectionColor.alpha / 2f)
+	else -> selectionColor
+}
 
 /**
  * Builds and remembers a [TextEditorStyle] whose defaults are drawn from the active
@@ -99,11 +129,15 @@ fun rememberTextEditorStyle(
 	// already encodes the intended subtlety.
 	codeFenceBackgroundColor: Color = MaterialTheme.colorScheme.surfaceContainerHigh,
 	codeFenceBorderColor: Color = MaterialTheme.colorScheme.outline,
+	cursorWidth: Dp = 2.dp,
+	// A neutral grey, as macOS and browsers draw a selection whose editor lost focus.
+	unfocusedSelectionColor: Color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f),
+	handleColor: Color = MaterialTheme.colorScheme.primary,
 ): TextEditorStyle = remember(
-	textColor, placeholderText, placeholderColor,
+	textColor, backgroundColor, placeholderText, placeholderColor,
 	cursorColor, selectionColor, focusedBorderColor, unfocusedBorderColor, textStyle,
 	bulletColor, blockquoteBarColor, blockquoteBackgroundColor, orderedListMarkerColor,
-	codeFenceBackgroundColor, codeFenceBorderColor,
+	codeFenceBackgroundColor, codeFenceBorderColor, cursorWidth, unfocusedSelectionColor, handleColor,
 ) {
 	TextEditorStyle(
 		textColor = textColor,
@@ -121,5 +155,8 @@ fun rememberTextEditorStyle(
 		orderedListMarkerColor = orderedListMarkerColor,
 		codeFenceBackgroundColor = codeFenceBackgroundColor,
 		codeFenceBorderColor = codeFenceBorderColor,
+		cursorWidth = cursorWidth,
+		unfocusedSelectionColor = unfocusedSelectionColor,
+		handleColor = handleColor,
 	)
 }

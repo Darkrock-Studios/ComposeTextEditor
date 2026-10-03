@@ -21,6 +21,9 @@ class FindMatchStyle(
 	/** Marks this highlight as an ephemeral overlay, keeping it out of the undo and edit history. */
 	override val isDecoration: Boolean = true
 
+	/** A tint only: clicks go to the spans beneath, such as its line's list marker. */
+	override val isHitTestable: Boolean = false
+
 	override fun DrawScope.drawCustomStyle(
 		layoutResult: TextLayoutResult,
 		lineWrap: LineWrap,
@@ -39,6 +42,9 @@ class FindCurrentMatchStyle(
 	/** Marks this highlight as an ephemeral overlay, keeping it out of the undo and edit history. */
 	override val isDecoration: Boolean = true
 
+	/** A tint only: clicks go to the spans beneath, such as its line's list marker. */
+	override val isHitTestable: Boolean = false
+
 	override fun DrawScope.drawCustomStyle(
 		layoutResult: TextLayoutResult,
 		lineWrap: LineWrap,
@@ -47,11 +53,15 @@ class FindCurrentMatchStyle(
 	) = drawRangeFill(color, layoutResult, lineWrap, textRange)
 }
 
-/** Marks the range a find in selection is limited to, behind the text. */
+/**
+ * Marks the range a find in selection is limited to, behind the text. It takes no
+ * clicks, so the list, quote, and fence markers inside it still do.
+ */
 internal class FindScopeStyle(
 	private val color: Color = Color(0x1A2196F3)
 ) : RichSpanStyle {
 	override val isDecoration: Boolean = true
+	override val isHitTestable: Boolean = false
 
 	override fun DrawScope.drawCustomStyle(
 		layoutResult: TextLayoutResult,

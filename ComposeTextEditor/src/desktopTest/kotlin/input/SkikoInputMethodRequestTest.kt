@@ -34,6 +34,7 @@ import com.darkrockstudios.texteditor.input.startSkikoInputSession
 import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
 import com.darkrockstudios.texteditor.markdown.MarkdownExtension
 import com.darkrockstudios.texteditor.richstyle.BulletListSpanStyle
+import com.darkrockstudios.texteditor.state.EditBehavior
 import com.darkrockstudios.texteditor.state.TextEditorState
 import io.mockk.every
 import io.mockk.mockk
@@ -209,6 +210,18 @@ class SkikoInputMethodRequestTest {
 		assertEquals("ab", text())
 	}
 
+	@Test
+	fun `backspace with a caret deletes a zwj sequence whole and a combining mark alone`() {
+		typeViaCommit("ab\uD83D\uDC68\u200D\uD83D\uDC69\u200D\uD83D\uDC67e\u0301")
+
+		request.onEditCommand(listOf(BackspaceCommand()))
+		assertEquals("ab\uD83D\uDC68\u200D\uD83D\uDC69\u200D\uD83D\uDC67e", text())
+
+		request.onEditCommand(listOf(BackspaceCommand()))
+		request.onEditCommand(listOf(BackspaceCommand()))
+		assertEquals("ab", text())
+	}
+
 	/** The web backspace must reach edit behaviors the same way the hardware key does. */
 	@Test
 	fun `backspace at the start of a bullet demotes it`() = runTest {
@@ -282,6 +295,35 @@ class SkikoInputMethodRequestTest {
 	}
 
 	/**
+	 * iOS moves its input view with the geometry it observes. The coordinates object is
+	 * the same one when the canvas moves (the window shifting for the keyboard), so the
+	 * observer must see the move through the snapshot-backed position.
+	 */
+	@Test
+	fun `geometry observers follow the canvas moving without a resize`() = runTest {
+		var origin = Offset(10f, 20f)
+		val coords = mockk<LayoutCoordinates>()
+		every { coords.isAttached } returns true
+		every { coords.localToRoot(Offset.Zero) } answers { origin }
+		every { coords.size } returns IntSize(300, 200)
+		state.canvasLayoutCoordinates = coords
+		state.canvasPositionInRoot = origin
+
+		val seen = mutableListOf<Rect?>()
+		val observer = launch { snapshotFlow { request.textFieldRectInRoot() }.collect { seen += it } }
+		Snapshot.sendApplyNotifications()
+		testScheduler.runCurrent()
+
+		origin = Offset(10f, 5f)
+		state.canvasPositionInRoot = origin
+		Snapshot.sendApplyNotifications()
+		testScheduler.runCurrent()
+
+		assertEquals(listOf<Rect?>(Rect(10f, 20f, 310f, 220f), Rect(10f, 5f, 310f, 205f)), seen)
+		observer.cancel()
+	}
+
+	/**
 	 * Web and iOS watch `value()` / `state.text` through `snapshotFlow`. The document is
 	 * not snapshot state, so the session must signal edits that move nothing observable.
 	 */
@@ -313,5 +355,39 @@ class SkikoInputMethodRequestTest {
 		assertEquals(listOf("abc", "bc"), seen)
 		observer.cancel()
 		sessionJob.cancel()
+	}
+
+	// --- the typed-text hook ---
+
+	@Test
+	fun `a commit through editText reaches the text input behavior`() {
+		val offered = mutableListOf<String>()
+		state.editBehaviors += object : EditBehavior {
+			override fun onTextInput(state: TextEditorState, text: String, range: TextEditorRange): Boolean {
+				offered += text
+				return false
+			}
+		}
+
+		request.editText { setComposingText("a", 1) }
+		request.editText { commitText("ab", 1) }
+
+		assertEquals(listOf("ab"), offered, "only the commit is offered")
+		assertEquals("ab", text())
+	}
+
+	@Test
+	fun `a commit through onEditCommand reaches the text input behavior`() {
+		val offered = mutableListOf<String>()
+		state.editBehaviors += object : EditBehavior {
+			override fun onTextInput(state: TextEditorState, text: String, range: TextEditorRange): Boolean {
+				offered += text
+				return false
+			}
+		}
+
+		request.onEditCommand(listOf(CommitTextCommand("x", 1)))
+
+		assertEquals(listOf("x"), offered)
 	}
 }

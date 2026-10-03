@@ -144,6 +144,18 @@ selection clearing, layout derivation, and edit announcement all follow the
 exact rules above. An insert undoes as a delete of the inserted range, a delete
 as an insert of the captured text, a replace as the mirrored replace;
 `cursorBefore`/`cursorAfter` swap roles. Redo replays the original operation.
+`StyleSpan` needs an exact inverse rather than a mirrored one: mirroring
+"add bold over this range" as "remove bold over this range" also strips bold
+the range carried before, so the entry records each touched line's character
+styles as they stood (`OperationMetadata.spanStylesBefore`) and undo derives
+from them the pieces that actually changed (the sub-ranges an add styled, or
+a removal unstyled), applying one inverse operation per piece through the
+same pipeline, so consumers see exactly what changed. A group entry (every operation of one `editGroup`, or of any transaction that
+recorded more than one) undoes by inverting its operations last to first
+inside a single transaction, so each inverse runs against exactly the document
+the next-later operation left; redo replays them first to last. The group's
+caret is the first operation's `cursorBefore` and the last one's
+`cursorAfter`.
 
 Positions in history are stored in the coordinates of the revision the
 operation was built against; replaying through the pipeline is what keeps them

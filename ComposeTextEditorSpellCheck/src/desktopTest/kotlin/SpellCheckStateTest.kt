@@ -91,6 +91,23 @@ class SpellCheckStateTest {
 		assertTrue(textState.getRichSpansInRange(segment.range).isEmpty())
 	}
 
+	/** Word segmentation keeps "don\u2019t" whole; the dictionary spells it with a straight apostrophe. */
+	@Test
+	fun `a typographic apostrophe is looked up as a straight one`() = runTest {
+		val word = "don\u2019t"
+		textState.setText(word)
+		val segment = WordSegment(
+			text = word,
+			range = TextEditorRange(start = CharLineOffset(0, 0), end = CharLineOffset(0, 5)),
+		)
+		spellChecker.correctWords = setOf("don't")
+
+		val result = spellCheckState.checkWordSegment(segment)
+
+		assertFalse(result)
+		assertTrue(textState.getRichSpansInRange(segment.range).isEmpty())
+	}
+
 	@Test
 	fun `test checkWordSegment with incorrect word`() = runTest {
 		// Setup

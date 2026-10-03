@@ -2,8 +2,11 @@ package e2e
 
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.unit.dp
 import com.darkrockstudios.texteditor.CharLineOffset
+import com.darkrockstudios.texteditor.cursor.calculateCursorPosition
 import com.darkrockstudios.texteditor.input.WindowsKeyBindings
 import utils.EditorUiTestScope
 import utils.editorUiTest
@@ -301,6 +304,175 @@ class NavigationE2eTest {
 	}
 
 	@Test
+	fun `a page move past the document end keeps the column for the move back`() = editorUiTest(
+		initialText = AnnotatedString((1..40).joinToString("\n") { "line number $it" }),
+	) {
+		clickAtCharacter(5)
+		press(Key.PageDown)
+		press(Key.PageDown)
+		press(Key.PageDown)
+		assertEquals(text.length, cursorIndex, "past the last page is the document end")
+		press(Key.DirectionUp)
+		assertEquals(CharLineOffset(38, 5), state.cursorPosition, "back on the column the run started in")
+	}
+
+	@Test
+	fun `end on a row wrapped mid-word sits at the wrap and draws on that row`() = editorUiTest(
+		initialText = AnnotatedString(WRAPPED_WORD),
+		width = 80.dp,
+	) {
+		clickAtCharacter(0)
+		val wrap = state.lineOffsets[1].wrapStartsAtIndex
+		press(Key.MoveEnd)
+		assertEquals(wrap, cursorIndex)
+		assertEquals(0, state.cursorRowIndex(), "drawn on the first row")
+		val metrics = state.calculateCursorPosition()
+		assertEquals(state.lineOffsets[0].offset.y, metrics.position.y)
+		val beforeWrap = state.getPositionForOffset(CharLineOffset(0, wrap - 1)).position.x
+		assertTrue(metrics.position.x > beforeWrap, "at the row's end, not the next row's start")
+
+		press(Key.MoveEnd)
+		assertEquals(wrap, cursorIndex, "End again stays")
+		assertEquals(0, state.cursorRowIndex())
+
+		press(Key.MoveHome)
+		assertEquals(0, cursorIndex, "Home goes to the start of the row the caret is drawn on")
+	}
+
+	@Test
+	fun `down and up from the end of a wrapped row move one row`() = editorUiTest(
+		initialText = AnnotatedString(WRAPPED_WORD),
+		width = 80.dp,
+	) {
+		clickAtCharacter(0)
+		press(Key.MoveEnd)
+		press(Key.DirectionDown)
+		assertEquals(1, state.cursorRowIndex())
+		assertEquals(state.lineOffsets[2].wrapStartsAtIndex, cursorIndex, "the goal x is at the row's edge")
+		press(Key.DirectionUp)
+		assertEquals(0, state.cursorRowIndex())
+		assertEquals(state.lineOffsets[1].wrapStartsAtIndex, cursorIndex, "back at the first row's end")
+	}
+
+	/** Native editors put End after a row's trailing space; BasicTextField stops before it. */
+	@Test
+	fun `end on a row wrapped at a space goes past the space`() = editorUiTest(
+		initialText = AnnotatedString("hello world again"),
+		width = 60.dp,
+	) {
+		clickAtCharacter(0)
+		press(Key.MoveEnd)
+		assertEquals(6, cursorIndex)
+		assertEquals(0, state.cursorRowIndex())
+		val beforeSpace = state.getPositionForOffset(CharLineOffset(0, 5)).position.x
+		assertTrue(state.calculateCursorPosition().position.x > beforeSpace, "drawn after the space")
+	}
+
+	@Test
+	fun `right from the end of a wrapped row steps onto the next row`() = editorUiTest(
+		initialText = AnnotatedString(WRAPPED_WORD),
+		width = 80.dp,
+	) {
+		clickAtCharacter(0)
+		val wrap = state.lineOffsets[1].wrapStartsAtIndex
+		press(Key.MoveEnd)
+		press(Key.DirectionRight)
+		assertEquals(wrap + 1, cursorIndex)
+		assertEquals(1, state.cursorRowIndex())
+		press(Key.DirectionLeft)
+		assertEquals(wrap, cursorIndex)
+		assertEquals(1, state.cursorRowIndex(), "Left arrives on the lower row's start")
+	}
+
+	@Test
+	fun `typing at the end of a wrapped row inserts at the wrap`() = editorUiTest(
+		initialText = AnnotatedString(WRAPPED_WORD),
+		width = 80.dp,
+	) {
+		clickAtCharacter(0)
+		val wrap = state.lineOffsets[1].wrapStartsAtIndex
+		press(Key.MoveEnd)
+		typeText("X")
+		assertEquals('X', text[wrap])
+		assertEquals(wrap + 1, cursorIndex)
+	}
+
+	@Test
+	fun `ctrl+left on windows goes to the next word start in a right-to-left paragraph`() = editorUiTest(
+		initialText = AnnotatedString("שלום עולם טוב"),
+		keyBindings = WindowsKeyBindings,
+		textStyle = TextStyle(textDirection = TextDirection.Content),
+	) {
+		press(Key.MoveHome, ctrl = true)
+		press(Key.DirectionLeft, ctrl = true)
+		assertEquals(5, cursorIndex, "Ctrl+Left is the forward word chord here: the next word's start")
+		press(Key.DirectionRight, ctrl = true)
+		assertEquals(0, cursorIndex)
+	}
+
+	/** Direction is per paragraph, as native editors resolve it; BasicTextField takes the whole text's. */
+	@Test
+	fun `arrows mirror only in the right-to-left paragraph of a mixed document`() = editorUiTest(
+		initialText = AnnotatedString("abc def\nשלום עולם"),
+		textStyle = TextStyle(textDirection = TextDirection.Content),
+	) {
+		press(Key.MoveEnd, ctrl = true)
+		press(Key.DirectionRight)
+		assertEquals(CharLineOffset(1, 8), state.cursorPosition, "Right moves back through the Hebrew paragraph")
+		press(Key.DirectionLeft)
+		assertEquals(CharLineOffset(1, 9), state.cursorPosition)
+		press(Key.MoveHome)
+		press(Key.DirectionRight)
+		assertEquals(CharLineOffset(0, 7), state.cursorPosition, "Right from the paragraph start crosses to the line above")
+		press(Key.DirectionLeft)
+		assertEquals(CharLineOffset(0, 6), state.cursorPosition, "and is logical again in the English paragraph")
+	}
+
+	@Test
+	fun `ctrl+backspace stays logical in a right-to-left paragraph`() = editorUiTest(
+		initialText = AnnotatedString("שלום עולם"),
+		textStyle = TextStyle(textDirection = TextDirection.Content),
+	) {
+		press(Key.MoveEnd, ctrl = true)
+		press(Key.Backspace, ctrl = true)
+		assertEquals("שלום ", text)
+	}
+
+	@Test
+	fun `ctrl+right and ctrl+left skip punctuation`() = editorUiTest(
+		initialText = AnnotatedString("hello, world... (again)"),
+	) {
+		clickAtCharacter(0)
+		press(Key.DirectionRight, ctrl = true)
+		assertEquals(5, cursorIndex, "after 'hello'")
+		press(Key.DirectionRight, ctrl = true)
+		assertEquals(12, cursorIndex, "after 'world'")
+		press(Key.DirectionRight, ctrl = true)
+		assertEquals(22, cursorIndex, "after 'again'")
+		press(Key.DirectionRight, ctrl = true)
+		assertEquals(23, cursorIndex, "then the document end")
+
+		press(Key.DirectionLeft, ctrl = true)
+		assertEquals(17, cursorIndex, "back to 'again'")
+		press(Key.DirectionLeft, ctrl = true)
+		assertEquals(7, cursorIndex, "back to 'world'")
+	}
+
+	@Test
+	fun `ctrl+right on windows stops at the line end before the next line's first word`() = editorUiTest(
+		initialText = AnnotatedString("first line\n\n  second"),
+		keyBindings = WindowsKeyBindings,
+	) {
+		clickAtCharacter(6)
+		press(Key.DirectionRight, ctrl = true)
+		assertEquals(CharLineOffset(0, 10), state.cursorPosition, "the line end is a stop (hammer-editor#852)")
+		press(Key.DirectionRight, ctrl = true)
+		assertEquals(CharLineOffset(1, 0), state.cursorPosition, "an empty line is a stop")
+		press(Key.DirectionRight, ctrl = true)
+		assertEquals(CharLineOffset(2, 2), state.cursorPosition, "the next line's first word")
+	}
+
+	@Test
 	fun `ctrl+right from a line end goes to the end of the next line's first word`() = editorUiTest(
 		initialText = AnnotatedString("first line\n  second line"),
 	) {
@@ -375,3 +547,6 @@ class NavigationE2eTest {
 		)
 	}
 }
+
+/** One word too wide for an 80 dp editor, so every row wraps mid-word. */
+private const val WRAPPED_WORD = "abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz"

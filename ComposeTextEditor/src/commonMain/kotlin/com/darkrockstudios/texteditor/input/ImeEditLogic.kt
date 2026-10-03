@@ -3,6 +3,11 @@ package com.darkrockstudios.texteditor.input
 import androidx.compose.ui.text.TextRange
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.state.TextEditorState
+import com.darkrockstudios.texteditor.state.backspaceStart
+import com.darkrockstudios.texteditor.state.followingGraphemeBoundary
+import com.darkrockstudios.texteditor.state.insertTypedNewline
+import com.darkrockstudios.texteditor.state.insertTypedString
+import com.darkrockstudios.texteditor.state.isOneTypedWord
 
 /**
  * Shared IME edit operations used by every platform that drives the editor
@@ -13,11 +18,12 @@ import com.darkrockstudios.texteditor.state.TextEditorState
  * identical across platforms. Each function mutates [TextEditorState] the way the
  * corresponding IME command (`commitText`, `setComposingText`, ...) expects.
  *
- * Each function performs a single mutation through the edit manager. Platforms
- * that need to suppress intermediate IME cursor-sync notifications during a
- * multi-command edit wrap the calls in their own batch (e.g. Android's
+ * Each function is one undo step, and the text commands are recorded as typing
+ * so a composition folds into the run it rewrites. Platforms that need to
+ * suppress intermediate IME cursor-sync notifications during a multi-command
+ * edit wrap the calls in their own batch (e.g. Android's
  * `PlatformTextEditorExtensions.beginBatchEdit`/`endBatchEdit`); the batch does
- * not coalesce undo history.
+ * not group undo history.
  */
 
 /**
@@ -35,12 +41,29 @@ internal fun TextEditorState.imeCommitText(text: String, newCursorPosition: Int)
 		return
 	}
 
-	val insertStart = replaceComposingOrInsert(text)
-	val insertEnd = insertStart + text.length
-	// Commit semantics end the composition even when no mutation ran (empty text
-	// with nothing composing), so clear explicitly rather than rely on applyOperation.
-	clearComposingRange()
-	applyNewCursorPosition(insertStart, insertEnd, newCursorPosition)
+	// A typed composition committed unchanged is still the user's word landing.
+	val committingTyped = composingIsTyped && composingRange != null
+	var landed: TextEditorRange? = null
+	editGroup {
+		// Committing what the IME composed is the user's typing; committing over text
+		// it merely marked (the shape of an autocorrect) is not, so that stays its
+		// own step and undo gives back what was typed, as native editors do.
+		val insertion = replaceComposingOrInsert(text, typing = composingIsTyped)
+		val insertStart = insertion.start
+		val insertEnd = insertStart + text.length
+		// Commit semantics end the composition even when no mutation ran (empty text
+		// with nothing composing), so clear explicitly rather than rely on applyOperation.
+		clearComposingRange()
+		applyNewCursorPosition(insertStart, insertEnd, newCursorPosition)
+		if (insertion.edited || committingTyped) {
+			landed = TextEditorRange(getOffsetAtCharacter(insertStart), getOffsetAtCharacter(insertEnd))
+		}
+	}
+	// Composing updates never reach the typed-text hook, nor does a commit that
+	// changed nothing over text the IME merely marked. Told after the commit has
+	// landed and the caret is placed, so a behavior edits on top of it and owns
+	// the caret.
+	landed?.let { textInputLanded(text, it) }
 }
 
 /**
@@ -49,14 +72,22 @@ internal fun TextEditorState.imeCommitText(text: String, newCursorPosition: Int)
  * path dead-key / accent composition flows through on desktop.
  */
 internal fun TextEditorState.imeSetComposingText(text: String, newCursorPosition: Int) {
-	val insertStart = replaceComposingOrInsert(text)
-	val insertEnd = insertStart + text.length
-	if (text.isNotEmpty()) {
-		updateComposingRange(insertStart, insertEnd)
-	} else {
-		clearComposingRange()
+	editGroup {
+		// Composing is typing, even over text the IME marked first: a keyboard that
+		// re-marks the word the caret sits in is letting the user keep typing it.
+		// Re-setting marked text unchanged types nothing, so the composition stays
+		// as it was, and a corrected commit after it stays its own step.
+		val typed = composingIsTyped || composingRange == null
+		val insertion = replaceComposingOrInsert(text, typing = true)
+		val insertStart = insertion.start
+		val insertEnd = insertStart + text.length
+		if (text.isNotEmpty()) {
+			updateComposingRange(insertStart, insertEnd, typed = typed || insertion.edited)
+		} else {
+			clearComposingRange()
+		}
+		applyNewCursorPosition(insertStart, insertEnd, newCursorPosition)
 	}
-	applyNewCursorPosition(insertStart, insertEnd, newCursorPosition)
 }
 
 /** `setComposingRegion`: mark an existing text range as the composing region. */
@@ -64,12 +95,25 @@ internal fun TextEditorState.imeSetComposingRegion(start: Int, end: Int) {
 	val len = getTextLength()
 	val s = start.coerceIn(0, len)
 	val e = end.coerceIn(0, len)
-	if (s < e) updateComposingRange(s, e) else clearComposingRange()
+	if (s < e) {
+		// Some keyboards re-anchor the composition they are typing before they
+		// commit it; that keeps it typed. Marking any other text does not.
+		val same = composingRange == TextEditorRange(getOffsetAtCharacter(s), getOffsetAtCharacter(e))
+		updateComposingRange(s, e, typed = composingIsTyped && same)
+	} else {
+		clearComposingRange()
+	}
 }
 
-/** `finishComposingText`: keep the text, drop the composing highlight. */
+/**
+ * `finishComposingText`: keep the text, drop the composing highlight. Finishing
+ * a typed composition commits it, so the typed-text hook is told, as for
+ * [imeCommitText]; some keyboards end every word this way.
+ */
 internal fun TextEditorState.imeFinishComposing() {
+	val composing = composingRange?.takeIf { composingIsTyped && isWithinDocument(it) }
 	clearComposingRange()
+	if (composing != null) textInputLanded(getStringInRange(composing), composing)
 }
 
 /**
@@ -109,9 +153,8 @@ internal fun TextEditorState.imeDeleteSurroundingTextInCodePoints(beforeLength: 
 	val cursorIndex = selection.start
 	val deleteStart = cursorIndex - charsBefore
 	val deleteEnd = cursorIndex + charsAfter
-	// charsBefore/charsAfter of 2 is one astral code point, which the semantic paths
-	// would split: they delete a single UTF-16 char. 0 is the document edge, where
-	// the request is still a keystroke even though there is nothing to remove.
+	// charsBefore/charsAfter of 0 is the document edge, where the request is still a
+	// keystroke even though there is nothing to remove.
 	deleteSurroundingRange(
 		singleCharBefore = beforeLength == 1 && afterLength == 0 && charsBefore <= 1,
 		singleCharAfter = beforeLength == 0 && afterLength == 1 && charsAfter <= 1,
@@ -149,11 +192,17 @@ private fun TextEditorState.deleteSurroundingRange(
 	val available = deleteEnd - deleteStart
 
 	if (undisturbed && available <= 1) {
-		if (singleCharBefore && deleteEnd <= cursorIndex) {
+		// The semantic deletes take a code point, an emoji sequence, or a cluster; a
+		// count of one char is honoured as asked when they would take more.
+		val lineText = textLines[cursorPosition.line].text
+		val char = cursorPosition.char
+		if (singleCharBefore && deleteEnd <= cursorIndex && (char == 0 || lineText.backspaceStart(char) == char - 1)) {
 			backspaceAtCursor()
 			return
 		}
-		if (singleCharAfter && deleteStart >= cursorIndex) {
+		if (singleCharAfter && deleteStart >= cursorIndex &&
+			(char >= lineText.length || lineText.followingGraphemeBoundary(char) == char + 1)
+		) {
 			deleteAtCursor()
 			return
 		}
@@ -168,20 +217,24 @@ private fun TextEditorState.deleteSurroundingRange(
  * end. The IME contract leaves the selection itself alone, and every content edit clears
  * it, so it is restored over the same text afterwards.
  */
-private fun TextEditorState.deleteAroundSelection(selection: TextRange, before: Int, after: Int) {
+private fun TextEditorState.deleteAroundSelection(selection: TextRange, before: Int, after: Int) = editGroup {
 	val selStart = selection.min
 	val selEnd = selection.max
 	val removedBefore = before.coerceIn(0, selStart)
 	val removedAfter = after.coerceIn(0, getTextLength() - selEnd)
-	if (removedBefore == 0 && removedAfter == 0) return
+	if (removedBefore == 0 && removedAfter == 0) return@editGroup
 
 	val cursorIndex = getCharacterIndex(cursorPosition)
-	// The far side first, so the near side's indices still hold.
-	if (removedAfter > 0) {
-		delete(TextEditorRange(getOffsetAtCharacter(selEnd), getOffsetAtCharacter(selEnd + removedAfter)))
-	}
-	if (removedBefore > 0) {
-		delete(TextEditorRange(getOffsetAtCharacter(selStart - removedBefore), getOffsetAtCharacter(selStart)))
+	// Not typing: an IME rewriting around a selection is no backspace, so a
+	// later backspace must not join it. The far side first, so the near side's
+	// indices still hold.
+	editManager.recordingAsTyping(false) {
+		if (removedAfter > 0) {
+			delete(TextEditorRange(getOffsetAtCharacter(selEnd), getOffsetAtCharacter(selEnd + removedAfter)))
+		}
+		if (removedBefore > 0) {
+			delete(TextEditorRange(getOffsetAtCharacter(selStart - removedBefore), getOffsetAtCharacter(selStart)))
+		}
 	}
 	selector.updateSelection(
 		getOffsetAtCharacter(selStart - removedBefore),
@@ -208,32 +261,48 @@ internal fun TextEditorState.imeSetSelection(start: Int, end: Int) {
 }
 
 /** Insert a newline, replacing any selection first (used for IME "enter" actions). */
-internal fun TextEditorState.imePerformNewline() {
-	if (selector.hasSelection()) selector.deleteSelection()
-	insertNewlineAtCursor()
-}
+internal fun TextEditorState.imePerformNewline() = insertTypedNewline()
 
 /**
- * Replaces the current composing region with [text], or — when there is no
- * composition — deletes any selection and inserts at the cursor. Returns the
- * character index at which the inserted text starts.
+ * Replaces the current composing region with [text], or, when there is no
+ * composition, types it over any selection at the cursor. With [typing] the
+ * edit is recorded as typing whatever its shape (a composition may hold spaces,
+ * as pinyin does); without, a replace is not typing and an insert is typing
+ * only when it is one word. Typed edits fold into the run they rewrite and join
+ * the typing around them, the way plain typed words do.
  */
-private fun TextEditorState.replaceComposingOrInsert(text: String): Int {
+private fun TextEditorState.replaceComposingOrInsert(text: String, typing: Boolean): ImeInsertion {
 	// A composing range that survived an out-of-pipeline edit can point past the
 	// current document; treating it as no-composition inserts safely at the cursor.
 	val composing = composingRange?.takeIf { isWithinDocument(it) }
 	return if (composing != null) {
 		val start = getCharacterIndex(composing.start)
-		// inheritStyle keeps autocorrect/composition from stripping bold/italic etc.
-		replace(TextEditorRange(composing.start, composing.end), text, inheritStyle = true)
-		start
+		val range = TextEditorRange(composing.start, composing.end)
+		// Re-setting the composition to what it already is (an IME re-marking a
+		// word) is no edit: a replace would still strip the rich spans inside.
+		val edited = text != getStringInRange(range)
+		if (edited) {
+			editManager.recordingAsTyping(typing) {
+				// inheritStyle keeps autocorrect/composition from stripping bold/italic etc.
+				replace(range, text, inheritStyle = true)
+			}
+		}
+		ImeInsertion(start, edited)
 	} else {
-		if (selector.hasSelection()) selector.deleteSelection()
-		val start = getCharacterIndex(cursorPosition)
-		insertStringAtCursor(text)
-		start
+		val selection = selector.selection
+		val start = getCharacterIndex(selection?.start ?: cursorPosition)
+		when {
+			text.isEmpty() -> selector.deleteSelection() // An IME commits "" routinely: a delete or nothing.
+			// Past the behavior chain: the commit path offered the text already, and
+			// a composing update is never offered.
+			else -> insertTypedString(text, typing = typing || text.isOneTypedWord())
+		}
+		ImeInsertion(start, edited = text.isNotEmpty() || selection != null)
 	}
 }
+
+/** Where an IME text command's text landed, and whether landing it changed anything. */
+private class ImeInsertion(val start: Int, val edited: Boolean)
 
 /** True if [range] is well-ordered and both endpoints index into the current document. */
 internal fun TextEditorState.isWithinDocument(range: TextEditorRange): Boolean {
