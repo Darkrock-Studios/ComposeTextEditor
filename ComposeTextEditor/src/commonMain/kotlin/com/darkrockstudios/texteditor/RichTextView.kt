@@ -6,15 +6,15 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.PointerIcon
-import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -41,6 +41,11 @@ import com.darkrockstudios.texteditor.state.TextEditorState
  *
  * The caller owns the [TextEditorState] and is responsible for seeding it with content
  * (e.g. via `rememberTextEditorState(initialText)` or `withMarkdown(...)`).
+ *
+ * @param onLinkClick Opens a [com.darkrockstudios.texteditor.richstyle.LinkSpanStyle]'s
+ *   URL on a click or tap that lands and lifts on the link. Dragging a selection
+ *   across a link does not open it. Pass `LocalUriHandler.current::openUri` to open
+ *   links in the browser.
  */
 @Composable
 fun RichTextView(
@@ -49,7 +54,11 @@ fun RichTextView(
 	contentPadding: PaddingValues = PaddingValues(0.dp),
 	style: TextEditorStyle = rememberTextEditorStyle(),
 	isSelectable: Boolean = false,
+	onLinkClick: ((url: String) -> Unit)? = null,
 ) {
+	val currentOnLinkClick by rememberUpdatedState(onLinkClick)
+	val linkClicks = remember { LinkClicks.forReadOnly { currentOnLinkClick } }
+
 	LaunchedEffect(style.textStyle) {
 		state.textStyle = style.textStyle
 	}
@@ -92,6 +101,7 @@ fun RichTextView(
 				style = style,
 				isSelectable = true,
 				onContextMenuRequest = { offset -> contextMenuState.showMenu(offset) },
+				linkClicks = linkClicks,
 			)
 		}
 	} else {
@@ -102,6 +112,7 @@ fun RichTextView(
 			style = style,
 			isSelectable = false,
 			onContextMenuRequest = null,
+			linkClicks = linkClicks,
 		)
 	}
 }
@@ -114,6 +125,7 @@ private fun RichTextViewBody(
 	style: TextEditorStyle,
 	isSelectable: Boolean,
 	onContextMenuRequest: ((Offset) -> Unit)?,
+	linkClicks: LinkClicks,
 ) {
 	val density = LocalDensity.current
 	val layoutDirection = LocalLayoutDirection.current
@@ -140,14 +152,18 @@ private fun RichTextViewBody(
 		Box(modifier = Modifier.padding(contentPadding)) {
 			val selectionModifier = if (isSelectable) {
 				Modifier
-					.pointerHoverIcon(PointerIcon.Text)
+					.textEditorPointerIcon(state, linkClicks)
+					.textMagnifier(state)
 					.textEditorPointerInputHandling(
 						state = state,
 						onContextMenuRequest = onContextMenuRequest,
 						readOnly = true,
+						links = linkClicks,
 					)
 			} else {
 				Modifier
+					.textEditorPointerIcon(state, linkClicks, default = null)
+					.linkClickHandling(state, linkClicks)
 			}
 
 			Canvas(

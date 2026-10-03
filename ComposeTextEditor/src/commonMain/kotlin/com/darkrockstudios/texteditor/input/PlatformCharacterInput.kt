@@ -17,8 +17,10 @@ import androidx.compose.ui.input.key.KeyEvent
  *   double-insert every printable key.
  * - **iOS**: text input arrives via the IME's `commitText`; the rare key
  *   events that surface use `Unknown` for typed characters.
- * - **WASM**: there is no IME path — typed characters arrive as
- *   [KeyEventType.KeyDown] events translated directly from the browser's
- *   `keydown` DOM event. The browser does not emit an `Unknown`-type event.
+ * - **WASM**: accepts [KeyEventType.KeyDown], less two shapes the input
+ *   session's textarea forwards that must not insert: named keys, whose Compose
+ *   event carries the key code as its code point, and Ctrl chords (AltGr on
+ *   Windows browsers). See the wasm actual. It does not emit an `Unknown`-type
+ *   event.
  */
 internal expect fun KeyEvent.isCharacterInputCandidate(): Boolean

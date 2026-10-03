@@ -30,7 +30,7 @@ val KeyEvent.isCtrlShortcut: Boolean
  *
  * ```kotlin
  * val bindings = KeyBindings { event ->
- *     if (event.key == Key.B && event.isCtrlShortcut) ToggleBold
+ *     if (event.key == Key.D && event.isCtrlShortcut && event.isShiftPressed) InsertDate
  *     else platformKeyBindings().commandFor(event)
  * }
  * ```
@@ -54,15 +54,32 @@ expect fun platformKeyBindings(): KeyBindings
  */
 val LocalKeyBindings = staticCompositionLocalOf { platformKeyBindings() }
 
-/** Windows and Linux conventions: Ctrl for shortcuts, Ctrl+Arrow for word jumps, Home/End for line bounds. */
+/**
+ * Linux conventions, also used on Android: Ctrl for shortcuts, Ctrl+Left/Right for word
+ * jumps, Ctrl+Up/Down for paragraph jumps, Home/End for line bounds. Going forward, Ctrl+Right
+ * and Ctrl+Delete stop at the end of the word and Ctrl+Down at the end of the paragraph, as
+ * GTK, `EditText` and `BasicTextField` do. Windows differs only in those, see
+ * [WindowsKeyBindings].
+ */
 object CtrlKeyBindings : KeyBindings {
 	override fun commandFor(event: KeyEvent): EditorCommand? {
 		val ctrl = event.isCtrlShortcut
 		return when (event.navigationKey) {
 			Key.A -> if (ctrl) Action.SelectAll else null
 			Key.C -> if (ctrl) Action.Copy else null
-			Key.X -> if (ctrl) Action.Cut else null
-			Key.V -> if (ctrl) Action.Paste else null
+			Key.X -> when {
+				ctrl && event.isShiftPressed -> Action.ToggleStrikethrough
+				ctrl -> Action.Cut
+				else -> null
+			}
+
+			Key.B, Key.I, Key.U, Key.E -> if (ctrl && !event.isShiftPressed) formattingToggleFor(event.key) else null
+			Key.V -> when {
+				ctrl && event.isShiftPressed -> Action.PasteAsPlainText
+				ctrl -> Action.Paste
+				else -> null
+			}
+
 			Key.Y -> if (ctrl) Action.Redo else null
 			Key.Z -> when {
 				ctrl && event.isShiftPressed -> Action.Redo
@@ -71,22 +88,59 @@ object CtrlKeyBindings : KeyBindings {
 			}
 
 			Key.DirectionLeft -> if (ctrl) Motion.WordLeft else Motion.Left
-			Key.DirectionRight -> if (ctrl) Motion.WordRight else Motion.Right
-			Key.DirectionUp -> Motion.Up
-			Key.DirectionDown -> Motion.Down
+			Key.DirectionRight -> if (ctrl) Motion.WordEnd else Motion.Right
+			Key.DirectionUp -> if (ctrl) Motion.ParagraphBackward else Motion.Up
+			Key.DirectionDown -> if (ctrl) Motion.ParagraphForward else Motion.Down
 			Key.MoveHome -> if (ctrl) Motion.DocumentStart else Motion.LineStart
 			Key.MoveEnd -> if (ctrl) Motion.DocumentEnd else Motion.LineEnd
 			Key.Backspace -> if (ctrl) Action.DeleteWordBackward else Action.DeleteBackward
-			Key.Delete -> if (ctrl) Action.DeleteWordForward else Action.DeleteForward
+			Key.Delete -> when {
+				ctrl -> Action.DeleteToWordEnd
+				event.isShiftPressed && !event.isAltPressed -> Action.Cut
+				else -> Action.DeleteForward
+			}
+
+			// The IBM CUA clipboard chords, still honoured by Windows and Linux editors.
+			Key.Insert -> when {
+				ctrl -> Action.Copy
+				event.isShiftPressed && !event.isAltPressed -> Action.Paste
+				else -> null
+			}
+
 			else -> commonCommandFor(event)
 		}
 	}
 }
 
 /**
- * macOS conventions: Cmd for shortcuts, Option+Arrow for word jumps, Cmd+Arrow for line and
- * document bounds. Ctrl never selects a different command than the unmodified key would, since
- * on macOS it belongs to the system and to the Emacs-style text bindings.
+ * Windows conventions: [CtrlKeyBindings], except that going forward runs on to the next
+ * start, as Windows edit controls, Word and WordPad do: Ctrl+Right and Ctrl+Delete to the
+ * start of the next word, Ctrl+Down to the start of the next paragraph.
+ */
+object WindowsKeyBindings : KeyBindings {
+	override fun commandFor(event: KeyEvent): EditorCommand? {
+		val forward = if (event.isCtrlShortcut) {
+			when (event.navigationKey) {
+				Key.DirectionRight -> Motion.WordRight
+				Key.DirectionDown -> Motion.NextParagraphStart
+				Key.Delete -> Action.DeleteWordForward
+				else -> null
+			}
+		} else {
+			null
+		}
+		return forward ?: CtrlKeyBindings.commandFor(event)
+	}
+}
+
+/**
+ * macOS conventions: Cmd for shortcuts, Option+Left/Right for word jumps (Option+Right to the
+ * end of the word), Option+Up/Down for paragraph jumps, Cmd+Arrow for line and document
+ * bounds, and the Emacs-style Ctrl chords of every Cocoa text view: A and E for the
+ * paragraph's start and end, F, B, N and P for a character or a row, D and H to delete
+ * forward and backward, K to delete to the paragraph end. Ctrl+Y needs a kill ring and is
+ * unbound. Every other Ctrl chord selects the same command as the unmodified key, since on
+ * macOS Ctrl belongs to the system; Enter with Ctrl, Cmd or Option is left for the host.
  *
  * Option is also the macOS compose modifier (Option+8 types '{'), so only the chords claimed here
  * may consume an Option event; everything else must fall through to
@@ -94,13 +148,27 @@ object CtrlKeyBindings : KeyBindings {
  */
 object MacKeyBindings : KeyBindings {
 	override fun commandFor(event: KeyEvent): EditorCommand? {
+		if (event.isEmacsChord) emacsCommandFor(event)?.let { return it }
 		val cmd = event.isMetaPressed
 		val option = event.isAltPressed
 		return when (event.navigationKey) {
 			Key.A -> if (cmd) Action.SelectAll else null
+
 			Key.C -> if (cmd) Action.Copy else null
-			Key.X -> if (cmd) Action.Cut else null
-			Key.V -> if (cmd) Action.Paste else null
+			Key.X -> when {
+				cmd && event.isShiftPressed -> Action.ToggleStrikethrough
+				cmd -> Action.Cut
+				else -> null
+			}
+
+			Key.B, Key.I, Key.U, Key.E -> if (cmd && !event.isShiftPressed) formattingToggleFor(event.key) else null
+			// Cmd+Option+Shift+V is Cocoa's Paste and Match Style; Cmd+Shift+V is the common alias.
+			Key.V -> when {
+				cmd && event.isShiftPressed -> Action.PasteAsPlainText
+				cmd -> Action.Paste
+				else -> null
+			}
+
 			Key.Z -> when {
 				cmd && event.isShiftPressed -> Action.Redo
 				cmd -> Action.Undo
@@ -115,12 +183,22 @@ object MacKeyBindings : KeyBindings {
 
 			Key.DirectionRight -> when {
 				cmd -> Motion.LineEnd
-				option -> Motion.WordRight
+				option -> Motion.WordEnd
 				else -> Motion.Right
 			}
 
-			Key.DirectionUp -> if (cmd) Motion.DocumentStart else Motion.Up
-			Key.DirectionDown -> if (cmd) Motion.DocumentEnd else Motion.Down
+			Key.DirectionUp -> when {
+				cmd -> Motion.DocumentStart
+				option -> Motion.ParagraphBackward
+				else -> Motion.Up
+			}
+
+			Key.DirectionDown -> when {
+				cmd -> Motion.DocumentEnd
+				option -> Motion.ParagraphForward
+				else -> Motion.Down
+			}
+
 			Key.MoveHome -> Motion.LineStart
 			Key.MoveEnd -> Motion.LineEnd
 			Key.Backspace -> when {
@@ -129,10 +207,28 @@ object MacKeyBindings : KeyBindings {
 				else -> Action.DeleteBackward
 			}
 
-			Key.Delete -> if (option) Action.DeleteWordForward else Action.DeleteForward
+			Key.Delete -> when {
+				cmd -> Action.DeleteToLineEnd
+				option -> Action.DeleteToWordEnd
+				else -> Action.DeleteForward
+			}
+
 			else -> commonCommandFor(event)
 		}
 	}
+}
+
+/**
+ * Bold, italic and underline sit on B, I and U everywhere. Inline code is on E (GitHub,
+ * Notion). Strikethrough, bound beside Cut, is on Shift+X (Google Docs on macOS, Slack,
+ * Teams): the other common choice, Shift+S, is Save As in most hosts.
+ */
+private fun formattingToggleFor(key: Key): Action? = when (key) {
+	Key.B -> Action.ToggleBold
+	Key.I -> Action.ToggleItalic
+	Key.U -> Action.ToggleUnderline
+	Key.E -> Action.ToggleInlineCode
+	else -> null
 }
 
 /** Chords that mean the same thing everywhere. */
@@ -140,9 +236,41 @@ private fun commonCommandFor(event: KeyEvent): EditorCommand? = when (event.navi
 	Key.PageUp -> Motion.PageUp
 	Key.PageDown -> Motion.PageDown
 	Key.Tab -> if (event.isShiftPressed) Action.Outdent else Action.Indent
-	Key.Enter, Key.NumPadEnter -> Action.NewLine
+	Key.Enter, Key.NumPadEnter -> if (event.isEnterHostChord) null else Action.NewLine
+	Key.Cut -> Action.Cut
+	Key.Copy -> Action.Copy
+	Key.Paste -> Action.Paste
 	else -> null
 }
+
+/** Ctrl alone, with or without Shift: the Emacs-style chords of Cocoa text views. */
+private val KeyEvent.isEmacsChord: Boolean
+	get() = isCtrlShortcut && !isMetaPressed
+
+/**
+ * Cocoa's Emacs-style Ctrl chords. A and E are `moveToBeginningOfParagraph:` and
+ * `moveToEndOfParagraph:`; the motions extend the selection with Shift, the deletions
+ * take none.
+ */
+private fun emacsCommandFor(event: KeyEvent): EditorCommand? = when (event.key) {
+	Key.A -> Motion.ParagraphStart
+	Key.E -> Motion.ParagraphEnd
+	Key.F -> Motion.Right
+	Key.B -> Motion.Left
+	Key.N -> Motion.Down
+	Key.P -> Motion.Up
+	Key.D -> if (event.isShiftPressed) null else Action.DeleteForward
+	Key.H -> if (event.isShiftPressed) null else Action.DeleteBackward
+	Key.K -> if (event.isShiftPressed) null else Action.DeleteToParagraphEnd
+	else -> null
+}
+
+/**
+ * Enter with Ctrl, Cmd or Alt is left for the host to claim (send, submit, a page break).
+ * Shift+Enter still breaks the line, as it does in every native editor.
+ */
+private val KeyEvent.isEnterHostChord: Boolean
+	get() = isCtrlPressed || isMetaPressed || isAltPressed
 
 /**
  * The dedicated key a numpad key stands in for when Num Lock is off. Desktop Compose
@@ -160,5 +288,6 @@ private val KeyEvent.navigationKey: Key
 		Key.NumPadPageUp -> Key.PageUp
 		Key.NumPadPageDown -> Key.PageDown
 		Key.NumPadDelete -> Key.Delete
+		Key.NumPadInsert -> Key.Insert
 		else -> key
 	}

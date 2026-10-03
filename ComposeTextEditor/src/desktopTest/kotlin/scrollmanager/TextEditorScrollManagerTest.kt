@@ -113,7 +113,7 @@ class TextEditorScrollManagerTest {
 
 		// Verify scroll was triggered to proper position
 		assertTrue(scrollSlot.isCaptured)
-		assertEquals(10, scrollSlot.captured) // Line 1 starts at y=20, minus 10 buffer
+		assertEquals(20, scrollSlot.captured) // Line 1 starts at y=20
 	}
 
 	@Test
@@ -154,7 +154,7 @@ class TextEditorScrollManagerTest {
 		assertEquals(
 			40,
 			scrollSlot.captured
-		) // Line 4 ends at y=100, minus viewport height (60), plus buffer (10)
+		) // Line 4 ends at y=100, minus viewport height (60)
 	}
 
 	@Test
@@ -183,9 +183,8 @@ class TextEditorScrollManagerTest {
 			manager.scrollToCursor()
 			testScope.advanceUntilIdle()
 
-			// The raw desired scroll position would be:
-			// cursorTop(80) + cursorHeight(20) - viewportHeight(60) + buffer(10) = 50
-			// But this is coerced to maxScroll = totalContentHeight(100) - viewportHeight(60) = 40
+			// cursorTop(80) + cursorHeight(20) - viewportHeight(60) = 40, which is also
+			// maxScroll = totalContentHeight(100) - viewportHeight(60)
 			assertTrue(scrollSlot.isCaptured)
 			assertEquals(40, scrollSlot.captured)
 		}
@@ -452,9 +451,9 @@ class TextEditorScrollManagerTest {
 		manager.ensureCursorVisible()
 		testScope.advanceUntilIdle()
 
-		// cursorTop(220) + cursorHeight(55) - viewportHeight(165) + buffer(10)
+		// cursorTop(220) + cursorHeight(55) - viewportHeight(165)
 		assertTrue(scrollSlot.isCaptured)
-		assertEquals(120, scrollSlot.captured)
+		assertEquals(110, scrollSlot.captured)
 	}
 
 	@Test

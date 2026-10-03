@@ -2,6 +2,7 @@ package e2e
 
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.text.AnnotatedString
+import com.darkrockstudios.texteditor.input.WindowsKeyBindings
 import utils.editorUiTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -61,8 +62,21 @@ class TypingAndDeletionE2eTest {
 	}
 
 	@Test
-	fun `ctrl+delete deletes the next word`() = editorUiTest(
+	fun `ctrl+delete deletes to the word end`() = editorUiTest(
 		initialText = AnnotatedString("The quick brown"),
+	) {
+		press(Key.MoveHome, ctrl = true)
+		press(Key.Delete, ctrl = true)
+		assertEquals(" quick brown", text)
+
+		press(Key.Delete, ctrl = true)
+		assertEquals(" brown", text)
+	}
+
+	@Test
+	fun `ctrl+delete on windows deletes to the next word start`() = editorUiTest(
+		initialText = AnnotatedString("The quick brown"),
+		keyBindings = WindowsKeyBindings,
 	) {
 		press(Key.MoveHome, ctrl = true)
 		press(Key.Delete, ctrl = true)

@@ -7,6 +7,7 @@ import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.key.utf16CodePoint
 import androidx.compose.ui.platform.Clipboard
+import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.input.EditorCommand.Action
 import com.darkrockstudios.texteditor.input.EditorCommand.Motion
 import com.darkrockstudios.texteditor.state.TextEditorState
@@ -15,10 +16,16 @@ import com.darkrockstudios.texteditor.state.moveCursorPageDown
 import com.darkrockstudios.texteditor.state.moveCursorPageUp
 import com.darkrockstudios.texteditor.state.moveCursorToLineEnd
 import com.darkrockstudios.texteditor.state.moveCursorUp
+import com.darkrockstudios.texteditor.state.moveParagraphBackward
+import com.darkrockstudios.texteditor.state.moveParagraphForward
 import com.darkrockstudios.texteditor.state.moveToDocumentEnd
 import com.darkrockstudios.texteditor.state.moveToDocumentStart
+import com.darkrockstudios.texteditor.state.moveToNextParagraphStart
 import com.darkrockstudios.texteditor.state.moveToNextWord
+import com.darkrockstudios.texteditor.state.moveToParagraphEnd
+import com.darkrockstudios.texteditor.state.moveToParagraphStart
 import com.darkrockstudios.texteditor.state.moveToPreviousWord
+import com.darkrockstudios.texteditor.state.moveToWordEnd
 import kotlinx.coroutines.CoroutineScope
 
 /**
@@ -49,6 +56,7 @@ internal class TextEditorKeyCommandHandler(
 		if (keyEvent.type != KeyEventType.KeyDown) return false
 
 		val command = keyBindings.commandFor(keyEvent) ?: return false
+		if (command !is Motion || !command.isVertical) state.cursor.forgetVerticalGoal()
 
 		return when (command) {
 			is Motion -> {
@@ -113,7 +121,30 @@ internal class TextEditorKeyCommandHandler(
 
 	private fun moveCursor(motion: Motion, state: TextEditorState, extendSelection: Boolean) {
 		val initialPosition = state.cursorPosition
-		if (!extendSelection) state.selector.clearSelection()
+		if (!extendSelection) {
+			val selection = state.selector.selection
+			state.selector.clearSelection()
+			if (selection != null) {
+				when (motion) {
+					// Native editors collapse onto the selection's edge without moving further.
+					Motion.Left -> return state.cursor.updatePosition(selection.start)
+					Motion.Right -> return state.cursor.updatePosition(selection.end)
+					// Paragraph jumps measure from the edge they head towards.
+					Motion.ParagraphBackward, Motion.ParagraphStart -> state.cursor.updatePosition(selection.start)
+					Motion.ParagraphForward, Motion.NextParagraphStart -> state.cursor.updatePosition(selection.end)
+					// A selection ending just past a line break still belongs to the paragraph above.
+					Motion.ParagraphEnd -> state.cursor.updatePosition(
+						if (selection.end.char == 0 && selection.end.line > selection.start.line) {
+							CharLineOffset(selection.end.line - 1, state.textLines[selection.end.line - 1].length)
+						} else {
+							selection.end
+						}
+					)
+
+					else -> {}
+				}
+			}
+		}
 
 		when (motion) {
 			Motion.Left -> state.cursor.moveLeft()
@@ -122,18 +153,27 @@ internal class TextEditorKeyCommandHandler(
 			Motion.Down -> state.moveCursorDown()
 			Motion.WordLeft -> state.moveToPreviousWord()
 			Motion.WordRight -> state.moveToNextWord()
+			Motion.WordEnd -> state.moveToWordEnd()
 			Motion.LineStart -> state.cursor.moveToLineStart()
 			Motion.LineEnd -> state.moveCursorToLineEnd()
 			Motion.DocumentStart -> state.moveToDocumentStart()
 			Motion.DocumentEnd -> state.moveToDocumentEnd()
 			Motion.PageUp -> state.moveCursorPageUp()
 			Motion.PageDown -> state.moveCursorPageDown()
+			Motion.ParagraphBackward -> state.moveParagraphBackward()
+			Motion.ParagraphForward -> state.moveParagraphForward()
+			Motion.NextParagraphStart -> state.moveToNextParagraphStart()
+			Motion.ParagraphStart -> state.moveToParagraphStart()
+			Motion.ParagraphEnd -> state.moveToParagraphEnd()
 		}
 
 		if (extendSelection) {
 			state.selector.extendSelection(initialPosition, state.cursorPosition)
 		}
 	}
+
+	private val Motion.isVertical: Boolean
+		get() = this == Motion.Up || this == Motion.Down || this == Motion.PageUp || this == Motion.PageDown
 
 	/**
 	 * Converts a Unicode code point to a String.

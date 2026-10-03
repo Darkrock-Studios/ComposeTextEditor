@@ -23,7 +23,8 @@ import com.darkrockstudios.texteditor.richstyle.*
 import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.getRichSpansAtPosition
 import com.darkrockstudios.texteditor.state.getRichSpansInRange
-import com.darkrockstudios.texteditor.state.getSpanStylesInRange
+import com.darkrockstudios.texteditor.state.hasStyleThroughout
+import com.darkrockstudios.texteditor.state.toggleSpanStyle
 import markdown.decreaseFontSize
 import markdown.increaseFontSize
 
@@ -51,11 +52,13 @@ fun TextEditorToolbar(
 
 	LaunchedEffect(Unit) {
 		state.cursorDataFlow.collect { (position, cursorStyles, selection) ->
-			val styles = if (selection != null) {
-				state.getSpanStylesInRange(selection)
-			} else {
-				cursorStyles
-			}
+			// Active exactly when the toggle would remove the style.
+			fun isActive(style: SpanStyle) =
+				if (selection != null && selection.start != selection.end) {
+					state.hasStyleThroughout(selection, style)
+				} else {
+					style in cursorStyles
+				}
 
 			val richSpans = if (selection != null) {
 				state.getRichSpansInRange(selection)
@@ -63,10 +66,10 @@ fun TextEditorToolbar(
 				state.getRichSpansAtPosition(position)
 			}
 
-			isBoldActive = styles.contains(mardkown.markdownStyles.BOLD)
-			isItalicActive = styles.contains(mardkown.markdownStyles.ITALICS)
-			isCodeActive = styles.contains(mardkown.markdownStyles.CODE)
-			isStrikethroughActive = styles.contains(mardkown.markdownStyles.STRIKETHROUGH)
+			isBoldActive = isActive(mardkown.markdownStyles.BOLD)
+			isItalicActive = isActive(mardkown.markdownStyles.ITALICS)
+			isCodeActive = isActive(mardkown.markdownStyles.CODE)
+			isStrikethroughActive = isActive(mardkown.markdownStyles.STRIKETHROUGH)
 			existingLinkSpan = richSpans.firstOrNull { it.style is LinkSpanStyle }
 			isBlockquoteActive = richSpans.any { it.style === BlockquoteSpanStyle }
 			isBulletListActive = richSpans.any { it.style === BulletListSpanStyle }
@@ -116,7 +119,7 @@ fun TextEditorToolbar(
 			// Formatting Controls Group
 			Row {
 				FormatButton(
-					onClick = { state.toggleBold(mardkown) },
+					onClick = { state.toggleSpanStyle(mardkown.markdownStyles.BOLD) },
 					icon = Icons.Default.FormatBold,
 					contentDescription = "Bold",
 					isActive = isBoldActive,
@@ -125,9 +128,7 @@ fun TextEditorToolbar(
 				Spacer(modifier = Modifier.width(4.dp))
 
 				FormatButton(
-					onClick = {
-						toggleStyle(state, isItalicActive, mardkown.markdownStyles.ITALICS)
-					},
+					onClick = { state.toggleSpanStyle(mardkown.markdownStyles.ITALICS) },
 					icon = Icons.Default.FormatItalic,
 					contentDescription = "Italic",
 					isActive = isItalicActive,
@@ -137,9 +138,7 @@ fun TextEditorToolbar(
 					Spacer(modifier = Modifier.width(4.dp))
 
 					FormatButton(
-						onClick = {
-							toggleStyle(state, isCodeActive, mardkown.markdownStyles.CODE)
-						},
+						onClick = { state.toggleSpanStyle(mardkown.markdownStyles.CODE) },
 						icon = Icons.Default.Code,
 						contentDescription = "Inline Code",
 						isActive = isCodeActive,
@@ -148,13 +147,7 @@ fun TextEditorToolbar(
 					Spacer(modifier = Modifier.width(4.dp))
 
 					FormatButton(
-						onClick = {
-							toggleStyle(
-								state,
-								isStrikethroughActive,
-								mardkown.markdownStyles.STRIKETHROUGH
-							)
-						},
+						onClick = { state.toggleSpanStyle(mardkown.markdownStyles.STRIKETHROUGH) },
 						icon = Icons.Default.FormatStrikethrough,
 						contentDescription = "Strikethrough",
 						isActive = isStrikethroughActive,
@@ -449,23 +442,6 @@ private fun reconcileHorizontalRules(state: TextEditorState) {
 			)
 		}
 		state.removeRichSpan(span)
-	}
-}
-
-private fun toggleStyle(
-	state: TextEditorState,
-	isActive: Boolean,
-	spanStyle: SpanStyle
-) {
-	val selection = state.selector.selection
-	if (selection != null) {
-		if (isActive) {
-			state.removeStyleSpan(selection, spanStyle)
-		} else {
-			state.addStyleSpan(selection, spanStyle)
-		}
-	} else {
-		state.cursor.toggleStyle(spanStyle)
 	}
 }
 

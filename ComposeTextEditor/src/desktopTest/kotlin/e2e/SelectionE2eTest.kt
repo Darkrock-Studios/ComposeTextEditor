@@ -2,6 +2,8 @@ package e2e
 
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.text.AnnotatedString
+import com.darkrockstudios.texteditor.input.MacKeyBindings
+import com.darkrockstudios.texteditor.input.WindowsKeyBindings
 import utils.editorUiTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -35,8 +37,19 @@ class SelectionE2eTest {
 	}
 
 	@Test
-	fun `ctrl+shift+right selects to the next word start`() = editorUiTest(
+	fun `ctrl+shift+right selects to the word end`() = editorUiTest(
 		initialText = AnnotatedString("The quick brown fox"),
+	) {
+		clickAtCharacter(0)
+		press(Key.DirectionRight, ctrl = true, shift = true)
+
+		assertEquals("The", selectedText)
+	}
+
+	@Test
+	fun `ctrl+shift+right on windows selects to the next word start`() = editorUiTest(
+		initialText = AnnotatedString("The quick brown fox"),
+		keyBindings = WindowsKeyBindings,
 	) {
 		clickAtCharacter(0)
 		press(Key.DirectionRight, ctrl = true, shift = true)
@@ -105,14 +118,60 @@ class SelectionE2eTest {
 	}
 
 	@Test
-	fun `unshifted arrow clears an existing selection`() = editorUiTest(
+	fun `unshifted right collapses the selection to its end`() = editorUiTest(
 		initialText = AnnotatedString("Hello World"),
 	) {
-		dragSelect(fromChar = 0, toChar = 5)
-		assertEquals("Hello", selectedText)
+		dragSelect(fromChar = 5, toChar = 1)
+		assertEquals("ello", selectedText)
 
 		press(Key.DirectionRight)
 		assertNull(state.selector.selection)
+		assertEquals(5, cursorIndex)
+	}
+
+	@Test
+	fun `unshifted left collapses the selection to its start`() = editorUiTest(
+		initialText = AnnotatedString("Hello\nWorld"),
+	) {
+		dragSelect(fromChar = 2, toChar = 8)
+		assertEquals("llo\nWo", selectedText)
+
+		press(Key.DirectionLeft)
+		assertNull(state.selector.selection)
+		assertEquals(2, cursorIndex)
+	}
+
+	@Test
+	fun `unshifted arrows collapse the same way on macos`() = editorUiTest(
+		initialText = AnnotatedString("Hello World"),
+		keyBindings = MacKeyBindings,
+	) {
+		dragSelect(fromChar = 2, toChar = 7)
+		assertEquals("llo W", selectedText)
+		press(Key.DirectionLeft)
+		assertNull(state.selector.selection)
+		assertEquals(2, cursorIndex)
+
+		dragSelect(fromChar = 7, toChar = 2)
+		assertEquals("llo W", selectedText)
+		press(Key.DirectionRight)
+		assertNull(state.selector.selection)
+		assertEquals(7, cursorIndex)
+	}
+
+	@Test
+	fun `arrows collapse a select all to the document ends wherever the caret was`() = editorUiTest(
+		initialText = AnnotatedString("first\nsecond"),
+	) {
+		clickAtCharacter(8)
+		press(Key.A, ctrl = true)
+		press(Key.DirectionLeft)
+		assertEquals(0, cursorIndex)
+
+		clickAtCharacter(3)
+		press(Key.A, ctrl = true)
+		press(Key.DirectionRight)
+		assertEquals(12, cursorIndex)
 	}
 
 	@Test
@@ -142,10 +201,10 @@ class SelectionE2eTest {
 	) {
 		clickAtCharacter(4)
 		press(Key.DirectionRight, ctrl = true, shift = true)
-		assertEquals("quick ", selectedText)
+		assertEquals("quick", selectedText)
 
 		press(Key.DirectionRight, ctrl = true, shift = true)
-		assertEquals("quick brown ", selectedText)
+		assertEquals("quick brown", selectedText)
 
 		press(Key.DirectionLeft, ctrl = true, shift = true)
 		assertTrue(selectedText.startsWith("quick"), "shrinking must keep the anchor, was '$selectedText'")

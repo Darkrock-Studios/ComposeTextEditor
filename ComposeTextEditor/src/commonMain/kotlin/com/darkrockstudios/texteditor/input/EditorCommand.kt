@@ -14,21 +14,46 @@ sealed interface EditorCommand {
 		Right,
 		Up,
 		Down,
+
+		/** To the start of the word, or of the previous one when not inside a word or at its start. */
 		WordLeft,
+
+		/** To the start of the next word: Ctrl+Right on Windows. */
 		WordRight,
 		LineStart,
 		LineEnd,
 		DocumentStart,
 		DocumentEnd,
 		PageUp,
-		PageDown;
+		PageDown,
+
+		/** To the start of the paragraph, or of the previous one when already at a start. */
+		ParagraphBackward,
+
+		/** To the end of the paragraph, or of the next one when already at an end. */
+		ParagraphForward,
+
+		/** To the start of the next paragraph, or the document end from the last one. */
+		NextParagraphStart,
+
+		/**
+		 * To the end of the word, or of the next one when not inside a word: Ctrl+Right on
+		 * Linux, Option+Right on macOS.
+		 */
+		WordEnd,
+
+		/** To the start of the paragraph, past any wrap: Emacs' Ctrl+A on macOS. */
+		ParagraphStart,
+
+		/** To the end of the paragraph, past any wrap: Emacs' Ctrl+E on macOS. */
+		ParagraphEnd;
 
 		override val isEdit: Boolean get() = false
 	}
 
 	/**
 	 * A named operation. Identified by [id] rather than enum membership so a host
-	 * can introduce its own (`Action("myapp.toggleBold", isEdit = true)`) and bind
+	 * can introduce its own (`Action("myapp.insertDate", isEdit = true)`) and bind
 	 * it from a custom [KeyBindings] exactly like a built-in. Ids are namespaced
 	 * by convention (`editor.` is the built-ins'), and equality is by [id] alone,
 	 * so two actions sharing an id are the same action however they disagree on
@@ -44,16 +69,40 @@ sealed interface EditorCommand {
 			val Copy = Action("editor.copy", isEdit = false)
 			val Cut = Action("editor.cut", isEdit = true)
 			val Paste = Action("editor.paste", isEdit = true)
+
+			/** Pastes the clipboard's text alone, styled like text typed at the destination. */
+			val PasteAsPlainText = Action("editor.pasteAsPlainText", isEdit = true)
 			val Undo = Action("editor.undo", isEdit = true)
 			val Redo = Action("editor.redo", isEdit = true)
 			val DeleteBackward = Action("editor.deleteBackward", isEdit = true)
 			val DeleteForward = Action("editor.deleteForward", isEdit = true)
 			val DeleteWordBackward = Action("editor.deleteWordBackward", isEdit = true)
+			/** Deletes to where [Motion.WordRight] goes, the start of the next word. */
 			val DeleteWordForward = Action("editor.deleteWordForward", isEdit = true)
+
+			/** Deletes to where [Motion.WordEnd] goes, the end of the word. */
+			val DeleteToWordEnd = Action("editor.deleteToWordEnd", isEdit = true)
 			val DeleteToLineStart = Action("editor.deleteToLineStart", isEdit = true)
+			val DeleteToLineEnd = Action("editor.deleteToLineEnd", isEdit = true)
+
+			/**
+			 * Deletes to the end of the logical line, past any wrap. At the line's end it
+			 * deletes the line break instead, joining the next line, like Cocoa's Ctrl+K.
+			 */
+			val DeleteToParagraphEnd = Action("editor.deleteToParagraphEnd", isEdit = true)
 			val Indent = Action("editor.indent", isEdit = true)
 			val Outdent = Action("editor.outdent", isEdit = true)
 			val NewLine = Action("editor.newLine", isEdit = true)
+
+			// The formatting toggles apply the styles of the state's markdownConfiguration,
+			// so a markdown editor exports what they apply. Underline has no markdown form
+			// and toggles SpanStyle(textDecoration = TextDecoration.Underline). Each follows
+			// TextEditorState.toggleSpanStyle.
+			val ToggleBold = Action("editor.toggleBold", isEdit = true)
+			val ToggleItalic = Action("editor.toggleItalic", isEdit = true)
+			val ToggleUnderline = Action("editor.toggleUnderline", isEdit = true)
+			val ToggleStrikethrough = Action("editor.toggleStrikethrough", isEdit = true)
+			val ToggleInlineCode = Action("editor.toggleInlineCode", isEdit = true)
 
 			/**
 			 * The built-in carrying [id], or null for a host's own action. Identity is
@@ -68,16 +117,25 @@ sealed interface EditorCommand {
 				Copy,
 				Cut,
 				Paste,
+				PasteAsPlainText,
 				Undo,
 				Redo,
 				DeleteBackward,
 				DeleteForward,
 				DeleteWordBackward,
 				DeleteWordForward,
+				DeleteToWordEnd,
 				DeleteToLineStart,
+				DeleteToLineEnd,
+				DeleteToParagraphEnd,
 				Indent,
 				Outdent,
 				NewLine,
+				ToggleBold,
+				ToggleItalic,
+				ToggleUnderline,
+				ToggleStrikethrough,
+				ToggleInlineCode,
 			)
 
 			private val builtinsById: Map<String, Action> = Builtins.associateBy { it.id }

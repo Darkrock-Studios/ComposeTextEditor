@@ -164,8 +164,9 @@ translation paths:
   conventions ship as two `KeyBindings` values; hosts can substitute their
   own and register actions for their own chords to bind.
 - **Typed characters.** Printable typing that arrives as raw key events
-  (desktop `KEY_TYPED`, hardware keyboards on Android, browser keydown on
-  wasm) inserts through the same handler, gated by a per-platform predicate
+  (desktop `KEY_TYPED`, hardware keyboards on Android, a browser keydown on
+  wasm while the canvas rather than the input session's textarea holds DOM
+  focus) inserts through the same handler, gated by a per-platform predicate
   for "this event is a typed character", because every platform signals that
   differently and guessing wrong either drops or double-inserts keystrokes.
 - **The IME.** Everything that *composes* text (soft keyboards, autocorrect,
@@ -189,7 +190,10 @@ key handling. Both, and the reasoning for keeping them separate:
 The IME contract runs in two directions. Commands flow in, and each one lands
 in a single shared implementation (`ImeEditLogic` in commonMain) so that
 composing-region and cursor semantics are byte-for-byte identical on every
-platform; the per-platform adapters are pure translation. State flows out,
+platform; the per-platform adapters are pure translation. There are two of
+them: the Android `InputConnection`, and one skiko
+`PlatformTextInputMethodRequest` in the `skikoMain` source set shared by
+desktop, iOS, and web, each contributing only its `ImeOptions`. State flows out,
 because an IME keeps its own mirror of the text around the cursor and will
 issue commands against a stale buffer unless it is told about every change.
 On Android every report goes through one flush that compares the finished state
@@ -198,14 +202,22 @@ after any other change, never from inside an edit. The session machinery, the An
 `InputConnection`, and the per-platform differences:
 [design/text-input-sessions.md](design/text-input-sessions.md).
 
-Pointer input is three cooperating handlers on the canvas: caret placement
-and span clicks, drag selection, and multi-click (word, then line). The
-load-bearing distinction is *mouse-like versus finger*, detected from pointer
-buttons rather than pointer type because Android reports external mice as
-`Touch`. Mouse-like input places the caret on press, drags to select, and
-extends with shift-click; finger input places the caret on release,
-long-presses to select a word or open the context menu, and drags selection
-handles.
+Pointer input on the canvas is split by device. One handler owns every mouse
+gesture; two own the finger ones (handle drags, and taps with long
+presses). The load-bearing distinction is *mouse-like versus finger*, detected
+from pointer buttons rather than pointer type because Android reports external
+mice as `Touch`. Mouse-like input places the caret on press, extends with
+shift-click, and counts presses into double and triple clicks (word, then
+line) by the platform's double-tap timeout and touch slop; a drag extends by
+whatever unit the press selected, and keeps scrolling while it is held above
+or below the viewport. Only the primary button places the caret or selects;
+the secondary button opens the context menu, keeping a selection it lands
+inside. Finger input places the caret on release and shows a caret handle
+under it, long-presses to select a word or open the context menu, and drags
+the caret and selection handles. A span click is reported on release, when the
+press and release land on the same span without a drag, so placing the caret
+or selecting never reads as a click; links open by the host's `onLinkClick` on
+Ctrl/Cmd+click in an editor and on a plain click in `RichTextView`.
 
 ## Document model and transactions
 

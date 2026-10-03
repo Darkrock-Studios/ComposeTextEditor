@@ -1,7 +1,8 @@
 # Module Find & Replace
 
 A drop-in find & replace UI for the Compose Text Editor: a ready-made search bar,
-live-updating match highlighting, next/previous navigation, and replace / replace-all.
+live-updating match highlighting, next/previous navigation, case, whole-word, and regular
+expression matching, and replace / replace-all.
 
 > **Try it live:
 ** [open the Find demo on Wasm »](https://darkrock-studios.github.io/ComposeTextEditor/)
@@ -15,7 +16,8 @@ implementation("com.darkrockstudios:composetexteditor-find:2.0.0")
 Create a [FindState][com.darkrockstudios.texteditor.find.FindState] for your editor's
 state with [rememberFindState][com.darkrockstudios.texteditor.find.rememberFindState],
 show the [FindBar][com.darkrockstudios.texteditor.find.FindBar], and wire up the
-standard <kbd>Ctrl/Cmd+F</kbd> shortcut with
+standard <kbd>Ctrl/Cmd+F</kbd> shortcut, plus <kbd>F3</kbd> and <kbd>Ctrl/Cmd+G</kbd> for the
+next match, with
 [Modifier.findShortcut][com.darkrockstudios.texteditor.find.findShortcut]:
 
 ```kotlin
@@ -37,7 +39,7 @@ fun EditorWithFind() {
             state = textState,
             modifier = Modifier
                 .fillMaxSize()
-                .findShortcut { showFind = !showFind },
+                .findShortcut(findState) { showFind = !showFind },
         )
     }
 }
@@ -51,7 +53,10 @@ The highlights update automatically as the user edits the text while a search is
 if you want to build your own UI:
 
 ```kotlin
-findState.search("needle")          // also: caseSensitive via toggleCaseSensitive()
+findState.search("needle")
+findState.toggleCaseSensitive(true) // also toggleWholeWord() and toggleRegex(); each re-runs the search
+findState.isInvalidPattern          // true while a regex query does not compile
+findState.toggleInSelection(true)   // limit matches to the current selection
 findState.findNext()                // and findPrevious()
 findState.replaceCurrent("thread")  // replace the active match, advance to the next
 val replaced = findState.replaceAll("thread")

@@ -43,11 +43,11 @@ What `startInput` actually does is the per-platform fork:
 
 - **Android**: starts an input method with a request that builds a real
   `InputConnection`; this is what opens the soft keyboard.
-- **Desktop and iOS**: starts an input method with a Compose (skiko)
-  `PlatformTextInputMethodRequest` that adapts the editor state and routes
-  edit commands; used for composed input only.
-- **WASM**: suspends forever. There is no IME path in the browser; typed
-  characters arrive as `keydown`-derived key events.
+- **Desktop, iOS, and WASM**: start an input method with the one skiko
+  `PlatformTextInputMethodRequest` shared by the three
+  (`SkikoTextEditorInputMethodRequest` in `skikoMain`), which adapts the
+  editor state and routes every edit into `ImeEditLogic`. Each platform file
+  contributes only its `ImeOptions`.
 
 ## The contract has two directions
 
@@ -63,8 +63,9 @@ the command path.
 
 Every mutating IME command has exactly one implementation, as commonMain
 extension functions on `TextEditorState`. The platform adapters (the Android
-`InputConnection` methods, the desktop and iOS `editText` scopes) translate
-their platform's calls into these functions and decide nothing themselves.
+`InputConnection` methods, the skiko request's `editText` scope and
+`onEditCommand` list) translate their platform's calls into these functions
+and decide nothing themselves.
 The semantics they pin down:
 
 - `commitText` replaces the composing region when there is one, otherwise
@@ -240,32 +241,112 @@ character-input predicate accepts only `Unknown`-type events on desktop
 because AWT also fires a `KEY_PRESSED` for the same keystroke; accepting
 both would double-insert every printable key.
 
-State out is simpler than Android: the request exposes a live adapter
-(length, charAt, subSequence served from the requested range only, so IME
-queries stay cheap on large documents) that the framework reads on demand,
-plus the caret rectangle from the cursor's layout metrics to position the
-candidate window.
-
 ## iOS
 
-iOS uses the same request shape as desktop: the live state adapter for
-reads, `onEditCommand` translating the common commands (commit, delete
-surrounding, set selection, backspace). Its `editText` scope currently
-applies changes by diffing and replacing the whole document, which is
-correct but coarse. This is the least-exercised backend; treat it as a
-starting point, not a reference.
+iOS starts the same shared request. Compose's `UIKitTextInputService` binds a
+`UITextInput` view to it and applies everything the keyboard does through
+`editText`: typing is `commitText`, marked text is `setComposingText`,
+autocorrect is `deleteSurroundingTextInCodePoints` plus a commit, dictation
+is a run of composing updates ending in a commit. All of it lands in
+`ImeEditLogic`, so what the desktop suite pins down about composition and
+surrounding deletes holds on iOS by construction. The iOS file contributes
+the keyboard traits only: default keyboard, sentence capitalisation,
+autocorrect on, multiline.
+
+What iOS cannot get from the shared request is a Compose `TextLayoutResult`,
+because the editor lays out its own lines. The request answers null there, as
+the interface allows, so features that read per-character geometry from it
+(the spacebar trackpad's floating caret, marked-text rectangles) are
+unavailable until the editor can offer an equivalent (roadmap 4.6). The caret
+and editor rectangles are supplied.
+
+This backend has been compiled and exercised only through the desktop suite's
+coverage of the shared code; the device pass is queued for the Mac.
+
+## State out on the skiko platforms
+
+The request exposes a live adapter (length, charAt, subSequence served from
+the requested range only, so IME queries stay cheap on large documents) that
+the framework reads on demand, plus the caret rectangle from the cursor's
+layout metrics to position the candidate window or backing input.
+
+The frameworks observe it through `snapshotFlow`: desktop watches the
+selection and composition (and ends the platform composition when the caret
+leaves it), iOS watches text, selection, and composition, web watches the
+`TextFieldValue`. The cursor, selection, and composing range are snapshot
+state and trigger those flows on their own; the document content is not, by
+design (it is a volatile snapshot readable from any thread). So the shared
+session collects the editor's edit and document-replacement flows and bumps a
+snapshot-backed revision that the request's text reads fold in. Without it an
+edit that moves nothing observable (a forward delete) would never reach the
+platform's mirror.
+
+The caret rectangle reads the caret position for the same reason, but the
+metrics themselves are written when the caret is drawn, so an observer
+re-running at the edit sees the previous draw's rectangle (roadmap 4.19).
 
 ## WASM
 
-No input-method session exists: `startInput` suspends until cancelled, and
-all typing arrives as browser `keydown`-derived key events (the predicate
-accepts `KeyDown`; the browser never emits an `Unknown`-type event).
-Composed input (IME typing in a browser) is a known gap.
+Web starts the same shared request. Compose's web session (`WebTextInputSession`
+over `WebTextInputService`) creates a hidden `<textarea>` next to the canvas,
+focuses it (which is what raises the soft keyboard on a phone), mirrors the
+request's `value()` into it after every edit, and positions it at the caret
+rectangle so the browser's IME candidate window and the phone's keyboard land
+near the text. It is the older half of the skiko API: edits come back as an
+`EditCommand` list through `onEditCommand`, which the shared request
+translates into `ImeEditLogic` calls.
+
+What the browser delivers, and when (`DomInputStrategy` and
+`NativeInputEventsProcessor` in Compose's webMain):
+
+- A typed character is a `beforeinput` of type `insertText`, turned into a
+  `CommitTextCommand`. Dead keys and CJK input are `insertCompositionText`
+  (`SetComposingTextCommand`) followed by `compositionend`
+  (`CommitTextCommand`). Mobile autocorrect is `insertReplacementText` or a
+  `deleteContentBackward` over a range plus an insert, delivered as a
+  `SetSelectionCommand` and a commit, which is why the shared request applies
+  a batch in order.
+- `keydown` on the textarea is forwarded to Compose's key dispatch only when
+  the key carries no character (`isTypedEvent` is false: arrows, Backspace,
+  Enter, Tab, Ctrl and Meta chords). Those reach the key handler like any
+  other key event. A typed character's `keydown` is dropped by the textarea,
+  never forwarded.
+- Events are batched and replayed on the next animation frame, in timestamp
+  order, so a Backspace `keydown` that Compose consumed suppresses the
+  textarea's own `deleteContentBackward`.
+
+Which path owns plain typing therefore follows DOM focus, and the browser
+gives a keystroke to one element only. With the textarea focused, typing is
+`commitText` and the character-input predicate never sees it. After a mouse
+click on the canvas, DOM focus sits on the canvas until the input is
+refocused (the tap's `requestInput` and the session's next state mirror both
+do that), and a keystroke in that window arrives as a canvas `keydown`
+carrying the character, which the predicate (`KeyDown`) accepts. The same
+keystroke cannot reach both elements, but two shapes the textarea forwards
+would insert on their own and the predicate refuses them: a named key
+(F2, Insert, a dead key), whose Compose event carries the key code as its
+code point and would type a letter, and a Ctrl chord, because Windows
+browsers report AltGr as Ctrl+Alt and the textarea commits that character
+itself. Ctrl is never a typing modifier in a browser, so refusing it loses
+nothing.
+
+`ImeCursorSync` stays a no-op on web; the session's `snapshotFlow` over
+`value()` is the state-out direction, fed by the shared revision described
+above. Composition on desktop browsers and the soft keyboard on mobile
+browsers follow from the session existing; both need a manual pass in real
+browsers (roadmap 4.4, 4.15).
 
 ## Rules for new code
 
 - A new IME mutation is implemented once in `ImeEditLogic` and called from
   every platform adapter. Adapters translate; they never decide semantics.
+  The skiko command list carries three commands no `InputConnection` has
+  (backspace, move cursor, delete all); their translations live beside the
+  shared request in `skikoMain`, still one implementation for the three
+  platforms that can receive them.
+- Desktop, iOS, and web share `skikoMain`. Anything that differs between
+  them is a value the platform file passes in (today: `ImeOptions`), not a
+  second copy of the request.
 - IME commands apply immediately. Never queue an edit behind a batch: a
   keyboard's batching mistakes may delay a notification, never lose text.
 - Never notify the `InputMethodManager` from an edit path. Reports go through

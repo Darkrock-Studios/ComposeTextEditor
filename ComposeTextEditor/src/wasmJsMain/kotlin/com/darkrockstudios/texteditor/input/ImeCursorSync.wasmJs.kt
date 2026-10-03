@@ -4,8 +4,8 @@ import com.darkrockstudios.texteditor.state.TextEditorState
 
 /**
  * WebAssembly implementation of IME cursor synchronization.
- * On WASM, keyboard input is handled by the browser,
- * so no IME synchronization is needed from the Compose side.
+ * Compose's web session watches the shared request's value through `snapshotFlow`
+ * and mirrors it into the hidden textarea itself, so nothing is pushed from here.
  */
 @Suppress("UNUSED_PARAMETER")
 actual class ImeCursorSync actual constructor(

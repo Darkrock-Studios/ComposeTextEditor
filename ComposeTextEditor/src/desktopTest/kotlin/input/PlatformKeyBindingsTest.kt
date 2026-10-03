@@ -2,6 +2,7 @@ package input
 
 import com.darkrockstudios.texteditor.input.CtrlKeyBindings
 import com.darkrockstudios.texteditor.input.MacKeyBindings
+import com.darkrockstudios.texteditor.input.WindowsKeyBindings
 import com.darkrockstudios.texteditor.input.keyBindingsForOs
 import com.darkrockstudios.texteditor.input.platformKeyBindings
 import kotlin.test.Test
@@ -22,8 +23,15 @@ class PlatformKeyBindingsTest {
 	}
 
 	@Test
+	fun `windows host names select the windows bindings`() {
+		for (osName in listOf("Windows 11", "Windows 10", "Windows Server 2022")) {
+			assertSame(WindowsKeyBindings, keyBindingsForOs(osName), "os.name '$osName'")
+		}
+	}
+
+	@Test
 	fun `other host names select the ctrl bindings`() {
-		for (osName in listOf("Windows 11", "Windows 10", "Linux", "FreeBSD", "")) {
+		for (osName in listOf("Linux", "FreeBSD", "SunOS", "")) {
 			assertSame(CtrlKeyBindings, keyBindingsForOs(osName), "os.name '$osName'")
 		}
 	}
@@ -32,7 +40,7 @@ class PlatformKeyBindingsTest {
 	fun `the host actual returns one of the known tables`() {
 		val bindings = platformKeyBindings()
 		assertTrue(
-			bindings === CtrlKeyBindings || bindings === MacKeyBindings,
+			bindings === CtrlKeyBindings || bindings === WindowsKeyBindings || bindings === MacKeyBindings,
 			"platformKeyBindings() returned an unknown table: $bindings",
 		)
 	}

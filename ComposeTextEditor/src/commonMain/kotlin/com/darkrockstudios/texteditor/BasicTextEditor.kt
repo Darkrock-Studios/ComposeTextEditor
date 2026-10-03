@@ -82,8 +82,15 @@ private const val CURSOR_BLINK_SPEED_MS = 500L
  * @param contextMenuStrings Localized labels for the built-in cut/copy/paste menu.
  * @param contextMenuState Drives context-menu visibility; pass your own to add
  *   custom items (e.g. spell-check suggestions), or leave `null` for the default.
- * @param onRichSpanClick Invoked when a rich span is tapped or right-clicked;
- *   see [RichSpanClickListener] for what the return value does (and does not do).
+ * @param onRichSpanClick Invoked when a rich span is clicked or tapped; see
+ *   [RichSpanClick] for when, and [RichSpanClickListener] for what the return
+ *   value does (and does not do).
+ * @param onRichSpanClickEvent The same clicks as [onRichSpanClick], with the
+ *   modifier keys that were held.
+ * @param onLinkClick Opens a [com.darkrockstudios.texteditor.richstyle.LinkSpanStyle]'s
+ *   URL on Ctrl+click, or Cmd+click under the macOS [keyBindings]. A plain click
+ *   only places the caret. `null` leaves links to [onRichSpanClick]; pass
+ *   `LocalUriHandler.current::openUri` to open them in the browser.
  * @param decorateLine Optional per-line decorator drawn behind each line, keyed by
  *   line index — useful for gutters, current-line highlights, or diff markers.
  * @param keyBindings Chord-to-command mapping, defaulting to [LocalKeyBindings].
@@ -103,6 +110,8 @@ fun BasicTextEditor(
 	onRichSpanClick: RichSpanClickListener? = null,
 	decorateLine: LineDecorator? = null,
 	keyBindings: KeyBindings = LocalKeyBindings.current,
+	onRichSpanClickEvent: RichSpanClickEventListener? = null,
+	onLinkClick: ((url: String) -> Unit)? = null,
 ) {
 	// Capture platform view for IME cursor synchronization (Android only)
 	CaptureViewForIme(state)
@@ -162,6 +171,10 @@ fun BasicTextEditor(
 
 	LaunchedEffect(style.textStyle) {
 		state.textStyle = style.textStyle
+	}
+
+	LaunchedEffect(enabled) {
+		if (!enabled) state.selector.hideCaretHandle()
 	}
 
 	LaunchedEffect(
@@ -268,18 +281,30 @@ fun BasicTextEditor(
 						state = state.scrollState,
 					)
 			) {
-				// The pointer handler never restarts, so it must reach the listener the
-				// host passed most recently rather than the one captured at first composition.
+				// The pointer handler never restarts, so it must reach the listeners the
+				// host passed most recently rather than the ones captured at first composition.
 				val currentOnRichSpanClick by rememberUpdatedState(onRichSpanClick)
-				val spanClickProxy: RichSpanClickListener = remember {
-					{ span, type, offset -> currentOnRichSpanClick?.invoke(span, type, offset) ?: false }
+				val currentOnRichSpanClickEvent by rememberUpdatedState(onRichSpanClickEvent)
+				val currentOnLinkClick by rememberUpdatedState(onLinkClick)
+				val spanClickProxy: SpanClickSink = remember {
+					{ click ->
+						currentOnRichSpanClick?.invoke(click.span, click.type, click.offset)
+						currentOnRichSpanClickEvent?.invoke(click)
+					}
+				}
+				val linkClicks = remember(keyBindings) {
+					LinkClicks.forEditor(keyBindings) { currentOnLinkClick }
 				}
 				Canvas(
 					modifier = Modifier
+						.textEditorPointerIcon(state, linkClicks)
+						.textMagnifier(state)
 						.textEditorPointerInputHandling(
 							state = state,
 							onSpanClick = spanClickProxy,
 							onContextMenuRequest = { offset -> effectiveContextMenuState.showMenu(offset) },
+							links = linkClicks,
+							caretHandle = enabled,
 						)
 						// Capture the canvas position so the desktop IME can place the
 						// composition/candidate window relative to the cursor.
@@ -378,7 +403,8 @@ internal fun Modifier.requestFocusOnPress(
 /**
  * Handles clicks on a [RichSpan]. Receives the clicked span, the [SpanClickType]
  * that distinguishes a tap from a left- or right-click, and the click [Offset] in
- * editor coordinates.
+ * editor coordinates. [RichSpanClick] says when a click is reported; use
+ * [RichSpanClickEventListener] to also receive the modifier keys.
  *
  * The return value is a chaining protocol between listeners: `true` means "this
  * click was answered here", which lets a wrapping listener (e.g. the spell-check

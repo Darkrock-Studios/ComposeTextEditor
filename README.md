@@ -64,7 +64,14 @@ the [API reference & recipes](https://darkrock-studios.github.io/ComposeTextEdit
 
 #### Platforms
 
-Desktop (JVM), Android, iOS, WASM
+| Platform | Status |
+| --- | --- |
+| Desktop (JVM) | Supported |
+| Android | Supported |
+| iOS | Experimental: soft keyboard input is incomplete |
+| WASM | Experimental: typing, backspace, and IME composition run through the browser input session; the soft keyboard and real-browser IME passes are pending |
+
+See the [roadmap](docs/ROADMAP.md) for what is planned.
 
 ### Work left to do:
 
