@@ -1,6 +1,7 @@
 package com.darkrockstudios.texteditor.html
 
 import androidx.compose.ui.text.AnnotatedString
+import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.richstyle.LineBlockStyle
 
 /**
@@ -16,11 +17,13 @@ internal class HtmlDocument(
 	val blockLines: Map<LineBlockStyle, Set<Int>>,
 	val horizontalRuleLines: Set<Int>,
 	val imageLines: Map<Int, HtmlImageRef>,
+	/** Each link's range in [text], one per line it covers, and its sanitized destination. */
+	val links: List<Pair<TextEditorRange, String>> = emptyList(),
 ) {
 	/** True when the markup carried nothing but styled text. */
-	fun hasNoBlocks(): Boolean =
+	fun hasNoDecorations(): Boolean =
 		blockLines.values.all { it.isEmpty() } &&
-			horizontalRuleLines.isEmpty() && imageLines.isEmpty()
+			horizontalRuleLines.isEmpty() && imageLines.isEmpty() && links.isEmpty()
 }
 
 /**

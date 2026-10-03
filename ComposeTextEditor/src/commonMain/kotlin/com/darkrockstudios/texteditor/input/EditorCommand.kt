@@ -20,6 +20,12 @@ sealed interface EditorCommand {
 
 		/** To the start of the next word: Ctrl+Right on Windows. */
 		WordRight,
+
+		/**
+		 * To the start of the previous word on this line, else the line start; from a line
+		 * start, to the previous line's end: Ctrl+Left on Windows, the mirror of [WordRight].
+		 */
+		PreviousWordStart,
 		LineStart,
 		LineEnd,
 		DocumentStart,
@@ -82,6 +88,9 @@ sealed interface EditorCommand {
 
 			/** Deletes to where [Motion.WordEnd] goes, the end of the word. */
 			val DeleteToWordEnd = Action("editor.deleteToWordEnd", isEdit = true)
+
+			/** Deletes back to where [Motion.PreviousWordStart] goes, stopping at line breaks. */
+			val DeleteToPreviousWordStart = Action("editor.deleteToPreviousWordStart", isEdit = true)
 			val DeleteToLineStart = Action("editor.deleteToLineStart", isEdit = true)
 			val DeleteToLineEnd = Action("editor.deleteToLineEnd", isEdit = true)
 
@@ -90,6 +99,13 @@ sealed interface EditorCommand {
 			 * deletes the line break instead, joining the next line, like Cocoa's Ctrl+K.
 			 */
 			val DeleteToParagraphEnd = Action("editor.deleteToParagraphEnd", isEdit = true)
+
+			/**
+			 * Inserts what the last kill deleted, over any selection: Cocoa's Ctrl+Y. Deleting
+			 * to the line's start or end or the paragraph's end is a kill, which keeps what it
+			 * deletes in the editor's own kill buffer, never the clipboard.
+			 */
+			val Yank = Action("editor.yank", isEdit = true)
 			val Indent = Action("editor.indent", isEdit = true)
 			val Outdent = Action("editor.outdent", isEdit = true)
 			val NewLine = Action("editor.newLine", isEdit = true)
@@ -103,6 +119,15 @@ sealed interface EditorCommand {
 			val ToggleUnderline = Action("editor.toggleUnderline", isEdit = true)
 			val ToggleStrikethrough = Action("editor.toggleStrikethrough", isEdit = true)
 			val ToggleInlineCode = Action("editor.toggleInlineCode", isEdit = true)
+
+			/** Follows TextEditorState.clearFormatting. */
+			val ClearFormatting = Action("editor.clearFormatting", isEdit = true)
+
+			/** Follows TextEditorState.unlink; disabled away from a link. */
+			val Unlink = Action("editor.unlink", isEdit = true)
+
+			/** Opens the editor's context menu under the caret: Shift+F10 and the Menu key. */
+			val ShowContextMenu = Action("editor.showContextMenu", isEdit = false)
 
 			/**
 			 * The built-in carrying [id], or null for a host's own action. Identity is
@@ -125,9 +150,11 @@ sealed interface EditorCommand {
 				DeleteWordBackward,
 				DeleteWordForward,
 				DeleteToWordEnd,
+				DeleteToPreviousWordStart,
 				DeleteToLineStart,
 				DeleteToLineEnd,
 				DeleteToParagraphEnd,
+				Yank,
 				Indent,
 				Outdent,
 				NewLine,
@@ -136,6 +163,9 @@ sealed interface EditorCommand {
 				ToggleUnderline,
 				ToggleStrikethrough,
 				ToggleInlineCode,
+				ClearFormatting,
+				Unlink,
+				ShowContextMenu,
 			)
 
 			private val builtinsById: Map<String, Action> = Builtins.associateBy { it.id }

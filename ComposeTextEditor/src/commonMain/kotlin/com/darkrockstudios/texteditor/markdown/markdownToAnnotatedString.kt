@@ -2,6 +2,7 @@ package com.darkrockstudios.texteditor.markdown
 
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.buildAnnotatedString
+import com.darkrockstudios.texteditor.annotatedstring.normalizeLineEndings
 import org.intellij.markdown.MarkdownElementTypes
 import org.intellij.markdown.MarkdownTokenTypes
 import org.intellij.markdown.ast.ASTNode
@@ -44,11 +45,12 @@ internal fun String.parseMarkdownWithLinks(
 ): MarkdownParseResult {
 	val styles = MarkdownStyles(configuration)
 
+	val source = normalizeLineEndings()
 	val flavour = GFMFlavourDescriptor()
-	val parsedTree = MarkdownParser(flavour).buildMarkdownTreeFromString(this)
+	val parsedTree = MarkdownParser(flavour).buildMarkdownTreeFromString(source)
 	val links = mutableListOf<ParsedLink>()
 	val annotated = buildAnnotatedString {
-		appendMarkdownChildren(this@parseMarkdownWithLinks, parsedTree, 0, styles, links)
+		appendMarkdownChildren(source, parsedTree, 0, styles, links)
 	}
 	return MarkdownParseResult(annotated, links)
 }

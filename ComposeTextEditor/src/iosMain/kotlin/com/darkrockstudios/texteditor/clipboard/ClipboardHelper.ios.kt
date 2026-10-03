@@ -13,11 +13,10 @@ actual object ClipboardHelper {
 	actual suspend fun getText(
 		clipboard: Clipboard,
 		configuration: MarkdownConfiguration,
-	): AnnotatedString? {
-		return UIPasteboard.generalPasteboard.string?.let { text ->
-			AnnotatedString(text)
-		}
-	}
+	): AnnotatedString? = getPlainText(clipboard)?.let(::AnnotatedString)
+
+	actual suspend fun getPlainText(clipboard: Clipboard): String? =
+		UIPasteboard.generalPasteboard.string
 
 	actual suspend fun setText(
 		clipboard: Clipboard,

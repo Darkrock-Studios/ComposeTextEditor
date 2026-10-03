@@ -147,7 +147,10 @@ line-indexed queries layout and drawing rely on.
   is deferred through transactions so it always reads fresh layout. The range
   runs from minus the top padding (the first row below the top padding) to the
   last row and bottom padding at the viewport's bottom, and is empty when
-  everything fits.
+  everything fits. A soft keyboard is met two ways: one drawn over the
+  editor is a covered strip the caret is kept above (`KeyboardCover.kt`), and
+  a window that shrinks the editor instead keeps a caret that was in view in
+  view (`onViewportSizeChange`).
 - **`PlatformTextEditorExtensions`**: per-platform IME glue (Android cursor
   anchor monitoring; empty elsewhere).
 
@@ -200,7 +203,7 @@ translation paths:
   motion is not something a host can register. The arrow keys are visual:
   in a paragraph the layout resolves as right-to-left, the handler mirrors
   the bound motion (Left and Right, the word motions through
-  `KeyBindings.wordForward`, line start and end) before running it; Home,
+  `KeyBindings.wordForward` and `wordBackward`, line start and end) before running it; Home,
   End, deletes and the Emacs chords stay logical. Windows/Linux and macOS
   conventions ship as two `KeyBindings` values; hosts can substitute their
   own and register actions for their own chords to bind.
@@ -251,7 +254,10 @@ presses). The load-bearing distinction is *mouse-like versus finger*, detected
 from pointer buttons rather than pointer type because Android reports external
 mice as `Touch`. Mouse-like input places the caret on press, extends with
 shift-click, and counts presses into double and triple clicks (word, then
-line) by the platform's double-tap timeout and touch slop; a drag extends by
+line) by the platform's double-tap timeout and touch slop; a plain press inside
+the selection is held instead, and moving past the slop drags the selection
+out through the platform's drag and drop (`dragdrop/`, desktop so far), which
+also drops text in; a drag extends by
 whatever unit the press selected, and keeps scrolling while it is held above
 or below the viewport. Only the primary button places the caret or selects;
 the secondary button opens the context menu, keeping a selection it lands
@@ -268,6 +274,12 @@ The document is an immutable `DocumentSnapshot`: one `AnnotatedString` per line
 plus a flat set of `RichSpan` decorations. Every mutation publishes a whole new
 snapshot, so a reader on any thread always sees a complete, self-consistent
 revision.
+
+Lines are separated by `\n` alone. Every path text enters by (`setText`, the
+insert and replace calls, typed and IME text, paste, markdown and HTML parsing)
+turns `\r\n` and a lone `\r` into `\n` first, so no line holds a carriage
+return (`setDocument` alone takes its lines as given). Copy writes `\n`; converting to a platform's native line ending is the
+platform clipboard's job (AWT does it on Windows).
 
 `setDocument` is the inverse of `snapshot()`: it loads a snapshot, rich spans
 included, as one revision, so a document moves between editors without a
@@ -309,7 +321,7 @@ Text shaping is by far the most expensive work per edit, so the layout pass
 The incremental path is opportunistic, never load-bearing: guards degrade any
 pass that cannot be proven sound to a full relayout, which is always correct.
 Costs are pinned by counting-measurer regression tests (a keystroke shapes one
-line, a spell-check pass shapes zero) and a parity suite holds incremental
+line, a spell-check pass shapes zero, a paste writes the line list once) and a parity suite holds incremental
 output to field-for-field equality with a full pass.
 
 Details: [design/incremental-relayout.md](design/incremental-relayout.md)

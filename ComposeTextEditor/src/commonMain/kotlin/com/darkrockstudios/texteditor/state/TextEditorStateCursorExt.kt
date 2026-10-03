@@ -162,13 +162,32 @@ fun TextEditorState.moveToWordEnd() {
 fun TextEditorState.moveToPreviousWord() {
 	var (line, char) = cursorPosition
 	while (true) {
-		val start = textLines[line].text.wordRuns().lastOrNull { it.isWord && it.start < char }?.start
+		val start = wordStartBefore(line, char)
 		if (start != null) return cursor.updatePosition(CharLineOffset(line, start))
 		if (line == 0) return moveToDocumentStart()
 		line--
 		char = textLines[line].length
 	}
 }
+
+/**
+ * The previous word start (Windows' Ctrl+Left), the mirror of [moveToNextWord]: the
+ * start of the word the caret is in or after on this line, else the line start; from
+ * a line start, the previous line's end, so a line break is a stop. Leading spaces
+ * are a stop of their own going back, as a line's first word is going forward.
+ */
+fun TextEditorState.moveToPreviousWordStart() {
+	val (line, char) = cursorPosition
+	if (char > 0) {
+		cursor.updatePosition(CharLineOffset(line, wordStartBefore(line, char) ?: 0))
+	} else if (line > 0) {
+		cursor.updatePosition(CharLineOffset(line - 1, textLines[line - 1].length))
+	}
+}
+
+/** The start of the last word on [line] that starts before [char]. */
+private fun TextEditorState.wordStartBefore(line: Int, char: Int): Int? =
+	textLines[line].text.wordRuns().lastOrNull { it.isWord && it.start < char }?.start
 
 /** Whether the caret's paragraph runs right to left; a paragraph the layout has not reached counts as left to right. */
 internal fun TextEditorState.caretParagraphIsRtl(): Boolean {

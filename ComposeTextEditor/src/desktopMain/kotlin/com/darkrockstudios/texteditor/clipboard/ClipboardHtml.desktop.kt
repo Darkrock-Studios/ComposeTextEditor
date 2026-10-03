@@ -12,10 +12,5 @@ internal actual suspend fun readClipboardHtml(clipboard: Clipboard): String? {
 	// its blocks after that; the two agree, and applying a block a line already
 	// carries is a no-op. The caller still checks the markup re-parses to the text
 	// it was handed, which is what rejects a flavor describing something else.
-	return runCatching {
-		val flavor = transferable.transferDataFlavors.firstOrNull {
-			it.mimeType.startsWith("text/html") && it.representationClass == String::class.java
-		} ?: return null
-		transferable.getTransferData(flavor) as? String
-	}.getOrNull()
+	return transferable.readHtmlMarkup()
 }

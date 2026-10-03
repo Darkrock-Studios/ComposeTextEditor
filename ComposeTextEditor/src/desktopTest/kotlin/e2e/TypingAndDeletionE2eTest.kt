@@ -87,6 +87,22 @@ class TypingAndDeletionE2eTest {
 	}
 
 	@Test
+	fun `ctrl+backspace on windows stops at the line start and deletes the line break alone`() = editorUiTest(
+		initialText = AnnotatedString("first line\n  second"),
+		keyBindings = WindowsKeyBindings,
+	) {
+		press(Key.MoveEnd, ctrl = true)
+		press(Key.Backspace, ctrl = true)
+		assertEquals("first line\n  ", text)
+		press(Key.Backspace, ctrl = true)
+		assertEquals("first line\n", text, "the leading spaces go on their own")
+		press(Key.Backspace, ctrl = true)
+		assertEquals("first line", text, "at the line start only the line break goes")
+		press(Key.Backspace, ctrl = true)
+		assertEquals("first ", text)
+	}
+
+	@Test
 	fun `ctrl+delete on windows deletes to the next word start`() = editorUiTest(
 		initialText = AnnotatedString("The quick brown"),
 		keyBindings = WindowsKeyBindings,

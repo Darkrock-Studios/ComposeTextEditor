@@ -28,8 +28,14 @@ class ContextMenuActions(
 		spec?.takeUnless { it.editsDocument && !enabled }
 
 	/**
-	 * Whether [action] is registered, allowed in this editor, and currently has
-	 * work to do; false hides its menu item.
+	 * Whether [action] is registered and allowed in this editor; false hides its menu
+	 * item. A read-only editor has no editing items at all.
+	 */
+	fun isAvailable(action: EditorCommand.Action): Boolean = permitted(state.actions[action]) != null
+
+	/**
+	 * Whether [action] is available and currently has work to do; false disables its
+	 * menu item.
 	 */
 	fun canPerform(action: EditorCommand.Action): Boolean =
 		permitted(state.actions[action])?.isEnabled?.invoke(context()) == true

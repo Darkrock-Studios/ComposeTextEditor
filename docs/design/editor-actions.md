@@ -80,8 +80,8 @@ host:
 | Table | Used on | Differs in |
 | --- | --- | --- |
 | `CtrlKeyBindings` | Linux, Android, and any other Ctrl host | The base: Ctrl for shortcuts and jumps; going forward stops at ends (GTK, `EditText`) |
-| `WindowsKeyBindings` | Windows desktop, browsers on Windows | Going forward runs on to the next start: Ctrl+Right and Ctrl+Delete to the next word's (`WordRight`, `DeleteWordForward`), Ctrl+Down to the next paragraph's |
-| `MacKeyBindings` | macOS, iPadOS, browsers on macOS | Cmd for shortcuts, Option for word and paragraph jumps; Option+Right and Option+Delete stop at the word end; Cocoa's Emacs-style Ctrl+A, E, F, B, N, P, D, H and K |
+| `WindowsKeyBindings` | Windows desktop, browsers on Windows | Going forward runs on to the next start: Ctrl+Right and Ctrl+Delete to the next word's (`WordRight`, `DeleteWordForward`), Ctrl+Down to the next paragraph's. Word motion stops at line breaks both ways: Ctrl+Left and Ctrl+Backspace from a line start go to the previous line's end (`PreviousWordStart`, `DeleteToPreviousWordStart`) |
+| `MacKeyBindings` | macOS, iPadOS, browsers on macOS | Cmd for shortcuts, Option for word and paragraph jumps; Option+Right and Option+Delete stop at the word end; Cocoa's Emacs-style Ctrl+A, E, F, B, N, P, D, H, K and Y |
 
 Windows and Linux are the same desktop JVM target, so the choice is made at
 runtime from `os.name` (desktop) or the browser's platform and user agent
@@ -153,10 +153,92 @@ by equality, as `addStyleSpan` and `removeStyleSpan` do.
 | Underline | Ctrl+U | Cmd+U |
 | Strikethrough | Ctrl+Shift+X | Cmd+Shift+X |
 | Inline code | Ctrl+E | Cmd+E |
+| Clear formatting | Ctrl+\ | Cmd+\ |
+| Unlink | none | none |
 
 Strikethrough follows Google Docs on macOS, Slack and Teams; the other common
 choice, Shift+S, is Save As in most hosts. Inline code follows GitHub and
-Notion.
+Notion. Clear formatting follows Google Docs; Word's Ctrl+Space switches the
+input method on Windows, Linux and macOS. Unlink has no chord common enough to
+claim.
+
+`editor.clearFormatting` (`TextEditorState.clearFormatting`) takes every
+character style off the selection except those structure puts there: a
+heading's or code block's line style and, in a markdown editor, the body text
+style and the link style where a link covers the text. At a collapsed caret it
+sets the style of the text typed next to its line's plain style, like the
+toggles leaving the document alone. `editor.unlink` (`TextEditorState.unlink`) takes off,
+whole, every link the selection touches or the one the caret is in or at the
+edge of, with its link style; its `isEnabled` is false away from a link. Each
+is one undo step.
+
+### Tab
+
+`editor.indent` and `editor.outdent` sit on Tab and Shift+Tab in every table.
+`TextEditorState.tabSettings` (`TabSettings`) configures them:
+
+- `size`, four by default, is how many spaces one indent inserts and one
+  outdent strips. Outdent strips a single leading tab character instead when
+  the line starts with one.
+- `insertTabCharacter` indents with a tab character instead of spaces.
+- `movesFocus` makes Tab and Shift+Tab move focus, as in a form field. The key
+  handler leaves them to the focus system before asking the bindings, so the
+  indent actions stay available to other chords and to host code.
+
+The default keeps Tab indenting, which a writing app wants; `BasicTextField`
+inserts a tab character instead, which a host can choose. Either way the
+keyboard can leave the editor: Tab with Ctrl or Cmd is bound in no table, so
+Ctrl+Tab and Ctrl+Shift+Tab reach the focus system (the GTK, Cocoa and Swing
+convention for a text view that takes Tab), and a Tab after Escape is left to it
+too (CodeMirror's escape, for browsers that keep Ctrl+Tab). Escape arms Tab until
+another key is pressed or focus changes. Alt+Tab still indents where the system
+lets it through, as Option+Tab does in Cocoa.
+
+Tab is list-aware. A list item has no indent level to take until nested lists
+exist (roadmap 5.6), and leading spaces in one do not survive a markdown round
+trip, so Tab at the start of a list item does nothing, and Tab over several
+lines indents all but the list items. Shift+Tab still strips leading spaces
+from any line, list items included.
+
+### The kill ring
+
+`editor.deleteToLineStart`, `editor.deleteToLineEnd` and
+`editor.deleteToParagraphEnd` are kills, as Cocoa's `deleteToBeginningOfLine:`,
+`deleteToEndOfLine:` and `deleteToEndOfParagraph:` are: what they delete goes
+in the editor's own kill buffer (`KillRing` on the state), never the clipboard.
+A kill made with the text and the caret as the last kill left them, and no other
+key command between, joins it, after it going forward and in front of it going
+back, so Ctrl+K pressed down a run of lines kills them as one piece; a kill of a
+selection starts afresh. `editor.yank` (Ctrl+Y on macOS) inserts it over any
+selection, as one undo step, keeping its character styling but not its rich
+spans (links, images, list markers), which only Cut and Paste carry. Like
+Cocoa's default the buffer holds one entry, and loading a document empties it.
+The yank is bound on macOS only; elsewhere Ctrl+Y is Redo.
+
+### The context menu
+
+The built-in menu lists, after any host items, Undo and Redo; Cut, Copy, Paste
+and Paste as Plain Text; and Select All, each group behind a divider. An item
+shows when its action is registered and allowed (a read-only editor or view has
+no editing items, so it offers Copy and Select All) and is disabled while its
+spec's `isEnabled` says it has nothing to act on, as native menus grey items out
+rather than drop them. Paste stays enabled, since the clipboard cannot be read
+synchronously. `ContextMenuStrings` holds every label; `TextEditor`,
+`BasicTextEditor` and `RichTextView` take one, and `TextEditor` takes a
+`TextEditorContextMenuState` too.
+
+`editor.showContextMenu` opens it under the caret. It is bound to Shift+F10 and
+the Menu key in `CtrlKeyBindings` (Windows, Linux and Android), and to nothing
+on macOS, which has no such convention. On the web Compose does not name the
+Menu key, and whether the browser leaves Shift+F10 to the page is unverified.
+The composable showing a state registers how to open its menu, and the action's
+`isEnabled` is false while none does. The menu takes Up, Down, Enter and Escape
+once open. An addon with menu items of its own (spell check) can register over
+the action to open its menu instead.
+
+Pointer and touch-toolbar positions are in the text canvas's coordinates; the
+composable converts them through the layout into the menu provider's, so the
+content padding and any padding in the host's modifier are accounted for.
 
 ### Resolution and consumption
 
@@ -391,10 +473,9 @@ primitives stay `internal`.
 
 ## Known limitations and follow-ups
 
-- `Action.Indent` / `Action.Outdent` insert and strip literal spaces against a
-  hard-coded `TAB_SIZE = 4` in `BuiltinEditorActions`. Because actions are
-  open these are overridable, so a list-aware Tab or a code-editor indent is a
-  host concern rather than a library change.
+- Tab cannot nest a list item, since the block model has no nesting (roadmap
+  5.6). A code-editor indent (to the next tab stop, or matching the line above)
+  is a host's own `editor.indent`.
 - Behaviors see typed text, newline, backspace and forward delete. A paste
   is not offered to `onTextInput`; the pasted-URL half of auto-link needs a
   paste seam of its own. Nor is a typed composition the editor ends itself

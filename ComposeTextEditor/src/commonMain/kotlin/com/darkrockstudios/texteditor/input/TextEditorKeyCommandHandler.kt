@@ -3,8 +3,11 @@ package com.darkrockstudios.texteditor.input
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isAltPressed
+import androidx.compose.ui.input.key.isCtrlPressed
 import androidx.compose.ui.input.key.isMetaPressed
 import androidx.compose.ui.input.key.isShiftPressed
+import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.key.utf16CodePoint
 import androidx.compose.ui.platform.Clipboard
@@ -28,6 +31,7 @@ import com.darkrockstudios.texteditor.state.moveToNextWord
 import com.darkrockstudios.texteditor.state.moveToParagraphEnd
 import com.darkrockstudios.texteditor.state.moveToParagraphStart
 import com.darkrockstudios.texteditor.state.moveToPreviousWord
+import com.darkrockstudios.texteditor.state.moveToPreviousWordStart
 import com.darkrockstudios.texteditor.state.moveToWordEnd
 import kotlinx.coroutines.CoroutineScope
 
@@ -42,6 +46,7 @@ import kotlinx.coroutines.CoroutineScope
  */
 internal class TextEditorKeyCommandHandler(
 	var keyBindings: KeyBindings,
+	private val deadKeys: DeadKeyComposer = DeadKeyComposer(),
 ) {
 
 	/**
@@ -57,6 +62,10 @@ internal class TextEditorKeyCommandHandler(
 		enabled: Boolean = true
 	): Boolean {
 		if (keyEvent.type != KeyEventType.KeyDown) return false
+		// A key with no character (Escape, a function key) ends a dead key's accent, as a
+		// command does; a key with one settles it in handleCharacterInput.
+		if (keyEvent.utf16CodePoint == 0 && keyEvent.key !in modifierKeys) deadKeys.commitPending(state)
+		if (yieldsTabToFocus(keyEvent, state)) return false
 
 		val bound = keyBindings.commandFor(keyEvent) ?: return false
 		// The arrow keys are visual: in a right-to-left paragraph Left moves forward
@@ -68,9 +77,11 @@ internal class TextEditorKeyCommandHandler(
 			bound
 		}
 		if (command !is Motion || !command.isVertical) state.cursor.forgetVerticalGoal()
+		if (command !is Action || !state.killRing.isKill(command)) state.killRing.interrupt()
 
 		return when (command) {
 			is Motion -> {
+				deadKeys.commitPending(state)
 				moveCursor(command, state, extendSelection = keyEvent.isShiftPressed)
 				true
 			}
@@ -81,10 +92,39 @@ internal class TextEditorKeyCommandHandler(
 				val spec = state.actions[command] ?: return false
 				// Selection, copy and navigation stay available in a disabled editor.
 				if (spec.editsDocument && !enabled) return false
+				deadKeys.commitPending(state)
 				spec.perform(EditorActionContext(state, clipboard, scope))
 				true
 			}
 		}
+	}
+
+	/**
+	 * Escape arms Tab to move focus until another key is pressed or focus changes. Tab
+	 * leaves it armed, since Android offers one event twice (before the soft keyboard,
+	 * then to the focused node) and the second offer must yield too.
+	 */
+	private var tabArmedByEscape = false
+
+	/** Disarms Escape's Tab: focus has changed, so the Escape belonged to another visit. */
+	fun onFocusChanged() {
+		tabArmedByEscape = false
+	}
+
+	/**
+	 * Whether this Tab or Shift+Tab is left to the focus system, whatever it is bound to:
+	 * always when [TabSettings.movesFocus], and otherwise after Escape, so a keyboard user
+	 * can leave an editor where Tab indents.
+	 */
+	private fun yieldsTabToFocus(event: KeyEvent, state: TextEditorState): Boolean {
+		val key = event.key
+		if (key in modifierKeys) return false
+		if (key != Key.Tab) {
+			tabArmedByEscape = key == Key.Escape
+			return false
+		}
+		val plainTab = !event.isCtrlPressed && !event.isAltPressed && !event.isMetaPressed
+		return plainTab && (tabArmedByEscape || state.tabSettings.movesFocus)
 	}
 
 	/**
@@ -109,6 +149,7 @@ internal class TextEditorKeyCommandHandler(
 		}
 
 		val codePoint = keyEvent.utf16CodePoint
+		if (codePoint and COMBINING_ACCENT != 0) return deadKeys.type(codePoint, state)
 		// Filter out control characters and Unicode non-characters.
 		if (codePoint <= 0 ||
 			codePoint in 0x00..0x1F ||
@@ -118,11 +159,7 @@ internal class TextEditorKeyCommandHandler(
 			return false
 		}
 
-		// Convert code point to string (handles surrogate pairs for supplementary characters)
-		val character = codePointToString(codePoint)
-
-		state.insertTypedString(character)
-
+		if (!deadKeys.type(codePoint, state)) state.insertTypedString(codePointToString(codePoint))
 		return true
 	}
 
@@ -160,6 +197,7 @@ internal class TextEditorKeyCommandHandler(
 			Motion.Down -> state.moveCursorDown()
 			Motion.WordLeft -> state.moveToPreviousWord()
 			Motion.WordRight -> state.moveToNextWord()
+			Motion.PreviousWordStart -> state.moveToPreviousWordStart()
 			Motion.WordEnd -> state.moveToWordEnd()
 			Motion.LineStart -> state.cursor.moveToLineStart()
 			Motion.LineEnd -> state.moveCursorToLineEnd()
@@ -179,6 +217,13 @@ internal class TextEditorKeyCommandHandler(
 		}
 	}
 
+	// Modifier, lock and function keys: none disarms Escape's Tab or ends a dead key's accent.
+	private val modifierKeys = setOf(
+		Key.ShiftLeft, Key.ShiftRight, Key.CtrlLeft, Key.CtrlRight,
+		Key.AltLeft, Key.AltRight, Key.MetaLeft, Key.MetaRight,
+		Key.CapsLock, Key.NumLock, Key.ScrollLock, Key.Function, Key.Symbol,
+	)
+
 	private val Motion.isVertical: Boolean
 		get() = this == Motion.Up || this == Motion.Down || this == Motion.PageUp || this == Motion.PageDown
 
@@ -189,27 +234,10 @@ internal class TextEditorKeyCommandHandler(
 	private fun Motion.mirrored(bindings: KeyBindings): Motion = when (this) {
 		Motion.Left -> Motion.Right
 		Motion.Right -> Motion.Left
-		Motion.WordLeft -> bindings.wordForward
-		Motion.WordRight, Motion.WordEnd -> Motion.WordLeft
+		Motion.WordLeft, Motion.PreviousWordStart -> bindings.wordForward
+		Motion.WordRight, Motion.WordEnd -> bindings.wordBackward
 		Motion.LineStart -> Motion.LineEnd
 		Motion.LineEnd -> Motion.LineStart
 		else -> this
-	}
-
-	/**
-	 * Converts a Unicode code point to a String.
-	 * Handles supplementary characters (code points > 0xFFFF) by creating surrogate pairs.
-	 */
-	private fun codePointToString(codePoint: Int): String {
-		return if (codePoint <= 0xFFFF) {
-			// Basic Multilingual Plane - single char
-			codePoint.toChar().toString()
-		} else {
-			// Supplementary character - needs surrogate pair
-			val adjusted = codePoint - 0x10000
-			val highSurrogate = ((adjusted shr 10) + 0xD800).toChar()
-			val lowSurrogate = ((adjusted and 0x3FF) + 0xDC00).toChar()
-			"$highSurrogate$lowSurrogate"
-		}
 	}
 }

@@ -1,5 +1,6 @@
 package com.darkrockstudios.texteditor.input
 
+import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusEventModifierNode
 import androidx.compose.ui.focus.FocusState
 import androidx.compose.ui.input.key.KeyEvent
@@ -10,9 +11,11 @@ import androidx.compose.ui.node.ModifierNodeElement
 import androidx.compose.ui.node.currentValueOf
 import androidx.compose.ui.platform.Clipboard
 import androidx.compose.ui.platform.InspectorInfo
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.PlatformTextInputModifierNode
 import androidx.compose.ui.platform.establishTextInputSession
+import androidx.compose.ui.text.input.ImeAction
 import com.darkrockstudios.texteditor.state.TextEditorState
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -43,6 +46,21 @@ internal class TextEditorInputModifierNode(
 	CompositionLocalConsumerModifierNode {
 
 	private val keyCommandHandler = TextEditorKeyCommandHandler(keyBindings)
+
+	/** The soft keyboard's action key without a host handler, as Compose's text fields answer it. */
+	private val defaultImeAction: (ImeAction) -> Unit = { action ->
+		when (action) {
+			ImeAction.Next -> currentValueOf(LocalFocusManager).moveFocus(FocusDirection.Next)
+			ImeAction.Previous -> currentValueOf(LocalFocusManager).moveFocus(FocusDirection.Previous)
+			ImeAction.Done -> currentValueOf(LocalSoftwareKeyboardController)?.hide()
+			else -> Unit
+		}
+	}
+
+	private fun releaseDefaultImeAction(state: TextEditorState) {
+		if (state.defaultImeAction === defaultImeAction) state.defaultImeAction = null
+	}
+
 	private var inputSessionJob: Job? = null
 	private var imeCursorSync: ImeCursorSync? = null
 	private var isFocused = false
@@ -53,6 +71,7 @@ internal class TextEditorInputModifierNode(
 
 	override fun onDetach() {
 		if (inputRequester?.node === this) inputRequester?.node = null
+		releaseDefaultImeAction(state)
 		stopTextInputSession()
 		if (isFocused) state.hasFocus = false
 		isFocused = false
@@ -65,6 +84,9 @@ internal class TextEditorInputModifierNode(
 		if (focusState.isFocused == isFocused) return
 		isFocused = focusState.isFocused
 		state.hasFocus = isFocused
+		// The focused editor is the one the keyboard types into, so its default answers.
+		if (isFocused) state.defaultImeAction = defaultImeAction else releaseDefaultImeAction(state)
+		keyCommandHandler.onFocusChanged()
 		syncInputSession(startSession = true)
 	}
 
@@ -164,6 +186,8 @@ internal class TextEditorInputModifierNode(
 			this.state.updateFocus(false)
 			this.state.hasFocus = false
 			state.hasFocus = true
+			releaseDefaultImeAction(this.state)
+			state.defaultImeAction = defaultImeAction
 		}
 		this.state = state
 		this.clipboard = clipboard

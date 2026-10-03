@@ -2,6 +2,7 @@ package com.darkrockstudios.texteditor.input
 
 import androidx.compose.ui.text.TextRange
 import com.darkrockstudios.texteditor.TextEditorRange
+import com.darkrockstudios.texteditor.annotatedstring.normalizeLineEndings
 import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.backspaceStart
 import com.darkrockstudios.texteditor.state.followingGraphemeBoundary
@@ -31,7 +32,10 @@ import com.darkrockstudios.texteditor.state.isOneTypedWord
  * [text], clear composition, then place the cursor per the Android
  * `newCursorPosition` contract.
  */
-internal fun TextEditorState.imeCommitText(text: String, newCursorPosition: Int) {
+internal fun TextEditorState.imeCommitText(committed: String, newCursorPosition: Int) {
+	val text = committed.normalizeLineEndings()
+	// The IME counts the carriage returns it sent, which never land.
+	if (text != committed) requestImeResync()
 	// A committed bare newline is an Enter: an IME that commits "\n" never produces
 	// a key event, so routing here is the only way an EditBehavior sees it. Requires
 	// the cursor-after-the-insert contract because a claimed newline may insert
@@ -71,7 +75,9 @@ internal fun TextEditorState.imeCommitText(text: String, newCursorPosition: Int)
  * composing region (rendered underlined) instead of being committed. This is the
  * path dead-key / accent composition flows through on desktop.
  */
-internal fun TextEditorState.imeSetComposingText(text: String, newCursorPosition: Int) {
+internal fun TextEditorState.imeSetComposingText(composing: String, newCursorPosition: Int) {
+	val text = composing.normalizeLineEndings()
+	if (text != composing) requestImeResync()
 	editGroup {
 		// Composing is typing, even over text the IME marked first: a keyboard that
 		// re-marks the word the caret sits in is letting the user keep typing it.

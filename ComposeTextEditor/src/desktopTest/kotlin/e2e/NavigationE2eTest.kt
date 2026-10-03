@@ -473,6 +473,39 @@ class NavigationE2eTest {
 	}
 
 	@Test
+	fun `ctrl+left on windows stops at the line start and the previous line's end`() = editorUiTest(
+		initialText = AnnotatedString("first line\n\n  second"),
+		keyBindings = WindowsKeyBindings,
+	) {
+		press(Key.MoveEnd, ctrl = true)
+		press(Key.DirectionLeft, ctrl = true)
+		assertEquals(CharLineOffset(2, 2), state.cursorPosition, "the word's start")
+		press(Key.DirectionLeft, ctrl = true)
+		assertEquals(CharLineOffset(2, 0), state.cursorPosition, "the line start")
+		press(Key.DirectionLeft, ctrl = true)
+		assertEquals(CharLineOffset(1, 0), state.cursorPosition, "an empty line is a stop")
+		press(Key.DirectionLeft, ctrl = true)
+		assertEquals(CharLineOffset(0, 10), state.cursorPosition, "the previous line's end")
+		press(Key.DirectionLeft, ctrl = true)
+		assertEquals(CharLineOffset(0, 6), state.cursorPosition, "then its last word")
+		press(Key.DirectionLeft, ctrl = true, shift = true)
+		assertEquals("first ", selectedText, "Shift extends")
+	}
+
+	@Test
+	fun `ctrl+right on windows goes back to the previous line's end in a right-to-left paragraph`() = editorUiTest(
+		initialText = AnnotatedString("שלום\nעולם"),
+		keyBindings = WindowsKeyBindings,
+		textStyle = TextStyle(textDirection = TextDirection.Content),
+	) {
+		press(Key.MoveEnd, ctrl = true)
+		press(Key.DirectionRight, ctrl = true)
+		assertEquals(CharLineOffset(1, 0), state.cursorPosition)
+		press(Key.DirectionRight, ctrl = true)
+		assertEquals(CharLineOffset(0, 4), state.cursorPosition, "Ctrl+Right is the backward word chord here")
+	}
+
+	@Test
 	fun `ctrl+right from a line end goes to the end of the next line's first word`() = editorUiTest(
 		initialText = AnnotatedString("first line\n  second line"),
 	) {

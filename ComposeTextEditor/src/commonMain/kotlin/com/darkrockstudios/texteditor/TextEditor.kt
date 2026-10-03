@@ -5,6 +5,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.darkrockstudios.texteditor.contextmenu.ContextMenuStrings
+import com.darkrockstudios.texteditor.contextmenu.TextEditorContextMenuState
 import com.darkrockstudios.texteditor.input.KeyBindings
 import com.darkrockstudios.texteditor.input.LocalKeyBindings
 import com.darkrockstudios.texteditor.state.TextEditorState
@@ -37,6 +39,9 @@ private val DefaultContentPadding = PaddingValues(16.dp)
  *   modifier keys that were held.
  * @param onLinkClick Opens a link's URL on Ctrl+click, or Cmd+click under the
  *   macOS [keyBindings]; see [BasicTextEditor].
+ * @param contextMenuStrings Localized labels for the built-in context menu.
+ * @param contextMenuState Drives context-menu visibility; pass your own to add
+ *   custom items, or leave `null` for the default.
  */
 @Composable
 fun TextEditor(
@@ -50,6 +55,8 @@ fun TextEditor(
 	keyBindings: KeyBindings = LocalKeyBindings.current,
 	onRichSpanClickEvent: RichSpanClickEventListener? = null,
 	onLinkClick: ((url: String) -> Unit)? = null,
+	contextMenuStrings: ContextMenuStrings = ContextMenuStrings.Default,
+	contextMenuState: TextEditorContextMenuState? = null,
 ) {
 	Surface(modifier = modifier.focusBorder(state.isFocused && enabled, style)) {
 		BasicTextEditor(
@@ -63,6 +70,8 @@ fun TextEditor(
 			keyBindings = keyBindings,
 			onRichSpanClickEvent = onRichSpanClickEvent,
 			onLinkClick = onLinkClick,
+			contextMenuStrings = contextMenuStrings,
+			contextMenuState = contextMenuState,
 		)
 	}
 }

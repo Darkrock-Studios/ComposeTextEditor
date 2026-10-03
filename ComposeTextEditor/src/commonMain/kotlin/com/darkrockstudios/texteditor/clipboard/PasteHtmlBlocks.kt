@@ -5,7 +5,10 @@ import androidx.compose.ui.text.AnnotatedString
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.html.HtmlDocument
 import com.darkrockstudios.texteditor.html.parseHtmlDocument
+import com.darkrockstudios.texteditor.html.pastedLinkSpans
+import com.darkrockstudios.texteditor.richstyle.LinkSpanStyle
 import com.darkrockstudios.texteditor.richstyle.applyDocumentBlocks
+import com.darkrockstudios.texteditor.state.LayoutUpdate
 import com.darkrockstudios.texteditor.state.TextEditorState
 
 /**
@@ -27,15 +30,15 @@ internal suspend fun TextEditorState.readHtmlPasteDocument(
 ): HtmlDocument? {
 	val html = readClipboardHtml(clipboard) ?: return null
 	val document = parseHtmlDocument(html, markdownConfiguration)
-	if (document.hasNoBlocks()) return null
+	if (document.hasNoDecorations()) return null
 	if (document.text.text != pastedText.text) return null
 	return document
 }
 
 /**
- * Restores the block structure of markup pasted from another application, so a
- * bulleted list copied out of a browser arrives as a bulleted list rather than
- * as three unadorned lines.
+ * Restores the block structure and links of markup pasted from another application,
+ * so a bulleted list copied out of a browser arrives as a bulleted list rather than
+ * as three unadorned lines, and its links as links.
  *
  * Call inside the paste's transaction, after the insert and after
  * [TextEditorState.pasteRichSpans], which covers copies made inside the editor. Images
@@ -47,6 +50,20 @@ internal fun TextEditorState.applyHtmlPasteBlocks(
 	insertPosition: CharLineOffset,
 	pastedText: AnnotatedString,
 ) {
+	// Links are inline, so unlike blocks they hold on the spliced first and last lines
+	// too. One the in-editor span buffer already restored is not added again, as a
+	// second span split per line would overlap it.
+	val restored = (insertPosition.line..insertPosition.line + pastedText.text.count { it == '\n' })
+		.flatMap { richSpanManager.getRichSpansStartingOn(it) }
+		.filter { it.style is LinkSpanStyle }
+	val links = pastedLinkSpans(document.links, insertPosition).filterNot { link ->
+		restored.any { it.style == link.style && it.range.start <= link.range.start && it.range.end >= link.range.end }
+	}
+	if (links.isNotEmpty()) {
+		richSpanManager.addRichSpans(links)
+		updateBookKeeping(LayoutUpdate.SpansOnly)
+	}
+
 	// A paste splices into a line at both ends: whatever preceded the insertion
 	// point stays on the first pasted line and whatever followed it joins the
 	// last. Those two lines are part of the document, not of the source, so a

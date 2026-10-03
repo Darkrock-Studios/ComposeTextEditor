@@ -2,6 +2,7 @@ package com.darkrockstudios.texteditor.state
 
 import androidx.compose.ui.text.AnnotatedString
 import com.darkrockstudios.texteditor.TextEditorRange
+import com.darkrockstudios.texteditor.annotatedstring.normalizeLineEndings
 
 /**
  * Inserts [char] as if typed: replaces any active selection, inserts at the
@@ -9,7 +10,7 @@ import com.darkrockstudios.texteditor.TextEditorRange
  * [EditBehavior] chain where it landed. A line break is the Enter key.
  */
 fun TextEditorState.insertTypedCharacter(char: Char) {
-	if (char == '\n') return insertTypedNewline()
+	if (char == '\n' || char == '\r') return insertTypedNewline()
 	typedInput(char.toString()) { typedEdit(typing = true) { insertCharacterAtCursor(char) } }
 }
 
@@ -21,8 +22,9 @@ fun TextEditorState.insertTypedCharacter(char: Char) {
  * Enter key.
  */
 fun TextEditorState.insertTypedString(string: String) {
-	if (string == "\n") return insertTypedNewline()
-	typedInput(string) { insertTypedString(string, typing = string.isOneTypedWord()) }
+	val text = string.normalizeLineEndings()
+	if (text == "\n") return insertTypedNewline()
+	typedInput(text) { insertTypedString(text, typing = text.isOneTypedWord()) }
 }
 
 /**
@@ -32,8 +34,9 @@ fun TextEditorState.insertTypedString(string: String) {
  * run around it; a phrase stays a step of its own.
  */
 fun TextEditorState.insertTypedString(string: AnnotatedString) {
-	if (string.text == "\n") return insertTypedNewline()
-	typedInput(string.text) { typedEdit(typing = string.text.isOneTypedWord()) { insertStringAtCursor(string) } }
+	val text = string.normalizeLineEndings()
+	if (text.text == "\n") return insertTypedNewline()
+	typedInput(text.text) { typedEdit(typing = text.text.isOneTypedWord()) { insertStringAtCursor(text) } }
 }
 
 /**

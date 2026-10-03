@@ -206,7 +206,7 @@ class HtmlClipboardTest {
 	@Test
 	fun `numeric and named entities are decoded`() {
 		val html = "<p>caf&#233; &amp; cr&#xE8;me&nbsp;&nbsp;done</p>"
-		assertEquals("café & crème  done", html.toAnnotatedStringFromHtml(config).text)
+		assertEquals("café & crème\u00A0\u00A0done", html.toAnnotatedStringFromHtml(config).text)
 	}
 
 	@Test

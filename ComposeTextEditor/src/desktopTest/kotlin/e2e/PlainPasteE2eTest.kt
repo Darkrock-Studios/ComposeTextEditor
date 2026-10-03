@@ -12,6 +12,7 @@ import com.darkrockstudios.texteditor.input.MacKeyBindings
 import com.darkrockstudios.texteditor.richstyle.BulletListSpanStyle
 import com.darkrockstudios.texteditor.richstyle.HighlightSpanStyle
 import utils.ForeignHtmlTransferable
+import utils.ForeignRichTransferable
 import utils.editorUiTest
 import utils.linesWith
 import utils.richSpansIn
@@ -89,6 +90,20 @@ class PlainPasteE2eTest {
 		assertEquals("one\ntwo", text)
 		assertEquals(emptyList(), state.linesWith(BulletListSpanStyle))
 		assertEquals(emptyList(), stylesAt(0))
+	}
+
+	@OptIn(ExperimentalComposeUiApi::class)
+	@Test
+	fun `plain paste takes the source's own plain text over its markup`() = editorUiTest {
+		clipboard.seed(
+			ClipEntry(ForeignRichTransferable(html = "<table><tr><td><b>a</b></td><td>b</td></tr></table>", plain = "a | b")),
+		)
+		press(Key.V, ctrl = true, shift = true)
+		assertEquals("a | b", text)
+		assertEquals(emptyList(), stylesAt(0))
+
+		press(Key.V, ctrl = true)
+		assertEquals("a | ba\tb", text, "a rich paste still reads the markup")
 	}
 
 	@Test

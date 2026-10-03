@@ -12,9 +12,9 @@ import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
  * implementations for clipboard text operations.
  *
  * - Desktop: styled, as HTML for other applications and exactly within this process
- * - Android: Plain text only (ClipData limitation)
+ * - Android: styled, as HTML beside plain text, with the copy id in the clip's extras
  * - iOS: Plain text only (UIPasteboard limitation)
- * - WASM: Plain text only (web clipboard limitation)
+ * - Web: styled, as HTML beside plain text, where the browser allows it
  *
  * `configuration` supplies the styling that header levels are matched against
  * when converting to and from HTML, so pass the editor's own or custom header
@@ -24,8 +24,9 @@ expect object ClipboardHelper {
 	/**
 	 * Reads text from the clipboard.
 	 * On Desktop, reads styled text, preferring an in-process copy and falling back
-	 * to the HTML flavor other applications provide.
-	 * On other platforms, returns plain text as AnnotatedString.
+	 * to the HTML flavor other applications provide. On the web, reads the HTML
+	 * flavor where the browser offers it. On Android, reads each item's HTML.
+	 * On iOS, returns plain text as AnnotatedString.
 	 */
 	suspend fun getText(
 		clipboard: Clipboard,
@@ -33,11 +34,21 @@ expect object ClipboardHelper {
 	): AnnotatedString?
 
 	/**
+	 * Reads the clipboard as plain text, for a paste without formatting: the plain
+	 * text the source offered, which is what it means its content to read as
+	 * unformatted. Where the platform exposes one and the source offered no plain
+	 * text, the text of its markup.
+	 */
+	suspend fun getPlainText(clipboard: Clipboard): String?
+
+	/**
 	 * Writes text to the clipboard.
 	 * On Desktop, offers the selection as HTML for other applications and as an
 	 * exact copy within this process; [copyId] rides along so a later paste can
 	 * prove the clipboard content is still this copy.
-	 * On other platforms, writes plain text only and [copyId] is ignored.
+	 * On the web, offers HTML beside plain text where the browser allows it. On
+	 * Android, offers HTML beside the text and carries [copyId] in the clip's extras.
+	 * On iOS, writes plain text only. [copyId] is ignored on the web and iOS.
 	 *
 	 * [html] is the markup to offer, which callers copying out of an editor supply
 	 * so the fragment carries the selection's block structure. Null falls back to

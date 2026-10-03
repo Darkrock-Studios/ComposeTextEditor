@@ -147,6 +147,12 @@ class TextEditorCursorState(
 		styles = emptySet()
 	}
 
+	/** Sets the typing style to [styles] in one step, as though toggled by hand. */
+	internal fun replaceStyles(styles: Set<SpanStyle>) {
+		stylesSetManually = true
+		this.styles = styles
+	}
+
 	/**
 	 * Lets the next [updatePosition] re-derive [styles] even if the caret stays put.
 	 * For edits, which can change the text under an unmoved caret.

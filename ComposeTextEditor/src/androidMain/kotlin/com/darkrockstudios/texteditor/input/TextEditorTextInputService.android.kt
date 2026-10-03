@@ -4,7 +4,6 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.SystemClock
-import android.text.InputType
 import android.text.TextUtils
 import android.view.KeyEvent
 import android.view.View
@@ -32,25 +31,28 @@ private class TextEditorInputMethodRequest(
 	private val view: View,
 ) : PlatformTextInputMethodRequest {
 	override fun createInputConnection(outAttributes: EditorInfo): InputConnection {
-		outAttributes.populate(state)
-		return TextEditorInputConnection(state, view)
+		val connection = TextEditorInputConnection(state, view)
+		outAttributes.populate(state, connection)
+		return connection
 	}
 }
 
-private fun EditorInfo.populate(state: TextEditorState) {
-	inputType = InputType.TYPE_CLASS_TEXT or
-			InputType.TYPE_TEXT_VARIATION_NORMAL or
-			InputType.TYPE_TEXT_FLAG_MULTI_LINE or
-			InputType.TYPE_TEXT_FLAG_AUTO_CORRECT or
-			InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
-
-	imeOptions = EditorInfo.IME_FLAG_NO_FULLSCREEN or
-			EditorInfo.IME_FLAG_NO_EXTRACT_UI or
-			EditorInfo.IME_ACTION_UNSPECIFIED
+private fun EditorInfo.populate(state: TextEditorState, connection: TextEditorInputConnection) {
+	val settings = state.keyboardSettings
+	inputType = settings.androidInputType()
+	imeOptions = settings.androidImeOptions()
 
 	val selection = state.selectionAsTextRange()
 	initialSelStart = selection.start
 	initialSelEnd = selection.end
+	// Where the keyboard starts shifted, as EditText reports it.
+	initialCapsMode = capsModesOf(inputType).let { if (it == 0) 0 else connection.getCursorCapsMode(it) }
+
+	// Saves the keyboard reading the text around the caret back before it can suggest.
+	// The platform trims it around the selection without splitting a surrogate pair.
+	if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+		setInitialSurroundingText(state.getAllText().text)
+	}
 }
 
 /**
@@ -74,6 +76,10 @@ internal class TextEditorInputConnection(
 
 	@Volatile
 	private var isActive: Boolean = true
+
+	/** The settings the keyboard was opened with; a change restarts input with a new connection. */
+	private val keyboardSettings = state.keyboardSettings
+	private val actionKey = keyboardSettings.androidEditorAction()
 
 	/** Batch levels this connection holds open on the state, released when it closes. */
 	private var batchDepth: Int = 0
@@ -158,24 +164,36 @@ internal class TextEditorInputConnection(
 
 	// ============ TEXT MUTATION ============
 
+	// Each command also moves the keyboard's expected selection (ImeExpectation), which
+	// is how a behavior answering the command its own way is told from one that did not.
+
 	override fun commitText(text: CharSequence?, newCursorPosition: Int): Boolean = edit {
 		// Per Android contract: nullable text is a no-op; the connection is still valid.
-		if (text != null) state.imeCommitText(text.toString(), newCursorPosition)
+		if (text != null) {
+			expect { commitText(text.length, newCursorPosition) }
+			state.imeCommitText(text.toString(), newCursorPosition)
+		}
 	}
 
 	override fun setComposingText(text: CharSequence?, newCursorPosition: Int): Boolean = edit {
-		if (text != null) state.imeSetComposingText(text.toString(), newCursorPosition)
+		if (text != null) {
+			expect { setComposingText(text.length, newCursorPosition) }
+			state.imeSetComposingText(text.toString(), newCursorPosition)
+		}
 	}
 
 	override fun setComposingRegion(start: Int, end: Int): Boolean = edit {
+		expect { setComposingRegion(start, end) }
 		state.imeSetComposingRegion(start, end)
 	}
 
 	override fun finishComposingText(): Boolean = edit {
+		expect { finishComposingText() }
 		state.imeFinishComposing()
 	}
 
 	override fun deleteSurroundingText(beforeLength: Int, afterLength: Int): Boolean = edit {
+		expect { deleteSurroundingText(beforeLength, afterLength) }
 		state.imeDeleteSurroundingText(beforeLength, afterLength)
 	}
 
@@ -183,11 +201,17 @@ internal class TextEditorInputConnection(
 		beforeLength: Int,
 		afterLength: Int
 	): Boolean = edit {
+		expect { unknown() }
 		state.imeDeleteSurroundingTextInCodePoints(beforeLength, afterLength)
 	}
 
 	override fun setSelection(start: Int, end: Int): Boolean = edit {
+		expect { setSelection(start, end) }
 		state.imeSetSelection(start, end)
+	}
+
+	private inline fun expect(update: ImeExpectation.() -> Unit) {
+		state.platformExtensions.imeSync?.expectation?.update()
 	}
 
 	// ============ BATCH EDITS ============
@@ -220,6 +244,7 @@ internal class TextEditorInputConnection(
 		}
 
 		dispatchKeyFromIme(event)
+		state.platformExtensions.imeSync?.keySentFromIme()
 		return true
 	}
 
@@ -234,15 +259,22 @@ internal class TextEditorInputConnection(
 
 	// ============ EDITOR ACTION / CONTEXT MENU ============
 
-	override fun performEditorAction(editorAction: Int): Boolean = edit {
-		// Multi-line field: some IMEs route Enter through here instead of
-		// commitText("\n") or sendKeyEvent(KEYCODE_ENTER).
+	override fun performEditorAction(editorAction: Int): Boolean {
+		if (!isActive) return false
 		when (editorAction) {
+			// Multi-line field: some IMEs route Enter through here instead of
+			// commitText("\n") or sendKeyEvent(KEYCODE_ENTER).
 			EditorInfo.IME_ACTION_UNSPECIFIED,
-			EditorInfo.IME_ACTION_NONE -> state.imePerformNewline()
+			EditorInfo.IME_ACTION_NONE -> return edit {
+				expect { unknown() }
+				state.imePerformNewline()
+			}
 
-			else -> Unit
+			// Outside a batch of its own: the host's handler may do anything, move focus
+			// included, and an IME batch around this call holds back only notifications.
+			actionKey -> state.performImeAction(keyboardSettings.imeAction)
 		}
+		return true
 	}
 
 	override fun performContextMenuAction(id: Int): Boolean {
@@ -254,6 +286,7 @@ internal class TextEditorInputConnection(
 			android.R.id.cut -> KeyEvent.KEYCODE_X
 			else -> return true
 		}
+		expect { unknown() }
 		// Dispatched directly rather than through dispatchKeyFromIme, which queues the
 		// event: an IME reads the selection right after asking for select-all, and
 		// EditText answers these synchronously.
@@ -261,6 +294,8 @@ internal class TextEditorInputConnection(
 		val meta = KeyEvent.META_CTRL_ON or KeyEvent.META_CTRL_LEFT_ON
 		view.dispatchKeyEvent(KeyEvent(now, now, KeyEvent.ACTION_DOWN, keyCode, 0, meta))
 		view.dispatchKeyEvent(KeyEvent(now, now, KeyEvent.ACTION_UP, keyCode, 0, meta))
+		// Applied already; the flush takes the result as the keyboard's new starting point.
+		state.platformExtensions.imeSync?.requestFlush()
 		return true
 	}
 
