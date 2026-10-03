@@ -9,12 +9,12 @@ import androidx.compose.ui.text.style.TextDecoration
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.RichTextStyles
 import com.darkrockstudios.texteditor.TextEditorRange
+import com.darkrockstudios.texteditor.html.DEFAULT_LINK_SCHEMES
 import com.darkrockstudios.texteditor.html.HtmlLink
 import com.darkrockstudios.texteditor.html.parseHtmlDocument
 import com.darkrockstudios.texteditor.html.sanitizeLinkUrl
 import com.darkrockstudios.texteditor.html.toHtml
 import com.darkrockstudios.texteditor.html.withHtml
-import com.darkrockstudios.texteditor.markdown.withMarkdown
 import com.darkrockstudios.texteditor.richstyle.LinkSpanStyle
 import com.darkrockstudios.texteditor.richstyle.RichSpan
 import com.darkrockstudios.texteditor.state.TextEditorState
@@ -83,7 +83,7 @@ class HtmlLinkTest {
 	fun `an in-editor paste of a link across lines adds no second link`() = editorUiTest(
 		initialText = AnnotatedString("one\ntwo"),
 	) {
-		markdown.editorState.setLink(TextEditorRange(CharLineOffset(0, 1), CharLineOffset(1, 2)), "https://x.test")
+		state.setLink(TextEditorRange(CharLineOffset(0, 1), CharLineOffset(1, 2)), "https://x.test")
 		press(Key.A, ctrl = true)
 		press(Key.C, ctrl = true)
 		press(Key.MoveEnd, ctrl = true)
@@ -104,6 +104,8 @@ class HtmlLinkTest {
 		val html = text.toHtml(
 			config,
 			listOf(HtmlLink(0, 2, "https://x.test"), HtmlLink(3, 5, "javascript:alert(1)")),
+			allowedLinkSchemes = DEFAULT_LINK_SCHEMES,
+			headingsBySize = false,
 		)
 		assertEquals("<a href=\"https://x.test\">a<u>b</u></a> cd", html)
 	}
@@ -152,7 +154,8 @@ class HtmlLinkTest {
 	fun `a copied link is written as an anchor and pastes back as a link`() {
 		lateinit var html: String
 		editorUiTest {
-			markdown.importMarkdown("see [site](https://example.com/?a=\"b\"&c) now")
+			state.setText("see site now")
+			state.setLink(range(0, 4, 8), "https://example.com/?a=\"b\"&c")
 			press(Key.A, ctrl = true)
 			press(Key.C, ctrl = true)
 			html = copiedHtml()
@@ -169,7 +172,8 @@ class HtmlLinkTest {
 
 	@Test
 	fun `an unsafe link is copied as plain text`() = editorUiTest {
-		markdown.importMarkdown("[click](javascript:alert(1))")
+		state.setText("click")
+		state.addRichSpan(0, 5, LinkSpanStyle("javascript:alert(1)"))
 		press(Key.A, ctrl = true)
 		press(Key.C, ctrl = true)
 		val html = copiedHtml()
@@ -180,7 +184,10 @@ class HtmlLinkTest {
 	@Test
 	fun `html export and import keep links`() = runTest {
 		val source = TextEditorState(scope = this, measurer = mockk(relaxed = true), initialText = AnnotatedString(""))
-		source.withMarkdown().importMarkdown("a [b](https://b.test) c\n\n**[bold](https://c.test)**")
+		source.setText("a b c\nbold")
+		source.setLink(range(0, 2, 3), "https://b.test")
+		source.addStyleSpan(range(1, 0, 4), RichTextStyles.DEFAULT.boldStyle)
+		source.setLink(range(1, 0, 4), "https://c.test")
 		val exported = source.withHtml().exportAsHtml()
 		assertTrue(exported.contains("<a href=\"https://b.test\">b</a>"), exported)
 

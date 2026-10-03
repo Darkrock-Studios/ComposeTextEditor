@@ -1,9 +1,11 @@
 package html
 
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontWeight
+import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.RichTextStyles
+import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.html.HtmlExtension
-import com.darkrockstudios.texteditor.markdown.MarkdownExtension
 import com.darkrockstudios.texteditor.richstyle.BlockquoteSpanStyle
 import com.darkrockstudios.texteditor.richstyle.BulletListSpanStyle
 import com.darkrockstudios.texteditor.richstyle.CodeFenceSpanStyle
@@ -18,6 +20,8 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
+import utils.blockLines
+import utils.setBlockLines
 
 class HtmlExtensionTest {
 
@@ -264,8 +268,8 @@ class HtmlExtensionTest {
 
 	@Test
 	fun `a heading sized like body text still round trips`() = runTest {
-		// The default h4 is bold at the body font size, so it survives only because
-		// a whole uniformly styled line is read as a heading.
+		// The default h4 is bold at the body font size; the line's heading block, not
+		// its style, writes it.
 		assertEquals("<h4>Sub</h4>", createHtmlExtension().roundTrip("<h4>Sub</h4>"))
 	}
 
@@ -306,15 +310,19 @@ class HtmlExtensionTest {
 	}
 
 	@Test
-	fun `a markdown document survives a trip through html`() = runTest {
+	fun `a document's blocks and bold survive a trip through html`() = runTest {
 		val state = TextEditorState(scope = this, measurer = mockk(relaxed = true))
-		val markdown = MarkdownExtension(state)
 		val html = HtmlExtension(state)
-		val source = "# Title\n\nSome **bold** text.\n\n- one\n- two\n\n> quoted"
+		val source = "# Title\nSome bold text.\n- one\n- two\n> quoted"
+		state.setBlockLines(source)
+		state.addStyleSpan(TextEditorRange(CharLineOffset(1, 5), CharLineOffset(1, 9)), RichTextStyles.DEFAULT.boldStyle)
 
-		markdown.importMarkdown(source)
 		html.importHtml(html.exportAsHtml())
 
-		assertEquals(source, markdown.exportAsMarkdown())
+		assertEquals(source, state.blockLines())
+		assertEquals(
+			listOf(5 to 9),
+			state.textLines[1].spanStyles.filter { it.item.fontWeight == FontWeight.Bold }.map { it.start to it.end },
+		)
 	}
 }

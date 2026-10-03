@@ -5,25 +5,43 @@ import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.richstyle.LinkSpanStyle
 import com.darkrockstudios.texteditor.richstyle.RichSpan
 
-private val SAFE_SCHEMES = setOf("http", "https", "mailto", "tel", "ftp")
+/**
+ * The schemes a link may use unless a host says otherwise: http, https, mailto, tel and
+ * ftp. A host whose documents link with schemes of its own extends them on its editor,
+ * `state.allowedLinkSchemes = DEFAULT_LINK_SCHEMES + "myapp"`.
+ */
+val DEFAULT_LINK_SCHEMES: Set<String> = setOf("http", "https", "mailto", "tel", "ftp")
+
+/**
+ * The schemes refused whatever a host allows: `javascript:` and `vbscript:` run code,
+ * `data:` carries a page of its own, and `file:` reaches the reader's disk.
+ */
+val REFUSED_LINK_SCHEMES: Set<String> = setOf("javascript", "vbscript", "data", "file")
 
 /**
  * [href] if it is safe to hand to a host as a link destination, or null.
  *
- * A URL with a scheme is kept only for the schemes a document link has any
- * business using, so `javascript:`, `data:`, `vbscript:` and `file:` are refused
- * whatever their case. A relative URL has no scheme to run and is kept.
+ * A URL with a scheme is kept only for one of [allowedSchemes] (matched ignoring case,
+ * named with or without the colon) that is not one of [REFUSED_LINK_SCHEMES], so
+ * `javascript:`, `data:`, `vbscript:` and `file:` are refused whatever their case
+ * and whatever a host allows. A relative URL has no scheme to run and is kept.
  * Browsers drop tabs and line breaks anywhere in a URL and control characters
  * and spaces at its ends before reading the scheme, so this does too:
  * `java\tscript:` is still `javascript:`.
  */
-fun sanitizeLinkUrl(href: String): String? {
+fun sanitizeLinkUrl(href: String, allowedSchemes: Set<String> = DEFAULT_LINK_SCHEMES): String? {
 	val url = href.trim { it <= ' ' }.filterNot { it == '\t' || it == '\n' || it == '\r' }
 	if (url.isEmpty()) return null
 	val colon = url.indexOf(':')
 	val pathStart = url.indexOfFirst { it == '/' || it == '?' || it == '#' }
 	if (colon == -1 || (pathStart != -1 && pathStart < colon)) return url
-	return url.takeIf { url.substring(0, colon).lowercase() in SAFE_SCHEMES }
+	val scheme = url.substring(0, colon)
+	// A scheme is ASCII, so one that is not cannot be compared safely by case.
+	if (!scheme.all { it in 'a'..'z' || it in 'A'..'Z' || it in '0'..'9' || it == '+' || it == '-' || it == '.' }) return null
+	val lower = scheme.lowercase()
+	if (lower in REFUSED_LINK_SCHEMES) return null
+	val allowed = lower in allowedSchemes || allowedSchemes.any { it.substringBefore(':').lowercase() == lower }
+	return url.takeIf { allowed }
 }
 
 /** A link over [start] until [end] of one line's text. */

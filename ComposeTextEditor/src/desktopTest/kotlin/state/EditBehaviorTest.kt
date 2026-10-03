@@ -2,8 +2,6 @@ package state
 
 import androidx.compose.ui.text.AnnotatedString
 import com.darkrockstudios.texteditor.CharLineOffset
-import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
-import com.darkrockstudios.texteditor.markdown.MarkdownExtension
 import com.darkrockstudios.texteditor.richstyle.BulletListSpanStyle
 import com.darkrockstudios.texteditor.richstyle.LineBlockEditBehavior
 import com.darkrockstudios.texteditor.state.EditBehavior
@@ -15,6 +13,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import utils.setBlockLines
 
 /**
  * The chain itself: what a behavior can claim, what falls through, and that the
@@ -29,15 +28,14 @@ class EditBehaviorTest {
 		initialText = AnnotatedString(text),
 	)
 
-	private fun TestScope.bulletedEditor(markdown: String): MarkdownExtension {
+	private fun TestScope.bulletedEditor(blockLines: String): TextEditorState {
 		val state = TextEditorState(
 			scope = this,
 			measurer = mockk(relaxed = true),
 			initialText = null as AnnotatedString?,
 		)
-		val extension = MarkdownExtension(state, MarkdownConfiguration.DEFAULT)
-		extension.importMarkdown(markdown)
-		return extension
+		state.setBlockLines(blockLines)
+		return state
 	}
 
 	private fun TextEditorState.bulletLines(): List<Int> =
@@ -156,8 +154,7 @@ class EditBehaviorTest {
 
 	@Test
 	fun `a claimed edit asks the IME to resync`() = runTest {
-		val extension = bulletedEditor("- one\n- ")
-		val state = extension.editorState
+		val state = bulletedEditor("- one\n- ")
 		state.cursor.updatePosition(CharLineOffset(1, 0))
 		val before = state.imeResyncGeneration
 
@@ -178,8 +175,7 @@ class EditBehaviorTest {
 
 	@Test
 	fun `enter on an empty bullet exits the block`() = runTest {
-		val extension = bulletedEditor("- one\n- ")
-		val state = extension.editorState
+		val state = bulletedEditor("- one\n- ")
 		state.cursor.updatePosition(CharLineOffset(1, 0))
 
 		state.insertNewlineAtCursor()
@@ -195,8 +191,7 @@ class EditBehaviorTest {
 	 */
 	@Test
 	fun `removing the behavior gives a plain split on an empty bullet`() = runTest {
-		val extension = bulletedEditor("- one\n- ")
-		val state = extension.editorState
+		val state = bulletedEditor("- one\n- ")
 		assertTrue(state.editBehaviors.remove(LineBlockEditBehavior))
 		state.cursor.updatePosition(CharLineOffset(1, 0))
 
@@ -208,8 +203,7 @@ class EditBehaviorTest {
 
 	@Test
 	fun `a split inside a bullet keeps the marker on both halves`() = runTest {
-		val extension = bulletedEditor("- hello")
-		val state = extension.editorState
+		val state = bulletedEditor("- hello")
 		state.cursor.updatePosition(CharLineOffset(0, 2))
 
 		state.insertNewlineAtCursor()
@@ -220,8 +214,7 @@ class EditBehaviorTest {
 
 	@Test
 	fun `backspace at the start of a bullet demotes before merging`() = runTest {
-		val extension = bulletedEditor("plain\n- item")
-		val state = extension.editorState
+		val state = bulletedEditor("plain\n- item")
 		state.cursor.updatePosition(CharLineOffset(1, 0))
 
 		state.backspaceAtCursor()
@@ -235,8 +228,7 @@ class EditBehaviorTest {
 
 	@Test
 	fun `backspace merges directly when the previous line is the same block`() = runTest {
-		val extension = bulletedEditor("- one\n- two")
-		val state = extension.editorState
+		val state = bulletedEditor("- one\n- two")
 		state.cursor.updatePosition(CharLineOffset(1, 0))
 
 		state.backspaceAtCursor()

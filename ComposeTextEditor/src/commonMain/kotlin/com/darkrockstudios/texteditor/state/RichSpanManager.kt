@@ -380,17 +380,14 @@ class RichSpanManager(
 
 				// Adjust span positions
 				var newStart = CharLineOffset(span.range.start.line + lineDiff, span.range.start.char + charDiff)
-				if (span.style.stickyAtStart && newStart.char != 0) {
-					// A line-anchored marker whose text the replacement puts after new text
-					// stays at its line's start when that line is the replacement's own
-					// (a line break in it, or whole lines replaced up to the marker). Joined
-					// onto the kept head of an earlier line, it goes, as a line joined by a
-					// delete does, unless that line is the same kind of item.
+				if ((span.style.stickyAtStart || span.style is BlockSpanStyle) && newStart.char != 0) {
+					// A line-anchored marker (or placeholder block) whose text the replacement
+					// puts after new text stays at its line's start when that line is the
+					// replacement's own (a line break in it, or whole lines replaced up to the
+					// marker). Joined onto the kept head of an earlier line, it goes, as a line
+					// joined by a delete does, unless that line is the same kind of item.
 					val ownLine = breaks || operation.range.start.char == 0
-					val receivingHasSame = spansOnLine(newStart.line).any { other ->
-						other.style == span.style && other.range.start.line == newStart.line && other.range.start.char == 0
-					}
-					if (!ownLine && !receivingHasSame) return
+					if (!ownLine && !receivingLineHasSame(span, newStart.line)) return
 					newStart = CharLineOffset(newStart.line, 0)
 				}
 				// A column moves only on the replacement's last line.
@@ -441,7 +438,11 @@ class RichSpanManager(
 					// portion. A line-anchored marker re-anchors to the start of the
 					// line its tail survives on; without the sticky start, replacing a
 					// selection that begins at the item start detaches the gutter marker.
+					// Its tail joined onto the kept head of an earlier line, it goes, as
+					// in the branch above.
 					val newStart = if (span.style.stickyAtStart) {
+						val ownLine = breaks || operation.range.start.char == 0
+						if (!ownLine && !receivingLineHasSame(span, newEnd.line)) return
 						CharLineOffset(newEnd.line, 0)
 					} else {
 						newEnd
@@ -479,6 +480,14 @@ class RichSpanManager(
 		}
 	}
 
+	/**
+	 * Whether [line], which a join keeps (its index is the same before and after the
+	 * edit), already starts with a marker of [span]'s style.
+	 */
+	private fun receivingLineHasSame(span: RichSpan, line: Int): Boolean = spansOnLine(line).any { other ->
+		other.style == span.style && other.range.start.line == line && other.range.start.char == 0
+	}
+
 	private fun TextEditorRange.handleDelete(
 		metadata: OperationMetadata?,
 		operation: TextEditOperation.Delete,
@@ -501,12 +510,7 @@ class RichSpanManager(
 				// of item (rejoining split halves); otherwise the receiving line keeps
 				// its own identity and the marker dies with its line. The receiving line
 				// is the join's own line, at the same index before and after the edit.
-				val receivingLineHasSameStyle = spansOnLine(newStart.line).any { other ->
-					other.style == span.style &&
-						other.range.start.line == newStart.line &&
-						other.range.start.char == 0
-				}
-				if (!receivingLineHasSameStyle) return
+				if (!receivingLineHasSame(span, newStart.line)) return
 			}
 			if (newStart == newEnd) {
 				// Emptied within its own line, an item survives as an empty item; a

@@ -35,7 +35,7 @@ internal expect fun DragAndDropEvent.dragId(): Long?
 internal expect fun DragAndDropEvent.carriesText(): Boolean
 
 /** The text this drag carries, read at the drop. */
-internal expect fun DragAndDropEvent.droppedText(styles: RichTextStyles): DroppedText?
+internal expect fun DragAndDropEvent.droppedText(styles: RichTextStyles, allowedLinkSchemes: Set<String>): DroppedText?
 
 /** Where the pointer is, in the root's pixels, or null where the platform does not say. */
 internal expect fun DragAndDropEvent.pointerInRoot(density: Density): Offset?

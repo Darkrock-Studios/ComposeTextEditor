@@ -41,7 +41,7 @@ internal fun TextEditorState.dropText(
 	if (normalized.isEmpty() || (whole && normalized != sized)) return null
 	val document = html
 		?.takeIf { normalized == sized }
-		?.let { parseHtmlDocument(it, richTextStyles) }
+		?.let { parseHtmlDocument(it, richTextStyles, allowedLinkSchemes = allowedLinkSchemes) }
 		?.takeIf { !it.hasNoDecorations() && it.text.text == normalized.text }
 	val spans = richSpans?.takeIf { normalized == sized }
 	// A composition's range would address the text as it stood before the drop.

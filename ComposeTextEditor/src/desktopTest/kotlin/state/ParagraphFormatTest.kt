@@ -14,12 +14,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.effectiveHeight
-import com.darkrockstudios.texteditor.markdown.MarkdownExtension
 import com.darkrockstudios.texteditor.richstyle.ParagraphFormatSpanStyle
 import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.paragraphFormat
 import com.darkrockstudios.texteditor.state.setParagraphFormat
 import com.darkrockstudios.texteditor.state.textEditorStateSaver
+import com.darkrockstudios.texteditor.state.toggleBulletList
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.test.TestScope
@@ -160,7 +160,7 @@ class ParagraphFormatTest {
 	fun `alignment, indents and line height shape the paragraph over its block's indent`() = runTest {
 		val shaped = shaped()
 		val state = editor(shaped)
-		MarkdownExtension(state).toggleBulletList(2..2)
+		state.toggleBulletList(2..2)
 		val blockIndent = state.textLines[2].paragraphStyles.single().item.textIndent!!
 		shaped.measured.clear()
 
@@ -178,7 +178,7 @@ class ParagraphFormatTest {
 	}
 
 	@Test
-	fun `the saved state keeps the format and markdown does not`() = runTest {
+	fun `the saved state keeps the format`() = runTest {
 		val state = editor()
 		val format = ParagraphFormatSpanStyle(spaceBefore = 8.dp, spaceAfter = 4.dp, textAlign = TextAlign.End, indent = 12.sp, lineHeight = 1.5.em())
 		state.setParagraphFormat(1..2, format)
@@ -189,8 +189,6 @@ class ParagraphFormatTest {
 		assertEquals(format, restored.paragraphFormat(1))
 		assertEquals(format, restored.paragraphFormat(2))
 		assertNull(restored.paragraphFormat(0))
-
-		assertEquals("line 0\n\nline 1\n\nline 2\n\nline 3\n\nline 4", MarkdownExtension(state).exportAsMarkdown())
 	}
 
 	private fun Double.em() = androidx.compose.ui.unit.TextUnit(toFloat(), androidx.compose.ui.unit.TextUnitType.Em)

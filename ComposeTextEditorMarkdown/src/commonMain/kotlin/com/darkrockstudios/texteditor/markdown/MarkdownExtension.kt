@@ -562,7 +562,11 @@ class MarkdownExtension(
 			}
 		}
 		val processedMarkdown = processedLines.joinToString("\n")
-		val parsed = processedMarkdown.parseMarkdownWithLinks(editorState.richTextStyles, literalLines = codeFenceLineIndices)
+		val parsed = processedMarkdown.parseMarkdownWithLinks(
+			editorState.richTextStyles,
+			literalLines = codeFenceLineIndices,
+			allowedLinkSchemes = editorState.allowedLinkSchemes,
+		)
 		val annotatedString = parsed.annotatedString
 		// setText publishes the text with no spans and applyDocumentBlocks attaches them
 		// afterwards. As one revision, so a concurrent export can't catch the document

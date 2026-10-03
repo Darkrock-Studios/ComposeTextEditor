@@ -8,8 +8,8 @@ import com.darkrockstudios.texteditor.RichTextStyles
 import com.darkrockstudios.texteditor.html.toAnnotatedStringFromHtml
 import com.darkrockstudios.texteditor.html.toHtml
 import com.darkrockstudios.texteditor.html.withHtml
-import com.darkrockstudios.texteditor.markdown.withMarkdown
 import com.darkrockstudios.texteditor.state.TextEditorState
+import com.darkrockstudios.texteditor.state.toggleHeader
 import io.mockk.mockk
 import java.awt.datatransfer.DataFlavor
 import java.awt.datatransfer.Transferable
@@ -137,7 +137,7 @@ class NonBreakingSpaceTest {
 	fun `a heading keeps its runs of spaces`() = runTest {
 		val line = " Title  Two${NBSP}"
 		val source = TextEditorState(scope = this, measurer = mockk(relaxed = true), initialText = AnnotatedString(line))
-		source.withMarkdown().toggleHeader(0..0, 2)
+		source.toggleHeader(0..0, 2)
 		val exported = source.withHtml().exportAsHtml()
 		assertTrue(exported.startsWith("<h2>"), exported)
 

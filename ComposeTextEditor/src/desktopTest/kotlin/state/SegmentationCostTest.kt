@@ -3,8 +3,10 @@ package state
 import androidx.compose.ui.text.AnnotatedString
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
+import com.darkrockstudios.texteditor.state.BreakCursor
 import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.sentenceSegments
+import com.darkrockstudios.texteditor.state.wordCursor
 import com.darkrockstudios.texteditor.state.wordSegments
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
@@ -71,5 +73,35 @@ class SegmentationCostTest {
 		assertEquals("0", words.next().text)
 		assertEquals("And a second sentence.", sentences.next().text)
 		assertEquals("Line 1 has words.", sentences.next().text)
+	}
+
+	@Test
+	fun `a word scan that stops early leaves no cursor open`() = runTest {
+		val state = editor()
+		var open = 0
+		var opened = 0
+		val openCursor = {
+			open++
+			opened++
+			val cursor = wordCursor("")
+			object : BreakCursor by cursor {
+				override fun close() {
+					open--
+					cursor.close()
+				}
+			}
+		}
+
+		assertEquals("Line", state.wordSegments(openCursor).first().text)
+		assertEquals(0, open, "cursors left open after first()")
+
+		val words = state.wordSegments(openCursor).iterator()
+		while (words.next().range.start.line < 100) Unit
+		assertEquals(0, open, "cursors left open by an abandoned iterator")
+
+		opened = 0
+		assertEquals(state.wordSegments().count(), state.wordSegments(openCursor).count())
+		assertEquals(0, open, "cursors left open by a whole scan")
+		assertTrue(opened <= 10, "a whole scan of $lineCount lines opened $opened cursors")
 	}
 }

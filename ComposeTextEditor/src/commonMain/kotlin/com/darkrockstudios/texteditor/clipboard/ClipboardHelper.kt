@@ -3,6 +3,7 @@ package com.darkrockstudios.texteditor.clipboard
 import androidx.compose.ui.platform.Clipboard
 import androidx.compose.ui.text.AnnotatedString
 import com.darkrockstudios.texteditor.RichTextStyles
+import com.darkrockstudios.texteditor.html.DEFAULT_LINK_SCHEMES
 
 /**
  * Platform-specific clipboard helper for text operations.
@@ -27,10 +28,12 @@ expect object ClipboardHelper {
 	 * to the HTML flavor other applications provide. On the web, reads the HTML
 	 * flavor where the browser offers it. On Android, reads each item's HTML.
 	 * On iOS, reads the pasteboard's `public.html`, else its plain text.
+	 * A link in the markup keeps its look only for one of [allowedLinkSchemes].
 	 */
 	suspend fun getText(
 		clipboard: Clipboard,
 		styles: RichTextStyles = RichTextStyles.DEFAULT,
+		allowedLinkSchemes: Set<String> = DEFAULT_LINK_SCHEMES,
 	): AnnotatedString?
 
 	/**

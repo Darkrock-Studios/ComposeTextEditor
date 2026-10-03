@@ -9,7 +9,6 @@ import com.darkrockstudios.texteditor.RichTextStyles
 import com.darkrockstudios.texteditor.SemanticsDocument
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.input.CtrlKeyBindings
-import com.darkrockstudios.texteditor.markdown.MarkdownExtension
 import com.darkrockstudios.texteditor.pointerIconAt
 import com.darkrockstudios.texteditor.richstyle.LinkSpanStyle
 import com.darkrockstudios.texteditor.state.TextEditorState
@@ -24,16 +23,15 @@ import kotlinx.coroutines.test.TestScope
 import utils.editorUiTest
 
 /**
- * Every source of a link agrees with the HTML path's allowlist (6.9): markdown import
- * and `setLink` refuse a `javascript:` or `data:` destination, and one a host attached
- * directly is refused where it would be opened (6.16).
+ * Every source of a link agrees with the HTML path's allowlist (6.9): `setLink` refuses
+ * a `javascript:` or `data:` destination (as markdown import does, the markdown module's
+ * `MarkdownLinkSafetyTest`), and one a host attached directly is refused where it would
+ * be opened (6.16).
  */
 class LinkDestinationSafetyTest {
 
-	private fun editor(markdown: String? = null): MarkdownExtension {
-		val state = TextEditorState(scope = TestScope(), measurer = mockk(relaxed = true))
-		return MarkdownExtension(state).apply { markdown?.let { importMarkdown(it) } }
-	}
+	private fun editor(text: String): TextEditorState =
+		TextEditorState(scope = TestScope(), measurer = mockk(relaxed = true), initialText = AnnotatedString(text))
 
 	private fun TextEditorState.linkUrls(): List<String> =
 		richSpanManager.getAllRichSpans().mapNotNull { (it.style as? LinkSpanStyle)?.url }
@@ -42,41 +40,17 @@ class LinkDestinationSafetyTest {
 		get() = textLines.any { line -> line.spanStyles.any { it.item == RichTextStyles.DEFAULT.linkStyle } }
 
 	@Test
-	fun `markdown import refuses an unsafe destination and keeps the text`() {
-		listOf("javascript:alert(1)", "JaVaScRiPt:alert(1)", "data:text/html,x", "vbscript:x", "file:///etc/passwd").forEach { url ->
-			val extension = editor("a [click]($url) b")
-			assertEquals("a click b", extension.editorState.getAllText().text, url)
-			assertEquals(emptyList(), extension.editorState.linkUrls(), url)
-			assertFalse(extension.editorState.hasLinkStyle, "$url keeps no link style")
-		}
-	}
-
-	@Test
-	fun `markdown import keeps a safe destination`() {
-		val extension = editor("[a](https://example.com) [b](/wiki/Page) [c](mailto:a@b.test)")
-		assertEquals(setOf("https://example.com", "/wiki/Page", "mailto:a@b.test"), extension.editorState.linkUrls().toSet())
-	}
-
-	@Test
-	fun `markdown import reads the destination as a renderer does`() {
-		listOf("javascript&#58;alert(1)", "javascript&colon;alert(1)", "java&#x73;cript:alert(1)").forEach { url ->
-			val extension = editor("a [click]($url) b")
-			assertEquals(emptyList(), extension.editorState.linkUrls(), url)
-		}
-	}
-
-	@Test
 	fun `setLink refuses an unsafe destination`() {
-		val extension = editor("one two")
+		val state = editor("one two")
 		val range = TextEditorRange(CharLineOffset(0, 4), CharLineOffset(0, 7))
 
-		assertFalse(extension.editorState.setLink(range, "javascript:alert(1)"))
-		assertEquals(emptyList(), extension.editorState.linkUrls())
-		assertFalse(extension.editorState.hasLinkStyle)
-		assertFalse(extension.editorState.canUndo)
+		assertFalse(state.setLink(range, "javascript:alert(1)"))
+		assertEquals(emptyList(), state.linkUrls())
+		assertFalse(state.hasLinkStyle)
+		assertFalse(state.canUndo)
 
-		assertTrue(extension.editorState.setLink(range, "https://example.com"))
-		assertEquals(listOf("https://example.com"), extension.editorState.linkUrls())
+		assertTrue(state.setLink(range, "https://example.com"))
+		assertEquals(listOf("https://example.com"), state.linkUrls())
 	}
 
 	@Test
@@ -96,7 +70,7 @@ class LinkDestinationSafetyTest {
 
 	@Test
 	fun `an accessibility service cannot open an unsafe destination`() {
-		val state = editor("one two").editorState
+		val state = editor("one two")
 		state.addRichSpan(CharLineOffset(0, 0), CharLineOffset(0, 3), LinkSpanStyle("javascript:alert(1)"))
 		var opened: String? = null
 		val text = SemanticsDocument(state) { opened = it }.text()

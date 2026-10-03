@@ -423,11 +423,10 @@ class FindState(
 		replacements.asReversed().forEach { (match, replacement) ->
 			val matchStart = textState.getCharacterIndex(match.start)
 			val matchEnd = textState.getCharacterIndex(match.end)
-			val lengthBefore = textState.getTextLength()
-			textState.replace(match, styledReplacement(match, replacement))
 			// What landed, which line ending normalization or the input filter can make differ
-			// from the replacement, or leave out entirely.
-			val landed = matchEnd - matchStart + textState.getTextLength() - lengthBefore
+			// from the replacement; a refused one leaves the match.
+			val landed = textState.replace(match, styledReplacement(match, replacement))
+				?.let { textState.getCharacterIndex(it.end) - matchStart } ?: (matchEnd - matchStart)
 			scope?.follow(matchStart, matchEnd, landed)
 			before?.follow(matchStart, matchEnd, landed)
 		}

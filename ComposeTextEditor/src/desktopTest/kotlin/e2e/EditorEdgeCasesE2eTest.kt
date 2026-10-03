@@ -8,11 +8,14 @@ import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.text.AnnotatedString
 import com.darkrockstudios.texteditor.CharLineOffset
+import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.richstyle.HighlightSpanStyle
 import com.darkrockstudios.texteditor.richstyle.LinkSpanStyle
 import com.darkrockstudios.texteditor.richstyle.RichSpan
 import com.darkrockstudios.texteditor.state.SpanClickType
+import com.darkrockstudios.texteditor.state.setLink
 import utils.editorUiTest
+import utils.setBlockLines
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -131,7 +134,8 @@ class EditorEdgeCasesE2eTest {
 				true
 			},
 		) {
-			markdown.importMarkdown("go to [site](https://example.com) now")
+			state.setBlockLines("go to site now")
+			state.setLink(TextEditorRange(CharLineOffset(0, 6), CharLineOffset(0, 10)), "https://example.com")
 			waitForIdle()
 
 			clickAtCharacter(8)

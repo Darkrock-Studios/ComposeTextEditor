@@ -8,6 +8,8 @@ import android.view.inputmethod.InputMethodManager
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.toComposeRect
 import com.darkrockstudios.texteditor.input.ImeCaretGeometry
 import com.darkrockstudios.texteditor.input.ImeCursorSync
 import com.darkrockstudios.texteditor.input.TextEditorInputConnection
@@ -143,7 +145,17 @@ actual class PlatformTextEditorExtensions actual constructor(
 		val view = imeView ?: return null
 		val location = IntArray(2)
 		view.getLocationOnScreen(location)
-		return CursorAnchor(state.imeCaretInRoot(), location[0], location[1])
+		return CursorAnchor(state.imeCaretInRoot(view.visibleRect()), location[0], location[1])
+	}
+
+	/**
+	 * The part of the view its ancestors leave on screen, in its own coordinates, which
+	 * clips the caret as `TextView.isPositionVisible` does: a scrolling parent can carry
+	 * the caret out of sight with the view still attached and drawn.
+	 */
+	private fun View.visibleRect(): Rect {
+		val rect = android.graphics.Rect()
+		return if (getLocalVisibleRect(rect)) rect.toComposeRect() else Rect.Zero
 	}
 
 	internal fun sendCursorAnchor(anchor: CursorAnchor) {

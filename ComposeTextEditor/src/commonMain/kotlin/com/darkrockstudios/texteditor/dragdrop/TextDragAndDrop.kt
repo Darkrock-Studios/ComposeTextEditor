@@ -22,9 +22,11 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
+import com.darkrockstudios.texteditor.cursor.calculateCursorPosition
 import com.darkrockstudios.texteditor.cursor.caretRect
 import com.darkrockstudios.texteditor.html.selectionAsHtml
 import com.darkrockstudios.texteditor.richstyle.BlockSpanStyle
+import com.darkrockstudios.texteditor.state.PointerHit
 import com.darkrockstudios.texteditor.state.TextEditorState
 import kotlin.random.Random
 
@@ -39,8 +41,12 @@ internal class TextDragAndDrop(private val state: TextEditorState) {
 	/** Whether drops edit this editor; a read-only one only lets its text be dragged out as a copy. */
 	var enabled: Boolean = true
 
-	/** Where a drag over the editor would drop, drawn as a caret while it hovers. */
-	var dropPosition: CharLineOffset? by mutableStateOf(null)
+	/**
+	 * Where a drag over the editor would drop, drawn as a caret while it hovers, with the
+	 * row it is drawn on: past a wrapped row's end, that row's end rather than the next
+	 * row's start.
+	 */
+	var dropHit: PointerHit? by mutableStateOf(null)
 		private set
 
 	private class OutgoingDrag(val id: Long, val range: TextEditorRange, val text: String) {
@@ -89,18 +95,18 @@ internal class TextDragAndDrop(private val state: TextEditorState) {
 
 	internal fun accepts(event: DragAndDropEvent): Boolean = enabled && event.carriesText()
 
-	internal fun hover(event: DragAndDropEvent, positionInRoot: Offset?) {
-		dropPosition = positionInRoot?.let(::offsetAt)
+	internal fun hover(positionInRoot: Offset?) {
+		dropHit = positionInRoot?.let(::hitAt)
 	}
 
 	internal fun endHover() {
-		dropPosition = null
+		dropHit = null
 	}
 
 	internal fun drop(event: DragAndDropEvent, positionInRoot: Offset?): Boolean {
-		val at = positionInRoot?.let(::offsetAt) ?: dropPosition ?: return false
-		dropPosition = null
-		val content = event.droppedText(state.richTextStyles) ?: return false
+		val at = positionInRoot?.let(::hitAt)?.position ?: dropHit?.position ?: return false
+		dropHit = null
+		val content = event.droppedText(state.richTextStyles, state.allowedLinkSchemes) ?: return false
 		return dropAt(at, content, event.dragId(), event.requestsCopy())
 	}
 
@@ -114,19 +120,19 @@ internal class TextDragAndDrop(private val state: TextEditorState) {
 		ours?.droppedHere = true
 		val source = ours?.takeIf { state.holds(it.range, it.text) }
 		val moveFrom = source?.takeIf { !copy }?.range
-		// Overlays belong to the passes that draw them, and line markers and formats to
-		// whole lines, which the markup restores.
+		// A copy of whole lines carries their markers and formats; a drop leaves them to
+		// the markup, which restores them.
 		val richSpans = source?.takeIf { content.text.text == it.text }
 			?.let { state.preservedRichSpans(it.range) }
-			?.filter { !it.style.isDecoration && !it.style.stickyAtStart && it.style !is BlockSpanStyle }
+			?.filter { !it.style.stickyAtStart && it.style !is BlockSpanStyle }
 		// Refused, the drop is not taken, so a move leaves its source where it was.
 		return state.dropText(content.text, content.html, at, moveFrom, whole = !copy, richSpans) != null
 	}
 
-	private fun offsetAt(positionInRoot: Offset): CharLineOffset? {
+	private fun hitAt(positionInRoot: Offset): PointerHit? {
 		val canvas = state.canvasPositionInRoot
 		if (canvas == Offset.Unspecified) return null
-		return state.getOffsetAtPosition(positionInRoot - canvas)
+		return state.pointerHitAt(positionInRoot - canvas)
 	}
 
 	/** Whether [range] still holds [text]: the drag's source is as it was dragged. */
@@ -145,8 +151,8 @@ internal class TextDragAndDrop(private val state: TextEditorState) {
 
 /** Draws the drop caret while a drag of text hovers over the editor. */
 internal fun DrawScope.DrawDropCaret(dragAndDrop: TextDragAndDrop, state: TextEditorState, color: Color, width: Dp) {
-	val position = dragAndDrop.dropPosition ?: return
-	val rect = caretRect(state.getPositionForOffset(position), width.toPx(), size.width)
+	val hit = dragAndDrop.dropHit ?: return
+	val rect = caretRect(state.calculateCursorPosition(hit.position, hit.affinity), width.toPx(), size.width)
 	if (rect.bottom >= 0f && rect.top <= size.height) {
 		drawRect(color = color, topLeft = rect.topLeft, size = rect.size)
 	}
@@ -175,8 +181,8 @@ private class TextDragAndDropNode(dragAndDrop: TextDragAndDrop) : DelegatingNode
 		}
 
 	private val target = object : DragAndDropTarget {
-		override fun onEntered(event: DragAndDropEvent) = dragAndDrop.hover(event, event.pointerInRoot(requireDensity()))
-		override fun onMoved(event: DragAndDropEvent) = dragAndDrop.hover(event, event.pointerInRoot(requireDensity()))
+		override fun onEntered(event: DragAndDropEvent) = dragAndDrop.hover(event.pointerInRoot(requireDensity()))
+		override fun onMoved(event: DragAndDropEvent) = dragAndDrop.hover(event.pointerInRoot(requireDensity()))
 		override fun onExited(event: DragAndDropEvent) = dragAndDrop.endHover()
 		override fun onEnded(event: DragAndDropEvent) = dragAndDrop.endHover()
 		override fun onDrop(event: DragAndDropEvent): Boolean =

@@ -7,7 +7,6 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
-import com.darkrockstudios.texteditor.markdown.MarkdownExtension
 import com.darkrockstudios.texteditor.richstyle.BlockquoteSpanStyle
 import com.darkrockstudios.texteditor.richstyle.CodeFenceSpanStyle
 import com.darkrockstudios.texteditor.richstyle.HighlightSpanStyle
@@ -28,7 +27,6 @@ import kotlinx.coroutines.test.TestScope
 class LineBlockRedoTests {
 	private lateinit var scope: TestScope
 	private lateinit var state: TextEditorState
-	private lateinit var markdown: MarkdownExtension
 
 	@BeforeTest
 	fun setup() {
@@ -37,7 +35,6 @@ class LineBlockRedoTests {
 			scope = scope.backgroundScope,
 			measurer = mockk(relaxed = true)
 		)
-		markdown = MarkdownExtension(state)
 	}
 
 	private fun spanLines(style: Any) = state.richSpanManager.getAllRichSpans()
@@ -51,7 +48,7 @@ class LineBlockRedoTests {
 	@Test
 	fun `redo ordered list re-applies span and indent`() {
 		state.setText("Hello World")
-		markdown.editorState.toggleOrderedList(0..0)
+		state.toggleOrderedList(0..0)
 		state.undo()
 		assertTrue(spanLines(OrderedListSpanStyle).isEmpty())
 
@@ -73,7 +70,7 @@ class LineBlockRedoTests {
 			)
 		)
 
-		markdown.editorState.toggleOrderedList(0..0)
+		state.toggleOrderedList(0..0)
 
 		state.undo()
 		assertEquals("Hello World!", state.textLines[0].text)
@@ -88,7 +85,7 @@ class LineBlockRedoTests {
 	@Test
 	fun `redo blockquote re-applies it`() {
 		state.setText("quote me")
-		markdown.editorState.toggleBlockquote(0..0)
+		state.toggleBlockquote(0..0)
 		state.undo()
 		assertTrue(spanLines(BlockquoteSpanStyle).isEmpty())
 
@@ -99,7 +96,7 @@ class LineBlockRedoTests {
 	@Test
 	fun `redo code fence re-applies it`() {
 		state.setText("code line")
-		markdown.editorState.toggleCodeFence(0..0)
+		state.toggleCodeFence(0..0)
 		state.undo()
 		assertTrue(spanLines(CodeFenceSpanStyle).isEmpty())
 
@@ -110,7 +107,7 @@ class LineBlockRedoTests {
 	@Test
 	fun `redo multi-line list toggle re-applies every line`() {
 		state.setText("one\ntwo\nthree")
-		markdown.editorState.toggleOrderedList(0..2)
+		state.toggleOrderedList(0..2)
 		state.undo()
 		assertTrue(spanLines(OrderedListSpanStyle).isEmpty())
 
@@ -134,7 +131,7 @@ class LineBlockRedoTests {
 			.singleOrNull { it.item == bold }
 			?.let { it.start to it.end }
 
-		markdown.editorState.toggleOrderedList(0..0)
+		state.toggleOrderedList(0..0)
 		assertEquals(6 to 11, boldRange())
 		assertEquals("Hello World", state.textLines[0].text)
 
@@ -160,7 +157,7 @@ class LineBlockRedoTests {
 		fun highlightSpans() = state.richSpanManager.getAllRichSpans()
 			.filter { it.style === highlight }
 
-		markdown.editorState.toggleOrderedList(0..0)
+		state.toggleOrderedList(0..0)
 		assertEquals(1, highlightSpans().size)
 		assertEquals(range, highlightSpans().single().range)
 
@@ -177,11 +174,11 @@ class LineBlockRedoTests {
 	@Test
 	fun `undo demote restores the list`() {
 		state.setText("item")
-		markdown.editorState.toggleOrderedList(0..0)
+		state.toggleOrderedList(0..0)
 		assertEquals(listOf(0), spanLines(OrderedListSpanStyle))
 
 		// Toggle off (demote) — this is its own atomic, undoable entry.
-		markdown.editorState.toggleOrderedList(0..0)
+		state.toggleOrderedList(0..0)
 		assertTrue(spanLines(OrderedListSpanStyle).isEmpty())
 
 		state.undo()

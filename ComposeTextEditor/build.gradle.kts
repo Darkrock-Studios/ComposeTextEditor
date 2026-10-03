@@ -97,13 +97,11 @@ kotlin {
         val desktopTest by getting {
             kotlin.srcDir(rootDir.resolve("testUtils/countingMeasurer"))
             kotlin.srcDir(rootDir.resolve("testUtils/blockLines"))
+            kotlin.srcDir(rootDir.resolve("testUtils/stateFuzz"))
             kotlin.srcDir(rootDir.resolve("testUtils/uiTest"))
             kotlin.srcDir(rootDir.resolve("testUtils/testFont/kotlin"))
             resources.srcDir(rootDir.resolve("testUtils/testFont/resources"))
             dependencies {
-                // The block tests build and read their documents as markdown text, the
-                // compact form of a block structure (docs/design/modules.md, "Tests").
-                implementation(projects.composeTextEditorMarkdown)
                 implementation(libs.jetbrains.kotlin.test)
                 implementation(libs.jetbrains.kotlin.test.junit)
                 implementation(libs.mockk)

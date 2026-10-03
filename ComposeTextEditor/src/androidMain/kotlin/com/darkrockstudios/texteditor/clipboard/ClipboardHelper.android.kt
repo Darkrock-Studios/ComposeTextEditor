@@ -34,6 +34,7 @@ actual object ClipboardHelper {
 	actual suspend fun getText(
 		clipboard: Clipboard,
 		styles: RichTextStyles,
+		allowedLinkSchemes: Set<String>,
 	): AnnotatedString? {
 		val clipData = clipboard.getClipEntry()?.clipData
 		pasteClip = clipData
@@ -45,7 +46,7 @@ actual object ClipboardHelper {
 		val styled = items.mapNotNull { item ->
 			val text = item.text?.toString()
 			item.htmlText
-				?.toAnnotatedStringFromHtml(styles)
+				?.toAnnotatedStringFromHtml(styles, allowedLinkSchemes)
 				?.takeIf { it.text.isNotEmpty() && (!ours || it.text == text) }
 				?: text?.let(::AnnotatedString)
 		}

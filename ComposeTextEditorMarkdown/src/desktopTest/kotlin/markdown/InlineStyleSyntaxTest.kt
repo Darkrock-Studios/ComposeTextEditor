@@ -179,6 +179,16 @@ class InlineStyleSyntaxTest {
 	}
 
 	@Test
+	fun `a style two retired configurations share exports as the most recent one's`() = runTest {
+		val shared = SpanStyle(background = Color.Red)
+		val e = extension(config.copy(underlineStyle = shared))
+		e.editorState.setText(styled("", shared, "s", ""))
+		e.editorState.richTextStyles = config.copy(highlightStyle = shared)
+		e.editorState.richTextStyles = config
+		assertEquals("==s==", e.exportAsMarkdown())
+	}
+
+	@Test
 	fun `a link style that equals the underline style still writes underlines`() {
 		val plainLinks = config.copy(linkStyle = config.underlineStyle)
 		assertEquals("<u>u</u>", styled("", plainLinks.underlineStyle, "u", "").toMarkdown(styles = plainLinks))

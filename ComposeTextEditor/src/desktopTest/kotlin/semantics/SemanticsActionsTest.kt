@@ -23,6 +23,7 @@ import com.darkrockstudios.texteditor.input.KeyboardSettings
 import com.darkrockstudios.texteditor.richstyle.LinkSpanStyle
 import utils.EditorUiTestScope
 import utils.editorUiTest
+import utils.setBlockLines
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -95,8 +96,8 @@ class SemanticsActionsTest {
 		width = 160.dp,
 		textStyle = TextStyle(textIndent = TextIndent(firstLine = 30.sp)),
 	) {
-		markdown.importMarkdown(
-			"A first paragraph long enough to wrap onto several rows here.\n\n" +
+		state.setBlockLines(
+			"A first paragraph long enough to wrap onto several rows here.\n" +
 				"- a list item that also runs on for a few rows at this width"
 		)
 		waitForIdle()

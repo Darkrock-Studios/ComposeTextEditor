@@ -2,7 +2,6 @@ package state
 
 import androidx.compose.ui.text.AnnotatedString
 import com.darkrockstudios.texteditor.CharLineOffset
-import com.darkrockstudios.texteditor.markdown.MarkdownExtension
 import com.darkrockstudios.texteditor.state.TextEditorState
 import io.mockk.mockk
 import kotlinx.coroutines.launch
@@ -15,6 +14,8 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
+import utils.blockLines
+import utils.setBlockLines
 
 /**
  * The transaction guarantees, checked without threads: what a reader sees is decided
@@ -22,15 +23,15 @@ import kotlin.test.assertTrue
  */
 class AtomicEditTest {
 
-	private fun editor(markdown: String): MarkdownExtension {
+	private fun editor(blockLines: String): TextEditorState {
 		val state = TextEditorState(scope = TestScope(), measurer = mockk(relaxed = true))
-		return MarkdownExtension(state).apply { importMarkdown(markdown) }
+		state.setBlockLines(blockLines)
+		return state
 	}
 
 	@Test
 	fun `snapshot pairs text and spans from the same revision`() {
-		val extension = editor("- alpha\n- bravo")
-		val state = extension.editorState
+		val state = editor("- alpha\n- bravo")
 
 		val before = state.snapshot()
 		assertEquals(2, before.lines.size)
@@ -46,17 +47,16 @@ class AtomicEditTest {
 
 	@Test
 	fun `snapshot getAllText matches the document`() {
-		val extension = editor("- alpha\n- bravo")
+		val state = editor("- alpha\n- bravo")
 		assertEquals(
-			extension.editorState.getAllText().text,
-			extension.editorState.snapshot().getAllText().text,
+			state.getAllText().text,
+			state.snapshot().getAllText().text,
 		)
 	}
 
 	@Test
 	fun `a failed edit leaves the previous revision published`() {
-		val extension = editor("- alpha\n- bravo")
-		val state = extension.editorState
+		val state = editor("- alpha\n- bravo")
 		val before = state.snapshot()
 
 		assertFailsWith<IllegalStateException> {
@@ -68,17 +68,17 @@ class AtomicEditTest {
 
 		assertSame(before, state.snapshot(), "A throwing edit published its partial work")
 		assertEquals(2, state.textLines.size)
-		assertEquals("- alpha\n- bravo", extension.exportAsMarkdown())
+		assertEquals("- alpha\n- bravo", state.blockLines())
 	}
 
 	@Test
 	fun `a failed edit does not announce its discarded operations`() = runTest {
 		val state = TextEditorState(scope = this, measurer = mockk(relaxed = true))
-		val extension = MarkdownExtension(state).apply { importMarkdown("- alpha\n- bravo") }
+		state.setBlockLines("- alpha\n- bravo")
 
 		val seen = mutableListOf<Any>()
 		val job = launch(UnconfinedTestDispatcher(testScheduler)) {
-			extension.editorState.editOperations.collect { seen += it }
+			state.editOperations.collect { seen += it }
 		}
 
 		assertFailsWith<IllegalStateException> {
@@ -100,13 +100,13 @@ class AtomicEditTest {
 	@Test
 	fun `an edit announced on editOperations is already published`() = runTest {
 		val state = TextEditorState(scope = this, measurer = mockk(relaxed = true))
-		val extension = MarkdownExtension(state).apply { importMarkdown("- alpha\n- bravo") }
+		state.setBlockLines("- alpha\n- bravo")
 
 		// insertNewlineAtCursor wraps applyOperation in an outer transaction, so an
 		// emit fired at the inner boundary would describe a revision still staged.
 		val seen = mutableListOf<Int>()
 		val job = launch(UnconfinedTestDispatcher(testScheduler)) {
-			extension.editorState.editOperations.collect { seen += state.snapshot().lines.size }
+			state.editOperations.collect { seen += state.snapshot().lines.size }
 		}
 
 		state.cursor.updatePosition(CharLineOffset(0, 7))

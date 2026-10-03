@@ -325,9 +325,12 @@ private fun TextEditorState.replaceComposingOrInsert(text: String, typing: Boole
 		// word) is no edit: a replace would still strip the rich spans inside.
 		val edited = text != getStringInRange(range)
 		if (edited) {
-			editManager.recordingAsTyping(typing) {
-				// inheritStyle keeps autocorrect/composition from stripping bold/italic etc.
-				replace(range, text, inheritStyle = true)
+			// A typed composition's updates and commit are one word however slowly they come.
+			editManager.rewritingComposition(composingIsTyped) {
+				editManager.recordingAsTyping(typing) {
+					// inheritStyle keeps autocorrect/composition from stripping bold/italic etc.
+					replace(range, text, inheritStyle = true)
+				}
 			}
 		}
 		ImeInsertion(start, edited)

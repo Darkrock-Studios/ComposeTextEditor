@@ -110,11 +110,15 @@ span re-anchoring, and the edit stream all at once.
 
 `TextEditHistory` holds the undo and redo stacks. An entry is one recorded
 operation paired with the `OperationMetadata` needed to reverse it (deleted
-text, deleted spans), or a group of them. Consecutive single-character typing
+text, deleted spans, and the lines it joined or broke, which undo writes back
+whole), or a group of them. Consecutive single-character typing
 and backspacing coalesce into wordwise runs, so undo peels words, not
-keystrokes. IME commits and composition updates are recorded as typing
-whatever their length, so a composed word and its commit fold into the run
-they rewrite rather than leaving one step per keystroke.
+keystrokes; a pause in typing ends a run too, and `UndoSettings` sets the
+pause and how many steps are kept. IME commits and composition updates are
+recorded as typing whatever their length, so a composed word and its commit
+fold into the run they rewrite rather than leaving one step per keystroke.
+Each step also records the selection before and after it, which undo and redo
+select again.
 
 One transaction is one undo step. Operations recorded inside a
 `withAtomicEdit` are staged and land as a single group entry when the
@@ -291,7 +295,8 @@ character, without ever producing a key event. Line-block smart editing is the
 first behavior, which is what makes it reach every input path rather than only
 the ones that go through key handling; the typed-text hook sees what every
 path commits (never an IME's composing updates) and is what smart punctuation,
-markdown as you type, and auto-link build on. Both, and the reasoning for
+markdown as you type, and auto-link build on; a paste hook is told where a paste
+landed, for auto-link's pasted half. Both, and the reasoning for
 keeping them separate: [design/editor-actions.md](design/editor-actions.md).
 
 The IME contract runs in two directions. Commands flow in, and each one lands
@@ -328,8 +333,10 @@ the caret and selection handles. A span click is reported on release, when the
 press and release land on the same span without a drag, so placing the caret
 or selecting never reads as a click; links open by the host's `onLinkClick` on
 Ctrl/Cmd+click in an editor and on a plain click in `RichTextView`, and only
-a destination `sanitizeLinkUrl` allows (relative, http, https, mailto, tel, ftp)
-reaches it, the same allowlist every importer applies.
+a destination `sanitizeLinkUrl` allows (relative, and http, https, mailto, tel
+and ftp unless the host sets its own `allowedLinkSchemes` on the state;
+`javascript:`, `data:`, `vbscript:` and `file:` never) reaches it, the same
+allowlist every importer applies.
 
 ## Document model and transactions
 

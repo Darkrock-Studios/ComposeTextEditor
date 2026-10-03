@@ -28,9 +28,9 @@ sealed class TextEditOperation {
 		override val cursorBefore: CharLineOffset,
 		override val cursorAfter: CharLineOffset
 	) : TextEditOperation() {
-		// Read for every rich span an edit moves, so worked out once per operation.
-		private val end = text.endWhenInsertedAt(position)
-		private val lineShift = end.line - position.line
+		/** Where [text] ends once inserted, read for every rich span an edit moves. */
+		internal val textEnd: CharLineOffset = text.endWhenInsertedAt(position)
+		private val lineShift = textEnd.line - position.line
 
 		override fun transformOffset(
 			offset: CharLineOffset,
@@ -53,7 +53,7 @@ sealed class TextEditOperation {
 				if (lineShift > 0) {
 					return CharLineOffset(
 						offset.line + lineShift,
-						offset.char - position.char + end.char
+						offset.char - position.char + textEnd.char
 					)
 				} else {
 					return offset.copy(char = offset.char + text.length)

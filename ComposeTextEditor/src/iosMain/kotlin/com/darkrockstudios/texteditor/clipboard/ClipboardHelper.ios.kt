@@ -2,6 +2,7 @@ package com.darkrockstudios.texteditor.clipboard
 
 import androidx.compose.ui.platform.Clipboard
 import androidx.compose.ui.text.AnnotatedString
+import com.darkrockstudios.texteditor.html.DEFAULT_LINK_SCHEMES
 import com.darkrockstudios.texteditor.html.toAnnotatedStringFromHtml
 import com.darkrockstudios.texteditor.html.toHtml
 import com.darkrockstudios.texteditor.RichTextStyles
@@ -31,8 +32,9 @@ actual object ClipboardHelper {
 	actual suspend fun getText(
 		clipboard: Clipboard,
 		styles: RichTextStyles,
+		allowedLinkSchemes: Set<String>,
 	): AnnotatedString? {
-		val paste = UIPasteboard.generalPasteboard.readStyled(styles)
+		val paste = UIPasteboard.generalPasteboard.readStyled(styles, allowedLinkSchemes)
 		lastReadHtml = paste.html
 		lastReadCopyId = paste.copyId
 		return paste.text
@@ -75,12 +77,15 @@ internal class PasteboardPaste(val text: AnnotatedString?, val html: String?, va
  * matches against, so its markup is used only where it re-parses to them. Several items
  * paste as their texts one per line.
  */
-internal fun UIPasteboard.readStyled(styles: RichTextStyles): PasteboardPaste {
+internal fun UIPasteboard.readStyled(
+	styles: RichTextStyles,
+	allowedLinkSchemes: Set<String> = DEFAULT_LINK_SCHEMES,
+): PasteboardPaste {
 	if (numberOfItems > 1) return PasteboardPaste(allTexts()?.let(::AnnotatedString), html = null, copyId = null)
 	val plain = string?.takeIf { it.isNotEmpty() }
 	val copyId = utf8(COPY_ID_TYPE)?.toLongOrNull()
 	val html = utf8(HTML_TYPE)
-	val styled = html?.toAnnotatedStringFromHtml(styles)
+	val styled = html?.toAnnotatedStringFromHtml(styles, allowedLinkSchemes)
 		?.takeIf { it.text.isNotEmpty() && (copyId == null || it.text == plain) }
 	return PasteboardPaste(text = styled ?: plain?.let(::AnnotatedString), html = html, copyId = copyId)
 }

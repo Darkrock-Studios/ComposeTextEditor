@@ -7,7 +7,8 @@ import org.jetbrains.skia.icu.CharProperties
  * Skia's ICU, bundled with skiko on desktop, iOS, and wasm, and the iterator
  * `BasicTextField` steps by on these platforms. The JDK's own break iterator is
  * not used on desktop: its clusters depend on the JDK version, and JDK 17 predates
- * emoji ZWJ sequences.
+ * emoji ZWJ sequences. Word breaks are each platform's: skia's ICU on iOS has no CJK
+ * dictionary, so iOS takes its own.
  */
 private class SkiaBreakCursor(private val iterator: BreakIterator) : BreakCursor {
 	override fun setText(text: String) = iterator.setText(text)
@@ -22,7 +23,8 @@ private class SkiaBreakCursor(private val iterator: BreakIterator) : BreakCursor
 internal actual fun graphemeCursor(text: String): BreakCursor =
 	SkiaBreakCursor(BreakIterator.makeCharacterInstance().also { it.setText(text) })
 
-internal actual fun wordCursor(text: String): BreakCursor =
+/** Skia's ICU word breaks, with its CJK dictionary where the platform's ICU data has one. */
+internal fun skiaWordCursor(text: String): BreakCursor =
 	SkiaBreakCursor(BreakIterator.makeWordInstance().also { it.setText(text) })
 
 internal actual fun isEmojiCodePoint(codePoint: Int): Boolean =

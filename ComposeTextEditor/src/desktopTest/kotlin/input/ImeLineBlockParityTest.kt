@@ -9,15 +9,15 @@ import com.darkrockstudios.texteditor.input.imeDeleteSurroundingText
 import com.darkrockstudios.texteditor.input.imeDeleteSurroundingTextInCodePoints
 import com.darkrockstudios.texteditor.input.imePerformNewline
 import com.darkrockstudios.texteditor.input.imeSetComposingRegion
-import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
-import com.darkrockstudios.texteditor.markdown.MarkdownExtension
 import com.darkrockstudios.texteditor.richstyle.BulletListSpanStyle
 import com.darkrockstudios.texteditor.state.EditBehavior
 import com.darkrockstudios.texteditor.state.TextEditorState
+import com.darkrockstudios.texteditor.state.toggleBulletList
 import io.mockk.mockk
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
 import utils.InMemoryClipboard
+import utils.setBlockLines
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -31,13 +31,13 @@ import kotlin.test.assertTrue
  */
 class ImeLineBlockParityTest {
 
-	private fun TestScope.editorWith(markdown: String): TextEditorState {
+	private fun TestScope.editorWith(blockLines: String): TextEditorState {
 		val state = TextEditorState(
 			scope = this,
 			measurer = mockk(relaxed = true),
 			initialText = null as AnnotatedString?,
 		)
-		MarkdownExtension(state, MarkdownConfiguration.DEFAULT).importMarkdown(markdown)
+		state.setBlockLines(blockLines)
 		return state
 	}
 
@@ -237,7 +237,7 @@ class ImeLineBlockParityTest {
 			measurer = mockk(relaxed = true),
 			initialText = AnnotatedString("\nitem"),
 		)
-		MarkdownExtension(state, MarkdownConfiguration.DEFAULT).toggleBulletList(1..1)
+		state.toggleBulletList(1..1)
 		state.cursor.updatePosition(CharLineOffset(1, 0))
 
 		state.imeDeleteSurroundingText(3, 0)
@@ -361,7 +361,7 @@ class ImeLineBlockParityTest {
 
 	@Test
 	fun `backspace merging two plain lines is unchanged`() = runTest {
-		val state = editorWith("one\n\n\ntwo")
+		val state = editorWith("one\n\ntwo")
 		state.cursor.updatePosition(CharLineOffset(2, 0))
 
 		state.imeDeleteSurroundingText(1, 0)

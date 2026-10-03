@@ -58,6 +58,7 @@ kotlin {
 		val desktopTest by getting {
 			kotlin.srcDir(rootDir.resolve("testUtils/countingMeasurer"))
 			kotlin.srcDir(rootDir.resolve("testUtils/blockLines"))
+			kotlin.srcDir(rootDir.resolve("testUtils/stateFuzz"))
 			dependencies {
 				implementation(libs.jetbrains.kotlin.test)
 				implementation(libs.jetbrains.kotlin.test.junit)

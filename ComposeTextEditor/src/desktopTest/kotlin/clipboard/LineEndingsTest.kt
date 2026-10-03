@@ -10,8 +10,6 @@ import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.html.toAnnotatedStringFromHtml
 import com.darkrockstudios.texteditor.input.imeCommitText
 import com.darkrockstudios.texteditor.input.imeSetComposingText
-import com.darkrockstudios.texteditor.markdown.toAnnotatedStringFromMarkdown
-import com.darkrockstudios.texteditor.markdown.withMarkdown
 import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.insertTypedString
 import com.darkrockstudios.texteditor.state.isCodeFence
@@ -28,7 +26,8 @@ import utils.pasteHtml
 /**
  * Carriage returns never reach a line: `\r\n` and a lone `\r` both become `\n` on
  * every path text enters by, so a paste from a Windows or classic Mac source splits
- * lines the way it looked where it was copied.
+ * lines the way it looked where it was copied. The markdown paths are the markdown
+ * module's `MarkdownLineEndingsTest`.
  */
 class LineEndingsTest {
 
@@ -118,20 +117,6 @@ class LineEndingsTest {
 	}
 
 	@Test
-	fun `markdown import splits on CRLF`() = runTest {
-		val state = createState()
-		state.withMarkdown().importMarkdown("**bold**\r\nplain\r\n\r\n- item\r\n")
-		assertEquals(listOf("bold", "plain", "item"), state.lines)
-		state.assertNoCarriageReturns()
-	}
-
-	@Test
-	fun `markdown parsing drops carriage returns`() {
-		val parsed = "one\r\ntwo".toAnnotatedStringFromMarkdown()
-		assertFalse(parsed.text.contains('\r'), parsed.text)
-	}
-
-	@Test
 	fun `preformatted HTML with CRLF becomes separate lines`() {
 		val parsed = "<pre>a\r\nb\rc</pre>".toAnnotatedStringFromHtml()
 		assertEquals("a\nb\nc", parsed.text)
@@ -162,6 +147,6 @@ class LineEndingsTest {
 	fun `a rich paste of preformatted CRLF markup keeps its block on every line`() = editorUiTest {
 		pasteHtml("<pre>a\r\nb</pre>")
 		assertEquals(listOf("a", "b"), lines)
-		assertTrue(markdown.editorState.isCodeFence(0) && markdown.editorState.isCodeFence(1), "both pasted lines should be fenced")
+		assertTrue(state.isCodeFence(0) && state.isCodeFence(1), "both pasted lines should be fenced")
 	}
 }

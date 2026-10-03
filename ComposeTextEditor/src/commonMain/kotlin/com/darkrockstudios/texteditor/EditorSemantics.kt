@@ -32,7 +32,6 @@ import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextIndent
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Constraints
@@ -43,6 +42,7 @@ import com.darkrockstudios.texteditor.contextmenu.ContextMenuActions
 import com.darkrockstudios.texteditor.html.sanitizeLinkUrl
 import com.darkrockstudios.texteditor.input.EditorCommand.Action
 import com.darkrockstudios.texteditor.input.selectionAsTextRange
+import com.darkrockstudios.texteditor.input.startsLine
 import com.darkrockstudios.texteditor.richstyle.LinkSpanStyle
 import com.darkrockstudios.texteditor.state.DocumentSnapshot
 import com.darkrockstudios.texteditor.state.RowList
@@ -62,9 +62,10 @@ import kotlin.math.abs
  * XCUITest cannot type into it. A disabled editor is reported as such and offers
  * nothing that edits.
  *
- * `onImeAction` is offered only for an action key the host chose
- * ([com.darkrockstudios.texteditor.input.KeyboardSettings.imeAction]): the default is
- * Enter, a new line, where `BasicTextField`'s default action does nothing either.
+ * `onImeAction` is offered only for an action key other than Enter, the one the
+ * keyboard shows ([TextEditorState.effectiveImeAction]): a multi-line editor's default
+ * is Enter, a new line, where `BasicTextField`'s default action does nothing either,
+ * and a single line's is Done.
  */
 internal fun Modifier.editorSemantics(
 	state: TextEditorState,
@@ -89,17 +90,14 @@ internal fun Modifier.editorSemantics(
 		clipboardActions(actions)
 		longPressOpensMenu(focusRequester, actions)
 		editorSemanticsEdits(state, enabled, editable)
-		val imeAction = state.keyboardSettings.imeAction
-		if (editable && imeAction !in newlineActions) {
-			onImeAction(imeAction) { state.performImeAction(imeAction); true }
+		val imeAction = state.effectiveImeAction()
+		if (editable && !imeAction.startsLine) {
+			onImeAction(imeAction) { state.performImeAction(imeAction) }
 		}
 		selectionSemantics(state)
 		onClick { focusRequester.requestFocus(); true }
 	}
 }
-
-/** Action keys that are Enter, a new line, rather than an action of their own. */
-private val newlineActions = setOf(ImeAction.Default, ImeAction.None, ImeAction.Unspecified)
 
 private fun SemanticsPropertyReceiver.editorSemanticsEdits(state: TextEditorState, enabled: Boolean, editable: Boolean) {
 	if (!enabled) {
@@ -192,6 +190,9 @@ internal class SemanticsDocument(
 	 */
 	private var chunkLinks: Map<SpanIndex.Chunk, List<ChunkLink>> = emptyMap()
 
+	/** The allowlist [chunkLinks] was found under. */
+	private var linkSchemes: Set<String>? = null
+
 	/** How many span chunks [text] has scanned for links, for the cost tests. */
 	internal var chunksScanned = 0
 
@@ -240,6 +241,12 @@ internal class SemanticsDocument(
 	fun text(): AnnotatedString {
 		state.revision
 		val content = state.snapshot()
+		val schemes = state.allowedLinkSchemes
+		if (schemes != linkSchemes) {
+			linkSchemes = schemes
+			chunkLinks = emptyMap()
+			textContent = null
+		}
 		if (content !== textContent) {
 			text = content.textWithLinks()
 			textContent = content
@@ -275,7 +282,7 @@ internal class SemanticsDocument(
 		chunkLinks = found
 		for (span in spanIndex.loose) {
 			val style = span.style as? LinkSpanStyle ?: continue
-			val url = sanitizeLinkUrl(style.url) ?: continue
+			val url = sanitizeLinkUrl(style.url, state.allowedLinkSchemes) ?: continue
 			add(
 				LinkAnnotation.Url(url, linkInteractionListener = listener),
 				indexOf(span.range.start.line, span.range.start.char),
@@ -294,7 +301,7 @@ internal class SemanticsDocument(
 		lines.forEachIndexed { line, spans ->
 			for (span in spans) {
 				val style = span.style as? LinkSpanStyle ?: continue
-				val url = sanitizeLinkUrl(style.url) ?: continue
+				val url = sanitizeLinkUrl(style.url, state.allowedLinkSchemes) ?: continue
 				add(ChunkLink(line, span.start, span.end, LinkAnnotation.Url(url, linkInteractionListener = listener)))
 			}
 		}

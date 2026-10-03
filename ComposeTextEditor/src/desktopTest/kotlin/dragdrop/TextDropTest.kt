@@ -6,8 +6,8 @@ import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.RichTextStyles
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.dragdrop.dropText
-import com.darkrockstudios.texteditor.markdown.withMarkdown
 import com.darkrockstudios.texteditor.state.TextEditorState
+import com.darkrockstudios.texteditor.state.isBulletList
 import io.mockk.mockk
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -86,7 +86,6 @@ class TextDropTest {
 	@Test
 	fun `dropped markup keeps its styling and blocks`() = runTest {
 		val state = createState("start")
-		state.withMarkdown()
 		val styled = buildAnnotatedString {
 			pushStyle(config.boldStyle)
 			append("one")
@@ -96,7 +95,7 @@ class TextDropTest {
 		state.dropText(styled, html = "<ul><li><b>one</b></li><li>two</li></ul>", at = at(0, 5), moveFrom = null)
 		assertEquals("startone\ntwo", state.text)
 		assertTrue(state.textLines[0].spanStyles.any { it.item == config.boldStyle && it.start == 5 })
-		assertTrue(state.withMarkdown().isBulletList(1), "the whole pasted line keeps its bullet")
+		assertTrue(state.isBulletList(1), "the whole pasted line keeps its bullet")
 	}
 
 	@Test

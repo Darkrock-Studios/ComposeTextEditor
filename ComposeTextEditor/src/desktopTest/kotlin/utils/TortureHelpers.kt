@@ -5,15 +5,12 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.ClipEntry
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.richstyle.RichSpan
-import com.darkrockstudios.texteditor.richstyle.RichSpanStyle
-import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.getRichSpansInRange
 import com.darkrockstudios.texteditor.state.isBlockquote
 import com.darkrockstudios.texteditor.state.isBulletList
 import com.darkrockstudios.texteditor.state.isCodeFence
 import com.darkrockstudios.texteditor.state.isOrderedList
 import kotlin.test.assertEquals
-import kotlin.test.assertTrue
 
 /** Pastes [html] the way a foreign application would: a text/html clipboard flavor, then Ctrl+V. */
 @OptIn(ExperimentalComposeUiApi::class)
@@ -21,13 +18,6 @@ fun EditorUiTestScope.pasteHtml(html: String) {
 	clipboard.seed(ClipEntry(ForeignHtmlTransferable(html)))
 	press(Key.V, ctrl = true)
 }
-
-/** Line indices carrying a rich span of exactly [style], sorted. */
-fun TextEditorState.linesWith(style: RichSpanStyle): List<Int> =
-	richSpanManager.getAllRichSpans()
-		.filter { it.style === style }
-		.map { it.range.start.line }
-		.sorted()
 
 /** Rich spans overlapping the flat character range [startChar, endChar). */
 fun EditorUiTestScope.richSpansIn(startChar: Int, endChar: Int): Set<RichSpan> =
@@ -62,6 +52,10 @@ fun EditorUiTestScope.undoAll(max: Int = 250): Int {
 	return count
 }
 
+/** The number each line's ordered item shows, null off an ordered item. */
+fun EditorUiTestScope.orderedNumbers(): List<Int?> =
+	state.lineOffsets.filter { it.virtualLineIndex == 0 }.map { it.orderedListNumber }
+
 /** Asserts [line]'s exact block-style membership; every style not passed as true must be absent. */
 fun EditorUiTestScope.assertBlockState(
 	line: Int,
@@ -70,53 +64,19 @@ fun EditorUiTestScope.assertBlockState(
 	ordered: Boolean = false,
 	fence: Boolean = false,
 ) {
-	assertEquals(quote, markdown.editorState.isBlockquote(line), "line $line blockquote state")
-	assertEquals(bullet, markdown.editorState.isBulletList(line), "line $line bullet-list state")
-	assertEquals(ordered, markdown.editorState.isOrderedList(line), "line $line ordered-list state")
-	assertEquals(fence, markdown.editorState.isCodeFence(line), "line $line code-fence state")
+	assertEquals(quote, state.isBlockquote(line), "line $line blockquote state")
+	assertEquals(bullet, state.isBulletList(line), "line $line bullet-list state")
+	assertEquals(ordered, state.isOrderedList(line), "line $line ordered-list state")
+	assertEquals(fence, state.isCodeFence(line), "line $line code-fence state")
 }
 
 /** The block styles present on [line], as readable names; empty set means a plain line. */
 fun EditorUiTestScope.blockFlags(line: Int): Set<String> = buildSet {
-	if (markdown.editorState.isBlockquote(line)) add("quote")
-	if (markdown.editorState.isBulletList(line)) add("bullet")
-	if (markdown.editorState.isOrderedList(line)) add("ordered")
-	if (markdown.editorState.isCodeFence(line)) add("fence")
+	if (state.isBlockquote(line)) add("quote")
+	if (state.isBulletList(line)) add("bullet")
+	if (state.isOrderedList(line)) add("ordered")
+	if (state.isCodeFence(line)) add("fence")
 }
 
 /** Structural sanity of every rich span: ordered, in bounds, no duplicate (range, style) pairs. */
 fun EditorUiTestScope.assertRichSpanInvariants() = state.assertRichSpanInvariants()
-
-fun TextEditorState.assertRichSpanInvariants() {
-	val spans = richSpanManager.getAllRichSpans()
-	val lineCount = textLines.size
-	for (span in spans) {
-		val start = span.range.start
-		val end = span.range.end
-		assertTrue(
-			start.line < end.line || (start.line == end.line && start.char <= end.char),
-			"span $span has an inverted range",
-		)
-		assertTrue(
-			start.line in 0 until lineCount && end.line in 0 until lineCount,
-			"span $span references lines outside the $lineCount-line document",
-		)
-		assertTrue(
-			start.char in 0..textLines[start.line].length,
-			"span $span starts past the end of line ${start.line} " +
-				"(char ${start.char}, line length ${textLines[start.line].length})",
-		)
-		assertTrue(
-			end.char in 0..textLines[end.line].length,
-			"span $span ends past the end of line ${end.line} " +
-				"(char ${end.char}, line length ${textLines[end.line].length})",
-		)
-	}
-	val duplicates = spans
-		.groupBy { it.range to it.style::class }
-		.filterValues { it.size > 1 }
-	assertTrue(
-		duplicates.isEmpty(),
-		"duplicate rich spans with identical range and style class: ${duplicates.values}",
-	)
-}
