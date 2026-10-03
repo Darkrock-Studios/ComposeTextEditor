@@ -101,8 +101,8 @@ the [API reference & recipes](https://darkrock-studios.github.io/ComposeTextEdit
 | --- | --- |
 | Desktop (JVM) | Supported |
 | Android | Supported |
-| iOS | Beta: typing, autocorrect, CJK composition, the edit menu, loupe and touch handles work in the simulator, with a UI smoke test in CI |
-| WASM | Beta: typing, IME composition, the rich clipboard and drag and drop run through the browser, with typing and composition tested in Chromium in CI |
+| iOS | Beta: typing, autocorrect, CJK composition, the edit menu, loupe and touch handles |
+| WASM | Beta: typing, IME composition, the rich clipboard and drag and drop |
 
 ### Work left to do:
 
