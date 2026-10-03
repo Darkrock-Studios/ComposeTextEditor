@@ -5,17 +5,17 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextDecoration
 import com.darkrockstudios.texteditor.CharLineOffset
+import com.darkrockstudios.texteditor.RichTextStyles
 import com.darkrockstudios.texteditor.contextmenu.ContextMenuActions
 import com.darkrockstudios.texteditor.input.EditorCommand.Action
 import com.darkrockstudios.texteditor.input.MacKeyBindings
-import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
 import com.darkrockstudios.texteditor.richstyle.LinkSpanStyle
-import utils.EditorUiTestScope
-import utils.editorUiTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import utils.EditorUiTestScope
+import utils.editorUiTest
 
 /**
  * Clear formatting (Ctrl+\, Cmd+\) takes the character formatting off a selection, or off
@@ -24,7 +24,7 @@ import kotlin.test.assertTrue
  */
 class ClearFormattingE2eTest {
 
-	private val config = MarkdownConfiguration.DEFAULT
+	private val config = RichTextStyles.DEFAULT
 	private val underline = SpanStyle(textDecoration = TextDecoration.Underline)
 
 	private fun EditorUiTestScope.perform(action: Action) {

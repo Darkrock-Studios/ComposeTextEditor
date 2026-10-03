@@ -8,12 +8,14 @@ import com.darkrockstudios.texteditor.richstyle.BulletListSpanStyle
 import com.darkrockstudios.texteditor.richstyle.HorizontalRuleSpanStyle
 import com.darkrockstudios.texteditor.richstyle.RichSpanStyle
 import com.darkrockstudios.texteditor.state.TextEditorState
-import utils.EditorUiTestScope
-import utils.editorUiTest
+import com.darkrockstudios.texteditor.state.toggleBlockquote
+import com.darkrockstudios.texteditor.state.toggleBulletList
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
+import utils.EditorUiTestScope
+import utils.editorUiTest
 
 /**
  * A block toggle applied to a real select-all, driven through the composed
@@ -51,7 +53,7 @@ class LineBlockToggleE2eTest {
 		importDocument(markdown, document)
 
 		press(Key.A, ctrl = true)
-		markdown.toggleBulletList(selectedLines())
+		markdown.editorState.toggleBulletList(selectedLines())
 		waitForIdle()
 
 		assertEquals(listOf(0, 1, 2, 3, 5, 6), state.linesWith(BulletListSpanStyle))
@@ -68,9 +70,9 @@ class LineBlockToggleE2eTest {
 		importDocument(markdown, document)
 
 		press(Key.A, ctrl = true)
-		markdown.toggleBulletList(selectedLines())
+		markdown.editorState.toggleBulletList(selectedLines())
 		press(Key.A, ctrl = true)
-		markdown.toggleBulletList(selectedLines())
+		markdown.editorState.toggleBulletList(selectedLines())
 		waitForIdle()
 
 		assertTrue(state.linesWith(BulletListSpanStyle).isEmpty())
@@ -83,7 +85,7 @@ class LineBlockToggleE2eTest {
 		importDocument(markdown, document)
 
 		press(Key.A, ctrl = true)
-		markdown.toggleBulletList(selectedLines())
+		markdown.editorState.toggleBulletList(selectedLines())
 		val saved = markdown.exportAsMarkdown()
 
 		importDocument(markdown, saved)
@@ -98,7 +100,7 @@ class LineBlockToggleE2eTest {
 		importDocument(markdown, document)
 
 		press(Key.A, ctrl = true)
-		markdown.toggleBlockquote(selectedLines())
+		markdown.editorState.toggleBlockquote(selectedLines())
 		waitForIdle()
 
 		assertEquals(listOf(0, 1, 2, 3, 4, 5, 6), state.linesWith(BlockquoteSpanStyle))
@@ -114,7 +116,7 @@ class LineBlockToggleE2eTest {
 		importDocument(markdown, document)
 
 		press(Key.A, ctrl = true)
-		markdown.toggleBulletList(selectedLines())
+		markdown.editorState.toggleBulletList(selectedLines())
 		press(Key.Z, ctrl = true)
 		waitForIdle()
 

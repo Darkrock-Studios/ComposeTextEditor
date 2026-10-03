@@ -5,6 +5,7 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.text.AnnotatedString
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
+import com.darkrockstudios.texteditor.state.EditorInputFilter
 import com.darkrockstudios.texteditor.state.TextEditorState
 import io.mockk.mockk
 import kotlinx.coroutines.test.TestScope
@@ -204,19 +205,144 @@ class FindInSelectionTest {
 	}
 
 	@Test
-	fun `a selection from before replace all is not reused`() = runTest {
+	fun `the selection from before the search follows replace all`() = runTest {
 		val textState = editor("cat cat\ncat")
 		val find = FindState(textState, backgroundScope)
 		textState.select(CharLineOffset(0, 4), CharLineOffset(0, 7))
 		find.search("cat")
 		find.replaceAll("c")
-
-		find.toggleInSelection(true)
-		assertFalse(find.inSelection)
-
 		find.search("c")
+
 		find.toggleInSelection(true)
+
+		assertEquals(listOf(TextEditorRange(CharLineOffset(0, 2), CharLineOffset(0, 3))), find.matches)
+	}
+
+	@Test
+	fun `a line break in the replacement is measured as it lands`() = runTest {
+		val textState = editor("cat cat x")
+		val find = FindState(textState, backgroundScope)
+		textState.select(CharLineOffset(0, 0), CharLineOffset(0, 7))
+		find.search("cat")
+		find.replaceAll("a\r\nb")
+		find.search("x")
+
+		find.toggleInSelection(true)
+
+		assertTrue(find.inSelection)
+		assertEquals(0, find.matchCount)
+	}
+
+	@Test
+	fun `a replacement the input filter cuts is measured as it lands`() = runTest {
+		val textState = editor("cat cat x")
+		textState.inputFilter = EditorInputFilter.maxLength(10)
+		val find = FindState(textState, backgroundScope)
+		textState.select(CharLineOffset(0, 0), CharLineOffset(0, 7))
+		find.search("cat")
+		find.replaceAll("doggo")
+		assertEquals("dog dogg x", textState.getAllText().text)
+		find.search("x")
+
+		find.toggleInSelection(true)
+
+		assertTrue(find.inSelection)
+		assertEquals(0, find.matchCount)
+	}
+
+	@Test
+	fun `clearing the selection keeps the last one the user made`() = runTest {
+		val textState = editor("cat\ncat cat\ncat")
+		val find = FindState(textState, backgroundScope)
+		textState.select(CharLineOffset(1, 0), CharLineOffset(1, 7))
+		find.search("cat")
+		textState.selector.clearSelection()
+		assertTrue(find.replaceCurrent("dog"))
+
+		find.toggleInSelection(true)
+
+		assertEquals(listOf(CharLineOffset(1, 4)), find.matches.map { it.start })
+	}
+
+	@Test
+	fun `a selection made before replace is the one carried`() = runTest {
+		val textState = editor("cat\ncat cat\ncat")
+		val find = FindState(textState, backgroundScope)
+		find.search("cat")
+		textState.select(CharLineOffset(1, 0), CharLineOffset(1, 7))
+		assertTrue(find.replaceCurrent("dog"))
+
+		find.toggleInSelection(true)
+
+		assertEquals(listOf(1, 1), find.matchLines)
+	}
+
+	@Test
+	fun `the selection from before the search follows a replace`() = runTest {
+		val textState = editor("cat cat\ncat cat cat")
+		val find = FindState(textState, backgroundScope)
+		textState.select(CharLineOffset(1, 0), CharLineOffset(1, 11))
+		find.search("cat")
+		find.findPrevious()
+		assertEquals(CharLineOffset(0, 4), find.matches[find.currentMatchIndex].start)
+		assertTrue(find.replaceCurrent("a\nb"))
+
+		find.toggleInSelection(true)
+
+		assertEquals(listOf(2, 2, 2), find.matchLines)
+	}
+
+	@Test
+	fun `a replace at the edge of the selection from before the search stays inside it`() = runTest {
+		val textState = editor("cat cat cat\ncat")
+		val find = FindState(textState, backgroundScope)
+		textState.select(CharLineOffset(0, 4), CharLineOffset(0, 11))
+		find.search("cat")
+		assertEquals(CharLineOffset(0, 4), find.matches[find.currentMatchIndex].start)
+		assertTrue(find.replaceCurrent("doggo"))
+		find.toggleRegex(true)
+		find.search("cat|dog")
+
+		find.toggleInSelection(true)
+
+		assertEquals(
+			listOf(CharLineOffset(0, 4), CharLineOffset(0, 10)),
+			find.matches.map { it.start },
+		)
+	}
+
+	@Test
+	fun `a replace across the edge of the selection from before the search is left out`() = runTest {
+		val textState = editor("xx cat yy cat")
+		val find = FindState(textState, backgroundScope)
+		textState.select(CharLineOffset(0, 0), CharLineOffset(0, 4))
+		find.search("cat")
+		assertEquals(CharLineOffset(0, 3), find.matches[find.currentMatchIndex].start)
+		assertTrue(find.replaceCurrent("dog"))
+		find.toggleRegex(true)
+		find.search("x|d")
+
+		find.toggleInSelection(true)
+
+		assertEquals(listOf(CharLineOffset(0, 0), CharLineOffset(0, 1)), find.matches.map { it.start })
+	}
+
+	@Test
+	fun `an edit find did not make drops the selection from before the search`() = runTest {
+		val textState = editor("cat\ncat cat cat")
+		val find = FindState(textState, backgroundScope)
+		runCurrent()
+		textState.select(CharLineOffset(1, 0), CharLineOffset(1, 11))
+		find.search("cat")
+		textState.replace(TextEditorRange(CharLineOffset(0, 0), CharLineOffset(0, 0)), "x\n")
+		advanceTimeBy(400)
+		runCurrent()
+		find.findNext()
+
+		find.toggleInSelection(true)
+
 		assertFalse(find.inSelection)
+		assertEquals(4, find.matchCount)
 	}
 
 	@Test

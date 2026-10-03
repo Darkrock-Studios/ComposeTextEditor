@@ -1,12 +1,13 @@
 package com.darkrockstudios.texteditor.html
 
+import androidx.compose.ui.graphics.isSpecified
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.TextUnit
-import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
+import com.darkrockstudios.texteditor.RichTextStyles
 
 /**
  * The HTML elements the clipboard serializer emits. Declaration order is the
@@ -24,13 +25,14 @@ internal enum class HtmlTag(val tag: String) {
 	EM("em"),
 	STRIKE("s"),
 	UNDERLINE("u"),
+	MARK("mark"),
 	;
 
 	/** Heading elements are block-level, so they replace a line's `<p>` rather than nest inside it. */
 	val isHeading: Boolean get() = this <= H6
 }
 
-internal fun SpanStyle.htmlTags(config: MarkdownConfiguration): Set<HtmlTag> {
+internal fun SpanStyle.htmlTags(config: RichTextStyles): Set<HtmlTag> {
 	// A header carries bold plus a size; emitting <strong> as well would make the
 	// paste round-trip back as bold-inside-header, so the header tag stands alone.
 	headerTag(config)?.let { return setOf(it) }
@@ -43,10 +45,11 @@ internal fun SpanStyle.htmlTags(config: MarkdownConfiguration): Set<HtmlTag> {
 		if (decoration.contains(TextDecoration.LineThrough)) tags += HtmlTag.STRIKE
 		if (decoration.contains(TextDecoration.Underline)) tags += HtmlTag.UNDERLINE
 	}
+	if (background.isSpecified && background == config.highlightStyle.background) tags += HtmlTag.MARK
 	return tags
 }
 
-private fun SpanStyle.headerTag(config: MarkdownConfiguration): HtmlTag? {
+private fun SpanStyle.headerTag(config: RichTextStyles): HtmlTag? {
 	val heading = headingTagBySize(config) ?: return null
 	// A run whose style is identical to emphasized body text carries nothing that
 	// says which of the two it is. Under the default configuration h4 is exactly
@@ -61,7 +64,7 @@ private fun SpanStyle.headerTag(config: MarkdownConfiguration): HtmlTag? {
  * The heading level whose configured size this style matches, ignoring whether
  * anything else could have produced the same style.
  */
-internal fun SpanStyle.headingTagBySize(config: MarkdownConfiguration): HtmlTag? {
+internal fun SpanStyle.headingTagBySize(config: RichTextStyles): HtmlTag? {
 	if (fontWeight != FontWeight.Bold || fontSize == TextUnit.Unspecified) return null
 	return when (fontSize.value) {
 		config.header1Style.fontSize.value -> HtmlTag.H1
@@ -74,7 +77,7 @@ internal fun SpanStyle.headingTagBySize(config: MarkdownConfiguration): HtmlTag?
 	}
 }
 
-internal fun HtmlTag.spanStyle(config: MarkdownConfiguration): SpanStyle = when (this) {
+internal fun HtmlTag.spanStyle(config: RichTextStyles): SpanStyle = when (this) {
 	HtmlTag.H1 -> config.header1Style
 	HtmlTag.H2 -> config.header2Style
 	HtmlTag.H3 -> config.header3Style
@@ -86,4 +89,5 @@ internal fun HtmlTag.spanStyle(config: MarkdownConfiguration): SpanStyle = when 
 	HtmlTag.EM -> config.italicStyle
 	HtmlTag.STRIKE -> config.strikethroughStyle
 	HtmlTag.UNDERLINE -> config.underlineStyle
+	HtmlTag.MARK -> config.highlightStyle
 }

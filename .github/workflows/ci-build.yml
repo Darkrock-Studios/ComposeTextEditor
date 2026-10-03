@@ -47,6 +47,14 @@ jobs:
         uses: gradle/gradle-build-action@ce999babab2de1c4b649dc15f0ee67e6246c994f
         with:
           arguments: ${{ matrix.target }}
+      - name: Keep the golden screenshot failures
+        # Actual, expected and diff images for each golden that no longer matches.
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: golden-failures-${{ matrix.target }}
+          path: '*/build/golden-failures/'
+          if-no-files-found: ignore
 
   # The desktop suites on macOS, where the editor takes the Mac key bindings and
   # the system fonts differ from Linux; the Ubuntu `check` covers everything else.
@@ -72,6 +80,7 @@ jobs:
         run: >
           ./gradlew --stacktrace
           :ComposeTextEditor:desktopTest
+          :ComposeTextEditorMarkdown:desktopTest
           :ComposeTextEditorFind:desktopTest
           :ComposeTextEditorSpellCheck:desktopTest
       - name: Keep the test reports
@@ -83,6 +92,128 @@ jobs:
           path: |
             */build/test-results/desktopTest/
             */build/reports/tests/desktopTest/
+
+  # The desktop suites on Windows: its font stack, its AWT key events, and the
+  # Ctrl bindings the Find tests take on a host that is not a Mac.
+  desktop-windows:
+    runs-on: windows-latest
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v6
+      - name: Validate Gradle Wrapper
+        uses: gradle/wrapper-validation-action@v3
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v5
+      - name: Run the desktop test suites
+        shell: bash
+        run: >
+          ./gradlew --stacktrace
+          :ComposeTextEditor:desktopTest
+          :ComposeTextEditorMarkdown:desktopTest
+          :ComposeTextEditorFind:desktopTest
+          :ComposeTextEditorSpellCheck:desktopTest
+      - name: Keep the test reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-windows-test-results
+          path: |
+            */build/test-results/desktopTest/
+            */build/reports/tests/desktopTest/
+
+  # A smoke test on an Android emulator: key events and an input method's edits
+  # reach the editor (androidApp/src/androidTest).
+  android-emulator:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v6
+      - name: Validate Gradle Wrapper
+        uses: gradle/wrapper-validation-action@v3
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v5
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Build the app and its tests
+        # Before the emulator starts, so a build failure shows without waiting for a boot.
+        run: ./gradlew --stacktrace :androidApp:assembleDebug :androidApp:assembleDebugAndroidTest
+      - name: Run the smoke test on an emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          script: ./gradlew --stacktrace :androidApp:connectedDebugAndroidTest
+      - name: Keep the test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-emulator-test-results
+          path: |
+            androidApp/build/outputs/androidTest-results/
+            androidApp/build/reports/androidTests/
+
+  # Playwright in Chromium against the built wasm demo: real key presses and the
+  # browser's own input method events (browserTests/).
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v6
+      - name: Validate Gradle Wrapper
+        uses: gradle/wrapper-validation-action@v3
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v5
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+      - name: Build the wasm demo
+        run: ./gradlew --stacktrace :sampleApp:wasmJsBrowserDistribution
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: browserTests/package-lock.json
+      - name: Install Playwright and Chromium
+        working-directory: browserTests
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+      - name: Run the browser tests
+        working-directory: browserTests
+        run: npx playwright test
+      - name: Keep the Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            browserTests/playwright-report/
+            browserTests/test-results/
 
   # Kotlin/Native iOS targets only compile on macOS, so the Ubuntu `check` never
   # builds iosMain. This job compiles the libraries for device and simulator, runs
@@ -113,6 +244,8 @@ jobs:
           ./gradlew --stacktrace
           :ComposeTextEditor:compileKotlinIosArm64
           :ComposeTextEditor:iosSimulatorArm64Test
+          :ComposeTextEditorMarkdown:compileKotlinIosArm64
+          :ComposeTextEditorMarkdown:iosSimulatorArm64Test
           :ComposeTextEditorSpellCheck:compileKotlinIosArm64
           :ComposeTextEditorSpellCheck:iosSimulatorArm64Test
           :ComposeTextEditorFind:compileKotlinIosArm64

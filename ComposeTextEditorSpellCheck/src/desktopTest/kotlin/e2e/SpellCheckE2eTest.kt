@@ -26,6 +26,7 @@ import com.darkrockstudios.texteditor.state.DocumentSnapshot
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.delay
 import utils.CountingSpellChecker
+import utils.setScanningContent
 import utils.spellCheckUiTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -166,7 +167,7 @@ class SpellCheckE2eTest {
 	fun `a document loaded before the editor is composed gets checked`() = runSkikoComposeUiTest {
 		val checker = CountingSpellChecker(correctWords = setOf("fine"))
 		lateinit var state: SpellCheckState
-		setContent {
+		setScanningContent {
 			state = rememberSpellCheckState(spellChecker = checker)
 			var loaded by remember { mutableStateOf(false) }
 			LaunchedEffect(state) {

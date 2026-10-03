@@ -61,7 +61,7 @@ jobs:
           cat gradle.properties | grep library.version
 
       - name: Assemble libraries
-        run: ./gradlew :ComposeTextEditor:assemble :ComposeTextEditorSpellCheck:assemble :ComposeTextEditorFind:assemble --no-daemon --stacktrace
+        run: ./gradlew :ComposeTextEditor:assemble :ComposeTextEditorMarkdown:assemble :ComposeTextEditorSpellCheck:assemble :ComposeTextEditorFind:assemble --no-daemon --stacktrace
 
       - name: Publish to Maven Central
         env:
@@ -71,6 +71,7 @@ jobs:
           ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.SIGNING_PASSWORD }}
         run: |
           ./gradlew :ComposeTextEditor:publishAllPublicationsToMavenCentralRepository --no-daemon --stacktrace
+          ./gradlew :ComposeTextEditorMarkdown:publishAllPublicationsToMavenCentralRepository --no-daemon --stacktrace
           ./gradlew :ComposeTextEditorSpellCheck:publishAllPublicationsToMavenCentralRepository --no-daemon --stacktrace
           ./gradlew :ComposeTextEditorFind:publishAllPublicationsToMavenCentralRepository --no-daemon --stacktrace
 
@@ -92,8 +93,9 @@ jobs:
           echo "**Group ID:** com.darkrockstudios" >> $GITHUB_STEP_SUMMARY
           echo "**Artifacts:**" >> $GITHUB_STEP_SUMMARY
           echo "- composetexteditor" >> $GITHUB_STEP_SUMMARY
-          echo "- composetexteditorspellcheck" >> $GITHUB_STEP_SUMMARY
-          echo "- composetexteditorfind" >> $GITHUB_STEP_SUMMARY
+          echo "- composetexteditor-markdown" >> $GITHUB_STEP_SUMMARY
+          echo "- composetexteditor-spellcheck" >> $GITHUB_STEP_SUMMARY
+          echo "- composetexteditor-find" >> $GITHUB_STEP_SUMMARY
           echo "**Version:** $VERSION" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Next Steps" >> $GITHUB_STEP_SUMMARY

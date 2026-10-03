@@ -62,16 +62,20 @@ private fun TextEditorState.moveCursorToRow(rowIndex: Int) {
 	cursor.rememberVerticalGoalX(goalX)
 }
 
+/** Whether this row's paragraph goes on in the next row, so its end is a wrap offset. */
+internal val LineWrap.wrapsToNextRow: Boolean
+	get() = virtualLineIndex < textLayoutResult.lineCount - 1
+
 /**
  * The caret position on this row nearest to [x], with the affinity that keeps it
  * drawn here: upstream when it lands on the wrap that ends the row.
  */
-private fun LineWrap.caretAtX(x: Float): Pair<Int, CaretAffinity> {
+internal fun LineWrap.caretAtX(x: Float): Pair<Int, CaretAffinity> {
 	val layout = textLayoutResult
 	val row = virtualLineIndex
 	val text = layout.layoutInput.text.text
 	val rowEnd = layout.getLineEnd(row)
-	val wraps = row < layout.lineCount - 1
+	val wraps = wrapsToNextRow
 	// Past a row's far edge the layout's answer is unreliable: on a wrapped row it is
 	// the last glyph's start (the wrap offset belongs to the next row), and on a row
 	// that ends in a run of the other direction it is a position inside that run. The
@@ -92,7 +96,7 @@ private fun LineWrap.caretAtX(x: Float): Pair<Int, CaretAffinity> {
 internal fun LineWrap.caretX(char: Int): Float {
 	val layout = textLayoutResult
 	val safe = char.coerceIn(0, layout.layoutInput.text.length)
-	val atWrap = virtualLineIndex < layout.lineCount - 1 && safe == layout.getLineEnd(virtualLineIndex)
+	val atWrap = wrapsToNextRow && safe == layout.getLineEnd(virtualLineIndex)
 	return if (atWrap) rowEndX() else layout.getHorizontalPosition(safe, usePrimaryDirection = true)
 }
 

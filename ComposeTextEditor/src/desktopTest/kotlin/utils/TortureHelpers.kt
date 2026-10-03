@@ -8,6 +8,10 @@ import com.darkrockstudios.texteditor.richstyle.RichSpan
 import com.darkrockstudios.texteditor.richstyle.RichSpanStyle
 import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.getRichSpansInRange
+import com.darkrockstudios.texteditor.state.isBlockquote
+import com.darkrockstudios.texteditor.state.isBulletList
+import com.darkrockstudios.texteditor.state.isCodeFence
+import com.darkrockstudios.texteditor.state.isOrderedList
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
@@ -66,18 +70,18 @@ fun EditorUiTestScope.assertBlockState(
 	ordered: Boolean = false,
 	fence: Boolean = false,
 ) {
-	assertEquals(quote, markdown.isBlockquote(line), "line $line blockquote state")
-	assertEquals(bullet, markdown.isBulletList(line), "line $line bullet-list state")
-	assertEquals(ordered, markdown.isOrderedList(line), "line $line ordered-list state")
-	assertEquals(fence, markdown.isCodeFence(line), "line $line code-fence state")
+	assertEquals(quote, markdown.editorState.isBlockquote(line), "line $line blockquote state")
+	assertEquals(bullet, markdown.editorState.isBulletList(line), "line $line bullet-list state")
+	assertEquals(ordered, markdown.editorState.isOrderedList(line), "line $line ordered-list state")
+	assertEquals(fence, markdown.editorState.isCodeFence(line), "line $line code-fence state")
 }
 
 /** The block styles present on [line], as readable names; empty set means a plain line. */
 fun EditorUiTestScope.blockFlags(line: Int): Set<String> = buildSet {
-	if (markdown.isBlockquote(line)) add("quote")
-	if (markdown.isBulletList(line)) add("bullet")
-	if (markdown.isOrderedList(line)) add("ordered")
-	if (markdown.isCodeFence(line)) add("fence")
+	if (markdown.editorState.isBlockquote(line)) add("quote")
+	if (markdown.editorState.isBulletList(line)) add("bullet")
+	if (markdown.editorState.isOrderedList(line)) add("ordered")
+	if (markdown.editorState.isCodeFence(line)) add("fence")
 }
 
 /** Structural sanity of every rich span: ordered, in bounds, no duplicate (range, style) pairs. */

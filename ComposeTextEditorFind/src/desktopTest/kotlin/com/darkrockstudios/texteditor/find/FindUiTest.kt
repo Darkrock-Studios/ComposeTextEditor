@@ -24,17 +24,21 @@ import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.runSkikoComposeUiTest
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import com.darkrockstudios.texteditor.BasicTextEditor
 import com.darkrockstudios.texteditor.CharLineOffset
+import com.darkrockstudios.texteditor.rememberTextEditorStyle
 import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.rememberTextEditorState
+import utils.TestFontFamily
 
 internal const val FIND_EDITOR_TAG = "find-editor-under-test"
 
 /**
  * Composes a real editor under a [FindBar] the way a host does: the bar is shown while
  * [FindUiTestScope.barVisible] is set, and [findShortcut] on the editor toggles it.
+ * The editor lays text out in the bundled test font (`utils.TestFontFamily`).
  */
 @OptIn(ExperimentalTestApi::class)
 internal fun findUiTest(
@@ -60,6 +64,7 @@ internal fun findUiTest(
 						.testTag(FIND_EDITOR_TAG)
 						.findShortcut(findState) { host.barVisible = !host.barVisible },
 					autoFocus = !barInitiallyVisible,
+					style = rememberTextEditorStyle(textStyle = TextStyle(fontFamily = TestFontFamily)),
 				)
 			}
 		}

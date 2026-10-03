@@ -7,14 +7,14 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
+import com.darkrockstudios.texteditor.RichTextStyles
 import com.darkrockstudios.texteditor.input.MacKeyBindings
-import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
 import com.darkrockstudios.texteditor.markdown.withMarkdown
-import utils.editorUiTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import utils.editorUiTest
 
 /**
  * The built-in formatting toggles and their chords (ComposeTextEditor#22). One rule
@@ -24,7 +24,7 @@ import kotlin.test.assertTrue
  */
 class FormattingChordsE2eTest {
 
-	private val config = MarkdownConfiguration.DEFAULT
+	private val config = RichTextStyles.DEFAULT
 	private val bold = config.boldStyle
 	private val underline = SpanStyle(textDecoration = TextDecoration.Underline)
 
@@ -193,7 +193,8 @@ class FormattingChordsE2eTest {
 		initialText = AnnotatedString("Hello world"),
 	) {
 		val redBold = SpanStyle(fontWeight = FontWeight.Bold, color = Color.Red)
-		val markdown = state.withMarkdown(config.copy(boldStyle = redBold))
+		state.richTextStyles = config.copy(boldStyle = redBold)
+		val markdown = state.withMarkdown()
 		dragSelect(fromChar = 6, toChar = 11)
 		press(Key.B, ctrl = true)
 		press(Key.I, ctrl = true)

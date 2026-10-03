@@ -81,6 +81,18 @@ interface RichSpanStyle {
 	 * marker.
 	 */
 	val isHitTestable: Boolean get() = true
+
+	/**
+	 * Whether a span of this style belongs to one paragraph: it covers its line and no
+	 * other, an Enter at the paragraph's start or end carries a copy onto the new
+	 * paragraph (an Enter inside it splits it), and a multi-line insert inside it keeps
+	 * it on its own line. A paragraph's format is one; a block marker is not, since the
+	 * block behavior continues it with its indent.
+	 */
+	val boundToParagraph: Boolean get() = false
+
+	/** Whether adding or removing a span of this style changes how its line is shaped. */
+	val reshapesLine: Boolean get() = false
 }
 
 /**

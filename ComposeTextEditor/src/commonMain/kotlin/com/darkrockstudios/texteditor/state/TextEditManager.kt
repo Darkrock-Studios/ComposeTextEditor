@@ -6,22 +6,32 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
+import com.darkrockstudios.texteditor.annotatedstring.normalizeLineEndings
 import com.darkrockstudios.texteditor.annotatedstring.splitAnnotatedString
+import com.darkrockstudios.texteditor.annotatedstring.withInheritedStyles
+import com.darkrockstudios.texteditor.annotatedstring.withSpanStyles
+import com.darkrockstudios.texteditor.richstyle.LineBlockEditBehavior
 import com.darkrockstudios.texteditor.richstyle.LineBlockStyle
+import com.darkrockstudios.texteditor.richstyle.LineBlockWrite
 import com.darkrockstudios.texteditor.richstyle.RichSpanStyle
 import com.darkrockstudios.texteditor.richstyle.allowedOn
-import com.darkrockstudios.texteditor.richstyle.applyLineBlock
 import com.darkrockstudios.texteditor.richstyle.atListLevel
 import com.darkrockstudios.texteditor.richstyle.demoteLineBlock
 import com.darkrockstudios.texteditor.richstyle.hasLineBlock
+import com.darkrockstudios.texteditor.richstyle.isHeading
 import com.darkrockstudios.texteditor.richstyle.isList
 import com.darkrockstudios.texteditor.richstyle.lineBlockSpanStyles
+import com.darkrockstudios.texteditor.richstyle.lineBlocks
 import com.darkrockstudios.texteditor.richstyle.listBlockAt
 import com.darkrockstudios.texteditor.richstyle.listLevel
 import com.darkrockstudios.texteditor.richstyle.placeholderKindOf
+import com.darkrockstudios.texteditor.richstyle.planDemoteLineBlock
+import com.darkrockstudios.texteditor.richstyle.planLineBlock
+import com.darkrockstudios.texteditor.richstyle.planLineBlocks
+import com.darkrockstudios.texteditor.richstyle.rebuildWithoutBlock
 import com.darkrockstudios.texteditor.richstyle.recordListEdit
 import com.darkrockstudios.texteditor.richstyle.sameListKind
-import com.darkrockstudios.texteditor.richstyle.setLineBlockSpans
+import com.darkrockstudios.texteditor.richstyle.writeLineBlocks
 import com.darkrockstudios.texteditor.utils.appendAnnotatedStrings
 import com.darkrockstudios.texteditor.utils.buildAnnotatedStringWithSpans
 import com.darkrockstudios.texteditor.utils.mergeAnnotatedStrings
@@ -100,11 +110,13 @@ class TextEditManager(private val state: TextEditorState) {
 				lineDelta = 0,
 			)
 
-			// The span is clamped onto the document by updateSpans, so its lines are too.
-			is TextEditOperation.RichSpan -> LayoutUpdate.Spans(
-				operation.range.start.line.coerceIn(0, newLineCount - 1),
-				operation.range.end.line.coerceIn(0, newLineCount - 1),
-			)
+			// The span is clamped onto the document as it lands, so its lines are too. A
+			// paragraph format that shapes its text (alignment, indent, line height) shapes.
+			is TextEditOperation.RichSpan -> {
+				val first = operation.range.start.line.coerceIn(0, newLineCount - 1)
+				val last = operation.range.end.line.coerceIn(0, newLineCount - 1)
+				if (operation.style.reshapesLine) LayoutUpdate.Partial(first, last, 0) else LayoutUpdate.Spans(first, last)
+			}
 
 			is TextEditOperation.LineBlock -> lineBlockLayoutUpdate(operation.lines)
 		}
@@ -126,8 +138,10 @@ class TextEditManager(private val state: TextEditorState) {
 	}
 
 	fun applyOperation(requested: TextEditOperation, addToHistory: Boolean = true) {
-		// Undo and redo replay edits the filter already let through.
-		val screened = if (addToHistory) screen(requested) ?: return else requested
+		val normalized = requested.withNormalizedLineEndings()
+		// Undo and redo replay edits the filter already let through. What a filter
+		// returns is normalised again.
+		val screened = if (addToHistory) screen(normalized)?.withNormalizedLineEndings() ?: return else normalized
 		// Resolved before anything reads it, so what is applied, recorded, and
 		// announced is one and the same operation.
 		val operation = if (screened is TextEditOperation.Replace) resolveInheritedStyle(screened) else screened
@@ -183,14 +197,15 @@ class TextEditManager(private val state: TextEditorState) {
 			// Requested inside the transaction so it merges with any layout work the
 			// handlers posted and the commit flushes a single pass for the operation.
 			state.updateBookKeeping(layoutUpdateFor(operation, oldLineCount, state.textLines.size))
-		}
 
-		if (!isDecoration) {
 			// Deferred to the outermost commit: callers that wrap applyOperation in
 			// their own transaction would otherwise announce an edit whose revision
 			// is still staged, and a subscriber that serializes on the announcement
-			// would write the document as it stood before the edit.
-			state.onCommit { _editOperations.tryEmit(operation) }
+			// would write the document as it stood before the edit. Queued before the
+			// continuation's own operation, so the two are announced in order.
+			if (!isDecoration) state.onCommit { _editOperations.tryEmit(operation) }
+
+			if (addToHistory) continueLineBlocks(operation)
 		}
 	}
 
@@ -326,6 +341,38 @@ class TextEditManager(private val state: TextEditorState) {
 		return metadata
 	}
 
+	/**
+	 * This operation with `\r\n` and lone `\r` in its text turned into `\n`, the one
+	 * place every inserted text passes. A caret its builder put after the text, as
+	 * counted before, goes after what lands; one put anywhere else stays.
+	 */
+	private fun TextEditOperation.withNormalizedLineEndings(): TextEditOperation = when (this) {
+		is TextEditOperation.Insert -> {
+			val normalized = text.normalizeLineEndings()
+			if (normalized === text) this else copy(
+				text = normalized,
+				cursorAfter = endAfterNormalizing(text, normalized, position, cursorAfter),
+			)
+		}
+		is TextEditOperation.Replace -> {
+			val normalized = newText.normalizeLineEndings()
+			val old = oldText.normalizeLineEndings()
+			if (normalized === newText && old === oldText) this else copy(
+				newText = normalized,
+				oldText = old,
+				cursorAfter = endAfterNormalizing(newText, normalized, range.start, cursorAfter),
+			)
+		}
+		else -> this
+	}
+
+	private fun endAfterNormalizing(
+		raw: AnnotatedString,
+		normalized: AnnotatedString,
+		start: CharLineOffset,
+		cursorAfter: CharLineOffset,
+	): CharLineOffset = if (cursorAfter == raw.endWhenInsertedAt(start)) normalized.endWhenInsertedAt(start) else cursorAfter
+
 	private fun TextEditOperation.isNoOp(): Boolean = when (this) {
 		is TextEditOperation.Insert -> text.isEmpty()
 		is TextEditOperation.Delete -> range.start == range.end
@@ -378,27 +425,32 @@ class TextEditManager(private val state: TextEditorState) {
 	/**
 	 * Bakes the styles an `inheritStyle` replace takes from the text it replaces
 	 * into its `newText`, so the operation that is applied, recorded, and announced
-	 * carries exactly the styling that lands in the document. On one line every
-	 * span touching the range is inherited; across lines, every span the range
-	 * overlaps. Inherited styles layer over the replacement's own.
+	 * carries exactly the styling that lands in the document. Each character of the
+	 * replacement takes the styles of the replaced character at its position; the
+	 * characters past the replaced ones, and a replace of nothing, take the styles
+	 * an insert at the range's end would (the caret's typing style when the caret
+	 * is there). A style merely touching the range is not inherited, so a
+	 * composition after bold text with bold toggled off stays plain. Inherited
+	 * styles layer over the replacement's own.
 	 */
 	private fun resolveInheritedStyle(operation: TextEditOperation.Replace): TextEditOperation.Replace {
 		if (!operation.inheritStyle) return operation
 		val newText = operation.newText
-		val inherited = if (operation.range.isSingleLine() && !newText.contains('\n')) {
-			state.textLines[operation.range.start.line].spanStyles.filter { span ->
-				span.start <= operation.range.end.char && span.end >= operation.range.start.char
-			}.map { it.item }.toSet()
-		} else {
-			getStyles(operation.range)
+		val range = operation.range
+		val insertStyles = if (state.cursorPosition == range.end) state.cursor.styles else state.getSpanStylesForEditAt(range.end)
+		if (range.start == range.end) {
+			return operation.copy(newText = newText.withInheritedStyles(insertStyles), inheritStyle = false)
 		}
-		val styled = if (inherited.isEmpty()) {
-			newText
-		} else {
-			buildAnnotatedString {
-				append(newText)
-				inherited.forEach { addStyle(it, 0, newText.length) }
+		val replaced = state.getTextInRange(range)
+		val kept = minOf(replaced.length, newText.length)
+		val styled = buildAnnotatedString {
+			append(newText)
+			for (span in replaced.spanStyles) {
+				val start = span.start.coerceAtMost(kept)
+				val end = span.end.coerceAtMost(kept)
+				if (start < end) addStyle(span.item, start, end)
 			}
+			if (newText.length > kept) insertStyles.forEach { addStyle(it, kept, newText.length) }
 		}
 		return operation.copy(newText = styled, inheritStyle = false)
 	}
@@ -446,29 +498,6 @@ class TextEditManager(private val state: TextEditorState) {
 					append(suffix)
 				}
 			)
-		}
-	}
-
-	private fun getStyles(range: TextEditorRange): Set<SpanStyle> {
-		val firstLine = state.textLines[range.start.line]
-		// Collect styles from all affected lines that overlap with our range
-		return buildSet {
-			// First line styles
-			addAll(firstLine.spanStyles
-				.filter { span -> span.end > range.start.char }
-				.map { it.item })
-
-			// Middle lines styles (if any)
-			(range.start.line + 1 until range.end.line).forEach { lineIndex ->
-				addAll(state.textLines[lineIndex].spanStyles.map { it.item })
-			}
-
-			// Last line styles (if different from first line)
-			if (range.end.line > range.start.line && range.end.line < state.textLines.size) {
-				addAll(state.textLines[range.end.line].spanStyles
-					.filter { span -> span.start < range.end.char }
-					.map { it.item })
-			}
 		}
 	}
 
@@ -636,57 +665,36 @@ class TextEditManager(private val state: TextEditorState) {
 		} else {
 			emptyMap()
 		}
-		if (operation.range.isSingleLine()) {
-			if (operation.isAdd) {
-				val updatedLine = spanManager.applySingleLineSpanStyle(
-					line = state.textLines[operation.range.start.line],
-					start = operation.range.start.char,
-					end = operation.range.end.char,
-					spanStyle = operation.style
-				)
-				state.setLine(operation.range.start.line, updatedLine)
-			} else {
-				val updatedLine = spanManager.removeSingleLineSpanStyle(
-					line = state.textLines[operation.range.start.line],
-					start = operation.range.start.char,
-					end = operation.range.end.char,
-					spanStyle = operation.style
-				)
-				state.setLine(operation.range.start.line, updatedLine)
-			}
+		val staged = stagedStyledLines
+		if (staged != null) {
+			styleLines(operation, staged)
 		} else {
-			// Handle multi-line case
-			val startLine = operation.range.start.line
-			val endLine = operation.range.end.line
-
-			for (lineIndex in startLine..endLine) {
-				val lineStart = if (lineIndex == startLine) operation.range.start.char else 0
-				val lineEnd = if (lineIndex == endLine)
-					operation.range.end.char
-				else
-					state.getLine(lineIndex).length
-
-				if (operation.isAdd) {
-					val updatedLine = spanManager.applySingleLineSpanStyle(
-						state.textLines[lineIndex],
-						lineStart,
-						lineEnd,
-						operation.style
-					)
-					state.setLine(lineIndex, updatedLine)
-				} else {
-					val updatedLine = spanManager.removeSingleLineSpanStyle(
-						state.textLines[lineIndex],
-						lineStart,
-						lineEnd,
-						operation.style
-					)
-					state.setLine(lineIndex, updatedLine)
-				}
-			}
+			val styled = HashMap<Int, AnnotatedString>()
+			styleLines(operation, styled)
+			state.writeLines(styled)
 		}
 
 		return OperationMetadata(spanStylesBefore = before)
+	}
+
+	/**
+	 * Adds [operation]'s style to, or removes it from, each line it covers, reading and
+	 * writing [styled]'s copy of a line where it has one, so several operations over
+	 * the same lines compose before anything is written.
+	 */
+	private fun styleLines(operation: TextEditOperation.StyleSpan, styled: MutableMap<Int, AnnotatedString>) {
+		val startLine = operation.range.start.line
+		val endLine = operation.range.end.line
+		for (lineIndex in startLine..endLine) {
+			val line = styled[lineIndex] ?: state.textLines[lineIndex]
+			val start = if (lineIndex == startLine) operation.range.start.char else 0
+			val end = if (lineIndex == endLine) operation.range.end.char else line.length
+			styled[lineIndex] = if (operation.isAdd) {
+				spanManager.applySingleLineSpanStyle(line, start, end, operation.style)
+			} else {
+				spanManager.removeSingleLineSpanStyle(line, start, end, operation.style)
+			}
+		}
 	}
 
 	private fun applyRichSpanOperation(operation: TextEditOperation.RichSpan): OperationMetadata? {
@@ -709,14 +717,121 @@ class TextEditManager(private val state: TextEditorState) {
 	}
 
 	// Restores each affected line's content and its exact block-span set for one
-	// direction of the toggle. The spans go through the direct manager path so the
-	// single LineBlock history entry isn't double-counted.
+	// direction of the toggle, through the direct path so the single LineBlock history
+	// entry isn't double-counted. A line already so (the toggle that recorded the
+	// entry has just left it that way) is not written again.
 	private fun applyLineBlockState(lines: List<LineBlockChange>, undo: Boolean) {
-		lines.forEach { change ->
-			val content = if (undo) change.contentBefore else change.contentAfter
-			val spans = if (undo) change.blockSpansBefore else change.blockSpansAfter
-			state.setLine(change.lineIndex, content)
-			state.setLineBlockSpans(change.lineIndex, spans)
+		state.writeLineBlocks(
+			lines.mapNotNull { change ->
+				val content = if (undo) change.contentBefore else change.contentAfter
+				val spanStyles = if (undo) change.blockSpansBefore else change.blockSpansAfter
+				val line = change.lineIndex
+				if (state.textLines[line] === content && state.lineBlockSpanStyles(line) == spanStyles) return@mapNotNull null
+				LineBlockWrite(line, content, spanStyles)
+			}
+		)
+	}
+
+	/**
+	 * Continues a block onto the lines [operation] breaks its line into, as Enter does:
+	 * a list item at its level, a quote, a fence. The block is the first line's, or,
+	 * when the break came at the line's start and its markers followed the text down,
+	 * the last's. A heading continues only when the break falls inside its text; the
+	 * lines added at its end are body text, without its text style. A replace across
+	 * lines leaves its last line the blocks of the line its tail came from. Recorded as
+	 * a LineBlock step of the same undo group, so a redo, which replays the text
+	 * unrecorded, puts the markers back, and an undo never continues a block onto the
+	 * text it restores. Enter is [LineBlockEditBehavior]'s, and an editor without that
+	 * behavior wants plain line breaks.
+	 */
+	private fun continueLineBlocks(operation: TextEditOperation) {
+		if (enterDepth > 0 || LineBlockEditBehavior !in state.editBehaviors) return
+		val (range, text) = when (operation) {
+			is TextEditOperation.Insert -> TextEditorRange(operation.position, operation.position) to operation.text.text
+			is TextEditOperation.Replace -> operation.range to operation.newText.text
+			else -> return
+		}
+		val breaks = text.count { it == '\n' }
+		if (breaks == 0) return
+		val first = range.start.line
+		val last = first + breaks
+		val singleLine = range.isSingleLine()
+		val fromLast = singleLine && range.start.char == 0 && state.lineBlocks(first).isEmpty()
+		val blocks = state.lineBlocks(if (fromLast) last else first)
+		if (blocks.isEmpty()) return
+		val tail = state.textLines[last].length - (text.length - text.lastIndexOf('\n') - 1)
+		val breakInside = singleLine && tail > 0
+		val (ended, continued) = blocks.partition { it.isHeading && !breakInside }
+		if (fromLast && ended.isNotEmpty()) {
+			// A lone break in an empty line took its markers down; a heading belongs to
+			// the line above, as Enter leaves it.
+			state.keepingCopiedRichSpans { continuationOf(first..last, first..first, blocks, emptyList(), last to ended) }
+			return
+		}
+		val targets = when {
+			fromLast -> first until last
+			singleLine -> (first + 1)..last
+			else -> (first + 1) until last
+		}
+		// The last line of a replace across lines keeps its own blocks, but not a heading's style.
+		val touched = if (singleLine || ended.isEmpty()) targets else first + 1..last
+		if (touched.isEmpty()) return
+		// Part of the edit that broke the line, so a paste's copied spans outlive it too.
+		state.keepingCopiedRichSpans { continuationOf(touched, targets, continued, ended) }
+	}
+
+	/**
+	 * Continues [continued] onto [targets], strips [ended] headings from the rest of
+	 * [touched], and first takes the blocks [demoted] names off its line, as one
+	 * recorded step.
+	 */
+	private fun continuationOf(
+		touched: IntRange,
+		targets: IntRange,
+		continued: List<LineBlockStyle>,
+		ended: List<LineBlockStyle>,
+		demoted: Pair<Int, List<LineBlockStyle>>? = null,
+	) {
+		recordLineBlockChanges(touched.toList()) {
+			demoted?.let { (line, gone) -> gone.forEach { state.demoteLineBlock(line, it) } }
+			state.writeLineBlocks(
+				touched.mapNotNull { line ->
+					val kind = placeholderKindOf(state.workingContent, line)
+					val own = state.lineBlocks(line)
+					// A tail carried onto the line brings its block's indent over part of it;
+					// the block is put back over the whole line.
+					val adding = if (line in targets) continued.filter { it.allowedOn(kind) && it !in own } else emptyList()
+					val unwrapped = adding.fold(state.textLines[line]) { lineText, block -> rebuildWithoutBlock(lineText, block) }
+					val planned = state.planLineBlocks(line, adding, unwrapped)
+					val content = planned?.content ?: state.textLines[line]
+					// Every heading shares its paragraph style, so a line that is a heading keeps
+					// it and loses only an ended heading's text style.
+					val plain = ended.filter { it !in own }.fold(content) { lineText, heading ->
+						when {
+							own.none { it.isHeading } -> rebuildWithoutBlock(lineText, heading)
+							heading.textStyle == null -> lineText
+							else -> lineText.withSpanStyles(lineText.spanStyles.filter { it.item != heading.textStyle })
+						}
+					}
+					when {
+						planned != null -> LineBlockWrite(line, plain, planned.spanStyles)
+						plain != content -> LineBlockWrite(line, plain, state.lineBlockSpanStyles(line))
+						else -> null
+					}
+				}
+			)
+		}
+	}
+
+	private var enterDepth = 0
+
+	/** Runs [block], the Enter key's own line break, which [continueLineBlocks] leaves to the behaviors. */
+	internal fun <T> asEnter(block: () -> T): T {
+		enterDepth++
+		try {
+			return block()
+		} finally {
+			enterDepth--
 		}
 	}
 
@@ -741,20 +856,21 @@ class TextEditManager(private val state: TextEditorState) {
 		} else {
 			block.takeIf { state.hasLineBlock(line, block) }
 		}
-		val anyOff = targets.any { present(it) == null }
+		val presentOn = targets.associateWith(::present)
+		val anyOff = presentOn.values.any { it == null }
 		// Clearing, demoting or re-quoting a list item changes what the items
 		// after the range may hang from; recordListEdit brings them up with it.
 		state.recordListEdit(targets) {
-			targets.forEach { lineIdx ->
-				if (anyOff) {
-					if (present(lineIdx) == null) {
-						val level = state.listBlockAt(lineIdx)?.listLevel ?: 0
-						state.applyLineBlock(lineIdx, block.atListLevel(level))
-					}
-				} else {
-					state.demoteLineBlock(lineIdx, present(lineIdx)!!)
+			// Every line is planned first and all are written in one go.
+			val writes = targets.mapNotNull { lineIdx ->
+				val on = presentOn.getValue(lineIdx)
+				when {
+					!anyOff -> state.planDemoteLineBlock(lineIdx, on!!)
+					on != null -> null
+					else -> state.planLineBlock(lineIdx, block.atListLevel(state.listBlockAt(lineIdx)?.listLevel ?: 0))
 				}
 			}
+			state.writeLineBlocks(writes)
 		}
 	}
 
@@ -828,8 +944,7 @@ class TextEditManager(private val state: TextEditorState) {
 	}
 
 	private fun undoLineBlock(operation: TextEditOperation.LineBlock) {
-		// Restores line content and block spans per line; without the transaction
-		// each of those is its own publicly visible revision.
+		// The restored lines, the caret and the layout request are one revision.
 		state.withAtomicEdit {
 			applyLineBlockState(operation.lines, undo = true)
 			state.cursor.releaseManualStyles()
@@ -945,16 +1060,28 @@ class TextEditManager(private val state: TextEditorState) {
 	 * it, as read from the styles each line carried before. A blind inverse over
 	 * the whole range would strip styling the range already had (bold applied over
 	 * a partly bold selection). Each piece is an ordinary operation through the
-	 * pipeline, so what consumers are told is what changed.
+	 * pipeline, so what consumers are told is what changed; their lines are staged
+	 * and written once.
 	 */
 	private fun undoStyleSpan(operation: TextEditOperation.StyleSpan, metadata: OperationMetadata) {
 		val pieces = exactInverseOf(operation, metadata.spanStylesBefore)
 		state.withAtomicEdit {
-			pieces.forEach { applyOperation(it, addToHistory = false) }
-			// An operation that changed nothing still moved the caret.
+			val staged = HashMap<Int, AnnotatedString>()
+			stagedStyledLines = staged
+			try {
+				pieces.forEach { applyOperation(it, addToHistory = false) }
+			} finally {
+				stagedStyledLines = null
+			}
+			state.writeLines(staged)
+			// An operation that changed nothing still moved the caret, and the typing
+			// style is read from the written lines.
 			state.cursor.updatePosition(operation.cursorBefore)
 		}
 	}
+
+	/** While set, style operations style these copies of their lines instead of writing them. */
+	private var stagedStyledLines: HashMap<Int, AnnotatedString>? = null
 
 	/**
 	 * The inverse of [operation] as the operations that undo exactly what it did,

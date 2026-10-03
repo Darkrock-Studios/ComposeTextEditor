@@ -16,7 +16,7 @@ import com.darkrockstudios.texteditor.richstyle.lineBlocks
  * - A collapsed caret toggles [style] for the text typed next, leaving the document alone.
  *
  * Styles match by equality, as [addStyleSpan] and [removeStyleSpan] do, so pass the
- * exact style the document uses (a markdown editor's configured one).
+ * exact style the document uses (the state's configured one).
  */
 fun TextEditorState.toggleSpanStyle(style: SpanStyle) {
 	// A drag that ends where it began leaves an empty selection rather than none.
@@ -58,8 +58,8 @@ fun TextEditorState.hasStyleThroughout(range: TextEditorRange, style: SpanStyle)
  * typed next to the plain style of its line instead, leaving the document alone.
  *
  * What structure puts in the text stays: the style a heading or code block gives its
- * line, and in a markdown editor the body text style and the link style on links. Links
- * stay links; [unlink] takes them off.
+ * line, and, once the styles are installed, the body text style and the link style on
+ * links. Links stay links; [unlink] takes them off.
  */
 fun TextEditorState.clearFormatting() {
 	val selection = selector.selection?.takeIf { it.start != it.end }
@@ -74,7 +74,7 @@ fun TextEditorState.clearFormatting() {
 			.mapTo(found) { it.item }
 	}
 	val lineStyles = (selection.start.line..selection.end.line).flatMapTo(mutableSetOf()) { lineStyles(it) }
-	val linkStyle = markdownConfiguration.linkStyle.takeIf { hasMarkdownConfiguration }
+	val linkStyle = richTextStyles.linkStyle.takeIf { richTextStylesSet }
 	editGroup {
 		for (style in found - listOfNotNull(bodyStyle).toSet()) {
 			when {
@@ -92,12 +92,12 @@ fun TextEditorState.clearFormatting() {
 	}
 }
 
-/** The markdown body text style, which structure puts on every line of a markdown editor. */
+/** The body text style, which the importers put on every line, once the styles are installed. */
 internal val TextEditorState.bodyStyle: SpanStyle?
-	get() = markdownConfiguration.defaultTextStyle.takeIf { hasMarkdownConfiguration }
+	get() = richTextStyles.defaultTextStyle.takeIf { richTextStylesSet }
 
 /** The styles a heading or code block on [line] gives it. */
-private fun TextEditorState.lineStyles(line: Int): Set<SpanStyle> =
+internal fun TextEditorState.lineStyles(line: Int): Set<SpanStyle> =
 	lineBlocks(line).mapNotNullTo(mutableSetOf()) { it.textStyle }
 
 /** Removes [linkStyle] from the parts of [range] that no link covers. */
@@ -141,7 +141,7 @@ fun TextEditorState.unlink() {
 	if (links.isEmpty()) return
 	editGroup {
 		links.forEach { link ->
-			removeStyleSpan(link.range, markdownConfiguration.linkStyle)
+			removeStyleSpan(link.range, richTextStyles.linkStyle)
 			removeRichSpan(link)
 		}
 	}

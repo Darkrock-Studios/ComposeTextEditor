@@ -10,6 +10,7 @@ import com.darkrockstudios.texteditor.richstyle.SpellCheckStyle
 import com.darkrockstudios.texteditor.spellcheck.api.Correction
 import com.darkrockstudios.texteditor.spellcheck.api.EditorSpellChecker
 import com.darkrockstudios.texteditor.spellcheck.api.Suggestion
+import com.darkrockstudios.texteditor.state.EditorInputFilter
 import com.darkrockstudios.texteditor.state.TextEditOperation
 import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.WordSegment
@@ -159,6 +160,67 @@ class SpellCheckStateTest {
 		// Assert
 		assertFalse(result)
 		assertTrue(textState.getRichSpansInRange(segment.range).isEmpty())
+	}
+
+	private fun flags() = textState.richSpanManager.getAllRichSpans().filter { it.style is SpellCheckStyle }
+
+	private val teh = WordSegment("teh", TextEditorRange(CharLineOffset(0, 0), CharLineOffset(0, 3)))
+
+	@Test
+	fun `a correction that lands removes the flag`() = runTest {
+		textState.setText("teh cat")
+		spellChecker.correctWords = setOf("cat")
+		spellCheckState.runFullSpellCheck()
+		assertEquals(listOf(teh.range), flags().map { it.range })
+
+		spellCheckState.correctSpelling(teh, "the")
+
+		assertEquals("the cat", textState.getAllText().text)
+		assertTrue(flags().isEmpty())
+	}
+
+	@Test
+	fun `a correction the input filter refuses keeps the flag`() = runTest {
+		textState.setText("teh cat")
+		spellChecker.correctWords = setOf("cat")
+		spellCheckState.runFullSpellCheck()
+		textState.inputFilter = EditorInputFilter { _, _, _ -> null }
+
+		spellCheckState.correctSpelling(teh, "the")
+
+		assertEquals("teh cat", textState.getAllText().text)
+		assertEquals(listOf(teh.range), flags().map { it.range })
+	}
+
+	@Test
+	fun `a correction the input filter changes is an edit like any other`() = runTest {
+		textState.setText("teh cat")
+		spellChecker.correctWords = setOf("cat")
+		spellCheckState.runFullSpellCheck()
+		textState.inputFilter = EditorInputFilter.maxLength(7)
+
+		spellCheckState.correctSpelling(teh, "thee")
+
+		assertEquals("the cat", textState.getAllText().text)
+		assertTrue(flags().isEmpty())
+	}
+
+	@Test
+	fun `a sentence correction the input filter refuses keeps the flag`() = runTest {
+		textState.setText("teh cat")
+		val correction = Correction(teh.range, "teh", listOf(Suggestion("the")))
+		textState.addRichSpan(teh.range, SentenceIssueStyle(correction))
+		textState.inputFilter = EditorInputFilter { _, _, _ -> null }
+
+		spellCheckState.applySentenceCorrection(correction, "the")
+
+		assertEquals(listOf(teh.range), flags().map { it.range })
+
+		textState.inputFilter = null
+		spellCheckState.applySentenceCorrection(correction, "the")
+
+		assertEquals("the cat", textState.getAllText().text)
+		assertTrue(flags().isEmpty())
 	}
 
 	@Test

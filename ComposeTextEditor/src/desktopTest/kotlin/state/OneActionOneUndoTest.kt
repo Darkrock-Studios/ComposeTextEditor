@@ -10,8 +10,6 @@ import androidx.compose.ui.text.font.FontWeight
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.LineWrap
 import com.darkrockstudios.texteditor.TextEditorRange
-import com.darkrockstudios.texteditor.richstyle.RichSpan
-import com.darkrockstudios.texteditor.richstyle.RichSpanStyle
 import com.darkrockstudios.texteditor.input.imeCommitText
 import com.darkrockstudios.texteditor.input.imeDeleteSurroundingText
 import com.darkrockstudios.texteditor.input.imeDeleteSurroundingTextInCodePoints
@@ -20,16 +18,19 @@ import com.darkrockstudios.texteditor.input.imeSetComposingRegion
 import com.darkrockstudios.texteditor.input.imeSetComposingText
 import com.darkrockstudios.texteditor.markdown.MarkdownExtension
 import com.darkrockstudios.texteditor.richstyle.LinkSpanStyle
+import com.darkrockstudios.texteditor.richstyle.RichSpan
+import com.darkrockstudios.texteditor.richstyle.RichSpanStyle
 import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.insertTypedCharacter
 import com.darkrockstudios.texteditor.state.insertTypedString
+import com.darkrockstudios.texteditor.state.setLink
 import io.mockk.mockk
-import kotlinx.coroutines.test.TestScope
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlinx.coroutines.test.TestScope
 
 /**
  * One user action is one undo step: typing or Enter over a selection, a link,
@@ -677,7 +678,7 @@ class OneActionOneUndoTest {
 		val extension = MarkdownExtension(state)
 		val range = TextEditorRange(CharLineOffset(0, 6), CharLineOffset(0, 10))
 
-		extension.setLink(range, "https://example.com")
+		extension.editorState.setLink(range, "https://example.com")
 		assertTrue(state.richSpanManager.getAllRichSpans().any { it.style is LinkSpanStyle })
 
 		assertEquals(1, state.undoSteps())

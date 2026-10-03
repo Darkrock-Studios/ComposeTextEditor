@@ -3,18 +3,18 @@ package dragdrop
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.buildAnnotatedString
 import com.darkrockstudios.texteditor.CharLineOffset
+import com.darkrockstudios.texteditor.RichTextStyles
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.dragdrop.dropText
-import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
 import com.darkrockstudios.texteditor.markdown.withMarkdown
 import com.darkrockstudios.texteditor.state.TextEditorState
 import io.mockk.mockk
-import kotlinx.coroutines.test.TestScope
-import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.runTest
 
 /**
  * A drop inserts the dragged text where it lands and selects it; a move within the
@@ -23,7 +23,7 @@ import kotlin.test.assertTrue
  */
 class TextDropTest {
 
-	private val config = MarkdownConfiguration.DEFAULT
+	private val config = RichTextStyles.DEFAULT
 
 	private fun TestScope.createState(text: String) =
 		TextEditorState(scope = this, measurer = mockk(relaxed = true), initialText = AnnotatedString(text))

@@ -18,8 +18,9 @@ import com.darkrockstudios.texteditor.TextEditorRange
  * - Spanish: Sr., Sra., Dr.
  */
 fun TextEditorState.sentenceSegments(): Sequence<SentenceSegment> = sequence {
-	val linesSnapshot = textLines.toList()
-	if (linesSnapshot.isEmpty()) return@sequence
+	// The line list is immutable, so an edit during a scan cannot pull lines out from under it.
+	val lines = textLines
+	if (lines.isEmpty()) return@sequence
 
 	var sentenceStartLine = 0
 	var sentenceStartChar = 0
@@ -29,7 +30,7 @@ fun TextEditorState.sentenceSegments(): Sequence<SentenceSegment> = sequence {
 	var currentLineInSentence = 0
 	var currentCharInLine = 0
 
-	for ((lineIndex, line) in linesSnapshot.withIndex()) {
+	for ((lineIndex, line) in lines.withIndex()) {
 		val text = line.text
 		var charIndex = 0
 
@@ -40,7 +41,7 @@ fun TextEditorState.sentenceSegments(): Sequence<SentenceSegment> = sequence {
 
 			if (isSentenceEndingPunctuation(char)) {
 				val accumulated = sentenceBuilder.toString()
-				if (isTrueSentenceEnd(text, charIndex, accumulated, linesSnapshot, lineIndex)) {
+				if (isTrueSentenceEnd(text, charIndex, accumulated, lines, lineIndex)) {
 					// Found a sentence end
 					val sentenceText = accumulated.trim()
 					if (sentenceText.isNotEmpty()) {
@@ -79,7 +80,7 @@ fun TextEditorState.sentenceSegments(): Sequence<SentenceSegment> = sequence {
 		}
 
 		// Add newline to sentence builder for multi-line sentences (preserves spacing)
-		if (lineIndex < linesSnapshot.lastIndex && sentenceBuilder.isNotEmpty()) {
+		if (lineIndex < lines.lastIndex && sentenceBuilder.isNotEmpty()) {
 			sentenceBuilder.append('\n')
 		}
 	}
@@ -87,8 +88,8 @@ fun TextEditorState.sentenceSegments(): Sequence<SentenceSegment> = sequence {
 	// Yield any remaining text as a final sentence
 	val remainingText = sentenceBuilder.toString().trim()
 	if (remainingText.isNotEmpty()) {
-		val lastLine = linesSnapshot.lastIndex
-		val lastLineLength = linesSnapshot[lastLine].text.length
+		val lastLine = lines.lastIndex
+		val lastLineLength = lines[lastLine].text.length
 		yield(
 			SentenceSegment(
 				text = remainingText,

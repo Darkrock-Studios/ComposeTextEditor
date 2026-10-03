@@ -2,7 +2,7 @@ package com.darkrockstudios.texteditor.clipboard
 
 import androidx.compose.ui.platform.Clipboard
 import androidx.compose.ui.text.AnnotatedString
-import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
+import com.darkrockstudios.texteditor.RichTextStyles
 
 /**
  * Platform-specific clipboard helper for text operations.
@@ -16,9 +16,9 @@ import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
  * - iOS: styled, as HTML beside plain text, with the copy id in a private type
  * - Web: styled, as HTML beside plain text, where the browser allows it
  *
- * `configuration` supplies the styling that header levels are matched against
- * when converting to and from HTML, so pass the editor's own or custom header
- * sizes will not survive the round trip.
+ * `styles` supplies the styling that header levels are matched against when
+ * converting to and from HTML, so pass the editor's own or custom header sizes
+ * will not survive the round trip.
  */
 expect object ClipboardHelper {
 	/**
@@ -30,7 +30,7 @@ expect object ClipboardHelper {
 	 */
 	suspend fun getText(
 		clipboard: Clipboard,
-		configuration: MarkdownConfiguration = MarkdownConfiguration.DEFAULT,
+		styles: RichTextStyles = RichTextStyles.DEFAULT,
 	): AnnotatedString?
 
 	/**
@@ -54,14 +54,18 @@ expect object ClipboardHelper {
 	 * [html] is the markup to offer, which callers copying out of an editor supply
 	 * so the fragment carries the selection's block structure. Null falls back to
 	 * markup derived from [text] alone, which describes its character styling only.
+	 *
+	 * Answers whether the clipboard took the text: a platform can refuse the write
+	 * (the web without permission or a user gesture, AWT while another application
+	 * holds the clipboard), and Cut deletes only once it has landed.
 	 */
 	suspend fun setText(
 		clipboard: Clipboard,
 		text: AnnotatedString,
-		configuration: MarkdownConfiguration = MarkdownConfiguration.DEFAULT,
+		styles: RichTextStyles = RichTextStyles.DEFAULT,
 		copyId: Long? = null,
 		html: String? = null,
-	)
+	): Boolean
 
 	/**
 	 * The [copyId] this editor attached to the current clipboard content, or null

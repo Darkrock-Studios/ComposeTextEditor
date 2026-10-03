@@ -120,17 +120,18 @@ action ids and asks each spec whether it currently applies, instead of knowing
 what any of them mean.
 
 The core registers its built-ins (`BuiltinEditorActions`) when the state is
-constructed. Nothing else in the library registers an action:
-`MarkdownExtension` still exposes its block toggles as plain functions, and a
-host that wants a chord for one registers the action itself.
+constructed. Nothing else in the library registers an action: the block
+toggles are plain functions on the state (`toggleBulletList` and the rest of
+`state/TextEditorStateBlockExt.kt`), and a host that wants a chord for one
+registers the action itself.
 
 ### Formatting toggles
 
 `editor.toggleBold`, `editor.toggleItalic`, `editor.toggleUnderline`,
 `editor.toggleStrikethrough` and `editor.toggleInlineCode` are built-ins. They
-apply the styles of the state's `markdownConfiguration`, which a
-`MarkdownExtension` keeps in sync with its own, so one action serves a plain
-editor and a markdown one, and a markdown editor exports what it applied.
+apply the styles of the state's `richTextStyles`, which the format addons
+read as well, so one action serves a plain editor and a markdown one, and a
+markdown editor exports what it applied.
 Underline has no markdown form and toggles
 `SpanStyle(textDecoration = TextDecoration.Underline)`.
 
@@ -331,7 +332,7 @@ something needs it.
 Line blocks are not a markdown feature. They are a core capability that
 markdown happens to serialize, so the behavior lives in the library
 (`LineBlockEditBehavior` in `richstyle`) and is registered by default;
-`MarkdownExtension` remains a consumer. The semantics documented under
+the markdown module remains a consumer. The semantics documented under
 "Smart editing" in [line-blocks.md](line-blocks.md) are unchanged by where the
 code sits.
 

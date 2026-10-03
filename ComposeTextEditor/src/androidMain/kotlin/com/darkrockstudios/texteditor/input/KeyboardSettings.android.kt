@@ -6,10 +6,13 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 
-// The mapping follows Compose's own for BasicTextField, multi-line.
+// The mapping follows Compose's own for BasicTextField.
 
-/** `EditorInfo.inputType`: the layout's class and variation, multi-line wherever the class takes text. */
-internal fun KeyboardSettings.androidInputType(): Int {
+/**
+ * `EditorInfo.inputType`: the layout's class and variation, multi-line wherever the class
+ * takes text, unless the editor is a [singleLine].
+ */
+internal fun KeyboardSettings.androidInputType(singleLine: Boolean = false): Int {
 	var type = when (keyboardType) {
 		KeyboardType.Number -> InputType.TYPE_CLASS_NUMBER
 		KeyboardType.Phone -> InputType.TYPE_CLASS_PHONE
@@ -21,7 +24,7 @@ internal fun KeyboardSettings.androidInputType(): Int {
 		else -> InputType.TYPE_CLASS_TEXT
 	}
 	if (type and InputType.TYPE_MASK_CLASS != InputType.TYPE_CLASS_TEXT) return type
-	type = type or InputType.TYPE_TEXT_FLAG_MULTI_LINE
+	if (!singleLine) type = type or InputType.TYPE_TEXT_FLAG_MULTI_LINE
 	type = type or when (capitalization) {
 		KeyboardCapitalization.Characters -> InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS
 		KeyboardCapitalization.Words -> InputType.TYPE_TEXT_FLAG_CAP_WORDS
@@ -43,7 +46,10 @@ internal fun capsModesOf(inputType: Int): Int {
 }
 
 /** The `EditorInfo` action the keyboard's action key sends: unspecified for Enter. */
-internal fun KeyboardSettings.androidEditorAction(): Int = when (imeAction) {
+internal fun KeyboardSettings.androidEditorAction(singleLine: Boolean = false): Int =
+	imeActionFor(singleLine).androidEditorAction()
+
+internal fun ImeAction.androidEditorAction(): Int = when (this) {
 	ImeAction.None -> EditorInfo.IME_ACTION_NONE
 	ImeAction.Go -> EditorInfo.IME_ACTION_GO
 	ImeAction.Search -> EditorInfo.IME_ACTION_SEARCH
@@ -55,11 +61,11 @@ internal fun KeyboardSettings.androidEditorAction(): Int = when (imeAction) {
 }
 
 /** `EditorInfo.imeOptions`: the action, and never the fullscreen extract UI. */
-internal fun KeyboardSettings.androidImeOptions(): Int {
-	var options = androidEditorAction() or EditorInfo.IME_FLAG_NO_FULLSCREEN or EditorInfo.IME_FLAG_NO_EXTRACT_UI
+internal fun KeyboardSettings.androidImeOptions(singleLine: Boolean = false): Int {
+	var options = androidEditorAction(singleLine) or EditorInfo.IME_FLAG_NO_FULLSCREEN or EditorInfo.IME_FLAG_NO_EXTRACT_UI
 	if (keyboardType == KeyboardType.Ascii) options = options or EditorInfo.IME_FLAG_FORCE_ASCII
 	// A multi-line field's Enter starts a line, as EditText sets it, unless an action was asked for.
-	val multiLine = androidInputType() and InputType.TYPE_TEXT_FLAG_MULTI_LINE != 0
+	val multiLine = androidInputType(singleLine) and InputType.TYPE_TEXT_FLAG_MULTI_LINE != 0
 	if (multiLine && imeAction == ImeAction.Default) options = options or EditorInfo.IME_FLAG_NO_ENTER_ACTION
 	return options
 }

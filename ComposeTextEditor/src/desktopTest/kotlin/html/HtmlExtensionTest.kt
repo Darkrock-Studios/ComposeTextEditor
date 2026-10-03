@@ -1,8 +1,8 @@
 package html
 
 import androidx.compose.ui.text.AnnotatedString
+import com.darkrockstudios.texteditor.RichTextStyles
 import com.darkrockstudios.texteditor.html.HtmlExtension
-import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
 import com.darkrockstudios.texteditor.markdown.MarkdownExtension
 import com.darkrockstudios.texteditor.richstyle.BlockquoteSpanStyle
 import com.darkrockstudios.texteditor.richstyle.BulletListSpanStyle
@@ -14,14 +14,14 @@ import com.darkrockstudios.texteditor.richstyle.OrderedListSpanStyle
 import com.darkrockstudios.texteditor.richstyle.RichSpanStyle
 import com.darkrockstudios.texteditor.state.TextEditorState
 import io.mockk.mockk
-import kotlinx.coroutines.test.TestScope
-import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.runTest
 
 class HtmlExtensionTest {
 
-	private val config = MarkdownConfiguration.DEFAULT
+	private val config = RichTextStyles.DEFAULT
 
 	private fun TestScope.createHtmlExtension(initialText: String? = null): HtmlExtension {
 		val state = TextEditorState(
@@ -29,7 +29,7 @@ class HtmlExtensionTest {
 			measurer = mockk(relaxed = true),
 			initialText = initialText?.let { AnnotatedString(it) },
 		)
-		return HtmlExtension(state, config)
+		return HtmlExtension(state)
 	}
 
 	private fun HtmlExtension.linesWith(style: RichSpanStyle): List<Int> =
@@ -291,9 +291,9 @@ class HtmlExtensionTest {
 		val extension = createHtmlExtension()
 		extension.importHtml("<ul><li>a<ol><li>b</li></ol></li></ul>")
 
-		// Nested lists render flat, but the innermost style is the one that wins.
+		// The innermost list is the item's, one level down.
 		assertEquals(listOf(0), extension.linesWith(BulletListSpanStyle))
-		assertEquals(listOf(1), extension.linesWith(OrderedListSpanStyle))
+		assertEquals(listOf(1), extension.linesWith(OrderedListSpanStyle.of(1)))
 	}
 
 	@Test
@@ -308,8 +308,8 @@ class HtmlExtensionTest {
 	@Test
 	fun `a markdown document survives a trip through html`() = runTest {
 		val state = TextEditorState(scope = this, measurer = mockk(relaxed = true))
-		val markdown = MarkdownExtension(state, config)
-		val html = HtmlExtension(state, config)
+		val markdown = MarkdownExtension(state)
+		val html = HtmlExtension(state)
 		val source = "# Title\n\nSome **bold** text.\n\n- one\n- two\n\n> quoted"
 
 		markdown.importMarkdown(source)

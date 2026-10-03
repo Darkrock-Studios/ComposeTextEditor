@@ -14,7 +14,7 @@ import com.darkrockstudios.texteditor.clipboard.ClipboardHelper
 import com.darkrockstudios.texteditor.clipboard.offersText
 import com.darkrockstudios.texteditor.clipboard.readHtmlMarkup
 import com.darkrockstudios.texteditor.clipboard.readStyledText
-import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
+import com.darkrockstudios.texteditor.RichTextStyles
 import java.awt.dnd.DropTargetDragEvent
 import java.awt.dnd.DropTargetDropEvent
 
@@ -30,11 +30,11 @@ internal actual fun textDragTransferData(
 	text: AnnotatedString,
 	html: String,
 	dragId: Long,
-	configuration: MarkdownConfiguration,
+	styles: RichTextStyles,
 	allowMove: Boolean,
 	onEnded: (moved: Boolean) -> Unit,
 ): DragAndDropTransferData? = DragAndDropTransferData(
-	transferable = DragAndDropTransferable(AnnotatedStringTransferable(text, configuration, copyId = dragId, blockHtml = html)),
+	transferable = DragAndDropTransferable(AnnotatedStringTransferable(text, styles, copyId = dragId, blockHtml = html)),
 	supportedActions = if (allowMove) {
 		listOf(DragAndDropTransferAction.Move, DragAndDropTransferAction.Copy)
 	} else {
@@ -55,9 +55,9 @@ internal actual fun DragAndDropEvent.carriesText(): Boolean =
 	runCatching { awtTransferable.offersText() }.getOrDefault(false)
 
 @OptIn(ExperimentalComposeUiApi::class)
-internal actual fun DragAndDropEvent.droppedText(configuration: MarkdownConfiguration): DroppedText? {
+internal actual fun DragAndDropEvent.droppedText(styles: RichTextStyles): DroppedText? {
 	val transferable = runCatching { awtTransferable }.getOrNull() ?: return null
-	val text = transferable.readStyledText(configuration) ?: return null
+	val text = transferable.readStyledText(styles) ?: return null
 	return DroppedText(text, transferable.readHtmlMarkup())
 }
 

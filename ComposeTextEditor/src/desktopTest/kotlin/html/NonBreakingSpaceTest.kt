@@ -4,23 +4,23 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.buildAnnotatedString
+import com.darkrockstudios.texteditor.RichTextStyles
 import com.darkrockstudios.texteditor.html.toAnnotatedStringFromHtml
 import com.darkrockstudios.texteditor.html.toHtml
 import com.darkrockstudios.texteditor.html.withHtml
-import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
 import com.darkrockstudios.texteditor.markdown.withMarkdown
 import com.darkrockstudios.texteditor.state.TextEditorState
 import io.mockk.mockk
-import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.test.runTest
-import utils.editorUiTest
-import utils.pasteHtml
 import java.awt.datatransfer.DataFlavor
 import java.awt.datatransfer.Transferable
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.runTest
+import utils.editorUiTest
+import utils.pasteHtml
 
 private const val NBSP = '\u00A0'
 
@@ -32,7 +32,7 @@ private const val NBSP = '\u00A0'
  */
 class NonBreakingSpaceTest {
 
-	private val config = MarkdownConfiguration.DEFAULT
+	private val config = RichTextStyles.DEFAULT
 
 	private fun parse(html: String) = html.toAnnotatedStringFromHtml(config).text
 

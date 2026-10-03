@@ -8,15 +8,15 @@ import androidx.compose.ui.text.AnnotatedString
 import com.darkrockstudios.texteditor.clipboard.AnnotatedStringTransferable
 import com.darkrockstudios.texteditor.richstyle.BulletListSpanStyle
 import com.darkrockstudios.texteditor.richstyle.HighlightSpanStyle
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 import utils.assertRichSpanInvariants
 import utils.blockFlags
 import utils.editorUiTest
 import utils.linesWith
 import utils.pasteHtml
 import utils.selectChars
-import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertTrue
 
 /**
  * Paste-over-selection is the replace path (RichSpanManager.handleReplace), the
@@ -220,7 +220,7 @@ class PasteOverSelectionTortureE2eTest {
 			ClipEntry(
 				AnnotatedStringTransferable(
 					AnnotatedString("item"),
-					state.markdownConfiguration,
+					state.richTextStyles,
 					copyId = 999_999L,
 				)
 			)

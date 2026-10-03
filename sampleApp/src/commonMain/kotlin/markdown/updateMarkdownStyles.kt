@@ -3,32 +3,31 @@ package markdown
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
-import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
-import com.darkrockstudios.texteditor.markdown.MarkdownExtension
+import com.darkrockstudios.texteditor.RichTextStyles
 import com.darkrockstudios.texteditor.state.TextEditorState
 
-fun MarkdownExtension.updateMarkdownConfiguration(newConfig: MarkdownConfiguration) {
-	val oldConfig = markdownConfiguration
+/** Restyles the document from its current styles to [newStyles], then installs them. */
+fun TextEditorState.updateRichTextStyles(newStyles: RichTextStyles) {
 	updateMarkdownStyles(
-		state = editorState,
-		oldConfig = oldConfig,
-		newConfig = newConfig
+		state = this,
+		oldConfig = richTextStyles,
+		newConfig = newStyles
 	)
-	markdownConfiguration = newConfig
+	richTextStyles = newStyles
 }
 
 /**
- * Updates all text in the editor to use the new markdown configuration styles.
+ * Updates all text in the editor to use the new styles.
  * This preserves the semantic meaning of styles while updating their visual appearance.
  *
  * @param state The TextEditorState to update
- * @param oldConfig The previous configuration that was used
- * @param newConfig The new configuration to apply
+ * @param oldConfig The previous styles that were used
+ * @param newConfig The new styles to apply
  */
 internal fun updateMarkdownStyles(
 	state: TextEditorState,
-	oldConfig: MarkdownConfiguration,
-	newConfig: MarkdownConfiguration
+	oldConfig: RichTextStyles,
+	newConfig: RichTextStyles
 ) {
 	if (state.textLines.isEmpty()) return
 

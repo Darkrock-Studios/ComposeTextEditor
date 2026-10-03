@@ -17,7 +17,7 @@ private val SAFE_SCHEMES = setOf("http", "https", "mailto", "tel", "ftp")
  * and spaces at its ends before reading the scheme, so this does too:
  * `java\tscript:` is still `javascript:`.
  */
-internal fun sanitizeLinkUrl(href: String): String? {
+fun sanitizeLinkUrl(href: String): String? {
 	val url = href.trim { it <= ' ' }.filterNot { it == '\t' || it == '\n' || it == '\r' }
 	if (url.isEmpty()) return null
 	val colon = url.indexOf(':')

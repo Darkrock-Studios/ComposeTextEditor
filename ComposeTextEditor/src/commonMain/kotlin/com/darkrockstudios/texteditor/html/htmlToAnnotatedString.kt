@@ -1,24 +1,37 @@
 package com.darkrockstudios.texteditor.html
 
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.isSpecified
+import androidx.compose.ui.graphics.isUnspecified
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
+import androidx.compose.ui.unit.em
+import androidx.compose.ui.unit.isSpecified
+import androidx.compose.ui.unit.isUnspecified
+import androidx.compose.ui.unit.sp
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.annotatedstring.normalizeLineEndings
-import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
-import com.darkrockstudios.texteditor.richstyle.Blockquote
-import com.darkrockstudios.texteditor.richstyle.BulletList
-import com.darkrockstudios.texteditor.richstyle.CodeFence
+import com.darkrockstudios.texteditor.RichTextStyles
+import com.darkrockstudios.texteditor.richstyle.BlockquoteSpanStyle
+import com.darkrockstudios.texteditor.richstyle.BulletListSpanStyle
+import com.darkrockstudios.texteditor.richstyle.CodeFenceSpanStyle
 import com.darkrockstudios.texteditor.richstyle.HR_PLACEHOLDER
+import com.darkrockstudios.texteditor.richstyle.HeaderSpanStyle
 import com.darkrockstudios.texteditor.richstyle.IMAGE_PLACEHOLDER
-import com.darkrockstudios.texteditor.richstyle.LineBlockStyle
-import com.darkrockstudios.texteditor.richstyle.OrderedList
-import com.darkrockstudios.texteditor.richstyle.isList
-import com.darkrockstudios.texteditor.richstyle.headerBlock
+import com.darkrockstudios.texteditor.richstyle.OrderedListSpanStyle
+import com.darkrockstudios.texteditor.richstyle.ParagraphFormatSpanStyle
+import com.darkrockstudios.texteditor.richstyle.RichSpanStyle
+import com.darkrockstudios.texteditor.richstyle.isListBlock
+import com.darkrockstudios.texteditor.richstyle.listLevel
 import com.fleeksoft.ksoup.Ksoup
 import com.fleeksoft.ksoup.nodes.Element
 import com.fleeksoft.ksoup.nodes.Node
 import com.fleeksoft.ksoup.nodes.TextNode
+import kotlin.math.abs
+import kotlin.math.roundToInt
 
 /**
  * Parses an HTML fragment (as found on the system clipboard's `text/html`
@@ -33,8 +46,8 @@ import com.fleeksoft.ksoup.nodes.TextNode
  * `withHtml().importHtml` to keep both.
  */
 fun String.toAnnotatedStringFromHtml(
-	configuration: MarkdownConfiguration = MarkdownConfiguration.DEFAULT
-): AnnotatedString = parseHtmlDocument(this, configuration).text
+	styles: RichTextStyles = RichTextStyles.DEFAULT
+): AnnotatedString = parseHtmlDocument(this, styles).text
 
 /**
  * Parses an HTML fragment into text plus the line-anchored decorations it
@@ -46,12 +59,12 @@ fun String.toAnnotatedStringFromHtml(
  */
 internal fun parseHtmlDocument(
 	html: String,
-	configuration: MarkdownConfiguration = MarkdownConfiguration.DEFAULT,
+	styles: RichTextStyles = RichTextStyles.DEFAULT,
 	includeImages: Boolean = false,
 ): HtmlDocument {
 	val body = Ksoup.parseBodyFragment(unwrapClipboardHtml(html)).body()
 	val marksConvertedSpaces = html.contains(CONVERTED_SPACE_CLASS) || html.contains(SPACERUN_STYLE, ignoreCase = true)
-	return HtmlSpanBuilder(configuration, includeImages, marksConvertedSpaces).build(body)
+	return HtmlSpanBuilder(styles, includeImages, marksConvertedSpaces).build(body)
 }
 
 private val START_FRAGMENT = Regex("""<!--\s*StartFragment\s*-->""", RegexOption.IGNORE_CASE)
@@ -105,6 +118,11 @@ private const val CONVERTED_SPACE_CLASS = "Apple-converted-space"
 /** Word's mark for the same, as an inline style. */
 private const val SPACERUN_STYLE = "mso-spacerun"
 
+private val HEADING_ELEMENTS = setOf("h1", "h2", "h3", "h4", "h5", "h6")
+
+private fun ParagraphFormatSpanStyle.withoutSpacing(): ParagraphFormatSpanStyle? =
+	copy(spaceBefore = Dp.Unspecified, spaceAfter = Dp.Unspecified).takeIf { it != ParagraphFormatSpanStyle() }
+
 private val TAG_STYLES = mapOf(
 	"b" to HtmlTag.STRONG,
 	"strong" to HtmlTag.STRONG,
@@ -120,6 +138,7 @@ private val TAG_STYLES = mapOf(
 	"del" to HtmlTag.STRIKE,
 	"u" to HtmlTag.UNDERLINE,
 	"ins" to HtmlTag.UNDERLINE,
+	"mark" to HtmlTag.MARK,
 	"h1" to HtmlTag.H1,
 	"h2" to HtmlTag.H2,
 	"h3" to HtmlTag.H3,
@@ -133,12 +152,18 @@ private data class HtmlScope(
 	val tags: Set<HtmlTag>,
 	/** Whitespace is kept as written, by `<pre>` or by CSS. */
 	val preformatted: Boolean,
-	/** The list style `<li>` children take, set by the nearest `<ul>`/`<ol>` ancestor. */
-	val listBlock: LineBlockStyle?,
+	/** The list style `<li>` children take, set by the nearest `<ul>`/`<ol>` ancestor, at its depth. */
+	val listBlock: RichSpanStyle?,
 	/** Inside a `<pre>` element, which becomes a code fence. */
 	val inPreElement: Boolean = false,
 	/** Inside an element marking its no-break spaces as ordinary ones. */
 	val convertedSpace: Boolean = false,
+	/** The hued colour and the size, in sp, that inline styles set, or null for neither. */
+	val css: SpanStyle? = null,
+	/** Inside a heading or code, whose own style sets the size and colour. */
+	val ownLook: Boolean = false,
+	/** Inside a link, whose colour is the link style's. */
+	val inLink: Boolean = false,
 ) {
 	companion object {
 		val ROOT = HtmlScope(emptySet(), preformatted = false, listBlock = null)
@@ -153,10 +178,20 @@ private data class HtmlScope(
  * its content really begins that many newlines later than [start].
  */
 private class BlockRange(
-	val block: LineBlockStyle,
+	val block: RichSpanStyle,
 	val start: Int,
 	val end: Int,
 	val pendingAtEntry: Int,
+)
+
+/** A paragraph format over a line-occupying element's output, as a [BlockRange] claims a block. */
+private class FormatRange(
+	val format: ParagraphFormatSpanStyle,
+	val start: Int,
+	val end: Int,
+	val pendingAtEntry: Int,
+	/** An item opening with its nested list: only its own first line is its. */
+	val firstLineOnly: Boolean,
 )
 
 /**
@@ -174,7 +209,7 @@ private class BlockRange(
  * a pending break materializes. Offsets convert to lines once the walk is done.
  */
 private class HtmlSpanBuilder(
-	private val config: MarkdownConfiguration,
+	private val config: RichTextStyles,
 	private val includeImages: Boolean,
 	/** The source marks every no-break space that stands for an ordinary one (Safari, Word). */
 	private val marksConvertedSpaces: Boolean,
@@ -186,7 +221,17 @@ private class HtmlSpanBuilder(
 	private var currentActive = emptySet<HtmlTag>()
 	private val runStart = HashMap<HtmlTag, Int>()
 
+	private var currentCss: SpanStyle? = null
+	private var cssStart = 0
+	private val cssRuns = mutableListOf<AnnotatedString.Range<SpanStyle>>()
+	private var inOwnLook = false
+	private var ownLookStart = 0
+	private val ownLookRuns = mutableListOf<IntRange>()
+
 	private val blockRanges = mutableListOf<BlockRange>()
+	private val formatRanges = mutableListOf<FormatRange>()
+	/** The line height of every element that holds a line, unspecified for one that sets none. */
+	private val lineHoldingLineHeights = mutableListOf<TextUnit>()
 	private val horizontalRuleOffsets = mutableListOf<Int>()
 	private val imageOffsets = mutableListOf<Pair<Int, HtmlImageRef>>()
 	/** Each link's output offsets, start inclusive and end exclusive, and destination. */
@@ -202,16 +247,17 @@ private class HtmlSpanBuilder(
 	fun build(body: Element): HtmlDocument {
 		visitChildren(body, HtmlScope.ROOT)
 		trimTrailingLayoutSpace()
-		syncActive(emptySet())
+		sync(HtmlScope.ROOT)
 		repeat(pendingExplicitBreaks) { out.append('\n') }
 
 		val text = out.toString()
-		val clamped = spans.mapNotNull { span ->
+		// After the tags' spans, so a colour on or inside a link or a bold run wins over theirs.
+		val clamped = (spans + relativeToBaseSize(relativeToBaseColor(cssRuns, ownLookRuns, text), ownLookRuns, text)).mapNotNull { span ->
 			val end = span.end.coerceAtMost(text.length)
 			if (span.start >= end) null else AnnotatedString.Range(span.item, span.start, end)
 		}
 		val lines = lineIndex(text)
-		val blockLines = mutableMapOf<LineBlockStyle, MutableSet<Int>>()
+		val blockLines = mutableMapOf<RichSpanStyle, MutableSet<Int>>()
 		// The two list styles cannot share a line, so the innermost claim wins
 		// rather than whichever happens to be applied last.
 		val listClaimed = mutableSetOf<Int>()
@@ -224,23 +270,53 @@ private class HtmlSpanBuilder(
 			// An empty block still owns the line it sits on: `<li></li>` is a
 			// bulleted blank line, not a block with nowhere to attach.
 			val last = if (end > first) end - 1 else first
-			val isList = range.block.isList
+			val isList = range.block.isListBlock
 			val target = blockLines.getOrPut(range.block) { mutableSetOf() }
 			for (line in lines[first]..lines[last]) {
 				if (isList && !listClaimed.add(line)) continue
 				target += line
 			}
 		}
+		val horizontalRuleLines = horizontalRuleOffsets.mapTo(mutableSetOf()) { lines[it.coerceIn(0, text.length)] }
+		val imageLines = imageOffsets.associate { (offset, image) -> lines[offset.coerceIn(0, text.length)] to image }
 		return HtmlDocument(
 			text = AnnotatedString(text, clamped),
 			blockLines = blockLines,
-			horizontalRuleLines = horizontalRuleOffsets
-				.mapTo(mutableSetOf()) { lines[it.coerceIn(0, text.length)] },
-			imageLines = imageOffsets.associate { (offset, image) ->
-				lines[offset.coerceIn(0, text.length)] to image
-			},
+			horizontalRuleLines = horizontalRuleLines,
+			imageLines = imageLines,
 			links = linksPerLine(text, lines),
+			paragraphFormats = formatsPerLine(text, lines, formatless = horizontalRuleLines + imageLines.keys + blockLines[CodeFenceSpanStyle].orEmpty()),
 		)
+	}
+
+	/**
+	 * Each line's format. An element's lines split its format as CSS lays it out: the
+	 * space before and the first-line indent go to its first line, the space after to
+	 * its last, and the rest to all of them. The innermost element's claim wins. Code,
+	 * rule and image lines ([formatless]) take none, as export writes none for them.
+	 *
+	 * A line height every one of two or more line-holding elements carries is the
+	 * source's own line spacing (Google Docs writes its 1.38 on every paragraph), as a
+	 * base colour and size are (7.46), so it is left to the editor's.
+	 */
+	private fun formatsPerLine(text: String, lines: IntArray, formatless: Set<Int>): Map<Int, ParagraphFormatSpanStyle> {
+		val baseLineHeight = lineHoldingLineHeights.takeIf { it.size >= 2 && it.distinct().size == 1 }?.first()
+		val formats = mutableMapOf<Int, ParagraphFormatSpanStyle>()
+		formatRanges.forEach { range ->
+			val first = (range.start + range.pendingAtEntry).coerceIn(0, text.length)
+			val end = range.end.coerceIn(first, text.length)
+			val firstLine = lines[first]
+			val lastLine = if (range.firstLineOnly) firstLine else lines[if (end > first) end - 1 else first]
+			for (line in firstLine..lastLine) {
+				if (line in formats || line in formatless) continue
+				var format = range.format
+				if (format.lineHeight == baseLineHeight) format = format.copy(lineHeight = TextUnit.Unspecified)
+				if (line != firstLine) format = format.copy(spaceBefore = Dp.Unspecified, firstLineIndent = TextUnit.Unspecified)
+				if (line != lastLine) format = format.copy(spaceAfter = Dp.Unspecified)
+				if (format != ParagraphFormatSpanStyle()) formats[line] = format
+			}
+		}
+		return formats
 	}
 
 	/** Each link cut at the line breaks inside it, in line and character coordinates. */
@@ -322,27 +398,41 @@ private class HtmlSpanBuilder(
 		// lines rather than being one, and its own separator is the one its first
 		// child asks for. A block that holds only text-level content does occupy a
 		// line, so it settles its separator on the way in rather than waiting for a
-		// character that may never come — that is what keeps an empty `<p>` or
+		// character that may never come, which is what keeps an empty `<p>` or
 		// `<li>` as the blank line it describes instead of dropping it.
+		// An item holding a nested list before any text of its own is still a line: the
+		// item's, empty.
 		val occupiesALine = isBlock &&
-			element.children().none { it.tagName().lowercase() in BLOCK_TAGS }
+			element.children().none { it.tagName().lowercase() in BLOCK_TAGS } ||
+			name == "li" && element.startsWithList()
 		if (occupiesALine) flushPendingBreaks()
 
 		val style = element.attr("style")
 		val nestedPre = scope.preformatted || name == "pre" || isPreformatted(style)
 		val nestedInPreElement = scope.inPreElement || name == "pre"
 		if (name == "pre") dropLeadingNewline = true
+		val nestedTags = resolveTags(name, style, scope.tags, nestedInPreElement)
+		val nestedOwnLook = scope.ownLook || nestedInPreElement || TAG_STYLES[name]?.isHeading == true ||
+			HtmlTag.CODE in nestedTags
+		val nestedInLink = scope.inLink || name == "a"
 		val nested = HtmlScope(
-			tags = resolveTags(name, style, scope.tags, nestedInPreElement),
+			tags = nestedTags,
 			preformatted = nestedPre,
+			// A list's depth is how many lists hold it, whether inside an item or, as
+			// browsers also render, directly inside another list.
 			listBlock = when (name) {
-				"ul" -> BulletList
-				"ol" -> OrderedList
+				"ul", "ol" -> {
+					val level = scope.listBlock?.listLevel?.plus(1) ?: 0
+					if (name == "ol") OrderedListSpanStyle.of(level) else BulletListSpanStyle.of(level)
+				}
 				else -> scope.listBlock
 			},
 			inPreElement = nestedInPreElement,
 			convertedSpace = scope.convertedSpace || element.hasClass(CONVERTED_SPACE_CLASS) ||
 				style.contains(SPACERUN_STYLE, ignoreCase = true),
+			css = if (nestedOwnLook) null else resolveCss(name, element, style, scope.css, nestedInLink),
+			ownLook = nestedOwnLook,
+			inLink = nestedInLink,
 		)
 
 		val block = blockStyleFor(name, scope)
@@ -350,10 +440,20 @@ private class HtmlSpanBuilder(
 		val start = out.length
 		val spansAtEntry = spans.size
 		val pendingAtEntry = pendingNewlines()
+		// An item is its own line, whatever it holds.
+		val format = if ((occupiesALine || name == "li") && style.isNotEmpty()) paragraphFormatFromCss(style)?.let {
+			// A heading's space around it is the heading style's; a source writes its own
+			// default there (Google Docs' 20 pt above a Heading 1).
+			if (name in HEADING_ELEMENTS) it.withoutSpacing() else it
+		} else null
+		if (occupiesALine) lineHoldingLineHeights += format?.lineHeight ?: TextUnit.Unspecified
 		visitChildren(element, nested)
 		// Appended on the way out, so a nested block is recorded before the one
-		// containing it — which is what lets the innermost claim on a line win.
+		// containing it, which is what lets the innermost claim on a line win.
 		if (block != null) blockRanges += BlockRange(block, start, out.length, pendingAtEntry)
+		if (format != null) {
+			formatRanges += FormatRange(format, start, out.length, pendingAtEntry, firstLineOnly = name == "li" && element.holdsList())
+		}
 		if (href != null) {
 			// The separators owed to what came before are written ahead of the
 			// link's first character, and are not part of it.
@@ -376,14 +476,23 @@ private class HtmlSpanBuilder(
 		if (isBlock) requestBlockBreak() else if (isCell) requestCellBreak()
 	}
 
-	private fun blockStyleFor(name: String, scope: HtmlScope): LineBlockStyle? = when (name) {
-		"blockquote" -> Blockquote
+	private fun Element.holdsList(): Boolean = children().any { it.tagName().lowercase().let { tag -> tag == "ul" || tag == "ol" } }
+
+	/** Whether this element's first content, whitespace aside, is a `<ul>` or `<ol>`. */
+	private fun Element.startsWithList(): Boolean {
+		val first = childNodes().firstOrNull { it !is TextNode || !it.isBlank() } as? Element ?: return false
+		val tag = first.tagName().lowercase()
+		return tag == "ul" || tag == "ol"
+	}
+
+	private fun blockStyleFor(name: String, scope: HtmlScope): RichSpanStyle? = when (name) {
+		"blockquote" -> BlockquoteSpanStyle
 		// A bare `<li>` with no list ancestor still reads as a bullet.
-		"li" -> scope.listBlock ?: BulletList
-		"pre" -> CodeFence
+		"li" -> scope.listBlock ?: BulletListSpanStyle
+		"pre" -> CodeFenceSpanStyle
 		// Heading elements land as heading blocks so the level survives as a
 		// HeaderSpanStyle span, the same way markdown import attaches it.
-		"h1", "h2", "h3", "h4", "h5", "h6" -> headerBlock(name[1] - '0', config)
+		"h1", "h2", "h3", "h4", "h5", "h6" -> HeaderSpanStyle.of(name[1] - '0')
 		else -> null
 	}
 
@@ -391,12 +500,129 @@ private class HtmlSpanBuilder(
 	private inline fun appendOwnLine(placeholder: String, record: (Int) -> Unit) {
 		requestBlockBreak()
 		flushPendingBreaks()
-		syncActive(emptySet())
+		sync(HtmlScope.ROOT)
 		record(out.length)
 		out.append(placeholder)
 		lastWasSpace = false
 		trailingSpaceIsLiteral = true
 		requestBlockBreak()
+	}
+
+	private fun sync(scope: HtmlScope) {
+		syncActive(scope.tags)
+		syncCss(scope.css)
+		if (scope.ownLook != inOwnLook) {
+			if (inOwnLook && out.length > ownLookStart) ownLookRuns += ownLookStart until out.length
+			inOwnLook = scope.ownLook
+			ownLookStart = out.length
+		}
+	}
+
+	private fun syncCss(css: SpanStyle?) {
+		if (css == currentCss) return
+		currentCss?.let { if (out.length > cssStart) cssRuns += AnnotatedString.Range(it, cssStart, out.length) }
+		currentCss = css
+		cssStart = out.length
+	}
+
+	/**
+	 * The colour and size [parent] passes down, with the element's own over them: a
+	 * `style` attribute's, or a `<font color>`'s. A link's colour is the link style's,
+	 * whatever the source wrote ([inLink]); which colours pasted text keeps is settled
+	 * after the walk ([relativeToBaseColor]). A relative size is resolved against the
+	 * size around it, or a browser's 16 px.
+	 */
+	private fun resolveCss(name: String, element: Element, style: String, parent: SpanStyle?, inLink: Boolean): SpanStyle? {
+		if (name != "a" && name != "font" && style.isEmpty()) return parent
+		var color = if (inLink) Color.Unspecified else parent?.color ?: Color.Unspecified
+		var size = parent?.fontSize ?: TextUnit.Unspecified
+		fun take(declared: SpanStyle) {
+			if (declared.color.isSpecified && !inLink) color = declared.color
+			if (declared.fontSize.isEm) {
+				size = ((if (size.isSp) size.value else BROWSER_FONT_SIZE) * declared.fontSize.value).hundredths().sp
+			} else if (declared.fontSize.isSp) {
+				size = declared.fontSize.value.hundredths().sp
+			}
+		}
+		if (name == "font") parseCssColor(element.attr("color"))?.let { take(SpanStyle(color = it)) }
+		if (style.isNotEmpty()) cssColorAndSize(style)?.let(::take)
+		return SpanStyle(color = color, fontSize = size).takeIf { color.isSpecified || size.isSpecified }
+	}
+
+	/**
+	 * [runs] without the colours pasted text leaves to the editor's theme: the colour
+	 * most of the text carries, the source's text colour (Google Docs writes its black on
+	 * every run), and near-black, near-white, and translucent colours, which would vanish
+	 * on one theme or the other. Every other colour the author chose is kept, greys
+	 * included. A fragment in one hued colour only (a single red word) keeps it: there is
+	 * no other text to tell the source's colour from the author's. Headings and code,
+	 * which set their own look, do not count.
+	 */
+	private fun relativeToBaseColor(
+		runs: List<AnnotatedString.Range<SpanStyle>>,
+		ownLook: List<IntRange>,
+		text: String,
+	): List<AnnotatedString.Range<SpanStyle>> {
+		if (runs.none { it.item.color.isSpecified }) return runs
+		fun weight(range: IntRange) = range.count { it < text.length && text[it] != '\n' }
+		// Unspecified first, so a tie keeps what the runs set.
+		val byColor = linkedMapOf(Color.Unspecified to text.count { it != '\n' } - ownLook.sumOf(::weight))
+		runs.forEach { run ->
+			if (run.item.color.isSpecified) {
+				val weight = weight(run.start until run.end)
+				byColor[run.item.color] = (byColor[run.item.color] ?: 0) + weight
+				byColor[Color.Unspecified] = byColor.getValue(Color.Unspecified) - weight
+			}
+		}
+		val base = byColor.maxBy { it.value }.key
+		val baseIsSourceColor = !base.hasHue() || byColor.keys.count { it.isSpecified } > 1
+		return runs.map { run ->
+			val color = run.item.color
+			if (color.isSpecified && ((color == base && baseIsSourceColor) || !color.isAuthorColor())) {
+				AnnotatedString.Range(run.item.copy(color = Color.Unspecified), run.start, run.end)
+			} else {
+				run
+			}
+		}
+	}
+
+	/**
+	 * [runs] with each size made relative to the size most of the text carries, the
+	 * source's body size (Google Docs writes its 11 pt on every run), and so to the
+	 * configuration's body size: pasted text takes the size of wherever it lands (6.18),
+	 * and a larger word stays as much larger. Headings and code, which set their own
+	 * size, do not count. Text with no size counts as a browser's 16 px.
+	 */
+	private fun relativeToBaseSize(
+		runs: List<AnnotatedString.Range<SpanStyle>>,
+		ownLook: List<IntRange>,
+		text: String,
+	): List<AnnotatedString.Range<SpanStyle>> {
+		if (runs.isEmpty()) return runs
+		fun weight(range: IntRange) = range.count { it < text.length && text[it] != '\n' }
+		// Unspecified first, so a tie keeps what the runs set.
+		val bySize = linkedMapOf(TextUnit.Unspecified to text.count { it != '\n' } - ownLook.sumOf(::weight))
+		runs.forEach { run ->
+			if (run.item.fontSize.isSpecified) {
+				val weight = weight(run.start until run.end)
+				bySize[run.item.fontSize] = (bySize[run.item.fontSize] ?: 0) + weight
+				bySize[TextUnit.Unspecified] = bySize.getValue(TextUnit.Unspecified) - weight
+			}
+		}
+		val base = bySize.maxBy { it.value }.key
+		val baseSize = if (base.isSp) base.value else BROWSER_FONT_SIZE
+		val bodySize = config.defaultTextStyle.fontSize
+		return runs.mapNotNull { run ->
+			val size = run.item.fontSize
+			val ratio = if (size.isSp) size.value / baseSize else 1f
+			val relative = when {
+				abs(ratio - 1f) < 0.005f -> TextUnit.Unspecified
+				bodySize.isSp -> (bodySize.value * ratio).hundredths().sp
+				else -> ratio.hundredths().em
+			}
+			if (run.item.color.isUnspecified && relative.isUnspecified) null
+			else AnnotatedString.Range(SpanStyle(color = run.item.color, fontSize = relative), run.start, run.end)
+		}
 	}
 
 	/**
@@ -439,7 +665,8 @@ private class HtmlSpanBuilder(
 
 		// Each directive settles its own tag in both directions, so an inline style
 		// always beats the meaning the element's tag name carries.
-		forEachDeclaration(style) { property, value ->
+		forEachCssDeclaration(style) { property, declared ->
+			val value = declared.lowercase()
 			when (property) {
 				"font-weight" -> {
 					val weight = value.toIntOrNull()
@@ -466,6 +693,14 @@ private class HtmlSpanBuilder(
 					result += HtmlTag.CODE
 				}
 
+				"background-color", "background" -> {
+					val color = parseCssColor(value) ?: value.split(' ').firstNotNullOfOrNull(::parseCssColor)
+					when {
+						color != null && color.hasHue() -> result += HtmlTag.MARK
+						color != null || value == "none" -> result -= HtmlTag.MARK
+					}
+				}
+
 				"text-decoration", "text-decoration-line" -> {
 					if (value.contains("underline")) result += HtmlTag.UNDERLINE
 					if (value.contains("line-through")) result += HtmlTag.STRIKE
@@ -481,7 +716,8 @@ private class HtmlSpanBuilder(
 
 	private fun isPreformatted(style: String): Boolean {
 		var preformatted = false
-		forEachDeclaration(style) { property, value ->
+		forEachCssDeclaration(style) { property, declared ->
+			val value = declared.lowercase()
 			if (property == "white-space" &&
 				(value == "pre" || value.startsWith("pre-wrap") || value.startsWith("break-spaces"))
 			) {
@@ -489,17 +725,6 @@ private class HtmlSpanBuilder(
 			}
 		}
 		return preformatted
-	}
-
-	private inline fun forEachDeclaration(style: String, action: (String, String) -> Unit) {
-		style.split(';').forEach { declaration ->
-			val separator = declaration.indexOf(':')
-			if (separator == -1) return@forEach
-			action(
-				declaration.substring(0, separator).trim().lowercase(),
-				declaration.substring(separator + 1).trim().lowercase(),
-			)
-		}
 	}
 
 	private fun requestBlockBreak() {
@@ -555,7 +780,7 @@ private class HtmlSpanBuilder(
 			if (kept.isEmpty()) return
 			val content = if (scope.convertedSpace) kept.replace(NO_BREAK_SPACE, ' ') else kept
 			flushPendingBreaks()
-			syncActive(scope.tags)
+			sync(scope)
 			out.append(content)
 			lastWasSpace = content.last() == ' '
 			trailingSpaceIsLiteral = true
@@ -574,7 +799,7 @@ private class HtmlSpanBuilder(
 						raw[index - 1].isCollapsibleSpace() || raw[index + 1].isCollapsibleSpace()
 					)
 				flushPendingBreaks()
-				syncActive(scope.tags)
+				sync(scope)
 				out.append(if (converted) ' ' else NO_BREAK_SPACE)
 				lastWasSpace = false
 				trailingSpaceIsLiteral = true
@@ -582,7 +807,7 @@ private class HtmlSpanBuilder(
 			}
 			if (ch.isCollapsibleSpace()) {
 				if (!lastWasSpace && pendingNewlines() == 0 && !pendingCellBreak && out.isNotEmpty()) {
-					syncActive(scope.tags)
+					sync(scope)
 					out.append(' ')
 					lastWasSpace = true
 					trailingSpaceIsLiteral = false
@@ -590,13 +815,25 @@ private class HtmlSpanBuilder(
 				return@forEachIndexed
 			}
 			flushPendingBreaks()
-			syncActive(scope.tags)
+			sync(scope)
 			out.append(ch)
 			lastWasSpace = false
 			trailingSpaceIsLiteral = false
 		}
 	}
 }
+
+/** A browser's default font size, in px, which a relative size with nothing above it is relative to. */
+private const val BROWSER_FONT_SIZE = 16f
+
+private fun Float.hundredths(): Float = (this * 100f).roundToInt() / 100f
+
+/** Whether this colour has hue enough, and is opaque enough, to be formatting rather than a text colour. */
+private fun Color.hasHue(): Boolean = alpha >= 0.5f && maxOf(red, green, blue) - minOf(red, green, blue) > 0.1f
+
+/** Readable on both a light and a dark theme: opaque enough, and neither near-black nor near-white. */
+private fun Color.isAuthorColor(): Boolean =
+	alpha >= 0.5f && (hasHue() || maxOf(red, green, blue) >= 0.2f && minOf(red, green, blue) <= 0.9f)
 
 /** HTML's own whitespace, the only characters it collapses. Other Unicode spaces are content. */
 private fun Char.isCollapsibleSpace(): Boolean =

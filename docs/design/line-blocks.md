@@ -40,20 +40,22 @@ one `LineBlockStyle` value:
 3. Optionally a baked-in `SpanStyle` for the line text (code fences bake
    monospace; headings bake the configured heading style).
 
-The bundle also carries the two serialization hooks, `markdownPrefix` (what
-export writes) and `markdownPattern` (what import recognizes), so adding a new
-block style is one instance, not changes to apply, demote, import, export,
-toggle, Enter, and Backspace separately.
+Adding a new block style is one instance, not changes to apply, demote,
+toggle, Enter, and Backspace separately, plus one row in each format's syntax
+table: the markdown module keeps a block's prefix (what export writes) and
+pattern (what import recognizes) per block span style
+(`MarkdownBlockSyntax`), ordered by core's `LINE_BLOCK_STYLES`, so it peels
+markers in the order core resolves a stack.
 
-The registry per markdown configuration: the *prefix blocks* (blockquote, the
-six heading levels, ordered list, bullet list) round-trip through a single-line
-prefix (`> `, `# `, `1. `, `- `), in match-priority order. Code fence is a
-*wrap block*: it round-trips through ``` markers around a contiguous run and is
-handled out-of-band by the importer and exporter.
+The registry per style configuration (`RichTextStyles`): the *prefix blocks*
+(blockquote, the six heading levels, ordered list, bullet list) round-trip
+through a single-line prefix (`> `, `# `, `1. `, `- `), in match-priority
+order. Code fence is a *wrap block*: it round-trips through ``` markers around
+a contiguous run and is handled out-of-band by the importer and exporter.
 
 ## Stacking rules
 
-Which blocks may share a line is defined in one predicate (`conflicts`):
+Which blocks may share a line is defined in one predicate (`lineBlocksConflict`, public so an importer peels by it):
 
 - The two list styles exclude each other.
 - Headings exclude each other and both list styles (`- # item` is a bullet
@@ -114,6 +116,20 @@ than the maximum clamps, and a non-list non-blank line or a change of quote
 status closes every open item. A marker shape at the start of an item's body
 (`- 1990. plans`) stays literal, one marker per line, as before.
 
+**HTML.** Export writes a nested item's list inside its parent's `<li>`
+(`<ul><li>a<ul><li>b</li></ul></li></ul>`): each item is a container that
+stays open while the lists under it are written. An item nests under the
+nearest open item at a shallower level, so an orphan is written one below
+the item before it and a copied selection that starts at a nested item keeps
+its items' nesting. HTML cannot hold another line inside an item, so any
+line that is not a list item, a blank one too, and any change of quote,
+closes every item: unlike markdown, which looks through blank lines, an item
+after a blank line starts a new list at the top level. Import gives a `<ul>`
+or `<ol>` the depth of the lists holding it, whether it sits inside an item
+or directly inside another list, as browsers render both; its `<li>`
+children take that level, and an `<li>` that opens with a nested list is an
+empty item line of its own.
+
 **Editing** (Google Docs, Word, Notion and Apple Notes agree on these): Tab
 at the start of a list item nests it one level, never deeper than one below
 the item above it, and a multi-line selection nests each selected item where
@@ -158,7 +174,7 @@ ever discard is a marker on empty content.
 ## Serialization
 
 **Export** walks lines from one snapshot, prepending each block's
-`markdownPrefix` in emission order, then converting the body with markdown
+prefix in emission order, then converting the body with markdown
 escaping. Escaping is the safety net for plain text, applied only where a
 character would start or end syntax in its position (`markdownEscapes`): a
 literal `- ` at the start of a plain paragraph exports as `\- ` and survives,
@@ -216,6 +232,40 @@ block but a quote: an empty list item, heading or fenced line is a block.
 must not change on the next save; `importMarkdown` also takes the rule to
 read one file by, for a host opening files written under the other.
 
+### Leading indent
+
+A line's leading spaces and tabs (Tab on a plain line inserts four spaces,
+roadmap 2.9) have no markdown form of their own: four spaces or a tab open
+an indented code block where a block can start, which since every line is a
+paragraph is every line, and a paragraph drops up to three. Export writes
+each leading space as `&nbsp;` and each leading tab as `&emsp;` (a `&#9;`
+is a tab, which HTML collapses), in a line's body after its block prefixes,
+whenever the line holds more than whitespace; a line of only whitespace is a
+blank line, as before. Renderers show both entities as space, and an entity
+is not whitespace to the block parser, so what follows it is not at a
+line's start: it needs none of the line-start escapes (`&nbsp;&nbsp;- item`
+is prose), and a delimiter after it flanks as it does after punctuation
+(the entity's `;`), so `*"quoted"*` still opens emphasis there and a lone
+`*` is escaped where it could close one. The entities are always the
+line's first characters: a style or link over an indent starts after it,
+and one ending in the next line's indent closes at the end of the line
+before, so an indent's own styling (an underline under it) is not kept.
+
+Import reads a line's leading run of space and tab entities, after any
+block prefixes, back as the spaces and tabs: `&nbsp;`, `&#160;`, `&#32;`
+and their hex and named forms as spaces, `&emsp;`, `&#9;` and `&Tab;` as
+tabs. Through the parse each stands in as a Unicode punctuation character
+the file does not contain, as the entity's `;` stands to a renderer, and
+becomes the whitespace again afterwards, one character for one, so no span
+moves and no character the file holds is mistaken for one. An entity
+elsewhere on a line stays literal text, as before, a typed `&nbsp;` is
+escaped (`\&nbsp;`) by the 7.14 rules, and fenced lines keep their
+whitespace as written. A foreign line of only such entities (a spacer)
+reads as an empty line. Rejected: a non-breaking space
+character, which is invisible in the file and reads back as content rather
+than indent; and no form (stripping the indent), which loses text on every
+save.
+
 ### Fence languages
 
 A fence's info string (` ```kotlin `) is not a line block: it belongs to the
@@ -224,7 +274,7 @@ run, and the text form holds exactly one per fence. It lives in a
 marker itself does, attached by import off the undo history like the blocks,
 written after the opening marker by export from the run's first line, and read
 or set (for the whole run, one undo step) through
-`MarkdownExtension.codeFenceLanguage` and `setCodeFenceLanguage`. One span per
+`TextEditorState.codeFenceLanguage` and `setCodeFenceLanguage`. One span per
 line is what lets the language survive whatever the fence survives: a split at
 the run's first line, a join with the line above, fencing the line above,
 un-fencing the first line, splitting a run in two. Each leaves some line of
@@ -260,10 +310,19 @@ conflicting block demoted as a side effect) in one step.
 
 ## Smart editing
 
-- Enter at the end of a block line continues the block onto both halves of the
-  split.
-- Enter on an empty block line exits the block instead, routed through the
-  toggle so the demotion lands in undo history.
+- Enter at the end of a block line continues its blocks onto both halves of the
+  split, except a heading: Enter at a heading's end, empty or not, opens a body
+  line after it. A split inside a heading keeps both halves headings. The
+  markers Enter sets are recorded with the split, so a redo restores them.
+- Enter on an empty block line other than a heading exits the block instead
+  (an empty quoted list item leaves the list and stays quoted), routed through
+  the toggle so the demotion lands in undo history.
+- Line breaks that arrive any other way (a paste, a replace, find and replace,
+  typed or IME text holding a break) continue the broken line's blocks onto the
+  new lines the same way, recorded in the edit's own undo step (an undo never
+  continues a block onto the text it restores); a heading continues only when
+  the break falls inside its text. A replace across lines leaves its last line
+  the blocks of the line its tail came from.
 - Backspace at column 0 of a block line demotes first (marker off, content
   kept); a second backspace merges. Exception: when the previous line carries
   the same block, backspace merges directly, so joining two adjacent items is
@@ -282,8 +341,6 @@ consequences of its own.
 ## Known limitations
 
 - A nested `> > ` quote collapses one level per import pass; only lists nest.
-- HTML export writes a nested list item as a sibling and HTML import reads a
-  nested `<ul>` at the top level (roadmap 7.47).
 - Exporting a document whose last line is a heading appends a trailing blank
   line that survives re-import (stable at one extra line).
 - Toggling a style off after a blanket apply does not restore the styles lines

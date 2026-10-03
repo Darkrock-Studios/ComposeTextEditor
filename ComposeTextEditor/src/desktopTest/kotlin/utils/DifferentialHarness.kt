@@ -155,9 +155,10 @@ private const val REFERENCE_TEST_TAG = "reference-text-field"
  * ("The reference rule" in docs/ROADMAP.md), and replays one [Stroke] script
  * through both.
  *
- * Both widgets use the default font and text style, and the reference field is as
- * wide as the editor's text viewport (the editor's scrollbar takes the rest), so
- * rows wrap at the same offsets; [DifferentialScope.assertSameRows] checks that.
+ * Both widgets lay text out in [TestFontFamily], otherwise in the default text
+ * style, and the reference field is as wide as the editor's text viewport (the
+ * editor's scrollbar takes the rest), so rows wrap at the same offsets;
+ * [DifferentialScope.assertSameRows] checks that.
  * Only the focused widget receives keys, and the reference collapses its selection
  * when it loses focus, so a script is replayed through the reference first, then
  * through the editor, never interleaved.
@@ -192,7 +193,7 @@ internal fun differentialUiTest(
 		var fieldFocused = false
 		var fieldLayout: (() -> TextLayoutResult?)? = null
 		lateinit var editorState: TextEditorState
-		val textStyle = TextStyle(textDirection = textDirection)
+		val textStyle = TextStyle(textDirection = textDirection, fontFamily = TestFontFamily)
 		setContent {
 			editorState = rememberTextEditorState(initialText = AnnotatedString(initialText))
 			CompositionLocalProvider(
@@ -322,8 +323,11 @@ class DifferentialScope internal constructor(
 		editor.getCharacterIndex(CharLineOffset(it.line, it.wrapStartsAtIndex))
 	}
 
+	/** The reference field's current text layout. */
+	fun referenceLayout(): TextLayoutResult = test.runOnIdle { fieldLayout() } ?: fail("the reference field has no layout")
+
 	private fun referenceRows(): List<Int> {
-		val layout = test.runOnIdle { fieldLayout() } ?: fail("the reference field has no layout")
+		val layout = referenceLayout()
 		return (0 until layout.lineCount).map { layout.getLineStart(it) }
 	}
 }

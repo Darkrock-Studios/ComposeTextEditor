@@ -51,7 +51,6 @@ kotlin {
                 implementation(compose.components.uiToolingPreview)
                 implementation(libs.androidx.lifecycle.viewmodel)
                 implementation(libs.androidx.lifecycle.runtime.compose)
-                implementation(libs.markdown)
                 implementation(libs.ksoup)
             }
         }
@@ -97,8 +96,14 @@ kotlin {
 
         val desktopTest by getting {
             kotlin.srcDir(rootDir.resolve("testUtils/countingMeasurer"))
+            kotlin.srcDir(rootDir.resolve("testUtils/blockLines"))
             kotlin.srcDir(rootDir.resolve("testUtils/uiTest"))
+            kotlin.srcDir(rootDir.resolve("testUtils/testFont/kotlin"))
+            resources.srcDir(rootDir.resolve("testUtils/testFont/resources"))
             dependencies {
+                // The block tests build and read their documents as markdown text, the
+                // compact form of a block structure (docs/design/modules.md, "Tests").
+                implementation(projects.composeTextEditorMarkdown)
                 implementation(libs.jetbrains.kotlin.test)
                 implementation(libs.jetbrains.kotlin.test.junit)
                 implementation(libs.mockk)
@@ -114,6 +119,38 @@ kotlin {
 
 // There are no wasmJs tests; this Compose check trips on the Skiko that main pulls in.
 tasks.matching { it.name == "checkComposeUiTestConfigurationForWasmJs" }.configureEach { enabled = false }
+
+// Golden screenshots (docs/TESTING.md); -PupdateGoldens rewrites them.
+class GoldenScreenshotArguments(
+	@get:InputFiles @get:PathSensitive(PathSensitivity.RELATIVE) val goldens: File,
+	@get:Internal val failures: File,
+	@get:Input val update: Boolean,
+) : CommandLineArgumentProvider {
+	override fun asArguments() = listOf(
+		"-Dgoldens.dir=${goldens.absolutePath}",
+		"-Dgoldens.failures=${failures.absolutePath}",
+		"-Dgoldens.update=$update",
+	)
+}
+
+tasks.withType<Test>().matching { it.name == "desktopTest" }.configureEach {
+	val failures = layout.buildDirectory.dir("golden-failures").get().asFile
+	jvmArgumentProviders += GoldenScreenshotArguments(
+		goldens = layout.projectDirectory.dir("src/desktopTest/goldens").asFile,
+		failures = failures,
+		update = providers.gradleProperty("updateGoldens").map { it != "false" }.getOrElse(false),
+	)
+	doFirst { failures.deleteRecursively() }
+}
+
+// The window the nightly real-input job types into (testUtils/osInput/drive.sh).
+tasks.register<JavaExec>("runOsInputProbe") {
+	description = "Opens a focused editor that writes its text to the directory given in --args."
+	group = "verification"
+	val test = kotlin.targets.getByName("desktop").compilations.getByName("test")
+	classpath = files(test.output.allOutputs, test.runtimeDependencyFiles)
+	mainClass.set("osinput.OsInputProbeKt")
+}
 
 dokka {
 	moduleName.set("Editor")

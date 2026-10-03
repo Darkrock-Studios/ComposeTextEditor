@@ -8,9 +8,9 @@ import androidx.compose.ui.platform.Clipboard
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import com.darkrockstudios.texteditor.RichTextStyles
 import com.darkrockstudios.texteditor.clipboard.ClipboardHelper
 import com.darkrockstudios.texteditor.clipboard.readClipboardHtml
-import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -20,13 +20,14 @@ import io.mockk.mockkStatic
 import io.mockk.slot
 import io.mockk.unmockkAll
 import io.mockk.verify
-import kotlinx.coroutines.test.runTest
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
+import kotlinx.coroutines.test.runTest
 
 /**
  * Android's clipboard carries an HTML flavor beside the text (`ClipData.newHtmlText`)
@@ -35,7 +36,7 @@ import kotlin.test.assertTrue
  */
 class AndroidRichClipboardTest {
 
-	private val config = MarkdownConfiguration.DEFAULT
+	private val config = RichTextStyles.DEFAULT
 
 	@AfterTest
 	fun tearDown() = unmockkAll()
@@ -123,9 +124,22 @@ class AndroidRichClipboardTest {
 		coEvery { clipboard.setClipEntry(match { it?.clipData === rich }) } throws RuntimeException("too large")
 		coEvery { clipboard.setClipEntry(match { it?.clipData === plain }) } returns Unit
 
-		ClipboardHelper.setText(clipboard, AnnotatedString("big"), config, copyId = null, html = null)
+		assertTrue(ClipboardHelper.setText(clipboard, AnnotatedString("big"), config, copyId = null, html = null))
 
 		coVerify { clipboard.setClipEntry(match { it?.clipData === plain }) }
+	}
+
+	@Test
+	fun `a copy the clipboard refuses reports it`() = runTest {
+		mockkStatic(ClipData::class)
+		mockkStatic(android.util.Log::class)
+		every { android.util.Log.w(any(), any<String>(), any()) } returns 0
+		every { ClipData.newHtmlText(any(), any(), any()) } returns mockk(relaxed = true)
+		every { ClipData.newPlainText(any(), any()) } returns mockk(relaxed = true)
+		val clipboard = mockk<Clipboard>()
+		coEvery { clipboard.setClipEntry(any()) } throws RuntimeException("refused")
+
+		assertFalse(ClipboardHelper.setText(clipboard, AnnotatedString("x"), config, copyId = null, html = null))
 	}
 
 	@Test

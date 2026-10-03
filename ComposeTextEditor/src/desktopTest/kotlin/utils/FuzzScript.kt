@@ -6,8 +6,11 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.font.FontWeight
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
-import com.darkrockstudios.texteditor.markdown.MarkdownExtension
 import com.darkrockstudios.texteditor.state.TextEditorState
+import com.darkrockstudios.texteditor.state.toggleBlockquote
+import com.darkrockstudios.texteditor.state.toggleBulletList
+import com.darkrockstudios.texteditor.state.toggleCodeFence
+import com.darkrockstudios.texteditor.state.toggleOrderedList
 import kotlin.random.Random
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -161,7 +164,7 @@ fun runFuzzScript(
 
 private val FUZZ_BOLD = SpanStyle(fontWeight = FontWeight.Bold)
 
-private val BLOCK_TOGGLES: List<Pair<String, MarkdownExtension.(IntRange) -> Unit>> = listOf(
+private val BLOCK_TOGGLES: List<Pair<String, TextEditorState.(IntRange) -> Unit>> = listOf(
 	"bullet" to { lines -> toggleBulletList(lines) },
 	"ordered" to { lines -> toggleOrderedList(lines) },
 	"quote" to { lines -> toggleBlockquote(lines) },
@@ -171,8 +174,7 @@ private val BLOCK_TOGGLES: List<Pair<String, MarkdownExtension.(IntRange) -> Uni
 private fun blockToggleTarget(
 	op: FuzzOp.ToggleBlock,
 	state: TextEditorState,
-	markdown: MarkdownExtension,
-): Pair<IntRange, MarkdownExtension.(IntRange) -> Unit>? {
+): Pair<IntRange, TextEditorState.(IntRange) -> Unit>? {
 	val lineCount = state.textLines.size
 	val start = op.lineSeed % lineCount
 	val range = start..minOf(start + op.extent, lineCount - 1)
@@ -199,7 +201,6 @@ private fun trimmedStyleRange(text: String, rawA: Int, rawB: Int): Pair<Int, Int
 /** Applies [op] directly to the state, the pure-state twin of [applyFuzzOpUi]. */
 class StateFuzzInterpreter(
 	private val state: TextEditorState,
-	private val markdown: MarkdownExtension,
 ) {
 	private fun clampIndex(raw: Int): Int = raw % (state.getAllText().text.length + 1)
 
@@ -258,8 +259,8 @@ class StateFuzzInterpreter(
 			}
 
 			is FuzzOp.ToggleBlock -> {
-				val target = blockToggleTarget(op, state, markdown) ?: return
-				target.second(markdown, target.first)
+				val target = blockToggleTarget(op, state) ?: return
+				target.second(state, target.first)
 			}
 
 			is FuzzOp.ToggleBold -> {
@@ -317,8 +318,8 @@ fun EditorUiTestScope.applyFuzzOpUi(op: FuzzOp) {
 		}
 
 		is FuzzOp.ToggleBlock -> {
-			val target = blockToggleTarget(op, state, markdown) ?: return
-			target.second(markdown, target.first)
+			val target = blockToggleTarget(op, state) ?: return
+			target.second(state, target.first)
 			waitForIdle()
 		}
 

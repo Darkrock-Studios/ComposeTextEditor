@@ -93,13 +93,12 @@ val checker: EditorSpellChecker = PlatformEditorSpellChecker(platformSpellChecke
 
 ## With Markdown
 
-To combine spell checking with Markdown import/export, wrap the state with
-[SpellCheckState.withMarkdown][com.darkrockstudios.texteditor.spellcheck.markdown.withMarkdown]
-and load content through `importMarkdown` so block elements are parsed:
+A spell-checked editor is a `TextEditorState` underneath, so the markdown addon
+(`composetexteditor-markdown`) installs on it as on any other:
 
 ```kotlin
 val state = rememberSpellCheckState(spellChecker = spellChecker)
-val markdown = remember(state) { state.withMarkdown() }
+val markdown = remember(state) { state.textState.withMarkdown() }
 
 LaunchedEffect(markdown) { markdown.importMarkdown(source) }
 ```
@@ -126,8 +125,3 @@ interface to plug in any spell-checking engine.
 
 Ready-made [EditorSpellChecker][com.darkrockstudios.texteditor.spellcheck.api.EditorSpellChecker]
 implementations: a SymSpell-backed checker and an OS-backed platform checker.
-
-# Package com.darkrockstudios.texteditor.spellcheck.markdown
-
-[SpellCheckState.withMarkdown][com.darkrockstudios.texteditor.spellcheck.markdown.withMarkdown]
-— adds Markdown import/export to a spell-checked editor.

@@ -11,12 +11,14 @@ import com.darkrockstudios.texteditor.richstyle.BulletListSpanStyle
 import com.darkrockstudios.texteditor.richstyle.OrderedListSpanStyle
 import com.darkrockstudios.texteditor.richstyle.RichSpanStyle
 import com.darkrockstudios.texteditor.state.TextEditorState
-import utils.EditorUiTestScope
-import utils.editorUiTest
+import com.darkrockstudios.texteditor.state.toggleBulletList
+import com.darkrockstudios.texteditor.state.toggleOrderedList
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import utils.EditorUiTestScope
+import utils.editorUiTest
 
 /** Tab and Shift+Tab: indenting, list items, the settings, and the ways out of the editor. */
 class TabE2eTest {
@@ -62,7 +64,7 @@ class TabE2eTest {
 	fun `tab at the start of a list item adds no leading space`() = editorUiTest(
 		initialText = AnnotatedString("intro\nitem"),
 	) {
-		markdown.toggleBulletList(1..1)
+		markdown.editorState.toggleBulletList(1..1)
 		waitForIdle()
 		state.cursor.updatePosition(CharLineOffset(1, 0))
 		press(Key.Tab)
@@ -79,8 +81,8 @@ class TabE2eTest {
 	fun `tab over several lines indents all but the list items, in one undo step`() = editorUiTest(
 		initialText = AnnotatedString("one\ntwo\nthree\nfour"),
 	) {
-		markdown.toggleBulletList(1..1)
-		markdown.toggleOrderedList(2..2)
+		markdown.editorState.toggleBulletList(1..1)
+		markdown.editorState.toggleOrderedList(2..2)
 		waitForIdle()
 		press(Key.A, ctrl = true)
 		press(Key.Tab)
@@ -98,7 +100,7 @@ class TabE2eTest {
 	fun `shift+tab still strips leading spaces from a list item`() = editorUiTest(
 		initialText = AnnotatedString("    item"),
 	) {
-		markdown.toggleBulletList(0..0)
+		markdown.editorState.toggleBulletList(0..0)
 		waitForIdle()
 		press(Key.Tab, shift = true)
 		assertEquals("item", text)

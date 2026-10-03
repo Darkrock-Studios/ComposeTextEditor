@@ -70,8 +70,15 @@ class FindState(
 	private val currentMatchStyle = FindCurrentMatchStyle()
 	private val scopeStyle = FindScopeStyle()
 
-	/** The user's own selection, as it stood before a search moved the selection onto a match. */
+	/**
+	 * The user's last own selection this session, as it stood before a search or a replacement
+	 * moved the selection onto a match. Clearing the selection keeps it. Find's own replacements
+	 * carry it along; any other edit drops it (see [selectionBeforeSearchLines]).
+	 */
 	private var selectionBeforeSearch: TextEditorRange? = null
+
+	/** The [TextEditorState.textLines] [selectionBeforeSearch] was taken in or carried to. */
+	private var selectionBeforeSearchLines: List<AnnotatedString>? = null
 
 	/**
 	 * The selection as this session last left it: on a match, or none after [clearSearch]. The
@@ -114,8 +121,7 @@ class FindState(
 	 * Updates highlights and jumps to the nearest match.
 	 */
 	fun search(newQuery: String) {
-		val selection = textState.selector.selection
-		if (!isSessionSelection(selection)) selectionBeforeSearch = selection
+		rememberOwnSelection()
 		query = newQuery
 
 		if (newQuery.isEmpty()) {
@@ -178,16 +184,17 @@ class FindState(
 	}
 
 	/**
-	 * Limit matches to the current selection, or search the whole document again. Once a search
-	 * has moved the selection onto a match, the selection from before that search is used.
-	 * Enabling does nothing when there is no such selection.
+	 * Limit matches to the current selection, or search the whole document again. While the
+	 * selection is a match this session selected, or there is none, the user's last own selection
+	 * is used instead, as long as the only edits since were this session's replacements. Enabling
+	 * does nothing when there is no such selection.
 	 */
 	fun toggleInSelection(enabled: Boolean) {
 		if (inSelection == enabled) return
 		if (enabled) {
 			val selection = textState.selector.selection
-			val scope = if (selection != null && isSessionSelection(selection)) {
-				selectionBeforeSearch
+			val scope = if (selection == null || isSessionSelection(selection)) {
+				currentSelectionBeforeSearch()
 			} else {
 				selection
 			}
@@ -211,13 +218,33 @@ class FindState(
 		return if (useRegex) text.replace(REGEX_METACHARACTER) { "\\" + it.value } else text
 	}
 
-	private fun scopeRange(): TextEditorRange? =
-		textState.richSpanManager.getAllRichSpans().firstOrNull { it.style === scopeStyle }?.range
+	private fun rememberOwnSelection() {
+		val selection = textState.selector.selection ?: return
+		if (!isSessionSelection(selection) && selection.start != selection.end) {
+			rememberSelectionBeforeSearch(selection)
+		}
+	}
+
+	private fun rememberSelectionBeforeSearch(selection: TextEditorRange?) {
+		selectionBeforeSearch = selection
+		selectionBeforeSearchLines = if (selection != null) textState.textLines else null
+	}
+
+	/**
+	 * The line list changes identity with every text edit and keeps it through span changes. A
+	 * formatting change or a block normalization replaces it too, which drops the range needlessly
+	 * but never keeps a stale one.
+	 */
+	private fun currentSelectionBeforeSearch(): TextEditorRange? =
+		selectionBeforeSearch?.takeIf { selectionBeforeSearchLines === textState.textLines }
+
+	private fun scopeSpans(): List<RichSpan> =
+		textState.richSpanManager.getAllRichSpans().filter { it.style === scopeStyle }
+
+	private fun scopeRange(): TextEditorRange? = scopeSpans().firstOrNull()?.range
 
 	private fun removeScope() {
-		textState.richSpanManager.getAllRichSpans()
-			.filter { it.style === scopeStyle }
-			.forEach { textState.removeRichSpan(it) }
+		scopeSpans().forEach { textState.removeRichSpan(it) }
 	}
 
 	private fun rerunSearch() {
@@ -289,7 +316,7 @@ class FindState(
 		query = ""
 		removeScope()
 		inSelection = false
-		selectionBeforeSearch = null
+		rememberSelectionBeforeSearch(null)
 		sessionSelection = null
 		clearHighlights()
 		_matches.clear()
@@ -376,7 +403,8 @@ class FindState(
 	 * Replaces [targets], in document order and not overlapping, last to first so each
 	 * replacement leaves the earlier ranges where they were, as one undo step. With [useRegex],
 	 * group references in [replaceText] are expanded for each match. An edit at the edge of the
-	 * find in selection scope would shrink it, so the scope is re-laid over what it covered.
+	 * find in selection scope would shrink it, so the scope is re-laid over what it covered, and
+	 * the selection from before the search is carried along the same way.
 	 */
 	private fun replaceRanges(targets: List<TextEditorRange>, replaceText: String) {
 		val replacements = if (useRegex) {
@@ -384,23 +412,60 @@ class FindState(
 		} else {
 			targets.map { replaceText }
 		}
-		textState.editGroup { replaceInGroup(targets.zip(replacements)) }
+		rememberOwnSelection()
+		val before = currentSelectionBeforeSearch()?.let(::flatRange)
+		textState.editGroup { replaceInGroup(targets.zip(replacements), before) }
+		rememberSelectionBeforeSearch(before?.toRange())
 	}
 
-	private fun replaceInGroup(replacements: List<Pair<TextEditorRange, String>>) {
-		val scope = scopeRange()
-		val scopeStart = scope?.start?.let(textState::getCharacterIndex)
-		var scopeEnd = scope?.end?.let(textState::getCharacterIndex)
+	private fun replaceInGroup(replacements: List<Pair<TextEditorRange, String>>, before: FlatRange?) {
+		val scope = scopeRange()?.let(::flatRange)
 		replacements.asReversed().forEach { (match, replacement) ->
-			if (scopeEnd != null) {
-				val matchLength = textState.getCharacterIndex(match.end) - textState.getCharacterIndex(match.start)
-				scopeEnd += replacement.length - matchLength
-			}
+			val matchStart = textState.getCharacterIndex(match.start)
+			val matchEnd = textState.getCharacterIndex(match.end)
+			val lengthBefore = textState.getTextLength()
 			textState.replace(match, styledReplacement(match, replacement))
+			// What landed, which line ending normalization or the input filter can make differ
+			// from the replacement, or leave out entirely.
+			val landed = matchEnd - matchStart + textState.getTextLength() - lengthBefore
+			scope?.follow(matchStart, matchEnd, landed)
+			before?.follow(matchStart, matchEnd, landed)
 		}
-		if (scopeStart != null && scopeEnd != null) {
-			removeScope()
-			textState.addRichSpan(scopeStart, scopeEnd, scopeStyle)
+		if (scope != null) {
+			textState.updateRichSpans(
+				remove = scopeSpans(),
+				add = listOfNotNull(scope.toRange()?.let { RichSpan(it, scopeStyle) }),
+			)
+		}
+	}
+
+	private fun flatRange(range: TextEditorRange) =
+		FlatRange(textState.getCharacterIndex(range.start), textState.getCharacterIndex(range.end))
+
+	private fun FlatRange.toRange(): TextEditorRange? =
+		if (start < end) TextEditorRange(textState.getOffsetAtCharacter(start), textState.getOffsetAtCharacter(end)) else null
+
+	/**
+	 * A range in flat character indices, carried across replacements made last to first. A
+	 * replacement inside it stays inside; one across an edge is left out, since not all of the
+	 * text it replaced was in the range.
+	 */
+	private class FlatRange(var start: Int, var end: Int) {
+		fun follow(matchStart: Int, matchEnd: Int, replacementLength: Int) {
+			val delta = replacementLength - (matchEnd - matchStart)
+			when {
+				matchStart >= end -> Unit
+				matchEnd <= start -> {
+					start += delta
+					end += delta
+				}
+
+				else -> {
+					val replacementEnd = matchStart + replacementLength
+					if (matchStart < start) start = replacementEnd
+					end = if (matchEnd > end) maxOf(start, matchStart) else end + delta
+				}
+			}
 		}
 	}
 

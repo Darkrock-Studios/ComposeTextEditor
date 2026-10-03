@@ -5,10 +5,11 @@ import com.darkrockstudios.texteditor.state.TextEditorState
 
 /**
  * Smart editing for lines carrying a [LineBlockStyle]: Enter on an empty item
- * exits the block (a nested list item un-nests instead), backspace at its
- * start demotes it (a nested list item un-nests), and a split keeps the
- * gutter marker on both halves. See the "Smart editing" and "Nested lists"
- * sections of `docs/design/line-blocks.md`.
+ * exits the block (a nested list item un-nests instead), Enter at a heading's
+ * end, empty or not, starts body text, backspace at its start demotes it (a
+ * nested list item un-nests), and a split keeps the gutter marker on both
+ * halves. See the "Smart editing" and "Nested lists" sections of
+ * `docs/design/line-blocks.md`.
  *
  * Registered on every [TextEditorState] by default. Remove it from
  * [TextEditorState.editBehaviors] for an editor that wants plain line breaks.
@@ -17,9 +18,12 @@ object LineBlockEditBehavior : EditBehavior {
 
 	override fun onNewline(state: TextEditorState): Boolean {
 		val line = state.cursorPosition.line
-		val block = state.detectLineBlock(line) ?: return false
+		val blocks = state.lineBlocks(line)
+		val block = blocks.firstOrNull() ?: return false
+		val text = state.textLines.getOrNull(line)?.text.orEmpty()
+		val atHeadingEnd = blocks.any { it.isHeading } && state.cursorPosition.char >= text.length
 
-		if (state.textLines.getOrNull(line)?.text.isNullOrEmpty()) {
+		if (text.isEmpty() && !atHeadingEnd) {
 			// Enter on an empty nested item un-nests it; on an empty top-level
 			// item it exits the block (matches Notion / Google Docs). Both go
 			// through recording paths so the change lands in undo history. The
@@ -27,20 +31,33 @@ object LineBlockEditBehavior : EditBehavior {
 			if ((state.listBlockAt(line)?.listLevel ?: 0) > 0) {
 				state.unnestListItems(line..line)
 			} else {
-				state.editManager.toggleLineBlock(line..line, block)
+				// A quoted item leaves the list and stays quoted.
+				state.editManager.toggleLineBlock(line..line, state.listBlockAt(line) ?: block)
 			}
 			return true
 		}
 
-		// The split and the block markers are one revision. Published separately, a
-		// reader between them sees the new half-line with its marker missing.
+		// The split and the block markers are one revision and one undo step, the
+		// markers recorded so that a redo puts them back too.
 		state.withAtomicEdit {
+			val lineCount = state.textLines.size
 			state.insertNewlineRaw()
-
-			// A split at a span boundary keeps the span on only one side, so apply
-			// to both halves; applyLineBlock is idempotent.
-			state.applyLineBlock(line, block)
-			state.applyLineBlock(line + 1, block)
+			// An input filter can turn the line break into something else.
+			if (state.textLines.size != lineCount + 1) return@withAtomicEdit
+			state.editManager.recordLineBlockChanges(listOf(line, line + 1)) {
+				// A split at a span boundary, or of an empty line, leaves a marker on
+				// only one side, so apply to both halves; applyLineBlock is idempotent.
+				// A heading ends at its end: the line after it is body text, empty
+				// heading or not (Word's and Google Docs' next-paragraph style).
+				blocks.forEach { state.applyLineBlock(line, it) }
+				blocks.forEach {
+					if (atHeadingEnd && it.isHeading) {
+						state.demoteLineBlock(line + 1, it)
+					} else {
+						state.applyLineBlock(line + 1, it)
+					}
+				}
+			}
 		}
 		return true
 	}

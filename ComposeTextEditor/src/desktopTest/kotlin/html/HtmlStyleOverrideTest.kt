@@ -4,8 +4,8 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import com.darkrockstudios.texteditor.RichTextStyles
 import com.darkrockstudios.texteditor.html.toAnnotatedStringFromHtml
-import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -13,7 +13,7 @@ import kotlin.test.assertTrue
 
 class HtmlStyleOverrideTest {
 
-	private val config = MarkdownConfiguration.DEFAULT
+	private val config = RichTextStyles.DEFAULT
 
 	/**
 	 * Resolves the styles at [index] the way rendering does: later spans in the

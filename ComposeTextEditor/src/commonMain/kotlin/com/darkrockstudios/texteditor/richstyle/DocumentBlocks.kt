@@ -3,7 +3,7 @@ package com.darkrockstudios.texteditor.richstyle
 import androidx.compose.ui.text.AnnotatedString
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
-import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
+import com.darkrockstudios.texteditor.RichTextStyles
 import com.darkrockstudios.texteditor.state.TextEditorState
 
 /**
@@ -43,10 +43,10 @@ internal class DocumentBlocks(
 
 /** Collects every line-anchored decoration currently attached to this document. */
 internal fun TextEditorState.documentBlocks(): DocumentBlocks =
-	documentBlocksOf(richSpanManager.getAllRichSpans(), markdownConfiguration)
+	documentBlocksOf(richSpanManager.getAllRichSpans(), richTextStyles)
 
 /**
- * Collects the decorations in [allSpans], keyed by [config]'s block registry.
+ * Collects the decorations in [allSpans], keyed by [styles]' block registry.
  *
  * Serializers take this from the same [TextEditorState.content] snapshot they read
  * the text from, so the blocks they place and the lines they place them on come
@@ -54,7 +54,7 @@ internal fun TextEditorState.documentBlocks(): DocumentBlocks =
  */
 internal fun documentBlocksOf(
 	allSpans: Set<RichSpan>,
-	config: MarkdownConfiguration,
+	styles: RichTextStyles,
 ): DocumentBlocks {
 	return DocumentBlocks(
 		horizontalRuleLines = allSpans
@@ -69,7 +69,7 @@ internal fun documentBlocksOf(
 				span.range.start.line to style
 			}
 			.toMap(),
-		blockLines = allBlockStyles(config).associateWith { block ->
+		blockLines = allBlockStyles(styles).associateWith { block ->
 			allSpans.asSequence()
 				.filter { it.style === block.spanStyle }
 				.map { it.range.start.line }
@@ -79,23 +79,35 @@ internal fun documentBlocksOf(
 }
 
 /**
- * Attaches the decorations an importer parsed out of a source document.
+ * Attaches the decorations an importer parsed out of a source document: rules on
+ * [horizontalRuleLines], the images of [imageLines], the line blocks of [blockLines]
+ * (keyed by the block's span style, one of [LINE_BLOCK_STYLES]; any other key is
+ * refused) and [richSpans] (links, fence languages), clamped onto the lines as
+ * [TextEditorState.setDocument] clamps them. A line index past the document and a
+ * decoration span are ignored.
  *
  * Every span is published and every block line rebuilt against the current content
  * before a single relayout runs at the end. A relayout re-measures from the line it
  * is given to the end of the document, so one per block line would measure an
  * n-line import O(n²) times. No edit is recorded: loading a document is not
- * something the user should be able to undo one list item at a time.
+ * something the user should be able to undo one list item at a time. Call it
+ * after [TextEditorState.setText] inside [TextEditorState.editGroup] to load a
+ * document as one revision, so no reader sees the text loaded but unstyled.
  */
-internal fun TextEditorState.applyDocumentBlocks(
+fun TextEditorState.applyDocumentBlocks(
 	horizontalRuleLines: Collection<Int> = emptyList(),
 	imageLines: Map<Int, ImageBlockSpanStyle> = emptyMap(),
-	blockLines: Map<LineBlockStyle, Collection<Int>> = emptyMap(),
+	blockLines: Map<RichSpanStyle, Collection<Int>> = emptyMap(),
+	richSpans: Collection<RichSpan> = emptyList(),
 ) = withAtomicEdit {
+	val blocks = blockLines.mapKeys { (style, _) ->
+		requireNotNull(lineBlockFor(style, richTextStyles)) { "$style is not a line block's span style" }
+	}
 	val added = mutableListOf<RichSpan>()
 	val removed = mutableListOf<RichSpan>()
 	val lines = textLines.toMutableList()
 	var rebuiltAnyLine = false
+	fun Collection<Int>.inDocument() = filter { it in lines.indices }
 
 	// The GFM parser drops a lone leading space at document start, so a
 	// placeholder line at index 0 can arrive empty; restore the character the
@@ -107,14 +119,14 @@ internal fun TextEditorState.applyDocumentBlocks(
 		}
 	}
 
-	horizontalRuleLines.forEach { line ->
+	horizontalRuleLines.inDocument().forEach { line ->
 		ensurePlaceholder(line, HR_PLACEHOLDER)
 		added += RichSpan(
 			range = lineRange(line, HR_PLACEHOLDER.length),
 			style = HorizontalRuleSpanStyle,
 		)
 	}
-	imageLines.forEach { (line, style) ->
+	imageLines.filterKeys { it in lines.indices }.forEach { (line, style) ->
 		ensurePlaceholder(line, IMAGE_PLACEHOLDER)
 		added += RichSpan(range = lineRange(line, IMAGE_PLACEHOLDER.length), style = style)
 	}
@@ -124,19 +136,19 @@ internal fun TextEditorState.applyDocumentBlocks(
 	// whatever it excludes, so a fence beats a list and blockquote stacks with both.
 	val requested = mutableMapOf<Int, MutableList<LineBlockStyle>>()
 	allBlockRegistry.forEach { block ->
-		blockLines[block]?.forEach { line ->
+		blocks[block]?.forEach { line ->
 			requested.getOrPut(line) { mutableListOf() } += block
 		}
 	}
 
-	for ((line, blocks) in requested) {
+	for ((line, lineBlocks) in requested) {
 		var text = lines.getOrNull(line) ?: continue
 		val present = lineBlocks(line).toMutableList()
 		// Spans staged for this line, so a block demoted after being applied in this
 		// same pass is withdrawn rather than published alongside the block that
 		// replaced it.
 		val staged = linkedMapOf<LineBlockStyle, RichSpan>()
-		for (block in blocks) {
+		for (block in lineBlocks) {
 			val resolved = resolveLineBlock(present, block, text) ?: continue
 			for (excluded in resolved.demoted) {
 				present.remove(excluded)
@@ -155,10 +167,11 @@ internal fun TextEditorState.applyDocumentBlocks(
 	richSpanManager.removeRichSpans(removed)
 	richSpanManager.addRichSpans(added)
 	if (rebuiltAnyLine) setLines(lines)
+	richSpanManager.addRichSpansClamped(richSpans.filterNot { it.style.isDecoration })
 	// Attaching a span is enough on its own to need the relayout, even with no line
 	// rebuilt: a rule or an image resolves its height from the spans on its line wrap,
 	// which only book-keeping works out.
-	if (added.isNotEmpty() || removed.isNotEmpty() || rebuiltAnyLine) updateBookKeeping()
+	if (added.isNotEmpty() || removed.isNotEmpty() || richSpans.isNotEmpty() || rebuiltAnyLine) updateBookKeeping()
 }
 
 /** The range covering [length] characters from the start of [line]. */

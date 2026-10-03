@@ -10,6 +10,7 @@ import com.darkrockstudios.texteditor.spellcheck.api.EditorSpellChecker.Scope
 import com.darkrockstudios.texteditor.spellcheck.api.Suggestion
 import com.darkrockstudios.texteditor.spellcheck.utils.LineDiff
 import com.darkrockstudios.texteditor.spellcheck.utils.applyCapitalizationStrategy
+import com.darkrockstudios.texteditor.spellcheck.utils.replaceFlagged
 import com.darkrockstudios.texteditor.state.TextEditOperation
 import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.WordSegment
@@ -151,26 +152,23 @@ class SpellCheckState(
 	/**
 	 * Replace a misspelled word with the chosen correction.
 	 *
-	 * Removes the word's spell-check decoration and applies the replacement to [textState].
+	 * Applies the replacement to [textState] and removes the word's spell-check decoration once
+	 * the correction has landed as given. If [TextEditorState.inputFilter] refuses it, the word
+	 * stays flagged; a correction the filter changes is an edit like any other, which the edit's
+	 * re-check settles.
 	 *
 	 * @param segment The misspelled [WordSegment] to correct.
 	 * @param correction The replacement text.
 	 */
 	fun correctSpelling(segment: WordSegment, correction: String) {
-		val doomed = textState.getRichSpansInRange(segment.range)
-			.filter { it.style is SpellCheckStyle }
-		textState.updateRichSpans(remove = doomed, add = emptyList())
-		textState.replace(segment.range, correction, true)
+		textState.replaceFlagged(segment.range, correction) { it.style is SpellCheckStyle }
 	}
 
 	/**
-	 * Apply a sentence-level correction.
+	 * Apply a sentence-level correction. Its flag is kept as [correctSpelling] keeps a word's.
 	 */
 	fun applySentenceCorrection(correction: Correction, selectedSuggestion: String) {
-		val doomed = textState.getRichSpansInRange(correction.range)
-			.filter { it.style is SpellCheckStyle }
-		textState.updateRichSpans(remove = doomed, add = emptyList())
-		textState.replace(correction.range, selectedSuggestion, true)
+		textState.replaceFlagged(correction.range, selectedSuggestion) { it.style is SpellCheckStyle }
 	}
 
 	/**

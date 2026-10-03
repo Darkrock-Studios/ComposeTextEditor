@@ -22,3 +22,5 @@ actual class TextEditorTextInputService actual constructor(
 	actual suspend fun startInput(session: PlatformTextInputSession): Nothing =
 		state.startSkikoInputSession(session, ImeOptions.Default, imeResync = SkikoImeResync.None)
 }
+
+internal actual val startsInputQuietly: Boolean = true

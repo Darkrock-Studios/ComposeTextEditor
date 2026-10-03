@@ -115,8 +115,9 @@ class AtomicEditTest {
 		job.cancel()
 
 		assertTrue(seen.isNotEmpty(), "No edit was announced; the test proved nothing")
+		// The split and the new item's marker are two operations, both announced after the publish.
 		assertEquals(
-			listOf(3),
+			listOf(3, 3),
 			seen,
 			"editOperations announced an edit whose revision was not yet published",
 		)

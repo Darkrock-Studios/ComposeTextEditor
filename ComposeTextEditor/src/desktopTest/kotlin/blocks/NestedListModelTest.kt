@@ -3,6 +3,7 @@ package blocks
 import androidx.compose.ui.text.AnnotatedString
 import com.darkrockstudios.texteditor.richstyle.BULLET_LISTS
 import com.darkrockstudios.texteditor.richstyle.BULLET_LIST_PARAGRAPH_STYLE
+import com.darkrockstudios.texteditor.richstyle.BlockquoteSpanStyle
 import com.darkrockstudios.texteditor.richstyle.BulletList
 import com.darkrockstudios.texteditor.richstyle.BulletListSpanStyle
 import com.darkrockstudios.texteditor.richstyle.MAX_LIST_LEVEL
@@ -10,19 +11,19 @@ import com.darkrockstudios.texteditor.richstyle.ORDERED_LISTS
 import com.darkrockstudios.texteditor.richstyle.OrderedListSpanStyle
 import com.darkrockstudios.texteditor.richstyle.applyDocumentBlocks
 import com.darkrockstudios.texteditor.richstyle.atListLevel
-import com.darkrockstudios.texteditor.richstyle.conflicts
+import com.darkrockstudios.texteditor.richstyle.lineBlocksConflict
 import com.darkrockstudios.texteditor.richstyle.listBlockAt
 import com.darkrockstudios.texteditor.richstyle.listLevel
 import com.darkrockstudios.texteditor.richstyle.listParagraphStyle
 import com.darkrockstudios.texteditor.state.TextEditorState
 import io.mockk.mockk
-import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotSame
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
+import kotlinx.coroutines.test.runTest
 
 /** The nested list model: per-level singletons, one list block per line, levels clamped to what a predecessor allows. */
 class NestedListModelTest {
@@ -40,10 +41,10 @@ class NestedListModelTest {
 
 	@Test
 	fun `list blocks at any level exclude each other and stack with a quote`() {
-		assertTrue(conflicts(BulletListSpanStyle.of(1), BulletListSpanStyle.of(2)))
-		assertTrue(conflicts(BulletListSpanStyle.of(1), OrderedListSpanStyle.of(1)))
-		assertFalse(conflicts(BulletListSpanStyle.of(3), BulletListSpanStyle.of(3)))
-		assertFalse(conflicts(BulletListSpanStyle.of(3), com.darkrockstudios.texteditor.richstyle.BlockquoteSpanStyle))
+		assertTrue(lineBlocksConflict(BulletListSpanStyle.of(1), BulletListSpanStyle.of(2)))
+		assertTrue(lineBlocksConflict(BulletListSpanStyle.of(1), OrderedListSpanStyle.of(1)))
+		assertFalse(lineBlocksConflict(BulletListSpanStyle.of(3), BulletListSpanStyle.of(3)))
+		assertFalse(lineBlocksConflict(BulletListSpanStyle.of(3), com.darkrockstudios.texteditor.richstyle.BlockquoteSpanStyle))
 	}
 
 	@Test
@@ -63,7 +64,7 @@ class NestedListModelTest {
 		val state = TextEditorState(scope = this, measurer = mockk(relaxed = true))
 		state.setText(AnnotatedString("a\nb\nc"))
 		state.applyDocumentBlocks(
-			blockLines = mapOf(BULLET_LISTS[0] to listOf(0), BULLET_LISTS[3] to listOf(1), ORDERED_LISTS[2] to listOf(2)),
+			blockLines = mapOf(BulletListSpanStyle.of(0) to listOf(0), BulletListSpanStyle.of(3) to listOf(1), OrderedListSpanStyle.of(2) to listOf(2)),
 		)
 		assertSame(BULLET_LISTS[0], state.listBlockAt(0))
 		assertSame(BULLET_LISTS[3], state.listBlockAt(1))

@@ -4,6 +4,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
+import com.darkrockstudios.texteditor.spellcheck.LocalScanContext
 import com.darkrockstudios.texteditor.state.TextEditorState
 
 /**
@@ -17,7 +18,8 @@ fun rememberTextDiagnosticsState(
 	color: Color = DefaultDiagnosticColor,
 	suggestionColor: Color = DefaultSuggestionColor,
 ): TextDiagnosticsState {
-	val state = remember(textState) { TextDiagnosticsState(textState, checker, color, suggestionColor) }
+	val scanContext = LocalScanContext.current
+	val state = remember(textState) { TextDiagnosticsState(textState, checker, color, suggestionColor, scanContext) }
 	LaunchedEffect(state, checker) { state.setChecker(checker) }
 	LaunchedEffect(state, color) { state.setColor(color) }
 	LaunchedEffect(state, suggestionColor) { state.setSuggestionColor(suggestionColor) }

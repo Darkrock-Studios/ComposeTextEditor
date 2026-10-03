@@ -5,16 +5,16 @@ import com.darkrockstudios.texteditor.state.TextEditorState
 
 /**
  * Nesting and un-nesting list items, and keeping the items that follow an
- * edited one at levels markdown can hold. See `docs/design/line-blocks.md`,
+ * edited one at levels the text forms can hold. See `docs/design/line-blocks.md`,
  * "Nested lists".
  */
 
 /**
  * Whether a line with [text] and [spansOnLine] is one nesting looks through:
- * blank text with no block but a quote. The exporter and the importer read
+ * blank text with no block but a quote. A format's exporter and importer read
  * the same definition, so what the editor nests, the file holds.
  */
-internal fun isNestingBlank(text: AnnotatedString, spansOnLine: Iterable<RichSpan>): Boolean =
+fun isNestingBlank(text: AnnotatedString, spansOnLine: Iterable<RichSpan>): Boolean =
 	text.isBlank() && spansOnLine.none { span ->
 		val style = span.style
 		style.listBlock() != null || style is BlockSpanStyle || style === CodeFenceSpanStyle || style is HeaderSpanStyle
@@ -142,7 +142,7 @@ internal fun TextEditorState.recordListEdit(targets: List<Int>, mutate: () -> Un
  * its former children now its siblings, as Google Docs has it. One undo step;
  * returns whether any item moved.
  */
-internal fun TextEditorState.nestListItems(lines: IntRange): Boolean {
+fun TextEditorState.nestListItems(lines: IntRange): Boolean {
 	val targets = lines.filter { it in textLines.indices && listBlockAt(it) != null }
 	if (targets.isEmpty()) return false
 	var moved = false
@@ -165,7 +165,7 @@ internal fun TextEditorState.nestListItems(lines: IntRange): Boolean {
  * last of them come up with it, so nothing is left deeper than it allows. One
  * undo step; returns whether any item moved.
  */
-internal fun TextEditorState.unnestListItems(lines: IntRange): Boolean {
+fun TextEditorState.unnestListItems(lines: IntRange): Boolean {
 	val targets = lines.filter { line ->
 		line in textLines.indices && (listBlockAt(line)?.listLevel ?: 0) > 0
 	}

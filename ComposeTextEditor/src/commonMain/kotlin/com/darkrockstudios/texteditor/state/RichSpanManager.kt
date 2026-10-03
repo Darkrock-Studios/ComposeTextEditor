@@ -230,6 +230,11 @@ class RichSpanManager(
 							)
 						)
 					)
+					// The paragraph left above, now empty, keeps the format it had.
+					if (span.style.boundToParagraph && operation.position.line == start.line) {
+						val above = CharLineOffset(start.line, 0)
+						updatedSpans.add(span.copy(range = TextEditorRange(above, above)))
+					}
 				}
 
 				// Case 2: Newline inserted inside the span
@@ -271,6 +276,12 @@ class RichSpanManager(
 						(operation.position.line == start.line && operation.position.char >= end.char) -> {
 					// Keep span as is
 					updatedSpans.add(span)
+					// A paragraph's format carries to the paragraph Enter makes after it, as
+					// word processors carry it; the new line is empty, so its span starts empty.
+					if (span.style.boundToParagraph && operation.position.line == start.line) {
+						val next = CharLineOffset(start.line + 1, 0)
+						updatedSpans.add(span.copy(range = TextEditorRange(next, next)))
+					}
 				}
 			}
 		} else {
@@ -281,12 +292,25 @@ class RichSpanManager(
 			// span past the line content and the gutter marker visually disappears.
 			val insertAtStart = operation.position.line == start.line &&
 					operation.position.char == start.char
-			val newStart = if (span.style.stickyAtStart && insertAtStart) {
-				start
-			} else {
-				operation.transformOffset(start, state)
+			// Where the inserted text ends: past a line break, a marker the insert lands in
+			// front of follows its line's text down, as Enter at a line's start moves it.
+			// An empty line's marker, and a paragraph's format, stay on the first line.
+			val insertEnd = operation.transformOffset(operation.position, state)
+			val followsDown = span.style.stickyAtStart && !span.style.boundToParagraph && end != start
+			val newStart = when {
+				followsDown && insertAtStart && insertEnd.line > start.line -> CharLineOffset(insertEnd.line, 0)
+				span.style.stickyAtStart && insertAtStart -> start
+				else -> operation.transformOffset(start, state)
 			}
-			val newEnd = operation.transformOffset(end, state)
+			val transformedEnd = operation.transformOffset(end, state)
+			// A line-anchored marker stays on its line when the insert brings more lines
+			// (the edit pipeline continues a block onto them): the clamp trims the end
+			// to the line.
+			val newEnd = if (span.style.stickyAtStart && transformedEnd.line > newStart.line) {
+				CharLineOffset(newStart.line, Int.MAX_VALUE)
+			} else {
+				transformedEnd
+			}
 			updatedSpans.add(
 				span.copy(
 					range = span.range.copy(
@@ -304,13 +328,44 @@ class RichSpanManager(
 		span: RichSpan
 	) {
 		val newEnd = operation.newTextEnd
+		val breaks = newEnd.line > operation.range.start.line
 
 		when {
-			// Span ends before replacement - keep as is
+			// A line-anchored marker on a line a replace breaks after its start stays on
+			// that line, the first; the edit pipeline continues a block onto the lines
+			// after it. One at the replace's start follows its line's text down.
+			span.style.stickyAtStart && operation.range.isSingleLine() && breaks &&
+					span.range.start.line == operation.range.start.line &&
+					operation.range.start.char > span.range.start.char -> {
+				val line = span.range.start.line
+				updatedSpans.add(span.copy(range = TextEditorRange(span.range.start, CharLineOffset(line, Int.MAX_VALUE))))
+			}
+
+			// A line-anchored marker covers its line whatever a replace of nothing adds
+			// to its first line, as an insert there leaves it: its start stays at
+			// column 0 and an end at the insert point takes the text in. Text holding
+			// a line break takes the branches below.
+			span.style.stickyAtStart && operation.range.start == operation.range.end &&
+					!breaks && operation.range.start.line == span.range.start.line &&
+					operation.range.start.char >= span.range.start.char &&
+					(span.range.end.line > span.range.start.line || operation.range.start.char <= span.range.end.char) -> {
+				val shift = newEnd.char - operation.range.start.char
+				val end = if (span.range.end.line == span.range.start.line) {
+					span.range.end.copy(char = span.range.end.char + shift)
+				} else {
+					span.range.end
+				}
+				updatedSpans.add(span.copy(range = TextEditorRange(span.range.start, end)))
+			}
+
+			// Span ends before replacement - keep as is. An empty line's marker at the
+			// start of a replace that takes whole lines goes with its line.
 			span.range.end.line < operation.range.start.line ||
 					(span.range.end.line == operation.range.start.line &&
 							span.range.end.char <= operation.range.start.char) -> {
-				updatedSpans.add(span)
+				val lineTaken = span.style.stickyAtStart && span.range.start == span.range.end &&
+					span.range.start == operation.range.start && !operation.range.isSingleLine()
+				if (!lineTaken) updatedSpans.add(span)
 			}
 
 			// Span starts after replacement - adjust position
@@ -324,13 +379,24 @@ class RichSpanManager(
 				} else 0
 
 				// Adjust span positions
-				val newStart = CharLineOffset(
-					span.range.start.line + lineDiff,
-					span.range.start.char + charDiff
-				)
+				var newStart = CharLineOffset(span.range.start.line + lineDiff, span.range.start.char + charDiff)
+				if (span.style.stickyAtStart && newStart.char != 0) {
+					// A line-anchored marker whose text the replacement puts after new text
+					// stays at its line's start when that line is the replacement's own
+					// (a line break in it, or whole lines replaced up to the marker). Joined
+					// onto the kept head of an earlier line, it goes, as a line joined by a
+					// delete does, unless that line is the same kind of item.
+					val ownLine = breaks || operation.range.start.char == 0
+					val receivingHasSame = spansOnLine(newStart.line).any { other ->
+						other.style == span.style && other.range.start.line == newStart.line && other.range.start.char == 0
+					}
+					if (!ownLine && !receivingHasSame) return
+					newStart = CharLineOffset(newStart.line, 0)
+				}
+				// A column moves only on the replacement's last line.
 				val newEndPos = CharLineOffset(
 					span.range.end.line + lineDiff,
-					span.range.end.char + charDiff
+					span.range.end.char + if (span.range.end.line == operation.range.end.line) charDiff else 0,
 				)
 				updatedSpans.add(span.copy(range = TextEditorRange(newStart, newEndPos)))
 			}
@@ -395,13 +461,15 @@ class RichSpanManager(
 					)
 				} else if (span.style.stickyAtStart && operation.range.isSingleLine()) {
 					// A line-anchored marker whose text is replaced within its own line
-					// survives: that is editing the item, not deleting it. A multi-line
-					// replacement removed the marker's line, so the marker goes with it.
+					// survives: that is editing the item, not deleting it, and it stays on
+					// the first line when the new text breaks it. A multi-line replacement
+					// removed the marker's line, so the marker goes with it.
+					val end = if (newEnd.line > operation.range.start.line) CharLineOffset(operation.range.start.line, Int.MAX_VALUE) else newEnd
 					updatedSpans.add(
 						span.copy(
 							range = TextEditorRange(
 								CharLineOffset(operation.range.start.line, 0),
-								newEnd,
+								end,
 							)
 						)
 					)

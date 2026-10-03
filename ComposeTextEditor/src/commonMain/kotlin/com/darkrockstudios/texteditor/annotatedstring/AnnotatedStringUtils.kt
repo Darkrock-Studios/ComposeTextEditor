@@ -16,6 +16,29 @@ fun String.toAnnotatedString(fontFamily: FontFamily? = null): AnnotatedString {
 	}
 }
 
+/**
+ * This text with [spanStyles] in place of its own span styles, where the first of
+ * them stood; paragraph styles and every other annotation keep their places, so an
+ * edit that puts the old spans back gives back an equal string.
+ */
+internal fun AnnotatedString.withSpanStyles(spanStyles: List<AnnotatedString.Range<SpanStyle>>): AnnotatedString {
+	var placed = false
+	val replaced = flatMapAnnotations { range ->
+		when {
+			range.item !is SpanStyle -> listOf(range)
+			placed -> emptyList()
+			else -> {
+				placed = true
+				spanStyles
+			}
+		}
+	}
+	if (placed || spanStyles.isEmpty()) return replaced
+	return AnnotatedString.Builder(replaced).apply {
+		spanStyles.forEach { addStyle(it.item, it.start, it.end) }
+	}.toAnnotatedString()
+}
+
 internal fun AnnotatedString.subSequence(startIndex: Int = 0, endIndex: Int = length) =
 	subSequence(startIndex = startIndex, endIndex = endIndex)
 

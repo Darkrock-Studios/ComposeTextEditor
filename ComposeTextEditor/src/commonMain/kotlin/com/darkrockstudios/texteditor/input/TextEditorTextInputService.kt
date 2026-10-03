@@ -19,3 +19,11 @@ expect class TextEditorTextInputService(state: TextEditorState) {
 	 */
 	suspend fun startInput(session: PlatformTextInputSession): Nothing
 }
+
+/**
+ * Whether a session may start with the soft keyboard asked to stay down, for input turned
+ * back on under focus. On Android the request to hide cancels the session's own request
+ * to show before either reaches the keyboard; desktop has no soft keyboard. On iOS and the
+ * web the keyboard is tied to the session's first responder or focused text area.
+ */
+internal expect val startsInputQuietly: Boolean

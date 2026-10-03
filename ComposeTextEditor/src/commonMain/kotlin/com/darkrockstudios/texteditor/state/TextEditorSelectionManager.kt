@@ -118,10 +118,10 @@ class TextEditorSelectionManager(
 	}
 
 	/** Moves the caret, and the handle with it, for a drag of the handle. */
-	internal fun dragCaretHandleTo(position: CharLineOffset) {
+	internal fun dragCaretHandleTo(position: CharLineOffset, affinity: CaretAffinity = CaretAffinity.Downstream) {
 		caretHandleIdle?.cancel()
 		if (caretHandle == null) return
-		state.cursor.updatePosition(position)
+		state.cursor.updatePosition(position, affinity)
 		caretHandle = CaretHandleAnchor(state.cursorPosition, state.content)
 	}
 
@@ -227,13 +227,16 @@ class TextEditorSelectionManager(
 	 * Selects from [anchor] to the [granularity] unit at [position], the way a click, a
 	 * multi-click, a long press, or a drag after one does: [anchor] always stays selected,
 	 * and the caret goes to the end that moves. Collapses to a caret when the two meet.
-	 * [isTouch] gives the selection touch handles.
+	 * [isTouch] gives the selection touch handles. At a wrap offset the caret stands where
+	 * the selection's highlight does, on the row the selection ends or starts on; a
+	 * collapsed one takes the hit's [affinity].
 	 */
 	internal fun selectFromAnchor(
 		anchor: TextEditorRange,
 		position: CharLineOffset,
 		granularity: SelectionGranularity,
 		isTouch: Boolean = false,
+		affinity: CaretAffinity = CaretAffinity.Downstream,
 	) {
 		val target = rangeAt(position, granularity)
 		val (start, end, caret) = if (isBeforeInDocument(target.start, anchor.start)) {
@@ -242,7 +245,12 @@ class TextEditorSelectionManager(
 			val end = if (isBeforeInDocument(target.end, anchor.end)) anchor.end else target.end
 			Triple(anchor.start, end, end)
 		}
-		state.cursor.updatePosition(caret)
+		val caretAffinity = when {
+			start == end -> affinity
+			caret == end -> CaretAffinity.Upstream
+			else -> CaretAffinity.Downstream
+		}
+		state.cursor.updatePosition(caret, caretAffinity)
 		updateSelection(start, end)
 		if (start != end) _isTouchSelection = isTouch
 		if (isTouch) touchSelectionGeneration++

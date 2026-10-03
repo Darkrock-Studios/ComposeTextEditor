@@ -37,7 +37,7 @@ class EditorStateFuzzTest {
 			count = 250,
 			mutatingBudget = 80,
 		)
-		val interpreter = StateFuzzInterpreter(state, markdown)
+		val interpreter = StateFuzzInterpreter(state)
 
 		runFuzzScript(fuzzSeed(seed), script) { op ->
 			interpreter.apply(op)
@@ -55,7 +55,7 @@ class EditorStateFuzzTest {
 	private fun markdownFixpoint(seed: Long) {
 		val (state, markdown) = editor("seed line\n- item\n> quoted")
 		val script = generateFuzzScript(seed = fuzzSeed(seed), count = 250)
-		val interpreter = StateFuzzInterpreter(state, markdown)
+		val interpreter = StateFuzzInterpreter(state)
 
 		runFuzzScript(fuzzSeed(seed), script) { op ->
 			interpreter.apply(op)
