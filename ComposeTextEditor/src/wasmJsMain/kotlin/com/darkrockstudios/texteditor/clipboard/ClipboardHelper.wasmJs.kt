@@ -116,6 +116,7 @@ actual object ClipboardHelper {
 		attempt(what) { block(); true } == true
 
 	/** Runs [block], logging a refusal and answering null for it. */
+	@Suppress("TooGenericExceptionCaught")
 	private suspend fun <T : Any> attempt(what: String, block: suspend () -> T?): T? = try {
 		block()
 	} catch (e: CancellationException) {

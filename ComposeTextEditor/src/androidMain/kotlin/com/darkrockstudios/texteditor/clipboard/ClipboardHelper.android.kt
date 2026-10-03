@@ -12,6 +12,7 @@ import com.darkrockstudios.texteditor.html.HtmlDocument
 import com.darkrockstudios.texteditor.html.toAnnotatedStringFromHtml
 import com.darkrockstudios.texteditor.html.toHtml
 import com.darkrockstudios.texteditor.RichTextStyles
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * Copies offer the selection as HTML beside its text (`ClipData.newHtmlText`), which
@@ -47,6 +48,7 @@ actual object ClipboardHelper {
 			?.joinToString("\n")
 	}
 
+	@Suppress("TooGenericExceptionCaught")
 	actual suspend fun setText(
 		clipboard: Clipboard,
 		text: AnnotatedString,
@@ -61,6 +63,8 @@ actual object ClipboardHelper {
 		try {
 			clipboard.setClipEntry(clipData.toClipEntry())
 			return true
+		} catch (e: CancellationException) {
+			throw e
 		} catch (e: RuntimeException) {
 			// A clip past the binder transaction limit is refused; the text alone is
 			// half the size, so a large selection still copies.
@@ -69,6 +73,8 @@ actual object ClipboardHelper {
 		return try {
 			clipboard.setClipEntry(ClipData.newPlainText("text", text.text).toClipEntry())
 			true
+		} catch (e: CancellationException) {
+			throw e
 		} catch (e: RuntimeException) {
 			Log.w(TAG, "Could not copy", e)
 			false

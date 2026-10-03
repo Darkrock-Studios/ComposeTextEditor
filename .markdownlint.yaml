@@ -1,0 +1,19 @@
+# Read by markdownlint and Codacy. A .markdownlint.json would shadow this file.
+
+# The docs wrap prose by hand at no fixed width; tables, URLs and code run long.
+MD013: false
+
+# Code samples use tabs to match the Kotlin sources.
+MD010:
+  code_blocks: false
+
+MD025: false
+
+# Keyboard shortcuts are written with <kbd>.
+MD033:
+  allowed_elements: [kbd]
+
+# Code spans such as `- ` and `> ` document markers whose trailing space matters.
+MD038: false
+
+MD052: false

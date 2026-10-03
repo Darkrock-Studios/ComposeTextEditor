@@ -8,6 +8,7 @@ import java.awt.datatransfer.ClipboardOwner
 import java.awt.datatransfer.DataFlavor
 import java.awt.datatransfer.Transferable
 import java.awt.datatransfer.UnsupportedFlavorException
+import java.io.IOException
 
 /**
  * Turns the primary selection off for the process when set to `false`. The test suites
@@ -34,7 +35,7 @@ internal class AwtPrimarySelection(private val selection: Clipboard) : PrimarySe
 		claim = next
 		try {
 			selection.setContents(LazyText(source), next)
-		} catch (e: Exception) {
+		} catch (_: IllegalStateException) {
 			// AWT refuses while another application holds the selection open.
 			if (claim === next) claim = null
 		}
@@ -44,7 +45,11 @@ internal class AwtPrimarySelection(private val selection: Clipboard) : PrimarySe
 	override suspend fun readText(): String? = withContext(Dispatchers.IO) {
 		try {
 			(selection.getData(DataFlavor.stringFlavor) as? String)?.takeIf { it.isNotEmpty() }
-		} catch (e: Exception) {
+		} catch (_: UnsupportedFlavorException) {
+			null
+		} catch (_: IOException) {
+			null
+		} catch (_: IllegalStateException) {
 			null
 		}
 	}
