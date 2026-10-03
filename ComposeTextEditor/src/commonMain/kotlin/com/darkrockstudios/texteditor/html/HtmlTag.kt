@@ -62,13 +62,13 @@ private fun SpanStyle.headerTag(config: RichTextStyles): HtmlTag? {
 /** The heading level whose configured size this style matches. */
 private fun SpanStyle.headingTagBySize(config: RichTextStyles): HtmlTag? {
 	if (fontWeight != FontWeight.Bold || fontSize == TextUnit.Unspecified) return null
-	return when (fontSize.value) {
-		config.header1Style.fontSize.value -> HtmlTag.H1
-		config.header2Style.fontSize.value -> HtmlTag.H2
-		config.header3Style.fontSize.value -> HtmlTag.H3
-		config.header4Style.fontSize.value -> HtmlTag.H4
-		config.header5Style.fontSize.value -> HtmlTag.H5
-		config.header6Style.fontSize.value -> HtmlTag.H6
+	return when (fontSize) {
+		config.header1Style.fontSize -> HtmlTag.H1
+		config.header2Style.fontSize -> HtmlTag.H2
+		config.header3Style.fontSize -> HtmlTag.H3
+		config.header4Style.fontSize -> HtmlTag.H4
+		config.header5Style.fontSize -> HtmlTag.H5
+		config.header6Style.fontSize -> HtmlTag.H6
 		else -> null
 	}
 }
