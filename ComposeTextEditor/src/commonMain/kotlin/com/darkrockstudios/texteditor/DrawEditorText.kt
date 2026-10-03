@@ -36,38 +36,57 @@ internal fun DrawScope.DrawEditorText(
 
 	// Pass 1: paint backgrounds for every visible virtual line BEFORE any text
 	// is drawn. Opaque fills (e.g. a code-fence card) need to land here so the
-	// text painted in pass 2 sits on top instead of being covered. Foreground
-	// rich-span decorations (bullets, borders, underlines) still run in pass 2
-	// after the text so they overlay correctly.
+	// text painted in pass 3 sits on top instead of being covered. Foreground
+	// rich-span decorations (bullets, borders, underlines) run in pass 4, after
+	// all the text, so they overlay it.
 	for (virtualLine in visible) {
 		drawRichSpans(virtualLine, state, phase = RichSpanDrawPhase.Background)
 	}
 
-	var lastLine = -1
-	for (virtualLine in visible) {
-		if (lastLine != virtualLine.line && state.textLines.size > virtualLine.line) {
-			// drawText paints from sub-line 0 down; anchor at the paragraph top so a
-			// mid-paragraph entry (earlier sub-lines culled above the viewport) doesn't
-			// shift the whole paragraph down by one wrap-line.
-			val offset = Offset(virtualLine.offset.x, virtualLine.paragraphTop - scrollY)
-			decorateLine?.let {
-				decorateLine(virtualLine.line, offset, state, style)
+	// Pass 2: the host's decorations behind each line; the offset is where the text is drawn.
+	if (decorateLine != null) {
+		var lastDecorated = -1
+		for (virtualLine in visible) {
+			if (lastDecorated != virtualLine.line && state.textLines.size > virtualLine.line) {
+				decorateLine(virtualLine.line, Offset(virtualLine.offset.x, virtualLine.paragraphTop - scrollY), state, style)
+				lastDecorated = virtualLine.line
 			}
-
-			val blockReplacesText = virtualLine.richSpans.any {
-				(it.style as? BlockSpanStyle)?.replacesText() == true
-			}
-			if (!blockReplacesText) {
-				drawText(
-					textLayoutResult = virtualLine.textLayoutResult,
-					color = style.textColor,
-					topLeft = offset,
-				)
-			}
-
-			lastLine = virtualLine.line
 		}
+	}
 
+	// Pass 3: the text, alone in the layer decorations tint it in when any colours it.
+	val tints = TextTints.of(visible)
+	tints?.begin(this)
+	try {
+		var lastLine = -1
+		for (virtualLine in visible) {
+			if (lastLine != virtualLine.line && state.textLines.size > virtualLine.line) {
+				// drawText paints from sub-line 0 down; anchor at the paragraph top so a
+				// mid-paragraph entry (earlier sub-lines culled above the viewport) doesn't
+				// shift the whole paragraph down by one wrap-line.
+				val offset = Offset(virtualLine.offset.x, virtualLine.paragraphTop - scrollY)
+
+				val blockReplacesText = virtualLine.richSpans.any {
+					(it.style as? BlockSpanStyle)?.replacesText() == true
+				}
+				if (!blockReplacesText) {
+					drawText(
+						textLayoutResult = virtualLine.textLayoutResult,
+						color = style.textColor,
+						topLeft = offset,
+					)
+					tints?.paint(this, virtualLine.line, offset)
+				}
+
+				lastLine = virtualLine.line
+			}
+		}
+	} finally {
+		tints?.end(this)
+	}
+
+	// Pass 4: what overlays the text.
+	for (virtualLine in visible) {
 		drawRichSpans(virtualLine, state, phase = RichSpanDrawPhase.Foreground)
 
 		// Draw composing underline if this line intersects the composing region

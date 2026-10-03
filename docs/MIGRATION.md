@@ -1,5 +1,31 @@
 # Migration
 
+## Decoration layers
+
+From the first release after 2.8.0, a host can draw its own overlays on the
+text without making them part of it: syntax colours, lint underlines, search
+matches. They enter no undo step, copy, drag, saved state or export, lay out no
+line, and move with edits until replaced. Each owner keys its own with a
+`DecorationLayer` (`com.darkrockstudios.texteditor.decoration`), so several
+coexist. Nothing changes for existing code; a host that marked its own
+`RichSpanStyle`s `isDecoration` and filtered `getAllRichSpans()` to replace
+them can move to a layer:
+
+```kotlin
+val syntax = DecorationLayer("syntax")
+val keyword = Decoration(syntax, textColor = Color(0xFFCC7832))
+
+state.setDecorations(syntax, listOf(RichSpan(range, keyword)))
+state.replaceDecorations(syntax, lines = 10..12, spans = rescanned)
+state.clearDecorations(syntax)
+```
+
+`Decoration` draws a text colour, a background and a solid, wavy or dotted
+underline; implement `DecorationStyle` for a look of your own or one that
+carries data for a click. A text colour tints the drawn text, so it wins over a
+colour the text has of its own. `updateRichSpans` with only such spans no
+longer re-resolves the lines they touch. Design: `docs/design/decorations.md`.
+
 ## Chords matched on `layoutKey`
 
 From the first release after 2.8.0, the built-in key bindings match letter
@@ -21,6 +47,24 @@ if (event.key == Key.D && event.isCtrlShortcut) InsertDate else platformKeyBindi
 
 // After
 if (event.layoutKey == Key.D && event.isCtrlShortcut) InsertDate else platformKeyBindings().commandFor(event)
+```
+
+## Keyboard content on Android
+
+From the first release after 2.8.0, an Android host can take the GIFs,
+stickers and images a keyboard commits by setting
+`TextEditorState.keyboardContentReceiver`
+(`com.darkrockstudios.texteditor.input`). Without one the editor refuses them,
+as before, and keyboards are not offered any. Inserting what arrives is the
+host's work: for an image block, register the bitmap with the
+`ImageProvider` the document uses. The sample app's
+`KeyboardImages.android.kt` does both.
+
+```kotlin
+state.keyboardContentReceiver = KeyboardContentReceiver(listOf("image/gif", "image/png")) { content, _ ->
+	// Read content.contentUri off the main thread, then content.releasePermission().
+	true
+}
 ```
 
 ## Markdown as a module

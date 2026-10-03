@@ -166,6 +166,7 @@ class TextEditorSelectionManager(
 		}
 		if (normalized == _selection) return
 		_selection = normalized
+		state.handwritingPreview = null
 		_selectionRangeFlow.tryEmit(normalized)
 	}
 

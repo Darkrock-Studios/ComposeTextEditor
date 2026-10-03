@@ -73,7 +73,7 @@ class DraggedRichSpansTest {
 	@Test
 	fun `a move carries its spans`() = runTest {
 		val drag = dragging("one two three", from = 4, to = 8, spanFrom = 4, spanTo = 7)
-		drag.dnd.dropAt(CharLineOffset(0, 13), drag.content, drag.id, copy = false)
+		drag.dnd.dropAt({ CharLineOffset(0, 13) }, drag.content, drag.id, copy = false)
 
 		assertEquals("one threetwo ", drag.state.getAllText().text)
 		assertEquals(listOf(TextEditorRange(CharLineOffset(0, 9), CharLineOffset(0, 12))), drag.state.spans())
@@ -82,7 +82,7 @@ class DraggedRichSpansTest {
 	@Test
 	fun `a move backward carries its spans`() = runTest {
 		val drag = dragging("one two three", from = 8, to = 13, spanFrom = 9, spanTo = 13)
-		drag.dnd.dropAt(CharLineOffset(0, 0), drag.content, drag.id, copy = false)
+		drag.dnd.dropAt({ CharLineOffset(0, 0) }, drag.content, drag.id, copy = false)
 
 		assertEquals("threeone two ", drag.state.getAllText().text)
 		assertEquals(listOf(TextEditorRange(CharLineOffset(0, 1), CharLineOffset(0, 5))), drag.state.spans())
@@ -91,7 +91,7 @@ class DraggedRichSpansTest {
 	@Test
 	fun `a copy carries its spans and keeps the source's`() = runTest {
 		val drag = dragging("one two three", from = 4, to = 7, spanFrom = 4, spanTo = 7)
-		drag.dnd.dropAt(CharLineOffset(0, 0), drag.content, drag.id, copy = true)
+		drag.dnd.dropAt({ CharLineOffset(0, 0) }, drag.content, drag.id, copy = true)
 
 		assertEquals("twoone two three", drag.state.getAllText().text)
 		assertEquals(
@@ -106,7 +106,7 @@ class DraggedRichSpansTest {
 	@Test
 	fun `a move is one undo step, spans included`() = runTest {
 		val drag = dragging("one two three", from = 4, to = 8, spanFrom = 4, spanTo = 7)
-		drag.dnd.dropAt(CharLineOffset(0, 13), drag.content, drag.id, copy = false)
+		drag.dnd.dropAt({ CharLineOffset(0, 13) }, drag.content, drag.id, copy = false)
 		drag.state.undo()
 
 		assertEquals("one two three", drag.state.getAllText().text)
@@ -116,7 +116,7 @@ class DraggedRichSpansTest {
 	@Test
 	fun `a copy dropped beside its source does not double the span`() = runTest {
 		val drag = dragging("one two three", from = 4, to = 7, spanFrom = 4, spanTo = 7)
-		drag.dnd.dropAt(CharLineOffset(0, 7), drag.content, drag.id, copy = true)
+		drag.dnd.dropAt({ CharLineOffset(0, 7) }, drag.content, drag.id, copy = true)
 
 		assertEquals("one twotwo three", drag.state.getAllText().text)
 		assertEquals(listOf(TextEditorRange(CharLineOffset(0, 4), CharLineOffset(0, 10))), drag.state.spans())
@@ -135,7 +135,7 @@ class DraggedRichSpansTest {
 		drag.state.selector.updateSelection(CharLineOffset(0, 0), CharLineOffset(0, 13))
 		dnd.startTransfer(scope)
 		val id = dragId(assertNotNull(scope.data))
-		dnd.dropAt(CharLineOffset(0, 13), DroppedText(AnnotatedString("one two three"), html = null), id, copy = true)
+		dnd.dropAt({ CharLineOffset(0, 13) }, DroppedText(AnnotatedString("one two three"), html = null), id, copy = true)
 
 		val styles = drag.state.richSpanManager.getAllRichSpans().filter { it.range.start.char >= 13 }.map { it.style }
 		assertEquals(listOf<RichSpanStyle>(style), styles)
@@ -144,7 +144,7 @@ class DraggedRichSpansTest {
 	@Test
 	fun `a drop from another drag carries no spans`() = runTest {
 		val drag = dragging("one two three", from = 4, to = 8, spanFrom = 4, spanTo = 7)
-		drag.dnd.dropAt(CharLineOffset(0, 13), drag.content, dragId = drag.id + 1, copy = false)
+		drag.dnd.dropAt({ CharLineOffset(0, 13) }, drag.content, dragId = drag.id + 1, copy = false)
 
 		assertEquals("one two threetwo ", drag.state.getAllText().text)
 		assertEquals(listOf(TextEditorRange(CharLineOffset(0, 4), CharLineOffset(0, 7))), drag.state.spans())

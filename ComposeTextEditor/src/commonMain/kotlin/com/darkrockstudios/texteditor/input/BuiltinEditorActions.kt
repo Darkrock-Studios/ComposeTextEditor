@@ -192,21 +192,19 @@ private fun EditorActionContext.writeSelection(selection: TextEditorRange): susp
  * block structure, so the text takes the styling of wherever it lands.
  */
 private fun EditorActionContext.pasteClipboard(plainText: Boolean) {
-	// Taken now: the read can suspend while focus moves to another editor on this state.
-	val target = state.answeringEditor
 	scope.launch {
 		// The clipboard is read before the selection is: a read can suspend for a while
 		// (the web's permission prompt), and the user can move the caret or edit
 		// meanwhile. Reading the HTML before mutating also lands the text, the in-editor
 		// rich spans and the pasted block structure as one revision.
 		if (plainText) {
-			ClipboardHelper.getPlainText(clipboard)?.let { state.asEditor(target) { state.pastePlainText(it) } }
+			ClipboardHelper.getPlainText(clipboard)?.let { asTarget { state.pastePlainText(it) } }
 			return@launch
 		}
 		val paste = readClipboardPaste(clipboard, state.richTextStyles, state.allowedLinkSchemes) ?: return@launch
 		val clipboardText = paste.text.normalizeLineEndings()
 		val htmlDocument = state.htmlPasteDocument(paste.html, clipboardText, paste.document)
-		state.asEditor(target) { state.landPaste(clipboardText, htmlDocument, paste.copyId, plainText = false) }
+		asTarget { state.landPaste(clipboardText, htmlDocument, paste.copyId, plainText = false) }
 	}
 }
 
@@ -224,6 +222,8 @@ private fun TextEditorState.landPaste(
 	clipboardCopyId: Long?,
 	plainText: Boolean,
 ) {
+	// Before the selection is read: the behaviors' edit of the word moves the caret.
+	finishCompositionBeforeInsert()
 	val curSelection = selector.selection
 	val insertPosition = curSelection?.start ?: cursorPosition
 	val sized = withSizeForPasteAt(insertPosition, clipboardText)
@@ -231,11 +231,6 @@ private fun TextEditorState.landPaste(
 	// layout, so text the filter changed pastes plain, and refused text not at all.
 	val text = screenAtSelection(sized) ?: return
 	val screened = text != sized
-	// A composition's range would address the text as it stood before the paste.
-	if (composingRange != null) {
-		clearComposingRange()
-		requestImeResync()
-	}
 	preserveCopiedRichSpansThroughNextEdit()
 	withAtomicEdit {
 		editManager.alreadyScreened {

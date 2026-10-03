@@ -406,6 +406,65 @@ class LinkComposingTest {
 	}
 
 	@Test
+	fun `plain text replacing letters inside a link takes its look`() {
+		val state = linked()
+
+		state.replace(TextEditorRange(CharLineOffset(0, 5), CharLineOffset(0, 7)), "IN")
+
+		assertEquals("see lINk here", state.getAllText().text)
+		assertEquals(listOf("lINk" to url), state.links())
+		assertEquals("lINk", state.linkLooking())
+
+		state.undo()
+		assertEquals(listOf("link" to url), state.links())
+		assertEquals("link", state.linkLooking())
+		state.redo()
+		assertEquals(listOf("lINk" to url), state.links())
+		assertEquals("lINk", state.linkLooking())
+	}
+
+	@Test
+	fun `plain text over a whole link drops it, though it changes only letters inside`() {
+		val state = linked()
+
+		state.replace(TextEditorRange(CharLineOffset(0, 2), CharLineOffset(0, 10)), "e liNk h")
+
+		assertEquals("see liNk here", state.getAllText().text)
+		assertEquals(emptyList(), state.links())
+		assertEquals("", state.linkLooking())
+	}
+
+	@Test
+	fun `plain text put inside a link takes its look`() {
+		val state = linked()
+
+		state.replace(TextEditorRange(CharLineOffset(0, 6), CharLineOffset(0, 6)), "X")
+
+		assertEquals(listOf("liXnk" to url), state.links())
+		assertEquals("liXnk", state.linkLooking())
+	}
+
+	@Test
+	fun `plain text replacing the start of a link's later line takes its look`() {
+		val state = linkedAcrossLines()
+
+		state.replace(TextEditorRange(CharLineOffset(1, 0), CharLineOffset(1, 2)), "HE")
+
+		assertEquals(listOf("link\nHEr" to url), state.links())
+		assertEquals("HEr", state.linkLooking(1))
+	}
+
+	@Test
+	fun `plain text over a link's last letters leaves the link`() {
+		val state = linked()
+
+		state.replace(TextEditorRange(CharLineOffset(0, 6), CharLineOffset(0, 8)), "NK")
+
+		assertEquals(listOf("li" to url), state.links())
+		assertEquals("li", state.linkLooking())
+	}
+
+	@Test
 	fun `a link replaced by nothing goes`() {
 		val state = linked()
 

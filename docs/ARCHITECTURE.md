@@ -239,7 +239,8 @@ current; the word count does the same.
 
 The state exposes a small reactive surface: `editOperations` streams applied
 operations (`editOperationBursts` in the lists a collector catches up on, so
-each can be read in the text it left), `cursorDataFlow` snapshots caret position, styles, and selection
+each can be read in the text it left, leaving out those a `setText` or
+`setDocument` since made stale), `cursorDataFlow` snapshots caret position, styles, and selection
 for toolbars (starting with the current one), `wordCount` counts words through
 the same ICU segmentation as word motion and spell check, recounting only the
 lines an edit replaced, and `snapshot()` hands any thread a coherent document

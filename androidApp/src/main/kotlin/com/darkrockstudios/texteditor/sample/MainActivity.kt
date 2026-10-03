@@ -25,7 +25,7 @@ class MainActivity : ComponentActivity() {
 						.consumeWindowInsets(innerPadding)
 						.imePadding()
 						.background(color = Color.White)) {
-						App()
+						AndroidApp()
 					}
 				}
 			}

@@ -320,15 +320,8 @@ class MarkdownExtension(
 		val content = editorState.snapshot()
 		val styles = editorState.richTextStyles
 		val retiredStyles = editorState.retiredRichTextStyles
-		// A heading's baked display style, under this configuration or a retired one, is the
-		// block's look, not bold text at a size. A retired look that is an inline style of
-		// its own configuration or of this one is that style, as HTML export reads it.
-		val bakedHeadingLooks = (1..6).map { level ->
-			retiredStyles
-				.map { it.headingLook(level) to it }
-				.filterNot { (look, retired) -> isConfiguredInlineStyle(look, retired) || isConfiguredInlineStyle(look, styles) }
-				.map { it.first } + styles.headingLook(level)
-		}
+		// A heading's baked display style is the block's look, not bold text at a size.
+		val bakedHeadingLooks = styles.exportedHeadingLooks(retiredStyles)
 		// A line-anchored span starts on the line it decorates.
 		val spansByLine = content.richSpans.groupBy { it.range.start.line }
 		fun stylesOn(line: Int): List<RichSpanStyle> = spansByLine[line].orEmpty().map { it.style }

@@ -2,6 +2,7 @@ package com.darkrockstudios.texteditor.input
 
 import android.os.Build
 import android.os.Bundle
+import android.os.CancellationSignal
 import android.os.Handler
 import android.provider.Settings
 import android.view.KeyEvent
@@ -10,13 +11,17 @@ import android.view.inputmethod.CorrectionInfo
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.ExtractedText
 import android.view.inputmethod.ExtractedTextRequest
+import android.view.inputmethod.HandwritingGesture
 import android.view.inputmethod.InputConnection
 import android.view.inputmethod.InputContentInfo
+import android.view.inputmethod.PreviewableHandwritingGesture
 import android.view.inputmethod.SurroundingText
 import androidx.annotation.RequiresApi
 import com.darkrockstudios.texteditor.input.KeyboardTraceFormat.quote
 import com.darkrockstudios.texteditor.state.TextEditorState
+import java.util.concurrent.Executor
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.function.IntConsumer
 
 /**
  * The connection the keyboard is handed: [inner] itself while no [KeyboardTraceRecorder]
@@ -138,8 +143,9 @@ internal class TracingInputConnection(
 
 	override fun endBatchEdit(): Boolean = command("endBatchEdit") { inner.endBatchEdit() }
 
-	// A key event, a context menu action and the host's action key change the text through
-	// handlers a replay cannot run, so what they change is written as a change from outside.
+	// A key event, a context menu action, the host's action key, its content receiver and a
+	// handwriting gesture (mapped through the layout) change the text through handlers a
+	// replay cannot run, so what they change is written as a change from outside.
 
 	@Suppress("DEPRECATION")
 	override fun sendKeyEvent(event: KeyEvent?): Boolean {
@@ -191,8 +197,20 @@ internal class TracingInputConnection(
 	override fun reportFullscreenMode(enabled: Boolean): Boolean =
 		command("reportFullscreenMode", { args(enabled) }) { inner.reportFullscreenMode(enabled) }
 
+	override fun performHandwritingGesture(gesture: HandwritingGesture, executor: Executor?, consumer: IntConsumer?) {
+		command("performHandwritingGesture", { args(gesture.javaClass.simpleName) }, replayable = false) {
+			inner.performHandwritingGesture(gesture, executor, consumer)
+			true
+		}
+	}
+
+	override fun previewHandwritingGesture(gesture: PreviewableHandwritingGesture, cancellationSignal: CancellationSignal?): Boolean =
+		command("previewHandwritingGesture", { args(gesture.javaClass.simpleName) }, replayable = false) {
+			inner.previewHandwritingGesture(gesture, cancellationSignal)
+		}
+
 	override fun commitContent(inputContentInfo: InputContentInfo, flags: Int, opts: Bundle?): Boolean =
-		command("commitContent", { args(flags) }) { inner.commitContent(inputContentInfo, flags, opts) }
+		command("commitContent", { args(flags) }, replayable = false) { inner.commitContent(inputContentInfo, flags, opts) }
 
 	private companion object {
 		val nextId = AtomicInteger()

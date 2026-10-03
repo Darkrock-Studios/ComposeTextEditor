@@ -4,9 +4,12 @@ import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.layout.positionInRoot
@@ -22,7 +25,8 @@ import androidx.compose.ui.test.SkikoComposeUiTest
 import androidx.compose.ui.test.TouchInjectionScope
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.isRoot
+import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performMouseInput
 import androidx.compose.ui.test.performTouchInput
@@ -97,6 +101,10 @@ internal fun editorUiTest(
 	readOnly: Boolean = false,
 	primarySelection: PrimarySelection? = null,
 	handleShape: SelectionHandleShape = SelectionHandleShape.Platform,
+	/** Space left above and below the editor, where what draws past its edges is captured. */
+	spaceAround: Dp = 0.dp,
+	/** Clips the editor to its bounds, as a clipping ancestor would. */
+	clipped: Boolean = false,
 	block: EditorUiTestScope.() -> Unit,
 ) = runSkikoComposeUiTest(density = Density(density)) {
 	val clipboard = InMemoryClipboard()
@@ -116,9 +124,11 @@ internal fun editorUiTest(
 			LocalPrimarySelection provides primarySelection,
 		) {
 			Column {
+				if (spaceAround > 0.dp) Spacer(Modifier.height(spaceAround))
 				BasicTextEditor(
 					state = state,
-					modifier = Modifier.size(width, height).testTag(EDITOR_TEST_TAG),
+					modifier = Modifier.size(width, height).testTag(EDITOR_TEST_TAG)
+						.then(if (clipped) Modifier.clipToBounds() else Modifier),
 					contentPadding = contentPadding,
 					enabled = enabled,
 					autoFocus = autoFocus,
@@ -132,6 +142,7 @@ internal fun editorUiTest(
 					contentDescription = contentDescription,
 					readOnly = readOnly,
 				)
+				if (spaceAround > 0.dp) Spacer(Modifier.height(spaceAround))
 				if (trailingFocusable) {
 					Box(Modifier.size(20.dp).onFocusChanged { trailing.focused = it.isFocused }.focusable())
 				}
@@ -166,8 +177,10 @@ class EditorUiTestScope internal constructor(
 	val trailingFocused: Boolean get() = trailing.focused
 
 	// Pointer input is injected at the tagged editor node, not onRoot(): once a
-	// context menu popup is open there are two roots and onRoot() refuses to pick.
+	// popup is open (a context menu, a touch handle) there are more roots and onRoot()
+	// refuses to pick. Key input goes to the window's own, the first.
 	private val editor get() = test.onNodeWithTag(EDITOR_TEST_TAG)
+	private val window get() = test.onAllNodes(isRoot()).onFirst()
 
 	/** Plain text of the whole document. */
 	val text: String get() = state.getAllText().text
@@ -195,7 +208,7 @@ class EditorUiTestScope internal constructor(
 		alt: Boolean = false,
 		meta: Boolean = false,
 	) {
-		test.onRoot().performKeyInput {
+		window.performKeyInput {
 			if (ctrl) keyDown(Key.CtrlLeft)
 			if (shift) keyDown(Key.ShiftLeft)
 			if (alt) keyDown(Key.AltLeft)
@@ -416,12 +429,12 @@ class EditorUiTestScope internal constructor(
 			Key.CtrlLeft.takeIf { ctrl },
 			Key.MetaLeft.takeIf { meta },
 		)
-		if (held.isNotEmpty()) test.onRoot().performKeyInput { held.forEach { keyDown(it) } }
+		if (held.isNotEmpty()) window.performKeyInput { held.forEach { keyDown(it) } }
 		editor.performMouseInput {
 			if (fresh) defeatMultiClickDetection()
 			gestures()
 		}
-		if (held.isNotEmpty()) test.onRoot().performKeyInput { held.forEach { keyUp(it) } }
+		if (held.isNotEmpty()) window.performKeyInput { held.forEach { keyUp(it) } }
 		test.waitForIdle()
 	}
 

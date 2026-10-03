@@ -41,6 +41,7 @@ import com.darkrockstudios.texteditor.lastRowAtOrAbove
 import com.darkrockstudios.texteditor.rowAt
 import com.darkrockstudios.texteditor.rowIndexOf
 import com.darkrockstudios.texteditor.input.EditorActionRegistry
+import com.darkrockstudios.texteditor.input.HandwritingPreview
 import com.darkrockstudios.texteditor.input.HeldKey
 import com.darkrockstudios.texteditor.input.KeyboardSettings
 import com.darkrockstudios.texteditor.input.KillRing
@@ -48,8 +49,10 @@ import com.darkrockstudios.texteditor.input.TabSettings
 import com.darkrockstudios.texteditor.input.imeActionFor
 import com.darkrockstudios.texteditor.input.isWithinDocument
 import com.darkrockstudios.texteditor.RichTextStyles
+import com.darkrockstudios.texteditor.SemanticsLayout
 import com.darkrockstudios.texteditor.richstyle.BlockSpanStyle
 import com.darkrockstudios.texteditor.richstyle.anchorsToLine
+import com.darkrockstudios.texteditor.richstyle.paintsOnly
 import com.darkrockstudios.texteditor.richstyle.HeaderSpanStyle
 import com.darkrockstudios.texteditor.richstyle.LineBlockEditBehavior
 import com.darkrockstudios.texteditor.richstyle.LinkSpanStyle
@@ -192,6 +195,8 @@ class TextEditorState private constructor(
 		}
 		boundMeasurer = null
 		canvasLayoutCoordinates = null
+		// It holds the departed composition's measurer and a whole-document layout.
+		cachedSemanticsLayout = null
 		// Its watch and timeout ran on the departed scope.
 		selector.hideCaretHandle()
 	}
@@ -343,6 +348,12 @@ class TextEditorState private constructor(
 		internal set
 
 	/**
+	 * The stylus gesture the keyboard is previewing, drawn as a highlight. As Compose's, it
+	 * ends at the next change to the text, the selection or the caret.
+	 */
+	internal var handwritingPreview: HandwritingPreview? by mutableStateOf(null)
+
+	/**
 	 * The last committed document content. Every mutation publishes a whole new
 	 * [DocumentSnapshot] rather than editing the previous one in place, so a reader
 	 * on any thread sees a complete, self-consistent snapshot and can never observe
@@ -359,7 +370,10 @@ class TextEditorState private constructor(
 			val textChanged = value.lines !== field.lines
 			field = value
 			_revision.intValue++
-			if (textChanged) _textRevision.intValue++
+			if (textChanged) {
+				_textRevision.intValue++
+				handwritingPreview = null
+			}
 		}
 
 	/**
@@ -704,6 +718,12 @@ class TextEditorState private constructor(
 	 */
 	var lastCursorMetrics: CursorMetrics? = null
 		internal set
+
+	private var cachedSemanticsLayout: SemanticsLayout? = null
+
+	/** The whole-document layout screen readers and iOS's input session read, measured on request. */
+	internal val semanticsLayout: SemanticsLayout
+		get() = cachedSemanticsLayout ?: SemanticsLayout(this).also { cachedSemanticsLayout = it }
 
 	/**
 	 * Layout coordinates of the editor's drawing canvas, captured via
@@ -1129,8 +1149,10 @@ class TextEditorState private constructor(
 	 * [editOperations] as a collector catches up with them: each list holds, in order, the
 	 * operations applied since the collector took the last, so the text it reads then is the
 	 * one after the list's last. Several can land before a collector runs (a find
-	 * replace-all's), each addressing the text as it stood when it ran. Collect on the
-	 * dispatcher that edits the document.
+	 * replace-all's), each addressing the text as it stood when it ran. Those applied
+	 * before the document was last replaced ([documentGeneration]) are left out, since
+	 * they addressed the document it replaced. Collect on the dispatcher that edits the
+	 * document.
 	 */
 	val editOperationBursts = editManager.editOperationBursts
 
@@ -1259,6 +1281,7 @@ class TextEditorState private constructor(
 	val documentGeneration: StateFlow<Int> = _documentGeneration
 
 	private fun announceReplacement() {
+		onRollback(editManager.documentReplaced())
 		onCommit { _documentGeneration.value++ }
 	}
 
@@ -1376,6 +1399,18 @@ class TextEditorState private constructor(
 		val composing = composingRange?.takeIf { composingIsTyped && isWithinDocument(it) }
 		clearComposingRange()
 		if (composing != null) textInputLanded(getStringInRange(composing), composing)
+	}
+
+	/**
+	 * [finishComposition] ahead of an edit the keyboard did not make (a paste, a drop),
+	 * so the behaviors' edit of the word lands first and the edit's position is read
+	 * after it. The keyboard is resynced, since its composition is gone.
+	 */
+	internal fun finishCompositionBeforeInsert() {
+		if (composingRange == null) return
+		val generation = imeResyncGeneration
+		finishComposition()
+		if (imeResyncGeneration == generation) requestImeResync()
 	}
 
 	/**
@@ -1571,10 +1606,16 @@ class TextEditorState private constructor(
 	 * normalization can make differ from [text] (collapsed when none did), or null when
 	 * the filter refused it.
 	 */
-	fun insertStringAtCursor(text: AnnotatedString): TextEditorRange? {
+	fun insertStringAtCursor(text: AnnotatedString): TextEditorRange? = insertWithOwnStylesAtCursor(cursor.applyCursorStyle(text))
+
+	/**
+	 * Inserts [text], which carries no paragraph styles (the line has its own), at the
+	 * cursor with its own span styles, taking no typing style.
+	 */
+	internal fun insertWithOwnStylesAtCursor(text: AnnotatedString): TextEditorRange? {
 		val operation = TextEditOperation.Insert(
 			position = cursorPosition,
-			text = cursor.applyCursorStyle(text),
+			text = text,
 			cursorBefore = cursorPosition,
 			cursorAfter = text.endWhenInsertedAt(cursorPosition),
 		)
@@ -1842,6 +1883,16 @@ class TextEditorState private constructor(
 		}
 		// After the relayout, which an open transaction holds until it commits.
 		if (keepCaret) onCommit { scrollManager.snapCursorVisible() }
+	}
+
+	/** Whether the rows were laid out for the lines as they are, not left behind them by a skipped pass. */
+	internal val rowsFollowText: Boolean get() = draft == null && lastLayoutLines === textLines
+
+	/** The first row's top, as its `LineWrap` reads it, without building one; zero while the rows lag the text. */
+	internal fun firstRowTop(): Float {
+		val rows = (_lineOffsets as? RowList)?.takeIf { rowsFollowText && it.lineCount > 0 } ?: return 0f
+		val first = rows.layoutOf(0)
+		return (rows.lineTop(0) + first.spaceBefore + first.rowTops[0]).toFloat()
 	}
 
 	/**
@@ -2387,6 +2438,10 @@ class TextEditorState private constructor(
 	 */
 	fun updateRichSpans(remove: Collection<RichSpan>, add: Collection<RichSpan>) {
 		if (remove.isEmpty() && add.isEmpty()) return
+		if (remove.all { it.style.paintsOnly } && add.all { it.style.paintsOnly }) {
+			swapPaintOnlySpans(remove, add)
+			return
+		}
 		// One revision as well as one relayout: published per span, a reader between
 		// the removals and the additions sees the batch half-applied.
 		withAtomicEdit {
@@ -2409,6 +2464,20 @@ class TextEditorState private constructor(
 				reshapes = reshapes || span.style.reshapesLine
 			}
 			updateBookKeeping(if (reshapes) LayoutUpdate.Partial(first, last, 0) else LayoutUpdate.Spans(first, last))
+		}
+	}
+
+	/**
+	 * [updateRichSpans] for spans that only paint: the lines are neither normalized nor
+	 * resolved again, and the rows are pointed at the new spans, so a whole document's
+	 * worth costs the span index's rewrite and no layout.
+	 */
+	internal fun swapPaintOnlySpans(remove: Collection<RichSpan>, add: Collection<RichSpan>) {
+		withAtomicEdit {
+			val lines = textLines
+			val added = add.mapNotNull { clampSpanToLines(it, lines) }
+			setSpanIndex(workingContent.spanIndex.swapping(remove, added), first = Int.MAX_VALUE, last = -1, spansChanged = false)
+			updateBookKeeping(LayoutUpdate.Spans(0, -1))
 		}
 	}
 

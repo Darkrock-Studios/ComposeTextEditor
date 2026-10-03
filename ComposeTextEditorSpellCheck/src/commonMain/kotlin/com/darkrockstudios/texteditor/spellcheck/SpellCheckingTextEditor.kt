@@ -45,6 +45,7 @@ import com.darkrockstudios.texteditor.state.TextEditOperation
 import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.WordSegment
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.transform
 import kotlinx.coroutines.launch
 import kotlin.time.Duration.Companion.milliseconds
 
@@ -149,10 +150,17 @@ fun SpellCheckingTextEditor(
 
 	LaunchedEffect(state) {
 		val text = state.textState
-		text.editOperations.debounceUntilQuiescentWithBatch(500.milliseconds) { BatchText(text.textLines, text.documentGeneration.value) }
-			.collect { (operations, batchText) ->
+		// Each edit with the document it addressed: a batch can run from before a replacement to after it.
+		text.editOperationBursts
+			.transform { burst ->
+				val generation = text.documentGeneration.value
+				burst.forEach { emit(it to generation) }
+			}
+			.debounceUntilQuiescentWithBatch(500.milliseconds) { BatchText(text.textLines, text.documentGeneration.value) }
+			.collect { (edits, batchText) ->
 				// A document replaced since has its own full check.
 				if (batchText.generation != text.documentGeneration.value) return@collect
+				val operations = edits.mapNotNull { (operation, generation) -> operation.takeIf { generation == batchText.generation } }
 				computeAffectedRanges(operations).forEach { range ->
 					state.runPartialSpellCheck(range, batchText.lines)
 				}
@@ -166,7 +174,7 @@ fun SpellCheckingTextEditor(
 			}
 		}
 		LaunchedEffect(diagnostics) {
-			diagnostics.textState.editOperations.collect(diagnostics::invalidate)
+			diagnostics.textState.editOperationBursts.collect { diagnostics.invalidate(it) }
 		}
 		LaunchedEffect(diagnostics) {
 			diagnostics.textState.editOperations.debounceUntilQuiescent(500.milliseconds).collect { diagnostics.refresh() }

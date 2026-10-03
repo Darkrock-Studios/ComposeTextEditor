@@ -374,10 +374,6 @@ private fun configuredMarkers(style: SpanStyle, config: RichTextStyles, syntax: 
 		else -> null
 	}
 
-/** Whether [style] is one of [config]'s configured inline styles. */
-internal fun isConfiguredInlineStyle(style: SpanStyle, config: RichTextStyles): Boolean =
-	configuredMarkers(style, config, MarkdownConfiguration.DEFAULT) != null
-
 private val BOLD_MARKER = StyleMarkerPair("**", "**")
 private val ITALIC_MARKER = StyleMarkerPair("*", "*")
 private val CODE_MARKER = StyleMarkerPair("`", "`")

@@ -14,7 +14,6 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.unit.LayoutDirection
 import com.darkrockstudios.texteditor.BarHandles
-import com.darkrockstudios.texteditor.DrawSelectionHandles
 import com.darkrockstudios.texteditor.SelectionHandleShape
 import com.darkrockstudios.texteditor.TeardropHandles
 import com.darkrockstudios.texteditor.cursor.CursorMetrics
@@ -26,6 +25,7 @@ import utils.ShapeKind
 import utils.assertOffsetEquals
 import utils.assertRectEquals
 import utils.drawnHandles
+import utils.drawHandles
 import utils.editorUiTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -62,7 +62,7 @@ class SelectionHandleShapeTest {
 		val size = state.viewportSize
 		val bitmap = ImageBitmap(size.width.toInt(), size.height.toInt())
 		CanvasDrawScope().draw(test.density, LayoutDirection.Ltr, Canvas(bitmap), size) {
-			DrawSelectionHandles(state, Color.Red, handles)
+			drawHandles(state, Color.Red, handles)
 		}
 		return bitmap.toPixelMap()
 	}

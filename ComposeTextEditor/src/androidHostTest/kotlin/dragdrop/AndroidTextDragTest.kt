@@ -356,7 +356,7 @@ class AndroidTextDragTest {
 		val drop = event(clip(item("one ", null)), localState = scope.data!!.localState)
 
 		val content = assertNotNull(drop.droppedText(styles, schemes, ownDrag = true, target = null))
-		assertTrue(dnd.dropAt(CharLineOffset(0, 13), content, drop.dragId(), drop.requestsCopy()))
+		assertTrue(dnd.dropAt({ CharLineOffset(0, 13) }, content, drop.dragId(), drop.requestsCopy()))
 
 		assertEquals("two threeone ", state.getAllText().text)
 	}
