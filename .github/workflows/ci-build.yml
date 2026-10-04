@@ -62,6 +62,7 @@ jobs:
           :ComposeTextEditorMarkdown:assemble
           :ComposeTextEditorSpellCheck:assemble
           :ComposeTextEditorFind:assemble
+          :ComposeTextEditorBom:generatePomFileForMavenPublication
           :dokkaGenerate
       - name: Keep the golden screenshot failures
         # Actual, expected and diff images for each golden that no longer matches.

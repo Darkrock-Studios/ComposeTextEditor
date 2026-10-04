@@ -74,6 +74,7 @@ jobs:
           ./gradlew :ComposeTextEditorMarkdown:publishAllPublicationsToMavenCentralRepository --no-daemon --stacktrace
           ./gradlew :ComposeTextEditorSpellCheck:publishAllPublicationsToMavenCentralRepository --no-daemon --stacktrace
           ./gradlew :ComposeTextEditorFind:publishAllPublicationsToMavenCentralRepository --no-daemon --stacktrace
+          ./gradlew :ComposeTextEditorBom:publishAllPublicationsToMavenCentralRepository --no-daemon --stacktrace
 
       - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
@@ -96,6 +97,7 @@ jobs:
           echo "- composetexteditor-markdown" >> $GITHUB_STEP_SUMMARY
           echo "- composetexteditor-spellcheck" >> $GITHUB_STEP_SUMMARY
           echo "- composetexteditor-find" >> $GITHUB_STEP_SUMMARY
+          echo "- composetexteditor-bom" >> $GITHUB_STEP_SUMMARY
           echo "**Version:** $VERSION" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Next Steps" >> $GITHUB_STEP_SUMMARY
