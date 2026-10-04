@@ -45,6 +45,11 @@ Four places list the modules by name and each names the new one: the root
 summary), the desktop macOS and Windows jobs of `ci-build.yml` (the desktop
 suites), and its iOS job (the iOS compile and simulator tests).
 
+A fifth artifact, `composetexteditor-bom` (`ComposeTextEditorBom`), holds no
+code: it is a platform that pins the four modules to its own version, so a host
+names the version once. A new module adds its coordinate to the constraints in
+`ComposeTextEditorBom/build.gradle.kts`.
+
 ```
                  ┌───────────────────────────┐
                  │ ComposeTextEditor (core)  │

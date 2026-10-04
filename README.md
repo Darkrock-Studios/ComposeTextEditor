@@ -122,6 +122,16 @@ Find & Replace addon:
 
 `implementation("com.darkrockstudios:composetexteditor-find:3.0.2")`
 
+Or take the BOM and leave the versions off the modules, so they always match:
+
+```kotlin
+implementation(platform("com.darkrockstudios:composetexteditor-bom:3.0.2")
+implementation("com.darkrockstudios:composetexteditor")
+implementation("com.darkrockstudios:composetexteditor-markdown")
+implementation("com.darkrockstudios:composetexteditor-spellcheck")
+implementation("com.darkrockstudios:composetexteditor-find")
+```
+
 Upgrading from 2.x (markdown as its own module, decoration layers,
 shortcuts matched on the keyboard layout): see [docs/MIGRATION.md](docs/MIGRATION.md).
 How the editor is built is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), and how it is
