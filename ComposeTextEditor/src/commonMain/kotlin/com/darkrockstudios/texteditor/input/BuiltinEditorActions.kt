@@ -60,6 +60,13 @@ internal fun EditorActionRegistry.registerBuiltinActions() {
 	)
 	register(EditorActionSpec(Action.Paste) { it.pasteClipboard(plainText = false) })
 	register(EditorActionSpec(Action.PasteAsPlainText) { it.pasteClipboard(plainText = true) })
+	register(
+		EditorActionSpec(
+			action = Action.DeleteSelection,
+			isEnabled = { it.state.selector.hasSelection() },
+			perform = { it.state.selector.deleteSelection() },
+		)
+	)
 
 	register(
 		EditorActionSpec(

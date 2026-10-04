@@ -232,8 +232,8 @@ The yank is bound on macOS only; elsewhere Ctrl+Y is Redo.
 
 ### The context menu
 
-The built-in menu lists, after any host items, Undo and Redo; Cut, Copy, Paste
-and Paste as Plain Text; and Select All, each group behind a divider. An item
+The built-in menu lists, after any host items, Undo and Redo; Cut, Copy, Paste,
+Paste as Plain Text and Delete; and Select All, each group behind a divider. An item
 shows when its action is registered and allowed (a read-only editor or view has
 no editing items, so it offers Copy and Select All) and is disabled while its
 spec's `isEnabled` says it has nothing to act on, as native menus grey items out

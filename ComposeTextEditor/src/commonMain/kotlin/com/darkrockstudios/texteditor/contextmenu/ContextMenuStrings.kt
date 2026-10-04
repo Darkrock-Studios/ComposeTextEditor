@@ -13,6 +13,7 @@ data class ContextMenuStrings(
 	val undo: String = "Undo",
 	val redo: String = "Redo",
 	val pasteAsPlainText: String = "Paste as Plain Text",
+	val delete: String = "Delete",
 ) {
 	companion object {
 		/**

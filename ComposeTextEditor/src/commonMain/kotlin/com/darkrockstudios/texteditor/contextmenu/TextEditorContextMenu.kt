@@ -15,7 +15,7 @@ import kotlin.math.roundToInt
 
 /**
  * The context menu: any [extraItems] and [trailingItems] first, then Undo and Redo, the
- * clipboard items, and Select All, each group behind a divider. A standard item shows
+ * clipboard items and Delete, and Select All, each group behind a divider. A standard item shows
  * when its action is registered and allowed here (a read-only editor has no editing
  * items), and is disabled while it has nothing to act on, as in native menus.
  *
@@ -44,6 +44,7 @@ internal fun TextEditorContextMenu(
 			Action.Copy to strings.copy,
 			Action.Paste to strings.paste,
 			Action.PasteAsPlainText to strings.pasteAsPlainText,
+			Action.DeleteSelection to strings.delete,
 		),
 		listOf(Action.SelectAll to strings.selectAll),
 	).map { group -> group.filter { (action, _) -> actions.isAvailable(action) } }
