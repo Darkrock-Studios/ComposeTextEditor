@@ -62,7 +62,22 @@ class ContextMenuE2eTest {
 		item("Copy").assertIsNotEnabled()
 		item("Paste").assertIsEnabled()
 		item("Paste as Plain Text").assertIsEnabled()
+		item("Delete").assertIsNotEnabled()
 		item("Select All").assertIsEnabled()
+	}
+
+	@Test
+	fun `delete from the menu removes the selection and leaves the clipboard alone`() = editorUiTest(
+		initialText = AnnotatedString("hello world"),
+	) {
+		setPlainClipboardText("kept")
+		dragSelect(0, 6)
+		rightClickAtCharacter(2)
+		item("Delete").assertIsEnabled().performClick()
+		waitForIdle()
+		assertEquals("world", text)
+		press(Key.V, ctrl = true)
+		assertEquals("keptworld", text)
 	}
 
 	@Test
@@ -85,7 +100,7 @@ class ContextMenuE2eTest {
 		editorUiTest(initialText = AnnotatedString("hello"), enabled = false, contextMenuState = menu) {
 			rightClickAtCharacter(2)
 			assertTrue(menu.isVisible)
-			for (label in listOf("Undo", "Redo", "Cut", "Paste", "Paste as Plain Text")) {
+			for (label in listOf("Undo", "Redo", "Cut", "Paste", "Paste as Plain Text", "Delete")) {
 				item(label).assertDoesNotExist()
 			}
 			item("Copy").assertIsNotEnabled()

@@ -131,7 +131,7 @@ this exercises the clipboard's HTML as the block carrier.
 ### 2.6 Context menu parity (#87, #50)
 
 1. Right-click in the editor with a selection: Undo / Redo, Cut / Copy / Paste /
-   Paste as Plain Text, Select All, in three groups.
+   Paste as Plain Text, Delete, Select All, in three groups.
 2. **Expect:** each does exactly what its keyboard chord does, including keeping list
    and quote styling on copy; Paste as Plain Text drops copied formatting.
 3. Right-click with **no** selection in a fresh document. **Expect:** Undo, Redo, Cut
