@@ -84,7 +84,12 @@ fun RichTextViewDemoUi(
 						color = MaterialTheme.colorScheme.surfaceContainerHigh,
 						modifier = Modifier.fillMaxWidth(),
 					) {
-						RichTextView(state = state, modifier = Modifier.padding(16.dp), isSelectable = true)
+						RichTextView(
+							state = state,
+							modifier = Modifier.padding(16.dp),
+							isSelectable = true,
+							onLinkClick = LocalUriHandler.current::openUri,
+						)
 					}
 				}
 			}
