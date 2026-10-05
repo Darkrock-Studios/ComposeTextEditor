@@ -62,6 +62,24 @@ class TextDiagnosticsE2eTest {
 	}
 
 	@Test
+	fun `an editor enabled after it is composed offers the message and fixes`() {
+		spellCheckUiTest(
+			spellChecker = CountingSpellChecker(correctWords = setOf("over", "the", "hill")),
+			initialText = "over the the hill",
+			diagnosticsChecker = repeats,
+			enabled = false,
+		) {
+			setEnabled(true)
+
+			rightClickAtCharacter(7)
+			awaitMenuItem("Repeated word")
+			clickMenuItem("the")
+
+			assertEquals("over the hill", state.textState.getAllText().text)
+		}
+	}
+
+	@Test
 	fun `a fix shows its label, and applies its replacement`() {
 		// Flags the second "the" of "the the", offering to remove it.
 		val removal = TextDiagnosticsChecker { lines ->

@@ -359,7 +359,9 @@ fun SpellCheckingTextEditor(
 			style = style,
 			contextMenuStrings = contextMenuStrings,
 			contextMenuState = contextMenuState,
-			onRichSpanClickEvent = ::onSpanClick,
+			// A lambda, not ::onSpanClick: references to a local function are equal across recompositions,
+			// so the editor would keep the first one and the parameters it captured.
+			onRichSpanClickEvent = { onSpanClick(it) },
 			onLinkClick = onLinkClick,
 			keyBindings = keyBindings,
 			contentDescription = contentDescription,
