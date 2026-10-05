@@ -108,24 +108,24 @@ the [API reference & recipes](https://darkrock-studios.github.io/ComposeTextEdit
 
 Text Editor:
 
-`implementation("com.darkrockstudios:composetexteditor:3.0.2")`
+`implementation("com.darkrockstudios:composetexteditor:3.0.3")`
 
 Markdown addon, to use the editor as a markdown editor (`state.withMarkdown()`):
 
-`implementation("com.darkrockstudios:composetexteditor-markdown:3.0.2")`
+`implementation("com.darkrockstudios:composetexteditor-markdown:3.0.3")`
 
 Spell Checking addon:
 
-`implementation("com.darkrockstudios:composetexteditor-spellcheck:3.0.2")`
+`implementation("com.darkrockstudios:composetexteditor-spellcheck:3.0.3")`
 
 Find & Replace addon:
 
-`implementation("com.darkrockstudios:composetexteditor-find:3.0.2")`
+`implementation("com.darkrockstudios:composetexteditor-find:3.0.3")`
 
 Or take the BOM and leave the versions off the modules, so they always match:
 
 ```kotlin
-implementation(platform("com.darkrockstudios:composetexteditor-bom:3.0.2")
+implementation(platform("com.darkrockstudios:composetexteditor-bom:3.0.3")
 implementation("com.darkrockstudios:composetexteditor")
 implementation("com.darkrockstudios:composetexteditor-markdown")
 implementation("com.darkrockstudios:composetexteditor-spellcheck")
