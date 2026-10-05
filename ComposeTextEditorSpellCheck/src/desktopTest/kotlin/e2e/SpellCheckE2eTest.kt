@@ -389,6 +389,24 @@ class SpellCheckE2eTest {
 	}
 
 	@Test
+	fun `host items are offered once a disabled editor is enabled`() {
+		val checker = CountingSpellChecker(correctWords = setOf("fine"))
+
+		spellCheckUiTest(
+			spellChecker = checker,
+			initialText = "fine brokenword fine",
+			enabled = false,
+			spellCheckMenuItems = hostItemsFor {},
+		) {
+			setEnabled(true)
+
+			rightClickAtCharacter(7)
+
+			awaitMenuItem(addToDictionary)
+		}
+	}
+
+	@Test
 	fun `host items follow the suggestions on a sentence issue`() {
 		val brokenRange = TextEditorRange(CharLineOffset(0, 5), CharLineOffset(0, 15))
 		val checker = CountingSpellChecker(

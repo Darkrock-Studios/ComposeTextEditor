@@ -4,6 +4,8 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.key.Key
@@ -88,6 +90,7 @@ fun spellCheckUiTest(
 ) = runSkikoComposeUiTest {
 	lateinit var state: SpellCheckState
 	var diagnostics: TextDiagnosticsState? = null
+	val enabledState = mutableStateOf(enabled)
 	val editorTextStyle = textStyle.withTestFont()
 	setScanningContent {
 		state = rememberSpellCheckState(
@@ -103,7 +106,7 @@ fun spellCheckUiTest(
 			modifier = Modifier.size(width, height).testTag(EDITOR_TEST_TAG),
 			style = rememberTextEditorStyle(textStyle = editorTextStyle),
 			contentPadding = contentPadding,
-			enabled = enabled,
+			enabled = enabledState.value,
 			autoFocus = true,
 			spellCheckMenuItems = spellCheckMenuItems,
 			spellCheckStrings = spellCheckStrings,
@@ -119,7 +122,7 @@ fun spellCheckUiTest(
 		)
 	}
 	waitForIdle()
-	SpellCheckUiTestScope(this, state, diagnostics).block()
+	SpellCheckUiTestScope(this, state, diagnostics, enabledState).block()
 }
 
 /**
@@ -137,7 +140,14 @@ class SpellCheckUiTestScope(
 	val test: SkikoComposeUiTest,
 	val state: SpellCheckState,
 	val diagnostics: TextDiagnosticsState? = null,
+	private val enabledState: MutableState<Boolean> = mutableStateOf(true),
 ) {
+	/** Enables or disables the composed editor, as a host does once its document has loaded. */
+	fun setEnabled(enabled: Boolean) {
+		enabledState.value = enabled
+		test.waitForIdle()
+	}
+
 	/** The diagnostic underlines on the document, in order. */
 	val diagnosticSpans: List<RichSpan>
 		get() = state.textState.richSpanManager.getAllRichSpans()
