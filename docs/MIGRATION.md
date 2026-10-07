@@ -190,7 +190,7 @@ one of their flags.
 
 After 3.0.3, tables are a block (`docs/design/tables.md`): a table is a run of cell lines,
 each carrying a `TableCellSpanStyle`, laid out side by side. Nothing needs code,
-but three things a host may notice:
+but a host may notice:
 
 - **Markdown.** A GFM pipe table outside a quote imports as a table where it
   imported as literal lines, and is written back in the editor's form
@@ -208,7 +208,10 @@ but three things a host may notice:
   line marker that sets it gets a cell's rules (no other block on its line, line
   breaks as spaces, pastes bringing inline styles only).
   `isInlineOnlyLine` reads it. A `LineWrap` laid out beside others carries its
-  `box`, and a cell's its `tableCell`.
+  `box`, and a cell's its `tableCell`; every `LineWrap` carries its line's
+  `spaceBefore`, `spaceAfter` and `blockFacts`.
+- **Layout.** A line stacking a quote and a list is indented by both, where the
+  list's indent alone placed its text and marker on the quote's bar.
 
 The table API is in `com.darkrockstudios.texteditor.state`: `insertTable`,
 `insertTableRow`, `deleteTableRow`, `insertTableColumn`, `deleteTableColumn`,
