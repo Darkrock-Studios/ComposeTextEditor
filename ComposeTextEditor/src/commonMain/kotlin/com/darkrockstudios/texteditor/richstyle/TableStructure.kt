@@ -1,5 +1,7 @@
 package com.darkrockstudios.texteditor.richstyle
 
+import com.darkrockstudios.texteditor.state.DocumentSnapshot
+
 /**
  * One table in a document: its cell lines, row by row, as derived from the cells'
  * columns (see [TableCellSpanStyle]). The first row is the header.
@@ -71,3 +73,9 @@ internal fun List<RichSpan>.tableCellOn(line: Int): TableCellSpanStyle? {
 	}
 	return null
 }
+
+/** The cell marker on [line] in this revision, or null when it is no table cell. */
+fun DocumentSnapshot.tableCellAt(line: Int): TableCellSpanStyle? = spansOn(line).tableCellOn(line)
+
+/** The table holding [line] in this revision, or null when [line] is no table cell. */
+fun DocumentSnapshot.tableAt(line: Int): TextEditorTable? = tableAround(line, lines.size) { tableCellAt(it) }

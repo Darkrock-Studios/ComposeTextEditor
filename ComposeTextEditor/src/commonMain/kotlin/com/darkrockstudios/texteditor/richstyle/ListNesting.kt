@@ -17,7 +17,8 @@ import com.darkrockstudios.texteditor.state.TextEditorState
 fun isNestingBlank(text: AnnotatedString, spansOnLine: Iterable<RichSpan>): Boolean =
 	text.isBlank() && spansOnLine.none { span ->
 		val style = span.style
-		style.listBlock() != null || style is BlockSpanStyle || style === CodeFenceSpanStyle || style is HeaderSpanStyle
+		style.listBlock() != null || style is BlockSpanStyle || style === CodeFenceSpanStyle || style is HeaderSpanStyle ||
+			style is TableCellSpanStyle
 	}
 
 internal fun TextEditorState.isNestingBlank(line: Int): Boolean =
