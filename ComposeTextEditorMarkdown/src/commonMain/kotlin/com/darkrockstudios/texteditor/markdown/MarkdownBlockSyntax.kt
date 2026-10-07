@@ -7,6 +7,7 @@ import com.darkrockstudios.texteditor.richstyle.HeaderSpanStyle
 import com.darkrockstudios.texteditor.richstyle.LINE_BLOCK_STYLES
 import com.darkrockstudios.texteditor.richstyle.OrderedListSpanStyle
 import com.darkrockstudios.texteditor.richstyle.RichSpanStyle
+import com.darkrockstudios.texteditor.richstyle.TableCellSpanStyle
 import com.darkrockstudios.texteditor.richstyle.isListBlock
 
 /**
@@ -15,8 +16,9 @@ import com.darkrockstudios.texteditor.richstyle.isListBlock
  * [pattern] must capture the line body (after the marker) in group 1. It is
  * null for a block with no per-line marker: a nested list level, whose level
  * comes from its indentation (see `docs/design/line-blocks.md`, "Nested
- * lists"), and the code fence, which round-trips through ` ``` ` markers
- * around a contiguous run and is handled out of band by [MarkdownExtension].
+ * lists"), the code fence, which round-trips through ` ``` ` markers around a
+ * contiguous run and is handled out of band by [MarkdownExtension], and a table
+ * cell, which round-trips with its whole table.
  *
  * [prefix] receives the 0-based position of the line within its contiguous
  * run of this block: fixed markers ignore it, an ordered list writes
@@ -68,6 +70,8 @@ internal val BLOCK_SYNTAX: List<MarkdownBlockSyntax> by lazy {
 			)
 
 			CodeFenceSpanStyle -> MarkdownBlockSyntax(style, prefix = { "" }, pattern = null)
+			// A table is written and read whole, by the table syntax.
+			is TableCellSpanStyle -> MarkdownBlockSyntax(style, prefix = { "" }, pattern = null)
 			else -> error("No markdown syntax for the line block $style")
 		}
 	}

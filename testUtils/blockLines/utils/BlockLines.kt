@@ -13,6 +13,8 @@ import com.darkrockstudios.texteditor.richstyle.ImageBlockSpanStyle
 import com.darkrockstudios.texteditor.richstyle.ImageProvider
 import com.darkrockstudios.texteditor.richstyle.OrderedListSpanStyle
 import com.darkrockstudios.texteditor.richstyle.RichSpanStyle
+import com.darkrockstudios.texteditor.richstyle.TableAlignment
+import com.darkrockstudios.texteditor.richstyle.TableCellSpanStyle
 import com.darkrockstudios.texteditor.richstyle.applyDocumentBlocks
 import com.darkrockstudios.texteditor.state.TextEditorState
 
@@ -30,12 +32,14 @@ import com.darkrockstudios.texteditor.state.TextEditorState
  * | three backticks, then a space         | code fence line                      |
  * | `---` alone                           | horizontal rule                      |
  * | `![alt](source)` alone                | image, when a provider is given      |
+ * | `|`, column, alignment, `| `          | table cell in that column            |
  *
  * A `\` after the markers keeps the rest as text (`\- not a list`), and is written
  * wherever the text would read as a marker. Unlike markdown there is no inline syntax,
  * nothing between lines (a blank notation line is a blank document line), and a fence
  * marks each line rather than opening a run. Ordered items are written `1. `: the
- * editor numbers a run itself.
+ * editor numbers a run itself. A cell's alignment is nothing for none, or `<`, `^`
+ * or `>` for left, center or right: `|0| a`, `|1>| 42`.
  */
 
 /**
@@ -95,6 +99,7 @@ fun TextEditorState.blockLines(): String {
 			styles.firstNotNullOfOrNull { it as? BulletListSpanStyle }?.let { "  ".repeat(it.level) + "- " },
 			styles.firstNotNullOfOrNull { it as? OrderedListSpanStyle }?.let { "  ".repeat(it.level) + "1. " },
 			if (CodeFenceSpanStyle in styles) "$FENCE_MARKER " else null,
+			styles.firstNotNullOfOrNull { it as? TableCellSpanStyle }?.let { "|${it.column}${ALIGNMENT_MARKS.getValue(it.alignment)}| " },
 		)
 		// The blocks never stack these, and the notation reads one of them per line.
 		check(markers.size <= 1) { "line $index stacks blocks the notation cannot write: $styles" }
@@ -135,7 +140,14 @@ private fun parseBlockLine(line: String): ParsedBlockLine {
 	}
 	val heading = HEADING.find(rest)
 	val list = LIST_ITEM.find(rest)
+	val cell = TABLE_CELL.find(rest)
 	when {
+		cell != null -> {
+			val alignment = ALIGNMENT_MARKS.entries.first { it.value == cell.groupValues[2] }.key
+			blocks += TableCellSpanStyle.of(cell.groupValues[1].toInt(), alignment)
+			rest = rest.substring(cell.range.last + 1)
+		}
+
 		heading != null -> {
 			blocks += HeaderSpanStyle.of(heading.groupValues[1].length)
 			rest = rest.substring(heading.range.last + 1)
@@ -166,4 +178,11 @@ private const val FENCE_MARKER = "```"
 private const val HR_MARKER = "---"
 private val HEADING = Regex("^(#{1,6}) ")
 private val LIST_ITEM = Regex("^((?:  )*)(-|\\d+\\.) ")
+private val TABLE_CELL = Regex("""^\|(\d+)([<^>]?)\| """)
+private val ALIGNMENT_MARKS = mapOf(
+	TableAlignment.NONE to "",
+	TableAlignment.LEFT to "<",
+	TableAlignment.CENTER to "^",
+	TableAlignment.RIGHT to ">",
+)
 private val IMAGE_LINE = Regex("""!\[([^\]]*)]\(([^)]*)\)""")
