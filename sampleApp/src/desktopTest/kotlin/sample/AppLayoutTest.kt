@@ -107,6 +107,22 @@ class AppLayoutTest {
 	}
 
 	@Test
+	fun `the table menu inserts a table and then offers its rows and columns`() = runComposeUiTest {
+		setApp(DpSize(1100.dp, 760.dp))
+		onNode(hasText("Blank document") and isSelectable()).performClick()
+		waitUntil(timeoutMillis = 5_000) { onAllNodesWithContentDescription("Table").fetchSemanticsNodes().size == 1 }
+
+		onNodeWithContentDescription("Table").performScrollTo().performClick()
+		onNodeWithText("Insert 2 × 2 table").performClick()
+		waitForIdle()
+		onNodeWithContentDescription("Table").performClick()
+
+		onNodeWithText("Row below").assertExists()
+		onNodeWithText("Insert 2 × 2 table").assertDoesNotExist()
+		screenshot("app-table-menu")
+	}
+
+	@Test
 	fun `every demo opens in the wide layout`() = runComposeUiTest {
 		setApp(DpSize(1100.dp, 760.dp))
 		Demo.entries.forEach { demo ->

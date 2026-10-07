@@ -18,6 +18,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.PopupProperties
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.html.sanitizeLinkUrl
@@ -107,7 +108,11 @@ fun TextEditorToolbar(
 	}
 
 	LaunchedEffect(Unit) {
-		state.editOperations.collect { reconcileHorizontalRules(state) }
+		state.editOperations.collect {
+			reconcileHorizontalRules(state)
+			// A table edit can leave the caret where it was.
+			tableLine = state.cursorPosition.line.takeIf { state.isTableCell(it) }
+		}
 	}
 
 	Surface(
@@ -477,7 +482,8 @@ private fun TableMenu(state: TextEditorState, tableLine: Int?) {
 			contentDescription = "Table",
 			isActive = tableLine != null,
 		)
-		DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+		// Not focusable, so the editor keeps focus and typing goes on in the table.
+		DropdownMenu(expanded = open, onDismissRequest = { open = false }, properties = PopupProperties(focusable = false)) {
 			@Composable
 			fun item(label: String, action: () -> Unit) = DropdownMenuItem(text = { Text(label) }, onClick = {
 				open = false

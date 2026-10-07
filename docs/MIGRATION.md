@@ -188,7 +188,7 @@ one of their flags.
 
 ## Tables
 
-Tables are a block now (`docs/design/tables.md`): a table is a run of cell lines,
+After 3.0.3, tables are a block (`docs/design/tables.md`): a table is a run of cell lines,
 each carrying a `TableCellSpanStyle`, laid out side by side. Nothing needs code,
 but three things a host may notice:
 
