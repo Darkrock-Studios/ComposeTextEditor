@@ -80,11 +80,11 @@ class ProseEscapingTest {
 	)
 
 	@Test
-	fun `a delimiter at the edge of a styled run is kept out of the run or escaped against its marker`() {
+	fun `a delimiter at the edge of a styled run stays in it, escaped against its marker or as tags`() {
 		listOf(
-			// The importer cannot read `**x \***`, so the run sheds its own character.
-			"x *" to "**x** *",
-			"* x" to "* **x**",
+			// The importer cannot read `**x \***`, so the run is written as tags.
+			"x *" to "<strong>x \\*</strong>",
+			"* x" to "<strong>\\* x</strong>",
 			// Another delimiter's character is escaped against the marker beside it.
 			"x ~" to "**x \\~**",
 		).forEach { (word, expected) ->
@@ -97,7 +97,8 @@ class ProseEscapingTest {
 			assertEquals("a $expected b", markdown)
 			val parsed = markdown.toAnnotatedStringFromMarkdown()
 			assertEquals("a $word b", parsed.text)
-			assertEquals(1, parsed.spanStyles.count { it.item.fontWeight == FontWeight.Bold }, markdown)
+			val bold = parsed.spanStyles.filter { it.item.fontWeight == FontWeight.Bold }.map { it.start to it.end }
+			assertEquals(listOf(2 to 2 + word.length), bold, markdown)
 		}
 	}
 

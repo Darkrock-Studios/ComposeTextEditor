@@ -1,5 +1,6 @@
 package markdown
 
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -95,6 +96,29 @@ class CommonMarkSyntaxTest {
 			assertEquals(markup, first.inlineMarkup(), markdown)
 			assertEquals(markdown, first.exportAsMarkdown())
 		}
+	}
+
+	@Test
+	fun `the HTML tags for emphasis import as it`() = runTest {
+		assertEquals(
+			"<i>a</i> <i>b</i> <b>c</b> <b>d</b> <s>e</s> <s>f</s> <s>g</s>",
+			imported("<em>a</em> <i>b</i> <strong>c</strong> <b>d</b> <del>e</del> <s>f</s> <strike>g</strike>").inlineMarkup(),
+		)
+	}
+
+	@Test
+	fun `emphasis keeps its own delimiter character at an edge`() = runTest {
+		assertInline("foo <em>*</em>", "foo <i>*</i>")
+		assertInline("<strong>x *</strong>", "<b>x *</b>")
+	}
+
+	@Test
+	fun `a backslash in the text escapes no bracket`() = runTest {
+		val markdown = markdown()
+		markdown.editorState.setText(AnnotatedString("a \\[x](y)"))
+
+		val again = imported(markdown.exportAsMarkdown())
+		assertEquals("a \\[x](y)", again.editorState.getAllText().text, markdown.exportAsMarkdown())
 	}
 
 	@Test

@@ -219,6 +219,9 @@ private fun findLinkOpeners(
 	openers: MutableSet<Int>,
 	closers: MutableSet<Int>,
 ) {
+	// boundariesBefore[k]: the marker boundaries in start until start + k.
+	val boundariesBefore = IntArray(end - start + 2)
+	for (k in 0..end - start) boundariesBefore[k + 1] = boundariesBefore[k] + if (start + k in markerBoundaries) 1 else 0
 	do {
 		var added = false
 		val unmatched = ArrayDeque<Int>()
@@ -228,7 +231,7 @@ private fun findLinkOpeners(
 				']' -> if (i !in closers && unmatched.isNotEmpty()) {
 					val opener = unmatched.removeLast()
 					val next = if (i + 1 < end) text[i + 1] else null
-					val aroundDelimiter = (opener + 1..i).any { it in markerBoundaries }
+					val aroundDelimiter = boundariesBefore[i + 1 - start] > boundariesBefore[opener + 1 - start]
 					if ((next == '(' || next == '[' || aroundDelimiter) && openers.add(opener)) added = true
 					if (aroundDelimiter) closers += i
 				}

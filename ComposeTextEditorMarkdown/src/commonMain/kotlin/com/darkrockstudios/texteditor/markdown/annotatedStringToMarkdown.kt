@@ -18,7 +18,9 @@ import com.darkrockstudios.texteditor.RichTextStyles
  * `TextEditorState.richTextStyles`.
  *
  * A string carries no heading blocks, so a run bold at one of [styles]' heading
- * sizes is written as that heading, on a line of its own.
+ * sizes is written as that heading, on a line of its own. Emphasis whose
+ * delimiters could not open or close where it stands (`**Note:**text`) is written
+ * as `<em>`, `<strong>` or `<del>`.
  */
 fun AnnotatedString.toMarkdown(
 	configuration: MarkdownConfiguration = MarkdownConfiguration.DEFAULT,
@@ -84,18 +86,13 @@ internal fun AnnotatedString.toMarkdown(
 
 	// Shrinks a run onto its text: CommonMark emphasis cannot open before or close
 	// after whitespace ("**word **" is literal asterisks to any parser, and
-	// re-importing it escalates into escaped garbage), and the importer cannot
-	// read an emphasis delimiter's own character escaped against it
-	// ("**x \***"), so an edge character equal to the delimiter is left outside
-	// the run, unstyled; the highlight pre-pass reads "==\=x==" as meant. Null
-	// once nothing is left.
+	// re-importing it escalates into escaped garbage). Null once nothing is left.
 	fun trimRun(run: MarkerRun): MarkerRun? {
 		if (!run.marker.trimsWhitespaceEdges) return run
-		val delimiter = run.marker.openMarker[0].takeIf { it != '=' }
 		var start = run.start
 		var end = run.end
-		while (start < end && (text[start].isWhitespace() || text[start] == delimiter)) start++
-		while (end > start && (text[end - 1].isWhitespace() || text[end - 1] == delimiter)) end--
+		while (start < end && text[start].isWhitespace()) start++
+		while (end > start && text[end - 1].isWhitespace()) end--
 		return if (start >= end) null else MarkerRun(start, end, run.marker)
 	}
 
@@ -279,40 +276,63 @@ private class WrittenDelimiters(val marker: StyleMarkerPair, val openStart: Int)
  * the same anywhere. Delimiters of one character written side by side are one run to
  * the parser, read by what is beside the whole run. An opener right after a closer
  * pairs as meant only as `*` and `**` together, a run of three that can both open and
- * close (`**a***b*`); after any other closer it is written as tags. A tag is
- * punctuation beside a delimiter, as the delimiter it replaces was, so it only widens
- * what the delimiters beside it can do, and one pass is enough.
+ * close (`**a***b*`); after any other closer it is written as tags, as is a run with
+ * an escaped delimiter of its own character beside it, which the parser does not
+ * pair. A tag ends a run of delimiters it was part of, which changes how the rest of
+ * the run reads, so the delimiters are read again until no more are swapped.
  */
 private fun withUnflankedEmphasisAsTags(markdown: String, delimiters: List<WrittenDelimiters>): String {
-	val delimiterAt = HashMap<Int, Char>()
-	val closerEnds = HashSet<Int>()
-	delimiters.forEach { written ->
-		val char = written.marker.openMarker[0]
-		repeat(written.marker.openMarker.length) { delimiterAt[written.openStart + it] = char }
-		repeat(written.marker.closeMarker.length) { delimiterAt[written.closeStart + it] = char }
-		closerEnds += written.closeStart + written.marker.closeMarker.length
-	}
+	val swaps = HashSet<WrittenDelimiters>()
+	do {
+		// Read as written so far: a swapped delimiter is a tag, punctuation that ends a run.
+		val delimiterAt = HashMap<Int, Char>()
+		val closerEnds = HashSet<Int>()
+		val tagAt = HashSet<Int>()
+		delimiters.forEach { written ->
+			val opener = written.openStart until written.openStart + written.marker.openMarker.length
+			val closer = written.closeStart until written.closeStart + written.marker.closeMarker.length
+			if (written in swaps) {
+				tagAt += opener
+				tagAt += closer
+			} else {
+				(opener + closer).forEach { delimiterAt[it] = written.marker.openMarker[0] }
+				closerEnds += closer.last + 1
+			}
+		}
 
-	/** The delimiter run that the delimiter at [start] until [end] is part of. */
-	fun runAround(start: Int, end: Int): IntRange {
-		val char = markdown[start]
-		var from = start
-		while (delimiterAt[from - 1] == char) from--
-		var to = end
-		while (delimiterAt[to] == char) to++
-		return from until to
-	}
+		fun charAt(index: Int): Char? = if (index in tagAt) '<' else markdown.getOrNull(index)
 
-	fun IntRange.leftFlanking() = isLeftFlanking(markdown.getOrNull(first - 1), markdown.getOrNull(last + 1))
-	fun IntRange.rightFlanking() = isRightFlanking(markdown.getOrNull(first - 1), markdown.getOrNull(last + 1))
+		/** The delimiter run that the delimiter at [start] until [end] is part of. */
+		fun runAround(start: Int, end: Int): IntRange {
+			val char = markdown[start]
+			var from = start
+			while (delimiterAt[from - 1] == char) from--
+			var to = end
+			while (delimiterAt[to] == char) to++
+			return from until to
+		}
 
-	val swaps = delimiters.filter { written ->
-		val opener = runAround(written.openStart, written.openStart + written.marker.openMarker.length)
-		val closer = runAround(written.closeStart, written.closeStart + written.marker.closeMarker.length)
-		val afterCloser = written.openStart in closerEnds && delimiterAt[written.openStart - 1] == markdown[written.openStart]
-		val pairsAfterCloser = !afterCloser || (opener.count() == 3 && opener.rightFlanking())
-		!pairsAfterCloser || !opener.leftFlanking() || !closer.rightFlanking()
-	}
+		fun IntRange.leftFlanking() = isLeftFlanking(charAt(first - 1), charAt(last + 1))
+		fun IntRange.rightFlanking() = isRightFlanking(charAt(first - 1), charAt(last + 1))
+
+		// The parser does not pair a delimiter beside an escaped one of its own character (`**x \***`).
+		fun IntRange.besideEscapedOwn(): Boolean {
+			val char = markdown[first]
+			return (charAt(first - 1) == char && charAt(first - 2) == '\\') ||
+				(charAt(last + 1) == '\\' && charAt(last + 2) == char)
+		}
+
+		val more = delimiters.filter { written ->
+			if (written in swaps) return@filter false
+			val opener = runAround(written.openStart, written.openStart + written.marker.openMarker.length)
+			val closer = runAround(written.closeStart, written.closeStart + written.marker.closeMarker.length)
+			val afterCloser = written.openStart in closerEnds && delimiterAt[written.openStart - 1] == markdown[written.openStart]
+			val pairsAfterCloser = !afterCloser || (opener.count() == 3 && opener.rightFlanking())
+			!pairsAfterCloser || !opener.leftFlanking() || !closer.rightFlanking() ||
+				opener.besideEscapedOwn() || closer.besideEscapedOwn()
+		}
+		swaps += more
+	} while (more.isNotEmpty())
 	if (swaps.isEmpty()) return markdown
 	val edits = swaps.flatMap { written ->
 		val tag = written.marker.htmlTag!!
