@@ -230,7 +230,8 @@ but a host may notice:
 - **HTML.** A checkbox at a list item's start, and Google Docs' checklist items,
   import as tasks; a task exports as GitHub's task list markup.
 - **Editing.** A click or a tap on a task's box checks it; Enter after a checked
-  item starts an unchecked one. `LINE_BLOCK_STYLES` lists the two task styles
+  item starts an unchecked one. A new built-in action, `ToggleTask`, bound to no
+  key, checks the caret's tasks. `LINE_BLOCK_STYLES` lists the two task styles
   after the blockquote.
 
 The task API is in `com.darkrockstudios.texteditor.state`: `toggleTaskList`,

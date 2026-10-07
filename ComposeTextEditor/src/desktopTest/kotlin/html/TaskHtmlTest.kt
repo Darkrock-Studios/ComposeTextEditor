@@ -47,6 +47,14 @@ class TaskHtmlTest {
 	}
 
 	@Test
+	fun `a checkbox inside an item's text leaves the item a list item`() = runTest {
+		val e = extension()
+		e.importHtml("<ul><li>Accept the <input type=\"checkbox\"> terms</li></ul>")
+
+		assertEquals("- Accept the terms", e.editorState.blockLines().replace("  ", " "))
+	}
+
+	@Test
 	fun `tasks round trip through HTML, nested and numbered`() = runTest {
 		val document = "- [ ] open\n  - [x] nested\n1. [x] numbered\n- plain"
 		val e = extension()

@@ -73,6 +73,11 @@ object LineBlockEditBehavior : EditBehavior {
 		if (position.char != 0) return false
 		val activeBlock = state.detectLineBlock(position.line) ?: return false
 		if (activeBlock.spanStyle.inlineOnly) return false
+		// A task's box goes first, whatever the item is nested in or follows.
+		if (activeBlock.isTask) {
+			state.editManager.toggleLineBlock(position.line..position.line, activeBlock)
+			return true
+		}
 		if ((state.listBlockAt(position.line)?.listLevel ?: 0) > 0) {
 			state.unnestListItems(position.line..position.line)
 			return true

@@ -381,9 +381,12 @@ box is drawn in the room it makes: in place of a bullet, after a numeral.
   leaves no stray box. `toggleTaskList` makes plain lines bullet items first.
 - **Editing.** A click or a tap on the box checks or unchecks it, one undo step,
   except in a read-only editor; elsewhere on the line it places the caret as
-  ever. Enter after a checked item starts an unchecked one (`LineBlockStyle.
-  continuesAs`); on an empty task it leaves the list. A task resolves ahead of
-  its list, so Backspace at an item's start takes the box off first.
+  ever. The `ToggleTask` action does it for the caret's or the selection's tasks,
+  bound to no key by default (Ctrl+Enter, which apps use for it, is a host's),
+  and an accessibility action, "Check task" or "Uncheck task", for the caret's.
+  Enter after a checked item starts an unchecked one (`LineBlockStyle.
+  continuesAs`); on an empty task it leaves the list. Backspace at an item's
+  start takes the box off first, whatever the item follows or is nested in.
 - **API.** `toggleTaskList`, `setTaskChecked`, `toggleTaskChecked`,
   `taskCheckedAt` and `isTask`.
 - **Markdown.** Import reads `[ ]`, `[x]` or `[X]` and then whitespace or the
@@ -413,6 +416,8 @@ consequences of its own.
   carried before the apply; undo does. This matches conventional toolbar
   behavior.
 - A table cell's spaces at either end are not written: GFM trims them.
+- An ordered task item's numeral shares the gutter with the box, so a numeral of
+  three digits or more runs into it.
 - A fence language filled in by normalization is outside undo history: joining
   a fence that has a language with one that has none tags the second with the
   first's, and undoing the join leaves that tag in place.

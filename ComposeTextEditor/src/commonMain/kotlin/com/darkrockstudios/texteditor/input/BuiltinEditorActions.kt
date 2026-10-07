@@ -1,5 +1,8 @@
 package com.darkrockstudios.texteditor.input
 
+import com.darkrockstudios.texteditor.state.toggleTasksChecked
+import com.darkrockstudios.texteditor.state.selectedLines
+import com.darkrockstudios.texteditor.state.isTask
 import com.darkrockstudios.texteditor.state.isInlineOnlyLine
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
@@ -131,6 +134,13 @@ internal fun EditorActionRegistry.registerBuiltinActions() {
 	registerFormattingToggle(Action.ToggleStrikethrough) { it.strikethroughStyle }
 	registerFormattingToggle(Action.ToggleInlineCode) { it.codeStyle }
 	register(EditorActionSpec(Action.ClearFormatting) { it.state.clearFormatting() })
+	register(
+		EditorActionSpec(
+			action = Action.ToggleTask,
+			isEnabled = { ctx -> ctx.state.selectedLines().any { ctx.state.isTask(it) } },
+			perform = { ctx -> ctx.state.toggleTasksChecked(ctx.state.selectedLines()) },
+		)
+	)
 	register(
 		EditorActionSpec(
 			action = Action.Unlink,

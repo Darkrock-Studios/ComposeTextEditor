@@ -395,9 +395,10 @@ private class HtmlSpanBuilder(
 				return
 			}
 
-			// A checkbox in a list item is the item's task box, GitHub's task list markup.
+			// A checkbox opening a list item is the item's task box, GitHub's task list markup.
 			"input" -> {
-				if (element.attr("type").equals("checkbox", ignoreCase = true) && scope.listBlock != null) {
+				val atLineStart = pendingNewlines() > 0 || out.isEmpty() || out.last() == '\n'
+				if (element.attr("type").equals("checkbox", ignoreCase = true) && scope.listBlock != null && atLineStart) {
 					blockRanges += BlockRange(TaskSpanStyle.of(element.hasAttr("checked")), out.length, out.length, pendingNewlines())
 				}
 				return

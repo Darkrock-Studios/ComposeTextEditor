@@ -56,6 +56,21 @@ fun TextEditorState.setTaskChecked(line: Int, checked: Boolean) {
 	}
 }
 
+/**
+ * Checks every task in [lines], or unchecks them when every one is checked, as one
+ * undo step. Lines that are no task are left alone.
+ */
+fun TextEditorState.toggleTasksChecked(lines: IntRange) {
+	val tasks = lines.filter { it in textLines.indices && isTask(it) }
+	if (tasks.isEmpty()) return
+	val checked = tasks.any { taskCheckedAt(it) == false }
+	editGroup { tasks.forEach { setTaskChecked(it, checked) } }
+}
+
+/** The lines the selection covers, or the caret's. */
+internal fun TextEditorState.selectedLines(): IntRange =
+	selector.selection?.let { it.start.line..it.end.line } ?: cursorPosition.line..cursorPosition.line
+
 /** Checks the task on [line] when it is unchecked, and unchecks it when it is checked. */
 fun TextEditorState.toggleTaskChecked(line: Int) {
 	val checked = taskCheckedAt(line) ?: return

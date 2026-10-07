@@ -128,6 +128,13 @@ sealed interface EditorCommand {
 			/** Follows TextEditorState.unlink; disabled away from a link. */
 			val Unlink = Action("editor.unlink", isEdit = true)
 
+			/**
+			 * Checks the tasks the caret or the selection is on, or unchecks them when every
+			 * one is checked; disabled off a task. Bound to no key by default, since the chord
+			 * apps use for it, Ctrl+Enter or Cmd+Enter, is a host's (to send, say).
+			 */
+			val ToggleTask = Action("editor.toggleTask", isEdit = true)
+
 			/** Opens the editor's context menu under the caret: Shift+F10 and the Menu key. */
 			val ShowContextMenu = Action("editor.showContextMenu", isEdit = false)
 
@@ -168,6 +175,7 @@ sealed interface EditorCommand {
 				ToggleInlineCode,
 				ClearFormatting,
 				Unlink,
+				ToggleTask,
 				ShowContextMenu,
 			)
 

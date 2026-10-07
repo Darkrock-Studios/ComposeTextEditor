@@ -1,6 +1,8 @@
 package blocks
 
 import com.darkrockstudios.texteditor.CharLineOffset
+import com.darkrockstudios.texteditor.input.EditorActionContext
+import com.darkrockstudios.texteditor.input.EditorCommand
 import com.darkrockstudios.texteditor.richstyle.BulletListSpanStyle
 import com.darkrockstudios.texteditor.richstyle.HeaderSpanStyle
 import com.darkrockstudios.texteditor.richstyle.BlockquoteSpanStyle
@@ -19,6 +21,7 @@ import io.mockk.mockk
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
 import org.junit.Test
+import utils.InMemoryClipboard
 import utils.blockLines
 import utils.setBlockLines
 import kotlin.test.assertEquals
@@ -93,12 +96,35 @@ class TaskListTest {
 	}
 
 	@Test
-	fun `backspace at a task's start takes its box off and keeps the item`() = runTest {
-		val state = editor("- [x] done")
-		state.cursor.updatePosition(CharLineOffset(0, 0))
+	fun `backspace at a task's start takes its box off and keeps the item, after a like task or nested too`() = runTest {
+		for ((document, line, expected) in listOf(
+			Triple("- [x] done", 0, "- done"),
+			Triple("- [ ] a\n- [ ] b", 1, "- [ ] a\n- b"),
+			Triple("- [ ] a\n  - [ ] b", 1, "- [ ] a\n  - b"),
+		)) {
+			val state = editor(document)
+			state.cursor.updatePosition(CharLineOffset(line, 0))
 
-		state.backspaceAtCursor()
-		assertEquals("- done", state.blockLines())
+			state.backspaceAtCursor()
+			assertEquals(expected, state.blockLines(), document)
+		}
+	}
+
+	@Test
+	fun `the toggle task action checks the selection's tasks, unchecks them when all are, and is off a task disabled`() = runTest {
+		val state = editor("- [ ] a\n- [x] b\nplain")
+		val context = EditorActionContext(state, InMemoryClipboard(), this)
+		val toggle = state.actions[EditorCommand.Action.ToggleTask]!!
+
+		state.selector.updateSelection(CharLineOffset(0, 0), CharLineOffset(2, 1))
+		toggle.perform(context)
+		assertEquals("- [x] a\n- [x] b\nplain", state.blockLines())
+		toggle.perform(context)
+		assertEquals("- [ ] a\n- [ ] b\nplain", state.blockLines())
+
+		state.selector.clearSelection()
+		state.cursor.updatePosition(CharLineOffset(2, 0))
+		assertFalse(toggle.isEnabled(context))
 	}
 
 	@Test
