@@ -193,6 +193,15 @@ class NestedListEditingTest {
 	}
 
 	@Test
+	fun `quoting a blank line and the nested item after it brings the item up`() = runTest {
+		val state = editor("- a\n\n  - b")
+
+		state.toggleBlockquote(1..2)
+
+		assertEquals("- a\n> \n> - b", state.blockLines())
+	}
+
+	@Test
 	fun `a heading or a quote on a list parent lifts its children`() = runTest {
 		val state = editor("- a\n  - b\n    - c")
 		state.toggleHeader(0..0, 1)
