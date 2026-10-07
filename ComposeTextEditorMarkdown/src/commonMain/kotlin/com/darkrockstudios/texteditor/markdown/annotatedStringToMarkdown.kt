@@ -180,6 +180,9 @@ internal fun AnnotatedString.toMarkdown(
 	var codeSpanClose = ""
 	var nextRun = 0
 	val open = ArrayDeque<MarkerRun>()
+	// Where each emphasis run's delimiters were written, to check them once the text is in.
+	val delimiters = ArrayList<WrittenDelimiters>()
+	val openDelimiters = ArrayDeque<WrittenDelimiters?>()
 
 	// Prose is escaped only where a character would start markdown syntax in
 	// its position, the emitter's own delimiters counted as neighbours; see
@@ -224,6 +227,7 @@ internal fun AnnotatedString.toMarkdown(
 		if (nextClose <= nextOpen) {
 			appendTextTo(nextClose, open.last().marker)
 			val closing = open.removeLast()
+			openDelimiters.removeLast()?.closeStart = result.length
 			if (closing.marker == CODE_MARKER) {
 				codeSpanDepth--
 				result.append(codeSpanClose)
@@ -243,6 +247,7 @@ internal fun AnnotatedString.toMarkdown(
 				// Ensure header starts on a new line
 				if (!result.endsWith("\n") && result.isNotEmpty()) result.append("\n")
 			}
+			openDelimiters.addLast(opening.marker.htmlTag?.let { WrittenDelimiters(opening.marker, result.length).also(delimiters::add) })
 			if (opening.marker == CODE_MARKER) {
 				val open = codeSpanOpener(text.subSequence(opening.start, opening.end))
 				result.append(open)
@@ -258,7 +263,71 @@ internal fun AnnotatedString.toMarkdown(
 
 	appendTextTo(text.length)
 
-	return result.toString()
+	return withUnflankedEmphasisAsTags(result.toString(), delimiters)
+}
+
+/** Where a run's delimiters start in the written markdown: its opener at [openStart], its closer at [closeStart]. */
+private class WrittenDelimiters(val marker: StyleMarkerPair, val openStart: Int) {
+	var closeStart = -1
+}
+
+/**
+ * [markdown] with each emphasis run in [delimiters] whose delimiters cannot open and
+ * close where they stand written as its HTML tags instead. CommonMark reads a delimiter
+ * by the characters beside it, so emphasis that starts or ends on punctuation with a
+ * letter outside (`**Note:**text`) is literal asterisks to any renderer; the tags read
+ * the same anywhere. Delimiters of one character written side by side are one run to
+ * the parser, read by what is beside the whole run. An opener right after a closer
+ * pairs as meant only as `*` and `**` together, a run of three that can both open and
+ * close (`**a***b*`); after any other closer it is written as tags. A tag is
+ * punctuation beside a delimiter, as the delimiter it replaces was, so it only widens
+ * what the delimiters beside it can do, and one pass is enough.
+ */
+private fun withUnflankedEmphasisAsTags(markdown: String, delimiters: List<WrittenDelimiters>): String {
+	val delimiterAt = HashMap<Int, Char>()
+	val closerEnds = HashSet<Int>()
+	delimiters.forEach { written ->
+		val char = written.marker.openMarker[0]
+		repeat(written.marker.openMarker.length) { delimiterAt[written.openStart + it] = char }
+		repeat(written.marker.closeMarker.length) { delimiterAt[written.closeStart + it] = char }
+		closerEnds += written.closeStart + written.marker.closeMarker.length
+	}
+
+	/** The delimiter run that the delimiter at [start] until [end] is part of. */
+	fun runAround(start: Int, end: Int): IntRange {
+		val char = markdown[start]
+		var from = start
+		while (delimiterAt[from - 1] == char) from--
+		var to = end
+		while (delimiterAt[to] == char) to++
+		return from until to
+	}
+
+	fun IntRange.leftFlanking() = isLeftFlanking(markdown.getOrNull(first - 1), markdown.getOrNull(last + 1))
+	fun IntRange.rightFlanking() = isRightFlanking(markdown.getOrNull(first - 1), markdown.getOrNull(last + 1))
+
+	val swaps = delimiters.filter { written ->
+		val opener = runAround(written.openStart, written.openStart + written.marker.openMarker.length)
+		val closer = runAround(written.closeStart, written.closeStart + written.marker.closeMarker.length)
+		val afterCloser = written.openStart in closerEnds && delimiterAt[written.openStart - 1] == markdown[written.openStart]
+		val pairsAfterCloser = !afterCloser || (opener.count() == 3 && opener.rightFlanking())
+		!pairsAfterCloser || !opener.leftFlanking() || !closer.rightFlanking()
+	}
+	if (swaps.isEmpty()) return markdown
+	val edits = swaps.flatMap { written ->
+		val tag = written.marker.htmlTag!!
+		listOf(
+			Triple(written.openStart, written.marker.openMarker.length, "<$tag>"),
+			Triple(written.closeStart, written.marker.closeMarker.length, "</$tag>"),
+		)
+	}.sortedBy { it.first }
+	val out = StringBuilder(markdown.length + edits.size * 4)
+	var from = 0
+	edits.forEach { (at, length, replacement) ->
+		out.append(markdown, from, at).append(replacement)
+		from = at + length
+	}
+	return out.append(markdown, from, markdown.length).toString()
 }
 
 /**
@@ -438,6 +507,15 @@ private data class StyleMarkerPair(
 	/** A font-size heading, which opens on a fresh line and closes with the line. */
 	val isHeading: Boolean
 		get() = closeMarker == "\n"
+
+	/** The HTML tag an emphasis delimiter pair is written as where it cannot flank its text. */
+	val htmlTag: String?
+		get() = when (openMarker) {
+			"*" -> "em"
+			"**" -> "strong"
+			"~~" -> "del"
+			else -> null
+		}
 
 	/** Whether the run must stay outside code spans: everything but code itself and a heading. */
 	val splitsAroundCode: Boolean

@@ -53,7 +53,8 @@ internal val SETEXT_UNDERLINE_LINE = Regex("""^ {0,3}(?:=+|-+)[ \t]*$""")
  * is left- or right-flanking (underscore only when it could open or close by
  * the intraword rules, `==` only as a run of exactly two); a backtick always,
  * since any run may pair; `[` when it pairs with a `]` followed by `(` or `[`,
- * or starts a footnote or a reference definition; every bracket inside a
+ * or starts a footnote or a reference definition; both brackets of a pair
+ * around one of the emitter's delimiters; every bracket inside a
  * link's own text; `!` before a link; `<` before a letter, `/`, `!` or `?`;
  * `&` before an entity; a backslash before punctuation, a delimiter of the
  * emitter's or at a line's end (a hard break); and at the start of a line
@@ -78,6 +79,7 @@ internal fun markdownEscapes(
 	fun isLineEnd(index: Int) = index >= text.length || text[index] == '\n'
 	val linkStarts = linkTexts.mapTo(HashSet()) { it.first }
 	val linkOpeners = HashSet<Int>()
+	val bracketClosers = HashSet<Int>()
 	// An indent is written as entities, whose `;` is what a delimiter after it flanks.
 	val indents = leadingIndents(text)
 
@@ -86,7 +88,7 @@ internal fun markdownEscapes(
 		var lineEnd = lineStart
 		while (!isLineEnd(lineEnd)) lineEnd++
 		escapeLineStart(text, lineStart, lineEnd, escape)
-		findLinkOpeners(text, lineStart, lineEnd, linkOpeners)
+		findLinkOpeners(text, lineStart, lineEnd, markerBoundaries, linkOpeners, bracketClosers)
 		lineStart = lineEnd + 1
 	}
 
@@ -95,8 +97,9 @@ internal fun markdownEscapes(
 		val c = text[i]
 		when (c) {
 			'*', '_', '~', '=' -> {
-				var runEnd = i
-				while (runEnd < text.length && text[runEnd] == c) runEnd++
+				// A delimiter the emitter writes splits a run in two.
+				var runEnd = i + 1
+				while (runEnd < text.length && text[runEnd] == c && runEnd !in markerBoundaries) runEnd++
 				val before = if (i in markerBoundaries || (i > 0 && indents[i - 1])) MARKER_STAND_IN else at(i - 1)
 				val after = if (runEnd in markerBoundaries) MARKER_STAND_IN else at(runEnd)
 				// Only a run of exactly two `=` is a highlight delimiter.
@@ -122,6 +125,7 @@ internal fun markdownEscapes(
 			'&' -> if (ENTITY_REGEX.matchesAt(text, i)) escape[i] = true
 			'!' -> if (i + 1 in linkStarts || i + 1 in linkOpeners) escape[i] = true
 			'[' -> if (at(i + 1) == '^' || i in linkOpeners) escape[i] = true
+			']' -> if (i in bracketClosers) escape[i] = true
 		}
 		i++
 	}
@@ -201,23 +205,36 @@ private fun escapeLineStart(text: CharSequence, start: Int, end: Int, escape: Bo
 /**
  * Adds to [openers] the index of each `[` on the line [start] until [end]
  * that a `]` followed by `(` or `[` pairs with, innermost first as CommonMark
- * pairs them, in one pass.
+ * pairs them. A pair around one of the emitter's delimiters ([markerBoundaries]),
+ * which the parser will not pair across the brackets, adds its `]` to
+ * [closers] too. An escaped bracket pairs with nothing, which can pair the ones
+ * around it, so the pass repeats until no bracket is added. The text's own
+ * backslashes are written escaped, so they escape no bracket.
  */
-private fun findLinkOpeners(text: CharSequence, start: Int, end: Int, openers: MutableSet<Int>) {
-	val unmatched = ArrayDeque<Int>()
-	var i = start
-	while (i < end) {
-		when (text[i]) {
-			'\\' -> i++
-			'[' -> unmatched.addLast(i)
-			']' -> if (unmatched.isNotEmpty()) {
-				val opener = unmatched.removeLast()
-				val next = if (i + 1 < end) text[i + 1] else null
-				if (next == '(' || next == '[') openers += opener
+private fun findLinkOpeners(
+	text: CharSequence,
+	start: Int,
+	end: Int,
+	markerBoundaries: Set<Int>,
+	openers: MutableSet<Int>,
+	closers: MutableSet<Int>,
+) {
+	do {
+		var added = false
+		val unmatched = ArrayDeque<Int>()
+		for (i in start until end) {
+			when (text[i]) {
+				'[' -> if (i !in openers) unmatched.addLast(i)
+				']' -> if (i !in closers && unmatched.isNotEmpty()) {
+					val opener = unmatched.removeLast()
+					val next = if (i + 1 < end) text[i + 1] else null
+					val aroundDelimiter = (opener + 1..i).any { it in markerBoundaries }
+					if ((next == '(' || next == '[' || aroundDelimiter) && openers.add(opener)) added = true
+					if (aroundDelimiter) closers += i
+				}
 			}
 		}
-		i++
-	}
+	} while (added)
 }
 
 /**
@@ -226,18 +243,28 @@ private fun findLinkOpeners(text: CharSequence, start: Int, end: Int, openers: M
  * `~`, strikethrough) where it stands.
  */
 private fun delimiterRunCanDelimit(delimiter: Char, before: Char?, after: Char?): Boolean {
-	val beforeSpace = before == null || before.isWhitespace()
-	val afterSpace = after == null || after.isWhitespace()
 	val beforePunctuation = before != null && before.isMarkdownPunctuation()
 	val afterPunctuation = after != null && after.isMarkdownPunctuation()
-	val leftFlanking = !afterSpace && (!afterPunctuation || beforeSpace || beforePunctuation)
-	val rightFlanking = !beforeSpace && (!beforePunctuation || afterSpace || afterPunctuation)
+	val leftFlanking = isLeftFlanking(before, after)
+	val rightFlanking = isRightFlanking(before, after)
 	return if (delimiter == '_') {
 		(leftFlanking && (!rightFlanking || beforePunctuation)) ||
 			(rightFlanking && (!leftFlanking || afterPunctuation))
 	} else {
 		leftFlanking || rightFlanking
 	}
+}
+
+/** Whether a delimiter run with [before] and [after] beside it (null at a line's edge) is left-flanking, so `*` can open there. */
+internal fun isLeftFlanking(before: Char?, after: Char?): Boolean {
+	if (after == null || after.isWhitespace()) return false
+	return !after.isMarkdownPunctuation() || before == null || before.isWhitespace() || before.isMarkdownPunctuation()
+}
+
+/** Whether a delimiter run with [before] and [after] beside it (null at a line's edge) is right-flanking, so `*` can close there. */
+internal fun isRightFlanking(before: Char?, after: Char?): Boolean {
+	if (before == null || before.isWhitespace()) return false
+	return !before.isMarkdownPunctuation() || after == null || after.isWhitespace() || after.isMarkdownPunctuation()
 }
 
 private fun Char.isAsciiPunctuation(): Boolean = this in '!'..'/' || this in ':'..'@' || this in '['..'`' || this in '{'..'~'

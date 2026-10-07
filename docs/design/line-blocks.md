@@ -213,9 +213,11 @@ character would start or end syntax in its position (`markdownEscapes`): a
 literal `- ` at the start of a plain paragraph exports as `\- ` and survives,
 `*not*` in dialogue is escaped by CommonMark's flanking rules, and an
 apostrophe, a hyphen mid-sentence, an underscore inside a word or an asterisk
-between spaces is written as typed. Line-start rules read the body, so a
-marker shape at the start of a list item's body (`- 1990. plans`) is escaped
-as well, since it would otherwise nest a list. Unsupported syntax kept as
+between spaces is written as typed. Emphasis whose delimiters could not open
+or close where they stand, by the same rules (`**Note:**text`), is written as
+`<em>`, `<strong>` or `<del>`, which import reads back. Line-start rules read
+the body, so a marker shape at the start of a list item's body
+(`- 1990. plans`) is escaped as well, since it would otherwise nest a list. Unsupported syntax kept as
 literal text on import (a task list's `[ ]`, a table inside a quote) is written
 back as it was, and a quoted table's rows are kept together. A table outside a
 quote is a block of its own, read and written whole (`docs/design/tables.md`).

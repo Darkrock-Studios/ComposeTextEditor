@@ -3,6 +3,7 @@ package markdown
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import com.darkrockstudios.texteditor.markdown.MarkdownExtension
 import com.darkrockstudios.texteditor.markdown.toAnnotatedStringFromMarkdown
 import com.darkrockstudios.texteditor.state.TextEditorState
@@ -23,7 +24,7 @@ class CommonMarkSyntaxTest {
 
 	private fun TestScope.imported(markdown: String): MarkdownExtension = markdown().apply { importMarkdown(markdown) }
 
-	/** The document's text with its italic, bold and code runs as `<i>`, `<b>` and `<code>` tags. */
+	/** The document's text with its italic, bold, code and struck runs as `<i>`, `<b>`, `<code>` and `<s>` tags. */
 	private fun MarkdownExtension.inlineMarkup(): String {
 		val text = editorState.getAllText()
 		val tags = mutableListOf<Triple<Int, Int, String>>()
@@ -32,6 +33,7 @@ class CommonMarkSyntaxTest {
 			if (style.fontStyle == FontStyle.Italic) tags += Triple(span.start, span.end, "i")
 			if (style.fontWeight == FontWeight.Bold) tags += Triple(span.start, span.end, "b")
 			if (style.fontFamily == FontFamily.Monospace) tags += Triple(span.start, span.end, "code")
+			if (style.textDecoration == TextDecoration.LineThrough) tags += Triple(span.start, span.end, "s")
 		}
 		val out = StringBuilder()
 		for (index in 0..text.length) {
@@ -80,6 +82,38 @@ class CommonMarkSyntaxTest {
 	fun `a backslash before a delimiter is escaped`() = runTest {
 		assertInline("\\\\*emphasis*", "\\<i>emphasis</i>")
 		assertEquals("\\\\*emphasis*", imported("\\\\*emphasis*").exportAsMarkdown())
+	}
+
+	@Test
+	fun `emphasis that cannot open or close where it stands is written as tags`() = runTest {
+		for ((markdown, markup) in listOf(
+			"<strong>Note:</strong>text" to "<b>Note:</b>text",
+			"a<em>(x)</em>b" to "a<i>(x)</i>b",
+			"a<del>(x)</del>b" to "a<s>(x)</s>b",
+		)) {
+			val first = imported(markdown)
+			assertEquals(markup, first.inlineMarkup(), markdown)
+			assertEquals(markdown, first.exportAsMarkdown())
+		}
+	}
+
+	@Test
+	fun `emphasis that can open and close is written with delimiters, side by side too`() = runTest {
+		for (markdown in listOf("a *(x)* b", "**Note:** text", "**ab***c***de**", "***both***")) {
+			assertEquals(markdown, imported(markdown).exportAsMarkdown())
+		}
+	}
+
+	@Test
+	fun `an opener that would join the closer before it in a run that cannot pair is written as tags`() = runTest {
+		assertInline("<em>a</em><strong>.</strong>", "<i>a</i><b>.</b>")
+		assertEquals("*a*<strong>.</strong>", imported("<em>a</em><strong>.</strong>").exportAsMarkdown())
+	}
+
+	@Test
+	fun `brackets around a delimiter are escaped, so emphasis crosses them`() = runTest {
+		assertInline("\\[**\\]a**", "[<b>]a</b>")
+		assertInline("a\\[**\\[b\\]**", "a[<b>[b]</b>")
 	}
 
 	@Test

@@ -12,9 +12,10 @@ import com.darkrockstudios.texteditor.html.parseCssColor
 /**
  * The inline HTML the markdown serializers use for styles CommonMark has no
  * syntax for: `<u>` for underline, `<mark>` for a highlight, and
- * `<span style="color:...;font-size:...">` for colour and size. Every
- * CommonMark renderer passes these through, so a document keeps its styling
- * outside this editor.
+ * `<span style="color:...;font-size:...">` for colour and size; and `<em>`,
+ * `<strong>` and `<del>` for emphasis whose delimiters could not open or close
+ * where it stands. Every CommonMark renderer passes these through, so a
+ * document keeps its styling outside this editor.
  */
 
 /** One inline HTML tag token as the parser hands it over. */
@@ -43,6 +44,9 @@ internal fun parseInlineHtmlTag(tag: String, styles: RichTextStyles): InlineHtml
 			(attribute.groupValues[2].ifEmpty { attribute.groupValues[3] })
 	}
 	val style = when (name) {
+		"em", "i" -> styles.italicStyle
+		"strong", "b" -> styles.boldStyle
+		"del", "s", "strike" -> styles.strikethroughStyle
 		"u", "ins" -> styles.underlineStyle
 		"mark" -> styles.highlightStyle
 		"span" -> attributes["style"]?.let(::cssColorAndSize)
@@ -52,7 +56,7 @@ internal fun parseInlineHtmlTag(tag: String, styles: RichTextStyles): InlineHtml
 	return InlineHtmlTag.Open(name, style)
 }
 
-private val STYLED_TAGS = setOf("u", "ins", "mark", "span", "font")
+private val STYLED_TAGS = setOf("em", "i", "strong", "b", "del", "s", "strike", "u", "ins", "mark", "span", "font")
 
 /** The opening `<span style="...">` for a colour. */
 internal fun colorSpanTag(color: Color): String = "<span style=\"color:${color.toCssHex()}\">"
