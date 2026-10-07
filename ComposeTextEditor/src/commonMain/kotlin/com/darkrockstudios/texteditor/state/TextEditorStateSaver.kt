@@ -39,6 +39,10 @@ import com.darkrockstudios.texteditor.richstyle.CODE_FENCE_PARAGRAPH_STYLE
 import com.darkrockstudios.texteditor.richstyle.CodeFenceSpanStyle
 import com.darkrockstudios.texteditor.richstyle.HEADER_PARAGRAPH_STYLE
 import com.darkrockstudios.texteditor.richstyle.HeaderSpanStyle
+import com.darkrockstudios.texteditor.richstyle.MAX_TABLE_COLUMNS
+import com.darkrockstudios.texteditor.richstyle.TableAlignment
+import com.darkrockstudios.texteditor.richstyle.TableCellSpanStyle
+import com.darkrockstudios.texteditor.richstyle.tableCellParagraphStyle
 import com.darkrockstudios.texteditor.richstyle.HorizontalRuleSpanStyle
 import com.darkrockstudios.texteditor.richstyle.LinkSpanStyle
 import com.darkrockstudios.texteditor.richstyle.ORDERED_LIST_PARAGRAPH_STYLE
@@ -86,7 +90,8 @@ private val blockParagraphs: Map<String, ParagraphStyle> = mapOf(
 	"fence" to CODE_FENCE_PARAGRAPH_STYLE,
 	"header" to HEADER_PARAGRAPH_STYLE,
 	// A nested item's indent, one name per level; both list kinds share it.
-) + (1..MAX_LIST_LEVEL).associate { level -> "list:$level" to listParagraphStyle(level) }
+) + (1..MAX_LIST_LEVEL).associate { level -> "list:$level" to listParagraphStyle(level) } +
+	TableAlignment.entries.associate { "cell:${it.name}" to tableCellParagraphStyle(it) }
 
 private val textAligns = listOf(TextAlign.Left, TextAlign.Right, TextAlign.Center, TextAlign.Justify, TextAlign.Start, TextAlign.End)
 
@@ -219,6 +224,7 @@ private fun RichSpanStyle.encode(scope: SaverScope, custom: Saver<RichSpanStyle,
 		is BulletListSpanStyle -> "bullet:$level" to ""
 		is OrderedListSpanStyle -> "ordered:$level" to ""
 		is CodeFenceLanguageSpanStyle -> "fence-language" to language
+		is TableCellSpanStyle -> "cell:$column:${alignment.name}" to ""
 		is ParagraphFormatSpanStyle -> "paragraph" to arrayListOf<Any>(
 			if (spaceBefore.isSpecified) spaceBefore.value else Float.NaN,
 			if (spaceAfter.isSpecified) spaceAfter.value else Float.NaN,
@@ -246,6 +252,11 @@ private fun decodeRichSpanStyle(kind: String, argument: Any?, custom: Saver<Rich
 		kind.startsWith("bullet:") -> kind.substringAfter(':').toIntOrNull()?.let { BulletListSpanStyle.of(it) }
 		kind.startsWith("ordered:") -> kind.substringAfter(':').toIntOrNull()?.let { OrderedListSpanStyle.of(it) }
 		kind == "fence-language" -> (argument as? String)?.let { CodeFenceLanguageSpanStyle(it) }
+		kind.startsWith("cell:") -> kind.split(':').let { parts ->
+			val column = parts.getOrNull(1)?.toIntOrNull()?.takeIf { it in 0 until MAX_TABLE_COLUMNS }
+			val alignment = TableAlignment.entries.firstOrNull { it.name == parts.getOrNull(2) }
+			if (column != null && alignment != null) TableCellSpanStyle.of(column, alignment) else null
+		}
 		kind == "paragraph" -> (argument as? List<*>)?.let { saved ->
 			ParagraphFormatSpanStyle(
 				spaceBefore = (saved[0] as Float).let { if (it.isNaN()) Dp.Unspecified else it.dp },
