@@ -4,6 +4,8 @@ import androidx.compose.ui.text.AnnotatedString
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.RichTextStyles
+import com.darkrockstudios.texteditor.state.BLOCK_KINDS
+import com.darkrockstudios.texteditor.state.BlockKind
 import com.darkrockstudios.texteditor.state.DocumentSnapshot
 import com.darkrockstudios.texteditor.state.LineSplice
 
@@ -14,9 +16,9 @@ import com.darkrockstudios.texteditor.state.LineSplice
  * marker with nothing to decorate that cannot survive a serialization round
  * trip. Violating spans are removed and their lines rebuilt without the
  * orphaned indent. Before that, an inline-only line, a table cell's, keeps its line
- * for its marker (see [repairInlineOnly]).
- * Then every line of a fence run gets a language span if the run has a language
- * (see [repairFenceLanguages]).
+ * for its marker (see [repairInlineOnly]). Then each [BlockKind] repairs its own
+ * ([BlockKind.repair]): every line of a fence run gets a language span if the run has
+ * a language (see [repairFenceLanguages]).
  *
  * Runs on every publish, from [com.darkrockstudios.texteditor.state.TextEditorState],
  * so the invariant holds no matter which path attached the span: a toggle, an
@@ -42,7 +44,7 @@ internal fun normalizeLineBlocks(
 	val inlineOnly = if (spansChanged) repairInlineOnly(snapshot, config, changed) else snapshot
 	val placeholders = repairPlaceholders(inlineOnly, config, changed)
 	// A repair can drop a fence span, which leaves its language span to drop too.
-	return if (spansChanged || placeholders !== snapshot) repairFenceLanguages(placeholders, changed) else placeholders
+	return BLOCK_KINDS.fold(placeholders) { current, kind -> kind.repair(current, config, changed, spansChanged || current !== snapshot) }
 }
 
 /**
@@ -128,7 +130,7 @@ private fun repairPlaceholders(
  * Examines the lines in [changed] and the fence runs they touch, walked out
  * to their ends: a language can only be missing or misplaced there.
  */
-private fun repairFenceLanguages(snapshot: DocumentSnapshot, changed: IntRange): DocumentSnapshot {
+internal fun repairFenceLanguages(snapshot: DocumentSnapshot, changed: IntRange): DocumentSnapshot {
 	fun fenced(line: Int) = snapshot.spansOn(line).any { it.style === CodeFenceSpanStyle && it.range.start.line == line }
 	var first = changed.first.coerceAtLeast(0)
 	var last = changed.last.coerceAtMost(snapshot.lines.size - 1)

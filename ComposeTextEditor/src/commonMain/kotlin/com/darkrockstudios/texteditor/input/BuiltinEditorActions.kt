@@ -1,7 +1,6 @@
 package com.darkrockstudios.texteditor.input
 
 import com.darkrockstudios.texteditor.state.isInlineOnlyLine
-import com.darkrockstudios.texteditor.state.moveToTableCell
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -367,7 +366,7 @@ private fun TextEditorState.deleteToParagraphEnd() {
 }
 
 private fun TextEditorState.handleIndent() = editGroup {
-	if (moveToTableCell(forward = true)) return@editGroup
+	if (indentClaimed(outdent = false)) return@editGroup
 	val selection = selector.selection
 	if (selection != null && selection.start.line != selection.end.line) {
 		indentLineRange(selection.start.line, selection.end.line)
@@ -407,7 +406,7 @@ private fun TextEditorState.takesIndentForNest(line: Int): Boolean =
 	listBlockAt(line)?.listLevel == 0 && textLines[line].isNotBlank()
 
 private fun TextEditorState.handleOutdent() = editGroup {
-	if (moveToTableCell(forward = false)) return@editGroup
+	if (indentClaimed(outdent = true)) return@editGroup
 	val selection = selector.selection
 	if (selection != null) {
 		unnestListItems(selection.start.line..selection.end.line)

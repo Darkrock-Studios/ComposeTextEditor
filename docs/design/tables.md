@@ -50,6 +50,9 @@ and touch handling for one block.
 
 ## Layout
 
+Tables plug into the layout passes and the edit pipeline as a `BlockKind`
+(`TableKind`, see `block-kinds.md`); the hooks below are its.
+
 - **Cell placement.** The walk that numbers lists (`LineFacts`) also derives each
   cell's `TableCellFacts`: its table row, its row's column count (the header's,
   or more for a row reaching past it), whether it starts or ends its row and
@@ -97,12 +100,12 @@ and touch handling for one block.
   already taken.
 - **Deletions across cells.** A user deletion or replace whose range crosses a
   table's edge or its cells is applied a line at a time in one edit group
-  (`tablePreservingPieces`): each cell it covers is cleared, the lines between
-  tables are deleted as usual, and a replace's text goes in at the range's start.
-  A range taking a whole table and more deletes the table. A word or line
-  deletion stops at a cell's edge.
-- **Tab** and Shift+Tab move to the next and previous cell and select its text;
-  Tab from the last cell adds a row.
+  (`tablePreservingPieces`, the table's `BlockKind.deletionPieces`): each cell
+  it covers is cleared, the lines between tables are deleted as usual, and a
+  replace's text goes in at the range's start. A range taking a whole table and
+  more deletes the table. A word or line deletion stops at a cell's edge.
+- **Tab** and Shift+Tab (`TableEditBehavior.onIndent`) move to the next and
+  previous cell and select its text; Tab from the last cell adds a row.
 - **Structural edits**, one undo step each: `insertTable` (in place of an empty
   line, never against another table, with a line after it at the document's
   end), `insertTableRow`, `deleteTableRow`, `insertTableColumn`,

@@ -200,9 +200,15 @@ but three things a host may notice:
 - **HTML.** A pasted or imported `<table>` becomes a table where its cells were
   tab-separated lines, and `toAnnotatedStringFromHtml` gives a cell a line.
 - **Editing.** `editBehaviors` starts with `TableEditBehavior` ahead of
-  `LineBlockEditBehavior`. A deletion or replace (`delete`, `replace`) across a
-  table's cells clears them rather than joining them, and line breaks landing
+  `LineBlockEditBehavior`, and Tab in a cell goes to the next cell through the
+  new `EditBehavior.onIndent`. A deletion or replace (`delete`, `replace`) across
+  a table's cells clears them rather than joining them, and line breaks landing
   in a cell become spaces, ahead of a host's `inputFilter`.
+- **Styles.** `RichSpanStyle` gains `inlineOnly`, which a cell sets; a custom
+  line marker that sets it gets a cell's rules (no other block on its line, line
+  breaks as spaces, pastes bringing inline styles only).
+  `isInlineOnlyLine` reads it. A `LineWrap` laid out beside others carries its
+  `box`, and a cell's its `tableCell`.
 
 The table API is in `com.darkrockstudios.texteditor.state`: `insertTable`,
 `insertTableRow`, `deleteTableRow`, `insertTableColumn`, `deleteTableColumn`,

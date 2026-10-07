@@ -43,7 +43,7 @@ the line break hook, `onNewlineLanded`, and the paste hook, `onPaste`.
   once the outermost batch ends, where it then stands, because the batch's
   later commands address the text as the keyboard's mirror holds it. A
   landed text a later command rewrote or removed is not offered. The pre-edit
-  hooks (`onNewline`, `onBackspace`, `onDeleteForward`) decide at once.
+  hooks (`onNewline`, `onBackspace`, `onDeleteForward`, `onIndent`) decide at once.
 
 ## Smart punctuation
 

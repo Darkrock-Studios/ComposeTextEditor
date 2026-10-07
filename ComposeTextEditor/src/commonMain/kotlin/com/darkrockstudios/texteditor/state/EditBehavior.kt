@@ -38,6 +38,9 @@ interface EditBehavior {
 	/** Called before the character following the caret is deleted. */
 	fun onDeleteForward(state: TextEditorState): Boolean = false
 
+	/** Called before Tab indents the caret's line or the selection, or with [outdent] before Shift+Tab outdents it. */
+	fun onIndent(state: TextEditorState, outdent: Boolean): Boolean = false
+
 	/**
 	 * Called once [text] the user typed has landed in the document at [range]: a
 	 * keystroke, an IME commit (the whole word a soft keyboard or a candidate

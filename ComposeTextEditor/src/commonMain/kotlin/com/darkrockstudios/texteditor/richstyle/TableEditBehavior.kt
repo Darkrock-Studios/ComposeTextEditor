@@ -6,6 +6,7 @@ import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.deleteTableRow
 import com.darkrockstudios.texteditor.state.insertTableRow
 import com.darkrockstudios.texteditor.state.isTableCell
+import com.darkrockstudios.texteditor.state.moveToTableCell
 import com.darkrockstudios.texteditor.state.removeLines
 import com.darkrockstudios.texteditor.state.tableAt
 
@@ -15,9 +16,9 @@ import com.darkrockstudios.texteditor.state.tableAt
  * Backspace at a cell's start and Delete at its end join nothing, and Backspace in the
  * first cell of an empty row deletes the row. Backspace at the start of the line
  * after a table steps into its last cell, deleting that line when it is empty, and
- * Delete at the end of the line before a table leaves it apart. Tab is the key bindings' (see `moveToTableCell`), and line
- * breaks typed or pasted into a cell become spaces (`InlineOnlyLineBreaks`). See
- * `docs/design/tables.md`.
+ * Delete at the end of the line before a table leaves it apart. Tab and Shift+Tab move
+ * to the next and previous cell (`moveToTableCell`), and line breaks typed or pasted
+ * into a cell become spaces (`InlineOnlyLineBreaks`). See `docs/design/tables.md`.
  *
  * Registered on every [TextEditorState] by default, ahead of [LineBlockEditBehavior].
  */
@@ -69,6 +70,8 @@ object TableEditBehavior : EditBehavior {
 		}
 		return true
 	}
+
+	override fun onIndent(state: TextEditorState, outdent: Boolean): Boolean = state.moveToTableCell(forward = !outdent)
 
 	override fun onDeleteForward(state: TextEditorState): Boolean {
 		if (state.selector.selection != null) return false

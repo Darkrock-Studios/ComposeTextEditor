@@ -908,13 +908,13 @@ class TextEditorState private constructor(
 	val richSpanManager = RichSpanManager(this)
 
 	/**
-	 * Behaviors consulted before [insertNewlineAtCursor], [backspaceAtCursor] and
-	 * [deleteAtCursor], and told after typed text ([insertTypedString] and the IME's
+	 * Behaviors consulted before [insertNewlineAtCursor], [backspaceAtCursor],
+	 * [deleteAtCursor] and Tab's indent, and told after typed text ([insertTypedString] and the IME's
 	 * commits), a line break or a paste has landed, in order; the first to claim an
 	 * edit wins. Every input path reaches these, hardware keys and IME alike.
 	 *
 	 * Pre-loaded with [TableEditBehavior], which claims Enter, Backspace and Delete
-	 * at a table cell's edges, and [LineBlockEditBehavior], which claims every
+	 * at a table cell's edges and Tab in a cell, and [LineBlockEditBehavior], which claims every
 	 * newline and column-0 backspace on a block line, so a behavior appended
 	 * after them is not asked before those edits, though it is told where a line
 	 * break landed. Use `add(0, behavior)` to run first, or remove one outright for
@@ -940,6 +940,9 @@ class TextEditorState private constructor(
 		if (claimed) requestImeResync()
 		return claimed
 	}
+
+	/** Offers Tab's indent, or Shift+Tab's outdent, to the behaviors. */
+	internal fun indentClaimed(outdent: Boolean): Boolean = claimedByBehavior { it.onIndent(this, outdent) }
 
 	private fun runBehaviors(hook: (EditBehavior) -> Boolean): Boolean {
 		if (behaviorDepth > 0) return false
@@ -2284,7 +2287,7 @@ class TextEditorState private constructor(
 			val onLine = spans.spansOn(line)
 			val format = onLine.paragraphFormat(line)
 			val old = current.layoutOf(line)
-			layouts += old.reshaped(shaper.shape(lines[line], format, old.tableCell), line, onLine, format, inputs, layoutInputGeneration)
+			layouts += old.reshaped(shaper.shape(lines[line], format, old.facts), line, onLine, format, inputs, layoutInputGeneration)
 		}
 		finishBands(layouts)
 		val settled = current.splice(first, last + 1, layouts, spans)
@@ -2415,20 +2418,20 @@ class TextEditorState private constructor(
 			facts.next(line)
 			val onLine = spans.spansOn(line)
 			val format = onLine.paragraphFormat(line)
-			layouts += LineLayout.of(shaper.shape(lines[line], format, facts.tableCell), line, onLine, format, inputs, facts, layoutInputGeneration)
+			layouts += LineLayout.of(shaper.shape(lines[line], format, facts.facts), line, onLine, format, inputs, facts, layoutInputGeneration)
 		}
 		finishBands(layouts)
 		return RowList.of(layouts, spans)
 	}
 
 	/**
-	 * A partial pass: [update]'s lines shaped or re-resolved, with a line each side for
-	 * the fence edges, widened to whole table rows, then the lines after them walked until
-	 * one that ends a table row, or is in none, keeps its layout and its list counters,
-	 * past which nothing can change; the result is spliced over [previous]. Every other
-	 * line keeps its layout and moves with its chunk. A line whose table facts shape it
-	 * differently (a header row that became a body row, a column count that changed) is
-	 * shaped again.
+	 * A partial pass: [update]'s lines shaped or re-resolved, the walk starting where
+	 * every [BlockKind] can derive them afresh ([BlockKind.walkStart]: a line before for
+	 * the fence edges, the table row before), then the lines after them walked until one
+	 * that ends its band, or is in none, keeps its layout and its facts, past which
+	 * nothing can change; the result is spliced over [previous]. Every other line keeps
+	 * its layout and moves with its chunk. A line whose facts shape it differently (a
+	 * header row that became a body row, a column count that changed) is shaped again.
 	 */
 	private fun layoutPartial(
 		previous: RowList,
@@ -2445,8 +2448,8 @@ class TextEditorState private constructor(
 		val respans = spansFirst <= spansLast
 		if (!shapes && !respans) return previous.withSpans(spans)
 
-		// The row before the edit's ends at the line before it, and whether it is its table's last can change.
-		val first = tableRowStart(spans, (minOf(if (shapes) shapeFirst else Int.MAX_VALUE, if (respans) spansFirst else Int.MAX_VALUE) - 1).coerceAtLeast(0))
+		val edited = minOf(if (shapes) shapeFirst else Int.MAX_VALUE, if (respans) spansFirst else Int.MAX_VALUE)
+		val first = BLOCK_KINDS.minOf { it.walkStart(spans, edited) }
 		val end = (maxOf(if (shapes) shapeLast else -1, if (respans) spansLast else -1) + 1).coerceAtMost(lastLine)
 		// A line after the shaped range had its layout at its pre-edit index.
 		fun oldIndex(line: Int) = if (shapes && line > shapeLast) line - update.lineDelta else line
@@ -2464,7 +2467,7 @@ class TextEditorState private constructor(
 				old == null || old.shapesDifferentlyUnder(facts) -> {
 					val onLine = spans.spansOn(line)
 					val format = onLine.paragraphFormat(line)
-					LineLayout.of(shaper.shape(lines[line], format, facts.tableCell), line, onLine, format, inputs, facts, layoutInputGeneration)
+					LineLayout.of(shaper.shape(lines[line], format, facts.facts), line, onLine, format, inputs, facts, layoutInputGeneration)
 				}
 				line in spansFirst..spansLast -> old.withSpans(line, spans.spansOn(line), inputs, facts)
 				else -> old.withFacts(facts, inputs)
@@ -2481,7 +2484,7 @@ class TextEditorState private constructor(
 	}
 
 	/** Shapes lines with the style, indent baking and width of one layout pass. */
-	private inner class LineShaper(private val inputs: LineInputs) {
+	private inner class LineShaper(override val inputs: LineInputs) : LineShaping {
 		// Compose Android doesn't reliably honor per-paragraph ParagraphStyle
 		// .textIndent overriding an editor-wide TextStyle.textIndent, so we
 		// sidestep the merge: strip the indent from the outer style and bake it
@@ -2512,11 +2515,10 @@ class TextEditorState private constructor(
 		 * Shapes [line], with [format]'s alignment, indents and line height over the
 		 * paragraph style the line carries (a block's indent) or the baked one. A line
 		 * holds one paragraph style, so the merged one replaces it for measuring only. A
-		 * table [cell] wraps at its column's width whether lines wrap or not, and a
-		 * header cell is bold, for measuring only, under the styles its text carries.
+		 * kind whose [facts] are on the line can shape it its own way ([BlockKind.shape]).
 		 */
-		fun shape(line: AnnotatedString, format: ParagraphFormatSpanStyle? = null, cell: TableCellFacts? = null): TextLayoutResult {
-			if (cell != null) return shapeCell(line, cell)
+		fun shape(line: AnnotatedString, format: ParagraphFormatSpanStyle? = null, facts: BlockFacts = BlockFacts.NONE): TextLayoutResult {
+			facts.firstOf { kind, value -> kind.shape(value, line, this) }?.let { return it }
 			val measureLine = when {
 				format != null && format.shapesText -> {
 					val base = line.paragraphStyles.firstOrNull()?.item ?: bakedIndentStyle
@@ -2537,13 +2539,9 @@ class TextEditorState private constructor(
 			}
 		}
 
-		private fun shapeCell(line: AnnotatedString, cell: TableCellFacts): TextLayoutResult {
-			val width = maxOf(1, cellTextWidth(cell, inputs).toInt())
-			val measureLine = if (cell.isHeader) {
-				AnnotatedString(line.text, listOf(AnnotatedString.Range(HEADER_CELL_STYLE, 0, line.length)) + line.spanStyles, line.paragraphStyles)
-			} else line
+		override fun measureWrapped(line: AnnotatedString, width: Int): TextLayoutResult {
 			return try {
-				textMeasurer.measure(text = measureLine, style = measureStyle, softWrap = true, constraints = Constraints.fixedWidth(width))
+				textMeasurer.measure(text = line, style = measureStyle, softWrap = true, constraints = Constraints.fixedWidth(width))
 			} catch (_: IllegalArgumentException) {
 				textMeasurer.measure(text = AnnotatedString(""), style = measureStyle, softWrap = true, constraints = Constraints.fixedWidth(width))
 			}

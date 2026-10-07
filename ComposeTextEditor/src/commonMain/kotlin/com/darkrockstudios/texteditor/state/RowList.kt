@@ -17,12 +17,11 @@ import com.darkrockstudios.texteditor.richstyle.RichSpan
 /**
  * One logical line's shaping result and what the layout pass derived for it: its rows'
  * character bounds and tops, read from the [layout] once, the block height of each
- * row, the ordered-list numeral, the code-fence edge, the ordered-list counters as
- * they stand after the line, so a pass can resume the numbering walk from any line,
- * the paragraph spacing above and below its rows, its [width] with wrapping off, and
- * the [generation] of layout inputs it was shaped under: a line shaped under an older
- * one is provisional until the settling reshape reaches it, and for a line laid out
- * beside others (a table cell, whose [tableCell] facts place it) its [placement].
+ * row, the [facts] its neighbours decide (every [BlockKind]'s, kept so a pass can
+ * resume the walk from any line), the paragraph spacing above and below its rows, its
+ * [width] with wrapping off, and the [generation] of layout inputs it was shaped under:
+ * a line shaped under an older one is provisional until the settling reshape reaches
+ * it, and for a line a kind lays out beside others its [placement].
  * The rows a [RowList] hands out are built from this on read.
  */
 internal class LineLayout(
@@ -35,10 +34,7 @@ internal class LineLayout(
 	val rowTops: FloatArray,
 	/** Each row's block height, `NaN` where a row has none; null when no row has one. */
 	val blockHeights: FloatArray?,
-	val orderedListNumber: Int?,
-	val codeFenceBoundary: CodeFenceBoundary?,
-	/** The ordered-list counter of each nesting level after this line; shared and never written. */
-	val counters: IntArray,
+	val facts: BlockFacts,
 	val generation: Int,
 	/** The space above the first row and below the last, in pixels; outside every row. */
 	val spaceBefore: Float,
@@ -48,14 +44,10 @@ internal class LineLayout(
 	 * was laid out at; zero when shaped with wrapping on, which never scrolls sideways.
 	 */
 	val width: Float,
-	val tableCell: TableCellFacts? = null,
-	/** Built from [tableCell] (`cellPlacement`): a cell is the one kind of line laid out beside others. */
+	/** From the kind whose facts place the line ([BlockKind.place]). */
 	val placement: LinePlacement? = null,
 ) {
 	val rowCount: Int get() = rowStarts.size
-
-	/** [tableCell] as each of the line's rows hands it out, built once. */
-	val tableCellPlace: TableCellPlace? = tableCell?.let { TableCellPlace(it.row, it.cell.column, it.lastRow) }
 
 	/** The rows' heights and the spacing around them. */
 	val height: Float get() = spaceBefore + rowTops[rowCount] + spaceAfter
@@ -70,11 +62,16 @@ internal class LineLayout(
 	 */
 	val advance: Float get() = placement?.let { if (it.endsBand) it.bandHeight + it.spaceAfter else 0f } ?: height
 
+	/** The facts a style draws by, as each of the line's rows hands them out, read once. */
+	val orderedListNumber: Int? = facts[OrderedListKind]?.number
+	val codeFenceBoundary: CodeFenceBoundary? = facts[CodeFenceKind]
+	val tableCellPlace: TableCellPlace? = facts[TableKind]?.let { TableCellPlace(it.row, it.cell.column, it.lastRow) }
+
 	/** This placed line's layout in a band [bandHeight] tall, itself when it is already. */
 	fun inBand(bandHeight: Float): LineLayout {
 		val placed = placement ?: return this
 		if (placed.bandHeight == bandHeight) return this
-		return LineLayout(layout, rowStarts, rowEnds, rowTops, blockHeights, orderedListNumber, codeFenceBoundary, counters, generation, spaceBefore, spaceAfter, width, tableCell, placed.copy(bandHeight = bandHeight))
+		return LineLayout(layout, rowStarts, rowEnds, rowTops, blockHeights, facts, generation, spaceBefore, spaceAfter, width, placed.copy(bandHeight = bandHeight))
 	}
 
 	/**
@@ -82,11 +79,7 @@ internal class LineLayout(
 	 * a cell moved to another column or column count, into or out of the header, into or
 	 * out of a table. Such a line is shaped again rather than given the facts.
 	 */
-	fun shapesDifferentlyUnder(facts: LineFacts): Boolean {
-		val now = facts.tableCell
-		val was = tableCell
-		return (now != null || was != null) && !(now?.shapesAs(was) ?: false)
-	}
+	fun shapesDifferentlyUnder(facts: LineFacts): Boolean = facts.facts.shapesDifferentlyThan(this.facts)
 
 	fun blockHeight(row: Int): Float? = blockHeights?.get(row)?.takeUnless { it.isNaN() }
 
@@ -95,26 +88,24 @@ internal class LineLayout(
 	 * same. The line must not [shapesDifferentlyUnder] them.
 	 */
 	fun withFacts(facts: LineFacts, inputs: LineInputs): LineLayout {
-		val tableCell = facts.tableCell
-		if (facts.orderedListNumber == orderedListNumber && facts.codeFenceBoundary == codeFenceBoundary &&
-			facts.counters.contentEquals(counters) && tableCell == this.tableCell
-		) return this
-		val placed = tableCell?.let { cellPlacement(it, inputs, height).copy(bandHeight = placement?.bandHeight ?: height) }
-		return LineLayout(layout, rowStarts, rowEnds, rowTops, blockHeights, facts.orderedListNumber, facts.codeFenceBoundary, facts.counters, generation, spaceBefore, spaceAfter, width, tableCell, placed)
+		val now = facts.facts
+		if (now == this.facts) return this
+		val placed = placementOf(now, inputs, rowTops[rowCount])?.let { it.copy(bandHeight = placement?.bandHeight ?: it.bandHeight) }
+		return LineLayout(layout, rowStarts, rowEnds, rowTops, blockHeights, now, generation, spaceBefore, spaceAfter, width, placed)
 	}
 
 	/** This layout resolved again for [spans] on its line, which may have changed its block heights or spacing, and [facts]. */
 	fun withSpans(line: Int, spans: List<RichSpan>, inputs: LineInputs, facts: LineFacts): LineLayout =
-		resolve(layout, line, rowStarts, rowEnds, spans, spans.paragraphFormat(line), inputs, facts.orderedListNumber, facts.codeFenceBoundary, facts.counters, facts.tableCell, generation)
+		resolve(layout, line, rowStarts, rowEnds, spans, spans.paragraphFormat(line), inputs, facts.facts, generation)
 
 	/** The line shaped again into [layout] under [generation] with [format], keeping the facts, which shaping does not change. */
 	fun reshaped(layout: TextLayoutResult, line: Int, spans: List<RichSpan>, format: ParagraphFormatSpanStyle?, inputs: LineInputs, generation: Int): LineLayout =
-		of(layout, line, spans, format, inputs, orderedListNumber, codeFenceBoundary, counters, tableCell, generation)
+		of(layout, line, spans, format, inputs, facts, generation)
 
 	companion object {
 		/** The layout of a line shaped into [layout] under [generation] with [format], with [spans] on it. */
 		fun of(layout: TextLayoutResult, line: Int, spans: List<RichSpan>, format: ParagraphFormatSpanStyle?, inputs: LineInputs, facts: LineFacts, generation: Int): LineLayout =
-			of(layout, line, spans, format, inputs, facts.orderedListNumber, facts.codeFenceBoundary, facts.counters, facts.tableCell, generation)
+			of(layout, line, spans, format, inputs, facts.facts, generation)
 
 		/**
 		 * The layout of a line not shaped yet, standing in until the settling reshape
@@ -132,7 +123,7 @@ internal class LineLayout(
 			while (rows > 1 && sentinel.getLineStart(rows - 1) > length) rows--
 			val rowStarts = IntArray(rows) { sentinel.getLineStart(it) }
 			val rowEnds = IntArray(rows) { if (it == rows - 1) length else minOf(sentinel.getLineEnd(it), length) }
-			return resolve(sentinel, line, rowStarts, rowEnds, spans, format, inputs, facts.orderedListNumber, facts.codeFenceBoundary, facts.counters, facts.tableCell, UNSHAPED_GENERATION)
+			return resolve(sentinel, line, rowStarts, rowEnds, spans, format, inputs, facts.facts, UNSHAPED_GENERATION)
 		}
 
 		private fun of(
@@ -141,10 +132,7 @@ internal class LineLayout(
 			spans: List<RichSpan>,
 			format: ParagraphFormatSpanStyle?,
 			inputs: LineInputs,
-			orderedListNumber: Int?,
-			codeFenceBoundary: CodeFenceBoundary?,
-			counters: IntArray,
-			tableCell: TableCellFacts?,
+			facts: BlockFacts,
 			generation: Int,
 		): LineLayout {
 			val rows = layout.multiParagraph.lineCount
@@ -152,15 +140,19 @@ internal class LineLayout(
 				layout, line,
 				rowStarts = IntArray(rows) { layout.getLineStart(it) },
 				rowEnds = IntArray(rows) { layout.getLineEnd(it) },
-				spans, format, inputs, orderedListNumber, codeFenceBoundary, counters, tableCell, generation,
+				spans, format, inputs, facts, generation,
 			)
 		}
+
+		/** Where the kind whose [facts] place a line puts it, or null for the document's flow. */
+		private fun placementOf(facts: BlockFacts, inputs: LineInputs, textHeight: Float): LinePlacement? =
+			facts.firstOf { kind, value -> kind.place(value, inputs, textHeight) }
 
 		/**
 		 * A block span's height applies to each row it intersects, at the viewport's
 		 * width; a paragraph format's spacing, or the editor's, goes around the rows. A
-		 * cell's padding goes around its rows instead, and the editor's spacing after its
-		 * table.
+		 * placed line's padding goes around its rows instead, and its band's spacing
+		 * after its band.
 		 */
 		private fun resolve(
 			layout: TextLayoutResult,
@@ -170,10 +162,7 @@ internal class LineLayout(
 			spans: List<RichSpan>,
 			format: ParagraphFormatSpanStyle?,
 			inputs: LineInputs,
-			orderedListNumber: Int?,
-			codeFenceBoundary: CodeFenceBoundary?,
-			counters: IntArray,
-			tableCell: TableCellFacts?,
+			facts: BlockFacts,
 			generation: Int,
 		): LineLayout {
 			val density = inputs.density
@@ -197,16 +186,13 @@ internal class LineLayout(
 				val block = blockHeights?.get(row)?.takeUnless { it.isNaN() }
 				rowTops[row + 1] = rowTops[row] + (block ?: paragraph.getLineHeight(row))
 			}
-			if (tableCell != null) {
-				val padding = cellPaddingY(inputs)
-				val height = 2 * padding + rowTops[rows]
-				val placed = cellPlacement(tableCell, inputs, height)
-				return LineLayout(layout, rowStarts, rowEnds, rowTops, blockHeights, orderedListNumber, codeFenceBoundary, counters, generation, padding, padding, 0f, tableCell, placed)
+			placementOf(facts, inputs, rowTops[rows])?.let { placed ->
+				return LineLayout(layout, rowStarts, rowEnds, rowTops, blockHeights, facts, generation, placed.padding, placed.padding, 0f, placed)
 			}
 			val spaceBefore = format?.spaceBefore?.takeIf { it.isSpecified }?.let { density?.run { it.toPx() } } ?: 0f
 			val spaceAfter = format?.spaceAfter?.takeIf { it.isSpecified }?.let { density?.run { it.toPx() } } ?: inputs.paragraphSpacing
 			val textWidth = if (inputs.softWrap) 0f else layout.textExtent()
-			return LineLayout(layout, rowStarts, rowEnds, rowTops, blockHeights, orderedListNumber, codeFenceBoundary, counters, generation, spaceBefore, spaceAfter, textWidth)
+			return LineLayout(layout, rowStarts, rowEnds, rowTops, blockHeights, facts, generation, spaceBefore, spaceAfter, textWidth)
 		}
 
 	}
@@ -502,13 +488,15 @@ internal class RowList private constructor(
 /**
  * A line's place in content space when it is laid out beside other lines rather than
  * below the one before it: its box's left edge and width, where its text starts, the
- * height of its band (the tallest of the band's lines, set once the band is laid out),
+ * padding around its rows, the height of its band (the tallest of the band's lines, set once the band is laid out),
  * the space after the band, and whether it starts or ends its band.
  */
 internal data class LinePlacement(
 	val boxLeft: Float,
 	val boxWidth: Float,
 	val textLeft: Float,
+	/** The space inside the box above and below the line's rows. */
+	val padding: Float,
 	val bandHeight: Float,
 	val spaceAfter: Float,
 	val startsBand: Boolean,

@@ -35,7 +35,6 @@ import com.darkrockstudios.texteditor.richstyle.planLineBlocks
 import com.darkrockstudios.texteditor.richstyle.rebuildWithoutBlock
 import com.darkrockstudios.texteditor.richstyle.recordListEdit
 import com.darkrockstudios.texteditor.richstyle.sameListKind
-import com.darkrockstudios.texteditor.richstyle.tableCellBlock
 import com.darkrockstudios.texteditor.richstyle.writeLineBlocks
 import com.darkrockstudios.texteditor.utils.appendAnnotatedStrings
 import com.darkrockstudios.texteditor.utils.buildAnnotatedStringWithSpans
@@ -227,7 +226,7 @@ class TextEditManager(private val state: TextEditorState) {
 		// Undo and redo replay edits the filter already let through. What a filter
 		// returns is normalised again.
 		val screened = if (addToHistory) screen(normalized)?.withNormalizedLineEndings() ?: return null else normalized
-		if (addToHistory && tableEditDepth == 0) aroundTables(screened)?.let { return it }
+		if (addToHistory && structuralEditDepth == 0) keepingBlockStructure(screened)?.let { return it }
 		// Resolved before anything reads it, so what is applied, recorded, and
 		// announced is one and the same operation.
 		val operation = when {
@@ -548,33 +547,32 @@ class TextEditManager(private val state: TextEditorState) {
 		else -> false
 	}
 
-	private var tableEditDepth = 0
+	private var structuralEditDepth = 0
 
-	/** Runs [block], a table edit that removes or joins cell lines on purpose, without [aroundTables]. */
-	internal fun <T> editingTable(block: () -> T): T {
-		tableEditDepth++
+	/** Runs [block], a block's own edit that removes or joins its lines on purpose (a table's), without [keepingBlockStructure]. */
+	internal fun <T> editingStructure(block: () -> T): T {
+		structuralEditDepth++
 		try {
 			return block()
 		} finally {
-			tableEditDepth--
+			structuralEditDepth--
 		}
 	}
 
 	/**
-	 * [operation], a deletion or replace whose range runs across a table's edge or
-	 * between its cells, applied a line at a time so no cell joins another or a line
-	 * outside the table: each cell it covers is cleared, the lines between cells are
-	 * deleted as usual, and a replace's text goes in at the range's start, as one
-	 * edit group. A range taking a whole table and more deletes the table. Null for
-	 * any other operation, which applies as it is. See [tablePreservingPieces].
+	 * [operation], a deletion or replace whose range a [BlockKind] splits to keep its
+	 * structure ([BlockKind.deletionPieces]: a range across a table's edge or between its
+	 * cells), applied a piece at a time, last first, with a replace's text going in at
+	 * the range's start, as one edit group. Null for any other operation, which applies
+	 * as it is.
 	 */
-	private fun aroundTables(operation: TextEditOperation): TextEditOperation? {
+	private fun keepingBlockStructure(operation: TextEditOperation): TextEditOperation? {
 		val range = when (operation) {
 			is TextEditOperation.Delete -> operation.range
 			is TextEditOperation.Replace -> operation.range
 			else -> return null
 		}
-		val pieces = state.tablePreservingPieces(range) ?: return null
+		val pieces = BLOCK_KINDS.firstNotNullOfOrNull { it.deletionPieces(state, range) } ?: return null
 		// A replace that inherits takes the styles of the text where it lands, as a replace of nothing there would.
 		val newText = (operation as? TextEditOperation.Replace)?.let { replace ->
 			if (!replace.inheritStyle) replace.newText
@@ -582,17 +580,10 @@ class TextEditManager(private val state: TextEditorState) {
 		} ?: AnnotatedString("")
 		state.withAtomicEdit {
 			state.selector.clearSelection()
-			editingTable {
+			editingStructure {
 				for (piece in pieces.asReversed()) {
 					applyLanded(TextEditOperation.Delete(piece, cursorBefore = operation.cursorBefore, cursorAfter = piece.start))
-					// A run that took a table whole joins its lines into one no cell is in,
-					// but a cell's marker at the run's end, or its start, can land on it.
-					val joined = piece.start.line
-					if (piece.end.line != joined) state.tableCellAt(joined)?.let { cell ->
-						recordLineBlockChanges(listOf(joined)) {
-							state.planDemoteLineBlock(joined, tableCellBlock(cell))?.let { state.writeLineBlocks(listOf(it)) }
-						}
-					}
+					if (piece.end.line != piece.start.line) BLOCK_KINDS.forEach { it.afterJoin(state, piece.start.line) }
 				}
 				if (newText.isNotEmpty()) {
 					alreadyScreened {

@@ -1,10 +1,61 @@
 package com.darkrockstudios.texteditor.state
 
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.font.FontWeight
+import com.darkrockstudios.texteditor.CharLineOffset
+import com.darkrockstudios.texteditor.TextEditorRange
+import com.darkrockstudios.texteditor.html.HtmlDocument
 import com.darkrockstudios.texteditor.richstyle.TableCellSpanStyle
+import com.darkrockstudios.texteditor.richstyle.planDemoteLineBlock
 import com.darkrockstudios.texteditor.richstyle.startsTableRow
+import com.darkrockstudios.texteditor.richstyle.tableCellBlock
 import com.darkrockstudios.texteditor.richstyle.tableCellOn
+import com.darkrockstudios.texteditor.richstyle.writeLineBlocks
+
+/**
+ * Tables: a cell takes its place in its table from the cells around it, is laid out at
+ * its column's share of the viewport beside the other cells of its table row, and no
+ * deletion or paste joins it to another line or leaves its table with a short row.
+ * See `docs/design/tables.md`.
+ */
+internal object TableKind : BlockKind<TableCellFacts> {
+	override fun walk(spans: SpanIndex): FactsWalk<TableCellFacts> = TableFactsWalk(spans)
+
+	/** The row before an edit ends at the line before it, and whether it is its table's last can change. */
+	override fun walkStart(spans: SpanIndex, line: Int): Int = tableRowStart(spans, (line - 1).coerceAtLeast(0))
+
+	override fun shapesDifferently(now: TableCellFacts?, was: TableCellFacts?): Boolean =
+		(now != null || was != null) && !(now?.shapesAs(was) ?: false)
+
+	/** A cell wraps at its column's width whether lines wrap or not, and a header cell is bold, for measuring only, under the styles its text carries. */
+	override fun shape(facts: TableCellFacts, line: AnnotatedString, shaper: LineShaping): TextLayoutResult {
+		val measureLine = if (facts.isHeader) {
+			AnnotatedString(line.text, listOf(AnnotatedString.Range(HEADER_CELL_STYLE, 0, line.length)) + line.spanStyles, line.paragraphStyles)
+		} else line
+		return shaper.measureWrapped(measureLine, maxOf(1, cellTextWidth(facts, shaper.inputs).toInt()))
+	}
+
+	override fun place(facts: TableCellFacts, inputs: LineInputs, textHeight: Float): LinePlacement =
+		cellPlacement(facts, inputs, textHeight)
+
+	override fun deletionPieces(state: TextEditorState, range: TextEditorRange): List<TextEditorRange>? =
+		state.tablePreservingPieces(range)
+
+	/** A run that took a table whole joins its lines into one no cell is in, but a cell's marker at the run's end, or its start, can land on it. */
+	override fun afterJoin(state: TextEditorState, line: Int) {
+		val cell = state.tableCellAt(line) ?: return
+		state.editManager.recordLineBlockChanges(listOf(line)) {
+			state.planDemoteLineBlock(line, tableCellBlock(cell))?.let { state.writeLineBlocks(listOf(it)) }
+		}
+	}
+
+	override fun beforePastedBlocks(state: TextEditorState, document: HtmlDocument, landedAt: CharLineOffset, text: AnnotatedString): CharLineOffset =
+		state.keepingTablesWhole(document, landedAt, text)
+
+	override fun settlePasted(state: TextEditorState, lines: IntRange) = state.textForBrokenTables(lines)
+}
 
 /**
  * Where a cell line sits in its table, as the layout walk derives it: the [cell] marker
@@ -34,7 +85,7 @@ internal data class TableCellFacts(
  * is the table's last are read ahead once at its first cell, and the header's column
  * count at the table's first row. Reads only the cell markers in [spans].
  */
-internal class TableFactsWalk(private val spans: SpanIndex) {
+internal class TableFactsWalk(private val spans: SpanIndex) : FactsWalk<TableCellFacts> {
 	private var row = -1
 	private var tableColumns = 0
 	private var rowEnd = -1
@@ -51,16 +102,14 @@ internal class TableFactsWalk(private val spans: SpanIndex) {
 		else -> spans.spansOn(line).tableCellOn(line)
 	}
 
-	/** Continues the walk after a line whose facts were [after]. */
-	fun resume(after: TableCellFacts?) {
+	override fun resume(after: TableCellFacts?) {
 		row = after?.row ?: -1
 		tableColumns = after?.tableColumns ?: 0
 		rowEnd = -1
 		given = -1
 	}
 
-	/** The facts of [line], which must follow the line last given, or start the walk. */
-	fun next(line: Int): TableCellFacts? {
+	override fun next(line: Int): TableCellFacts? {
 		val previous = cellOf(line - 1)
 		val cell = spans.spansOn(line).tableCellOn(line)
 		given = line
@@ -109,25 +158,25 @@ internal const val CELL_PADDING_Y_DP = 4f
 private fun LineInputs.dp(value: Float): Float = value * (density?.density ?: 1f)
 
 /** How wide a cell with [facts] lays its text out under [inputs]: its column's share, less its padding. */
-internal fun cellTextWidth(facts: TableCellFacts, inputs: LineInputs): Float =
+private fun cellTextWidth(facts: TableCellFacts, inputs: LineInputs): Float =
 	(inputs.width / facts.columns - 2 * inputs.dp(CELL_PADDING_X_DP)).coerceAtLeast(1f)
 
-/** The padding above and below a cell's text under [inputs]. */
-internal fun cellPaddingY(inputs: LineInputs): Float = inputs.dp(CELL_PADDING_Y_DP)
-
 /**
- * Where a cell with [facts] whose own height is [height] sits under [inputs], before its
- * row's height is known: its column's share of the viewport, in a band that is its
- * table row, with the paragraph spacing after the table's last row.
+ * Where a cell with [facts] whose rows are [textHeight] tall sits under [inputs], before
+ * its row's height is known: its column's share of the viewport, padded around its
+ * text, in a band that is its table row, with the paragraph spacing after the table's
+ * last row.
  */
-internal fun cellPlacement(facts: TableCellFacts, inputs: LineInputs, height: Float): LinePlacement {
+internal fun cellPlacement(facts: TableCellFacts, inputs: LineInputs, textHeight: Float): LinePlacement {
 	val boxWidth = inputs.width / facts.columns
 	val boxLeft = facts.cell.column * boxWidth
+	val padding = inputs.dp(CELL_PADDING_Y_DP)
 	return LinePlacement(
 		boxLeft = boxLeft,
 		boxWidth = boxWidth,
 		textLeft = boxLeft + inputs.dp(CELL_PADDING_X_DP),
-		bandHeight = height,
+		padding = padding,
+		bandHeight = textHeight + 2 * padding,
 		spaceAfter = if (facts.lastRow) inputs.paragraphSpacing else 0f,
 		startsBand = facts.rowStart,
 		endsBand = facts.rowEnd,
@@ -135,7 +184,7 @@ internal fun cellPlacement(facts: TableCellFacts, inputs: LineInputs, height: Fl
 }
 
 /** The look a header cell is shaped with, under its own styles: it is never in the text, so no format writes it. */
-internal val HEADER_CELL_STYLE = SpanStyle(fontWeight = FontWeight.Bold)
+private val HEADER_CELL_STYLE = SpanStyle(fontWeight = FontWeight.Bold)
 
 /** The first line of the table row [line] is in, as [spans] place cells; [line] itself outside a table. */
 internal fun tableRowStart(spans: SpanIndex, line: Int): Int {

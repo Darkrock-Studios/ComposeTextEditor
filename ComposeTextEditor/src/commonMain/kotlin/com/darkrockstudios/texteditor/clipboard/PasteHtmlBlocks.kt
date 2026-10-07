@@ -9,14 +9,12 @@ import com.darkrockstudios.texteditor.html.pastedLinkSpans
 import com.darkrockstudios.texteditor.html.sanitizeLinkUrl
 import com.darkrockstudios.texteditor.richstyle.LinkSpanStyle
 import com.darkrockstudios.texteditor.richstyle.RichSpan
-import com.darkrockstudios.texteditor.richstyle.TableCellSpanStyle
 import com.darkrockstudios.texteditor.richstyle.applyDocumentBlocks
+import com.darkrockstudios.texteditor.state.BLOCK_KINDS
 import com.darkrockstudios.texteditor.state.LayoutUpdate
 import com.darkrockstudios.texteditor.state.PreservedRichSpan
 import com.darkrockstudios.texteditor.state.TextEditorState
-import com.darkrockstudios.texteditor.state.insertLineBreaksRaw
 import com.darkrockstudios.texteditor.state.isInlineOnlyLine
-import com.darkrockstudios.texteditor.state.textForBrokenTables
 import com.darkrockstudios.texteditor.state.removeBlockLooksOffTheirBlocks
 import com.darkrockstudios.texteditor.state.removeLinkLookOutsideLinks
 import com.darkrockstudios.texteditor.state.takeOutOfOtherLinks
@@ -70,7 +68,10 @@ internal fun TextEditorState.settleLanded(
 		landedInline -> at.also { applyHtmlPasteLinks(document, at) }
 		else -> applyHtmlPasteBlocks(document, at, text)
 	}
-	if (!landedInline) textForBrokenTables(start.line..start.line + text.text.count { it == '\n' })
+	if (!landedInline) {
+		val lines = start.line..start.line + text.text.count { it == '\n' }
+		BLOCK_KINDS.forEach { it.settlePasted(this, lines) }
+	}
 	removeLinkLookOutsideLinks(start, text)
 	removeBlockLooksOffTheirBlocks(start, text)
 	start
@@ -92,7 +93,7 @@ internal fun TextEditorState.applyHtmlPasteBlocks(
 	landedAt: CharLineOffset,
 	pastedText: AnnotatedString,
 ): CharLineOffset {
-	val insertPosition = keepingTablesWhole(document, landedAt, pastedText)
+	val insertPosition = BLOCK_KINDS.fold(landedAt) { at, kind -> kind.beforePastedBlocks(this, document, at, pastedText) }
 	val pastedLines = insertPosition.line..insertPosition.line + pastedText.text.count { it == '\n' }
 	addHtmlPasteLinks(document, insertPosition, pastedLines) {
 		placeHtmlPasteBlocks(document, insertPosition, pastedText, pastedLines)
@@ -120,38 +121,6 @@ private inline fun TextEditorState.addHtmlPasteLinks(
 		}
 		then()
 	}
-}
-
-/**
- * Puts a pasted table on lines of its own, and returns where the paste starts then. A
- * paste splices its first and last lines into the line it lands in, and those take no
- * block, so a table at either end of it would lose a cell: a line break goes between.
- */
-private fun TextEditorState.keepingTablesWhole(
-	document: HtmlDocument,
-	insertPosition: CharLineOffset,
-	pastedText: AnnotatedString,
-): CharLineOffset {
-	val cells = document.blockLines.filterKeys { it is TableCellSpanStyle }.values.flatMapTo(HashSet()) { it }
-	if (cells.isEmpty()) return insertPosition
-	val breaks = pastedText.text.count { it == '\n' }
-	val tail = pastedText.text.length - pastedText.text.lastIndexOf('\n') - 1
-	val end = CharLineOffset(insertPosition.line + breaks, if (breaks == 0) insertPosition.char + tail else tail)
-	var caret = cursorPosition
-	if (breaks in cells && end.char < textLines[end.line].length) insertLineBreaksRaw(end, 1)
-	if (0 !in cells || insertPosition.char == 0) {
-		cursor.updatePosition(caret)
-		return insertPosition
-	}
-	insertLineBreaksRaw(insertPosition, 1)
-	caret = when {
-		caret.line > insertPosition.line -> caret.copy(line = caret.line + 1)
-		caret.line == insertPosition.line && caret.char >= insertPosition.char ->
-			CharLineOffset(caret.line + 1, caret.char - insertPosition.char)
-		else -> caret
-	}
-	cursor.updatePosition(caret)
-	return CharLineOffset(insertPosition.line + 1, 0)
 }
 
 /**

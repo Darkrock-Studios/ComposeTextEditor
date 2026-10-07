@@ -3,6 +3,7 @@ package com.darkrockstudios.texteditor.state
 import androidx.compose.ui.text.AnnotatedString
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
+import com.darkrockstudios.texteditor.html.HtmlDocument
 import com.darkrockstudios.texteditor.richstyle.RichSpanStyle
 import com.darkrockstudios.texteditor.richstyle.LineBlockWrite
 import com.darkrockstudios.texteditor.richstyle.MAX_TABLE_COLUMNS
@@ -77,6 +78,38 @@ fun TextEditorState.convertTableToText(line: Int) {
 			planDemoteLineBlock(cellLine, tableCellBlock(table.cellAt(cellLine)))
 		})
 	}
+}
+
+/**
+ * Puts a pasted table on lines of its own, and returns where the paste starts then. A
+ * paste splices its first and last lines into the line it lands in, and those take no
+ * block, so a table at either end of it would lose a cell: a line break goes between.
+ */
+internal fun TextEditorState.keepingTablesWhole(
+	document: HtmlDocument,
+	insertPosition: CharLineOffset,
+	pastedText: AnnotatedString,
+): CharLineOffset {
+	val cells = document.blockLines.filterKeys { it is TableCellSpanStyle }.values.flatMapTo(HashSet()) { it }
+	if (cells.isEmpty()) return insertPosition
+	val breaks = pastedText.text.count { it == '\n' }
+	val tail = pastedText.text.length - pastedText.text.lastIndexOf('\n') - 1
+	val end = CharLineOffset(insertPosition.line + breaks, if (breaks == 0) insertPosition.char + tail else tail)
+	var caret = cursorPosition
+	if (breaks in cells && end.char < textLines[end.line].length) insertLineBreaksRaw(end, 1)
+	if (0 !in cells || insertPosition.char == 0) {
+		cursor.updatePosition(caret)
+		return insertPosition
+	}
+	insertLineBreaksRaw(insertPosition, 1)
+	caret = when {
+		caret.line > insertPosition.line -> caret.copy(line = caret.line + 1)
+		caret.line == insertPosition.line && caret.char >= insertPosition.char ->
+			CharLineOffset(caret.line + 1, caret.char - insertPosition.char)
+		else -> caret
+	}
+	cursor.updatePosition(caret)
+	return CharLineOffset(insertPosition.line + 1, 0)
 }
 
 /**
@@ -265,7 +298,7 @@ private fun TextEditorState.insertPlainLine(at: Int) {
 	val kept = at - 1
 	val keptText = textLines[kept]
 	val keptBlocks = lineBlockSpanStyles(kept)
-	editManager.editingTable { insertLineBreaksRaw(CharLineOffset(kept, keptText.length), 1) }
+	editManager.editingStructure { insertLineBreaksRaw(CharLineOffset(kept, keptText.length), 1) }
 	editManager.recordLineBlockChanges(listOf(kept, at)) {
 		writeLineBlocks(listOf(LineBlockWrite(kept, keptText, keptBlocks), LineBlockWrite(at, AnnotatedString(""), emptyList())))
 	}
@@ -289,7 +322,7 @@ internal fun TextEditorState.insertCellLines(at: Int, cells: List<TableCellSpanS
 	val kept = if (at > 0) at - 1 else 0
 	val keptText = textLines[kept]
 	val keptBlocks = lineBlockSpanStyles(kept)
-	editManager.editingTable {
+	editManager.editingStructure {
 		insertLineBreaksRaw(if (at > 0) CharLineOffset(kept, keptText.length) else CharLineOffset(0, 0), cells.size)
 	}
 	val keptAt = if (at > 0) kept else cells.size
@@ -306,7 +339,7 @@ internal fun TextEditorState.insertCellLines(at: Int, cells: List<TableCellSpanS
  * Deletes [lines] whole, line breaks and all, keeping the line that closes the gap as
  * it was. A document of only [lines] is left one empty line.
  */
-internal fun TextEditorState.removeLines(lines: IntRange) = editManager.editingTable {
+internal fun TextEditorState.removeLines(lines: IntRange) = editManager.editingStructure {
 	val first = lines.first
 	val last = lines.last
 	when {
