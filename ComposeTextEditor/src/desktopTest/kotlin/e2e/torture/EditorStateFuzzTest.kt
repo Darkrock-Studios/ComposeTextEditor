@@ -94,6 +94,9 @@ class EditorStateFuzzTest {
 	fun `undo to origin with stacked blocks seed 1137`() = blocksUndoToOrigin(1137)
 
 	@Test
+	fun `undo to origin with stacked blocks seed 2198`() = blocksUndoToOrigin(2198)
+
+	@Test
 	fun `undo to origin with tables seed 1`() = tablesUndoToOrigin(1)
 
 	@Test
