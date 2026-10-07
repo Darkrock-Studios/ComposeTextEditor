@@ -44,20 +44,24 @@ internal class DocumentBlocks(
 	fun tableCellAt(line: Int): TableCellSpanStyle? = cellsByLine[line]
 
 	/** The first line of the table [line] is a cell of; the cells before it must be among these blocks. */
-	fun tableStart(line: Int): Int {
-		var at = line
-		while (cellsByLine.containsKey(at - 1)) at--
-		return at
-	}
+	fun tableStart(line: Int): Int = cellStarts[line]?.first ?: line
 
 	/** The first line of the table row [line] is a cell of. */
-	fun tableRowStart(line: Int): Int {
-		var at = line
-		while (true) {
-			val cell = cellsByLine[at] ?: return at
-			if (startsTableRow(cell, cellsByLine[at - 1])) return at
-			at--
+	fun tableRowStart(line: Int): Int = cellStarts[line]?.second ?: line
+
+	/** Each cell line's table start and row start, in one pass down the cells. */
+	private val cellStarts: Map<Int, Pair<Int, Int>> by lazy {
+		val starts = HashMap<Int, Pair<Int, Int>>()
+		var tableStart = -1
+		var rowStart = -1
+		for (line in cellsByLine.keys.sorted()) {
+			val cell = cellsByLine.getValue(line)
+			val previous = cellsByLine[line - 1]
+			if (previous == null) tableStart = line
+			if (startsTableRow(cell, previous)) rowStart = line
+			starts[line] = tableStart to rowStart
 		}
+		starts
 	}
 
 	private val cellsByLine: Map<Int, TableCellSpanStyle> by lazy {

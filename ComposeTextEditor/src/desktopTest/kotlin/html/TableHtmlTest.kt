@@ -3,6 +3,7 @@ package html
 import androidx.compose.ui.text.font.FontWeight
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
+import com.darkrockstudios.texteditor.clipboard.settleLanded
 import com.darkrockstudios.texteditor.html.HtmlExtension
 import com.darkrockstudios.texteditor.html.parseHtmlDocument
 import com.darkrockstudios.texteditor.html.selectionAsHtml
@@ -140,5 +141,37 @@ class TableHtmlTest {
 		testScheduler.advanceUntilIdle()
 
 		assertEquals("$table\n|0| Name\n|1>| Age\n|0| Ada\n|1>| 36", state.blockLines())
+	}
+
+	@Test
+	fun `a heading in a cell is its text, and a cell's colour stays`() = runTest {
+		val document = parseHtmlDocument(
+			"<p>a</p><p>b</p><table><tr><td><h2>Title</h2></td><td style=\"color:#cc0000\">warn</td></tr></table>",
+			com.darkrockstudios.texteditor.RichTextStyles.DEFAULT,
+		)
+		val size = com.darkrockstudios.texteditor.RichTextStyles.DEFAULT.headingLook(2).fontSize
+
+		assertEquals("a\nb\nTitle\nwarn", document.text.text)
+		assertTrue(document.text.spanStyles.none { it.item.fontSize == size })
+		assertTrue(document.text.spanStyles.any { it.item.color == androidx.compose.ui.graphics.Color(0xFFCC0000) && it.start == 10 })
+	}
+
+	@Test
+	fun `a table pasted into the middle of a line gets lines of its own`() = runTest {
+		val state = TextEditorState(scope = this, measurer = mockk(relaxed = true))
+		state.setBlockLines("abcdef")
+		val document = parseHtmlDocument("<table><tr><th>x</th><th>y</th></tr></table>", state.richTextStyles)
+		val at = CharLineOffset(0, 3)
+
+		state.editGroup {
+			state.cursor.updatePosition(at)
+			state.insertStringAtCursor(document.text)
+			state.settleLanded(at, document.text, richSpans = null, document = document)
+		}
+
+		assertEquals("abc\n|0| x\n|1| y\ndef", state.blockLines())
+		assertEquals(CharLineOffset(2, 1), state.cursorPosition)
+		state.undo()
+		assertEquals("abcdef", state.blockLines())
 	}
 }

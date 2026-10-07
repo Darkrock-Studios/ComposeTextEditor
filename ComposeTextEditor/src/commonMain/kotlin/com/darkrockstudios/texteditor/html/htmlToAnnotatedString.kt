@@ -468,21 +468,7 @@ private class HtmlSpanBuilder(
 		if (format != null) {
 			formatRanges += FormatRange(format, start, out.length, pendingAtEntry, firstLineOnly = name == "li" && element.holdsList())
 		}
-		if (href != null) {
-			// The separators owed to what came before are written ahead of the
-			// link's first character, and are not part of it.
-			var first = start
-			while (first < out.length && (out[first] == '\n' || out[first] == '\t')) first++
-			// A collapsed space at the end separates the link from what follows, or is
-			// trimmed at a line or cell break; either way it is not the link's.
-			val end = if (out.length > first && out.last() == ' ' && !trailingSpaceIsLiteral) out.length - 1 else out.length
-			if (first < end) {
-				links += Triple(first, end, href)
-				// Ahead of the styles inside the link, so they win where they overlap
-				// it, as they do in markdown's links.
-				spans.add(spansAtEntry, AnnotatedString.Range(config.linkStyle, first, end))
-			}
-		}
+		if (href != null) recordLink(href, start, spansAtEntry)
 		// A `<pre>` holding no text never consumes the flag, and leaving it armed
 		// would eat a real newline from the next preformatted run.
 		if (name == "pre") dropLeadingNewline = false
@@ -504,7 +490,8 @@ private class HtmlSpanBuilder(
 		if (separates) appendText(" ", scope)
 		val style = element.attr("style")
 		val nestedInLink = scope.inLink || name == "a"
-		val nestedTags = resolveTags(name, style, scope.tags, inPreElement = false)
+		// A heading's look is a heading's; in a cell its text is text.
+		val nestedTags = resolveTags(name, style, scope.tags, inPreElement = false).filterTo(LinkedHashSet()) { !it.isHeading }
 		val nestedOwnLook = scope.ownLook || HtmlTag.CODE in nestedTags
 		val nested = scope.copy(
 			tags = nestedTags,
@@ -516,14 +503,25 @@ private class HtmlSpanBuilder(
 		val start = out.length
 		val spansAtEntry = spans.size
 		visitChildren(element, nested)
-		if (href != null) {
-			val end = if (out.length > start && out.last() == ' ' && !trailingSpaceIsLiteral) out.length - 1 else out.length
-			if (start < end) {
-				links += Triple(start, end, href)
-				spans.add(spansAtEntry, AnnotatedString.Range(config.linkStyle, start, end))
-			}
-		}
+		if (href != null) recordLink(href, start, spansAtEntry)
 		if (separates) appendText(" ", scope)
+	}
+
+	/** A link to [href] over what was written since [start], the link style ahead of the [spansAtEntry] spans inside it. */
+	private fun recordLink(href: String, start: Int, spansAtEntry: Int) {
+		// The separators owed to what came before are written ahead of the
+		// link's first character, and are not part of it.
+		var first = start
+		while (first < out.length && (out[first] == '\n' || out[first] == '\t')) first++
+		// A collapsed space at the end separates the link from what follows, or is
+		// trimmed at a line or cell break; either way it is not the link's.
+		val end = if (out.length > first && out.last() == ' ' && !trailingSpaceIsLiteral) out.length - 1 else out.length
+		if (first < end) {
+			links += Triple(first, end, href)
+			// Ahead of the styles inside the link, so they win where they overlap
+			// it, as they do in markdown's links.
+			spans.add(spansAtEntry, AnnotatedString.Range(config.linkStyle, first, end))
+		}
 	}
 
 	/**
@@ -562,8 +560,11 @@ private class HtmlSpanBuilder(
 				cellOffsets += out.length to TableCellSpanStyle.of(column, alignments[column])
 				val cell = row.getOrNull(column)
 				if (cell != null) {
+					val name = cell.tagName().lowercase()
 					val style = cell.attr("style")
-					visitChildren(cell, cellScope.copy(tags = resolveTags(cell.tagName().lowercase(), style, emptySet(), inPreElement = false)))
+					val tags = resolveTags(name, style, emptySet(), inPreElement = false)
+					val css = if (HtmlTag.CODE in tags) null else resolveCss(name, cell, style, scope.css, inLink = false)
+					visitChildren(cell, cellScope.copy(tags = tags, css = css, ownLook = HtmlTag.CODE in tags))
 				}
 				trimTrailingLayoutSpace()
 				requestBlockBreak()
