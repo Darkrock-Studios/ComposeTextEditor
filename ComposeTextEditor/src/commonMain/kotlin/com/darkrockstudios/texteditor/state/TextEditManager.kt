@@ -269,6 +269,13 @@ class TextEditManager(private val state: TextEditorState) {
 			if (!isSpanOperation && state.selector.selection != null) {
 				state.selector.clearSelection()
 			}
+			// Breaking an empty line carries its markers onto the lines it makes, which
+			// deleting the text again does not bring back, so undo writes the line back.
+			val brokenLine = if (addToHistory && operation is TextEditOperation.Insert && operation.text.contains('\n')) {
+				OperationMetadata().withLinesBefore(TextEditorRange(operation.position, operation.position), breaks = true)
+			} else {
+				null
+			}
 			val metadata = when (operation) {
 				is TextEditOperation.Insert -> applyInsert(operation)
 				is TextEditOperation.Delete -> applyDelete(addToHistory, operation)
@@ -288,7 +295,7 @@ class TextEditManager(private val state: TextEditorState) {
 			if (addToHistory && !isDecoration) {
 				history.recordEdit(
 					operation,
-					metadata ?: OperationMetadata(),
+					metadata ?: brokenLine ?: OperationMetadata(),
 					typing = typingOverride,
 					rewritesComposition = rewritingComposition,
 				)
@@ -1377,14 +1384,17 @@ class TextEditManager(private val state: TextEditorState) {
 		}
 
 		val range = TextEditorRange(operation.position, endPosition)
-		applyOperation(
-			TextEditOperation.Delete(
-				range = range,
-				cursorBefore = entry.operation.cursorAfter,
-				cursorAfter = entry.operation.cursorBefore,
-			),
-			addToHistory = false
-		)
+		state.withAtomicEdit {
+			applyOperation(
+				TextEditOperation.Delete(
+					range = range,
+					cursorBefore = entry.operation.cursorAfter,
+					cursorAfter = entry.operation.cursorBefore,
+				),
+				addToHistory = false
+			)
+			restoreLinesBefore(entry.metadata.linesBefore, operation.position.line)
+		}
 	}
 
 	/**

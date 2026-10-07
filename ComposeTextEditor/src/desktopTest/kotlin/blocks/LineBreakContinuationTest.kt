@@ -344,4 +344,17 @@ class LineBreakContinuationTest {
 		assertEquals(null, state.headerLevel(2))
 		assertEquals(CharLineOffset(2, 0), state.cursorPosition)
 	}
+
+	@Test
+	fun `undoing text with line breaks put on an empty block line gives the line its block back`() = runTest {
+		for (start in listOf("a\n# \nz", "a\n- \nz", "a\n> \nz", "a\n|0| \nz")) {
+			val state = editor(start)
+			state.cursor.updatePosition(CharLineOffset(1, 0))
+
+			state.insertStringAtCursor("x\ny")
+			state.undo()
+
+			assertEquals(start, state.blockLines(), start)
+		}
+	}
 }

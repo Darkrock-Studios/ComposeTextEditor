@@ -448,8 +448,8 @@ data class OperationMetadata(
 	 */
 	val spanStylesBefore: Map<Int, List<AnnotatedString.Range<SpanStyle>>> = emptyMap(),
 	/**
-	 * For a delete or replace that joins or breaks lines: the first and last lines of
-	 * its range as they stood before. A joined line keeps the first line's blocks and
+	 * For a delete, replace or insert that joins or breaks lines: the first and last
+	 * lines of its range as they stood before. A joined line keeps the first line's blocks and
 	 * paragraph styles over the last's text, and a broken one carries them onto both
 	 * halves, so undo writes these back rather than trusting the inverse edit to
 	 * recover them.
