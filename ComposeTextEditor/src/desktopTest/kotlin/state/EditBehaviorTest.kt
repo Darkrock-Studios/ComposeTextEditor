@@ -4,6 +4,7 @@ import androidx.compose.ui.text.AnnotatedString
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.richstyle.BulletListSpanStyle
 import com.darkrockstudios.texteditor.richstyle.LineBlockEditBehavior
+import com.darkrockstudios.texteditor.richstyle.TableEditBehavior
 import com.darkrockstudios.texteditor.state.EditBehavior
 import com.darkrockstudios.texteditor.state.TextEditorState
 import io.mockk.mockk
@@ -55,9 +56,9 @@ class EditBehaviorTest {
 	}
 
 	@Test
-	fun `line blocks are a behavior on every state by default`() = runTest {
+	fun `tables and line blocks are behaviors on every state by default`() = runTest {
 		val state = editor()
-		assertEquals(listOf<EditBehavior>(LineBlockEditBehavior), state.editBehaviors.toList())
+		assertEquals(listOf<EditBehavior>(TableEditBehavior, LineBlockEditBehavior), state.editBehaviors.toList())
 	}
 
 	@Test
@@ -123,7 +124,7 @@ class EditBehaviorTest {
 
 		state.insertNewlineAtCursor()
 
-		assertEquals(listOf<EditBehavior>(LineBlockEditBehavior), state.editBehaviors.toList())
+		assertEquals(listOf<EditBehavior>(TableEditBehavior, LineBlockEditBehavior), state.editBehaviors.toList())
 		assertEquals("hello", state.getAllText().text)
 
 		state.insertNewlineAtCursor()

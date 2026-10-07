@@ -58,6 +58,7 @@ import com.darkrockstudios.texteditor.richstyle.anchorsToLine
 import com.darkrockstudios.texteditor.richstyle.paintsOnly
 import com.darkrockstudios.texteditor.richstyle.HeaderSpanStyle
 import com.darkrockstudios.texteditor.richstyle.LineBlockEditBehavior
+import com.darkrockstudios.texteditor.richstyle.TableEditBehavior
 import com.darkrockstudios.texteditor.richstyle.LinkSpanStyle
 import com.darkrockstudios.texteditor.richstyle.ParagraphFormatSpanStyle
 import com.darkrockstudios.texteditor.richstyle.RichSpan
@@ -912,13 +913,14 @@ class TextEditorState private constructor(
 	 * commits), a line break or a paste has landed, in order; the first to claim an
 	 * edit wins. Every input path reaches these, hardware keys and IME alike.
 	 *
-	 * Pre-loaded with [LineBlockEditBehavior] at index 0, which claims every
+	 * Pre-loaded with [TableEditBehavior], which claims Enter, Backspace and Delete
+	 * at a table cell's edges, and [LineBlockEditBehavior], which claims every
 	 * newline and column-0 backspace on a block line, so a behavior appended
-	 * after it is not asked before those edits, though it is told where a line
-	 * break landed. Use `add(0, behavior)` to run first, or remove it outright for
+	 * after them is not asked before those edits, though it is told where a line
+	 * break landed. Use `add(0, behavior)` to run first, or remove one outright for
 	 * plain line breaks.
 	 */
-	val editBehaviors: MutableList<EditBehavior> = mutableListOf(LineBlockEditBehavior)
+	val editBehaviors: MutableList<EditBehavior> = mutableListOf(TableEditBehavior, LineBlockEditBehavior)
 
 	/** Depth of the behavior chain currently dispatching, to break recursion. */
 	private var behaviorDepth = 0
@@ -1311,10 +1313,10 @@ class TextEditorState private constructor(
 	/** [isSingleLine] for the keyboard, which is always the focused editor's, whatever an edit is aimed at. */
 	internal val keyboardIsSingleLine: Boolean get() = focusedEditor?.singleLine ?: (singleLineEditors > 0)
 
-	internal val effectiveInputFilter: EditorInputFilter?
+	internal val effectiveInputFilter: EditorInputFilter
 		get() {
-			if (!isSingleLine) return inputFilter
-			return inputFilter?.let { EditorInputFilter.SingleLine then it } ?: EditorInputFilter.SingleLine
+			val lines = if (isSingleLine) TableCellLineBreaks then EditorInputFilter.SingleLine else TableCellLineBreaks
+			return inputFilter?.let { lines then it } ?: lines
 		}
 
 	/**

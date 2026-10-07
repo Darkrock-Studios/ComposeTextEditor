@@ -2,6 +2,8 @@ package com.darkrockstudios.texteditor.state
 
 import androidx.compose.ui.text.AnnotatedString
 import com.darkrockstudios.texteditor.CharLineOffset
+import com.darkrockstudios.texteditor.TextEditorRange
+import com.darkrockstudios.texteditor.richstyle.RichSpanStyle
 import com.darkrockstudios.texteditor.richstyle.LineBlockWrite
 import com.darkrockstudios.texteditor.richstyle.MAX_TABLE_COLUMNS
 import com.darkrockstudios.texteditor.richstyle.TableAlignment
@@ -112,4 +114,248 @@ internal fun TextEditorState.insertLineBreaksRaw(position: CharLineOffset, count
 		cursorAfter = cursorPosition,
 	)
 	editManager.alreadyScreened { editManager.asEnter { editManager.applyOperation(operation) } }
+}
+
+/**
+ * Inserts an empty table row above or [below] the row holding [line], its cells
+ * aligned as the table's columns are, and puts the caret in its cell under [line]'s
+ * column, as one undo step. A row above the header becomes the header. Does nothing
+ * off a table.
+ */
+fun TextEditorState.insertTableRow(line: Int, below: Boolean = true) {
+	val table = tableAt(line) ?: return
+	val row = table.rows[table.rowOf(line)]
+	val at = if (below) row.last + 1 else row.first
+	val alignments = table.alignments
+	val column = table.cellAt(line).column.coerceAtMost(table.columnCount - 1)
+	editGroup {
+		selector.clearSelection()
+		insertCellLines(at, List(table.columnCount) { TableCellSpanStyle.of(it, alignments[it]) })
+		cursor.updatePosition(CharLineOffset(at + column, 0))
+	}
+}
+
+/**
+ * Deletes the table row holding [line], and the whole table when it is its only row,
+ * as one undo step; the caret goes to the row that takes its place, or the one above.
+ * Does nothing off a table.
+ */
+fun TextEditorState.deleteTableRow(line: Int) {
+	val table = tableAt(line) ?: return
+	if (table.rowCount == 1) return deleteTable(line)
+	val rowIndex = table.rowOf(line)
+	val row = table.rows[rowIndex]
+	val column = table.cellAt(line).column
+	editGroup {
+		selector.clearSelection()
+		removeLines(row)
+		val landing = if (rowIndex + 1 < table.rowCount) row.first else table.rows[rowIndex - 1].first
+		val after = tableAt(landing)
+		val target = after?.cellLine(after.rowOf(landing), column) ?: landing
+		cursor.updatePosition(CharLineOffset(target, textLines[target].length))
+	}
+}
+
+/**
+ * Inserts an empty column before or [after] the column of cell [line], in every row,
+ * and puts the caret in its cell on [line]'s row, as one undo step. Does nothing off a
+ * table or in one of [MAX_TABLE_COLUMNS] columns.
+ */
+fun TextEditorState.insertTableColumn(line: Int, after: Boolean = true) {
+	val table = tableAt(line) ?: return
+	if (table.columnCount >= MAX_TABLE_COLUMNS) return
+	val column = table.cellAt(line).column + if (after) 1 else 0
+	val caretRow = table.rowOf(line)
+	editGroup {
+		selector.clearSelection()
+		var caret = 0
+		for (rowIndex in table.rows.indices.reversed()) {
+			val row = table.rows[rowIndex]
+			// After the last cell left of the new column, before every cell right of it.
+			val at = (row.lastOrNull { table.cellAt(it).column < column } ?: (row.first - 1)) + 1
+			val shifted = (at..row.last).filter { table.cellAt(it).column < MAX_TABLE_COLUMNS - 1 }
+			insertCellLines(at, listOf(TableCellSpanStyle.of(column)))
+			retagCells(shifted.associate { it + 1 to table.cellAt(it).let { cell -> TableCellSpanStyle.of(cell.column + 1, cell.alignment) } })
+			if (rowIndex == caretRow) caret = at
+		}
+		cursor.updatePosition(CharLineOffset(caret, 0))
+	}
+}
+
+/**
+ * Deletes the column of cell [line] from every row, and the whole table when it is
+ * its only column, as one undo step. Does nothing off a table.
+ */
+fun TextEditorState.deleteTableColumn(line: Int) {
+	val table = tableAt(line) ?: return
+	val column = table.cellAt(line).column
+	if (table.lines.all { table.cellAt(it).column == column }) return deleteTable(line)
+	val caretRow = table.rowOf(line)
+	editGroup {
+		selector.clearSelection()
+		var caret = table.firstLine
+		for (rowIndex in table.rows.indices.reversed()) {
+			val row = table.rows[rowIndex]
+			val cell = row.firstOrNull { table.cellAt(it).column == column }
+			val later = row.filter { table.cellAt(it).column > column }
+			if (cell != null) removeLines(cell..cell)
+			val shift = if (cell != null) 1 else 0
+			retagCells(later.associate { it - shift to table.cellAt(it).let { c -> TableCellSpanStyle.of(c.column - 1, c.alignment) } })
+			if (rowIndex == caretRow) caret = (later.firstOrNull()?.minus(shift)) ?: (row.first - 1).coerceAtLeast(0)
+		}
+		val target = caret.coerceIn(0, textLines.lastIndex)
+		cursor.updatePosition(CharLineOffset(target, if (isTableCell(target)) 0 else textLines[target].length))
+	}
+}
+
+/**
+ * Deletes the table holding [line], its text with it, as one undo step; the caret goes
+ * to the line that takes its place. Does nothing off a table.
+ */
+fun TextEditorState.deleteTable(line: Int) {
+	val table = tableAt(line) ?: return
+	editGroup {
+		selector.clearSelection()
+		removeLines(table.lines)
+		val target = table.firstLine.coerceAtMost(textLines.lastIndex)
+		cursor.updatePosition(CharLineOffset(target, 0))
+	}
+}
+
+/**
+ * Moves to the next cell, or the previous one when not [forward], from the caret's or
+ * the selection's cell, selecting its text as Tab does in a word processor's table;
+ * Tab from the last cell adds a row first. Returns false off a table, leaving Tab its
+ * usual meaning.
+ */
+internal fun TextEditorState.moveToTableCell(forward: Boolean): Boolean {
+	val from = selector.selection?.let { if (forward) it.end else it.start } ?: cursorPosition
+	val table = tableAt(from.line) ?: return false
+	editGroup {
+		val target = when {
+			!forward && from.line == table.firstLine -> from.line
+			!forward -> from.line - 1
+			from.line < table.lastLine -> from.line + 1
+			else -> {
+				insertTableRow(from.line, below = true)
+				cursorPosition.line - table.cellAt(from.line).column.coerceAtMost(table.columnCount - 1)
+			}
+		}
+		selector.clearSelection()
+		val length = textLines[target].length
+		if (length > 0) selector.updateSelection(CharLineOffset(target, 0), CharLineOffset(target, length))
+		cursor.updatePosition(CharLineOffset(target, length))
+	}
+	return true
+}
+
+/** Gives each line in [cells] its cell, as one recorded step. */
+private fun TextEditorState.retagCells(cells: Map<Int, TableCellSpanStyle>) {
+	if (cells.isEmpty()) return
+	editManager.recordLineBlockChanges(cells.keys.toList()) {
+		writeLineBlocks(cells.mapNotNull { (line, cell) -> retaggedCell(line, cell) })
+	}
+}
+
+/**
+ * Inserts an empty line for each of [cells] so the first lands at line [at], each
+ * carrying its cell, and keeps the line they go in beside as it was: line breaks put
+ * at a line's edge carry an empty line's markers along.
+ */
+internal fun TextEditorState.insertCellLines(at: Int, cells: List<TableCellSpanStyle>) {
+	if (cells.isEmpty()) return
+	val kept = if (at > 0) at - 1 else 0
+	val keptText = textLines[kept]
+	val keptBlocks = lineBlockSpanStyles(kept)
+	editManager.editingTable {
+		insertLineBreaksRaw(if (at > 0) CharLineOffset(kept, keptText.length) else CharLineOffset(0, 0), cells.size)
+	}
+	val keptAt = if (at > 0) kept else cells.size
+	val lines = minOf(keptAt, at)..maxOf(keptAt, at + cells.size - 1)
+	editManager.recordLineBlockChanges(lines.toList()) {
+		writeLineBlocks(lines.mapNotNull { line ->
+			if (line == keptAt) LineBlockWrite(line, keptText, keptBlocks)
+			else planLineBlocks(line, listOf(tableCellBlock(cells[line - at])), AnnotatedString(""))
+		})
+	}
+}
+
+/**
+ * Deletes [lines] whole, line breaks and all, keeping the line that closes the gap as
+ * it was. A document of only [lines] is left one empty line.
+ */
+internal fun TextEditorState.removeLines(lines: IntRange) = editManager.editingTable {
+	val first = lines.first
+	val last = lines.last
+	when {
+		first > 0 -> {
+			val keptText = textLines[first - 1]
+			val keptBlocks = lineBlockSpanStyles(first - 1)
+			delete(TextEditorRange(CharLineOffset(first - 1, keptText.length), CharLineOffset(last, textLines[last].length)))
+			rewriteLine(first - 1, keptText, keptBlocks)
+		}
+		last < textLines.lastIndex -> {
+			val keptText = textLines[last + 1]
+			val keptBlocks = lineBlockSpanStyles(last + 1)
+			delete(TextEditorRange(CharLineOffset(0, 0), CharLineOffset(last + 1, 0)))
+			rewriteLine(0, keptText, keptBlocks)
+		}
+		else -> {
+			delete(TextEditorRange(CharLineOffset(0, 0), CharLineOffset(last, textLines[last].length)))
+			rewriteLine(0, AnnotatedString(""), emptyList())
+		}
+	}
+}
+
+/** Gives [line] [text] and exactly the block span styles [blocks], as one recorded step when that changes it. */
+private fun TextEditorState.rewriteLine(line: Int, text: AnnotatedString, blocks: List<RichSpanStyle>) {
+	editManager.recordLineBlockChanges(listOf(line)) {
+		writeLineBlocks(listOf(LineBlockWrite(line, text, blocks)))
+	}
+}
+
+/**
+ * How deleting [range] goes so no table cell joins another line: the ranges to delete,
+ * in document order, or null when [range] stays on one line or touches no table. Each
+ * cell [range] covers is cleared where it covers it; a run of lines outside the tables
+ * is deleted as one, short of the cell after it. A table [range] takes whole, with more
+ * besides, is deleted like any other lines, in its run.
+ */
+internal fun TextEditorState.tablePreservingPieces(range: TextEditorRange): List<TextEditorRange>? {
+	if (range.start.line == range.end.line) return null
+	val firstLine = range.start.line
+	val kept = BooleanArray(range.end.line - firstLine + 1)
+	var touchesAny = false
+	var line = firstLine
+	while (line <= range.end.line) {
+		val table = tableAt(line)
+		if (table == null) {
+			line++
+			continue
+		}
+		val start = CharLineOffset(table.firstLine, 0)
+		val end = CharLineOffset(table.lastLine, textLines[table.lastLine].length)
+		val taken = range.start <= start && range.end >= end && (range.start < start || range.end > end)
+		if (!taken) {
+			for (cell in maxOf(table.firstLine, firstLine)..minOf(table.lastLine, range.end.line)) kept[cell - firstLine] = true
+		}
+		touchesAny = true
+		line = table.lastLine + 1
+	}
+	if (!touchesAny) return null
+	val pieces = ArrayList<TextEditorRange>()
+	var runStart: CharLineOffset? = null
+	for (at in firstLine..range.end.line) {
+		val from = if (at == firstLine) range.start.char else 0
+		val to = if (at == range.end.line) range.end.char else textLines[at].length
+		if (kept[at - firstLine]) {
+			runStart?.let { pieces += TextEditorRange(it, CharLineOffset(at - 1, textLines[at - 1].length)) }
+			runStart = null
+			pieces += TextEditorRange(CharLineOffset(at, from), CharLineOffset(at, to))
+		} else if (runStart == null) {
+			runStart = CharLineOffset(at, from)
+		}
+	}
+	runStart?.let { pieces += TextEditorRange(it, range.end) }
+	return pieces.filter { it.start != it.end }
 }

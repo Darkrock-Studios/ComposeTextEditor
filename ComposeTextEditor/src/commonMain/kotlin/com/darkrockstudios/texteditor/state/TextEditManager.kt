@@ -36,6 +36,7 @@ import com.darkrockstudios.texteditor.richstyle.planLineBlocks
 import com.darkrockstudios.texteditor.richstyle.rebuildWithoutBlock
 import com.darkrockstudios.texteditor.richstyle.recordListEdit
 import com.darkrockstudios.texteditor.richstyle.sameListKind
+import com.darkrockstudios.texteditor.richstyle.tableCellBlock
 import com.darkrockstudios.texteditor.richstyle.writeLineBlocks
 import com.darkrockstudios.texteditor.utils.appendAnnotatedStrings
 import com.darkrockstudios.texteditor.utils.buildAnnotatedStringWithSpans
@@ -227,6 +228,7 @@ class TextEditManager(private val state: TextEditorState) {
 		// Undo and redo replay edits the filter already let through. What a filter
 		// returns is normalised again.
 		val screened = if (addToHistory) screen(normalized)?.withNormalizedLineEndings() ?: return null else normalized
+		if (addToHistory && tableEditDepth == 0) aroundTables(screened)?.let { return it }
 		// Resolved before anything reads it, so what is applied, recorded, and
 		// announced is one and the same operation.
 		val operation = when {
@@ -516,6 +518,68 @@ class TextEditManager(private val state: TextEditorState) {
 		else -> false
 	}
 
+	private var tableEditDepth = 0
+
+	/** Runs [block], a table edit that removes or joins cell lines on purpose, without [aroundTables]. */
+	internal fun <T> editingTable(block: () -> T): T {
+		tableEditDepth++
+		try {
+			return block()
+		} finally {
+			tableEditDepth--
+		}
+	}
+
+	/**
+	 * [operation], a deletion or replace whose range runs across a table's edge or
+	 * between its cells, applied a line at a time so no cell joins another or a line
+	 * outside the table: each cell it covers is cleared, the lines between cells are
+	 * deleted as usual, and a replace's text goes in at the range's start, as one
+	 * edit group. A range taking a whole table and more deletes the table. Null for
+	 * any other operation, which applies as it is. See [tablePreservingPieces].
+	 */
+	private fun aroundTables(operation: TextEditOperation): TextEditOperation? {
+		val range = when (operation) {
+			is TextEditOperation.Delete -> operation.range
+			is TextEditOperation.Replace -> operation.range
+			else -> return null
+		}
+		val pieces = state.tablePreservingPieces(range) ?: return null
+		val newText = (operation as? TextEditOperation.Replace)?.newText ?: AnnotatedString("")
+		state.withAtomicEdit {
+			state.selector.clearSelection()
+			editingTable {
+				for (piece in pieces.asReversed()) {
+					applyLanded(TextEditOperation.Delete(piece, cursorBefore = operation.cursorBefore, cursorAfter = piece.start))
+					// A run that took a table whole joins its lines into one no cell is in,
+					// but a cell's marker at the run's end, or its start, can land on it.
+					val joined = piece.start.line
+					if (piece.end.line != joined) state.tableCellAt(joined)?.let { cell ->
+						recordLineBlockChanges(listOf(joined)) {
+							state.planDemoteLineBlock(joined, tableCellBlock(cell))?.let { state.writeLineBlocks(listOf(it)) }
+						}
+					}
+				}
+				if (newText.isNotEmpty()) {
+					alreadyScreened {
+						applyLanded(TextEditOperation.Insert(range.start, newText, cursorBefore = range.start, cursorAfter = newText.endWhenInsertedAt(range.start)))
+					}
+				}
+			}
+			state.cursor.updatePosition(if (newText.isEmpty()) range.start else newText.endWhenInsertedAt(range.start))
+		}
+		return when (operation) {
+			is TextEditOperation.Replace -> TextEditOperation.Replace(
+				range = TextEditorRange(range.start, range.start),
+				newText = newText,
+				oldText = AnnotatedString(""),
+				cursorBefore = operation.cursorBefore,
+				cursorAfter = newText.endWhenInsertedAt(range.start),
+			)
+			else -> operation
+		}
+	}
+
 	private var alreadyScreened = 0
 
 	/**
@@ -539,7 +603,7 @@ class TextEditManager(private val state: TextEditorState) {
 	 */
 	private fun screen(operation: TextEditOperation): TextEditOperation? {
 		if (alreadyScreened > 0) return operation
-		val filter = state.effectiveInputFilter ?: return operation
+		val filter = state.effectiveInputFilter
 		val (range, text) = when (operation) {
 			is TextEditOperation.Insert -> TextEditorRange(operation.position, operation.position) to operation.text
 			is TextEditOperation.Replace -> operation.range to operation.newText
