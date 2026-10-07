@@ -34,7 +34,8 @@ fun TextEditorState.tableAt(line: Int): TextEditorTable? = tableAround(line, tex
  * Inserts an empty table of [rows] rows (the first is the header) and [columns]
  * columns (1 to [MAX_TABLE_COLUMNS]) after the caret's line, or in its place when
  * that line is empty and carries no block, and puts the caret in its first cell. A
- * table that would end the document gets an empty line after it, to type below it.
+ * table that would end the document, or meet another table, gets an empty line after
+ * it, and one never takes the place of a line right after another table.
  * Does nothing with the caret in a table, since a cell holds no block.
  */
 fun TextEditorState.insertTable(rows: Int, columns: Int) {
@@ -44,10 +45,11 @@ fun TextEditorState.insertTable(rows: Int, columns: Int) {
 	if (isTableCell(anchor)) return
 	editGroup {
 		selector.clearSelection()
-		val reuse = textLines[anchor].isEmpty() && lineBlocks(anchor).isEmpty()
+		// A table against another's cells would join it, so a line stays between them.
+		val reuse = textLines[anchor].isEmpty() && lineBlocks(anchor).isEmpty() && !isTableCell(anchor - 1)
 		val first = if (reuse) anchor else anchor + 1
 		val cells = first until first + rows * columns
-		val last = if (anchor == textLines.lastIndex) cells.last + 1 else cells.last
+		val last = if (anchor == textLines.lastIndex || isTableCell(anchor + 1)) cells.last + 1 else cells.last
 		val anchorText = textLines[anchor]
 		val anchorBlocks = lineBlockSpanStyles(anchor)
 		insertLineBreaksRaw(CharLineOffset(anchor, anchorText.length), last - anchor)

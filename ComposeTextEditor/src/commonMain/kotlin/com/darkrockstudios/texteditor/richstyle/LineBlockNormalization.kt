@@ -46,13 +46,12 @@ private fun repairPlaceholders(
 	config: RichTextStyles,
 	changed: IntRange,
 ): DocumentSnapshot {
-	val registry = allBlockStyles(config)
 	val violations = ArrayList<Pair<RichSpan, LineBlockStyle>>()
 	for (line in changed) {
 		val kind = placeholderKindOf(snapshot, line) ?: continue
 		for (span in snapshot.spansOn(line)) {
 			if (span.range.start.line != line) continue
-			val block = registry.firstOrNull { it.spanStyle === span.style } ?: continue
+			val block = lineBlockFor(span.style, config) ?: continue
 			if (!block.allowedOn(kind)) violations += span to block
 		}
 	}

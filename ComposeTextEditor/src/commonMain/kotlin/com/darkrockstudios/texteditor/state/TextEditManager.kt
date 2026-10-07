@@ -24,7 +24,7 @@ import com.darkrockstudios.texteditor.richstyle.demoteLineBlock
 import com.darkrockstudios.texteditor.richstyle.hasLineBlock
 import com.darkrockstudios.texteditor.richstyle.isHeading
 import com.darkrockstudios.texteditor.richstyle.isList
-import com.darkrockstudios.texteditor.richstyle.isTableCell
+import com.darkrockstudios.texteditor.richstyle.refusedBy
 import com.darkrockstudios.texteditor.richstyle.lineBlockSpanStyles
 import com.darkrockstudios.texteditor.richstyle.lineBlocks
 import com.darkrockstudios.texteditor.richstyle.listBlockAt
@@ -1068,7 +1068,7 @@ class TextEditManager(private val state: TextEditorState) {
 	internal fun toggleLineBlock(lines: IntRange, block: LineBlockStyle) = state.withAtomicEdit {
 		val targets = lines.filter { line ->
 			line in state.textLines.indices && block.allowedOn(placeholderKindOf(state.workingContent, line)) &&
-				(block.isTableCell || state.tableCellAt(line) == null)
+				!block.refusedBy(state.lineBlocks(line))
 		}
 		if (targets.isEmpty()) return@withAtomicEdit
 		// A list toggle asks for a kind at any nesting level: a nested item has

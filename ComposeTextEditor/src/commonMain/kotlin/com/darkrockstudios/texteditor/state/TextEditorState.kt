@@ -60,7 +60,7 @@ import com.darkrockstudios.texteditor.richstyle.LinkSpanStyle
 import com.darkrockstudios.texteditor.richstyle.ParagraphFormatSpanStyle
 import com.darkrockstudios.texteditor.richstyle.RichSpan
 import com.darkrockstudios.texteditor.richstyle.RichSpanStyle
-import com.darkrockstudios.texteditor.richstyle.allBlockRegistry
+import com.darkrockstudios.texteditor.richstyle.lineBlockFor
 import com.darkrockstudios.texteditor.richstyle.demoteLineBlock
 import com.darkrockstudios.texteditor.richstyle.headerBlock
 import com.darkrockstudios.texteditor.richstyle.lineBlocksConflict
@@ -2856,7 +2856,7 @@ class TextEditorState private constructor(
 			}
 			// A copied block takes a line it covers whole from whatever block there refuses
 			// to share it, a list the paste continued onto a pasted heading.
-			val block = allBlockRegistry.firstOrNull { it.spanStyle === preserved.style }
+			val block = lineBlockFor(preserved.style, richTextStyles)
 			if (block != null) {
 				val refusing = lineBlocks(startPos.line).filter { lineBlocksConflict(block.spanStyle, it.spanStyle) }
 				if (refusing.isNotEmpty()) {

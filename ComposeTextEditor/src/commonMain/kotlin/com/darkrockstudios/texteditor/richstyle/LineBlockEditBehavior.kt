@@ -8,8 +8,8 @@ import com.darkrockstudios.texteditor.state.TextEditorState
  * exits the block (a nested list item un-nests instead), Enter at a heading's
  * end, empty or not, starts body text, backspace at its start demotes it (a
  * nested list item un-nests), and a split keeps the gutter marker on both
- * halves. A table cell is left to the table's behavior. See the "Smart editing" and "Nested lists" sections of
- * `docs/design/line-blocks.md`.
+ * halves. A table cell is left to the table's behavior. See the "Smart
+ * editing" and "Nested lists" sections of `docs/design/line-blocks.md`.
  *
  * Registered on every [TextEditorState] by default. Remove it from
  * [TextEditorState.editBehaviors] for an editor that wants plain line breaks.

@@ -8,7 +8,7 @@ import androidx.compose.ui.text.style.TextAlign
 import com.darkrockstudios.texteditor.LineWrap
 import com.darkrockstudios.texteditor.state.TextEditorState
 
-/** The most columns a table can have; a wider table's extra cells are dropped on import. */
+/** The most columns a table can have. */
 const val MAX_TABLE_COLUMNS: Int = 16
 
 /** How a table column's cells align their text, as a GFM delimiter row writes it. */
@@ -59,9 +59,11 @@ class TableCellSpanStyle private constructor(
 			TableAlignment.entries.map { TableCellSpanStyle(column, it) }
 		}
 
-		/** The singleton for [column], coerced into 0 until [MAX_TABLE_COLUMNS], and [alignment]. */
-		fun of(column: Int, alignment: TableAlignment = TableAlignment.NONE): TableCellSpanStyle =
-			CELLS[column.coerceIn(0, MAX_TABLE_COLUMNS - 1)][alignment.ordinal]
+		/** The singleton for [column], 0 until [MAX_TABLE_COLUMNS], and [alignment]. */
+		fun of(column: Int, alignment: TableAlignment = TableAlignment.NONE): TableCellSpanStyle {
+			require(column in 0 until MAX_TABLE_COLUMNS) { "A cell's column is 0 until $MAX_TABLE_COLUMNS, was $column" }
+			return CELLS[column][alignment.ordinal]
+		}
 
 		/** Every cell style, column by column. */
 		internal val ALL: List<TableCellSpanStyle> = CELLS.flatten()

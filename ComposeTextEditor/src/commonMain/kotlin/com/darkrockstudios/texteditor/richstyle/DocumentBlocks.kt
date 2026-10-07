@@ -69,13 +69,18 @@ internal fun documentBlocksOf(
 				span.range.start.line to style
 			}
 			.toMap(),
-		blockLines = allBlockStyles(styles).associateWith { block ->
-			allSpans.asSequence()
-				.filter { it.style === block.spanStyle }
-				.map { it.range.start.line }
-				.toHashSet()
-		},
+		blockLines = blockLinesOf(allSpans, styles),
 	)
+}
+
+/** The lines each block of [styles]' registry is on among [allSpans], in one pass over them. */
+private fun blockLinesOf(allSpans: Set<RichSpan>, styles: RichTextStyles): Map<LineBlockStyle, Set<Int>> {
+	val lines = allBlockStyles(styles).associateWithTo(LinkedHashMap()) { HashSet<Int>() }
+	for (span in allSpans) {
+		val block = lineBlockFor(span.style, styles) ?: continue
+		lines.getValue(block) += span.range.start.line
+	}
+	return lines
 }
 
 /**

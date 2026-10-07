@@ -168,6 +168,19 @@ class TableModelTest {
 	}
 
 	@Test
+	fun `a table never meets another, so the two stay apart`() = runTest {
+		val before = editor("text\n|0| a")
+		before.cursor.updatePosition(CharLineOffset(0, 0))
+		before.insertTable(rows = 1, columns = 1)
+		assertEquals("text\n|0| \n\n|0| a", before.blockLines())
+
+		val after = editor("|0| a\n\nnext")
+		after.cursor.updatePosition(CharLineOffset(1, 0))
+		after.insertTable(rows = 1, columns = 1)
+		assertEquals("|0| a\n\n|0| \nnext", after.blockLines())
+	}
+
+	@Test
 	fun `no table goes into a table`() = runTest {
 		val state = editor(twoByTwo)
 		state.cursor.updatePosition(CharLineOffset(1, 0))

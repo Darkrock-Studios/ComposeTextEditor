@@ -82,6 +82,9 @@ internal val PREFIX_BLOCK_SYNTAX: List<MarkdownBlockSyntax> by lazy { BLOCK_SYNT
 
 private val SYNTAX_BY_STYLE: Map<RichSpanStyle, MarkdownBlockSyntax> by lazy { BLOCK_SYNTAX.associateBy { it.style } }
 
+/** Whether [style] is a line block's, one [BLOCK_SYNTAX] has a row for. */
+internal fun hasBlockSyntax(style: RichSpanStyle): Boolean = style in SYNTAX_BY_STYLE
+
 internal val BLOCKQUOTE_SYNTAX: MarkdownBlockSyntax by lazy { SYNTAX_BY_STYLE.getValue(BlockquoteSpanStyle) }
 
 internal val MarkdownBlockSyntax.isList: Boolean

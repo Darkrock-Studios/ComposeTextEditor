@@ -344,7 +344,7 @@ class MarkdownExtension(
 		// empty quote line is `> `, not nothing.
 		val hasBlocks = content.richSpans.any { span ->
 			val style = span.style
-			style === HorizontalRuleSpanStyle || style is ImageBlockSpanStyle || BLOCK_SYNTAX.any { it.style === style }
+			style === HorizontalRuleSpanStyle || style is ImageBlockSpanStyle || hasBlockSyntax(style)
 		}
 		if (text.isEmpty() && !hasBlocks) return ""
 

@@ -115,6 +115,13 @@ internal fun tableCellBlock(style: TableCellSpanStyle): LineBlockStyle =
 internal val LineBlockStyle.isTableCell: Boolean
 	get() = spanStyle is TableCellSpanStyle
 
+/**
+ * Whether a line holding [present] refuses this block: a cell is never demoted by
+ * another block, or the table would lose a cell to a toolbar button.
+ */
+internal fun LineBlockStyle.refusedBy(present: Collection<LineBlockStyle>): Boolean =
+	!isTableCell && present.any { it.isTableCell }
+
 /** The heading block for [level] under [styles]' display styles, from the shared registry. */
 internal fun headerBlock(level: Int, styles: RichTextStyles): LineBlockStyle =
 	registryFor(styles).headers[level.coerceIn(1, 6) - 1]
@@ -394,8 +401,7 @@ internal fun resolveLineBlock(
 	text: AnnotatedString,
 ): ResolvedLineBlock? {
 	if (block in present) return null
-	// A cell is never demoted by another block: the table would lose a cell to a toolbar button.
-	if (!block.isTableCell && present.any { it.isTableCell }) return null
+	if (block.refusedBy(present)) return null
 	// Demote any conflicting block before applying — otherwise the new
 	// paragraph-style indent would overlap the old one and Compose blanks the
 	// line on the next measure pass.
