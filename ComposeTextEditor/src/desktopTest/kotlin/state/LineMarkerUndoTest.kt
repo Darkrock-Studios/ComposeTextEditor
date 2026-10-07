@@ -48,4 +48,27 @@ class LineMarkerUndoTest {
 		assertEquals(listOf(range(0, 5), range(0, 5)), before)
 		assertEquals(before, state.markerRanges())
 	}
+
+	@Test
+	fun `a deletion from inside a marked line into the next keeps the marker over the joined line`() = runTest {
+		val state = editor("- abc\nxyz")
+
+		state.delete(TextEditorRange(CharLineOffset(0, 1), CharLineOffset(1, 1)))
+
+		assertEquals("ayz", state.textLines[0].text)
+		assertEquals(listOf(range(0, 3)), state.markerRanges())
+	}
+
+	@Test
+	fun `a deletion from a marked line's start takes its marker with the line`() = runTest {
+		val state = editor("- abc\n# Head")
+
+		state.delete(TextEditorRange(CharLineOffset(0, 0), CharLineOffset(1, 2)))
+
+		assertEquals("ad", state.textLines[0].text)
+		assertEquals(
+			listOf("HeaderSpanStyle"),
+			state.richSpanManager.getAllRichSpans().filter { it.style.stickyAtStart }.map { it.style::class.simpleName },
+		)
+	}
 }
