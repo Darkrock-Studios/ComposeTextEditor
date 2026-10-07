@@ -151,23 +151,9 @@ private val TAB_ENTITY = Regex("""&(?:Tab|emsp|#0*9|#[xX]0*9);""")
 
 private fun String.isTabEntity(): Boolean = TAB_ENTITY.matches(this)
 
-private val QUOTE_MARKERS = Regex("""^(?: {0,3}> ?)*""")
-
-/** The lines inside a fence, a quoted one too, whose text is literal. */
-private fun String.fencedLineIndices(): Set<Int> {
-	val fenced = HashSet<Int>()
-	var fence: String? = null
-	lines().forEachIndexed { index, line ->
-		val unquoted = line.replaceFirst(QUOTE_MARKERS, "")
-		val open = fence
-		when {
-			open == null -> fence = codeFenceMarker(unquoted)
-			closesFence(unquoted, open) -> fence = null
-			else -> fenced += index
-		}
-	}
-	return fenced
-}
+/** The lines inside a fence, a quoted one or a list item's too, whose text is literal. */
+private fun String.fencedLineIndices(): Set<Int> =
+	walkFences(lines()).withIndex().filter { it.value is FenceLine.Code }.mapTo(HashSet()) { it.index }
 
 /**
  * Rewrites `==text==` highlights as `<mark>text</mark>` so the GFM parser,
@@ -184,24 +170,14 @@ private fun String.withHighlightTags(): String {
 	val lines = lines()
 	val out = StringBuilder(length + 16)
 	val tableRows = tableRowIndices(lines)
-	var fence: String? = null
+	val fences = walkFences(lines)
 	var inIndentedCode = false
 	var previousBlank = true
 	lines.forEachIndexed { index, line ->
 		if (index > 0) out.append('\n')
-		val marker = codeFenceMarker(line)
 		val indented = line.startsWith("    ") || line.startsWith("\t")
-		val openFence = fence
 		when {
-			openFence != null -> {
-				if (closesFence(line, openFence)) fence = null
-				out.append(line)
-			}
-
-			marker != null -> {
-				fence = marker
-				out.append(line)
-			}
+			fences[index] != FenceLine.Outside -> out.append(line)
 
 			line.isBlank() -> out.append(line)
 

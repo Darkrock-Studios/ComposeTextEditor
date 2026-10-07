@@ -4,12 +4,14 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import com.darkrockstudios.texteditor.markdown.MarkdownExtension
+import com.darkrockstudios.texteditor.markdown.toAnnotatedStringFromMarkdown
 import com.darkrockstudios.texteditor.state.TextEditorState
 import io.mockk.mockk
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 import utils.blockLines
 import utils.setBlockLines
 
@@ -54,6 +56,7 @@ class CommonMarkSyntaxTest {
 		assertInline("foo **_**", "foo <b>_</b>")
 		assertInline("*foo**bar*", "<i>foo**bar</i>")
 		assertInline("*foo _bar* baz_", "<i>foo _bar</i> baz_")
+		assertInline("*a ` b*", "<i>a ` b</i>")
 	}
 
 	@Test
@@ -145,5 +148,10 @@ class CommonMarkSyntaxTest {
 		)) {
 			assertEquals(expected, imported(markdown).editorState.blockLines(), markdown)
 		}
+	}
+
+	@Test
+	fun `a fence in a list item is code to the highlight pass too`() {
+		assertTrue("==x==" in "- ```\n  ==x==\n  ```".toAnnotatedStringFromMarkdown().text)
 	}
 }

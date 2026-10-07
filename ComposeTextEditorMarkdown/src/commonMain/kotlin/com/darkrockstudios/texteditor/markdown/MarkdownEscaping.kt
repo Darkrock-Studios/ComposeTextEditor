@@ -58,8 +58,8 @@ internal val SETEXT_UNDERLINE_LINE = Regex("""^ {0,3}(?:=+|-+)[ \t]*$""")
  * `&` before an entity; a backslash before punctuation, a delimiter of the
  * emitter's or at a line's end (a hard break); and at the start of a line
  * with no indent, a heading, quote, list or ordered marker, a tilde fence, a
- * thematic break and a setext underline. An indented line's indent is written as entities
- * ([leadingIndents]), after which nothing is at a line's start.
+ * thematic break and a setext underline. An indented line's indent is written
+ * as entities ([leadingIndents]), after which nothing is at a line's start.
  *
  * [linkTexts] are the ranges written as a link's text, and [markerBoundaries]
  * the indices before which the emitter writes a delimiter of its own (a run's

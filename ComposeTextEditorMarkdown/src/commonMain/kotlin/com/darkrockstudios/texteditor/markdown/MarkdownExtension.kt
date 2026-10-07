@@ -88,17 +88,11 @@ private data class CodeFenceStripResult(
 )
 
 /**
- * Walks the input top-to-bottom, opening a fence at a line whose content starts with
- * three or more backticks or tildes and closing it at a line of at least as long a
- * run of the same character and nothing else; the marker lines are dropped from the
- * output. Lines emitted inside a fence have their indices (in the post-strip line
- * numbering) recorded so `importMarkdown` can attach fence spans after the parser has
- * built the AnnotatedString. A fence with no lines is one empty fenced line.
- *
- * A fence may open inside a quote or a list item, which a fence cannot stack with: its
- * lines are taken out of the container and read as code, the container's markers and
- * indent off them, and it ends with its container. A fence's own indent comes off its
- * lines too, up to the opener's.
+ * Drops the fence marker lines ([walkFences]) and records which of the lines left came
+ * from inside a fence, in the post-strip numbering, so `importMarkdown` can attach fence
+ * spans after the parser has built the AnnotatedString. A fenced line is its code, out
+ * of any quote or list item the fence opened in, which a fence cannot stack with. A
+ * fence with no lines is one empty fenced line.
  *
  * An unclosed fence at EOF treats the remaining lines as fenced, which matches
  * GFM parser behavior and avoids the worst case where a typo silently turns the
@@ -108,98 +102,43 @@ private fun stripCodeFences(markdown: String): CodeFenceStripResult {
 	val outputLines = mutableListOf<String>()
 	val fencedLineIndices = mutableSetOf<Int>()
 	val infoStrings = mutableMapOf<Int, String>()
-	var fence: OpenFence? = null
-	fun addFenced(line: String, open: OpenFence) {
+	var opener: FenceLine.Opener? = null
+	var fencedCount = 0
+	fun addFenced(line: String, open: FenceLine.Opener) {
 		fencedLineIndices += outputLines.size
 		open.info?.let { infoStrings[outputLines.size] = it }
 		outputLines += line
-		open.lines++
+		fencedCount++
 	}
 
-	fun close(open: OpenFence) {
-		if (open.lines == 0) addFenced("", open)
-		fence = null
+	fun closeFence() {
+		opener?.let { if (fencedCount == 0) addFenced("", it) }
+		opener = null
 	}
 
 	val lines = markdown.lines()
-	lines.forEachIndexed { index, line ->
-		val open = fence
-		if (open != null) {
-			val body = open.contentOf(line)
-			when {
-				body == null -> close(open)
-				closesFence(body, open.marker) -> {
-					close(open)
-					return@forEachIndexed
-				}
-				// The newline ending the text starts no line of its own.
-				index == lines.lastIndex && line.isEmpty() -> return@forEachIndexed
+	walkFences(lines).forEachIndexed { index, kind ->
+		when (kind) {
+			is FenceLine.Code -> addFenced(kind.code, opener!!)
+			FenceLine.Closer -> closeFence()
+			is FenceLine.Opener -> {
+				closeFence()
+				opener = kind
+				fencedCount = 0
+			}
 
-				else -> {
-					addFenced(body.dropLeadingSpaces(open.indent), open)
-					return@forEachIndexed
-				}
+			FenceLine.Outside -> {
+				closeFence()
+				outputLines += lines[index]
 			}
 		}
-		val container = FENCE_CONTAINER.find(line)!!
-		val rest = line.substring(container.value.length)
-		val marker = codeFenceMarker(rest)
-		if (marker == null) {
-			outputLines += line
-			return@forEachIndexed
-		}
-		val content = rest.trimStart(' ')
-		fence = OpenFence(
-			marker = marker,
-			info = content.substring(marker.length).trim().ifEmpty { null },
-			quotes = container.groupValues[1].count { it == '>' },
-			itemOffset = container.groupValues[2].length,
-			indent = rest.length - content.length,
-		)
 	}
-	fence?.let(::close)
+	closeFence()
 	return CodeFenceStripResult(
 		text = outputLines.joinToString("\n"),
 		fencedLines = fencedLineIndices,
 		infoStrings = infoStrings,
 	)
-}
-
-/** Quote markers, then a list item's marker, that a fence opens after. */
-private val FENCE_CONTAINER = Regex("""^((?: {0,3}>[ ]?)*)([ \t]*(?:[-*+]|\d{1,9}[.)])[ \t]+)?""")
-
-/**
- * A fence being read: its [marker] and [info] string, the [quotes] and the list item
- * content offset ([itemOffset], 0 for none) it opened inside, and its opener's [indent].
- */
-private class OpenFence(
-	val marker: String,
-	val info: String?,
-	val quotes: Int,
-	val itemOffset: Int,
-	val indent: Int,
-) {
-	var lines = 0
-	private val quotePrefix = if (quotes > 0) Regex("^(?: {0,3}>[ ]?){$quotes}") else null
-
-	/** [line] without its container's markers and indent, or null when the container has ended. */
-	fun contentOf(line: String): String? {
-		var body = line
-		if (quotePrefix != null) body = body.substring((quotePrefix.find(body) ?: return null).value.length)
-		if (itemOffset > 0) {
-			if (body.isBlank()) return body.drop(itemOffset)
-			if (body.length - body.trimStart(' ').length < itemOffset) return null
-			body = body.substring(itemOffset)
-		}
-		return body
-	}
-}
-
-/** This string without up to [count] leading spaces. */
-private fun String.dropLeadingSpaces(count: Int): String {
-	var dropped = 0
-	while (dropped < count && dropped < length && this[dropped] == ' ') dropped++
-	return substring(dropped)
 }
 
 /** A line's body once its stacked block markers are peeled, and the blocks peeled. */

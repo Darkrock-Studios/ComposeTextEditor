@@ -237,6 +237,21 @@ but a host may notice:
 The task API is in `com.darkrockstudios.texteditor.state`: `toggleTaskList`,
 `setTaskChecked`, `toggleTaskChecked`, `taskCheckedAt` and `isTask`.
 
+## Markdown read as CommonMark has it
+
+After 3.0.3, markdown import follows CommonMark where it read some syntax
+differently. Nothing needs code, but a file saved by an earlier version can
+reload changed in two places:
+
+- **Headings ending in `#`.** A heading's closing run of `#` (`## Title ##`) is
+  not its text. Earlier versions wrote a heading whose text ended in a space and
+  `#` as is, so `# Learn C #` reloads as `Learn C`. Export now escapes it.
+- **Code with a space at each end.** CommonMark takes one space off each end of
+  a code span, so `` ` a ` `` reloads as `a`. Export now pads it.
+
+A code fence opened inside a quote or list item, which the editor cannot hold
+there, now imports as code out of its container rather than as inline code.
+
 ## Keyboard content on Android
 
 An Android host can take the GIFs, stickers and images a keyboard commits by
