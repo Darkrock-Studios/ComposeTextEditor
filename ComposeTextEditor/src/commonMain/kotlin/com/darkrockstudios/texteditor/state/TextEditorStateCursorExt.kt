@@ -296,7 +296,11 @@ private fun TextEditorState.moveCursorByPage(direction: Int) {
 	val targetY = row.offset.y + row.effectiveHeight / 2f + direction * pageHeight
 	val lastRow = lineOffsets.last()
 	val targetIndex = lineOffsets.rowAtPoint(verticalGoalOrCaretX(), targetY).let {
-		if (it == index) index + direction else it
+		when {
+			it != index -> it
+			direction < 0 -> if (index > 0) rowAbove(index) else -1
+			else -> if (index + 1 < lineOffsets.size) rowBelow(index) else lineOffsets.size
+		}
 	}
 	when {
 		targetY < 0f || targetIndex < 0 -> keepingVerticalGoal { moveToDocumentStart() }

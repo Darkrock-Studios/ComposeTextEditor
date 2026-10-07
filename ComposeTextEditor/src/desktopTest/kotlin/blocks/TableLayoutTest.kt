@@ -24,6 +24,16 @@ import com.darkrockstudios.texteditor.state.LayoutUpdate
 import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.moveCursorDown
 import com.darkrockstudios.texteditor.state.moveCursorUp
+import com.darkrockstudios.texteditor.state.moveCursorPageDown
+import com.darkrockstudios.texteditor.state.paragraphFormat
+import com.darkrockstudios.texteditor.state.setParagraphFormat
+import com.darkrockstudios.texteditor.richstyle.LinkSpanStyle
+import com.darkrockstudios.texteditor.richstyle.ParagraphFormatSpanStyle
+import com.darkrockstudios.texteditor.LinkClicks
+import com.darkrockstudios.texteditor.pointerIconAt
+import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.input.pointer.PointerKeyboardModifiers
+import androidx.compose.ui.text.style.TextAlign
 import kotlinx.coroutines.test.TestScope
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -197,6 +207,61 @@ class TableLayoutTest {
 		check("a line before the table joins it as the header")
 	}
 
+	@Test
+	fun `a long document lays a table out lazily and settles it as a full pass would`() {
+		val lines = List(300) { "line $it" }.toMutableList()
+		lines[150] = "|0| $long"
+		lines[151] = "|1| b"
+		lines[152] = "|0| c"
+		lines[153] = "|1| $long"
+		val state = TextEditorState(scope = scope, measurer = TextMeasurer(testFontFamilyResolver, density, LayoutDirection.Ltr)).apply {
+			this.density = this@TableLayoutTest.density
+			textStyle = TextStyle(fontFamily = TestFontFamily, fontSize = 16.sp)
+			onViewportSizeChange(Size(width, 100f))
+			setBlockLines(lines.joinToString("\n"))
+		}
+		state.settleLayout()
+		assertParity(state, "settled after a load")
+		assertEquals(state.rowsOf(150).first().offset.y, state.rowsOf(151).single().offset.y)
+
+		state.onViewportSizeChange(Size(300f, 100f))
+		state.settleLayout()
+		assertParity(state, "settled after a narrower viewport")
+		assertEquals(150f + 8f, state.rowsOf(151).single().offset.x)
+	}
+
+	@Test
+	fun `a link in a later column is under the pointer over it`() {
+		val state = editor("|0| some text in the first\n|1| a link")
+		state.addRichSpan(CharLineOffset(1, 2), CharLineOffset(1, 6), LinkSpanStyle("https://example.com"))
+		val row = state.rowsOf(1).single()
+		val x = row.offset.x + row.textLayoutResult.getHorizontalPosition(3, true) + 1f
+		val icon = pointerIconAt(state, Offset(x, row.offset.y + 4f), PointerKeyboardModifiers(), LinkClicks.forReadOnly { {} }, PointerIcon.Text)
+
+		assertEquals(PointerIcon.Hand, icon)
+	}
+
+	@Test
+	fun `a page move shorter than a table row goes to the row below, not the cell beside`() {
+		val state = editor("|0| a\n|1| b\n|0| c\n|1| d")
+		state.onViewportSizeChange(Size(width, 10f))
+		state.cursor.updatePosition(CharLineOffset(0, 0))
+
+		state.moveCursorPageDown()
+
+		assertEquals(2, state.cursorPosition.line)
+	}
+
+	@Test
+	fun `a cell takes no paragraph format`() {
+		val state = editor("plain\n|0| cell")
+
+		state.setParagraphFormat(0..1, ParagraphFormatSpanStyle(textAlign = TextAlign.Center))
+
+		assertEquals(ParagraphFormatSpanStyle(textAlign = TextAlign.Center), state.paragraphFormat(0))
+		assertEquals(null, state.paragraphFormat(1))
+	}
+
 	/** Puts a cell of [column] on [line] through the import path, off the undo history but recorded as a layout pass would see it. */
 	private fun TextEditorState.toggleCellOn(line: Int, column: Int) = editManager.recordLineBlockChanges(listOf(line)) {
 		writeLineBlocks(listOfNotNull(planLineBlocks(line, listOf(tableCellBlock(TableCellSpanStyle.of(column))))))
@@ -205,6 +270,8 @@ class TableLayoutTest {
 	private fun assertParity(state: TextEditorState, context: String) {
 		val incremental = state.lineOffsets.toList()
 		state.updateBookKeeping(LayoutUpdate.Full)
+		// A long document's full pass is lazy too.
+		state.settleLayout()
 		val full = state.lineOffsets.toList()
 		assertEquals(full.size, incremental.size, "$context: rows")
 		full.zip(incremental).forEachIndexed { index, (expected, actual) ->

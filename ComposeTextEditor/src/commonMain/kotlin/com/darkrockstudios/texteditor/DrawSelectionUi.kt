@@ -58,11 +58,18 @@ private fun DrawScope.drawSelectedRows(state: TextEditorState, selection: TextEd
 
 		val boxes = if (hasText) layout.getRunBoxes(row, from, to) else emptyList()
 		val stretches = if (selectsLineBreak) withLineBreak(boxes, wrap, state.lineBreakWidth) else boxes
+		// A cell's selection stays in its box, a selected line break's sliver too.
+		val box = wrap.tableCell
+		val minX = if (box == null) Float.NEGATIVE_INFINITY else box.left
+		val maxX = if (box == null) Float.POSITIVE_INFINITY else box.left + box.width
 		for (stretch in stretches) {
+			val left = (wrap.offset.x + stretch.left).coerceIn(minX, maxX)
+			val right = (wrap.offset.x + stretch.right).coerceIn(minX, maxX)
+			if (right <= left) continue
 			drawRect(
 				color = selectionColor,
-				topLeft = Offset(wrap.offset.x + stretch.left, top),
-				size = Size(stretch.width, wrap.effectiveHeight),
+				topLeft = Offset(left, top),
+				size = Size(right - left, wrap.effectiveHeight),
 			)
 		}
 	}

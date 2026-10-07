@@ -2265,8 +2265,8 @@ class TextEditorState private constructor(
 		val content = content
 		val lines = content.lineList
 		val spans = content.spanIndex
-		val shaper = LineShaper()
 		val inputs = lineInputs()
+		val shaper = LineShaper(inputs)
 		val scrollBefore = scrollState.value
 		// Derived afresh once anything else has scrolled.
 		val anchor = settleAnchor?.takeIf { it.scroll == scrollBefore && it.line < current.lineCount } ?: run {
@@ -2385,9 +2385,9 @@ class TextEditorState private constructor(
 		// Invisible, so a provisional row drawn before its line is shaped shows nothing
 		// rather than the longest line's text.
 		val text = lines[longest].text
-		val sentinel = LineShaper().shape(AnnotatedString(text, listOf(AnnotatedString.Range(SpanStyle(color = Color.Transparent), 0, text.length))))
-		val facts = LineFacts(spans)
 		val inputs = lineInputs()
+		val sentinel = LineShaper(inputs).shape(AnnotatedString(text, listOf(AnnotatedString.Range(SpanStyle(color = Color.Transparent), 0, text.length))))
+		val facts = LineFacts(spans)
 		val layouts = ArrayList<LineLayout>(lines.size)
 		for (line in 0 until lines.size) {
 			facts.next(line)
@@ -2401,9 +2401,9 @@ class TextEditorState private constructor(
 
 	/** A full pass: every line shaped, every fact derived in line order. */
 	private fun layoutAll(lines: LineList, spans: SpanIndex): RowList {
-		val shaper = LineShaper()
-		val facts = LineFacts(spans)
 		val inputs = lineInputs()
+		val shaper = LineShaper(inputs)
+		val facts = LineFacts(spans)
 		val layouts = ArrayList<LineLayout>(lines.size)
 		for (line in 0 until lines.size) {
 			facts.next(line)
@@ -2447,8 +2447,8 @@ class TextEditorState private constructor(
 
 		val facts = LineFacts(spans)
 		if (first > 0) facts.resume(previous.layoutOf(oldIndex(first - 1)))
-		val shaper = LineShaper()
 		val inputs = lineInputs()
+		val shaper = LineShaper(inputs)
 		val layouts = ArrayList<LineLayout>(end - first + 2)
 		var line = first
 		while (line <= lastLine) {
@@ -2475,7 +2475,7 @@ class TextEditorState private constructor(
 	}
 
 	/** Shapes lines with the style, indent baking and width of one layout pass. */
-	private inner class LineShaper {
+	private inner class LineShaper(private val inputs: LineInputs) {
 		// Compose Android doesn't reliably honor per-paragraph ParagraphStyle
 		// .textIndent overriding an editor-wide TextStyle.textIndent, so we
 		// sidestep the merge: strip the indent from the outer style and bake it
@@ -2532,7 +2532,7 @@ class TextEditorState private constructor(
 		}
 
 		private fun shapeCell(line: AnnotatedString, cell: TableCellFacts): TextLayoutResult {
-			val width = maxOf(1, cellTextWidth(cell, lineInputs()).toInt())
+			val width = maxOf(1, cellTextWidth(cell, inputs).toInt())
 			val measureLine = if (cell.isHeader) {
 				AnnotatedString(line.text, listOf(AnnotatedString.Range(HEADER_CELL_STYLE, 0, line.length)) + line.spanStyles, line.paragraphStyles)
 			} else line

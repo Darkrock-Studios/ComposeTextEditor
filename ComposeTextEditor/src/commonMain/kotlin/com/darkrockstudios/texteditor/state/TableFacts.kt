@@ -41,23 +41,35 @@ internal class TableFactsWalk(private val spans: SpanIndex) {
 	private var rowColumns = 0
 	private var lastRow = false
 
-	private fun cellOf(line: Int): TableCellSpanStyle? = if (line < 0) null else spans.spansOn(line).tableCellOn(line)
+	/** The line [next] was last given and its cell, so the next line reads its own alone. */
+	private var given = -1
+	private var givenCell: TableCellSpanStyle? = null
+
+	private fun cellOf(line: Int): TableCellSpanStyle? = when {
+		line < 0 -> null
+		line == given -> givenCell
+		else -> spans.spansOn(line).tableCellOn(line)
+	}
 
 	/** Continues the walk after a line whose facts were [after]. */
 	fun resume(after: TableCellFacts?) {
 		row = after?.row ?: -1
 		tableColumns = after?.tableColumns ?: 0
 		rowEnd = -1
+		given = -1
 	}
 
 	/** The facts of [line], which must follow the line last given, or start the walk. */
 	fun next(line: Int): TableCellFacts? {
-		val cell = cellOf(line) ?: run {
+		val previous = cellOf(line - 1)
+		val cell = spans.spansOn(line).tableCellOn(line)
+		given = line
+		givenCell = cell
+		if (cell == null) {
 			row = -1
 			rowEnd = -1
 			return null
 		}
-		val previous = cellOf(line - 1)
 		val starts = startsTableRow(cell, previous)
 		if (starts) row = if (previous == null) 0 else row + 1
 		if (starts || line > rowEnd) readRow(line, cell)

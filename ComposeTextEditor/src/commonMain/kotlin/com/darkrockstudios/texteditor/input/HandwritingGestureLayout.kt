@@ -11,6 +11,8 @@ import com.darkrockstudios.texteditor.LineWrap
 import com.darkrockstudios.texteditor.effectiveHeight
 import com.darkrockstudios.texteditor.firstRowEndingAtOrBelow
 import com.darkrockstudios.texteditor.lastRowAtOrAbove
+import com.darkrockstudios.texteditor.bandBottom
+import com.darkrockstudios.texteditor.bandTop
 import com.darkrockstudios.texteditor.rowAtPoint
 import com.darkrockstudios.texteditor.state.BreakCursor
 import com.darkrockstudios.texteditor.state.TextEditorState
@@ -106,8 +108,14 @@ private fun TextEditorState.rowAtGesturePoint(point: Offset, lineMargin: Float):
 	if (rows.isEmpty()) return null
 	val y = point.y + scrollState.value
 	val above = rows.rowAtPoint(point.x + scrollX, y)
-	val row = listOfNotNull(rows.getOrNull(above), rows.getOrNull(above + 1)).firstOrNull { row ->
-		y >= row.offset.y - lineMargin && y <= row.offset.y + row.effectiveHeight + lineMargin
+	val found = rows.getOrNull(above)
+	// The row after a cell's is another cell's, beside it; the cell's box is its own.
+	val row = if (found?.tableCell != null) {
+		found.takeIf { y >= it.bandTop - lineMargin && y <= it.bandBottom + lineMargin }
+	} else {
+		listOfNotNull(found, rows.getOrNull(above + 1)).firstOrNull { row ->
+			y >= row.offset.y - lineMargin && y <= row.offset.y + row.effectiveHeight + lineMargin
+		}
 	} ?: return null
 	val x = point.x + scrollX - row.offset.x
 	return row.takeIf { x >= -lineMargin && x <= row.textLayoutResult.multiParagraph.width + lineMargin }
