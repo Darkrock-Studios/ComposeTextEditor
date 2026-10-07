@@ -47,7 +47,6 @@ import com.darkrockstudios.texteditor.state.toggleCodeFence
 import com.darkrockstudios.texteditor.state.toggleHeader
 import com.darkrockstudios.texteditor.state.toggleOrderedList
 
-private val HR_LINE_TOKENS = setOf("---", "***", "___")
 
 /**
  * Matches a line whose entire content is a single markdown image, optionally
@@ -141,6 +140,75 @@ private fun stripCodeFences(markdown: String): CodeFenceStripResult {
 		infoStrings = infoStrings,
 	)
 }
+
+/**
+ * [strip] with each setext heading (a paragraph's lines, then a line of `=` or `-`)
+ * written as an ATX heading per line, of level 1 or 2, its underline dropped, so the
+ * peel reads the lines as headings. The fence data is renumbered onto the lines left.
+ * A paragraph line stays in a quote it is in; a table's rows are no paragraph. Without
+ * [dashUnderlines] a `-` line is a rule: under [ParagraphSeparator.NEWLINE] export
+ * once wrote a rule right under a paragraph's line so.
+ */
+private fun withSetextHeadings(strip: CodeFenceStripResult, dashUnderlines: Boolean): CodeFenceStripResult {
+	val lines = strip.text.lines()
+	val tableLines = findTables(lines, strip.fencedLines).flatMapTo(HashSet()) { it }
+	fun literal(index: Int) = index in strip.fencedLines || index in tableLines
+	val levels = HashMap<Int, Int>()
+	val underlines = HashSet<Int>()
+	for (index in 1 until lines.size) {
+		if (literal(index)) continue
+		val (quote, underline) = splitQuote(lines[index])
+		if (!SETEXT_UNDERLINE_LINE.matches(underline) || (!dashUnderlines && underline.trim().startsWith('-'))) continue
+		var first = index
+		while (first > 0 && !literal(first - 1) && first - 1 !in underlines) {
+			val (lineQuote, body) = splitQuote(lines[first - 1])
+			if (lineQuote != quote || !isParagraphText(body)) break
+			first--
+		}
+		if (first == index) continue
+		val level = if (underline.trim().startsWith('=')) 1 else 2
+		for (line in first until index) levels[line] = level
+		underlines += index
+	}
+	if (underlines.isEmpty()) return strip
+
+	val out = ArrayList<String>(lines.size - underlines.size)
+	val fenced = HashSet<Int>()
+	val infoStrings = HashMap<Int, String>()
+	lines.forEachIndexed { index, line ->
+		if (index in underlines) return@forEachIndexed
+		if (index in strip.fencedLines) fenced += out.size
+		strip.infoStrings[index]?.let { infoStrings[out.size] = it }
+		val level = levels[index]
+		out += if (level == null) {
+			line
+		} else {
+			val (quote, body) = splitQuote(line)
+			val text = body.trim()
+			val closing = ATX_CLOSING_SEQUENCE.find(text)
+			val escaped = if (closing == null) text else text.substring(0, closing.range.first) + closing.value.replaceFirst("#", "\\#")
+			quote + "#".repeat(level) + " " + escaped
+		}
+	}
+	return CodeFenceStripResult(out.joinToString("\n"), fenced, infoStrings)
+}
+
+private val QUOTE_PREFIX = Regex("""^>\s?""")
+
+/** [line]'s quote marker (empty when it has none) and the rest. */
+private fun splitQuote(line: String): Pair<String, String> {
+	val quote = QUOTE_PREFIX.find(line)?.value.orEmpty()
+	return quote to line.substring(quote.length)
+}
+
+private val LIST_ITEM_START = Regex("""^[ \t]*(?:[-*+]|\d{1,9}[.)])(?:[ \t]|$)""")
+private val ATX_HEADING_START = Regex("""^ {0,3}#{1,6}(?:[ \t]|$)""")
+
+/** Whether a line's [body], its quote marker off, is a paragraph's text rather than another block. */
+private fun isParagraphText(body: String): Boolean =
+	body.isNotBlank() && !body.startsWith("    ") && !body.startsWith("\t") && !body.trimStart().startsWith(">") &&
+		!LIST_ITEM_START.containsMatchIn(body) && !ATX_HEADING_START.containsMatchIn(body) &&
+		!isThematicBreak(body) && !STANDALONE_IMAGE_REGEX.matches(body)
 
 /** A line's body once its stacked block markers are peeled, and the blocks peeled. */
 private data class PeeledLine(
@@ -412,6 +480,12 @@ class MarkdownExtension(
 			findTables(lines.mapIndexed { line, text -> if (isQuoted(line) || cellOf(line) != null || isFence(line)) "" else text.text })
 				.mapTo(HashSet()) { it.first + 1 }
 		}
+		// Whether [line] is written right under a paragraph's line, in the same quote or none.
+		fun underParagraph(line: Int): Boolean {
+			val above = line - 1
+			return above >= 0 && !needsSeparator(above) && !isBlankLine(above) && isQuoted(above) == isQuoted(line) &&
+				stylesOn(above).none { it !== BlockquoteSpanStyle && (hasBlockSyntax(it) || it === HorizontalRuleSpanStyle || it is ImageBlockSpanStyle) }
+		}
 		val lineStarts = IntArray(lines.size).also { starts ->
 			for (line in 1 until lines.size) starts[line] = starts[line - 1] + lines[line - 1].length + 1
 		}
@@ -520,7 +594,8 @@ class MarkdownExtension(
 			val list = if (isFenceLine) null else listStyleAt(lineIndex)?.let(listSyntax::getValue)
 			val headingLevel = headerLevel(lineIndex)
 			val inlineMarkdown = when {
-				has(lineIndex, HorizontalRuleSpanStyle) -> "---"
+				// Right under a paragraph's line `---` would make that line a heading.
+				has(lineIndex, HorizontalRuleSpanStyle) -> if (underParagraph(lineIndex)) "***" else "---"
 				imageLines.containsKey(lineIndex) -> {
 					val style = imageLines.getValue(lineIndex)
 					"![${style.alt}](${style.source})"
@@ -617,7 +692,10 @@ class MarkdownExtension(
 		// were inside a fence. Fence content needs to skip the per-line block
 		// detection (it's literal code, not markdown) and its specials need to be
 		// escaped so the parser doesn't reinterpret `*foo*` as italic etc.
-		val fenceStrip = stripCodeFences(markdownText)
+		val fenceStrip = withSetextHeadings(
+			stripCodeFences(markdownText),
+			dashUnderlines = paragraphSeparator == ParagraphSeparator.BLANK_LINE,
+		)
 		// Stage 2: take the blank line export puts after each block away again,
 		// so a paragraph per line comes back as a line per paragraph.
 		// Stage 3: a table's rows become a line per cell. Tables are found first: the blank
@@ -654,12 +732,15 @@ class MarkdownExtension(
 			fun record(blocks: List<MarkdownBlockSyntax>) = blocks.forEach { block ->
 				blockHits.getOrPut(block.style) { mutableListOf() } += index
 			}
+			// A rule outranks a list item: `* * *` is a rule, not an item holding `* *`.
+			val ruleNotItem = peeled.blocks.any { it.isList } && isThematicBreak(splitQuote(line).second)
 			when {
-				peeled.body.trim() in HR_LINE_TOKENS -> {
+				ruleNotItem || isThematicBreak(peeled.body) -> {
 					hrLineIndices += index
+					if (ruleNotItem) nesting.close()
 					// A rule takes only a stacked quote; normalization drops any other
 					// peeled marker from the placeholder line it lands on.
-					record(peeled.blocks)
+					record(if (ruleNotItem) peeled.blocks.filterNot { it.isList } else peeled.blocks)
 					HR_PLACEHOLDER
 				}
 

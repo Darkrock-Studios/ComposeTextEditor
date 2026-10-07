@@ -193,6 +193,13 @@ private const val MARKER_STAND_IN = '*'
 
 private val ENTITY_REGEX = Regex("""&(?:#[0-9]{1,7}|#[xX][0-9a-fA-F]{1,6}|[A-Za-z][A-Za-z0-9]{1,31});""")
 private val THEMATIC_BREAK_REGEX = Regex("""^(?:(?:\*[ \t]*){3,}|(?:-[ \t]*){3,}|(?:_[ \t]*){3,})$""")
+
+/** Whether [line] is a thematic break: three or more of `-`, `*` or `_`, spaced or not, after up to three spaces. */
+internal fun isThematicBreak(line: String): Boolean {
+	var indent = 0
+	while (indent < line.length && indent < 4 && line[indent] == ' ') indent++
+	return indent <= 3 && THEMATIC_BREAK_REGEX.matches(line.substring(indent))
+}
 private val ORDERED_MARKER_REGEX = Regex("""^[0-9]{1,9}[.)](?:[ \t]|$)""")
 private val REFERENCE_DEFINITION_REGEX = Regex("""^\[[^\]]+\]:""")
 

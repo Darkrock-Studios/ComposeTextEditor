@@ -7,7 +7,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
+import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
 import com.darkrockstudios.texteditor.markdown.MarkdownExtension
+import com.darkrockstudios.texteditor.markdown.ParagraphSeparator
 import com.darkrockstudios.texteditor.markdown.toAnnotatedStringFromMarkdown
 import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.linkAt
@@ -23,6 +25,8 @@ import utils.setBlockLines
 
 /** CommonMark syntax read as the spec has it, and written so it reads back the same. */
 class CommonMarkSyntaxTest {
+
+	private val newlines = MarkdownConfiguration.DEFAULT.copy(paragraphSeparator = ParagraphSeparator.NEWLINE)
 
 	private fun TestScope.markdown(): MarkdownExtension =
 		MarkdownExtension(TextEditorState(scope = this, measurer = mockk(relaxed = true)))
@@ -206,6 +210,53 @@ class CommonMarkSyntaxTest {
 			val again = imported(first.exportAsMarkdown())
 			assertEquals(text, again.editorState.getAllText().text, first.exportAsMarkdown())
 			assertEquals(url, again.editorState.linkAt(CharLineOffset(0, 5)), first.exportAsMarkdown())
+		}
+	}
+
+	@Test
+	fun `a paragraph underlined with = or - is a heading, line by line`() = runTest {
+		for ((markdown, expected) in listOf(
+			"Foo *bar*\n=========\n\nFoo\n---------" to "# Foo bar\n## Foo",
+			"Foo\nbar\n===\n\nafter" to "# Foo\n# bar\nafter",
+			"> quoted\n> ===" to "> # quoted",
+			"  Foo #\n===" to "# Foo #",
+			"- item\n---" to "- item\n---",
+			"| a |\n| --- |\n| b |" to "|0| a\n|0| b",
+			"===\n\nFoo\n\n===" to "===\nFoo\n===",
+		)) {
+			assertEquals(expected, imported(markdown).editorState.blockLines(), markdown)
+		}
+	}
+
+	@Test
+	fun `a dash underline is a rule under single-newline paragraphs, as export once wrote one`() = runTest {
+		val markdown = MarkdownExtension(TextEditorState(scope = this, measurer = mockk(relaxed = true)), newlines)
+		markdown.importMarkdown("Foo\n---\nBar\n===")
+
+		assertEquals("Foo\n---\n# Bar", markdown.editorState.blockLines())
+	}
+
+	@Test
+	fun `a rule right under a paragraph is written so it stays a rule`() = runTest {
+		for (configuration in listOf(MarkdownConfiguration.DEFAULT, newlines)) {
+			val markdown = MarkdownExtension(TextEditorState(scope = this, measurer = mockk(relaxed = true)), configuration)
+			markdown.editorState.setBlockLines("Foo\n---\n> quoted\n> ---")
+			val written = markdown.exportAsMarkdown()
+
+			val again = MarkdownExtension(TextEditorState(scope = this, measurer = mockk(relaxed = true)), configuration)
+			again.importMarkdown(written)
+			assertEquals("Foo\n---\n> quoted\n> ---", again.editorState.blockLines(), written)
+		}
+	}
+
+	@Test
+	fun `a rule is three or more of one of - * _, spaced or not, and outranks a list item`() = runTest {
+		for ((markdown, expected) in listOf(
+			"___\n\n- - -\n\n **  * ** * ** * **\n\n-     -      -      -\n\n_____________________________________" to "---\n---\n---\n---\n---",
+			"* Foo\n* * *\n* Bar" to "- Foo\n---\n- Bar",
+			"--\n\n**\n\n    ***" to "--\n**\n\n    ***",
+		)) {
+			assertEquals(expected, imported(markdown).editorState.blockLines(), markdown)
 		}
 	}
 

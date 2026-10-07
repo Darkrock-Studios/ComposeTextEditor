@@ -106,7 +106,7 @@ class LineBlockSweepTest {
 	@Test
 	fun `select-all bullet leaves a horizontal rule untouched`() = runTest {
 		val extension = createMarkdownExtension()
-		extension.importMarkdown("before\n---\nafter")
+		extension.importMarkdown("before\n\n---\n\nafter")
 
 		extension.editorState.toggleBulletList(extension.selectAll())
 
@@ -118,7 +118,7 @@ class LineBlockSweepTest {
 	@Test
 	fun `select-all bullet across a rule survives a save and reload`() = runTest {
 		val extension = createMarkdownExtension()
-		extension.importMarkdown("before\n---\nafter")
+		extension.importMarkdown("before\n\n---\n\nafter")
 		extension.editorState.toggleBulletList(extension.selectAll())
 		val saved = extension.exportAsMarkdown()
 
@@ -144,7 +144,7 @@ class LineBlockSweepTest {
 	@Test
 	fun `select-all quote includes the rule line`() = runTest {
 		val extension = createMarkdownExtension()
-		extension.importMarkdown("before\n---\nafter")
+		extension.importMarkdown("before\n\n---\n\nafter")
 
 		extension.editorState.toggleBlockquote(extension.selectAll())
 

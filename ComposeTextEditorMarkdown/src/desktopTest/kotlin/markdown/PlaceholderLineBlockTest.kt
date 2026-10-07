@@ -47,7 +47,7 @@ class PlaceholderLineBlockTest {
 	@Test
 	fun `import reads a rule inside a blockquote`() = runTest {
 		val extension = createMarkdownExtension()
-		extension.importMarkdown("> above\n> ---\n> below")
+		extension.importMarkdown("> above\n>\n> ---\n>\n> below")
 
 		assertEquals(listOf(0, 1, 2), extension.linesWith(BlockquoteSpanStyle))
 		assertEquals(listOf(1), extension.linesWith(HorizontalRuleSpanStyle))
