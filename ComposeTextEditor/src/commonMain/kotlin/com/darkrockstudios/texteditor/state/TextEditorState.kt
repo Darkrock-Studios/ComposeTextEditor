@@ -909,15 +909,16 @@ class TextEditorState private constructor(
 
 	/**
 	 * Behaviors consulted before [insertNewlineAtCursor], [backspaceAtCursor],
-	 * [deleteAtCursor] and Tab's indent, and told after typed text ([insertTypedString] and the IME's
-	 * commits), a line break or a paste has landed, in order; the first to claim an
-	 * edit wins. Every input path reaches these, hardware keys and IME alike.
+	 * [deleteAtCursor] and Tab's indent, and told after typed text
+	 * ([insertTypedString] and the IME's commits), a line break or a paste has
+	 * landed, in order; the first to claim an edit wins. Every input path reaches
+	 * these, hardware keys and IME alike.
 	 *
 	 * Pre-loaded with [TableEditBehavior], which claims Enter, Backspace and Delete
-	 * at a table cell's edges and Tab in a cell, and [LineBlockEditBehavior], which claims every
-	 * newline and column-0 backspace on a block line, so a behavior appended
-	 * after them is not asked before those edits, though it is told where a line
-	 * break landed. Use `add(0, behavior)` to run first, or remove one outright for
+	 * at a table cell's edges and Tab in a cell, and [LineBlockEditBehavior], which
+	 * claims every newline and column-0 backspace on a block line, so a behavior
+	 * appended after them is not asked before those edits, though it is told where
+	 * a line break landed. Use `add(0, behavior)` to run first, or remove one outright for
 	 * plain line breaks.
 	 */
 	val editBehaviors: MutableList<EditBehavior> = mutableListOf(TableEditBehavior, LineBlockEditBehavior)
@@ -941,8 +942,8 @@ class TextEditorState private constructor(
 		return claimed
 	}
 
-	/** Offers Tab's indent, or Shift+Tab's outdent, to the behaviors. */
-	internal fun indentClaimed(outdent: Boolean): Boolean = claimedByBehavior { it.onIndent(this, outdent) }
+	/** Offers Tab's indent, or Shift+Tab's outdent, to the behaviors; a key only, so the IME needs no resync. */
+	internal fun indentClaimed(outdent: Boolean): Boolean = runBehaviors { it.onIndent(this, outdent) }
 
 	private fun runBehaviors(hook: (EditBehavior) -> Boolean): Boolean {
 		if (behaviorDepth > 0) return false
@@ -2461,8 +2462,8 @@ class TextEditorState private constructor(
 		val layouts = ArrayList<LineLayout>(end - first + 2)
 		var line = first
 		while (line <= lastLine) {
-			facts.next(line)
 			val old = if (line in shapeFirst..shapeLast) null else previous.layoutOf(oldIndex(line))
+			facts.next(line, was = old?.facts)
 			val layout = when {
 				old == null || old.shapesDifferentlyUnder(facts) -> {
 					val onLine = spans.spansOn(line)

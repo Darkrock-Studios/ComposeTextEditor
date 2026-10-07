@@ -2,11 +2,14 @@ package state
 
 import androidx.compose.ui.text.AnnotatedString
 import com.darkrockstudios.texteditor.CharLineOffset
+import com.darkrockstudios.texteditor.input.EditorActionContext
+import com.darkrockstudios.texteditor.input.EditorCommand
 import com.darkrockstudios.texteditor.richstyle.BulletListSpanStyle
 import com.darkrockstudios.texteditor.richstyle.LineBlockEditBehavior
 import com.darkrockstudios.texteditor.richstyle.TableEditBehavior
 import com.darkrockstudios.texteditor.state.EditBehavior
 import com.darkrockstudios.texteditor.state.TextEditorState
+import com.darkrockstudios.texteditor.state.listLevel
 import io.mockk.mockk
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
@@ -14,6 +17,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import utils.InMemoryClipboard
 import utils.setBlockLines
 
 /**
@@ -235,5 +239,38 @@ class EditBehaviorTest {
 		state.backspaceAtCursor()
 
 		assertEquals("onetwo", state.getAllText().text)
+	}
+
+	private fun TestScope.perform(state: TextEditorState, action: EditorCommand.Action) =
+		state.actions[action]!!.perform(EditorActionContext(state, InMemoryClipboard(), this))
+
+	@Test
+	fun `a behavior claiming the indent keeps Tab and Shift+Tab from indenting`() = runTest {
+		val state = bulletedEditor("  - item")
+		val asked = mutableListOf<Boolean>()
+		state.editBehaviors.add(0, object : EditBehavior {
+			override fun onIndent(state: TextEditorState, outdent: Boolean): Boolean { asked += outdent; return true }
+		})
+		state.cursor.updatePosition(CharLineOffset(0, 0))
+
+		perform(state, EditorCommand.Action.Indent)
+		perform(state, EditorCommand.Action.Outdent)
+
+		assertEquals(listOf(false, true), asked)
+		assertEquals("item", state.getAllText().text)
+		assertEquals(1, state.listLevel(0))
+	}
+
+	@Test
+	fun `a behavior declining the indent leaves Tab its usual meaning`() = runTest {
+		val state = editor("hello")
+		state.editBehaviors.add(0, object : EditBehavior {
+			override fun onIndent(state: TextEditorState, outdent: Boolean): Boolean = false
+		})
+		state.cursor.updatePosition(CharLineOffset(0, 0))
+
+		perform(state, EditorCommand.Action.Indent)
+
+		assertEquals(state.tabSettings.indentText + "hello", state.getAllText().text)
 	}
 }

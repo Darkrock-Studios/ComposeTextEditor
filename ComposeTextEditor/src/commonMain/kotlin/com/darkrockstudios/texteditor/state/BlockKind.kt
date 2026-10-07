@@ -119,6 +119,9 @@ internal class BlockFacts private constructor(private val values: Array<Any?>) {
 		return false
 	}
 
+	/** Whether these are the facts in [values], one per kind. */
+	fun holds(values: Array<Any?>): Boolean = this.values.contentEquals(values)
+
 	override fun equals(other: Any?): Boolean = other is BlockFacts && values.contentEquals(other.values)
 
 	override fun hashCode(): Int = values.contentHashCode()

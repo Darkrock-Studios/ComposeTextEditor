@@ -562,9 +562,9 @@ class TextEditManager(private val state: TextEditorState) {
 	/**
 	 * [operation], a deletion or replace whose range a [BlockKind] splits to keep its
 	 * structure ([BlockKind.deletionPieces]: a range across a table's edge or between its
-	 * cells), applied a piece at a time, last first, with a replace's text going in at
-	 * the range's start, as one edit group. Null for any other operation, which applies
-	 * as it is.
+	 * cells), each kind splitting the pieces the kinds before it left, applied a piece at
+	 * a time, last first, with a replace's text going in at the range's start, as one
+	 * edit group. Null for any other operation, which applies as it is.
 	 */
 	private fun keepingBlockStructure(operation: TextEditOperation): TextEditOperation? {
 		val range = when (operation) {
@@ -572,7 +572,11 @@ class TextEditManager(private val state: TextEditorState) {
 			is TextEditOperation.Replace -> operation.range
 			else -> return null
 		}
-		val pieces = BLOCK_KINDS.firstNotNullOfOrNull { it.deletionPieces(state, range) } ?: return null
+		var split = false
+		val pieces = BLOCK_KINDS.fold(listOf(range)) { pieces, kind ->
+			pieces.flatMap { piece -> kind.deletionPieces(state, piece)?.also { split = true } ?: listOf(piece) }
+		}
+		if (!split) return null
 		// A replace that inherits takes the styles of the text where it lands, as a replace of nothing there would.
 		val newText = (operation as? TextEditOperation.Replace)?.let { replace ->
 			if (!replace.inheritStyle) replace.newText

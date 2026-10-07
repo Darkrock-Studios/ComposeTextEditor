@@ -51,7 +51,9 @@ and touch handling for one block.
 ## Layout
 
 Tables plug into the layout passes and the edit pipeline as a `BlockKind`
-(`TableKind`, see `block-kinds.md`); the hooks below are its.
+(`TableKind`, see `block-kinds.md`): its walk gives a cell its facts, and its
+`shape` and `place` lay it out. Bands, advances and the row searches below are
+generic placement, for any kind that places lines.
 
 - **Cell placement.** The walk that numbers lists (`LineFacts`) also derives each
   cell's `TableCellFacts`: its table row, its row's column count (the header's,
