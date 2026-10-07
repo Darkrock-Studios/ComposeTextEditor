@@ -182,6 +182,17 @@ class NestedListEditingTest {
 	}
 
 	@Test
+	fun `quoting a list's nested items brings them up together, as one undo step`() = runTest {
+		val state = editor("- a\n  - b\n    - c\n  - d\nafter")
+
+		state.toggleBlockquote(1..3)
+
+		assertEquals("- a\n> - b\n>   - c\n> - d\nafter", state.blockLines())
+		state.undo()
+		assertEquals("- a\n  - b\n    - c\n  - d\nafter", state.blockLines())
+	}
+
+	@Test
 	fun `a heading or a quote on a list parent lifts its children`() = runTest {
 		val state = editor("- a\n  - b\n    - c")
 		state.toggleHeader(0..0, 1)

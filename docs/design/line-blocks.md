@@ -104,7 +104,8 @@ followers where they are, its former children now its siblings, as Google
 Docs does; un-nesting a line (Shift+Tab), making it body text (toggle,
 heading, Backspace at level 0), re-quoting it or exiting the list brings the
 items nested under it up to what it now allows, the subtree moving together
-and ending at its first sibling. A selection moves only its own items, as in
+and ending at its first sibling; quoting nested items brings them up to what
+the items before them in the quote allow. A selection moves only its own items, as in
 Docs; the items under the last of them follow it.
 
 **Markdown.** Export indents a level-k item by the content offset of its

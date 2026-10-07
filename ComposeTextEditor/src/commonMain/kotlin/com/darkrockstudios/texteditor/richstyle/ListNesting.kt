@@ -133,6 +133,14 @@ internal fun TextEditorState.recordListEdit(targets: List<Int>, mutate: (ListMov
 	val lastLevel = last?.let { listBlockAt(it)!!.listLevel!! }
 	val quoted = last?.let { isQuotedLine(it) }
 	mutate(moves)
+	// A target moved into another quote can be left deeper than the items before it
+	// there allow: from each run of targets in one quote, the items come up together.
+	targets.forEachIndexed { index, line ->
+		if (moves.blockAt(line) == null) return@forEachIndexed
+		val quote = isQuotedLine(line)
+		if (index > 0 && targets[index - 1] == line - 1 && isQuotedLine(line - 1) == quote) return@forEachIndexed
+		relevelListFollowers(line, editedLevel = -1, quote, previousListLevel(line, quote, moves), moves)
+	}
 	if (last != null && lastLevel != null && quoted != null) {
 		val previousLevel = when {
 			isQuotedLine(last) != quoted -> -1
