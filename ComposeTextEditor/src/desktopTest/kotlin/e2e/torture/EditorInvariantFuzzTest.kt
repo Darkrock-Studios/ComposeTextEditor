@@ -54,6 +54,27 @@ class EditorInvariantFuzzTest {
 		)
 	}
 
+	/** Narrow enough that most lines wrap, right-to-left runs and grapheme clusters at the wraps too. */
+	private fun narrowFuzz(seed: Long) = invariantFuzz(seed = fuzzSeed(seed), count = 120, width = 60.dp)
+
+	@Test
+	fun `narrow invariant fuzz seed 1`() = narrowFuzz(1)
+
+	@Test
+	fun `narrow invariant fuzz seed 42`() = narrowFuzz(42)
+
+	@Test
+	fun `narrow invariant fuzz seed 777`() = narrowFuzz(777)
+
+	@Test
+	fun `invariant fuzz with tables seed 7`() = tablesFuzz(7)
+
+	@Test
+	fun `invariant fuzz with tables seed 69`() = tablesFuzz(69)
+
+	@Test
+	fun `invariant fuzz with tables seed 105`() = tablesFuzz(105)
+
 	@Test
 	fun `invariant fuzz with tables seed 1`() = tablesFuzz(1)
 

@@ -128,7 +128,14 @@ internal fun LineWrap.caretX(char: Int, runSide: CaretAffinity? = null): Float {
 	val safe = char.coerceIn(0, layout.layoutInput.text.length)
 	if (runSide != null) layout.runEdgeX(safe, runSide)?.let { return it }
 	val atWrap = wrapsToNextRow && safe == layout.getLineEnd(virtualLineIndex)
-	return if (atWrap) rowEndX() else layout.getHorizontalPosition(safe, usePrimaryDirection = true)
+	if (atWrap) return rowEndX()
+	// At a row's start after a wrap that ends in text of the other direction, the layout
+	// answers with the end of that run on the row above; the row's first glyph, reading
+	// in the paragraph's direction, is where the caret stands.
+	if (safe == wrapStartsAtIndex && safe > 0 && layout.getBidiRunDirection(safe) == layout.getParagraphDirection(safe)) {
+		layout.runEdgeX(safe, CaretAffinity.Downstream)?.let { return it }
+	}
+	return layout.getHorizontalPosition(safe, usePrimaryDirection = true)
 }
 
 /**
