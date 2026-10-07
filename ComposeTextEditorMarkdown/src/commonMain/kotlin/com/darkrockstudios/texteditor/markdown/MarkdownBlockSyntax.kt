@@ -50,8 +50,8 @@ internal val BLOCK_SYNTAX: List<MarkdownBlockSyntax> by lazy {
 			is HeaderSpanStyle -> MarkdownBlockSyntax(
 				style,
 				prefix = { "#".repeat(style.level) + " " },
-				// (?!#) keeps each level from matching a deeper heading's marker run.
-				pattern = Regex("^#{${style.level}}(?!#)\\s+(.*)$"),
+				// The marker ends at whitespace or the line's end, so it never matches a deeper level's.
+				pattern = Regex("^#{${style.level}}(?:\\s+(.*))?$"),
 			)
 
 			is BulletListSpanStyle -> MarkdownBlockSyntax(

@@ -88,12 +88,17 @@ private data class CodeFenceStripResult(
 )
 
 /**
- * Walks the input top-to-bottom, opening a fence at a line whose trimmed
- * content starts with three or more backticks or tildes and closing it at the
- * next line starting with at least as long a run of the same character; the
- * marker lines are dropped from the output. Lines emitted inside a fence have
- * their indices (in the post-strip line numbering) recorded so `importMarkdown`
- * can attach fence spans after the parser has built the AnnotatedString.
+ * Walks the input top-to-bottom, opening a fence at a line whose content starts with
+ * three or more backticks or tildes and closing it at a line of at least as long a
+ * run of the same character and nothing else; the marker lines are dropped from the
+ * output. Lines emitted inside a fence have their indices (in the post-strip line
+ * numbering) recorded so `importMarkdown` can attach fence spans after the parser has
+ * built the AnnotatedString. A fence with no lines is one empty fenced line.
+ *
+ * A fence may open inside a quote or a list item, which a fence cannot stack with: its
+ * lines are taken out of the container and read as code, the container's markers and
+ * indent off them, and it ends with its container. A fence's own indent comes off its
+ * lines too, up to the opener's.
  *
  * An unclosed fence at EOF treats the remaining lines as fenced, which matches
  * GFM parser behavior and avoids the worst case where a typo silently turns the
@@ -103,31 +108,98 @@ private fun stripCodeFences(markdown: String): CodeFenceStripResult {
 	val outputLines = mutableListOf<String>()
 	val fencedLineIndices = mutableSetOf<Int>()
 	val infoStrings = mutableMapOf<Int, String>()
-	var fence: String? = null
-	var pendingInfo: String? = null
-	for (line in markdown.lines()) {
-		val marker = codeFenceMarker(line)
-		val open = fence
-		if (open == null && marker != null) {
-			fence = marker
-			pendingInfo = line.trimStart().substring(marker.length).trim().ifEmpty { null }
-			continue
-		}
-		if (open != null && marker != null && marker[0] == open[0] && marker.length >= open.length) {
-			fence = null
-			continue
-		}
-		if (open != null) {
-			fencedLineIndices += outputLines.size
-			pendingInfo?.let { infoStrings[outputLines.size] = it }
-		}
+	var fence: OpenFence? = null
+	fun addFenced(line: String, open: OpenFence) {
+		fencedLineIndices += outputLines.size
+		open.info?.let { infoStrings[outputLines.size] = it }
 		outputLines += line
+		open.lines++
 	}
+
+	fun close(open: OpenFence) {
+		if (open.lines == 0) addFenced("", open)
+		fence = null
+	}
+
+	val lines = markdown.lines()
+	lines.forEachIndexed { index, line ->
+		val open = fence
+		if (open != null) {
+			val body = open.contentOf(line)
+			when {
+				body == null -> close(open)
+				closesFence(body, open.marker) -> {
+					close(open)
+					return@forEachIndexed
+				}
+				// The newline ending the text starts no line of its own.
+				index == lines.lastIndex && line.isEmpty() -> return@forEachIndexed
+
+				else -> {
+					addFenced(body.dropLeadingSpaces(open.indent), open)
+					return@forEachIndexed
+				}
+			}
+		}
+		val container = FENCE_CONTAINER.find(line)!!
+		val rest = line.substring(container.value.length)
+		val marker = codeFenceMarker(rest)
+		if (marker == null) {
+			outputLines += line
+			return@forEachIndexed
+		}
+		val content = rest.trimStart(' ')
+		fence = OpenFence(
+			marker = marker,
+			info = content.substring(marker.length).trim().ifEmpty { null },
+			quotes = container.groupValues[1].count { it == '>' },
+			itemOffset = container.groupValues[2].length,
+			indent = rest.length - content.length,
+		)
+	}
+	fence?.let(::close)
 	return CodeFenceStripResult(
 		text = outputLines.joinToString("\n"),
 		fencedLines = fencedLineIndices,
 		infoStrings = infoStrings,
 	)
+}
+
+/** Quote markers, then a list item's marker, that a fence opens after. */
+private val FENCE_CONTAINER = Regex("""^((?: {0,3}>[ ]?)*)([ \t]*(?:[-*+]|\d{1,9}[.)])[ \t]+)?""")
+
+/**
+ * A fence being read: its [marker] and [info] string, the [quotes] and the list item
+ * content offset ([itemOffset], 0 for none) it opened inside, and its opener's [indent].
+ */
+private class OpenFence(
+	val marker: String,
+	val info: String?,
+	val quotes: Int,
+	val itemOffset: Int,
+	val indent: Int,
+) {
+	var lines = 0
+	private val quotePrefix = if (quotes > 0) Regex("^(?: {0,3}>[ ]?){$quotes}") else null
+
+	/** [line] without its container's markers and indent, or null when the container has ended. */
+	fun contentOf(line: String): String? {
+		var body = line
+		if (quotePrefix != null) body = body.substring((quotePrefix.find(body) ?: return null).value.length)
+		if (itemOffset > 0) {
+			if (body.isBlank()) return body.drop(itemOffset)
+			if (body.length - body.trimStart(' ').length < itemOffset) return null
+			body = body.substring(itemOffset)
+		}
+		return body
+	}
+}
+
+/** This string without up to [count] leading spaces. */
+private fun String.dropLeadingSpaces(count: Int): String {
+	var dropped = 0
+	while (dropped < count && dropped < length && this[dropped] == ' ') dropped++
+	return substring(dropped)
 }
 
 /** A line's body once its stacked block markers are peeled, and the blocks peeled. */
@@ -231,6 +303,9 @@ private fun String.withoutIndentOnlyText(holdsWhitespace: Boolean = false): Stri
 	holdsWhitespace -> trimEnd(' ', '\t')
 	else -> ""
 }
+
+/** A heading's optional closing run of `#`, after whitespace or as its whole text, and the whitespace around it. */
+internal val ATX_CLOSING_SEQUENCE = Regex("""(?:^|[ \t]+)#+[ \t]*$""")
 
 private val RESIDUAL_BULLET_MARKER = Regex("""^([-*+])(\s)""")
 private val RESIDUAL_QUOTE_MARKER = Regex("""^>""")
@@ -458,6 +533,7 @@ class MarkdownExtension(
 		// Code fences wrap a contiguous run with ` ``` ` markers rather than
 		// per-line prefixes; track open/close state across iterations.
 		var inCodeFence = false
+		var fenceMarker = ""
 		var table: TextEditorTable? = null
 		for (lineIndex in lines.indices) {
 			val lineLength = lines[lineIndex].length
@@ -475,7 +551,7 @@ class MarkdownExtension(
 				sb.append('\n')
 				// Close a fence when leaving; the marker sits on its own line.
 				if (inCodeFence && !isFenceLine) {
-					sb.append("```\n")
+					sb.append(fenceMarker).append('\n')
 					inCodeFence = false
 				}
 				if (needsSeparator(lineIndex - 1)) {
@@ -485,7 +561,15 @@ class MarkdownExtension(
 				}
 			}
 			if (isFenceLine && !inCodeFence) {
-				sb.append("```")
+				// Longer than any backtick run a line of the fence could close it with.
+				var longest = 0
+				var fenced = lineIndex
+				while (fenced < lines.size && isFence(fenced)) {
+					codeFenceMarker(lines[fenced].text)?.takeIf { it[0] == '`' }?.let { longest = maxOf(longest, it.length) }
+					fenced++
+				}
+				fenceMarker = "`".repeat(maxOf(3, longest + 1))
+				sb.append(fenceMarker)
 				fenceLanguages[lineIndex]?.let { sb.append(it) }
 				sb.append('\n')
 				inCodeFence = true
@@ -512,7 +596,14 @@ class MarkdownExtension(
 				else -> {
 					val baked = headingLevel?.let { bakedHeadingLooks[it.coerceIn(1, 6) - 1] }.orEmpty()
 					val written = inlineMarkdownOf(lineIndex, baked)
-					if (lineIndex in accidentalDelimiterRows) written.replace("|", "\\|") else written
+					val closing = if (headingLevel != null) ATX_CLOSING_SEQUENCE.find(written) else null
+					when {
+						// A heading's text ending as a closing sequence would be read as one.
+						closing != null -> written.substring(0, closing.range.first) + closing.value.replaceFirst("#", "\\#")
+
+						lineIndex in accidentalDelimiterRows -> written.replace("|", "\\|")
+						else -> written
+					}
 				}
 			}
 			// CommonMark reads a marker followed by whitespace alone as an empty
@@ -567,7 +658,7 @@ class MarkdownExtension(
 		// Close an unfinished fence at EOF; the closing marker needs its own line
 		// so insert a separator newline before it.
 		if (inCodeFence) {
-			sb.append("\n```")
+			sb.append('\n').append(fenceMarker)
 		}
 		return sb.toString()
 	}
@@ -648,8 +739,10 @@ class MarkdownExtension(
 
 				peeled.blocks.isNotEmpty() -> {
 					record(peeled.blocks)
-					val holdsWhitespace = peeled.blocks.any { it.isList || it.style is HeaderSpanStyle }
-					peeled.body.withoutIndentOnlyText(holdsWhitespace).escapeResidualMarker()
+					val heading = peeled.blocks.any { it.style is HeaderSpanStyle }
+					val holdsWhitespace = heading || peeled.blocks.any { it.isList }
+					val body = if (heading) peeled.body.replace(ATX_CLOSING_SEQUENCE, "") else peeled.body
+					body.withoutIndentOnlyText(holdsWhitespace).escapeResidualMarker()
 				}
 
 				else -> line.withoutIndentOnlyText()

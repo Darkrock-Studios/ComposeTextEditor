@@ -55,10 +55,10 @@ internal val SETEXT_UNDERLINE_LINE = Regex("""^ {0,3}(?:=+|-+)[ \t]*$""")
  * since any run may pair; `[` when it pairs with a `]` followed by `(` or `[`,
  * or starts a footnote or a reference definition; every bracket inside a
  * link's own text; `!` before a link; `<` before a letter, `/`, `!` or `?`;
- * `&` before an entity; a backslash before punctuation or at a line's end (a
- * hard break); and at the start of a line with no indent, a heading, quote,
- * list or ordered marker, a tilde fence, a thematic break and a setext
- * underline. An indented line's indent is written as entities
+ * `&` before an entity; a backslash before punctuation, a delimiter of the
+ * emitter's or at a line's end (a hard break); and at the start of a line
+ * with no indent, a heading, quote, list or ordered marker, a tilde fence, a
+ * thematic break and a setext underline. An indented line's indent is written as entities
  * ([leadingIndents]), after which nothing is at a line's start.
  *
  * [linkTexts] are the ranges written as a link's text, and [markerBoundaries]
@@ -111,7 +111,7 @@ internal fun markdownEscapes(
 			'`' -> escape[i] = true
 			'\\' -> {
 				val next = at(i + 1)
-				if (next == null || next == '\n' || next.isAsciiPunctuation()) escape[i] = true
+				if (next == null || next == '\n' || next.isAsciiPunctuation() || i + 1 in markerBoundaries) escape[i] = true
 			}
 
 			'<' -> {

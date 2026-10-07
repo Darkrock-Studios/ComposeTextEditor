@@ -15,3 +15,12 @@ internal fun codeFenceMarker(line: String): String? {
 	if (first == '`' && trimmed.indexOf('`', run.length) != -1) return null
 	return run
 }
+
+/**
+ * Whether [line] closes a fence [open] opened: a run of its character at least as long,
+ * followed only by spaces and tabs.
+ */
+internal fun closesFence(line: String, open: String): Boolean {
+	val marker = codeFenceMarker(line) ?: return false
+	return marker[0] == open[0] && marker.length >= open.length && line.trimStart(' ').substring(marker.length).isBlank()
+}

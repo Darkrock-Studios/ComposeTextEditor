@@ -158,12 +158,12 @@ private fun String.fencedLineIndices(): Set<Int> {
 	val fenced = HashSet<Int>()
 	var fence: String? = null
 	lines().forEachIndexed { index, line ->
-		val marker = codeFenceMarker(line.replaceFirst(QUOTE_MARKERS, ""))
+		val unquoted = line.replaceFirst(QUOTE_MARKERS, "")
 		val open = fence
 		when {
-			open == null && marker != null -> fence = marker
-			open != null && marker != null && marker[0] == open[0] && marker.length >= open.length -> fence = null
-			open != null -> fenced += index
+			open == null -> fence = codeFenceMarker(unquoted)
+			closesFence(unquoted, open) -> fence = null
+			else -> fenced += index
 		}
 	}
 	return fenced
@@ -194,7 +194,7 @@ private fun String.withHighlightTags(): String {
 		val openFence = fence
 		when {
 			openFence != null -> {
-				if (marker != null && marker[0] == openFence[0] && marker.length >= openFence.length) fence = null
+				if (closesFence(line, openFence)) fence = null
 				out.append(line)
 			}
 
@@ -464,26 +464,27 @@ private fun AnnotatedString.Builder.appendMarkdownNode(
 
 		MarkdownElementTypes.EMPH -> {
 			pushStyle(styles.italicStyle)
-			appendStyledContent(node, original, context)
+			appendStyledContent(node, original, context, delimiters = 1)
 			pop()
 		}
 
 		MarkdownElementTypes.STRONG -> {
 			pushStyle(styles.boldStyle)
-			appendStyledContent(node, original, context)
+			appendStyledContent(node, original, context, delimiters = 2)
 			pop()
 		}
 
 		GFMElementTypes.STRIKETHROUGH -> {
 			pushStyle(styles.strikethroughStyle)
-			appendStyledContent(node, original, context)
+			val leading = node.children.takeWhile { it.type == GFMTokenTypes.TILDE }.size
+			val trailing = node.children.takeLastWhile { it.type == GFMTokenTypes.TILDE }.size
+			appendStyledContent(node, original, context, delimiters = minOf(leading, trailing, 2))
 			pop()
 		}
 
 		MarkdownElementTypes.CODE_SPAN -> {
 			pushStyle(styles.codeStyle)
-			val codeText = nodeText.removeSurrounding("`")
-			append(codeText)
+			append(codeSpanContent(nodeText))
 			pop()
 		}
 
@@ -615,28 +616,30 @@ private fun AnnotatedString.Builder.appendMarkdownNode(
 	}
 }
 
+/**
+ * The content of an emphasis or strikethrough [node], whose first and last [delimiters]
+ * children are its delimiter tokens; a delimiter token between them is literal text.
+ */
 private fun AnnotatedString.Builder.appendStyledContent(
 	node: ASTNode,
 	original: String,
 	context: MarkdownRenderContext,
+	delimiters: Int,
 ) = context.scope(this) {
 	var currentText = StringBuilder()
+	val contentEnd = node.children.size - delimiters
 
-	node.children.forEach { child ->
-		// At this level we should only be dealing with tokens, not elements
-		when (child.type) {
-			// Accumulate actual content
-			MarkdownTokenTypes.TEXT,
-			MarkdownTokenTypes.WHITE_SPACE -> {
+	node.children.forEachIndexed { index, child ->
+		when {
+			index < delimiters || index >= contentEnd -> context.keeps(child)
+
+			child.type == MarkdownTokenTypes.TEXT ||
+				child.type == MarkdownTokenTypes.WHITE_SPACE ||
+				child.type == MarkdownTokenTypes.EMPH ||
+				child.type == MarkdownTokenTypes.BACKTICK ||
+				child.type == GFMTokenTypes.TILDE -> {
 				if (context.keeps(child)) currentText.append(child.getTextInNode(original))
 			}
-			// Skip markdown syntax tokens, though they end a line's start
-			MarkdownTokenTypes.EMPH,
-			MarkdownTokenTypes.BACKTICK,
-			GFMTokenTypes.TILDE -> {
-				context.keeps(child)
-			}
-			// Handle any nested elements by recursing
 			else -> {
 				// Flush accumulated text first
 				if (currentText.isNotEmpty()) {
@@ -700,6 +703,17 @@ private fun AnnotatedString.Builder.handleHeader(
 
 	// Pop the header style
 	pop()
+}
+
+/**
+ * A code span's text as CommonMark reads it: inside its backtick strings, less one space
+ * at each end when both ends have one and it is not all spaces.
+ */
+private fun codeSpanContent(node: String): String {
+	val fence = node.takeWhile { it == '`' }.length
+	val code = node.substring(fence, (node.length - fence).coerceAtLeast(fence))
+	val padded = code.length >= 2 && code.first() == ' ' && code.last() == ' ' && code.any { it != ' ' }
+	return if (padded) code.substring(1, code.length - 1) else code
 }
 
 private val DESTINATION_ESCAPE = Regex("""\\([!-/:-@\[-`{-~])""")

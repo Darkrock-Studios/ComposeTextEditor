@@ -329,6 +329,16 @@ gives the second run its own back, and un-fencing the first run's lines makes
 the second's the run's. A language holding a backtick or a line break cannot
 be written and is dropped.
 
+### Fence markers
+
+Export writes a run's fence one backtick longer than the longest backtick run
+a line of it starts with, so no line inside closes it early. A fence closes
+only at a marker with nothing after it, and an empty one is one empty fenced
+line. A fence a foreign file opens inside a quote or a list item, which a fence
+cannot stack with, is read as code out of its container: its lines lose the
+container's markers and indent, the fence ends with the container, and the
+item or quote line that opened it is dropped.
+
 ## Toggle semantics
 
 `toggleLineBlock` is the sweep behind every toolbar button. From one span-set

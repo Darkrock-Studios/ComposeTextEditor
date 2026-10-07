@@ -177,6 +177,7 @@ internal fun AnnotatedString.toMarkdown(
 	val result = StringBuilder()
 	var currentIndex = 0
 	var codeSpanDepth = 0
+	var codeSpanClose = ""
 	var nextRun = 0
 	val open = ArrayDeque<MarkerRun>()
 
@@ -223,8 +224,12 @@ internal fun AnnotatedString.toMarkdown(
 		if (nextClose <= nextOpen) {
 			appendTextTo(nextClose, open.last().marker)
 			val closing = open.removeLast()
-			if (closing.marker.closeMarker == "`") codeSpanDepth--
-			result.append(closing.marker.closeMarker)
+			if (closing.marker == CODE_MARKER) {
+				codeSpanDepth--
+				result.append(codeSpanClose)
+			} else {
+				result.append(closing.marker.closeMarker)
+			}
 			afterHighlightMarker = closing.marker == DOUBLE_EQUALS_MARKER
 			if (closing.marker.closeMarker == "\n") {
 				// Avoid duplicate newlines
@@ -238,9 +243,15 @@ internal fun AnnotatedString.toMarkdown(
 				// Ensure header starts on a new line
 				if (!result.endsWith("\n") && result.isNotEmpty()) result.append("\n")
 			}
-			result.append(opening.marker.openMarker)
+			if (opening.marker == CODE_MARKER) {
+				val open = codeSpanOpener(text.subSequence(opening.start, opening.end))
+				result.append(open)
+				codeSpanClose = open.reversed()
+				codeSpanDepth++
+			} else {
+				result.append(opening.marker.openMarker)
+			}
 			afterHighlightMarker = opening.marker == DOUBLE_EQUALS_MARKER
-			if (opening.marker.openMarker == "`") codeSpanDepth++
 			open.addLast(opening)
 		}
 	}
@@ -248,6 +259,26 @@ internal fun AnnotatedString.toMarkdown(
 	appendTextTo(text.length)
 
 	return result.toString()
+}
+
+/**
+ * What a code span holding [code] opens with, its closer the same reversed: a backtick
+ * string longer than any in the code, then a space when the code starts or ends with a
+ * backtick or has a space at both ends, since CommonMark takes one off each end.
+ */
+private fun codeSpanOpener(code: CharSequence): String {
+	var longest = 0
+	var run = 0
+	code.forEach { c ->
+		run = if (c == '`') run + 1 else 0
+		longest = maxOf(longest, run)
+	}
+	val ticks = "`".repeat(longest + 1)
+	val padded = code.isNotEmpty() && (
+		code.first() == '`' || code.last() == '`' ||
+			(code.length >= 2 && code.first() == ' ' && code.last() == ' ' && code.any { it != ' ' })
+		)
+	return if (padded) "$ticks " else ticks
 }
 
 private data class MarkerRun(val start: Int, val end: Int, val marker: StyleMarkerPair)
