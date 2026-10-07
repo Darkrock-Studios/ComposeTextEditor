@@ -68,10 +68,12 @@ internal class MarkdownUiTestScope(
 
 	override fun typeText(text: String) = test.typeText(text)
 
-	override fun sendKey(key: Key, ctrl: Boolean) {
+	override fun sendKey(key: Key, ctrl: Boolean, shift: Boolean) {
 		test.onRoot().performKeyInput {
 			if (ctrl) keyDown(Key.CtrlLeft)
+			if (shift) keyDown(Key.ShiftLeft)
 			pressKey(key)
+			if (shift) keyUp(Key.ShiftLeft)
 			if (ctrl) keyUp(Key.CtrlLeft)
 		}
 		test.waitForIdle()

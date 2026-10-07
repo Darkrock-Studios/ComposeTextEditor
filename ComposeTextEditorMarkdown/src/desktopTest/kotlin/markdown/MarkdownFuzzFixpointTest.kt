@@ -20,12 +20,13 @@ import kotlin.test.assertTrue
  */
 class MarkdownFuzzFixpointTest {
 
-	private fun markdownFixpoint(seed: Long) {
-		val markdown = MarkdownExtension(TextEditorState(scope = TestScope(), measurer = mockk(relaxed = true)))
-		markdown.importMarkdown("seed line\n- item\n> quoted")
+	private fun markdownFixpoint(seed: Long, tables: Boolean = false) {
+		val scope = TestScope()
+		val markdown = MarkdownExtension(TextEditorState(scope = scope, measurer = mockk(relaxed = true)))
+		markdown.importMarkdown(if (tables) TABLES_START else "seed line\n- item\n> quoted")
 		val state = markdown.editorState
-		val script = generateFuzzScript(seed = fuzzSeed(seed), count = 250)
-		val interpreter = StateFuzzInterpreter(state)
+		val script = generateFuzzScript(seed = fuzzSeed(seed), count = 250, tables = tables)
+		val interpreter = StateFuzzInterpreter(state, scope)
 
 		runFuzzScript(fuzzSeed(seed), script) { op ->
 			interpreter.apply(op)
@@ -43,6 +44,18 @@ class MarkdownFuzzFixpointTest {
 		checkCheapInvariants(state)
 		assertTrue(state.textLines.isNotEmpty())
 	}
+
+	@Test
+	fun `markdown fixpoint with tables seed 1`() = markdownFixpoint(1, tables = true)
+
+	@Test
+	fun `markdown fixpoint with tables seed 42`() = markdownFixpoint(42, tables = true)
+
+	@Test
+	fun `markdown fixpoint with tables seed 4243`() = markdownFixpoint(4243, tables = true)
+
+	@Test
+	fun `markdown fixpoint with tables seed 20261007`() = markdownFixpoint(20261007, tables = true)
 
 	@Test
 	fun `markdown fixpoint seed 1`() = markdownFixpoint(1)
@@ -64,4 +77,8 @@ class MarkdownFuzzFixpointTest {
 
 	@Test
 	fun `markdown fixpoint seed 2482`() = markdownFixpoint(2482)
+
+	private companion object {
+		val TABLES_START = "seed line\n\n| Name | Age |\n| --- | --: |\n| Ada Lovelace | 36 |\n\n- item\n\n| solo |\n| :-: |\n\n> quoted"
+	}
 }

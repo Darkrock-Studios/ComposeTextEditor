@@ -22,13 +22,19 @@ import kotlin.test.assertEquals
  */
 class MarkdownUiFuzzFixpointTest {
 
-	private fun markdownFixpoint(seed: Long, sideways: Boolean = false) = markdownUiTest(
+	private fun markdownFixpoint(seed: Long, sideways: Boolean = false, tables: Boolean = false) = markdownUiTest(
 		width = if (sideways) 200.dp else 400.dp,
 		softWrap = !sideways,
 	) {
-		markdown.importMarkdown(if (sideways) "$SIDEWAYS_FUZZ_START_TEXT\n- item\n> quoted" else "seed line\n- item\n> quoted")
+		markdown.importMarkdown(
+			when {
+				tables -> "seed line\n\n| Name | Age |\n| --- | --: |\n| Ada Lovelace | 36 |\n\n- item\n> quoted"
+				sideways -> "$SIDEWAYS_FUZZ_START_TEXT\n- item\n> quoted"
+				else -> "seed line\n- item\n> quoted"
+			}
+		)
 		waitForIdle()
-		val script = generateFuzzScript(seed = fuzzSeed(seed), count = 60)
+		val script = generateFuzzScript(seed = fuzzSeed(seed), count = 60, tables = tables)
 
 		runUiFuzzScript(fuzzSeed(seed), script, sideways)
 
@@ -42,6 +48,15 @@ class MarkdownUiFuzzFixpointTest {
 		)
 		checkCheapInvariants(state)
 	}
+
+	@Test
+	fun `ui markdown fixpoint with tables seed 1`() = markdownFixpoint(1, tables = true)
+
+	@Test
+	fun `ui markdown fixpoint with tables seed 42`() = markdownFixpoint(42, tables = true)
+
+	@Test
+	fun `ui markdown fixpoint with tables seed 4243`() = markdownFixpoint(4243, tables = true)
 
 	@Test
 	fun `ui markdown fixpoint seed 4243`() = markdownFixpoint(4243)

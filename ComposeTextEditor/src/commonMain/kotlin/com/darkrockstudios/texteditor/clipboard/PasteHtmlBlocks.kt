@@ -16,6 +16,7 @@ import com.darkrockstudios.texteditor.state.PreservedRichSpan
 import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.insertLineBreaksRaw
 import com.darkrockstudios.texteditor.state.isTableCell
+import com.darkrockstudios.texteditor.state.textForBrokenTables
 import com.darkrockstudios.texteditor.state.removeBlockLooksOffTheirBlocks
 import com.darkrockstudios.texteditor.state.removeLinkLookOutsideLinks
 import com.darkrockstudios.texteditor.state.takeOutOfOtherLinks
@@ -53,17 +54,26 @@ internal fun TextEditorState.htmlPasteDocument(
  * block look off a line that does not bake it, against the lines' blocks as they end up.
  * Text landing in a table cell is one line (the input filter sees to it) and takes only
  * inline styles and links: a cell takes no other block, nor another column's marker.
+ * Cells pasted anywhere else that would leave a table broken land as text. Returns where
+ * [text] starts once settled, which a table given lines of its own moves.
  */
 internal fun TextEditorState.settleLanded(
 	at: CharLineOffset,
 	text: AnnotatedString,
 	richSpans: List<PreservedRichSpan>?,
 	document: HtmlDocument?,
-) = withAtomicEdit {
+): CharLineOffset = withAtomicEdit {
+	val landedInCell = isTableCell(at.line)
 	richSpans?.let { addPreservedRichSpans(at, it) }
-	document?.let { if (isTableCell(at.line)) applyHtmlPasteLinks(it, at) else applyHtmlPasteBlocks(it, at, text) }
-	removeLinkLookOutsideLinks(at, text)
-	removeBlockLooksOffTheirBlocks(at, text)
+	val start = when {
+		document == null -> at
+		landedInCell -> at.also { applyHtmlPasteLinks(document, at) }
+		else -> applyHtmlPasteBlocks(document, at, text)
+	}
+	if (!landedInCell) textForBrokenTables(start.line..start.line + text.text.count { it == '\n' })
+	removeLinkLookOutsideLinks(start, text)
+	removeBlockLooksOffTheirBlocks(start, text)
+	start
 }
 
 /**
@@ -75,18 +85,19 @@ internal fun TextEditorState.settleLanded(
  * [TextEditorState.pasteRichSpans], which covers copies made inside the editor. Images
  * are left out: reconstructing one needs an `ImageProvider`, which lives on the import
  * extensions rather than here. Recorded as part of the paste's undo step, so a redo,
- * which replays the text, puts them back too.
+ * which replays the text, puts them back too. Returns where the pasted text starts then.
  */
 internal fun TextEditorState.applyHtmlPasteBlocks(
 	document: HtmlDocument,
 	landedAt: CharLineOffset,
 	pastedText: AnnotatedString,
-) {
+): CharLineOffset {
 	val insertPosition = keepingTablesWhole(document, landedAt, pastedText)
 	val pastedLines = insertPosition.line..insertPosition.line + pastedText.text.count { it == '\n' }
 	addHtmlPasteLinks(document, insertPosition, pastedLines) {
 		placeHtmlPasteBlocks(document, insertPosition, pastedText, pastedLines)
 	}
+	return insertPosition
 }
 
 /** The links alone of markup landed in a table cell, which takes no block; text landing in one is one line. */

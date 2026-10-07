@@ -5,11 +5,27 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.font.FontWeight
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
+import com.darkrockstudios.texteditor.input.EditorActionContext
+import com.darkrockstudios.texteditor.input.EditorCommand
+import com.darkrockstudios.texteditor.richstyle.BlockSpanStyle
+import com.darkrockstudios.texteditor.richstyle.TableAlignment
+import com.darkrockstudios.texteditor.richstyle.TableCellSpanStyle
 import com.darkrockstudios.texteditor.state.TextEditorState
+import com.darkrockstudios.texteditor.state.convertTableToText
+import com.darkrockstudios.texteditor.state.deleteTable
+import com.darkrockstudios.texteditor.state.deleteTableColumn
+import com.darkrockstudios.texteditor.state.deleteTableRow
+import com.darkrockstudios.texteditor.state.insertTable
+import com.darkrockstudios.texteditor.state.insertTableColumn
+import com.darkrockstudios.texteditor.state.insertTableRow
+import com.darkrockstudios.texteditor.state.setTableColumnAlignment
+import com.darkrockstudios.texteditor.state.tableAt
+import com.darkrockstudios.texteditor.state.tableCellAt
 import com.darkrockstudios.texteditor.state.toggleBlockquote
 import com.darkrockstudios.texteditor.state.toggleBulletList
 import com.darkrockstudios.texteditor.state.toggleCodeFence
 import com.darkrockstudios.texteditor.state.toggleOrderedList
+import kotlinx.coroutines.test.TestScope
 import kotlin.random.Random
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -33,7 +49,28 @@ sealed class FuzzOp {
 	data class UndoBurst(val count: Int) : FuzzOp()
 	data class RedoBurst(val count: Int) : FuzzOp()
 	data class SelectAllType(val text: String) : FuzzOp()
+
+	/** Only in a script generated with tables: a table of [rows] by [columns] at the caret. */
+	data class InsertTable(val rows: Int, val columns: Int) : FuzzOp()
+
+	/** Only in a script generated with tables: a row, column or table operation on the table at [slot], if any. */
+	data class TableEdit(val kind: Int, val slot: Int) : FuzzOp()
+
+	/** Only in a script generated with tables: Tab, or Shift+Tab when [backward]. */
+	data class Tab(val backward: Boolean) : FuzzOp()
+
+	/** Only in a script generated with tables: copies, or cuts, [a, b) and pastes it at [slot], inside the editor. */
+	data class CopyPaste(val a: Int, val b: Int, val slot: Int, val cut: Boolean) : FuzzOp()
 }
+
+/** The number of [FuzzOp.TableEdit] kinds; see [applyTableEdit]. */
+private const val TABLE_EDIT_KINDS = 9
+
+/**
+ * A document with tables to start a table storm from, in block lines: a header row of
+ * two columns, the second right-aligned, a body row, and a one-column table.
+ */
+const val TABLE_FUZZ_START = "intro line\n|0| Name\n|1>| Age\n|0| Ada Lovelace\n|1>| 36\nbetween\n|0^| solo\nend line"
 
 fun fuzzSeed(default: Long): Long =
 	System.getenv("FUZZ_SEED")?.toLongOrNull() ?: default
@@ -56,6 +93,7 @@ private fun FuzzOp.historyCost(): Int = when (this) {
 	is FuzzOp.SelectAllType -> text.length + 1
 	is FuzzOp.MoveCursor, is FuzzOp.SelectRange,
 	is FuzzOp.UndoBurst, is FuzzOp.RedoBurst -> 0
+	is FuzzOp.CopyPaste -> if (cut) 2 else 1
 	else -> 1
 }
 
@@ -63,18 +101,20 @@ private fun FuzzOp.historyCost(): Int = when (this) {
  * Generates [count] ops. Mutating ops stop once their worst-case history entries
  * (per keystroke, see [historyCost]) reach [mutatingBudget], which keeps a whole
  * script inside the 100-entry undo cap so the undo-to-origin invariant is honest;
- * the rest are navigation and undo/redo.
+ * the rest are navigation and undo/redo. With [tables], some ops are table operations,
+ * Tab and in-editor copy and paste; without, a seed's script is as it always was.
  */
 fun generateFuzzScript(
 	seed: Long,
 	count: Int,
 	mutatingBudget: Int = Int.MAX_VALUE,
+	tables: Boolean = false,
 ): List<FuzzOp> {
 	val random = Random(seed)
 	var budget = mutatingBudget
 	val script = mutableListOf<FuzzOp>()
 	while (script.size < count) {
-		val op = randomOp(random)
+		val op = if (tables && random.nextInt(100) < 20) randomTableOp(random) else randomOp(random)
 		if (op.isMutating()) {
 			val cost = op.historyCost()
 			if (cost > budget) {
@@ -104,6 +144,28 @@ private fun randomOp(random: Random): FuzzOp = when (random.nextInt(100)) {
 	else -> FuzzOp.TypeText(WORDS.random(random))
 }
 
+private fun randomTableOp(random: Random): FuzzOp = when (random.nextInt(10)) {
+	0, 1 -> FuzzOp.InsertTable(1 + random.nextInt(3), 1 + random.nextInt(3))
+	in 2 until 6 -> FuzzOp.TableEdit(random.nextInt(TABLE_EDIT_KINDS), random.nextInt(1024))
+	6, 7 -> FuzzOp.Tab(random.nextInt(3) == 0)
+	else -> FuzzOp.CopyPaste(random.nextInt(1024), random.nextInt(1024), random.nextInt(1024), random.nextInt(4) == 0)
+}
+
+/** Applies a [FuzzOp.TableEdit] of [kind] to the table holding [line]; each is a no-op off a table. */
+fun TextEditorState.applyTableEdit(kind: Int, line: Int) {
+	when (kind % TABLE_EDIT_KINDS) {
+		0 -> insertTableRow(line, below = false)
+		1 -> insertTableRow(line, below = true)
+		2 -> insertTableColumn(line, after = false)
+		3 -> insertTableColumn(line, after = true)
+		4 -> deleteTableRow(line)
+		5 -> deleteTableColumn(line)
+		6 -> setTableColumnAlignment(line, tableCellAt(line)?.column ?: 0, TableAlignment.entries[line % TableAlignment.entries.size])
+		7 -> convertTableToText(line)
+		else -> deleteTable(line)
+	}
+}
+
 private fun randomNonMutatingOp(random: Random): FuzzOp = when (random.nextInt(4)) {
 	0 -> FuzzOp.MoveCursor(random.nextInt(1024))
 	1 -> FuzzOp.SelectRange(random.nextInt(1024), random.nextInt(1024))
@@ -130,6 +192,7 @@ fun snapshotOf(state: TextEditorState): FuzzSnapshot = FuzzSnapshot(
 
 fun checkCheapInvariants(state: TextEditorState) {
 	state.assertRichSpanInvariants()
+	state.assertTableInvariants()
 	assertEquals(
 		state.textLines.joinToString("\n") { it.text },
 		state.getAllText().text,
@@ -198,10 +261,23 @@ internal fun trimmedStyleRange(text: String, rawA: Int, rawB: Int): Pair<Int, In
 	return start to end
 }
 
-/** Applies [op] directly to the state, the pure-state twin of `FuzzUiDriver.applyFuzzOpUi` (`testUtils/uiFuzz`). */
+/**
+ * Applies [op] directly to the state, the pure-state twin of `FuzzUiDriver.applyFuzzOpUi`
+ * (`testUtils/uiFuzz`). Tab and copy and paste run as the editor's actions, through an
+ * in-memory clipboard on [scope], the state's own; a script with them needs it.
+ */
 class StateFuzzInterpreter(
 	private val state: TextEditorState,
+	private val scope: TestScope? = null,
 ) {
+	private val clipboard = InMemoryClipboard()
+
+	private fun perform(action: EditorCommand.Action) {
+		val scope = checkNotNull(scope) { "$action needs the interpreter's scope" }
+		state.actions[action]!!.perform(EditorActionContext(state, clipboard, scope))
+		scope.testScheduler.advanceUntilIdle()
+	}
+
 	private fun clampIndex(raw: Int): Int = raw % (state.getAllText().text.length + 1)
 
 	private fun offset(raw: Int): CharLineOffset = state.getOffsetAtCharacter(clampIndex(raw))
@@ -283,7 +359,57 @@ class StateFuzzInterpreter(
 				state.selector.selectAll()
 				typeOrReplace(op.text)
 			}
+
+			is FuzzOp.InsertTable -> state.insertTable(op.rows, op.columns)
+
+			is FuzzOp.TableEdit -> state.applyTableEdit(op.kind, offset(op.slot).line)
+
+			is FuzzOp.Tab -> perform(if (op.backward) EditorCommand.Action.Outdent else EditorCommand.Action.Indent)
+
+			is FuzzOp.CopyPaste -> {
+				val a = clampIndex(op.a)
+				val b = clampIndex(op.b)
+				if (a == b) return
+				state.selector.updateSelection(offset(minOf(a, b)), offset(maxOf(a, b)))
+				perform(if (op.cut) EditorCommand.Action.Cut else EditorCommand.Action.Copy)
+				state.selector.clearSelection()
+				state.cursor.updatePosition(offset(op.slot))
+				perform(EditorCommand.Action.Paste)
+			}
 		}
+	}
+}
+
+/**
+ * Every table is whole: a cell line holds one cell marker and no other block, rule,
+ * image or paragraph format, and each table row holds the header's columns, 0 on.
+ */
+fun TextEditorState.assertTableInvariants() {
+	val spansByLine = richSpanManager.getAllRichSpans().groupBy { it.range.start.line }
+	for ((line, starting) in spansByLine) {
+		val cells = starting.count { it.style is TableCellSpanStyle }
+		if (cells == 0) continue
+		assertEquals(1, cells, "line $line holds $cells cell markers: $starting")
+		val others = starting.filter {
+			it.style !is TableCellSpanStyle && (it.style.stickyAtStart || it.style is BlockSpanStyle || it.style.boundToParagraph)
+		}
+		assertTrue(others.isEmpty(), "cell line $line also holds ${others.map { it.style }}")
+	}
+	var line = 0
+	while (line < textLines.size) {
+		val table = tableAt(line)
+		if (table == null) {
+			line++
+			continue
+		}
+		table.rows.forEach { row ->
+			assertEquals(
+				(0 until table.columnCount).toList(),
+				row.map { table.cellAt(it).column },
+				"table at ${table.firstLine}, row $row is not whole",
+			)
+		}
+		line = table.lastLine + 1
 	}
 }
 

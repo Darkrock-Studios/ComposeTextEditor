@@ -63,6 +63,14 @@ clipboard helpers in `testUtils/uiTest`): core's `EditorFuzzE2eTest` runs them
 through `editorUiTest`, and the markdown module's `MarkdownUiFuzzFixpointTest`
 through its own small composed harness, `markdownUiTest`.
 
+Every storm checks `checkCheapInvariants` after each op, which includes
+`assertTableInvariants`: a cell line holds one cell marker and no other block, and
+every table row holds its header's columns. A script generated with `tables = true`
+adds table operations, Tab and in-editor copy and paste (`FuzzOp.InsertTable`,
+`TableEdit`, `Tab`, `CopyPaste`), and its storms start from `TABLE_FUZZ_START`; a
+seed's script without it is unchanged. The `with tables` cases in each of the four
+storm suites, and in `EditorInvariantFuzzTest`, run them.
+
 Each desktop suite runs in one JVM with a 1 GB heap (the root
 `build.gradle.kts`); the core suite's heap stays under 200 MB after a
 collection. MockK keeps every mock, child mocks included, and every call

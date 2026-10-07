@@ -395,4 +395,48 @@ class TableEditingTest {
 
 		assertEquals(lines("|0| a", "|1| Head", "# Head"), state.blockLines())
 	}
+
+	@Test
+	fun `a row added below an empty cell undoes back to it`() = runTest {
+		val start = lines("|0| a", "|1| ", "after")
+		val state = editor(start)
+
+		state.insertTableRow(1, below = true)
+		state.undo()
+
+		assertEquals(start, state.blockLines())
+	}
+
+	private fun TestScope.copyAndPaste(state: TextEditorState, from: CharLineOffset, to: CharLineOffset, at: CharLineOffset) {
+		val clipboard = InMemoryClipboard()
+		fun perform(action: EditorCommand.Action) = state.actions[action]!!.perform(EditorActionContext(state, clipboard, this))
+		state.select(from, to)
+		perform(EditorCommand.Action.Copy)
+		testScheduler.advanceUntilIdle()
+		state.caretAt(at.line, at.char)
+		perform(EditorCommand.Action.Paste)
+		testScheduler.advanceUntilIdle()
+	}
+
+	@Test
+	fun `part of a table pastes as text, and whole rows as a table`() = runTest {
+		val start = lines("|0| a", "|1| b", "|0| c", "|1| d", "", "end")
+
+		val part = editor(start)
+		copyAndPaste(part, CharLineOffset(1, 0), CharLineOffset(3, 1), at = CharLineOffset(4, 0))
+		assertEquals(lines("|0| a", "|1| b", "|0| c", "|1| d", "b", "c", "d", "end"), part.blockLines())
+
+		val rows = editor(start)
+		copyAndPaste(rows, CharLineOffset(2, 0), CharLineOffset(3, 1), at = CharLineOffset(5, 0))
+		assertEquals(lines("|0| a", "|1| b", "|0| c", "|1| d", "", "|0| c", "|1| d", "end"), rows.blockLines())
+	}
+
+	@Test
+	fun `rows pasted beside a table of another width paste as text`() = runTest {
+		val state = editor(lines("|0| a", "|1| b", "|2| c", "", "|0| x", "|1| y", ""))
+
+		copyAndPaste(state, CharLineOffset(4, 0), CharLineOffset(5, 1), at = CharLineOffset(3, 0))
+
+		assertEquals(lines("|0| a", "|1| b", "|2| c", "x", "y", "|0| x", "|1| y", ""), state.blockLines())
+	}
 }

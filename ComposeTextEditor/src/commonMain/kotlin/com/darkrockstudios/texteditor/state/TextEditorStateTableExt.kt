@@ -80,6 +80,19 @@ fun TextEditorState.convertTableToText(line: Int) {
 }
 
 /**
+ * Takes the cell markers off [lines], text a paste put there, when a table they are in
+ * is left with a row short of its columns or past them: part of a table, or rows beside
+ * a table of another width, paste as text rather than break a table.
+ */
+internal fun TextEditorState.textForBrokenTables(lines: IntRange) {
+	val cells = lines.filter { it in textLines.indices && isTableCell(it) }
+	if (cells.isEmpty() || cells.mapNotNull { tableAt(it) }.all { it.isWhole }) return
+	editManager.recordLineBlockChanges(cells) {
+		writeLineBlocks(cells.mapNotNull { planDemoteLineBlock(it, tableCellBlock(tableCellAt(it)!!)) })
+	}
+}
+
+/**
  * Sets the alignment of [column] in the table holding [line], every cell of the column,
  * as one undo step. Does nothing off a table or past its columns.
  */

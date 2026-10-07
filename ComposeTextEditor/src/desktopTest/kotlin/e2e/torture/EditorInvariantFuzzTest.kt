@@ -3,6 +3,7 @@ package e2e.torture
 import androidx.compose.ui.unit.dp
 import utils.EditorInvariant
 import utils.FUZZ_START_TEXT_UNWRAPPED
+import utils.TABLE_FUZZ_START
 import utils.fuzzSeed
 import utils.invariantFuzz
 import kotlin.test.Test
@@ -28,6 +29,14 @@ class EditorInvariantFuzzTest {
 		sideways = true,
 	)
 
+	/** From a document with tables, where the arrows move between cells side by side. */
+	private fun tablesFuzz(seed: Long) = invariantFuzz(
+		seed = fuzzSeed(seed),
+		count = 120,
+		width = WIDTH,
+		startBlockLines = TABLE_FUZZ_START,
+	)
+
 	/** Passes on the first of [seeds] that breaks [invariant], so unrelated fixes cannot retire the check. */
 	private fun assertStillFails(invariant: EditorInvariant, seeds: LongRange = 1L..12L) {
 		if (invariant.onByDefault) return
@@ -44,6 +53,15 @@ class EditorInvariantFuzzTest {
 			"expected $invariant to be the failure, got: ${failure.message}",
 		)
 	}
+
+	@Test
+	fun `invariant fuzz with tables seed 1`() = tablesFuzz(1)
+
+	@Test
+	fun `invariant fuzz with tables seed 42`() = tablesFuzz(42)
+
+	@Test
+	fun `invariant fuzz with tables seed 777`() = tablesFuzz(777)
 
 	@Test
 	fun `invariant fuzz seed 1`() = fuzz(1)

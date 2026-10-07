@@ -241,7 +241,7 @@ private fun TextEditorState.landPaste(
 	val text = screenAtSelection(sized) ?: return
 	val screened = text != sized
 	preserveCopiedRichSpansThroughNextEdit()
-	withAtomicEdit {
+	val landed = withAtomicEdit {
 		editManager.alreadyScreened {
 			if (curSelection != null) {
 				replace(curSelection, applyStyleForEditAt(curSelection.start, text))
@@ -257,7 +257,7 @@ private fun TextEditorState.landPaste(
 		settleLanded(insertPosition, text, richSpans, htmlDocument.takeIf { !screened })
 	}
 	selector.clearSelection()
-	pasteLanded(text.text, TextEditorRange(insertPosition, text.endWhenInsertedAt(insertPosition)))
+	pasteLanded(text.text, TextEditorRange(landed, text.endWhenInsertedAt(landed)))
 }
 
 private fun TextEditorState.handleDelete() {

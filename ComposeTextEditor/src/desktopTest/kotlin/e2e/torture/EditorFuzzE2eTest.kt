@@ -5,6 +5,7 @@ import androidx.compose.ui.unit.dp
 import utils.EditorUiTestScope
 import utils.FuzzOp
 import utils.SIDEWAYS_FUZZ_START_TEXT
+import utils.TABLE_FUZZ_START
 import utils.assertViewFollowsSidewaysScroll
 import utils.blockLines
 import utils.editorUiTest
@@ -61,6 +62,27 @@ class EditorFuzzE2eTest {
 		)
 	}
 
+	/** [undoToOrigin] from a document with tables, the script with table operations, Tab and copy and paste. */
+	private fun tablesUndoToOrigin(seed: Long, sideways: Boolean = false) = storm(seed, sideways) { runScript ->
+		state.setBlockLines(TABLE_FUZZ_START)
+		waitForIdle()
+		val origin = snapshotOf(state)
+		runScript(generateFuzzScript(seed = fuzzSeed(seed), count = 60, mutatingBudget = 80, tables = true))
+
+		undoAll()
+		assertEquals(origin, snapshotOf(state), "table fuzz seed=${fuzzSeed(seed)}: undoing every edit must restore the origin exactly")
+	}
+
+	/** [blockLinesFixpoint] from a document with tables, the script with table operations, Tab and copy and paste. */
+	private fun tablesBlockLinesFixpoint(seed: Long, sideways: Boolean = false) = storm(seed, sideways) { runScript ->
+		state.setBlockLines(TABLE_FUZZ_START)
+		runScript(generateFuzzScript(seed = fuzzSeed(seed), count = 60, tables = true))
+
+		val first = state.blockLines()
+		state.setBlockLines(first)
+		assertEquals(first, state.blockLines(), "table fuzz seed=${fuzzSeed(seed)}: blocks must reload as they were")
+	}
+
 	/** An editor for a storm, and to [block] a runner for its script that checks every op. */
 	private fun storm(
 		seed: Long,
@@ -76,6 +98,27 @@ class EditorFuzzE2eTest {
 			runUiFuzzScript(fuzzSeed(seed), script, sideways) { assertViewFollowsSidewaysScroll() }
 		}
 	}
+
+	@Test
+	fun `ui undo to origin with tables seed 1`() = tablesUndoToOrigin(1)
+
+	@Test
+	fun `ui undo to origin with tables seed 42`() = tablesUndoToOrigin(42)
+
+	@Test
+	fun `ui undo to origin with tables seed 777`() = tablesUndoToOrigin(777)
+
+	@Test
+	fun `ui block lines fixpoint with tables seed 4243`() = tablesBlockLinesFixpoint(4243)
+
+	@Test
+	fun `ui block lines fixpoint with tables seed 27`() = tablesBlockLinesFixpoint(27)
+
+	@Test
+	fun `sideways ui undo to origin with tables seed 1`() = tablesUndoToOrigin(1, sideways = true)
+
+	@Test
+	fun `sideways ui block lines fixpoint with tables seed 4243`() = tablesBlockLinesFixpoint(4243, sideways = true)
 
 	@Test
 	fun `ui undo to origin seed 1`() = undoToOrigin(1)

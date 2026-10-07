@@ -224,7 +224,7 @@ class EditorUiTestScope internal constructor(
 		test.waitForIdle()
 	}
 
-	override fun sendKey(key: Key, ctrl: Boolean) = press(key, ctrl = ctrl)
+	override fun sendKey(key: Key, ctrl: Boolean, shift: Boolean) = press(key, ctrl = ctrl, shift = shift)
 
 	/** Taps [position] with a finger: down and up in the same place, no buttons. */
 	fun tapAt(position: Offset) {

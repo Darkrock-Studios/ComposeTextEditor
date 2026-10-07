@@ -105,7 +105,7 @@ and touch handling for one block.
   so each of these writes the markers of every line it touches.
 - A fuzz test (`TableFuzzTest`) runs random edits, structural ones included, and
   checks every table stays rectangular and that undoing them all gives the
-  document back.
+  document back. The shared storms run over tables too (see `docs/TESTING.md`).
 
 ## Markdown
 
@@ -147,7 +147,10 @@ and touch handling for one block.
   body row stays a body row.
 - **Paste.** A table pasted into the middle of a line is given lines of its own,
   so its first and last cells keep their markers; pasted into a cell it is
-  flattened to text by the line-break filter.
+  flattened to text by the line-break filter. Pasted cells that would leave a
+  table with a row short of its columns or past them (part of a table, or rows
+  beside a table of another width) paste as text; whole rows paste as a table.
+  This holds for a copy inside the editor too.
 
 ## Not done
 

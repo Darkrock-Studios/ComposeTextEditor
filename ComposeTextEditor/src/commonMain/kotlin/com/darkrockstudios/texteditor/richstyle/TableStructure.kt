@@ -33,6 +33,10 @@ class TextEditorTable internal constructor(
 	val alignments: List<TableAlignment>
 		get() = List(columnCount) { column -> cellLine(0, column)?.let { cellAt(it).alignment } ?: TableAlignment.NONE }
 
+	/** Whether every row holds the header's columns, 0 on, and no more. */
+	internal val isWhole: Boolean
+		get() = rows.all { row -> row.withIndex().all { (index, line) -> cellAt(line).column == index } && row.count() == columnCount }
+
 	override fun toString(): String = "TextEditorTable(rows=$rows)"
 }
 
