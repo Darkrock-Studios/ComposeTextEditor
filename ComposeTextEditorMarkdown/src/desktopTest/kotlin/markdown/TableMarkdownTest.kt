@@ -191,6 +191,28 @@ class TableMarkdownTest {
 		assertEquals("| a | b |", markdown.editorState.textLines[0].text)
 	}
 
+	@Test
+	fun `a table indented like code is code`() = runTest {
+		val markdown = markdown()
+		markdown.importMarkdown("    | a | b |\n    | --- | --- |")
+
+		assertNull(markdown.editorState.tableCellAt(0))
+		assertNull(markdown.editorState.tableCellAt(1))
+	}
+
+	@Test
+	fun `an HTML block ends a table`() = runTest {
+		val markdown = markdown()
+		markdown.importMarkdown("| a | b |\n| --- | --- |\n| c | d |\n<div>\nx")
+		val state = markdown.editorState
+
+		assertEquals(listOf(0..1, 2..3), state.tableAt(0)!!.rows)
+		assertNull(state.tableCellAt(4))
+		val again = markdown.exportAsMarkdown()
+		markdown.importMarkdown(again)
+		assertEquals(again, markdown.exportAsMarkdown())
+	}
+
 	private val cellTexts = listOf(
 		"plain", "**bold**", "*it*", "`code`", "a | pipe", "back\\\\slash", "- dash", "# hash", "1. one",
 		"> quote", "---", "", "==mark==", "[link](https://example.com)", "x  y", "~~gone~~", ":-:", "  padded  ", " ",

@@ -34,18 +34,37 @@ internal fun findTables(lines: List<String>, skip: Set<Int> = emptySet()): List<
 			continue
 		}
 		var j = i + 2
-		while (j < lines.size && j !in skip && lines[j].isNotBlank() && !BLOCK_START.containsMatchIn(lines[j])) j++
+		while (j < lines.size && j !in skip && lines[j].isNotBlank() && !startsBlock(lines[j])) j++
 		tables += i until j
 		i = j
 	}
 	return tables
 }
 
-/** A line that starts a block of its own and so ends a table: a heading, quote, list item, fence or rule. */
+/**
+ * A line that starts a block of its own and so ends a table: a heading, quote, list item,
+ * fence, rule, or an HTML block of a kind that can interrupt a paragraph.
+ */
+private fun startsBlock(line: String): Boolean = BLOCK_START.containsMatchIn(line) || HTML_BLOCK_START.containsMatchIn(line)
+
 private val BLOCK_START = Regex("""^ {0,3}(?:#{1,6}(?:[ \t]|$)|>|[-*+][ \t]|[0-9]{1,9}[.)][ \t]|```|~~~|(?:[-*_][ \t]*){3,}$)""")
+
+/** CommonMark's HTML block starts 1 to 6, the GFM spec's tag list for 6. */
+private val HTML_BLOCK_START = Regex(
+	"""^ {0,3}(?:<(?:script|pre|style|textarea)(?:[ \t>]|$)|<!--|<\?|<![A-Za-z]|<!\[CDATA\[|</?(?:""" +
+		"address|article|aside|base|basefont|blockquote|body|caption|center|col|colgroup|dd|details|dialog|dir|div|dl|dt|" +
+		"fieldset|figcaption|figure|footer|form|frame|frameset|h[1-6]|head|header|hr|html|iframe|legend|li|link|main|menu|" +
+		"menuitem|nav|noframes|ol|optgroup|option|p|param|section|source|summary|table|tbody|td|tfoot|th|thead|title|tr|" +
+		"track|ul" + """)(?:[ \t>]|/>|$))""",
+	RegexOption.IGNORE_CASE,
+)
+
+/** A line indented four columns or more, which is code where a table could start. */
+private val INDENTED_FOR_CODE = Regex("""^(?: {4}| {0,3}\t)""")
 
 private fun isTableHeader(line: String, next: String?): Boolean {
 	if (next == null || !line.contains('|') || !next.contains('|')) return false
+	if (INDENTED_FOR_CODE.containsMatchIn(line) || INDENTED_FOR_CODE.containsMatchIn(next)) return false
 	if (!TABLE_DELIMITER_ROW.matches(next)) return false
 	return tableCells(line).size == tableCells(next).size
 }
