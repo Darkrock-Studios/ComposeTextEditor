@@ -3,6 +3,7 @@ package com.darkrockstudios.texteditor
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.text.TextLayoutResult
 import com.darkrockstudios.texteditor.richstyle.RichSpan
+import com.darkrockstudios.texteditor.state.BlockFacts
 import com.darkrockstudios.texteditor.state.TextEditorState
 
 /**
@@ -65,6 +66,16 @@ data class LineWrap(
 	val box: LineBox? = null,
 	/** Where this row's line sits in its table, for the cell's style to draw; null outside a table. */
 	val tableCell: TableCellPlace? = null,
+	/**
+	 * The space above the line's first row and below its last, outside every row: its
+	 * paragraph spacing, and what its blocks add (a callout's title). A style drawing a
+	 * card across several lines covers it to close the gaps between them. Repeated
+	 * across a wrapped line's rows.
+	 */
+	val spaceBefore: Float = 0f,
+	val spaceAfter: Float = 0f,
+	/** What the editor's multi-line blocks derive for this row's line, for their styles to draw by. */
+	val blockFacts: BlockFacts = BlockFacts.NONE,
 )
 
 /**

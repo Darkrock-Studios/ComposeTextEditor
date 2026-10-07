@@ -91,7 +91,13 @@ internal class LineLayout(
 		val now = facts.facts
 		if (now == this.facts) return this
 		val placed = placementOf(now, inputs, rowTops[rowCount])?.let { it.copy(bandHeight = placement?.bandHeight ?: it.bandHeight) }
-		return LineLayout(layout, rowStarts, rowEnds, rowTops, blockHeights, now, generation, spaceBefore, spaceAfter, width, placed)
+		if (placed != null) return LineLayout(layout, rowStarts, rowEnds, rowTops, blockHeights, now, generation, spaceBefore, spaceAfter, width, placed)
+		// The space a kind adds is its facts', which can change without the line's shape.
+		val was = blockSpacingOf(this.facts, inputs)
+		val will = blockSpacingOf(now, inputs)
+		val before = spaceBefore - was.before + will.before
+		val after = spaceAfter - was.after + will.after
+		return LineLayout(layout, rowStarts, rowEnds, rowTops, blockHeights, now, generation, before, after, width)
 	}
 
 	/** This layout resolved again for [spans] on its line, which may have changed its block heights or spacing, and [facts]. */
@@ -144,6 +150,19 @@ internal class LineLayout(
 			)
 		}
 
+		/** The space every kind with [facts] on a line adds above and below it. */
+		private fun blockSpacingOf(facts: BlockFacts, inputs: LineInputs): LineSpacing {
+			var before = 0f
+			var after = 0f
+			facts.forEach { kind, value ->
+				kind.spacing(value, inputs)?.let {
+					before += it.before
+					after += it.after
+				}
+			}
+			return if (before == 0f && after == 0f) LineSpacing.NONE else LineSpacing(before, after)
+		}
+
 		/** Where the kind whose [facts] place a line puts it, or null for the document's flow. */
 		private fun placementOf(facts: BlockFacts, inputs: LineInputs, textHeight: Float): LinePlacement? =
 			facts.firstOf { kind, value -> kind.place(value, inputs, textHeight) }
@@ -189,8 +208,9 @@ internal class LineLayout(
 			placementOf(facts, inputs, rowTops[rows])?.let { placed ->
 				return LineLayout(layout, rowStarts, rowEnds, rowTops, blockHeights, facts, generation, placed.padding, placed.padding, 0f, placed)
 			}
-			val spaceBefore = format?.spaceBefore?.takeIf { it.isSpecified }?.let { density?.run { it.toPx() } } ?: 0f
-			val spaceAfter = format?.spaceAfter?.takeIf { it.isSpecified }?.let { density?.run { it.toPx() } } ?: inputs.paragraphSpacing
+			val extra = blockSpacingOf(facts, inputs)
+			val spaceBefore = (format?.spaceBefore?.takeIf { it.isSpecified }?.let { density?.run { it.toPx() } } ?: 0f) + extra.before
+			val spaceAfter = (format?.spaceAfter?.takeIf { it.isSpecified }?.let { density?.run { it.toPx() } } ?: inputs.paragraphSpacing) + extra.after
 			val textWidth = if (inputs.softWrap) 0f else layout.textExtent()
 			return LineLayout(layout, rowStarts, rowEnds, rowTops, blockHeights, facts, generation, spaceBefore, spaceAfter, textWidth)
 		}
@@ -356,6 +376,9 @@ internal class RowList private constructor(
 					LineBox(it.boxLeft, lineTop.toFloat(), it.boxWidth, it.bandHeight, it.startsBand, it.endsBand)
 				},
 				tableCell = layout.tableCellPlace,
+				spaceBefore = layout.spaceBefore,
+				spaceAfter = layout.spaceAfter,
+				blockFacts = layout.facts,
 			)
 		}
 	}
