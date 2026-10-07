@@ -68,9 +68,9 @@ data class LineWrap(
 	val tableCell: TableCellPlace? = null,
 	/**
 	 * The space above the line's first row and below its last, outside every row: its
-	 * paragraph spacing, and what its blocks add (a callout's title). A style drawing a
-	 * card across several lines covers it to close the gaps between them. Repeated
-	 * across a wrapped line's rows.
+	 * paragraph spacing and what its blocks add (a callout's title), or for a line in a
+	 * [box], its padding inside the box. A style drawing a card across several lines
+	 * covers it to close the gaps between them. Repeated across a wrapped line's rows.
 	 */
 	val spaceBefore: Float = 0f,
 	val spaceAfter: Float = 0f,
