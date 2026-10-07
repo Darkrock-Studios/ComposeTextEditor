@@ -6,6 +6,7 @@ import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.deleteTableRow
 import com.darkrockstudios.texteditor.state.insertTableRow
 import com.darkrockstudios.texteditor.state.isTableCell
+import com.darkrockstudios.texteditor.state.removeLines
 import com.darkrockstudios.texteditor.state.tableAt
 
 /**
@@ -13,8 +14,8 @@ import com.darkrockstudios.texteditor.state.tableAt
  * is one line, so Enter goes to the cell below, adding a row from the last one;
  * Backspace at a cell's start and Delete at its end join nothing, and Backspace in the
  * first cell of an empty row deletes the row. Backspace at the start of the line
- * after a table steps into its last cell, and Delete at the end of the line before a
- * table leaves it apart. Tab is the key bindings' (see `moveToTableCell`), and line
+ * after a table steps into its last cell, deleting that line when it is empty, and
+ * Delete at the end of the line before a table leaves it apart. Tab is the key bindings' (see `moveToTableCell`), and line
  * breaks typed or pasted into a cell become spaces (`TableCellLineBreaks`). See
  * `docs/design/tables.md`.
  *
@@ -47,7 +48,13 @@ object TableEditBehavior : EditBehavior {
 		val table = state.tableAt(position.line)
 		if (table == null) {
 			if (position.line == 0 || !state.isTableCell(position.line - 1)) return false
-			state.cursor.updatePosition(CharLineOffset(position.line - 1, state.textLines[position.line - 1].length))
+			val lastCell = position.line - 1
+			// An empty line goes, unless another table after it would join this one.
+			val removable = state.textLines[position.line].isEmpty() && !state.isTableCell(position.line + 1)
+			state.editGroup {
+				if (removable) state.removeLines(position.line..position.line)
+				state.cursor.updatePosition(CharLineOffset(lastCell, state.textLines[lastCell].length))
+			}
 			return true
 		}
 		val row = table.rows[table.rowOf(position.line)]

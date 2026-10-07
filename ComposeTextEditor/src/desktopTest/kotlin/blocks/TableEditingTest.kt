@@ -10,6 +10,9 @@ import com.darkrockstudios.texteditor.state.deleteTableRow
 import com.darkrockstudios.texteditor.state.insertTableColumn
 import com.darkrockstudios.texteditor.state.insertTableRow
 import com.darkrockstudios.texteditor.state.moveToTableCell
+import com.darkrockstudios.texteditor.input.EditorActionContext
+import com.darkrockstudios.texteditor.input.EditorCommand
+import utils.InMemoryClipboard
 import com.darkrockstudios.texteditor.state.setTableColumnAlignment
 import io.mockk.mockk
 import kotlinx.coroutines.test.TestScope
@@ -38,6 +41,11 @@ class TableEditingTest {
 	}
 
 	private fun lines(vararg lines: String) = lines.joinToString("\n")
+
+	private val bold = androidx.compose.ui.text.SpanStyle(fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+
+	private fun TestScope.deleteWordBackward(state: TextEditorState) =
+		state.actions[EditorCommand.Action.DeleteWordBackward]!!.perform(EditorActionContext(state, InMemoryClipboard(), this))
 
 	@Test
 	fun `enter goes to the cell below, keeping the text`() = runTest {
@@ -265,5 +273,64 @@ class TableEditingTest {
 		state.undo()
 		state.undo()
 		assertEquals(lines("before", "|0^| Name", "|1>| Age", "|0^| Ada", "|1>| 36", "after"), state.blockLines())
+	}
+
+	@Test
+	fun `a column op from a body row leaves the caret in that row`() = runTest {
+		val state = editor(table)
+
+		state.insertTableColumn(3, after = true)
+		assertEquals(CharLineOffset(5, 0), state.cursorPosition)
+		assertEquals("", state.textLines[5].text)
+		state.undo()
+
+		state.deleteTableColumn(3)
+		assertEquals(CharLineOffset(2, 0), state.cursorPosition)
+		assertEquals("36", state.textLines[2].text)
+	}
+
+	@Test
+	fun `backspace on an empty line after a table deletes it, into the last cell`() = runTest {
+		val state = editor(lines("|0| a", "|1| b", "", "after"))
+		state.caretAt(2, 0)
+
+		state.backspaceAtCursor()
+
+		assertEquals(lines("|0| a", "|1| b", "after"), state.blockLines())
+		assertEquals(CharLineOffset(1, 1), state.cursorPosition)
+	}
+
+	@Test
+	fun `an empty line between two tables stays to keep them apart`() = runTest {
+		val state = editor(lines("|0| a", "", "|0| b"))
+		state.caretAt(1, 0)
+
+		state.backspaceAtCursor()
+
+		assertEquals(lines("|0| a", "", "|0| b"), state.blockLines())
+		assertEquals(CharLineOffset(0, 1), state.cursorPosition)
+	}
+
+	@Test
+	fun `a word deleted at a cell's edge stops there`() = runTest {
+		val state = editor(table)
+		state.caretAt(2, 0)
+		deleteWordBackward(state)
+		assertEquals(table, state.blockLines())
+
+		state.caretAt(2, 2)
+		deleteWordBackward(state)
+		assertEquals(lines("before", "|0| Name", "|1>| e", "|0| Ada", "|1>| 36", "after"), state.blockLines())
+	}
+
+	@Test
+	fun `text typed over a selection across cells takes the style where it lands`() = runTest {
+		val state = editor(table)
+		state.addStyleSpan(TextEditorRange(CharLineOffset(1, 0), CharLineOffset(1, 4)), bold)
+
+		state.replace(TextEditorRange(CharLineOffset(1, 2), CharLineOffset(2, 1)), "x", inheritStyle = true)
+
+		assertEquals("Nax", state.textLines[1].text)
+		assertEquals(true, state.textLines[1].spanStyles.any { it.item == bold && it.start <= 2 && it.end >= 3 })
 	}
 }

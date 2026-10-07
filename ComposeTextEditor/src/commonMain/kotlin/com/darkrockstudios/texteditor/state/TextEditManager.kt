@@ -545,7 +545,11 @@ class TextEditManager(private val state: TextEditorState) {
 			else -> return null
 		}
 		val pieces = state.tablePreservingPieces(range) ?: return null
-		val newText = (operation as? TextEditOperation.Replace)?.newText ?: AnnotatedString("")
+		// A replace that inherits takes the styles of the text where it lands, as a replace of nothing there would.
+		val newText = (operation as? TextEditOperation.Replace)?.let { replace ->
+			if (!replace.inheritStyle) replace.newText
+			else resolveInheritedStyle(replace.copy(range = TextEditorRange(range.start, range.start), oldText = AnnotatedString(""))).newText
+		} ?: AnnotatedString("")
 		state.withAtomicEdit {
 			state.selector.clearSelection()
 			editingTable {

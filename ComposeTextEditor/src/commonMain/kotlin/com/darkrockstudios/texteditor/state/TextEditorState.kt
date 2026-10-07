@@ -1683,7 +1683,9 @@ class TextEditorState private constructor(
 
 	/**
 	 * Deletes the text covered by [range], leaving the cursor at the range start.
-	 * A collapsed [range] covers nothing and is no edit at all.
+	 * A collapsed [range] covers nothing and is no edit at all. A range across a table's
+	 * cells clears each cell it covers rather than joining them, and one taking a whole
+	 * table and more deletes the table; see `docs/design/tables.md`.
 	 */
 	fun delete(range: TextEditorRange) = delete(range, cursorBefore = cursorPosition)
 
@@ -1714,7 +1716,9 @@ class TextEditorState private constructor(
 
 	/**
 	 * Replaces the text in [range] with [newText], preserving the latter's
-	 * character-level spans and moving the cursor to the end of the inserted text.
+	 * character-level spans and moving the cursor to the end of the inserted text. A
+	 * [range] across a table's cells is deleted as [delete] has it and [newText] goes in
+	 * at its start, its line breaks spaces when that is a cell.
 	 * @param inheritStyle when true, each inserted character also adopts the style of
 	 * the replaced character at its position, and any beyond them (or all, when
 	 * [range] is empty) the style an insert at the range's end would take.

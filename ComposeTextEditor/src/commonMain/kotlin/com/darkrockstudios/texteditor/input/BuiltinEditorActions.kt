@@ -1,5 +1,6 @@
 package com.darkrockstudios.texteditor.input
 
+import com.darkrockstudios.texteditor.state.isTableCell
 import com.darkrockstudios.texteditor.state.moveToTableCell
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
@@ -295,8 +296,15 @@ private fun TextEditorState.deleteByMotion(kill: Kill? = null, locateRangeEdge: 
 	}
 	val origin = cursorPosition
 	locateRangeEdge()
-	val edge = cursorPosition
-	if (edge == origin) return
+	// A word or line motion crosses a table cell's edge; the deletion stops there.
+	val edge = cursorPosition.let {
+		if (it.line == origin.line || (!isTableCell(it.line) && !isTableCell(origin.line))) it
+		else if (it < origin) CharLineOffset(origin.line, 0) else CharLineOffset(origin.line, textLines[origin.line].length)
+	}
+	if (edge == origin) {
+		cursor.updatePosition(origin)
+		return
+	}
 
 	val range = if (edge < origin) {
 		TextEditorRange(edge, origin)
