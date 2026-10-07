@@ -339,7 +339,8 @@ class TextEditHistory(maxHistorySize: Int = 1000) {
 				cursorBefore = previous.cursorBefore,
 				cursorAfter = operation.cursorAfter,
 			),
-			metadata = OperationMetadata(deletedText = mergedText),
+			// The line's styles as they stood before the run's first delete.
+			metadata = OperationMetadata(deletedText = mergedText, spanStylesBefore = last.metadata.spanStylesBefore),
 			typingRun = true,
 		)
 	}
@@ -442,9 +443,10 @@ data class OperationMetadata(
 	val deletedSpans: List<RichSpan> = emptyList(),
 	val preservedRichSpans: List<PreservedRichSpan> = emptyList(),
 	/**
-	 * For a [TextEditOperation.StyleSpan]: each touched line's character styles as
-	 * they stood before it, by line index, so undo restores them exactly rather
-	 * than applying a blind inverse over the range.
+	 * For a [TextEditOperation.StyleSpan], or a delete or replace inside one line:
+	 * each touched line's character styles as they stood before it, by line index, so
+	 * undo restores them exactly rather than applying a blind inverse over the range
+	 * or leaving restored text in the styles around it.
 	 */
 	val spanStylesBefore: Map<Int, List<AnnotatedString.Range<SpanStyle>>> = emptyMap(),
 	/**

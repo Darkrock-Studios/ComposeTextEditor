@@ -388,7 +388,9 @@ class TextEditManager(private val state: TextEditorState) {
 		operation: TextEditOperation.Replace
 	): OperationMetadata? {
 		val metadata = if (addToHistory) {
-			state.captureMetadata(operation.range).withLinesBefore(operation.range, operation.newText.contains('\n'))
+			state.captureMetadata(operation.range)
+				.withLinesBefore(operation.range, operation.newText.contains('\n'))
+				.withStylesBefore(operation.range)
 		} else {
 			null
 		}
@@ -428,7 +430,7 @@ class TextEditManager(private val state: TextEditorState) {
 		// (undo of an insert, redo of a delete) are exactly where spans would
 		// otherwise be dropped.
 		val metadata = state.captureMetadata(operation.range).let {
-			if (addToHistory) it.withLinesBefore(operation.range, breaks = false) else it
+			if (addToHistory) it.withLinesBefore(operation.range, breaks = false).withStylesBefore(operation.range) else it
 		}
 
 		when {
@@ -469,6 +471,28 @@ class TextEditManager(private val state: TextEditorState) {
 			linesBefore = lines.filter { it in state.textLines.indices }.map {
 				LineBefore(it - range.start.line, state.textLines[it], state.lineBlockSpanStyles(it))
 			}
+		)
+	}
+
+	/**
+	 * With the styles of the line a single-line edit of [range] changes. Text put back
+	 * into a line takes the styles around it, which a delete may have joined (the
+	 * unstyled gap between two bold runs), so undo writes the line's styles back.
+	 */
+	private fun OperationMetadata.withStylesBefore(range: TextEditorRange): OperationMetadata {
+		val line = range.start.line
+		if (!range.isSingleLine() || line !in state.textLines.indices) return this
+		return copy(spanStylesBefore = mapOf(line to state.textLines[line].spanStyles))
+	}
+
+	/** Gives each line in [styles] its character styles back, once its text is back as long as it was. */
+	private fun restoreStylesBefore(styles: Map<Int, List<AnnotatedString.Range<SpanStyle>>>) {
+		state.writeLines(
+			styles.mapNotNull { (line, spans) ->
+				val text = state.textLines.getOrNull(line) ?: return@mapNotNull null
+				if (spans.any { it.end > text.length }) return@mapNotNull null
+				line to AnnotatedString(text.text, spans, text.paragraphStyles)
+			}.toMap()
 		)
 	}
 
@@ -1339,6 +1363,7 @@ class TextEditManager(private val state: TextEditorState) {
 				operation.range.start
 			)
 			restoreLinesBefore(entry.metadata.linesBefore, operation.range.start.line)
+			restoreStylesBefore(entry.metadata.spanStylesBefore)
 		}
 	}
 
@@ -1361,6 +1386,7 @@ class TextEditManager(private val state: TextEditorState) {
 					operation.range.start
 				)
 				restoreLinesBefore(entry.metadata.linesBefore, operation.range.start.line)
+				restoreStylesBefore(entry.metadata.spanStylesBefore)
 			}
 		}
 	}

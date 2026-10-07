@@ -77,6 +77,31 @@ class SpanConsistencyTortureTest {
 	}
 
 	@Test
+	fun `undoing a delete of the gap between two bold runs gives the gap back unstyled`() {
+		val gapped = AnnotatedString(
+			"abcdefgh",
+			spanStyles = listOf(AnnotatedString.Range(bold, 0, 2), AnnotatedString.Range(bold, 3, 6)),
+		)
+		val forward = editor(gapped)
+		forward.cursor.updatePosition(CharLineOffset(0, 2))
+		forward.deleteAtCursor()
+		forward.undo()
+		assertEquals(listOf(0 to 2, 3 to 6), boldRangesIn(forward), "Delete")
+
+		val backward = editor(gapped)
+		backward.cursor.updatePosition(CharLineOffset(0, 4))
+		backward.backspaceAtCursor()
+		backward.backspaceAtCursor()
+		backward.undo()
+		assertEquals(listOf(0 to 2, 3 to 6), boldRangesIn(backward), "a Backspace run")
+
+		val replaced = editor(gapped)
+		replaced.replace(TextEditorRange(CharLineOffset(0, 2), CharLineOffset(0, 3)), AnnotatedString("X"), inheritStyle = true)
+		replaced.undo()
+		assertEquals(listOf(0 to 2, 3 to 6), boldRangesIn(replaced), "a replace")
+	}
+
+	@Test
 	fun `setText drops rich spans by contract`() {
 		val state = editor(AnnotatedString("hello world"))
 		state.addRichSpan(0, 5, HighlightSpanStyle(Color.Yellow))

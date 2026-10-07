@@ -85,6 +85,9 @@ class EditorStateFuzzTest {
 	fun `undo to origin with tables seed 20261007`() = tablesUndoToOrigin(20261007)
 
 	@Test
+	fun `undo to origin with tables seed 24`() = tablesUndoToOrigin(24)
+
+	@Test
 	fun `undo to origin seed 1`() = undoToOrigin(1)
 
 	@Test
