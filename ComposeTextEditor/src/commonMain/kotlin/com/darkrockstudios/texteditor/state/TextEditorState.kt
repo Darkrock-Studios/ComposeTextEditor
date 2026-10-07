@@ -18,6 +18,7 @@ import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextIndent
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
@@ -2520,16 +2521,17 @@ class TextEditorState private constructor(
 		 */
 		fun shape(line: AnnotatedString, format: ParagraphFormatSpanStyle? = null, facts: BlockFacts = BlockFacts.NONE): TextLayoutResult {
 			facts.firstOf { kind, value -> kind.shape(value, line, this) }?.let { return it }
+			val stacked = line.withStackedIndents()
 			val measureLine = when {
 				format != null && format.shapesText -> {
-					val base = line.paragraphStyles.firstOrNull()?.item ?: bakedIndentStyle
+					val base = stacked.paragraphStyles.firstOrNull()?.item ?: bakedIndentStyle
 					AnnotatedString(line.text, line.spanStyles, listOf(AnnotatedString.Range(format.paragraphStyleOver(base), 0, line.length)))
 				}
 				// Skip if the line already has a ParagraphStyle (block line):
 				// Compose forbids overlapping ParagraphStyle ranges.
 				bakedIndentStyle != null && line.paragraphStyles.isEmpty() ->
 					buildAnnotatedString { withStyle(bakedIndentStyle) { append(line) } }
-				else -> line
+				else -> stacked
 			}
 			return try {
 				val layout = textMeasurer.measure(text = measureLine, style = measureStyle, softWrap = softWrap, constraints = constraints)
@@ -2538,6 +2540,22 @@ class TextEditorState private constructor(
 				// If measurement fails, create an empty layout result
 				textMeasurer.measure(text = AnnotatedString(""), style = measureStyle, softWrap = softWrap, constraints = constraints)
 			}
+		}
+
+		/**
+		 * This line with the paragraph styles of its stacked blocks (a quote's and a list's)
+		 * as one, their indents added, for measuring only: nested over one line, Compose
+		 * lets the innermost indent replace the rest, and the list's text and marker would
+		 * sit on the quote's bar.
+		 */
+		private fun AnnotatedString.withStackedIndents(): AnnotatedString {
+			val stack = paragraphStyles
+			if (stack.size < 2 || stack.any { it.start != 0 || it.end != length }) return this
+			val indents = stack.mapNotNull { it.item.textIndent }
+			if (indents.any { !it.firstLine.isSp || !it.restLine.isSp }) return this
+			val indent = TextIndent(indents.sumOf { it.firstLine.value.toDouble() }.toFloat().sp, indents.sumOf { it.restLine.value.toDouble() }.toFloat().sp)
+			val merged = stack.fold(ParagraphStyle()) { all, it -> all.merge(it.item) }.copy(textIndent = indent)
+			return AnnotatedString(text, spanStyles, listOf(AnnotatedString.Range(merged, 0, length)))
 		}
 
 		override fun measureWrapped(line: AnnotatedString, width: Int): TextLayoutResult {
