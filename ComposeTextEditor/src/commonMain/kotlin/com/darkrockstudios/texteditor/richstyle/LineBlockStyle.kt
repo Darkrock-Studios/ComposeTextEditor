@@ -385,7 +385,7 @@ internal class ResolvedLineBlock(
 /**
  * Resolves [block] against a line holding [present] with content [text], or
  * returns null when there is nothing to do: [block] is already there, or the line
- * is a table cell and [block] is not one.
+ * holds an inline-only block (a table cell) and [block] is not one.
  *
  * The one place [lineBlocksConflict] is turned into an actual demotion and rebuild:
  * the per-line toggle and the batched importer both resolve through this, so a

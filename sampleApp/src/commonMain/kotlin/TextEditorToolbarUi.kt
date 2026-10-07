@@ -70,6 +70,11 @@ fun TextEditorToolbar(
 	var tableLine by remember { mutableStateOf<Int?>(null) }
 	var selectionEndsInTable by remember { mutableStateOf(false) }
 	var blocksRefused by remember { mutableStateOf(false) }
+
+	fun readCaretLine(line: Int) {
+		tableLine = line.takeIf { state.isTableCell(it) }
+		blocksRefused = state.isInlineOnlyLine(line)
+	}
 	var isHighlightActive by remember { mutableStateOf(false) }
 	var linkDialogState by remember { mutableStateOf<LinkDialogRequest?>(null) }
 	val isLinkActive = existingLinkSpan != null
@@ -105,8 +110,7 @@ fun TextEditorToolbar(
 			isOrderedListActive = richSpans.any { it.style is OrderedListSpanStyle }
 			isCodeFenceActive = richSpans.any { it.style === CodeFenceSpanStyle }
 			currentHeaderLevel = state.headerLevel(position.line) ?: 0
-			tableLine = position.line.takeIf { state.isTableCell(it) }
-			blocksRefused = state.isInlineOnlyLine(position.line)
+			readCaretLine(position.line)
 			// The rule replaces the selection, which would clear the cells it takes in.
 			selectionEndsInTable = selected != null && (state.isTableCell(selected.start.line) || state.isTableCell(selected.end.line))
 			isHighlightActive = isActive(state.richTextStyles.highlightStyle)
@@ -117,8 +121,7 @@ fun TextEditorToolbar(
 		state.editOperations.collect {
 			reconcileHorizontalRules(state)
 			// A table edit can leave the caret where it was.
-			tableLine = state.cursorPosition.line.takeIf { state.isTableCell(it) }
-			blocksRefused = state.isInlineOnlyLine(state.cursorPosition.line)
+			readCaretLine(state.cursorPosition.line)
 		}
 	}
 

@@ -49,9 +49,13 @@ internal class LineLayout(
 	 */
 	val width: Float,
 	val tableCell: TableCellFacts? = null,
+	/** Built from [tableCell] (`cellPlacement`): a cell is the one kind of line laid out beside others. */
 	val placement: LinePlacement? = null,
 ) {
 	val rowCount: Int get() = rowStarts.size
+
+	/** [tableCell] as each of the line's rows hands it out, built once. */
+	val tableCellPlace: TableCellPlace? = tableCell?.let { TableCellPlace(it.row, it.cell.column, it.lastRow) }
 
 	/** The rows' heights and the spacing around them. */
 	val height: Float get() = spaceBefore + rowTops[rowCount] + spaceAfter
@@ -365,7 +369,7 @@ internal class RowList private constructor(
 				box = layout.placement?.let {
 					LineBox(it.boxLeft, lineTop.toFloat(), it.boxWidth, it.bandHeight, it.startsBand, it.endsBand)
 				},
-				tableCell = layout.tableCell?.let { TableCellPlace(it.row, it.cell.column, it.lastRow) },
+				tableCell = layout.tableCellPlace,
 			)
 		}
 	}

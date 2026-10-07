@@ -24,7 +24,6 @@ import com.darkrockstudios.texteditor.richstyle.demoteLineBlock
 import com.darkrockstudios.texteditor.richstyle.hasLineBlock
 import com.darkrockstudios.texteditor.richstyle.isHeading
 import com.darkrockstudios.texteditor.richstyle.isList
-import com.darkrockstudios.texteditor.richstyle.refusedBy
 import com.darkrockstudios.texteditor.richstyle.lineBlockSpanStyles
 import com.darkrockstudios.texteditor.richstyle.lineBlocks
 import com.darkrockstudios.texteditor.richstyle.listBlockAt
@@ -1160,14 +1159,14 @@ class TextEditManager(private val state: TextEditorState) {
 	 *
 	 * Acts on the in-range lines that can carry [block]: placeholder lines count
 	 * for the styles that stack on them (blockquote on any, a list style on an
-	 * image, nothing else), and a table cell takes no other block. The toggle
-	 * direction is decided from the same set, so a rule inside the selection
-	 * cannot wedge a list toggle into always-apply.
+	 * image, nothing else), and an inline-only line (a table cell) takes no other
+	 * block. The toggle direction is decided from the same set, so a rule inside
+	 * the selection cannot wedge a list toggle into always-apply.
 	 */
 	internal fun toggleLineBlock(lines: IntRange, block: LineBlockStyle) = state.withAtomicEdit {
 		val targets = lines.filter { line ->
 			line in state.textLines.indices && block.allowedOn(placeholderKindOf(state.workingContent, line)) &&
-				!block.refusedBy(state.lineBlocks(line))
+				(block.spanStyle.inlineOnly || !state.isInlineOnlyLine(line))
 		}
 		if (targets.isEmpty()) return@withAtomicEdit
 		// A list toggle asks for a kind at any nesting level: a nested item has

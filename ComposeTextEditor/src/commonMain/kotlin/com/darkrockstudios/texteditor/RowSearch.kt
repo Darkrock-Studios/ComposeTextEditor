@@ -7,10 +7,11 @@ import com.darkrockstudios.texteditor.state.RowList
 // bands ([bandTop], [bandBottom]), each row's band top at or below the one above's and
 // each band bottom likewise, so every lookup is a binary search. A row's band is the row
 // itself, but for the rows of a line laid out beside others in a box (a table's cells):
-// there it is the whole band the boxes share. A paragraph's spacing lies between its last row's bottom and the
-// next row's top, so a height in a gap resolves to the row above it. The list is random
-// access: the editor's own rows are a [RowList], which builds each row it hands out and
-// answers the four searches below from its directory without building any.
+// there it is the whole band the boxes share. A paragraph's spacing lies between its
+// last row's bottom and the next row's top, so a height in a gap resolves to the row
+// above it. The list is random access: the editor's own rows are a [RowList], which
+// builds each row it hands out and answers the four searches below from its directory
+// without building any.
 
 /** The first index in `0..size` whose row satisfies [predicate], which must be false and then true across the rows. */
 internal inline fun List<LineWrap>.firstRowWhere(predicate: (LineWrap) -> Boolean): Int {
