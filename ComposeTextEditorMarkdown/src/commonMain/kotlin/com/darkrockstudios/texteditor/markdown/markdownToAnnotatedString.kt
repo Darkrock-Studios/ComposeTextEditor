@@ -6,7 +6,6 @@ import com.darkrockstudios.texteditor.RichTextStyles
 import com.darkrockstudios.texteditor.annotatedstring.normalizeLineEndings
 import com.darkrockstudios.texteditor.html.DEFAULT_LINK_SCHEMES
 import com.darkrockstudios.texteditor.html.sanitizeLinkUrl
-import com.fleeksoft.ksoup.nodes.Entities
 import org.intellij.markdown.MarkdownElementTypes
 import org.intellij.markdown.MarkdownTokenTypes
 import org.intellij.markdown.ast.ASTNode
@@ -416,7 +415,38 @@ internal fun AnnotatedString.Builder.appendMarkdownChildren(
 	node: ASTNode,
 	context: MarkdownRenderContext,
 ) = context.scope(this) {
-	node.children.forEach { child -> appendMarkdownNode(original, child, context) }
+	val children = node.children
+	var i = 0
+	while (i < children.size) {
+		// `<me@example.com>` parses as its brackets beside an email token.
+		val email = children.getOrNull(i + 1)
+		if (children[i].type == MarkdownTokenTypes.LT && email?.type == MarkdownTokenTypes.EMAIL_AUTOLINK &&
+			children.getOrNull(i + 2)?.type == MarkdownTokenTypes.GT && context.keeps(email)
+		) {
+			val address = email.getTextInNode(original).toString()
+			appendAutolink(address, "mailto:$address", context)
+			i += 3
+			continue
+		}
+		appendMarkdownNode(original, children[i], context)
+		i++
+	}
+}
+
+/** An autolink's URI as CommonMark has it: a scheme of 2 to 32 characters, a colon, then no space or angle bracket. */
+private val URI_AUTOLINK = Regex("""[A-Za-z][A-Za-z0-9+.-]{1,31}:[^\s<>\u0000-\u001F]*""")
+
+/** [text] as a link to [url], or as plain text when the allowlist refuses it. */
+private fun AnnotatedString.Builder.appendAutolink(text: String, url: String, context: MarkdownRenderContext) {
+	if (sanitizeLinkUrl(url, context.allowedLinkSchemes) == null) {
+		append(text)
+		return
+	}
+	val start = length
+	pushStyle(context.styles.linkStyle)
+	append(text)
+	pop()
+	context.links += ParsedLink(start, length, url)
 }
 
 private fun AnnotatedString.Builder.appendMarkdownNode(
@@ -465,7 +495,7 @@ private fun AnnotatedString.Builder.appendMarkdownNode(
 		}
 
 		MarkdownTokenTypes.ESCAPED_BACKTICKS -> {
-			append(nodeText.removeMarkdownEscapes())
+			append(nodeText.decodeMarkdownText())
 		}
 
 		MarkdownTokenTypes.HTML_TAG -> {
@@ -514,9 +544,9 @@ private fun AnnotatedString.Builder.appendMarkdownNode(
 		MarkdownElementTypes.INLINE_LINK -> {
 			// A bare destination parses as LINK_DESTINATION; the GFM flavour
 			// reads an angle-bracketed one as an AUTOLINK child instead. Both
-			// carry any angle brackets in the node text; the URL itself is
-			// what round-trips. One the allowlist refuses, read as a renderer reads
-			// it (entities and escapes decoded), keeps its text alone.
+			// carry any angle brackets in the node text. The URL is read as a
+			// renderer reads it, escapes and entities decoded; one the allowlist
+			// refuses keeps its text alone.
 			val url = node.children
 				.firstOrNull {
 					it.type == MarkdownElementTypes.LINK_DESTINATION ||
@@ -524,7 +554,8 @@ private fun AnnotatedString.Builder.appendMarkdownNode(
 				}
 				?.getTextInNode(original)?.toString()
 				?.removeSurrounding("<", ">")
-				?.takeIf { sanitizeLinkUrl(it.decodedDestination(), context.allowedLinkSchemes) != null }
+				?.decodeMarkdownText()
+				?.takeIf { sanitizeLinkUrl(it, context.allowedLinkSchemes) != null }
 			if (url != null) pushStyle(styles.linkStyle)
 			val textStart = length
 			node.children.forEach { child ->
@@ -570,11 +601,22 @@ private fun AnnotatedString.Builder.appendMarkdownNode(
 
 		MarkdownTokenTypes.TEXT -> {
 			// Remove escape sequences from text content
-			append(nodeText.removeMarkdownEscapes())
+			append(nodeText.decodeMarkdownText())
 		}
 
 		MarkdownTokenTypes.EOL -> {
 			append(nodeText)
+		}
+
+		// A backslash before a line's end breaks the line, which the line break after it does.
+		MarkdownTokenTypes.HARD_LINE_BREAK -> if (nodeText != "\\") append(nodeText)
+
+		// `<https://...>`: its text, taken literally, is the link's text and destination.
+		// The parser takes some the spec does not, which stay as written.
+		MarkdownElementTypes.AUTOLINK -> {
+			val url = node.children.firstOrNull { it.type == MarkdownElementTypes.AUTOLINK }
+				?.getTextInNode(original)?.toString() ?: nodeText.removeSurrounding("<", ">")
+			if (URI_AUTOLINK.matches(url)) appendAutolink(url, url, context) else append(nodeText)
 		}
 
 		MarkdownElementTypes.MARKDOWN_FILE -> {
@@ -584,7 +626,7 @@ private fun AnnotatedString.Builder.appendMarkdownNode(
 		else -> {
 			// For any unhandled node types, append text with escapes removed
 			if (nodeText.isNotEmpty()) {
-				append(nodeText.removeMarkdownEscapes())
+				append(nodeText.decodeMarkdownText())
 			} else {
 				appendMarkdownChildren(original, node, context)
 			}
@@ -619,7 +661,7 @@ private fun AnnotatedString.Builder.appendStyledContent(
 			else -> {
 				// Flush accumulated text first
 				if (currentText.isNotEmpty()) {
-					append(currentText.toString().removeMarkdownEscapes())
+					append(currentText.toString().decodeMarkdownText())
 					currentText.clear()
 				}
 				appendMarkdownNode(original, child, context)
@@ -629,7 +671,7 @@ private fun AnnotatedString.Builder.appendStyledContent(
 
 	// Flush any remaining text
 	if (currentText.isNotEmpty()) {
-		append(currentText.toString().removeMarkdownEscapes())
+		append(currentText.toString().decodeMarkdownText())
 	}
 }
 
@@ -692,7 +734,3 @@ private fun codeSpanContent(node: String): String {
 	return if (padded) code.substring(1, code.length - 1) else code
 }
 
-private val DESTINATION_ESCAPE = Regex("""\\([!-/:-@\[-`{-~])""")
-
-/** A link destination as CommonMark reads it: backslash escapes and entity references decoded. */
-private fun String.decodedDestination(): String = Entities.unescape(replace(DESTINATION_ESCAPE, "$1"))

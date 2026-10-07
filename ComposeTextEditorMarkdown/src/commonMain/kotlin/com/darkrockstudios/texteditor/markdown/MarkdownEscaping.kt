@@ -1,29 +1,6 @@
 package com.darkrockstudios.texteditor.markdown
 
-/**
- * Characters that can appear as backslash escapes in markdown input, all
- * unescaped on parse: what [markdownEscapes] may write, plus the rest of the
- * ASCII punctuation CommonMark lets a document escape.
- */
-private val UNESCAPE_CHARS: Set<Char> = setOf(
-	'*', '_', '`', '#', '+', '-', '!', '[', ']', '(', ')', '{', '}', '<', '>', '|', '\\',
-	'.', '=', '~', '&',
-)
-
-private val UNESCAPE_REGEX: Regex = buildUnescapeRegex(UNESCAPE_CHARS)
-
-private fun buildUnescapeRegex(chars: Set<Char>): Regex {
-	val escaped = chars.joinToString("") { char ->
-		when (char) {
-			'\\' -> "\\\\"
-			'[', ']' -> "\\$char"
-			'-' -> "\\-"
-			'.' -> "\\."
-			else -> char.toString()
-		}
-	}
-	return """\\([$escaped])""".toRegex()
-}
+import com.fleeksoft.ksoup.nodes.Entities
 
 /**
  * Escapes "1." / "2." etc. at line starts to prevent ordered list parsing.
@@ -35,8 +12,81 @@ internal fun escapeOrderedListMarkers(markdown: String): String {
 	return markdown.replace(ORDERED_LIST_REGEX, "$1\\\\.")
 }
 
-internal fun CharSequence.removeMarkdownEscapes(): String {
-	return replace(UNESCAPE_REGEX, "$1")
+/**
+ * This text as CommonMark reads it outside code: a backslash before ASCII punctuation
+ * is the punctuation, and an entity reference (`&copy;`, `&#35;`, `&#x22;`) its
+ * character, in one pass, so an escaped `&` starts no entity. A name HTML does not
+ * know stays as written; a code point that is no character reads as U+FFFD.
+ */
+internal fun CharSequence.decodeMarkdownText(): String {
+	if (none { it == '\\' || it == '&' }) return toString()
+	val out = StringBuilder(length)
+	var i = 0
+	while (i < length) {
+		val c = this[i]
+		if (c == '\\' && i + 1 < length && this[i + 1].isAsciiPunctuation()) {
+			out.append(this[i + 1])
+			i += 2
+			continue
+		}
+		if (c == '&') {
+			val entity = ENTITY_REGEX.matchAt(this, i)
+			val decoded = entity?.let { decodeEntity(it.value) }
+			if (entity != null && decoded != null) {
+				out.append(decoded)
+				i += entity.value.length
+				continue
+			}
+		}
+		out.append(c)
+		i++
+	}
+	return out.toString()
+}
+
+/**
+ * [url] escaped so [decodeMarkdownText] reads it back: a backslash before punctuation or
+ * at the end, an `&` that starts an entity, and the characters that would open a code
+ * span, pair with emphasis or end the link around it (`` ` ``, `*`, `[`, `]`); and in an
+ * [angled] destination the angle brackets, which would end or open one.
+ */
+internal fun escapeLinkDestination(url: String, angled: Boolean): String = buildString(url.length) {
+	url.forEachIndexed { i, c ->
+		val next = url.getOrNull(i + 1)
+		val escaped = when (c) {
+			'\\' -> next == null || next.isAsciiPunctuation()
+			'&' -> ENTITY_REGEX.matchesAt(url, i)
+			'<', '>' -> angled
+			'`', '*', '[', ']' -> true
+			else -> false
+		}
+		if (escaped) append('\\')
+		append(c)
+	}
+}
+
+/** What the entity reference [entity] (`&name;` or `&#...;`) stands for, or null for an unknown name. */
+private fun decodeEntity(entity: String): String? {
+	val body = entity.substring(1, entity.length - 1)
+	if (!body.startsWith('#')) {
+		val codepoints = IntArray(2)
+		val count = Entities.codepointsForName(body, codepoints)
+		return if (count == 0) null else buildString { repeat(count) { appendCodePoint(codepoints[it]) } }
+	}
+	val hex = body.length > 1 && (body[1] == 'x' || body[1] == 'X')
+	val code = (if (hex) body.substring(2).toIntOrNull(16) else body.substring(1).toIntOrNull()) ?: return null
+	val valid = code in 1..0x10FFFF && code !in 0xD800..0xDFFF
+	return buildString { appendCodePoint(if (valid) code else 0xFFFD) }
+}
+
+private fun StringBuilder.appendCodePoint(code: Int) {
+	if (code < 0x10000) {
+		append(code.toChar())
+	} else {
+		val offset = code - 0x10000
+		append((0xD800 + (offset shr 10)).toChar())
+		append((0xDC00 + (offset and 0x3FF)).toChar())
+	}
 }
 
 /** A setext heading underline: a line of only `=` or `-` after up to three spaces. */

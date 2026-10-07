@@ -109,10 +109,10 @@ class LeadingIndentTest {
 	}
 
 	@Test
-	fun `a foreign file's leading entities read as indentation`() = runTest {
+	fun `a foreign file's leading entities read as indentation, and others as their characters`() = runTest {
 		val e = extension()
 		e.importMarkdown("&nbsp;&nbsp;two\n\n&#9;tab\n\nmid &nbsp; line")
-		assertEquals("  two\n\ttab\nmid &nbsp; line", e.editorState.getAllText().text)
+		assertEquals("  two\n\ttab\nmid \u00A0 line", e.editorState.getAllText().text)
 	}
 
 	@Test

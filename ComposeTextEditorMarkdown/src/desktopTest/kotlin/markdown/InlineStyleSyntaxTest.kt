@@ -116,7 +116,7 @@ class InlineStyleSyntaxTest {
 		assertEquals(url, e.editorState.linkAt(com.darkrockstudios.texteditor.CharLineOffset(0, 1)))
 
 		listOf(
-			"<https://x.test/?a==b==c>" to "<https://x.test/?a==b==c>",
+			"<https://x.test/?a==b==c>" to "https://x.test/?a==b==c",
 			"| a==b== | c |\n|---|---|\n| ==x== | y |" to "| a==b== | c |\n|---|---|\n| ==x== | y |",
 			"    if (a==b==c)" to "    if (a==b==c)",
 			"~~~\n==x==\n~~~" to "==x==\n",

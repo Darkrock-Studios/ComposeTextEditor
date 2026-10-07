@@ -5,9 +5,13 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
+import com.darkrockstudios.texteditor.CharLineOffset
+import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.markdown.MarkdownExtension
 import com.darkrockstudios.texteditor.markdown.toAnnotatedStringFromMarkdown
 import com.darkrockstudios.texteditor.state.TextEditorState
+import com.darkrockstudios.texteditor.state.linkAt
+import com.darkrockstudios.texteditor.state.setLink
 import io.mockk.mockk
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
@@ -138,6 +142,71 @@ class CommonMarkSyntaxTest {
 	fun `brackets around a delimiter are escaped, so emphasis crosses them`() = runTest {
 		assertInline("\\[**\\]a**", "[<b>]a</b>")
 		assertInline("a\\[**\\[b\\]**", "a[<b>[b]</b>")
+	}
+
+	@Test
+	fun `entity references read as their characters, unless escaped`() = runTest {
+		for ((markdown, text) in listOf(
+			"&copy; &AElig; &Dcaron; &frac34; &HilbertSpace; &ngE;" to "© Æ Ď ¾ ℋ ≧̸",
+			"&#35; &#1234; &#0; &#X22; &#xcab;" to "# Ӓ \uFFFD \" ಫ",
+			"&MadeUpEntity; and a&b" to "&MadeUpEntity; and a&b",
+			"\\&amp; &amp;amp;" to "&amp; &amp;",
+		)) {
+			val first = imported(markdown)
+			assertEquals(text, first.editorState.getAllText().text, markdown)
+			assertEquals(text, imported(first.exportAsMarkdown()).editorState.getAllText().text, first.exportAsMarkdown())
+		}
+	}
+
+	@Test
+	fun `a backslash escapes any ASCII punctuation and breaks a line before its end`() = runTest {
+		val punctuation = "!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~"
+		assertEquals(punctuation, imported(punctuation.map { "\\$it" }.joinToString("")).editorState.getAllText().text)
+		assertEquals("\\a \\φ", imported("\\a \\φ").editorState.getAllText().text)
+		assertEquals("foo\nbar", imported("foo\\\nbar").editorState.getAllText().text)
+	}
+
+	@Test
+	fun `a fenced line's entities and escapes stay as written`() = runTest {
+		assertEquals("``` &copy; \\* &amp;", imported("```\n&copy; \\* &amp;\n```").editorState.blockLines())
+	}
+
+	@Test
+	fun `a link destination reads its escapes and entities, and is written so it reads back`() = runTest {
+		for ((markdown, url) in listOf(
+			"[a](/f&ouml;\\*)" to "/fö*",
+			"[a](foo\\(and\\(bar\\))" to "foo(and(bar)",
+			"[a](<b\\>c>)" to "b>c",
+		)) {
+			val first = imported(markdown)
+			assertEquals(url, first.editorState.linkAt(CharLineOffset(0, 0)), markdown)
+			val written = first.exportAsMarkdown()
+			assertEquals(url, imported(written).editorState.linkAt(CharLineOffset(0, 0)), written)
+		}
+		val literal = markdown()
+		literal.editorState.setText(AnnotatedString("a"))
+		for (url in listOf("https://x.test/a\\*b&amp;c", "https://x.test/`a`*[b]", "https://x.test/(a) <b>")) {
+			literal.editorState.setLink(TextEditorRange(CharLineOffset(0, 0), CharLineOffset(0, 1)), url)
+			assertEquals(url, imported(literal.exportAsMarkdown()).editorState.linkAt(CharLineOffset(0, 0)), literal.exportAsMarkdown())
+		}
+	}
+
+	@Test
+	fun `an autolink is a link to its text, an email's by mailto, and a refused one is its text`() = runTest {
+		for ((markdown, text, url) in listOf(
+			Triple("see <https://x.test/a?b=1&c>", "see https://x.test/a?b=1&c", "https://x.test/a?b=1&c"),
+			Triple("see <me@x.test>", "see me@x.test", "mailto:me@x.test"),
+			Triple("see <irc://x.test>", "see irc://x.test", null),
+			Triple("see <https://x.test/a b>", "see <https://x.test/a b>", null),
+			Triple("see <m:abc>", "see <m:abc>", null),
+		)) {
+			val first = imported(markdown)
+			assertEquals(text, first.editorState.getAllText().text, markdown)
+			assertEquals(url, first.editorState.linkAt(CharLineOffset(0, 5)), markdown)
+			val again = imported(first.exportAsMarkdown())
+			assertEquals(text, again.editorState.getAllText().text, first.exportAsMarkdown())
+			assertEquals(url, again.editorState.linkAt(CharLineOffset(0, 5)), first.exportAsMarkdown())
+		}
 	}
 
 	@Test

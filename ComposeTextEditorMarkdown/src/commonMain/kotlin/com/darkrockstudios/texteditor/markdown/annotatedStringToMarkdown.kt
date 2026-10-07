@@ -510,10 +510,14 @@ private fun highlightMarker(syntax: MarkdownConfiguration): StyleMarkerPair =
 
 /**
  * The destination as it appears inside `(...)`: angle-bracketed when it holds
- * a character CommonMark cannot take in a bare destination.
+ * a character CommonMark cannot take in a bare destination, and escaped where
+ * import would decode it (see [escapeLinkDestination]).
  */
-private fun markdownLinkDestination(url: String): String =
-	if (url.any { it == ')' || it == ' ' || it == '\n' }) "<$url>" else url
+private fun markdownLinkDestination(url: String): String {
+	val angled = url.any { it == ')' || it == ' ' || it == '\n' }
+	val escaped = escapeLinkDestination(url, angled)
+	return if (angled) "<$escaped>" else escaped
+}
 
 private data class StyleMarkerPair(
 	val openMarker: String,

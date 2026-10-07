@@ -61,12 +61,13 @@ private val STANDALONE_IMAGE_REGEX =
 /**
  * Markdown special characters that need escaping inside fenced code lines so
  * the parser treats them as literal text. Includes `\` itself so a literal
- * backslash survives. The parser strips the preceding `\` via
- * `removeMarkdownEscapes`, leaving the original character in the output.
+ * backslash survives, and `&` so an entity reference does. The parser strips the
+ * preceding `\` via `decodeMarkdownText`, leaving the original character in the
+ * output.
  */
 private val MARKDOWN_ESCAPE_CHARS: Set<Char> = setOf(
 	'\\', '`', '*', '_', '{', '}', '[', ']', '(', ')',
-	'#', '+', '-', '.', '!', '|', '>', '~', '<', '=',
+	'#', '+', '-', '.', '!', '|', '>', '~', '<', '=', '&',
 )
 
 private fun String.escapeMarkdownSpecials(): String {
@@ -266,7 +267,7 @@ private val INDENTED_CODE_LINE = Regex("""^(?: {4}|\t)[ \t]*[^ \t]""")
  * every marker the line's spans account for, so whatever still looks like one is
  * literal text and must not reach the GFM parser bare, or it parses as markup
  * and the author's characters are consumed. The parser strips the escapes back
- * out via `removeMarkdownEscapes`. This is broader than export's escaping,
+ * out via `decodeMarkdownText`. This is broader than export's escaping,
  * which leaves `1.2.3` alone: a peeled body is foreign text, and a marker
  * shape with nothing after it is still safer escaped.
  */
