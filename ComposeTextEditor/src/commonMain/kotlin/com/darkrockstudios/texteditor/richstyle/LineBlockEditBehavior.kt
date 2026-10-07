@@ -55,7 +55,7 @@ object LineBlockEditBehavior : EditBehavior {
 					if (atHeadingEnd && it.isHeading) {
 						state.demoteLineBlock(line + 1, it)
 					} else {
-						state.applyLineBlock(line + 1, it)
+						state.applyLineBlock(line + 1, it.continuesAs ?: it)
 					}
 				}
 			}

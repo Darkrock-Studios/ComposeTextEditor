@@ -72,6 +72,13 @@ class MarkdownShortcutsTest {
 	}
 
 	@Test
+	fun `a box typed at a list item's start makes it a task, checked or not`() {
+		assertEquals("- [ ] todo", editor().apply { type("- [ ] todo") }.blockLines())
+		assertEquals("1. [x] done", editor().apply { type("1. [x] done") }.blockLines())
+		assertEquals("[ ] text", editor().apply { type("[ ] text") }.blockLines())
+	}
+
+	@Test
 	fun `a marker typed before existing text converts the line`() {
 		val state = editor("text")
 		state.cursor.updatePosition(CharLineOffset(0, 0))

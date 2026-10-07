@@ -42,6 +42,8 @@ import com.darkrockstudios.texteditor.richstyle.HeaderSpanStyle
 import com.darkrockstudios.texteditor.richstyle.MAX_TABLE_COLUMNS
 import com.darkrockstudios.texteditor.richstyle.TableAlignment
 import com.darkrockstudios.texteditor.richstyle.TableCellSpanStyle
+import com.darkrockstudios.texteditor.richstyle.TASK_PARAGRAPH_STYLE
+import com.darkrockstudios.texteditor.richstyle.TaskSpanStyle
 import com.darkrockstudios.texteditor.richstyle.tableCellParagraphStyle
 import com.darkrockstudios.texteditor.richstyle.HorizontalRuleSpanStyle
 import com.darkrockstudios.texteditor.richstyle.LinkSpanStyle
@@ -89,6 +91,7 @@ private val blockParagraphs: Map<String, ParagraphStyle> = mapOf(
 	"quote" to BLOCKQUOTE_PARAGRAPH_STYLE,
 	"fence" to CODE_FENCE_PARAGRAPH_STYLE,
 	"header" to HEADER_PARAGRAPH_STYLE,
+	"task" to TASK_PARAGRAPH_STYLE,
 	// A nested item's indent, one name per level; both list kinds share it.
 ) + (1..MAX_LIST_LEVEL).associate { level -> "list:$level" to listParagraphStyle(level) } +
 	TableAlignment.entries.associate { "cell:${it.name}" to tableCellParagraphStyle(it) }
@@ -225,6 +228,7 @@ private fun RichSpanStyle.encode(scope: SaverScope, custom: Saver<RichSpanStyle,
 		is OrderedListSpanStyle -> "ordered:$level" to ""
 		is CodeFenceLanguageSpanStyle -> "fence-language" to language
 		is TableCellSpanStyle -> "cell:$column:${alignment.name}" to ""
+		is TaskSpanStyle -> (if (checked) "task:checked" else "task") to ""
 		is ParagraphFormatSpanStyle -> "paragraph" to arrayListOf<Any>(
 			if (spaceBefore.isSpecified) spaceBefore.value else Float.NaN,
 			if (spaceAfter.isSpecified) spaceAfter.value else Float.NaN,
@@ -252,6 +256,8 @@ private fun decodeRichSpanStyle(kind: String, argument: Any?, custom: Saver<Rich
 		kind.startsWith("bullet:") -> kind.substringAfter(':').toIntOrNull()?.let { BulletListSpanStyle.of(it) }
 		kind.startsWith("ordered:") -> kind.substringAfter(':').toIntOrNull()?.let { OrderedListSpanStyle.of(it) }
 		kind == "fence-language" -> (argument as? String)?.let { CodeFenceLanguageSpanStyle(it) }
+		kind == "task" -> TaskSpanStyle.UNCHECKED
+		kind == "task:checked" -> TaskSpanStyle.CHECKED
 		kind.startsWith("cell:") -> kind.split(':').let { parts ->
 			val column = parts.getOrNull(1)?.toIntOrNull()?.takeIf { it in 0 until MAX_TABLE_COLUMNS }
 			val alignment = TableAlignment.entries.firstOrNull { it.name == parts.getOrNull(2) }

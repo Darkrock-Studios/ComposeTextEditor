@@ -8,6 +8,7 @@ import com.darkrockstudios.texteditor.richstyle.LINE_BLOCK_STYLES
 import com.darkrockstudios.texteditor.richstyle.OrderedListSpanStyle
 import com.darkrockstudios.texteditor.richstyle.RichSpanStyle
 import com.darkrockstudios.texteditor.richstyle.TableCellSpanStyle
+import com.darkrockstudios.texteditor.richstyle.TaskSpanStyle
 import com.darkrockstudios.texteditor.richstyle.isListBlock
 
 /**
@@ -72,6 +73,8 @@ internal val BLOCK_SYNTAX: List<MarkdownBlockSyntax> by lazy {
 			CodeFenceSpanStyle -> MarkdownBlockSyntax(style, prefix = { "" }, pattern = null)
 			// A table is written and read whole, by the table syntax.
 			is TableCellSpanStyle -> MarkdownBlockSyntax(style, prefix = { "" }, pattern = null)
+			// A task's box follows its item's marker, read and written with the list.
+			is TaskSpanStyle -> MarkdownBlockSyntax(style, prefix = { if (style.checked) "[x] " else "[ ] " }, pattern = null)
 			else -> error("No markdown syntax for the line block $style")
 		}
 	}
@@ -86,6 +89,12 @@ private val SYNTAX_BY_STYLE: Map<RichSpanStyle, MarkdownBlockSyntax> by lazy { B
 internal fun hasBlockSyntax(style: RichSpanStyle): Boolean = style in SYNTAX_BY_STYLE
 
 internal val BLOCKQUOTE_SYNTAX: MarkdownBlockSyntax by lazy { SYNTAX_BY_STYLE.getValue(BlockquoteSpanStyle) }
+
+/** The syntax of a task, [checked] or not. */
+internal fun taskSyntax(checked: Boolean): MarkdownBlockSyntax = SYNTAX_BY_STYLE.getValue(TaskSpanStyle.of(checked))
+
+/** A task's box at the start of a list item's body: `[ ]` or `[x]`, then whitespace or the line's end; group 2 is the rest. */
+internal val TASK_MARKER = Regex("""^\[([ xX])](?:[ \t]+|$)(.*)$""")
 
 internal val MarkdownBlockSyntax.isList: Boolean
 	get() = style.isListBlock

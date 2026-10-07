@@ -210,14 +210,14 @@ class SaveableStateTest {
 	}
 
 	@Test
-	fun `a table survives a restore`() = runComposeUiTest {
+	fun `a table and tasks survive a restore`() = runComposeUiTest {
 		val restorer = Restorer(this)
 		lateinit var state: TextEditorState
 		restorer.setContent {
 			state = rememberSaveableTextEditorState()
 			BasicTextEditor(state = state, modifier = Modifier.size(400.dp, 300.dp))
 		}
-		val document = "intro\n|0| Name\n|1>| Age\n|0^| Ada\n|1>| 36\nafter"
+		val document = "intro\n|0| Name\n|1>| Age\n|0^| Ada\n|1>| 36\n- [ ] open\n1. [x] done\nafter"
 		lateinit var linesBefore: List<AnnotatedString>
 		runOnIdle {
 			state.setBlockLines(document)

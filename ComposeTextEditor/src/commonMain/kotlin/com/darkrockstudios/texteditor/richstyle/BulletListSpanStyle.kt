@@ -45,6 +45,8 @@ open class BulletListSpanStyle private constructor(val level: Int) : RichSpanSty
 		state: TextEditorState,
 	) {
 		if (lineWrap.virtualLineIndex != 0) return
+		// A task's box takes the bullet's place.
+		if (lineWrap.isTask) return
 		val lineHeight = layoutResult.multiParagraph.getLineHeight(lineWrap.virtualLineIndex)
 		val color = if (state.bulletColor.isSpecified) state.bulletColor else Color.DarkGray
 		// Anchor the marker relative to the actual text-left position rather than

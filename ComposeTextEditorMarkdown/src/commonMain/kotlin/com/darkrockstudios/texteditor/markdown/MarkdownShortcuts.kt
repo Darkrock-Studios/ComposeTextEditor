@@ -8,6 +8,9 @@ import com.darkrockstudios.texteditor.state.EditBehavior
 import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.headerLevel
 import com.darkrockstudios.texteditor.state.isBlockquote
+import com.darkrockstudios.texteditor.state.isTask
+import com.darkrockstudios.texteditor.state.setTaskChecked
+import com.darkrockstudios.texteditor.state.toggleTaskList
 import com.darkrockstudios.texteditor.state.isBulletList
 import com.darkrockstudios.texteditor.state.isCodeFence
 import com.darkrockstudios.texteditor.state.isOrderedList
@@ -47,7 +50,7 @@ data class MarkdownShortcuts(
 	val inline: Boolean = true,
 ) : EditBehavior {
 
-	private enum class Block { Bullet, Ordered, Heading, Quote }
+	private enum class Block { Bullet, Ordered, Heading, Quote, Task }
 
 	override fun onTextInput(state: TextEditorState, text: String, range: TextEditorRange): Boolean {
 		if (range.end != state.cursorPosition || state.isCodeFence(range.end.line)) return false
@@ -94,6 +97,7 @@ data class MarkdownShortcuts(
 			ORDERED_MARKER.matches(marker) && !isList && heading == null -> Block.Ordered
 			HEADING_MARKER.matches(marker) && !isList && heading != marker.length - 1 -> Block.Heading
 			marker == QUOTE_MARKER && !state.isBlockquote(line) -> Block.Quote
+			TASK_SHORTCUT.matches(marker) && isList && !state.isTask(line) -> Block.Task
 			else -> return false
 		}
 		state.editGroup {
@@ -103,6 +107,10 @@ data class MarkdownShortcuts(
 				Block.Ordered -> state.toggleOrderedList(line..line)
 				Block.Heading -> state.toggleHeader(line..line, marker.length - 1)
 				Block.Quote -> state.toggleBlockquote(line..line)
+				Block.Task -> {
+					state.toggleTaskList(line..line)
+					if (marker[1] != ' ') state.setTaskChecked(line, true)
+				}
 			}
 			state.cursor.updatePosition(CharLineOffset(line, 0))
 		}
@@ -202,6 +210,7 @@ data class MarkdownShortcuts(
 		val BULLET_MARKER = Regex("""[-*+] """)
 		val ORDERED_MARKER = Regex("""\d{1,9}[.)] """)
 		val HEADING_MARKER = Regex("""#{1,6} """)
+		val TASK_SHORTCUT = Regex("""\[[ xX]] """)
 		const val QUOTE_MARKER = "> "
 
 		/** The longest marker: nine digits, a period and a space. */
