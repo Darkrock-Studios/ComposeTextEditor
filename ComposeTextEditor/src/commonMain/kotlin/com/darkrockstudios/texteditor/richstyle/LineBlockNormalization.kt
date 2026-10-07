@@ -13,10 +13,9 @@ import com.darkrockstudios.texteditor.state.LineSplice
  * [Blockquote]; an image may also carry one list style; anything else is a
  * marker with nothing to decorate that cannot survive a serialization round
  * trip. Violating spans are removed and their lines rebuilt without the
- * orphaned indent. A table cell is the exception: it keeps its line and the
- * rule or image is removed, its placeholder left as the cell's text. Then every
- * line of a fence run gets a language span if the run has a language (see
- * [repairFenceLanguages]).
+ * orphaned indent. Before that, a table cell keeps its line (see [repairCells]).
+ * Then every line of a fence run gets a language span if the run has a language
+ * (see [repairFenceLanguages]).
  *
  * Runs on every publish, from [com.darkrockstudios.texteditor.state.TextEditorState],
  * so the invariant holds no matter which path attached the span: a toggle, an
@@ -27,7 +26,8 @@ import com.darkrockstudios.texteditor.state.LineSplice
  * removed or lost, or a line came or went: a keystroke inside a fenced line moves
  * no language. The repair is deterministic and outside the undo history; since
  * only blank lines classify as placeholders, the most it ever discards is a
- * marker on empty content, or a fence language that cannot be written.
+ * marker on empty content, a marker or format put on a table cell, or a fence
+ * language that cannot be written.
  * Returns the snapshot unchanged (no line allocation) when the document is
  * already valid, the overwhelmingly common case.
  */
@@ -38,9 +38,47 @@ internal fun normalizeLineBlocks(
 	spansChanged: Boolean,
 ): DocumentSnapshot {
 	if (changed.isEmpty()) return snapshot
-	val placeholders = repairPlaceholders(snapshot, config, changed)
-	// A placeholder repair can drop a fence span, which leaves its language span to drop too.
+	val cells = if (spansChanged) repairCells(snapshot, config, changed) else snapshot
+	val placeholders = repairPlaceholders(cells, config, changed)
+	// A repair can drop a fence span, which leaves its language span to drop too.
 	return if (spansChanged || placeholders !== snapshot) repairFenceLanguages(placeholders, changed) else placeholders
+}
+
+/**
+ * Keeps every table cell's line for the cell alone, so no path, the public span API
+ * included, can stack a block on a cell and break its table: another block, a rule or
+ * an image, a paragraph format, or a second cell marker (the lowest column's stays) is
+ * removed, a block's indent and look with it. A cell only meets one of them when a span
+ * is added or a line comes or goes, so this runs only then.
+ */
+private fun repairCells(
+	snapshot: DocumentSnapshot,
+	config: RichTextStyles,
+	changed: IntRange,
+): DocumentSnapshot {
+	val removed = ArrayList<RichSpan>()
+	var lines = snapshot.lineList
+	var rebuiltFirst = Int.MAX_VALUE
+	var rebuiltLast = -1
+	for (line in changed) {
+		val starting = snapshot.spansOn(line).filter { it.range.start.line == line }
+		val cell = starting.filter { it.style is TableCellSpanStyle }
+			.minByOrNull { (it.style as TableCellSpanStyle).column } ?: continue
+		for (span in starting) {
+			if (span === cell) continue
+			val block = lineBlockFor(span.style, config)
+			if (block == null && span.style !is BlockSpanStyle && !span.style.boundToParagraph) continue
+			removed += span
+			if (block != null) {
+				lines = lines.splice(line, line + 1, listOf(rebuildWithoutBlock(lines[line], block)))
+				rebuiltFirst = minOf(rebuiltFirst, line)
+				rebuiltLast = maxOf(rebuiltLast, line)
+			}
+		}
+	}
+	if (removed.isEmpty()) return snapshot
+	val splice = if (rebuiltLast < 0) null else LineSplice(rebuiltFirst, lines.size - 1 - rebuiltLast)
+	return snapshot.withLines(lines, splice).withSpanIndex(snapshot.spanIndex.minus(removed))
 }
 
 private fun repairPlaceholders(
@@ -49,21 +87,15 @@ private fun repairPlaceholders(
 	changed: IntRange,
 ): DocumentSnapshot {
 	val violations = ArrayList<Pair<RichSpan, LineBlockStyle>>()
-	val placeholdersOnCells = ArrayList<RichSpan>()
 	for (line in changed) {
 		val kind = placeholderKindOf(snapshot, line) ?: continue
-		val starting = snapshot.spansOn(line).filter { it.range.start.line == line }
-		// A cell keeps its line, so a table stays whole: the rule or image goes instead.
-		if (starting.any { it.style is TableCellSpanStyle }) {
-			placeholdersOnCells += starting.filter { (it.style as? BlockSpanStyle)?.replacesText() == true }
-			continue
-		}
-		for (span in starting) {
+		for (span in snapshot.spansOn(line)) {
+			if (span.range.start.line != line) continue
 			val block = lineBlockFor(span.style, config) ?: continue
 			if (!block.allowedOn(kind)) violations += span to block
 		}
 	}
-	if (violations.isEmpty() && placeholdersOnCells.isEmpty()) return snapshot
+	if (violations.isEmpty()) return snapshot
 
 	var lines = snapshot.lineList
 	violations.forEach { (span, block) ->
@@ -72,7 +104,7 @@ private fun repairPlaceholders(
 	}
 	val rebuilt = violations.map { it.first.range.start.line }.filter { it in lines.indices }
 	val splice = if (rebuilt.isEmpty()) null else LineSplice(rebuilt.min(), lines.size - 1 - rebuilt.max())
-	return snapshot.withLines(lines, splice).withSpanIndex(snapshot.spanIndex.minus(violations.map { it.first } + placeholdersOnCells))
+	return snapshot.withLines(lines, splice).withSpanIndex(snapshot.spanIndex.minus(violations.map { it.first }))
 }
 
 /**

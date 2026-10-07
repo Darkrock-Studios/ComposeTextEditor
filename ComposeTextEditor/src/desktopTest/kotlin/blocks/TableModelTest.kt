@@ -1,6 +1,7 @@
 package blocks
 
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.em
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.richstyle.HorizontalRuleSpanStyle
 import com.darkrockstudios.texteditor.richstyle.LINE_BLOCK_STYLES
@@ -125,6 +126,41 @@ class TableModelTest {
 
 		assertTrue(state.isTableCell(0))
 		assertFalse(state.richSpanManager.getAllRichSpans().any { it.style === HorizontalRuleSpanStyle })
+	}
+
+	@Test
+	fun `whatever the span API puts on a cell, the cell keeps its line alone`() = runTest {
+		val styles = listOf(
+			com.darkrockstudios.texteditor.richstyle.HeaderSpanStyle.of(1),
+			com.darkrockstudios.texteditor.richstyle.BulletListSpanStyle.of(0),
+			com.darkrockstudios.texteditor.richstyle.OrderedListSpanStyle.of(1),
+			com.darkrockstudios.texteditor.richstyle.BlockquoteSpanStyle,
+			com.darkrockstudios.texteditor.richstyle.CodeFenceSpanStyle,
+			HorizontalRuleSpanStyle,
+			TableCellSpanStyle.of(3),
+			com.darkrockstudios.texteditor.richstyle.ParagraphFormatSpanStyle(firstLineIndent = 2.em),
+		)
+		for (style in styles) {
+			val state = editor("|0| a\n|1| bb")
+			val cellLook = state.textLines[1].paragraphStyles.map { it.item }
+
+			state.addRichSpan(CharLineOffset(1, 0), CharLineOffset(1, 2), style)
+
+			assertEquals("|0| a\n|1| bb", state.blockLines(), "$style")
+			assertEquals(listOf(TableCellSpanStyle.of(1)), state.richSpanManager.getRichSpansStartingOn(1).map { it.style }, "$style")
+			assertEquals(cellLook, state.textLines[1].paragraphStyles.map { it.item }, "$style")
+		}
+	}
+
+	@Test
+	fun `a cell put on a heading takes the line from it`() = runTest {
+		val state = editor("# Head")
+
+		state.addRichSpan(CharLineOffset(0, 0), CharLineOffset(0, 4), TableCellSpanStyle.of(0))
+
+		assertEquals("|0| Head", state.blockLines())
+		val headingSize = state.richTextStyles.headingLook(1).fontSize
+		assertTrue(state.textLines[0].spanStyles.none { it.item.fontSize == headingSize })
 	}
 
 	@Test
