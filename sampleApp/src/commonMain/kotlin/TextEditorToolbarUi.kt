@@ -67,6 +67,7 @@ fun TextEditorToolbar(
 	var isCodeFenceActive by remember { mutableStateOf(false) }
 	var currentHeaderLevel by remember { mutableStateOf(0) }
 	var tableLine by remember { mutableStateOf<Int?>(null) }
+	var selectionEndsInTable by remember { mutableStateOf(false) }
 	var isHighlightActive by remember { mutableStateOf(false) }
 	var linkDialogState by remember { mutableStateOf<LinkDialogRequest?>(null) }
 	val isLinkActive = existingLinkSpan != null
@@ -103,6 +104,8 @@ fun TextEditorToolbar(
 			isCodeFenceActive = richSpans.any { it.style === CodeFenceSpanStyle }
 			currentHeaderLevel = state.headerLevel(position.line) ?: 0
 			tableLine = position.line.takeIf { state.isTableCell(it) }
+			// The rule replaces the selection, which would clear the cells it takes in.
+			selectionEndsInTable = selected != null && (state.isTableCell(selected.start.line) || state.isTableCell(selected.end.line))
 			isHighlightActive = isActive(state.richTextStyles.highlightStyle)
 		}
 	}
@@ -264,7 +267,7 @@ fun TextEditorToolbar(
 						onClick = { insertHorizontalRule(state) },
 						icon = Icons.Default.HorizontalRule,
 						contentDescription = "Horizontal rule",
-						enabled = tableLine == null,
+						enabled = tableLine == null && !selectionEndsInTable,
 					)
 
 					Spacer(modifier = Modifier.width(2.dp))

@@ -2893,6 +2893,8 @@ class TextEditorState private constructor(
 			) {
 				return@forEach
 			}
+			// A cell takes no other block or format, nor another column's marker.
+			if ((preserved.style.anchorsToLine || preserved.style.boundToParagraph) && isTableCell(startPos.line)) return@forEach
 			// A copied block takes a line it covers whole from whatever block there refuses
 			// to share it, a list the paste continued onto a pasted heading.
 			val block = lineBlockFor(preserved.style, richTextStyles)

@@ -10,7 +10,6 @@ import com.darkrockstudios.texteditor.html.sanitizeLinkUrl
 import com.darkrockstudios.texteditor.richstyle.LinkSpanStyle
 import com.darkrockstudios.texteditor.richstyle.RichSpan
 import com.darkrockstudios.texteditor.richstyle.TableCellSpanStyle
-import com.darkrockstudios.texteditor.richstyle.anchorsToLine
 import com.darkrockstudios.texteditor.richstyle.applyDocumentBlocks
 import com.darkrockstudios.texteditor.state.LayoutUpdate
 import com.darkrockstudios.texteditor.state.PreservedRichSpan
@@ -61,11 +60,8 @@ internal fun TextEditorState.settleLanded(
 	richSpans: List<PreservedRichSpan>?,
 	document: HtmlDocument?,
 ) = withAtomicEdit {
-	val inCell = isTableCell(at.line)
-	richSpans?.let { spans ->
-		addPreservedRichSpans(at, if (inCell) spans.filterNot { it.style.anchorsToLine || it.style.boundToParagraph } else spans)
-	}
-	document?.let { applyHtmlPasteBlocks(it, at, text, blocks = !inCell) }
+	richSpans?.let { addPreservedRichSpans(at, it) }
+	document?.let { if (isTableCell(at.line)) applyHtmlPasteLinks(it, at) else applyHtmlPasteBlocks(it, at, text) }
 	removeLinkLookOutsideLinks(at, text)
 	removeBlockLooksOffTheirBlocks(at, text)
 }
@@ -79,16 +75,30 @@ internal fun TextEditorState.settleLanded(
  * [TextEditorState.pasteRichSpans], which covers copies made inside the editor. Images
  * are left out: reconstructing one needs an `ImageProvider`, which lives on the import
  * extensions rather than here. Recorded as part of the paste's undo step, so a redo,
- * which replays the text, puts them back too. Without [blocks], only the links.
+ * which replays the text, puts them back too.
  */
 internal fun TextEditorState.applyHtmlPasteBlocks(
 	document: HtmlDocument,
 	landedAt: CharLineOffset,
 	pastedText: AnnotatedString,
-	blocks: Boolean = true,
 ) {
-	val insertPosition = if (blocks) keepingTablesWhole(document, landedAt, pastedText) else landedAt
+	val insertPosition = keepingTablesWhole(document, landedAt, pastedText)
 	val pastedLines = insertPosition.line..insertPosition.line + pastedText.text.count { it == '\n' }
+	addHtmlPasteLinks(document, insertPosition, pastedLines) {
+		placeHtmlPasteBlocks(document, insertPosition, pastedText, pastedLines)
+	}
+}
+
+/** The links alone of markup landed in a table cell, which takes no block; text landing in one is one line. */
+private fun TextEditorState.applyHtmlPasteLinks(document: HtmlDocument, landedAt: CharLineOffset) =
+	addHtmlPasteLinks(document, landedAt, landedAt.line..landedAt.line) {}
+
+private inline fun TextEditorState.addHtmlPasteLinks(
+	document: HtmlDocument,
+	insertPosition: CharLineOffset,
+	pastedLines: IntRange,
+	crossinline then: () -> Unit,
+) {
 	val links = htmlPasteLinks(document, insertPosition)
 	// Outside the line recording, which sees only spans starting on the pasted lines.
 	links.forEach { takeOutOfOtherLinks(it.range, it.style as LinkSpanStyle) }
@@ -97,7 +107,7 @@ internal fun TextEditorState.applyHtmlPasteBlocks(
 			richSpanManager.addRichSpans(links)
 			updateBookKeeping(LayoutUpdate.SpansOnly)
 		}
-		if (blocks) placeHtmlPasteBlocks(document, insertPosition, pastedText, pastedLines)
+		then()
 	}
 }
 

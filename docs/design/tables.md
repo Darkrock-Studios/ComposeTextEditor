@@ -110,7 +110,10 @@ and touch handling for one block.
 ## Markdown
 
 - **Import.** Tables are found in the fence-stripped lines before the paragraph
-  separators are taken out, since the blank line that ends a table is one.
+  separators are taken out, since the blank line that ends a table is one. As
+  GFM has it, a header or delimiter row indented like code starts no table (a
+  header continuing a paragraph aside), and a heading, quote, list item, fence,
+  rule or HTML block that can interrupt a paragraph ends one.
   `readTables` splits a row at its unescaped pipes, `\|` a pipe in its cell
   (inside a code span too), reads the alignments from the delimiter row, pads or
   cuts a row to the header's width and drops columns past

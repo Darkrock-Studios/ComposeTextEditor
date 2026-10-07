@@ -29,7 +29,8 @@ internal fun findTables(lines: List<String>, skip: Set<Int> = emptySet()): List<
 	val tables = ArrayList<IntRange>()
 	var i = 0
 	while (i < lines.size) {
-		if (i in skip || i + 1 in skip || !isTableHeader(lines[i], lines.getOrNull(i + 1))) {
+		val previous = lines.getOrNull(i - 1)?.takeIf { i - 1 !in skip }
+		if (i in skip || i + 1 in skip || !isTableHeader(previous, lines[i], lines.getOrNull(i + 1))) {
 			i++
 			continue
 		}
@@ -59,15 +60,24 @@ private val HTML_BLOCK_START = Regex(
 	RegexOption.IGNORE_CASE,
 )
 
-/** A line indented four columns or more, which is code where a table could start. */
+/** A line indented four columns or more, which is code where a block could start. */
 private val INDENTED_FOR_CODE = Regex("""^(?: {4}| {0,3}\t)""")
 
-private fun isTableHeader(line: String, next: String?): Boolean {
+/**
+ * Whether [line], after [previous], heads a table whose delimiter row is [next]. An
+ * indented header is code unless it continues a paragraph; an indented delimiter row
+ * never starts a table.
+ */
+private fun isTableHeader(previous: String?, line: String, next: String?): Boolean {
 	if (next == null || !line.contains('|') || !next.contains('|')) return false
-	if (INDENTED_FOR_CODE.containsMatchIn(line) || INDENTED_FOR_CODE.containsMatchIn(next)) return false
+	if (INDENTED_FOR_CODE.containsMatchIn(next)) return false
+	if (INDENTED_FOR_CODE.containsMatchIn(line) && !continuesParagraph(previous)) return false
 	if (!TABLE_DELIMITER_ROW.matches(next)) return false
 	return tableCells(line).size == tableCells(next).size
 }
+
+private fun continuesParagraph(previous: String?): Boolean =
+	previous != null && previous.isNotBlank() && !startsBlock(previous) && !INDENTED_FOR_CODE.containsMatchIn(previous)
 
 /**
  * A table row's cells as GFM splits it: at each pipe no backslash escapes, an outer one

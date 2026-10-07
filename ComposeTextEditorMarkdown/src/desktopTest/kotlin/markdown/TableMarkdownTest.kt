@@ -201,6 +201,15 @@ class TableMarkdownTest {
 	}
 
 	@Test
+	fun `an indented header continuing a paragraph still heads a table`() = runTest {
+		val markdown = markdown()
+		markdown.importMarkdown("intro\n    | a | b |\n| --- | --- |")
+
+		assertEquals(listOf("intro", "a", "b"), markdown.editorState.textLines.map { it.text })
+		assertEquals(TableCellSpanStyle.of(0), markdown.editorState.tableCellAt(1))
+	}
+
+	@Test
 	fun `an HTML block ends a table`() = runTest {
 		val markdown = markdown()
 		markdown.importMarkdown("| a | b |\n| --- | --- |\n| c | d |\n<div>\nx")

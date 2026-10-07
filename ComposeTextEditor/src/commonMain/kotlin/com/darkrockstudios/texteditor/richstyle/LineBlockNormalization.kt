@@ -14,8 +14,9 @@ import com.darkrockstudios.texteditor.state.LineSplice
  * marker with nothing to decorate that cannot survive a serialization round
  * trip. Violating spans are removed and their lines rebuilt without the
  * orphaned indent. A table cell is the exception: it keeps its line and the
- * rule or image is removed. Then every line of a fence run gets a language span if the
- * run has a language (see [repairFenceLanguages]).
+ * rule or image is removed, its placeholder left as the cell's text. Then every
+ * line of a fence run gets a language span if the run has a language (see
+ * [repairFenceLanguages]).
  *
  * Runs on every publish, from [com.darkrockstudios.texteditor.state.TextEditorState],
  * so the invariant holds no matter which path attached the span: a toggle, an
@@ -54,7 +55,7 @@ private fun repairPlaceholders(
 		val starting = snapshot.spansOn(line).filter { it.range.start.line == line }
 		// A cell keeps its line, so a table stays whole: the rule or image goes instead.
 		if (starting.any { it.style is TableCellSpanStyle }) {
-			placeholdersOnCells += starting.filter { it.style is BlockSpanStyle }
+			placeholdersOnCells += starting.filter { (it.style as? BlockSpanStyle)?.replacesText() == true }
 			continue
 		}
 		for (span in starting) {

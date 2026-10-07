@@ -371,11 +371,28 @@ class TableEditingTest {
 	}
 
 	@Test
-	fun `a rule put on a cell gives way to it`() = runTest {
-		val state = editor(lines("|0| a", "|1|  "))
+	fun `a rule or an image put on a cell gives way to it`() = runTest {
+		val image = com.darkrockstudios.texteditor.richstyle.ImageBlockSpanStyle(source = "img", provider = mockk(relaxed = true))
+		for (style in listOf(com.darkrockstudios.texteditor.richstyle.HorizontalRuleSpanStyle, image)) {
+			val state = editor(lines("|0| a", "|1|  "))
 
-		state.addRichSpan(CharLineOffset(1, 0), CharLineOffset(1, 1), com.darkrockstudios.texteditor.richstyle.HorizontalRuleSpanStyle)
+			state.addRichSpan(CharLineOffset(1, 0), CharLineOffset(1, 1), style)
 
-		assertEquals(lines("|0| a", "|1|  "), state.blockLines())
+			assertEquals(lines("|0| a", "|1|  "), state.blockLines(), "$style")
+			assertEquals(false, state.richSpanManager.getAllRichSpans().any { it.style === style }, "$style")
+		}
+	}
+
+	@Test
+	fun `a host's own paste of a copied block line keeps a cell`() = runTest {
+		val state = editor(lines("|0| a", "|1| ", "# Head"))
+		state.copyRichSpans(TextEditorRange(CharLineOffset(2, 0), CharLineOffset(2, 4)))
+		val copied = state.textLines[2]
+		state.caretAt(1, 0)
+		state.insertStringAtCursor(androidx.compose.ui.text.AnnotatedString(copied.text))
+
+		state.pasteRichSpans(CharLineOffset(1, 0), androidx.compose.ui.text.AnnotatedString(copied.text))
+
+		assertEquals(lines("|0| a", "|1| Head", "# Head"), state.blockLines())
 	}
 }
