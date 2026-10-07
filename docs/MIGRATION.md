@@ -186,6 +186,30 @@ A `SpellCheckStyle` or `DiagnosticStyle` given a layer of the host's own is
 left to the host: spell check and diagnostics neither clear it nor treat it as
 one of their flags.
 
+## Tables
+
+Tables are a block now (`docs/design/tables.md`): a table is a run of cell lines,
+each carrying a `TableCellSpanStyle`, laid out side by side. Nothing needs code,
+but three things a host may notice:
+
+- **Markdown.** A GFM pipe table outside a quote imports as a table where it
+  imported as literal lines, and is written back in the editor's form
+  (`| a | b |`, a `---` delimiter row, a blank line after it). A document that
+  held a pipe table on purpose as text now shows it as a table. A table inside a
+  quote stays literal text.
+- **HTML.** A pasted or imported `<table>` becomes a table where its cells were
+  tab-separated lines, and `toAnnotatedStringFromHtml` gives a cell a line.
+- **Editing.** `editBehaviors` starts with `TableEditBehavior` ahead of
+  `LineBlockEditBehavior`. A deletion or replace (`delete`, `replace`) across a
+  table's cells clears them rather than joining them, and line breaks landing
+  in a cell become spaces, ahead of a host's `inputFilter`.
+
+The table API is in `com.darkrockstudios.texteditor.state`: `insertTable`,
+`insertTableRow`, `deleteTableRow`, `insertTableColumn`, `deleteTableColumn`,
+`setTableColumnAlignment`, `convertTableToText`, `deleteTable`, and `tableAt`
+and `tableCellAt` to read one. `TextEditorStyle` gains `tableBorderColor` and
+`tableHeaderBackgroundColor`.
+
 ## Keyboard content on Android
 
 An Android host can take the GIFs, stickers and images a keyboard commits by

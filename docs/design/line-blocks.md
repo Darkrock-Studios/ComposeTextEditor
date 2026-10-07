@@ -62,6 +62,8 @@ Which blocks may share a line is defined in one predicate (`lineBlocksConflict`,
   holding literal text, not a bulleted heading).
 - Blockquote stacks with lists and headings (`> - item`, `> # Title`).
 - Code fence stacks with nothing.
+- A table cell stacks with nothing, and unlike the others it never gives way:
+  putting another block on a cell line does nothing (`docs/design/tables.md`).
 
 One resolution point (`resolveLineBlock`) turns the predicate into an actual
 demotion and rebuild: applying a block first demotes whatever conflicts with
@@ -211,8 +213,9 @@ apostrophe, a hyphen mid-sentence, an underscore inside a word or an asterisk
 between spaces is written as typed. Line-start rules read the body, so a
 marker shape at the start of a list item's body (`- 1990. plans`) is escaped
 as well, since it would otherwise nest a list. Unsupported syntax kept as
-literal text on import (a table, a task list's `[ ]`) is written back as it
-was, and a table's rows are kept together.
+literal text on import (a task list's `[ ]`, a table inside a quote) is written
+back as it was, and a quoted table's rows are kept together. A table outside a
+quote is a block of its own, read and written whole (`docs/design/tables.md`).
 
 **Import** runs peel-then-classify on each raw line, after fence stripping:
 
@@ -381,8 +384,7 @@ consequences of its own.
 - Toggling a style off after a blanket apply does not restore the styles lines
   carried before the apply; undo does. This matches conventional toolbar
   behavior.
-- A table is literal text: import unescapes a `\|` inside a cell and export
-  writes the pipe bare, so such a cell splits in two for other renderers.
+- A table cell's spaces at either end are not written: GFM trims them.
 - A fence language filled in by normalization is outside undo history: joining
   a fence that has a language with one that has none tags the second with the
   first's, and undoing the join leaves that tag in place.

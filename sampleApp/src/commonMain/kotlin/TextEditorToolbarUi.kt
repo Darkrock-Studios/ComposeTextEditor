@@ -23,6 +23,16 @@ import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.html.sanitizeLinkUrl
 import com.darkrockstudios.texteditor.richstyle.*
 import com.darkrockstudios.texteditor.state.TextEditorState
+import com.darkrockstudios.texteditor.state.convertTableToText
+import com.darkrockstudios.texteditor.state.deleteTable
+import com.darkrockstudios.texteditor.state.deleteTableColumn
+import com.darkrockstudios.texteditor.state.deleteTableRow
+import com.darkrockstudios.texteditor.state.insertTable
+import com.darkrockstudios.texteditor.state.insertTableColumn
+import com.darkrockstudios.texteditor.state.insertTableRow
+import com.darkrockstudios.texteditor.state.isTableCell
+import com.darkrockstudios.texteditor.state.setTableColumnAlignment
+import com.darkrockstudios.texteditor.state.tableCellAt
 import com.darkrockstudios.texteditor.state.getRichSpansAtPosition
 import com.darkrockstudios.texteditor.state.getRichSpansInRange
 import com.darkrockstudios.texteditor.state.hasStyleThroughout
@@ -55,6 +65,7 @@ fun TextEditorToolbar(
 	var isOrderedListActive by remember { mutableStateOf(false) }
 	var isCodeFenceActive by remember { mutableStateOf(false) }
 	var currentHeaderLevel by remember { mutableStateOf(0) }
+	var tableLine by remember { mutableStateOf<Int?>(null) }
 	var isHighlightActive by remember { mutableStateOf(false) }
 	var linkDialogState by remember { mutableStateOf<LinkDialogRequest?>(null) }
 	val isLinkActive = existingLinkSpan != null
@@ -90,6 +101,7 @@ fun TextEditorToolbar(
 			isOrderedListActive = richSpans.any { it.style is OrderedListSpanStyle }
 			isCodeFenceActive = richSpans.any { it.style === CodeFenceSpanStyle }
 			currentHeaderLevel = state.headerLevel(position.line) ?: 0
+			tableLine = position.line.takeIf { state.isTableCell(it) }
 			isHighlightActive = isActive(state.richTextStyles.highlightStyle)
 		}
 	}
@@ -243,6 +255,10 @@ fun TextEditorToolbar(
 						icon = Icons.Default.HorizontalRule,
 						contentDescription = "Horizontal rule",
 					)
+
+					Spacer(modifier = Modifier.width(2.dp))
+
+					TableMenu(state, tableLine)
 
 					ToolbarDivider()
 
@@ -444,6 +460,50 @@ private fun reconcileHorizontalRules(state: TextEditorState) {
 			)
 		}
 		state.removeRichSpan(span)
+	}
+}
+
+/**
+ * The table button: off a table it inserts one; in a table it adds and removes rows
+ * and columns, aligns the caret's column, or turns the table back into text.
+ */
+@Composable
+private fun TableMenu(state: TextEditorState, tableLine: Int?) {
+	var open by remember { mutableStateOf(false) }
+	Box {
+		FormatButton(
+			onClick = { open = true },
+			icon = Icons.Default.TableChart,
+			contentDescription = "Table",
+			isActive = tableLine != null,
+		)
+		DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+			@Composable
+			fun item(label: String, action: () -> Unit) = DropdownMenuItem(text = { Text(label) }, onClick = {
+				open = false
+				action()
+			})
+			val line = tableLine
+			if (line == null) {
+				item("Insert 2 × 2 table") { state.insertTable(rows = 2, columns = 2) }
+				item("Insert 3 × 3 table") { state.insertTable(rows = 3, columns = 3) }
+			} else {
+				val column = state.tableCellAt(line)?.column ?: 0
+				item("Row above") { state.insertTableRow(line, below = false) }
+				item("Row below") { state.insertTableRow(line, below = true) }
+				item("Column left") { state.insertTableColumn(line, after = false) }
+				item("Column right") { state.insertTableColumn(line, after = true) }
+				HorizontalDivider()
+				item("Align column left") { state.setTableColumnAlignment(line, column, TableAlignment.LEFT) }
+				item("Align column center") { state.setTableColumnAlignment(line, column, TableAlignment.CENTER) }
+				item("Align column right") { state.setTableColumnAlignment(line, column, TableAlignment.RIGHT) }
+				HorizontalDivider()
+				item("Delete row") { state.deleteTableRow(line) }
+				item("Delete column") { state.deleteTableColumn(line) }
+				item("Convert to text") { state.convertTableToText(line) }
+				item("Delete table") { state.deleteTable(line) }
+			}
+		}
 	}
 }
 

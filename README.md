@@ -36,11 +36,11 @@ And now, it's working, and at this point, working pretty well.
 - ✅ Decoration layers: your own highlights (find, syntax colours) kept out of undo and export
 - ✅ Screen readers
 - ✅ Diagnostics from your own checker (grammar, style), underlined with a menu of fixes
-- ✅ Block structure: headings, nested lists, blockquotes, code fences, rules, images, links
+- ✅ Block structure: headings, nested lists, blockquotes, code fences, tables, rules, images, links
 - ✅ HTML import, export and clipboard
 - ☑️ Markdown, as an addon (CommonMark, partial)
   - Inline styles (bold, italics, etc.)
-  - Block styles (code fence with its language tag, nested lists, images)
+  - Block styles (code fence with its language tag, nested lists, GFM tables, images)
   - Underline (`<u>`), highlight (`==text==` or `<mark>`), colour and size (`<span style>`)
   - Opt-in shortcuts that format as you type (`# `, `- `, `**bold**`)
 
