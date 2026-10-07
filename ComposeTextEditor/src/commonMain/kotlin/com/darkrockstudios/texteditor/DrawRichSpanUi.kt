@@ -65,7 +65,7 @@ internal fun DrawScope.drawRichSpans(
 			)
 
 			with(richSpan.style) {
-				translate(top = translateY) {
+				translate(left = lineWrap.offset.x, top = translateY) {
 					when (phase) {
 						RichSpanDrawPhase.Background -> drawBackground(
 							layoutResult = textLayoutResult,

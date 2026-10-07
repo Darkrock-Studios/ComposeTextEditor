@@ -38,7 +38,9 @@ import com.darkrockstudios.texteditor.cursor.getWrappedLineIndex
 import com.darkrockstudios.texteditor.effectiveHeight
 import com.darkrockstudios.texteditor.html.DEFAULT_LINK_SCHEMES
 import com.darkrockstudios.texteditor.html.REFUSED_LINK_SCHEMES
-import com.darkrockstudios.texteditor.lastRowAtOrAbove
+import com.darkrockstudios.texteditor.bandBottom
+import com.darkrockstudios.texteditor.bandTop
+import com.darkrockstudios.texteditor.rowAtPoint
 import com.darkrockstudios.texteditor.rowAt
 import com.darkrockstudios.texteditor.rowIndexOf
 import com.darkrockstudios.texteditor.input.EditorActionRegistry
@@ -373,6 +375,10 @@ class TextEditorState private constructor(
 	var codeFenceBackgroundColor: Color by mutableStateOf(Color.Unspecified)
 		internal set
 	var codeFenceBorderColor: Color by mutableStateOf(Color.Unspecified)
+		internal set
+	var tableBorderColor: Color by mutableStateOf(Color.Unspecified)
+		internal set
+	var tableHeaderBackgroundColor: Color by mutableStateOf(Color.Unspecified)
 		internal set
 
 	/**
@@ -1970,7 +1976,7 @@ class TextEditorState private constructor(
 		val currentWrappedLine = lineOffsets.getWrapForDrawing(position, affinity)
 			?: return CursorMetrics(position = Offset.Zero, height = 0f)
 
-		val cursorX = currentWrappedLine.caretX(position.char, caretRunSide(position, affinity)) - scrollX
+		val cursorX = currentWrappedLine.offset.x + currentWrappedLine.caretX(position.char, caretRunSide(position, affinity)) - scrollX
 		val cursorY = currentWrappedLine.offset.y - scrollState.value
 
 		val lineHeight = currentWrappedLine.effectiveHeight
@@ -1987,7 +1993,7 @@ class TextEditorState private constructor(
 
 	/** [getPositionForOffset]'s x in content, which no scroll moves; null with no row for [position]. */
 	internal fun caretContentX(position: CharLineOffset, affinity: CaretAffinity): Float? =
-		lineOffsets.getWrapForDrawing(position, affinity)?.caretX(position.char, caretRunSide(position, affinity))
+		lineOffsets.getWrapForDrawing(position, affinity)?.let { it.offset.x + it.caretX(position.char, caretRunSide(position, affinity)) }
 
 	/**
 	 * Maps a pixel [Offset] within the editor (e.g. a tap location) to the nearest
@@ -2008,7 +2014,7 @@ class TextEditorState private constructor(
 
 		val contentY = offset.y + scrollState.value
 		val contentX = offset.x + scrollX
-		val row = rows[rows.lastRowAtOrAbove(contentY).coerceAtLeast(0)]
+		val row = rows[rows.rowAtPoint(contentX, contentY).coerceAtLeast(0)]
 		val lineLength = textLines.getOrNull(row.line)?.length
 			?: return downstreamHit(CharLineOffset(textLines.lastIndex, textLines.last().length))
 		val lineText = textLines[row.line].text
@@ -2048,7 +2054,7 @@ class TextEditorState private constructor(
 		val first = _lineOffsets.firstOrNull() ?: return null
 		val last = _lineOffsets.last()
 		val contentY = offset.y + scrollState.value
-		if (contentY < first.offset.y || contentY >= last.offset.y + last.effectiveHeight) return null
+		if (contentY < first.bandTop || contentY >= last.bandBottom) return null
 		if (offset.x < 0f || offset.x > viewportSize.width) return null
 		return findSpanAtPosition(pointerHitAt(offset).character)
 	}
@@ -2251,8 +2257,11 @@ class TextEditorState private constructor(
 	 * offset within it the settling started with, so what is on screen stays where it is;
 	 * an animated scroll under way would write over that, so it is stopped.
 	 */
-	private fun reshapeLines(first: Int, last: Int) {
+	private fun reshapeLines(from: Int, to: Int) {
 		val current = rows ?: return
+		// A table row's cells share their row's height, so a row is shaped whole.
+		val first = current.tableRowStart(from)
+		val last = current.tableRowEnd(to)
 		val content = content
 		val lines = content.lineList
 		val spans = content.spanIndex
@@ -2268,8 +2277,10 @@ class TextEditorState private constructor(
 		for (line in first..last) {
 			val onLine = spans.spansOn(line)
 			val format = onLine.paragraphFormat(line)
-			layouts += current.layoutOf(line).reshaped(shaper.shape(lines[line], format), line, onLine, format, inputs, layoutInputGeneration)
+			val old = current.layoutOf(line)
+			layouts += old.reshaped(shaper.shape(lines[line], format, old.tableCell), line, onLine, format, inputs, layoutInputGeneration)
 		}
+		finishTableRows(layouts)
 		val settled = current.splice(first, last + 1, layouts, spans)
 		publishRows(settled)
 		val target = (settled.lineTop(anchor.line) + anchor.offset).roundToInt()
@@ -2383,6 +2394,7 @@ class TextEditorState private constructor(
 			val onLine = spans.spansOn(line)
 			layouts += LineLayout.provisional(sentinel, lengths[line], line, onLine, onLine.paragraphFormat(line), inputs, facts)
 		}
+		finishTableRows(layouts)
 		val provisional = RowList.of(layouts, spans)
 		return provisional.takeIf { it.lastRowBottom() > 3 * viewportSize.height }
 	}
@@ -2397,16 +2409,20 @@ class TextEditorState private constructor(
 			facts.next(line)
 			val onLine = spans.spansOn(line)
 			val format = onLine.paragraphFormat(line)
-			layouts += LineLayout.of(shaper.shape(lines[line], format), line, onLine, format, inputs, facts, layoutInputGeneration)
+			layouts += LineLayout.of(shaper.shape(lines[line], format, facts.tableCell), line, onLine, format, inputs, facts, layoutInputGeneration)
 		}
+		finishTableRows(layouts)
 		return RowList.of(layouts, spans)
 	}
 
 	/**
 	 * A partial pass: [update]'s lines shaped or re-resolved, with a line each side for
-	 * the fence edges, then the lines after them walked until one keeps its layout and
-	 * its list counters, past which nothing can change; the result is spliced over
-	 * [previous]. Every other line keeps its layout and moves with its chunk.
+	 * the fence edges, widened to whole table rows, then the lines after them walked until
+	 * one that ends a table row, or is in none, keeps its layout and its list counters,
+	 * past which nothing can change; the result is spliced over [previous]. Every other
+	 * line keeps its layout and moves with its chunk. A line whose table facts shape it
+	 * differently (a header row that became a body row, a column count that changed) is
+	 * shaped again.
 	 */
 	private fun layoutPartial(
 		previous: RowList,
@@ -2423,13 +2439,14 @@ class TextEditorState private constructor(
 		val respans = spansFirst <= spansLast
 		if (!shapes && !respans) return previous.withSpans(spans)
 
-		val first = (minOf(if (shapes) shapeFirst else Int.MAX_VALUE, if (respans) spansFirst else Int.MAX_VALUE) - 1).coerceAtLeast(0)
+		// The row before the edit's ends at the line before it, and whether it is its table's last can change.
+		val first = tableRowStart(spans, (minOf(if (shapes) shapeFirst else Int.MAX_VALUE, if (respans) spansFirst else Int.MAX_VALUE) - 1).coerceAtLeast(0))
 		val end = (maxOf(if (shapes) shapeLast else -1, if (respans) spansLast else -1) + 1).coerceAtMost(lastLine)
 		// A line after the shaped range had its layout at its pre-edit index.
 		fun oldIndex(line: Int) = if (shapes && line > shapeLast) line - update.lineDelta else line
 
 		val facts = LineFacts(spans)
-		if (first > 0) facts.resume(previous.layoutOf(oldIndex(first - 1)).counters)
+		if (first > 0) facts.resume(previous.layoutOf(oldIndex(first - 1)))
 		val shaper = LineShaper()
 		val inputs = lineInputs()
 		val layouts = ArrayList<LineLayout>(end - first + 2)
@@ -2438,18 +2455,19 @@ class TextEditorState private constructor(
 			facts.next(line)
 			val old = if (line in shapeFirst..shapeLast) null else previous.layoutOf(oldIndex(line))
 			val layout = when {
-				old == null -> {
+				old == null || old.shapesDifferentlyUnder(facts) -> {
 					val onLine = spans.spansOn(line)
 					val format = onLine.paragraphFormat(line)
-					LineLayout.of(shaper.shape(lines[line], format), line, onLine, format, inputs, facts, layoutInputGeneration)
+					LineLayout.of(shaper.shape(lines[line], format, facts.tableCell), line, onLine, format, inputs, facts, layoutInputGeneration)
 				}
 				line in spansFirst..spansLast -> old.withSpans(line, spans.spansOn(line), inputs, facts)
-				else -> old.withFacts(facts)
+				else -> old.withFacts(facts, inputs)
 			}
 			layouts += layout
-			if (line >= end && layout === old) break
+			if (line >= end && layout === old && facts.tableCell?.rowEnd != false) break
 			line++
 		}
+		finishTableRows(layouts)
 		// The walk never stops inside the shaped range, whose old lines end at its last line's pre-edit index.
 		val stop = minOf(line, lastLine)
 		val oldEnd = if (shapes && stop >= shapeLast) stop - update.lineDelta + 1 else stop + 1
@@ -2487,9 +2505,12 @@ class TextEditorState private constructor(
 		/**
 		 * Shapes [line], with [format]'s alignment, indents and line height over the
 		 * paragraph style the line carries (a block's indent) or the baked one. A line
-		 * holds one paragraph style, so the merged one replaces it for measuring only.
+		 * holds one paragraph style, so the merged one replaces it for measuring only. A
+		 * table [cell] wraps at its column's width whether lines wrap or not, and a
+		 * header cell is bold, for measuring only, under the styles its text carries.
 		 */
-		fun shape(line: AnnotatedString, format: ParagraphFormatSpanStyle? = null): TextLayoutResult {
+		fun shape(line: AnnotatedString, format: ParagraphFormatSpanStyle? = null, cell: TableCellFacts? = null): TextLayoutResult {
+			if (cell != null) return shapeCell(line, cell)
 			val measureLine = when {
 				format != null && format.shapesText -> {
 					val base = line.paragraphStyles.firstOrNull()?.item ?: bakedIndentStyle
@@ -2507,6 +2528,18 @@ class TextEditorState private constructor(
 			} catch (_: IllegalArgumentException) {
 				// If measurement fails, create an empty layout result
 				textMeasurer.measure(text = AnnotatedString(""), style = measureStyle, softWrap = softWrap, constraints = constraints)
+			}
+		}
+
+		private fun shapeCell(line: AnnotatedString, cell: TableCellFacts): TextLayoutResult {
+			val width = maxOf(1, cellTextWidth(cell, lineInputs()).toInt())
+			val measureLine = if (cell.isHeader) {
+				AnnotatedString(line.text, listOf(AnnotatedString.Range(HEADER_CELL_STYLE, 0, line.length)) + line.spanStyles, line.paragraphStyles)
+			} else line
+			return try {
+				textMeasurer.measure(text = measureLine, style = measureStyle, softWrap = true, constraints = Constraints.fixedWidth(width))
+			} catch (_: IllegalArgumentException) {
+				textMeasurer.measure(text = AnnotatedString(""), style = measureStyle, softWrap = true, constraints = Constraints.fixedWidth(width))
 			}
 		}
 

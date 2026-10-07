@@ -57,7 +57,34 @@ data class LineWrap(
 	 * draw-time work is just a flag check. Repeated across virtual sub-lines.
 	 */
 	val codeFenceBoundary: CodeFenceBoundary? = null,
+	/**
+	 * The table cell this row is in, or null outside a table: the cell's box and its
+	 * place in the table, so a cell's style draws its borders and header fill, and a
+	 * search places the row by its table row. Repeated across a wrapped cell's rows.
+	 */
+	val tableCell: TableCellBox? = null,
 )
+
+/**
+ * A table cell's box in content space, the coordinates [LineWrap.offset] is in: its
+ * column's share of the width and its whole table row's height, as tall as the
+ * row's tallest cell. [row] is the table row (0 is the header), [column] the cell's
+ * column; [startsRow] and [endsRow] tell the row's first and last cells, and
+ * [isLastRow] the table's last row.
+ */
+data class TableCellBox(
+	val row: Int,
+	val column: Int,
+	val startsRow: Boolean,
+	val endsRow: Boolean,
+	val isLastRow: Boolean,
+	val left: Float,
+	val top: Float,
+	val width: Float,
+	val height: Float,
+) {
+	val isHeader: Boolean get() = row == 0
+}
 
 /**
  * Where a fenced line sits inside its run. [Only] is the single-line case (the
@@ -69,6 +96,18 @@ enum class CodeFenceBoundary { First, Middle, Last, Only }
 val LineWrap.effectiveHeight: Float
 	get() = blockHeight
 		?: textLayoutResult.multiParagraph.getLineHeight(virtualLineIndex)
+
+/**
+ * The top of the band this row is ordered by: a table cell's row spans its whole table
+ * row, so rows' bands run top to bottom in row order though a cell's own rows sit
+ * beside the next cell's. Its own top for any other row.
+ */
+internal val LineWrap.bandTop: Float
+	get() = tableCell?.top ?: offset.y
+
+/** The bottom of this row's band (see [bandTop]). */
+internal val LineWrap.bandBottom: Float
+	get() = tableCell?.let { it.top + it.height } ?: (offset.y + effectiveHeight)
 
 fun LineWrap.wrapStartToCharacterIndex(state: TextEditorState): Int {
 	return state.wrapStartToCharacterIndex(this)

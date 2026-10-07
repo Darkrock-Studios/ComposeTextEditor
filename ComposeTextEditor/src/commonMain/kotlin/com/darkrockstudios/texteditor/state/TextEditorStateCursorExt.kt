@@ -6,7 +6,10 @@ import androidx.compose.ui.text.style.ResolvedTextDirection
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.LineWrap
 import com.darkrockstudios.texteditor.effectiveHeight
-import com.darkrockstudios.texteditor.lastRowAtOrAbove
+import com.darkrockstudios.texteditor.bandBottom
+import com.darkrockstudios.texteditor.bandTop
+import com.darkrockstudios.texteditor.firstRowWhere
+import com.darkrockstudios.texteditor.rowAtPoint
 import com.darkrockstudios.texteditor.rowAt
 
 // The layout can lag the text (it is skipped while the viewport is collapsed), so the
@@ -19,8 +22,33 @@ internal fun TextEditorState.moveCursorUp() {
 	when {
 		cursorPosition.line == 0 && (row == null || row.virtualLineIndex == 0) -> moveToDocumentStart()
 		index <= 0 -> cursor.updatePosition(cursorPosition.copy(line = cursorPosition.line - 1))
-		else -> moveCursorToRow(index - 1)
+		else -> rowAbove(index).let { if (it < 0) moveToDocumentStart() else moveCursorToRow(it) }
 	}
+}
+
+/**
+ * The row Up goes to from row [index]: the one before it, but from or into a table,
+ * the row on screen above it at the goal x, a cell's row beside it being no row above.
+ * -1 when there is none.
+ */
+private fun TextEditorState.rowAbove(index: Int): Int {
+	val rows = lineOffsets
+	val row = rows[index]
+	if (row.virtualLineIndex > 0 || (row.tableCell == null && rows[index - 1].tableCell == null)) return index - 1
+	val above = rows.firstRowWhere { it.bandTop >= row.bandTop } - 1
+	if (above < 0 || rows[above].tableCell == null) return above
+	return rows.rowAtPoint(verticalGoalOrCaretX(), rows[above].bandBottom - 0.5f)
+}
+
+/** [rowAbove] for Down: the row on screen below row [index], or the row count when there is none. */
+private fun TextEditorState.rowBelow(index: Int): Int {
+	val rows = lineOffsets
+	val row = rows[index]
+	val next = rows[index + 1]
+	if (next.line == row.line || (row.tableCell == null && next.tableCell == null)) return index + 1
+	val below = rows.firstRowWhere { it.bandTop > row.bandTop }
+	if (below >= rows.size || rows[below].tableCell == null) return below
+	return rows.rowAtPoint(verticalGoalOrCaretX(), rows[below].bandTop)
 }
 
 internal fun TextEditorState.moveCursorDown() {
@@ -31,7 +59,7 @@ internal fun TextEditorState.moveCursorDown() {
 			moveToDocumentEnd()
 
 		nextRow == null -> cursor.updatePosition(cursorPosition.copy(line = cursorPosition.line + 1))
-		else -> moveCursorToRow(index + 1)
+		else -> rowBelow(index).let { if (it >= lineOffsets.size) moveToDocumentEnd() else moveCursorToRow(it) }
 	}
 }
 
@@ -58,7 +86,7 @@ private fun TextEditorState.verticalGoalOrCaretX(): Float =
 private fun TextEditorState.moveCursorToRow(rowIndex: Int) {
 	val goalX = verticalGoalOrCaretX()
 	val row = lineOffsets[rowIndex]
-	val (char, affinity) = row.caretAtX(goalX)
+	val (char, affinity) = row.caretAtX(goalX - row.offset.x)
 	cursor.updatePosition(CharLineOffset(row.line, char), affinity)
 	cursor.rememberVerticalGoalX(goalX)
 }
@@ -267,12 +295,12 @@ private fun TextEditorState.moveCursorByPage(direction: Int) {
 	val pageHeight = scrollManager.viewportHeight
 	val targetY = row.offset.y + row.effectiveHeight / 2f + direction * pageHeight
 	val lastRow = lineOffsets.last()
-	val targetIndex = lineOffsets.lastRowAtOrAbove(targetY).let {
+	val targetIndex = lineOffsets.rowAtPoint(verticalGoalOrCaretX(), targetY).let {
 		if (it == index) index + direction else it
 	}
 	when {
 		targetY < 0f || targetIndex < 0 -> keepingVerticalGoal { moveToDocumentStart() }
-		targetY >= lastRow.offset.y + lastRow.effectiveHeight || targetIndex > lineOffsets.lastIndex ->
+		targetY >= lastRow.bandBottom || targetIndex > lineOffsets.lastIndex ->
 			keepingVerticalGoal { moveToDocumentEnd() }
 
 		else -> moveCursorToRow(targetIndex)

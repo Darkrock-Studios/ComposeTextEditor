@@ -89,6 +89,10 @@ data class TextEditorStyle(
 	val handleColor: Color = Color.Unspecified,
 	/** Shape of the touch selection and caret handles, and so where a finger takes them. */
 	val handleShape: SelectionHandleShape = SelectionHandleShape.Platform,
+	/** The lines around and between a table's cells. `Color.Unspecified` falls back to [codeFenceBorderColor]'s fallback. */
+	val tableBorderColor: Color = Color.Unspecified,
+	/** The fill behind a table's header row. `Color.Unspecified` falls back to [codeFenceBackgroundColor]'s fallback. */
+	val tableHeaderBackgroundColor: Color = Color.Unspecified,
 )
 
 /** How the touch selection and caret handles look. */
@@ -161,12 +165,14 @@ fun rememberTextEditorStyle(
 	handleColor: Color = MaterialTheme.colorScheme.primary,
 	paragraphSpacing: Dp = 0.dp,
 	handleShape: SelectionHandleShape = SelectionHandleShape.Platform,
+	tableBorderColor: Color = MaterialTheme.colorScheme.outline,
+	tableHeaderBackgroundColor: Color = MaterialTheme.colorScheme.surfaceContainerHigh,
 ): TextEditorStyle = remember(
 	textColor, backgroundColor, placeholderText, placeholderColor,
 	cursorColor, selectionColor, focusedBorderColor, unfocusedBorderColor, textStyle,
 	bulletColor, blockquoteBarColor, blockquoteBackgroundColor, orderedListMarkerColor,
 	codeFenceBackgroundColor, codeFenceBorderColor, cursorWidth, unfocusedSelectionColor, handleColor,
-	paragraphSpacing, handleShape,
+	paragraphSpacing, handleShape, tableBorderColor, tableHeaderBackgroundColor,
 ) {
 	TextEditorStyle(
 		textColor = textColor,
@@ -189,5 +195,7 @@ fun rememberTextEditorStyle(
 		handleColor = handleColor,
 		paragraphSpacing = paragraphSpacing,
 		handleShape = handleShape,
+		tableBorderColor = tableBorderColor,
+		tableHeaderBackgroundColor = tableHeaderBackgroundColor,
 	)
 }

@@ -1,11 +1,17 @@
 package com.darkrockstudios.texteditor.richstyle
 
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.isSpecified
 import androidx.compose.ui.text.ParagraphStyle
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
 import com.darkrockstudios.texteditor.LineWrap
+import com.darkrockstudios.texteditor.TableCellBox
 import com.darkrockstudios.texteditor.state.TextEditorState
 
 /** The most columns a table can have. */
@@ -44,17 +50,45 @@ class TableCellSpanStyle private constructor(
 ) : RichSpanStyle {
 	override val stickyAtStart: Boolean get() = true
 
+	/** The header row's fill, behind the text, from the cell's first row over its whole box. */
+	override fun DrawScope.drawBackground(
+		layoutResult: TextLayoutResult,
+		lineWrap: LineWrap,
+		textRange: TextRange,
+		state: TextEditorState,
+	) {
+		val box = lineWrap.tableCell ?: return
+		if (lineWrap.virtualLineIndex != 0 || !box.isHeader) return
+		val fill = if (state.tableHeaderBackgroundColor.isSpecified) state.tableHeaderBackgroundColor else Color.Gray.copy(alpha = 0.18f)
+		drawRect(fill, topLeft = box.topLeftIn(lineWrap), size = Size(box.width, box.height))
+	}
+
+	/**
+	 * The cell's borders, from its first row: its top and left edges, its right edge when
+	 * it ends its row and its bottom edge in the table's last row, so each line is drawn once.
+	 */
 	override fun DrawScope.drawCustomStyle(
 		layoutResult: TextLayoutResult,
 		lineWrap: LineWrap,
 		textRange: TextRange,
 		state: TextEditorState,
 	) {
+		val box = lineWrap.tableCell ?: return
+		if (lineWrap.virtualLineIndex != 0) return
+		val color = if (state.tableBorderColor.isSpecified) state.tableBorderColor else Color.Gray.copy(alpha = 0.55f)
+		val stroke = BORDER_WIDTH_DP.dp.toPx()
+		val origin = box.topLeftIn(lineWrap)
+		drawRect(color, origin, Size(box.width, stroke))
+		drawRect(color, origin, Size(stroke, box.height))
+		if (box.endsRow) drawRect(color, Offset(origin.x + box.width - stroke, origin.y), Size(stroke, box.height))
+		if (box.isLastRow) drawRect(color, Offset(origin.x, origin.y + box.height - stroke), Size(box.width, stroke))
 	}
 
 	override fun toString(): String = "TableCellSpanStyle(column=$column, alignment=$alignment)"
 
 	companion object {
+		private const val BORDER_WIDTH_DP = 1f
+
 		private val CELLS: List<List<TableCellSpanStyle>> = List(MAX_TABLE_COLUMNS) { column ->
 			TableAlignment.entries.map { TableCellSpanStyle(column, it) }
 		}
@@ -69,6 +103,9 @@ class TableCellSpanStyle private constructor(
 		internal val ALL: List<TableCellSpanStyle> = CELLS.flatten()
 	}
 }
+
+/** The box's top left in the coordinates [row]'s spans draw in, which start at the row's offset. */
+private fun TableCellBox.topLeftIn(row: LineWrap): Offset = Offset(left - row.offset.x, top - row.offset.y)
 
 /** The paragraph style a cell aligned by [alignment] carries: the alignment and nothing else. */
 fun tableCellParagraphStyle(alignment: TableAlignment): ParagraphStyle = TABLE_CELL_PARAGRAPH_STYLES[alignment.ordinal]

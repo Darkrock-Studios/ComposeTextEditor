@@ -12,26 +12,31 @@ import com.darkrockstudios.texteditor.richstyle.listLevel
  * numbered by its position in its level's run (a level-k item continues its level's
  * run and restarts every deeper level; a bullet at a level or any non-list line ends
  * the run at and below it), and a fenced line's card edges come from whether its
- * neighbours are fenced. A walk starts at the document or [resume]s from the counters a
- * [LineLayout] kept.
+ * neighbours are fenced, and a table cell's place in its table comes from the cells
+ * around it ([TableFactsWalk]). A walk starts at the document or [resume]s from the
+ * facts a [LineLayout] kept.
  */
 internal class LineFacts(private val spans: SpanIndex) {
 	private val running = IntArray(MAX_LIST_LEVEL + 1)
+	private val tables = TableFactsWalk(spans)
 
 	/** The facts of the line [next] was last given. */
 	var orderedListNumber: Int? = null
 		private set
 	var codeFenceBoundary: CodeFenceBoundary? = null
 		private set
+	var tableCell: TableCellFacts? = null
+		private set
 
 	/** The counters after the line [next] was last given: [NO_COUNTERS] while none is running. */
 	var counters: IntArray = NO_COUNTERS
 		private set
 
-	/** Continues the walk after a line whose counters were [after]. */
-	fun resume(after: IntArray) {
-		after.copyInto(running)
-		counters = after
+	/** Continues the walk after a line laid out as [after]. */
+	fun resume(after: LineLayout) {
+		after.counters.copyInto(running)
+		counters = after.counters
+		tables.resume(after.tableCell)
 	}
 
 	/** The list on [line]: its level doubled, plus one when ordered; -1 for none. */
@@ -49,6 +54,7 @@ internal class LineFacts(private val spans: SpanIndex) {
 
 	/** Derives the facts of [line], which must follow the line last given, or start the walk. */
 	fun next(line: Int) {
+		tableCell = tables.next(line)
 		val list = listOn(line)
 		orderedListNumber = if (list < 0) {
 			running.fill(0)

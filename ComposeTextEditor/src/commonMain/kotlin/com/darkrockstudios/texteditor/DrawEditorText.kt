@@ -167,7 +167,7 @@ internal fun DrawScope.drawComposingUnderline(
 				val top = floor(lineWrap.paragraphTop - scrollY + box.bottom - thickness)
 				drawRect(
 					color = underlineColor,
-					topLeft = Offset(box.left, top),
+					topLeft = Offset(lineWrap.offset.x + box.left, top),
 					size = Size(box.right - box.left, thickness),
 				)
 			}

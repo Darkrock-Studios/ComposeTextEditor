@@ -11,6 +11,7 @@ import com.darkrockstudios.texteditor.LineWrap
 import com.darkrockstudios.texteditor.effectiveHeight
 import com.darkrockstudios.texteditor.firstRowEndingAtOrBelow
 import com.darkrockstudios.texteditor.lastRowAtOrAbove
+import com.darkrockstudios.texteditor.rowAtPoint
 import com.darkrockstudios.texteditor.state.BreakCursor
 import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.graphemeCursor
@@ -104,7 +105,7 @@ private fun TextEditorState.rowAtGesturePoint(point: Offset, lineMargin: Float):
 	val rows = lineOffsets
 	if (rows.isEmpty()) return null
 	val y = point.y + scrollState.value
-	val above = rows.lastRowAtOrAbove(y)
+	val above = rows.rowAtPoint(point.x + scrollX, y)
 	val row = listOfNotNull(rows.getOrNull(above), rows.getOrNull(above + 1)).firstOrNull { row ->
 		y >= row.offset.y - lineMargin && y <= row.offset.y + row.effectiveHeight + lineMargin
 	} ?: return null

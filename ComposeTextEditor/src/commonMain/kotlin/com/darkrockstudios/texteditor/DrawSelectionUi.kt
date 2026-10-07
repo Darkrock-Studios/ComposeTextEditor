@@ -34,12 +34,12 @@ private fun DrawScope.drawSelectedRows(state: TextEditorState, selection: TextEd
 
 	// Rows run top to bottom and line by line, so the first one to draw is a binary search.
 	var index = rows.firstRowWhere { wrap ->
-		wrap.line >= selection.start.line && wrap.offset.y + wrap.effectiveHeight >= scroll
+		wrap.line >= selection.start.line && wrap.bandBottom >= scroll
 	}
 	while (index < rows.size) {
 		val wrap = rows[index]
 		val top = wrap.offset.y - scroll
-		if (wrap.line > selection.end.line || top > size.height) break
+		if (wrap.line > selection.end.line || wrap.bandTop - scroll > size.height) break
 
 		val layout = wrap.textLayoutResult
 		val row = wrap.virtualLineIndex
@@ -61,7 +61,7 @@ private fun DrawScope.drawSelectedRows(state: TextEditorState, selection: TextEd
 		for (stretch in stretches) {
 			drawRect(
 				color = selectionColor,
-				topLeft = Offset(stretch.left, top),
+				topLeft = Offset(wrap.offset.x + stretch.left, top),
 				size = Size(stretch.width, wrap.effectiveHeight),
 			)
 		}
