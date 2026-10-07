@@ -23,7 +23,10 @@ import com.darkrockstudios.texteditor.richstyle.HeaderSpanStyle
 import com.darkrockstudios.texteditor.richstyle.IMAGE_PLACEHOLDER
 import com.darkrockstudios.texteditor.richstyle.OrderedListSpanStyle
 import com.darkrockstudios.texteditor.richstyle.ParagraphFormatSpanStyle
+import com.darkrockstudios.texteditor.richstyle.MAX_TABLE_COLUMNS
 import com.darkrockstudios.texteditor.richstyle.RichSpanStyle
+import com.darkrockstudios.texteditor.richstyle.TableAlignment
+import com.darkrockstudios.texteditor.richstyle.TableCellSpanStyle
 import com.darkrockstudios.texteditor.richstyle.isListBlock
 import com.darkrockstudios.texteditor.richstyle.listLevel
 import com.fleeksoft.ksoup.Ksoup
@@ -167,6 +170,8 @@ private data class HtmlScope(
 	val ownLook: Boolean = false,
 	/** Inside a link, whose colour is the link style's. */
 	val inLink: Boolean = false,
+	/** Inside a table cell, which holds inline content alone: its blocks and breaks run on as spaces. */
+	val inTableCell: Boolean = false,
 ) {
 	companion object {
 		val ROOT = HtmlScope(emptySet(), preformatted = false, listBlock = null)
@@ -233,6 +238,8 @@ private class HtmlSpanBuilder(
 	private val ownLookRuns = mutableListOf<IntRange>()
 
 	private val blockRanges = mutableListOf<BlockRange>()
+	/** Each table cell's output offset, where its line starts, and its cell. */
+	private val cellOffsets = mutableListOf<Pair<Int, TableCellSpanStyle>>()
 	private val formatRanges = mutableListOf<FormatRange>()
 	/** The line height of every element that holds a line, unspecified for one that sets none. */
 	private val lineHoldingLineHeights = mutableListOf<TextUnit>()
@@ -281,6 +288,7 @@ private class HtmlSpanBuilder(
 				target += line
 			}
 		}
+		cellOffsets.forEach { (offset, cell) -> blockLines.getOrPut(cell) { mutableSetOf() } += lines[offset.coerceIn(0, text.length)] }
 		val horizontalRuleLines = horizontalRuleOffsets.mapTo(mutableSetOf()) { lines[it.coerceIn(0, text.length)] }
 		val imageLines = imageOffsets.associate { (offset, image) -> lines[offset.coerceIn(0, text.length)] to image }
 		return HtmlDocument(
@@ -371,6 +379,8 @@ private class HtmlSpanBuilder(
 	private fun visitElement(element: Element, scope: HtmlScope) {
 		val name = element.tagName().lowercase()
 		if (name in SKIPPED_TAGS) return
+		if (scope.inTableCell) return visitInCell(element, name, scope)
+		if (name == "table") return visitTable(element, scope)
 
 		when (name) {
 			"br" -> {
@@ -478,6 +488,99 @@ private class HtmlSpanBuilder(
 		if (name == "pre") dropLeadingNewline = false
 
 		if (isBlock) requestBlockBreak() else if (isCell) requestCellBreak()
+	}
+
+	/**
+	 * [element], inside a table cell: inline styles and links as anywhere, but a block,
+	 * a cell of a table nested in this one or a line break is a space, and a rule or an
+	 * image is nothing, since a cell is one line of inline content.
+	 */
+	private fun visitInCell(element: Element, name: String, scope: HtmlScope) {
+		if (name == "br" || name == "hr" || name == "img") {
+			if (name == "br") appendText(" ", scope)
+			return
+		}
+		val separates = name in BLOCK_TAGS || name in CELL_TAGS
+		if (separates) appendText(" ", scope)
+		val style = element.attr("style")
+		val nestedInLink = scope.inLink || name == "a"
+		val nestedTags = resolveTags(name, style, scope.tags, inPreElement = false)
+		val nestedOwnLook = scope.ownLook || HtmlTag.CODE in nestedTags
+		val nested = scope.copy(
+			tags = nestedTags,
+			css = if (nestedOwnLook) null else resolveCss(name, element, style, scope.css, nestedInLink),
+			ownLook = nestedOwnLook,
+			inLink = nestedInLink,
+		)
+		val href = if (name == "a") sanitizeLinkUrl(element.attr("href"), allowedLinkSchemes) else null
+		val start = out.length
+		val spansAtEntry = spans.size
+		visitChildren(element, nested)
+		if (href != null) {
+			val end = if (out.length > start && out.last() == ' ' && !trailingSpaceIsLiteral) out.length - 1 else out.length
+			if (start < end) {
+				links += Triple(start, end, href)
+				spans.add(spansAtEntry, AnnotatedString.Range(config.linkStyle, start, end))
+			}
+		}
+		if (separates) appendText(" ", scope)
+	}
+
+	/**
+	 * A `<table>`, a line per cell, row by row: the rows of its `<thead>`, `<tbody>` and
+	 * `<tfoot>` or its own, the first the header, a cell spanning columns followed by an
+	 * empty one for each more it spans, and every row padded to the widest, up to
+	 * [MAX_TABLE_COLUMNS]. A column's alignment is its header cell's `text-align` or
+	 * `align`. A table with no cells is skipped.
+	 */
+	private fun visitTable(table: Element, scope: HtmlScope) {
+		val rows = table.children().flatMap { child ->
+			when (child.tagName().lowercase()) {
+				"tr" -> listOf(child)
+				"thead", "tbody", "tfoot" -> child.children().filter { it.tagName().lowercase() == "tr" }
+				else -> emptyList()
+			}
+		}.map { row ->
+			row.children().filter { it.tagName().lowercase() in CELL_TAGS }.flatMap { cell ->
+				val span = cell.attr("colspan").toIntOrNull()?.coerceIn(1, MAX_TABLE_COLUMNS) ?: 1
+				listOf<Element?>(cell) + List(span - 1) { null }
+			}
+		}.filter { it.isNotEmpty() }
+		if (rows.isEmpty()) return
+		val columns = rows.maxOf { it.size }.coerceAtMost(MAX_TABLE_COLUMNS)
+		val alignments = List(columns) { column -> rows.first().getOrNull(column)?.tableAlignment() ?: TableAlignment.NONE }
+		val cellScope = HtmlScope.ROOT.copy(inTableCell = true, convertedSpace = scope.convertedSpace)
+		var first = true
+		for (row in rows) {
+			for (column in 0 until columns) {
+				requestBlockBreak()
+				// Empty cells at the document's start still take a line each.
+				if (!first) pendingBlockBreak = true
+				first = false
+				flushPendingBreaks()
+				sync(HtmlScope.ROOT)
+				cellOffsets += out.length to TableCellSpanStyle.of(column, alignments[column])
+				val cell = row.getOrNull(column)
+				if (cell != null) {
+					val style = cell.attr("style")
+					visitChildren(cell, cellScope.copy(tags = resolveTags(cell.tagName().lowercase(), style, emptySet(), inPreElement = false)))
+				}
+				trimTrailingLayoutSpace()
+				requestBlockBreak()
+			}
+		}
+	}
+
+	/** This cell's alignment, from its `style` or its `align`, or null for none. */
+	private fun Element.tableAlignment(): TableAlignment? {
+		var align = attr("align").lowercase()
+		forEachCssDeclaration(attr("style")) { property, value -> if (property == "text-align") align = value.lowercase() }
+		return when (align) {
+			"left", "start" -> TableAlignment.LEFT
+			"center" -> TableAlignment.CENTER
+			"right", "end" -> TableAlignment.RIGHT
+			else -> null
+		}
 	}
 
 	private fun Element.holdsList(): Boolean = children().any { it.tagName().lowercase().let { tag -> tag == "ul" || tag == "ol" } }

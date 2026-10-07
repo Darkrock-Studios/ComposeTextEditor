@@ -2,6 +2,7 @@ package com.darkrockstudios.texteditor.html
 
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.richstyle.documentBlocksOf
+import com.darkrockstudios.texteditor.richstyle.tableAt
 import com.darkrockstudios.texteditor.state.TextEditorState
 
 /**
@@ -45,8 +46,11 @@ internal fun TextEditorState.selectionAsHtml(range: TextEditorRange): String {
 		)
 	}
 	// Only the lines being written can contribute a block, and a line-anchored span
-	// starts on the line it decorates.
-	val spans = spansOnLines.filterTo(mutableSetOf()) { it.range.start.line in coveredLines }
+	// starts on the line it decorates; but a table's header and rows are read from its
+	// cells before the selection too.
+	val tableLines = (content.tableAt(range.start.line)?.firstLine ?: range.start.line) until range.start.line
+	val spans = (spansOnLines + tableLines.flatMap { content.spansOn(it) })
+		.filterTo(mutableSetOf()) { it.range.start.line in coveredLines || it.range.start.line in tableLines }
 	return renderHtmlFragment(
 		lines = lines,
 		blocks = documentBlocksOf(spans, richTextStyles),

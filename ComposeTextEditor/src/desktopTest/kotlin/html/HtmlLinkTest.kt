@@ -75,8 +75,8 @@ class HtmlLinkTest {
 			"<table><tr><td><a href=\"https://x.test\">x </a></td><td>y</td></tr></table><p><a href=\"https://y.test\">a </a>b</p>",
 			config,
 		)
-		assertEquals("x\ty\na b", document.text.text)
-		assertEquals(listOf(range(0, 0, 1) to "https://x.test", range(1, 0, 1) to "https://y.test"), document.links)
+		assertEquals("x\ny\na b", document.text.text)
+		assertEquals(listOf(range(0, 0, 1) to "https://x.test", range(2, 0, 1) to "https://y.test"), document.links)
 	}
 
 	@Test

@@ -1,5 +1,6 @@
 package com.darkrockstudios.texteditor.html
 
+import com.darkrockstudios.texteditor.richstyle.TableAlignment
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import com.darkrockstudios.texteditor.CharLineOffset
@@ -219,6 +220,17 @@ private class HtmlContainers(
 
 	fun around(line: Int): List<HtmlContainer> {
 		val containers = mutableListOf<HtmlContainer>()
+		if (blocks.tableCellAt(line) != null) {
+			// A cell stacks with nothing, so no list stays open around it.
+			openItems.clear()
+			quoted = false
+			val table = blocks.tableStart(line)
+			val row = blocks.tableRowStart(line)
+			containers += HtmlContainer("table", table)
+			containers += HtmlContainer(if (row == table) "thead" else "tbody", table)
+			containers += HtmlContainer("tr", row)
+			return containers
+		}
 		val lineQuoted = blocks.has(line, Blockquote)
 		if (lineQuoted) containers += BLOCKQUOTE
 		val list = blocks.listBlockAt(line)
@@ -265,6 +277,17 @@ private fun lineHtml(
 	// Fenced lines are literal code: running them through `toHtml` would see the
 	// baked-in monospace as an inline code run and wrap every line in `<code>`.
 	if (blocks.has(index, CodeFence)) return line.text.escapeHtmlText()
+
+	blocks.tableCellAt(index)?.let { cell ->
+		val tag = if (blocks.tableRowStart(index) == blocks.tableStart(index)) "th" else "td"
+		val align = when (cell.alignment) {
+			TableAlignment.NONE -> ""
+			TableAlignment.LEFT -> " style=\"text-align:left\""
+			TableAlignment.CENTER -> " style=\"text-align:center\""
+			TableAlignment.RIGHT -> " style=\"text-align:right\""
+		}
+		return "<$tag$align>" + line.toHtml(styles, links, retired, allowedLinkSchemes, headingsBySize = false) + "</$tag>"
+	}
 
 	val image = blocks.imageLines[index]
 	val isRule = index in blocks.horizontalRuleLines

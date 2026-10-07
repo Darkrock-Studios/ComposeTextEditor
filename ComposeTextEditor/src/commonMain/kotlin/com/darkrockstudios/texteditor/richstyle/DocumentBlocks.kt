@@ -39,6 +39,35 @@ internal class DocumentBlocks(
 		}
 		byLine
 	}
+
+	/** The cell on [line], or null when it is no table cell. */
+	fun tableCellAt(line: Int): TableCellSpanStyle? = cellsByLine[line]
+
+	/** The first line of the table [line] is a cell of; the cells before it must be among these blocks. */
+	fun tableStart(line: Int): Int {
+		var at = line
+		while (cellsByLine.containsKey(at - 1)) at--
+		return at
+	}
+
+	/** The first line of the table row [line] is a cell of. */
+	fun tableRowStart(line: Int): Int {
+		var at = line
+		while (true) {
+			val cell = cellsByLine[at] ?: return at
+			if (startsTableRow(cell, cellsByLine[at - 1])) return at
+			at--
+		}
+	}
+
+	private val cellsByLine: Map<Int, TableCellSpanStyle> by lazy {
+		val byLine = HashMap<Int, TableCellSpanStyle>()
+		blockLines.forEach { (block, lines) ->
+			val cell = block.spanStyle as? TableCellSpanStyle ?: return@forEach
+			lines.forEach { byLine[it] = cell }
+		}
+		byLine
+	}
 }
 
 /** Collects every line-anchored decoration currently attached to this document. */
