@@ -21,6 +21,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import utils.blockLines
 import utils.setBlockLines
+import com.darkrockstudios.texteditor.dragdrop.dropText
 
 /** Editing a table: the keys at a cell's edges, line breaks, deletions across cells, Tab, and the row and column operations. */
 class TableEditingTest {
@@ -332,5 +333,49 @@ class TableEditingTest {
 
 		assertEquals("Nax", state.textLines[1].text)
 		assertEquals(true, state.textLines[1].spanStyles.any { it.item == bold && it.start <= 2 && it.end >= 3 })
+	}
+
+	@Test
+	fun `a whole block line pasted into an empty cell brings only its text`() = runTest {
+		val source = lines("|0| Name", "|1| Age", "|0| Ada", "|1| ", "after", "# Head", "- item", "---", "> quote")
+		for (copied in listOf(0, 5, 6, 7, 8)) {
+			val state = editor(source)
+			val clipboard = InMemoryClipboard()
+			fun perform(action: EditorCommand.Action) = state.actions[action]!!.perform(EditorActionContext(state, clipboard, this))
+			state.select(CharLineOffset(copied, 0), CharLineOffset(copied, state.textLines[copied].length))
+			perform(EditorCommand.Action.Copy)
+			testScheduler.advanceUntilIdle()
+			state.caretAt(3, 0)
+			perform(EditorCommand.Action.Paste)
+			testScheduler.advanceUntilIdle()
+
+			val pasted = source.lines()[copied].substringAfter(' ').takeUnless { copied == 7 } ?: " "
+			assertEquals(source.replace("|1| \n", "|1| $pasted\n"), state.blockLines(), "line $copied")
+		}
+	}
+
+	@Test
+	fun `markup dropped into a cell brings only its text`() = runTest {
+		for (html in listOf("<hr>", "<h1>Head</h1>", "<table><tr><td>t</td></tr></table>")) {
+			for (start in listOf(0, 3)) {
+				val state = editor(lines("|0| Name", "|1| Ada"))
+				if (start == 0) state.replace(TextEditorRange(CharLineOffset(1, 0), CharLineOffset(1, 3)), "")
+				val document = com.darkrockstudios.texteditor.html.parseHtmlDocument(html, state.richTextStyles)
+
+				state.dropText(document.text, html, CharLineOffset(1, start), moveFrom = null)
+
+				val text = (if (start == 0) "" else "Ada") + document.text.text
+				assertEquals(lines("|0| Name", "|1| $text"), state.blockLines(), "$html at $start")
+			}
+		}
+	}
+
+	@Test
+	fun `a rule put on a cell gives way to it`() = runTest {
+		val state = editor(lines("|0| a", "|1|  "))
+
+		state.addRichSpan(CharLineOffset(1, 0), CharLineOffset(1, 1), com.darkrockstudios.texteditor.richstyle.HorizontalRuleSpanStyle)
+
+		assertEquals(lines("|0| a", "|1|  "), state.blockLines())
 	}
 }

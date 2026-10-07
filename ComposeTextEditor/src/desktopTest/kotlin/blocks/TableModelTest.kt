@@ -118,13 +118,13 @@ class TableModelTest {
 	}
 
 	@Test
-	fun `a cell on a rule's placeholder is taken off it`() = runTest {
+	fun `a cell on a rule's placeholder takes the line from the rule`() = runTest {
 		val state = editor("---")
 
 		state.applyDocumentBlocks(blockLines = mapOf(TableCellSpanStyle.of(0) to listOf(0)))
 
-		assertFalse(state.isTableCell(0))
-		assertTrue(state.richSpanManager.getAllRichSpans().any { it.style === HorizontalRuleSpanStyle })
+		assertTrue(state.isTableCell(0))
+		assertFalse(state.richSpanManager.getAllRichSpans().any { it.style === HorizontalRuleSpanStyle })
 	}
 
 	@Test

@@ -215,6 +215,7 @@ fun TextEditorToolbar(
 						else
 							"Header H$currentHeaderLevel — click to cycle",
 						isActive = currentHeaderLevel != 0,
+						enabled = tableLine == null,
 					)
 
 					Spacer(modifier = Modifier.width(2.dp))
@@ -224,6 +225,7 @@ fun TextEditorToolbar(
 						icon = Icons.Default.FormatQuote,
 						contentDescription = "Blockquote",
 						isActive = isBlockquoteActive,
+						enabled = tableLine == null,
 					)
 
 					Spacer(modifier = Modifier.width(2.dp))
@@ -233,6 +235,7 @@ fun TextEditorToolbar(
 						icon = Icons.Default.FormatListBulleted,
 						contentDescription = "Bullet list",
 						isActive = isBulletListActive,
+						enabled = tableLine == null,
 					)
 
 					Spacer(modifier = Modifier.width(2.dp))
@@ -242,6 +245,7 @@ fun TextEditorToolbar(
 						icon = Icons.Default.FormatListNumbered,
 						contentDescription = "Ordered list",
 						isActive = isOrderedListActive,
+						enabled = tableLine == null,
 					)
 
 					Spacer(modifier = Modifier.width(2.dp))
@@ -251,6 +255,7 @@ fun TextEditorToolbar(
 						icon = Icons.Default.Terminal,
 						contentDescription = "Code block",
 						isActive = isCodeFenceActive,
+						enabled = tableLine == null,
 					)
 
 					Spacer(modifier = Modifier.width(2.dp))
@@ -259,6 +264,7 @@ fun TextEditorToolbar(
 						onClick = { insertHorizontalRule(state) },
 						icon = Icons.Default.HorizontalRule,
 						contentDescription = "Horizontal rule",
+						enabled = tableLine == null,
 					)
 
 					Spacer(modifier = Modifier.width(2.dp))
@@ -606,11 +612,13 @@ private fun TextLabelButton(
 	label: String,
 	contentDescription: String,
 	isActive: Boolean,
+	enabled: Boolean = true,
 ) {
 	ToolbarTooltip(contentDescription) {
 		IconToggleButton(
 			checked = isActive,
 			onCheckedChange = { onClick() },
+			enabled = enabled,
 			shapes = IconButtonDefaults.toggleableShapes(),
 			colors = toolbarToggleColors(),
 			modifier = Unfocusable.semantics { this.contentDescription = contentDescription },

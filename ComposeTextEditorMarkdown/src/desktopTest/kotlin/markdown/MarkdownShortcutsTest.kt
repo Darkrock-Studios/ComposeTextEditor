@@ -232,4 +232,25 @@ class MarkdownShortcutsTest {
 		assertEquals("- x", editor(shortcuts = MarkdownShortcuts(blocks = false)).apply { type("- x") }.text())
 		assertEquals("- **b**", editor(shortcuts = MarkdownShortcuts(inline = false)).apply { type("- **b**") }.blockLines())
 	}
+
+	@Test
+	fun `block markers typed in a table cell stay text`() {
+		for (marker in listOf("- ", "1. ", "# ", "> ")) {
+			val state = editor("|0| a\n|1| ")
+			state.type("${marker}x")
+			assertEquals("${marker}x", state.textLines[1].text, marker)
+			assertTrue(state.blockLines().lines().all { it.startsWith("|") }, marker)
+		}
+	}
+
+	@Test
+	fun `a fence line in a table cell is not a code block`() {
+		val state = editor("|0| a\n|1| ")
+		state.type("```")
+		state.insertTypedNewline()
+
+		assertEquals("```", state.textLines[1].text)
+		assertTrue(state.blockLines().lines().all { it.startsWith("|") })
+	}
 }
+

@@ -11,6 +11,7 @@ import com.darkrockstudios.texteditor.state.isBlockquote
 import com.darkrockstudios.texteditor.state.isBulletList
 import com.darkrockstudios.texteditor.state.isCodeFence
 import com.darkrockstudios.texteditor.state.isOrderedList
+import com.darkrockstudios.texteditor.state.isTableCell
 import com.darkrockstudios.texteditor.state.setCodeFenceLanguage
 import com.darkrockstudios.texteditor.state.toggleBlockquote
 import com.darkrockstudios.texteditor.state.toggleBulletList
@@ -25,9 +26,9 @@ import com.darkrockstudios.texteditor.state.toggleOrderedList
  * - [blocks]: at a line's start, `- `, `* ` or `+ ` make a bullet item, a number and
  *   `. ` or `) ` an ordered item, one to six `#` and a space a heading of that level,
  *   and `> ` a quote, as soon as the space is typed. A marker the line's blocks refuse
- *   (a heading on a list item) stays text. Enter on a line of three backticks and an
- *   optional language makes the line a code block in that language, unless a code
- *   block is next to it.
+ *   (a heading on a list item, any block in a table cell) stays text. Enter on a line
+ *   of three backticks and an optional language makes the line a code block in that
+ *   language, unless the line is a table cell or a code block is next to it.
  * - [inline]: a closing `**` or `__` makes the text since its opener bold, `*` or `_`
  *   italic, `` ` `` inline code, `~~` struck through, and `==` highlighted, once the
  *   closer is typed. The opener is the nearest run of the delimiter before the closer
@@ -84,7 +85,7 @@ data class MarkdownShortcuts(
 		val end = range.end.char
 		val lineText = state.textLines[line].text
 		if (end == 0 || end > MAX_MARKER_LENGTH || lineText[end - 1] != ' ') return false
-		if (state.inCode(line, 0, end, codeStyles)) return false
+		if (state.isTableCell(line) || state.inCode(line, 0, end, codeStyles)) return false
 		val marker = lineText.substring(0, end)
 		val isList = state.isList(line)
 		val heading = state.headerLevel(line)
@@ -187,7 +188,7 @@ data class MarkdownShortcuts(
 	private fun TextEditorState.isList(line: Int) = isBulletList(line) || isOrderedList(line)
 
 	private fun TextEditorState.hasAnyBlock(line: Int) =
-		isList(line) || headerLevel(line) != null || isBlockquote(line) || isCodeFence(line)
+		isList(line) || headerLevel(line) != null || isBlockquote(line) || isCodeFence(line) || isTableCell(line)
 
 	/** The inline code styles of this document: the current one and every retired one. */
 	private fun TextEditorState.codeStyles(): Set<SpanStyle> =

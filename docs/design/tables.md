@@ -41,8 +41,9 @@ and touch handling for one block.
 - **Stacking.** A cell conflicts with every block, another column's cell too, and
   never gives way: `lineBlocksConflict` reports the conflict and
   `LineBlockStyle.refusedBy` makes a heading, list, quote or fence put on a cell
-  line a no-op, so a toolbar cannot break a table one cell at a time. A cell on
-  a rule's or an image's placeholder is taken off it by normalization. A cell is
+  line a no-op, so a toolbar cannot break a table one cell at a time. A rule or
+  an image put on a cell is taken off it by normalization. Text pasted or
+  dropped into a cell brings only its inline styles and links. A cell is
   a block, not a blank line (`isNestingBlank`), and takes no paragraph format.
 
 ## Layout

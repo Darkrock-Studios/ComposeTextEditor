@@ -13,7 +13,8 @@ import com.darkrockstudios.texteditor.state.LineSplice
  * [Blockquote]; an image may also carry one list style; anything else is a
  * marker with nothing to decorate that cannot survive a serialization round
  * trip. Violating spans are removed and their lines rebuilt without the
- * orphaned indent. Then every line of a fence run gets a language span if the
+ * orphaned indent. A table cell is the exception: it keeps its line and the
+ * rule or image is removed. Then every line of a fence run gets a language span if the
  * run has a language (see [repairFenceLanguages]).
  *
  * Runs on every publish, from [com.darkrockstudios.texteditor.state.TextEditorState],
@@ -47,15 +48,21 @@ private fun repairPlaceholders(
 	changed: IntRange,
 ): DocumentSnapshot {
 	val violations = ArrayList<Pair<RichSpan, LineBlockStyle>>()
+	val placeholdersOnCells = ArrayList<RichSpan>()
 	for (line in changed) {
 		val kind = placeholderKindOf(snapshot, line) ?: continue
-		for (span in snapshot.spansOn(line)) {
-			if (span.range.start.line != line) continue
+		val starting = snapshot.spansOn(line).filter { it.range.start.line == line }
+		// A cell keeps its line, so a table stays whole: the rule or image goes instead.
+		if (starting.any { it.style is TableCellSpanStyle }) {
+			placeholdersOnCells += starting.filter { it.style is BlockSpanStyle }
+			continue
+		}
+		for (span in starting) {
 			val block = lineBlockFor(span.style, config) ?: continue
 			if (!block.allowedOn(kind)) violations += span to block
 		}
 	}
-	if (violations.isEmpty()) return snapshot
+	if (violations.isEmpty() && placeholdersOnCells.isEmpty()) return snapshot
 
 	var lines = snapshot.lineList
 	violations.forEach { (span, block) ->
@@ -64,7 +71,7 @@ private fun repairPlaceholders(
 	}
 	val rebuilt = violations.map { it.first.range.start.line }.filter { it in lines.indices }
 	val splice = if (rebuilt.isEmpty()) null else LineSplice(rebuilt.min(), lines.size - 1 - rebuilt.max())
-	return snapshot.withLines(lines, splice).withSpanIndex(snapshot.spanIndex.minus(violations.map { it.first }))
+	return snapshot.withLines(lines, splice).withSpanIndex(snapshot.spanIndex.minus(violations.map { it.first } + placeholdersOnCells))
 }
 
 /**
