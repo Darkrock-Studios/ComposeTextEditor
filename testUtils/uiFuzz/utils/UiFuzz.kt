@@ -101,6 +101,11 @@ fun FuzzUiDriver.applyFuzzOpUi(op: FuzzOp) {
 			typeText(op.text)
 		}
 
+		is FuzzOp.ToggleTask -> {
+			runOnIdle { state.applyTaskToggle(op) }
+			waitForIdle()
+		}
+
 		is FuzzOp.InsertTable -> {
 			runOnIdle { state.insertTable(op.rows, op.columns) }
 			waitForIdle()

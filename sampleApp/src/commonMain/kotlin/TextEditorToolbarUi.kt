@@ -41,6 +41,8 @@ import com.darkrockstudios.texteditor.state.hasStyleThroughout
 import com.darkrockstudios.texteditor.state.headerLevel
 import com.darkrockstudios.texteditor.state.setLink
 import com.darkrockstudios.texteditor.state.toggleBlockquote
+import com.darkrockstudios.texteditor.state.isTask
+import com.darkrockstudios.texteditor.state.toggleTaskList
 import com.darkrockstudios.texteditor.state.toggleBulletList
 import com.darkrockstudios.texteditor.state.toggleCodeFence
 import com.darkrockstudios.texteditor.state.toggleHeader
@@ -70,10 +72,12 @@ fun TextEditorToolbar(
 	var tableLine by remember { mutableStateOf<Int?>(null) }
 	var selectionEndsInTable by remember { mutableStateOf(false) }
 	var blocksRefused by remember { mutableStateOf(false) }
+	var isTaskActive by remember { mutableStateOf(false) }
 
 	fun readCaretLine(line: Int) {
 		tableLine = line.takeIf { state.isTableCell(it) }
 		blocksRefused = state.isInlineOnlyLine(line)
+		isTaskActive = state.isTask(line)
 	}
 	var isHighlightActive by remember { mutableStateOf(false) }
 	var linkDialogState by remember { mutableStateOf<LinkDialogRequest?>(null) }
@@ -255,6 +259,16 @@ fun TextEditorToolbar(
 						icon = Icons.Default.FormatListNumbered,
 						contentDescription = "Ordered list",
 						isActive = isOrderedListActive,
+						enabled = !blocksRefused,
+					)
+
+					Spacer(modifier = Modifier.width(2.dp))
+
+					FormatButton(
+						onClick = { state.toggleTaskList(selectedLines(state)) },
+						icon = Icons.Default.Checklist,
+						contentDescription = "Task list",
+						isActive = isTaskActive,
 						enabled = !blocksRefused,
 					)
 
@@ -528,6 +542,10 @@ private fun TableMenu(state: TextEditorState, tableLine: Int?) {
 		}
 	}
 }
+
+/** The lines the selection covers, or the caret's. */
+private fun selectedLines(state: TextEditorState): IntRange =
+	state.selector.selection?.let { it.start.line..it.end.line } ?: state.cursorPosition.line..state.cursorPosition.line
 
 // Cycles none -> H1 -> H2 -> ... -> H6 -> none over the selected lines (or the
 // cursor's line). Headings are semantic line blocks: toggling the same level
