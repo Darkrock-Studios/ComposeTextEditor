@@ -18,6 +18,7 @@ collapsible sections) is meant to test it before it is opened to hosts.
 | `shapesDifferently` | a partial pass, reshape or reuse | | | column, count, header |
 | `shape` | `LineShaper` | | | column width, bold header |
 | `place` | `LineLayout`, side-by-side lines | | | cell box in its row |
+| `spacing` | `LineLayout`, a line in the flow | | | |
 | `deletionPieces`, `afterJoin` | `TextEditManager` | | | `tablePreservingPieces` |
 | `beforePastedBlocks`, `settlePasted` | paste and drop | | | own lines, broken tables as text |
 | `repair` | `normalizeLineBlocks` | | language spans | |
@@ -45,6 +46,11 @@ its facts and ends its band.
 A kind that `place`s a line lays it out beside others: its `LinePlacement` gives
 the box, the text's x, its padding and its band. Readers of geometry (hit
 testing, selection, Up and Down, gestures) use `LineWrap.box` and the band, never
-the kind. `LineWrap` still carries each kind's draw data as its own field
+the kind. A kind that adds `spacing` gives a line room above or below its rows,
+and `LineWrap.spaceBefore` and `spaceAfter` hand a style that room, so a card
+drawn across lines can close the gaps between them.
+
+A style reads its kind's facts from `LineWrap.blockFacts`, an opaque handle a
+new kind needs no field for. The first kinds' draw data is also kept as fields
 (`orderedListNumber`, `codeFenceBoundary`, `tableCell`), since public styles
 read them.
