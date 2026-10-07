@@ -101,21 +101,6 @@ internal class TableFactsWalk(private val spans: SpanIndex) {
 	}
 }
 
-/**
- * A cell line's place in content space: its [facts], its box's left edge and width
- * (its column's share of the viewport), where its text starts, the height of its
- * table row (the tallest of the row's cells, set once the row is laid out), and the
- * space after the row, which only the table's last row leaves.
- */
-internal data class CellPlacement(
-	val facts: TableCellFacts,
-	val boxLeft: Float,
-	val boxWidth: Float,
-	val textLeft: Float,
-	val rowHeight: Float,
-	val rowSpacing: Float,
-)
-
 /** A cell's padding around its text, in dp: sideways and above and below. */
 internal const val CELL_PADDING_X_DP = 8f
 internal const val CELL_PADDING_Y_DP = 4f
@@ -130,17 +115,22 @@ internal fun cellTextWidth(facts: TableCellFacts, inputs: LineInputs): Float =
 /** The padding above and below a cell's text under [inputs]. */
 internal fun cellPaddingY(inputs: LineInputs): Float = inputs.dp(CELL_PADDING_Y_DP)
 
-/** Where a cell with [facts] whose own height is [height] sits under [inputs], before its row's height is known. */
-internal fun cellPlacement(facts: TableCellFacts, inputs: LineInputs, height: Float): CellPlacement {
+/**
+ * Where a cell with [facts] whose own height is [height] sits under [inputs], before its
+ * row's height is known: its column's share of the viewport, in a band that is its
+ * table row, with the paragraph spacing after the table's last row.
+ */
+internal fun cellPlacement(facts: TableCellFacts, inputs: LineInputs, height: Float): LinePlacement {
 	val boxWidth = inputs.width / facts.columns
 	val boxLeft = facts.cell.column * boxWidth
-	return CellPlacement(
-		facts = facts,
+	return LinePlacement(
 		boxLeft = boxLeft,
 		boxWidth = boxWidth,
 		textLeft = boxLeft + inputs.dp(CELL_PADDING_X_DP),
-		rowHeight = height,
-		rowSpacing = if (facts.lastRow) inputs.paragraphSpacing else 0f,
+		bandHeight = height,
+		spaceAfter = if (facts.lastRow) inputs.paragraphSpacing else 0f,
+		startsBand = facts.rowStart,
+		endsBand = facts.rowEnd,
 	)
 }
 

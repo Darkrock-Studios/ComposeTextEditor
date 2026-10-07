@@ -15,7 +15,7 @@ private fun TextEditorState.paragraphFormatSpans(line: Int): List<RichSpan> =
 
 /**
  * Gives every line in [lines] the paragraph [format], replacing the one it had; null
- * restores the editor's defaults. A table cell takes no format: its table lays it out.
+ * restores the editor's defaults. An inline-only line (a table cell) takes no format.
  * One undo step.
  */
 fun TextEditorState.setParagraphFormat(lines: IntRange, format: ParagraphFormatSpanStyle?) {
@@ -23,7 +23,7 @@ fun TextEditorState.setParagraphFormat(lines: IntRange, format: ParagraphFormatS
 		for (line in lines) {
 			val text = textLines.getOrNull(line) ?: continue
 			paragraphFormatSpans(line).forEach { removeRichSpan(it) }
-			if (format != null && !isTableCell(line)) addRichSpan(CharLineOffset(line, 0), CharLineOffset(line, text.length), format)
+			if (format != null && !isInlineOnlyLine(line)) addRichSpan(CharLineOffset(line, 0), CharLineOffset(line, text.length), format)
 		}
 	}
 }

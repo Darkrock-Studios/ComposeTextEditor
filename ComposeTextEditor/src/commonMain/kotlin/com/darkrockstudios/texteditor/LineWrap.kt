@@ -58,30 +58,35 @@ data class LineWrap(
 	 */
 	val codeFenceBoundary: CodeFenceBoundary? = null,
 	/**
-	 * The table cell this row is in, or null outside a table: the cell's box and its
-	 * place in the table, so a cell's style draws its borders and header fill, and a
-	 * search places the row by its table row. Repeated across a wrapped cell's rows.
+	 * The box this row's line is placed in when it sits beside other lines rather than
+	 * below the one before it, or null for a line in the document's flow. Repeated
+	 * across a wrapped line's rows.
 	 */
-	val tableCell: TableCellBox? = null,
+	val box: LineBox? = null,
+	/** Where this row's line sits in its table, for the cell's style to draw; null outside a table. */
+	val tableCell: TableCellPlace? = null,
 )
 
 /**
- * A table cell's box in content space, the coordinates [LineWrap.offset] is in: its
- * column's share of the width and its whole table row's height, as tall as the
- * row's tallest cell. [row] is the table row (0 is the header), [column] the cell's
- * column; [startsRow] and [endsRow] tell the row's first and last cells, and
- * [isLastRow] the table's last row.
+ * A line's box in content space, the coordinates [LineWrap.offset] is in, when it is
+ * laid out beside other lines, as a table row's cells are. The lines laid out together
+ * share a band from [top], [height] tall: as tall as the tallest of them, and moving the
+ * lines after it down by that once. [startsBand] and [endsBand] tell its first and last lines.
  */
-data class TableCellBox(
-	val row: Int,
-	val column: Int,
-	val startsRow: Boolean,
-	val endsRow: Boolean,
-	val isLastRow: Boolean,
+data class LineBox(
 	val left: Float,
 	val top: Float,
 	val width: Float,
 	val height: Float,
+	val startsBand: Boolean,
+	val endsBand: Boolean,
+)
+
+/** A cell's table [row] (0 is the header) and [column], and whether its row is the table's last. */
+data class TableCellPlace(
+	val row: Int,
+	val column: Int,
+	val isLastRow: Boolean,
 ) {
 	val isHeader: Boolean get() = row == 0
 }
@@ -98,16 +103,16 @@ val LineWrap.effectiveHeight: Float
 		?: textLayoutResult.multiParagraph.getLineHeight(virtualLineIndex)
 
 /**
- * The top of the band this row is ordered by: a table cell's row spans its whole table
- * row, so rows' bands run top to bottom in row order though a cell's own rows sit
- * beside the next cell's. Its own top for any other row.
+ * The top of the band this row is ordered by: a boxed line's rows span their whole
+ * band ([LineBox]), so rows' bands run top to bottom in row order though a boxed line's
+ * own rows sit beside the next line's. Its own top for any other row.
  */
 internal val LineWrap.bandTop: Float
-	get() = tableCell?.top ?: offset.y
+	get() = box?.top ?: offset.y
 
 /** The bottom of this row's band (see [bandTop]). */
 internal val LineWrap.bandBottom: Float
-	get() = tableCell?.let { it.top + it.height } ?: (offset.y + effectiveHeight)
+	get() = box?.let { it.top + it.height } ?: (offset.y + effectiveHeight)
 
 fun LineWrap.wrapStartToCharacterIndex(state: TextEditorState): Int {
 	return state.wrapStartToCharacterIndex(this)

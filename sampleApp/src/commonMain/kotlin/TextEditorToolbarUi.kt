@@ -31,6 +31,7 @@ import com.darkrockstudios.texteditor.state.deleteTableRow
 import com.darkrockstudios.texteditor.state.insertTable
 import com.darkrockstudios.texteditor.state.insertTableColumn
 import com.darkrockstudios.texteditor.state.insertTableRow
+import com.darkrockstudios.texteditor.state.isInlineOnlyLine
 import com.darkrockstudios.texteditor.state.isTableCell
 import com.darkrockstudios.texteditor.state.setTableColumnAlignment
 import com.darkrockstudios.texteditor.state.tableCellAt
@@ -68,6 +69,7 @@ fun TextEditorToolbar(
 	var currentHeaderLevel by remember { mutableStateOf(0) }
 	var tableLine by remember { mutableStateOf<Int?>(null) }
 	var selectionEndsInTable by remember { mutableStateOf(false) }
+	var blocksRefused by remember { mutableStateOf(false) }
 	var isHighlightActive by remember { mutableStateOf(false) }
 	var linkDialogState by remember { mutableStateOf<LinkDialogRequest?>(null) }
 	val isLinkActive = existingLinkSpan != null
@@ -104,6 +106,7 @@ fun TextEditorToolbar(
 			isCodeFenceActive = richSpans.any { it.style === CodeFenceSpanStyle }
 			currentHeaderLevel = state.headerLevel(position.line) ?: 0
 			tableLine = position.line.takeIf { state.isTableCell(it) }
+			blocksRefused = state.isInlineOnlyLine(position.line)
 			// The rule replaces the selection, which would clear the cells it takes in.
 			selectionEndsInTable = selected != null && (state.isTableCell(selected.start.line) || state.isTableCell(selected.end.line))
 			isHighlightActive = isActive(state.richTextStyles.highlightStyle)
@@ -115,6 +118,7 @@ fun TextEditorToolbar(
 			reconcileHorizontalRules(state)
 			// A table edit can leave the caret where it was.
 			tableLine = state.cursorPosition.line.takeIf { state.isTableCell(it) }
+			blocksRefused = state.isInlineOnlyLine(state.cursorPosition.line)
 		}
 	}
 
@@ -218,7 +222,7 @@ fun TextEditorToolbar(
 						else
 							"Header H$currentHeaderLevel — click to cycle",
 						isActive = currentHeaderLevel != 0,
-						enabled = tableLine == null,
+						enabled = !blocksRefused,
 					)
 
 					Spacer(modifier = Modifier.width(2.dp))
@@ -228,7 +232,7 @@ fun TextEditorToolbar(
 						icon = Icons.Default.FormatQuote,
 						contentDescription = "Blockquote",
 						isActive = isBlockquoteActive,
-						enabled = tableLine == null,
+						enabled = !blocksRefused,
 					)
 
 					Spacer(modifier = Modifier.width(2.dp))
@@ -238,7 +242,7 @@ fun TextEditorToolbar(
 						icon = Icons.Default.FormatListBulleted,
 						contentDescription = "Bullet list",
 						isActive = isBulletListActive,
-						enabled = tableLine == null,
+						enabled = !blocksRefused,
 					)
 
 					Spacer(modifier = Modifier.width(2.dp))
@@ -248,7 +252,7 @@ fun TextEditorToolbar(
 						icon = Icons.Default.FormatListNumbered,
 						contentDescription = "Ordered list",
 						isActive = isOrderedListActive,
-						enabled = tableLine == null,
+						enabled = !blocksRefused,
 					)
 
 					Spacer(modifier = Modifier.width(2.dp))
@@ -258,7 +262,7 @@ fun TextEditorToolbar(
 						icon = Icons.Default.Terminal,
 						contentDescription = "Code block",
 						isActive = isCodeFenceActive,
-						enabled = tableLine == null,
+						enabled = !blocksRefused,
 					)
 
 					Spacer(modifier = Modifier.width(2.dp))
@@ -267,7 +271,7 @@ fun TextEditorToolbar(
 						onClick = { insertHorizontalRule(state) },
 						icon = Icons.Default.HorizontalRule,
 						contentDescription = "Horizontal rule",
-						enabled = tableLine == null && !selectionEndsInTable,
+						enabled = !blocksRefused && !selectionEndsInTable,
 					)
 
 					Spacer(modifier = Modifier.width(2.dp))

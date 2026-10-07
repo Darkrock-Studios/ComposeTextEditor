@@ -109,8 +109,8 @@ private fun TextEditorState.rowAtGesturePoint(point: Offset, lineMargin: Float):
 	val y = point.y + scrollState.value
 	val above = rows.rowAtPoint(point.x + scrollX, y)
 	val found = rows.getOrNull(above)
-	// The row after a cell's is another cell's, beside it; the cell's box is its own.
-	val row = if (found?.tableCell != null) {
+	// The row after a boxed line's is another line's, beside it; the box is its own.
+	val row = if (found?.box != null) {
 		found.takeIf { y >= it.bandTop - lineMargin && y <= it.bandBottom + lineMargin }
 	} else {
 		listOfNotNull(found, rows.getOrNull(above + 1)).firstOrNull { row ->

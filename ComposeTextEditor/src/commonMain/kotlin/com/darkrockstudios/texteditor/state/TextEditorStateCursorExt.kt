@@ -27,16 +27,17 @@ internal fun TextEditorState.moveCursorUp() {
 }
 
 /**
- * The row Up goes to from row [index]: the one before it, but from or into a table,
- * the row on screen above it at the goal x, a cell's row beside it being no row above.
+ * The row Up goes to from row [index]: the one before it, but from or into a band of
+ * boxed lines (a table row), the row on screen above it at the goal x, a row beside it
+ * being no row above.
  * -1 when there is none.
  */
 private fun TextEditorState.rowAbove(index: Int): Int {
 	val rows = lineOffsets
 	val row = rows[index]
-	if (row.virtualLineIndex > 0 || (row.tableCell == null && rows[index - 1].tableCell == null)) return index - 1
+	if (row.virtualLineIndex > 0 || (row.box == null && rows[index - 1].box == null)) return index - 1
 	val above = rows.firstRowWhere { it.bandTop >= row.bandTop } - 1
-	if (above < 0 || rows[above].tableCell == null) return above
+	if (above < 0 || rows[above].box == null) return above
 	return rows.rowAtPoint(verticalGoalOrCaretX(), rows[above].bandBottom - 0.5f)
 }
 
@@ -45,9 +46,9 @@ private fun TextEditorState.rowBelow(index: Int): Int {
 	val rows = lineOffsets
 	val row = rows[index]
 	val next = rows[index + 1]
-	if (next.line == row.line || (row.tableCell == null && next.tableCell == null)) return index + 1
+	if (next.line == row.line || (row.box == null && next.box == null)) return index + 1
 	val below = rows.firstRowWhere { it.bandTop > row.bandTop }
-	if (below >= rows.size || rows[below].tableCell == null) return below
+	if (below >= rows.size || rows[below].box == null) return below
 	return rows.rowAtPoint(verticalGoalOrCaretX(), rows[below].bandTop)
 }
 

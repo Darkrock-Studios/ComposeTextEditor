@@ -15,7 +15,7 @@ import com.darkrockstudios.texteditor.state.LayoutUpdate
 import com.darkrockstudios.texteditor.state.PreservedRichSpan
 import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.insertLineBreaksRaw
-import com.darkrockstudios.texteditor.state.isTableCell
+import com.darkrockstudios.texteditor.state.isInlineOnlyLine
 import com.darkrockstudios.texteditor.state.textForBrokenTables
 import com.darkrockstudios.texteditor.state.removeBlockLooksOffTheirBlocks
 import com.darkrockstudios.texteditor.state.removeLinkLookOutsideLinks
@@ -63,14 +63,14 @@ internal fun TextEditorState.settleLanded(
 	richSpans: List<PreservedRichSpan>?,
 	document: HtmlDocument?,
 ): CharLineOffset = withAtomicEdit {
-	val landedInCell = isTableCell(at.line)
+	val landedInline = isInlineOnlyLine(at.line)
 	richSpans?.let { addPreservedRichSpans(at, it) }
 	val start = when {
 		document == null -> at
-		landedInCell -> at.also { applyHtmlPasteLinks(document, at) }
+		landedInline -> at.also { applyHtmlPasteLinks(document, at) }
 		else -> applyHtmlPasteBlocks(document, at, text)
 	}
-	if (!landedInCell) textForBrokenTables(start.line..start.line + text.text.count { it == '\n' })
+	if (!landedInline) textForBrokenTables(start.line..start.line + text.text.count { it == '\n' })
 	removeLinkLookOutsideLinks(start, text)
 	removeBlockLooksOffTheirBlocks(start, text)
 	start

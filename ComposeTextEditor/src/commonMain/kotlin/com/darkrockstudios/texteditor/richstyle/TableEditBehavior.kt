@@ -16,7 +16,7 @@ import com.darkrockstudios.texteditor.state.tableAt
  * first cell of an empty row deletes the row. Backspace at the start of the line
  * after a table steps into its last cell, deleting that line when it is empty, and
  * Delete at the end of the line before a table leaves it apart. Tab is the key bindings' (see `moveToTableCell`), and line
- * breaks typed or pasted into a cell become spaces (`TableCellLineBreaks`). See
+ * breaks typed or pasted into a cell become spaces (`InlineOnlyLineBreaks`). See
  * `docs/design/tables.md`.
  *
  * Registered on every [TextEditorState] by default, ahead of [LineBlockEditBehavior].

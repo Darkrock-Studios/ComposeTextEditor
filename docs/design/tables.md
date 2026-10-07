@@ -45,6 +45,8 @@ and touch handling for one block.
   an image put on a cell is taken off it by normalization. Text pasted or
   dropped into a cell brings only its inline styles and links. A cell is
   a block, not a blank line (`isNestingBlank`), and takes no paragraph format.
+  These rules belong to `RichSpanStyle.inlineOnly`, which a cell sets: the
+  shared code asks `isInlineOnlyLine`, not whether a line is a cell.
 
 ## Layout
 
@@ -53,15 +55,16 @@ and touch handling for one block.
   or more for a row reaching past it), whether it starts or ends its row and
   whether its row is the table's last. A cell is shaped at its column's share of
   the viewport less its padding, wrapping whether lines wrap or not, and its
-  `LineLayout` carries a `CellPlacement`: its box, its text's x, and its table
-  row's height.
+  `LineLayout` carries a `LinePlacement`: its box, its text's x, and its band's
+  height. Placement is generic: a band is any run of lines laid out side by
+  side, and a table row is the one kind there is.
 - **One top per table row.** A line's *advance*, what moves the lines after it
   down, is its height, but a cell's is nothing until the last cell of its row,
   which advances by the row's height (the tallest cell's), and below the
   table's last row by the paragraph spacing too. `RowList` sums advances, so the
-  cells of a row share a top whichever chunks they fall in. `finishTableRows`
+  cells of a row share a top whichever chunks they fall in. `finishBands`
   gives each row its height after its cells are laid out; every pass widens to
-  whole table rows (`tableRowStart`, `tableRowEnd`) so a row is never laid out in
+  whole bands (`bandStart`, `bandEnd`) so a row is never laid out in
   part, and a cell whose facts would shape it differently (another column count,
   in or out of the header) is shaped again rather than handed the new facts.
 - **Bands.** A row's band is the row itself, but a cell's row's is its whole table
@@ -71,8 +74,11 @@ and touch handling for one block.
   test, the pointer's character, handwriting gestures and page moves use it.
 - **x.** `LineWrap.offset.x` is a cell's text x, honoured by the caret, the hit
   test, selection (kept in the cell's box), span drawing, the composing underline
-  and the semantics bounds. `LineWrap.tableCell` carries the cell's box for its
-  style to draw its borders (each line once) and the header's fill.
+  and the semantics bounds. `LineWrap.box` carries the cell's box, and
+  `LineWrap.tableCell` its row and column, for its style to draw its borders
+  (each line once) and the header's fill. Geometry readers (hit testing,
+  selection, Up and Down, gestures) read only the box and the band, never the
+  table.
 - **Up and Down** move by row index, not by y as the proposal assumed, so from or
   into a table they go by geometry: to the row above or below the band, in the
   cell under the goal x.
@@ -86,7 +92,7 @@ and touch handling for one block.
   its end join nothing; Backspace in the first cell of an empty row deletes the
   row; Backspace at the start of the line after a table steps into its last cell,
   deleting that line when it is empty unless another table follows it.
-- **Line breaks.** `TableCellLineBreaks`, ahead of every other input filter, makes
+- **Line breaks.** `InlineOnlyLineBreaks`, ahead of every other input filter, makes
   a line break landing in a cell a space, Enter's too, which the behavior has
   already taken.
 - **Deletions across cells.** A user deletion or replace whose range crosses a

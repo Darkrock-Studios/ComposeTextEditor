@@ -113,7 +113,7 @@ fun EditorUiTestScope.checkInvariants(invariants: Set<EditorInvariant>) {
 		val row = state.cursorRowIndex()
 		val rows = state.lineOffsets
 		send(Down)
-		if (rows.any { it.tableCell != null }) {
+		if (rows.any { it.box != null }) {
 			val from = rows[row]
 			val below = rows.any { it.bandTop >= from.bandBottom - 0.5f || (it.line == from.line && it.offset.y > from.offset.y) }
 			val landed = state.lineOffsets[state.cursorRowIndex()]

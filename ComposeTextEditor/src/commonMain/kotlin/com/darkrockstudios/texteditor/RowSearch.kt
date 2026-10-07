@@ -6,8 +6,8 @@ import com.darkrockstudios.texteditor.state.RowList
 // The rows run line by line, a line's rows by wrap start, and top to bottom by their
 // bands ([bandTop], [bandBottom]), each row's band top at or below the one above's and
 // each band bottom likewise, so every lookup is a binary search. A row's band is the row
-// itself, but for a table cell's rows, which sit beside the next cell's: there it is the
-// whole table row. A paragraph's spacing lies between its last row's bottom and the
+// itself, but for the rows of a line laid out beside others in a box (a table's cells):
+// there it is the whole band the boxes share. A paragraph's spacing lies between its last row's bottom and the
 // next row's top, so a height in a gap resolves to the row above it. The list is random
 // access: the editor's own rows are a [RowList], which builds each row it hands out and
 // answers the four searches below from its directory without building any.
@@ -59,29 +59,30 @@ internal fun List<LineWrap>.firstRowEndingAtOrBelow(y: Float): Int {
 
 /**
  * Index of the row a point at content-space ([x], [y]) is on: the last row at or above
- * [y], or in a table row, the cell under [x] (the nearest when [x] is beside the
- * cells) and its last row at or above [y], else its first. -1 when every row is below.
+ * [y], or in a band of boxed lines, the line whose box is under [x] (the nearest when
+ * [x] is beside them) and its last row at or above [y], else its first. -1 when every
+ * row is below.
  */
 internal fun List<LineWrap>.rowAtPoint(x: Float, y: Float): Int {
 	val index = lastRowAtOrAbove(y)
-	if (getOrNull(index)?.tableCell == null) return index
-	val rows = tableRowAround(index)
-	var cellLine = this[rows.first].line
+	if (getOrNull(index)?.box == null) return index
+	val rows = bandRowsAround(index)
+	var boxedLine = this[rows.first].line
 	for (row in rows) {
-		val box = this[row].tableCell ?: continue
-		if (box.left <= x) cellLine = this[row].line
+		val box = this[row].box ?: continue
+		if (box.left <= x) boxedLine = this[row].line
 	}
-	val ofCell = rows.filter { this[it].line == cellLine }
-	return ofCell.lastOrNull { this[it].offset.y <= y } ?: ofCell.first()
+	val ofLine = rows.filter { this[it].line == boxedLine }
+	return ofLine.lastOrNull { this[it].offset.y <= y } ?: ofLine.first()
 }
 
-/** The indices of the rows of the table row the cell row at [index] is in. */
-internal fun List<LineWrap>.tableRowAround(index: Int): IntRange {
-	fun startsTableRow(at: Int): Boolean = this[at].tableCell?.startsRow != false && this[at].virtualLineIndex == 0
-	fun endsTableRow(at: Int): Boolean = this[at].tableCell?.endsRow != false && getOrNull(at + 1)?.line != this[at].line
+/** The indices of the rows of the band the boxed row at [index] is in. */
+internal fun List<LineWrap>.bandRowsAround(index: Int): IntRange {
+	fun startsBand(at: Int): Boolean = this[at].box?.startsBand != false && this[at].virtualLineIndex == 0
+	fun endsBand(at: Int): Boolean = this[at].box?.endsBand != false && getOrNull(at + 1)?.line != this[at].line
 	var first = index
-	while (first > 0 && !startsTableRow(first)) first--
+	while (first > 0 && !startsBand(first)) first--
 	var last = index
-	while (last < size - 1 && !endsTableRow(last)) last++
+	while (last < size - 1 && !endsBand(last)) last++
 	return first..last
 }

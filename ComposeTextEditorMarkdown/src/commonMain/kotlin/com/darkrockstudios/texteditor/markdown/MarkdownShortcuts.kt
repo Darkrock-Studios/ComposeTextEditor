@@ -11,7 +11,7 @@ import com.darkrockstudios.texteditor.state.isBlockquote
 import com.darkrockstudios.texteditor.state.isBulletList
 import com.darkrockstudios.texteditor.state.isCodeFence
 import com.darkrockstudios.texteditor.state.isOrderedList
-import com.darkrockstudios.texteditor.state.isTableCell
+import com.darkrockstudios.texteditor.state.isInlineOnlyLine
 import com.darkrockstudios.texteditor.state.setCodeFenceLanguage
 import com.darkrockstudios.texteditor.state.toggleBlockquote
 import com.darkrockstudios.texteditor.state.toggleBulletList
@@ -85,7 +85,7 @@ data class MarkdownShortcuts(
 		val end = range.end.char
 		val lineText = state.textLines[line].text
 		if (end == 0 || end > MAX_MARKER_LENGTH || lineText[end - 1] != ' ') return false
-		if (state.isTableCell(line) || state.inCode(line, 0, end, codeStyles)) return false
+		if (state.isInlineOnlyLine(line) || state.inCode(line, 0, end, codeStyles)) return false
 		val marker = lineText.substring(0, end)
 		val isList = state.isList(line)
 		val heading = state.headerLevel(line)
@@ -188,7 +188,7 @@ data class MarkdownShortcuts(
 	private fun TextEditorState.isList(line: Int) = isBulletList(line) || isOrderedList(line)
 
 	private fun TextEditorState.hasAnyBlock(line: Int) =
-		isList(line) || headerLevel(line) != null || isBlockquote(line) || isCodeFence(line) || isTableCell(line)
+		isList(line) || headerLevel(line) != null || isBlockquote(line) || isCodeFence(line) || isInlineOnlyLine(line)
 
 	/** The inline code styles of this document: the current one and every retired one. */
 	private fun TextEditorState.codeStyles(): Set<SpanStyle> =

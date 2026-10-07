@@ -1315,7 +1315,7 @@ class TextEditorState private constructor(
 
 	internal val effectiveInputFilter: EditorInputFilter
 		get() {
-			val lines = if (isSingleLine) TableCellLineBreaks then EditorInputFilter.SingleLine else TableCellLineBreaks
+			val lines = if (isSingleLine) InlineOnlyLineBreaks then EditorInputFilter.SingleLine else InlineOnlyLineBreaks
 			return inputFilter?.let { lines then it } ?: lines
 		}
 
@@ -2265,9 +2265,9 @@ class TextEditorState private constructor(
 	 */
 	private fun reshapeLines(from: Int, to: Int) {
 		val current = rows ?: return
-		// A table row's cells share their row's height, so a row is shaped whole.
-		val first = current.tableRowStart(from)
-		val last = current.tableRowEnd(to)
+		// A band's lines share its height, so a band is shaped whole.
+		val first = current.bandStart(from)
+		val last = current.bandEnd(to)
 		val content = content
 		val lines = content.lineList
 		val spans = content.spanIndex
@@ -2286,7 +2286,7 @@ class TextEditorState private constructor(
 			val old = current.layoutOf(line)
 			layouts += old.reshaped(shaper.shape(lines[line], format, old.tableCell), line, onLine, format, inputs, layoutInputGeneration)
 		}
-		finishTableRows(layouts)
+		finishBands(layouts)
 		val settled = current.splice(first, last + 1, layouts, spans)
 		publishRows(settled)
 		val target = (settled.lineTop(anchor.line) + anchor.offset).roundToInt()
@@ -2400,7 +2400,7 @@ class TextEditorState private constructor(
 			val onLine = spans.spansOn(line)
 			layouts += LineLayout.provisional(sentinel, lengths[line], line, onLine, onLine.paragraphFormat(line), inputs, facts)
 		}
-		finishTableRows(layouts)
+		finishBands(layouts)
 		val provisional = RowList.of(layouts, spans)
 		return provisional.takeIf { it.lastRowBottom() > 3 * viewportSize.height }
 	}
@@ -2417,7 +2417,7 @@ class TextEditorState private constructor(
 			val format = onLine.paragraphFormat(line)
 			layouts += LineLayout.of(shaper.shape(lines[line], format, facts.tableCell), line, onLine, format, inputs, facts, layoutInputGeneration)
 		}
-		finishTableRows(layouts)
+		finishBands(layouts)
 		return RowList.of(layouts, spans)
 	}
 
@@ -2470,10 +2470,10 @@ class TextEditorState private constructor(
 				else -> old.withFacts(facts, inputs)
 			}
 			layouts += layout
-			if (line >= end && layout === old && facts.tableCell?.rowEnd != false) break
+			if (line >= end && layout === old && layout.placement?.endsBand != false) break
 			line++
 		}
-		finishTableRows(layouts)
+		finishBands(layouts)
 		// The walk never stops inside the shaped range, whose old lines end at its last line's pre-edit index.
 		val stop = minOf(line, lastLine)
 		val oldEnd = if (shapes && stop >= shapeLast) stop - update.lineDelta + 1 else stop + 1
@@ -2893,8 +2893,8 @@ class TextEditorState private constructor(
 			) {
 				return@forEach
 			}
-			// A cell takes no other block or format, nor another column's marker.
-			if ((preserved.style.anchorsToLine || preserved.style.boundToParagraph) && isTableCell(startPos.line)) return@forEach
+			// An inline-only line takes no other block or format, nor another column's marker.
+			if ((preserved.style.anchorsToLine || preserved.style.boundToParagraph) && isInlineOnlyLine(startPos.line)) return@forEach
 			// A copied block takes a line it covers whole from whatever block there refuses
 			// to share it, a list the paste continued onto a pasted heading.
 			val block = lineBlockFor(preserved.style, richTextStyles)

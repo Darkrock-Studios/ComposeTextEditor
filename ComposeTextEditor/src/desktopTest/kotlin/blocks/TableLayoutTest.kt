@@ -72,9 +72,9 @@ class TableLayoutTest {
 		assertEquals(a.offset.y, b.offset.y)
 		assertEquals(8f, a.offset.x)
 		assertEquals(width / 2 + 8f, b.offset.x)
-		assertEquals(0f, a.tableCell!!.left)
-		assertEquals(width / 2, b.tableCell!!.left)
-		assertEquals(a.tableCell!!.top + a.tableCell!!.height, state.rowsOf(3).single().tableCell!!.top)
+		assertEquals(0f, a.box!!.left)
+		assertEquals(width / 2, b.box!!.left)
+		assertEquals(a.box!!.top + a.box!!.height, state.rowsOf(3).single().box!!.top)
 	}
 
 	@Test
@@ -85,8 +85,8 @@ class TableLayoutTest {
 
 		assertTrue(wrapped.size > 2, "the cell wraps at its column's width")
 		assertEquals(wrapped.first().offset.y, short.offset.y)
-		val box = short.tableCell!!
-		assertEquals(wrapped.first().tableCell!!.height, box.height)
+		val box = short.box!!
+		assertEquals(wrapped.first().box!!.height, box.height)
 		assertTrue(box.height > wrapped.size * short.effectiveHeight)
 		val after = state.rowsOf(5).single()
 		assertEquals(box.top + box.height, after.offset.y, 1e-3f)
@@ -112,7 +112,7 @@ class TableLayoutTest {
 	fun `a point in a cell's box hits that cell, under its text too`() {
 		val state = editor("|0| $long\n|1| short\nafter")
 		val short = state.rowsOf(1).single()
-		val box = short.tableCell!!
+		val box = short.box!!
 
 		val beside = state.getOffsetAtPosition(Offset(box.left + 4f, box.top + box.height - 3f))
 		assertEquals(1, beside.line)
@@ -168,15 +168,15 @@ class TableLayoutTest {
 		val state = editor("|0| $long\n|1| b\nshort", softWrap = false)
 
 		assertTrue(state.rowsOf(0).size > 1)
-		assertEquals(width / 2, state.rowsOf(1).single().tableCell!!.left)
+		assertEquals(width / 2, state.rowsOf(1).single().box!!.left)
 		assertEquals(0, state.horizontalScrollState.maxValue)
 	}
 
 	@Test
 	fun `the paragraph spacing goes after the table, not between its rows`() {
 		val state = editor("|0| a\n|0| b\nafter", spacing = 10f)
-		val a = state.rowsOf(0).single().tableCell!!
-		val b = state.rowsOf(1).single().tableCell!!
+		val a = state.rowsOf(0).single().box!!
+		val b = state.rowsOf(1).single().box!!
 
 		assertEquals(a.top + a.height, b.top, 1e-3f)
 		assertEquals(b.top + b.height + 10f, state.rowsOf(2).single().offset.y, 1e-3f)
@@ -280,8 +280,9 @@ class TableLayoutTest {
 			assertEquals(expected.virtualLineIndex, actual.virtualLineIndex, at)
 			assertEquals(expected.offset.x, actual.offset.x, 1e-3f, at)
 			assertEquals(expected.offset.y, actual.offset.y, 1e-3f, at)
-			assertEquals(expected.tableCell?.copy(top = 0f), actual.tableCell?.copy(top = 0f), at)
-			assertEquals(expected.tableCell?.top ?: 0f, actual.tableCell?.top ?: 0f, 1e-3f, at)
+			assertEquals(expected.tableCell, actual.tableCell, at)
+			assertEquals(expected.box?.copy(top = 0f), actual.box?.copy(top = 0f), at)
+			assertEquals(expected.box?.top ?: 0f, actual.box?.top ?: 0f, 1e-3f, at)
 			assertEquals(expected.textLayoutResult.layoutInput.text, actual.textLayoutResult.layoutInput.text, at)
 		}
 	}

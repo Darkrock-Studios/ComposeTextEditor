@@ -111,16 +111,12 @@ internal val TABLE_CELLS: List<LineBlockStyle> = TableCellSpanStyle.ALL.map {
 internal fun tableCellBlock(style: TableCellSpanStyle): LineBlockStyle =
 	TABLE_CELLS[style.column * TableAlignment.entries.size + style.alignment.ordinal]
 
-/** Whether this block is a table cell's, at any column. */
-internal val LineBlockStyle.isTableCell: Boolean
-	get() = spanStyle is TableCellSpanStyle
-
 /**
- * Whether a line holding [present] refuses this block: a cell is never demoted by
- * another block, or the table would lose a cell to a toolbar button.
+ * Whether a line holding [present] refuses this block: an inline-only block (a cell) is
+ * never demoted by another, or a table would lose a cell to a toolbar button.
  */
 internal fun LineBlockStyle.refusedBy(present: Collection<LineBlockStyle>): Boolean =
-	!isTableCell && present.any { it.isTableCell }
+	!spanStyle.inlineOnly && present.any { it.spanStyle.inlineOnly }
 
 /** The heading block for [level] under [styles]' display styles, from the shared registry. */
 internal fun headerBlock(level: Int, styles: RichTextStyles): LineBlockStyle =
@@ -289,9 +285,10 @@ private fun registryFor(styles: RichTextStyles): LineBlockRegistry {
  * - A blockquote stacks with lists and headings (`> - item` and `> # Title`).
  * - A code fence stacks with nothing; quoted or listed code blocks aren't
  *   meaningful in the editor's model and the visual treatments would conflict.
- * - A table cell stacks with nothing, another column's cell included: GFM holds
- *   only inline content in a cell. Unlike the others, a cell is not the block
- *   that gives way: putting another block on a cell line does nothing.
+ * - An inline-only block ([RichSpanStyle.inlineOnly], a table cell) stacks with
+ *   nothing, another column's cell included: GFM holds only inline content in a
+ *   cell. Unlike the others, it is not the block that gives way: putting another
+ *   block on its line does nothing.
  *
  * An importer peels a line's markers by this predicate, so it never places a
  * stack the editor would demote.
@@ -302,7 +299,7 @@ fun lineBlocksConflict(a: RichSpanStyle, b: RichSpanStyle): Boolean {
 	val bList = b is BulletListSpanStyle || b is OrderedListSpanStyle
 	return when {
 		a === CodeFenceSpanStyle || b === CodeFenceSpanStyle -> true
-		a is TableCellSpanStyle || b is TableCellSpanStyle -> true
+		a.inlineOnly || b.inlineOnly -> true
 		a is HeaderSpanStyle -> b is HeaderSpanStyle || bList
 		b is HeaderSpanStyle -> aList
 		else -> aList && bList

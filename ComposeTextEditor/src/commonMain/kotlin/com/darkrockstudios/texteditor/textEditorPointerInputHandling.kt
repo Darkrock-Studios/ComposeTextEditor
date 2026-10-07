@@ -482,8 +482,8 @@ private fun TextEditorState.characterAt(offset: Offset): CharLineOffset? {
 	// Every row of a paragraph carries its top and its whole layout. The paragraph with a
 	// row at y is the one hit, unless y is on its top edge, which the one above holds too.
 	val atY = rows.getOrNull(rows.rowAtPoint(offset.x + scrollX, y)) ?: return null
-	// A table's rows sit beside each other, so the line before is no paragraph above.
-	val above = if (atY.tableCell != null) null else rows.getOrNull(rows.lastRowOfLineAtOrBefore(atY.line - 1))?.takeIf { it.tableCell == null }
+	// Boxed lines sit beside each other, so the line before is no paragraph above.
+	val above = if (atY.box != null) null else rows.getOrNull(rows.lastRowOfLineAtOrBefore(atY.line - 1))?.takeIf { it.box == null }
 	fun LineWrap.holds(y: Float): Boolean {
 		val height = blockHeight ?: textLayoutResult.size.height.toFloat()
 		return y >= paragraphTop && y <= paragraphTop + height

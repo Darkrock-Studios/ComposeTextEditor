@@ -12,6 +12,7 @@ import com.darkrockstudios.texteditor.richstyle.HeaderSpanStyle
 import com.darkrockstudios.texteditor.richstyle.LinkSpanStyle
 import com.darkrockstudios.texteditor.richstyle.OrderedList
 import com.darkrockstudios.texteditor.richstyle.OrderedListSpanStyle
+import com.darkrockstudios.texteditor.richstyle.RichSpanStyle
 import com.darkrockstudios.texteditor.richstyle.hasLineBlock
 import com.darkrockstudios.texteditor.richstyle.headerBlock
 import com.darkrockstudios.texteditor.richstyle.listBlockAt
@@ -75,6 +76,10 @@ fun TextEditorState.isOrderedList(line: Int): Boolean = listBlockAt(line)?.spanS
 
 /** Whether [line] is rendered as a fenced code line. */
 fun TextEditorState.isCodeFence(line: Int): Boolean = hasLineBlock(line, CodeFence)
+
+/** Whether [line] holds inline content alone, as a table cell does; see [RichSpanStyle.inlineOnly]. */
+fun TextEditorState.isInlineOnlyLine(line: Int): Boolean =
+	richSpanManager.getRichSpansStartingOn(line).any { it.style.inlineOnly }
 
 /** The nesting level (0 for a top-level item) of the list item on [line], or null when it is not one. */
 fun TextEditorState.listLevel(line: Int): Int? = listBlockAt(line)?.listLevel
