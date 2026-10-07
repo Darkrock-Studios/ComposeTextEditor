@@ -945,6 +945,7 @@ class TextEditManager(private val state: TextEditorState) {
                 }
                 // Coalesce adjacent/overlapping runs of the SAME paragraph style so each
                 // style contributes a single continuous run to the joined line.
+                val coalesced = mutableListOf<Triple<ParagraphStyle, Int, Int>>()
                 paragraphRuns
                     .groupBy { it.first }
                     .forEach { (style, runs) ->
@@ -955,13 +956,25 @@ class TextEditManager(private val state: TextEditorState) {
                             if (start <= runEnd) {
                                 runEnd = maxOf(runEnd, end)
                             } else {
-                                addStyle(style, runStart, runEnd)
+                                coalesced += Triple(style, runStart, runEnd)
                                 runStart = start
                                 runEnd = end
                             }
                         }
-                        addStyle(style, runStart, runEnd)
+                        coalesced += Triple(style, runStart, runEnd)
                     }
+                // Lines stacking different blocks leave runs that cover part of the joined
+                // line over one another, which Compose rejects: the line whose looks win the
+                // join (see lastLine) gives its styles to the whole line instead.
+                val overlapping = coalesced.any { a ->
+                    coalesced.any { b -> a !== b && a.second < b.third && b.second < a.third && (a.second != b.second || a.third != b.third) }
+                }
+                if (overlapping) {
+                    val winner = if (startChar > 0) firstLine else lastLine
+                    winner.paragraphStyles.map { it.item }.distinct().forEach { addStyle(it, 0, mergedLength) }
+                } else {
+                    coalesced.forEach { (style, start, end) -> addStyle(style, start, end) }
+                }
 			}
 
 			state.replaceLines(startLine, endLine, listOf(newText))
