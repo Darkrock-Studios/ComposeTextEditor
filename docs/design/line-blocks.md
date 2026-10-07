@@ -61,6 +61,8 @@ Which blocks may share a line is defined in one predicate (`lineBlocksConflict`,
 - Headings exclude each other and both list styles (`- # item` is a bullet
   holding literal text, not a bulleted heading).
 - Blockquote stacks with lists and headings (`> - item`, `> # Title`).
+- A task stacks with a list item, whose box it is, and a quote; it takes no
+  heading, and its two states exclude each other (see "Task lists").
 - Code fence stacks with nothing.
 - A table cell stacks with nothing, and unlike the others it never gives way:
   putting another block on a cell line does nothing (`docs/design/tables.md`).
@@ -366,6 +368,31 @@ conflicting block demoted as a side effect) in one step.
   kept); a second backspace merges. Exception: when the previous line carries
   the same block, backspace merges directly, so joining two adjacent items is
   one keystroke.
+
+## Task lists
+
+GFM's task list items, `- [ ]` and `- [x]`, are list items with a box. A task
+is a line marker of its own, `TaskSpanStyle.UNCHECKED` or `CHECKED`, on a
+bullet or ordered item at any level. Its indent adds to the list's, and the
+box is drawn in the room it makes: in place of a bullet, after a numeral.
+
+- **A task needs a list.** `TaskKind`'s repair takes a task off a line that is
+  no list item, so a list toggled off, an item left with Enter, or a host's span
+  leaves no stray box. `toggleTaskList` makes plain lines bullet items first.
+- **Editing.** A click or a tap on the box checks or unchecks it, one undo step,
+  except in a read-only editor; elsewhere on the line it places the caret as
+  ever. Enter after a checked item starts an unchecked one (`LineBlockStyle.
+  continuesAs`); on an empty task it leaves the list. A task resolves ahead of
+  its list, so Backspace at an item's start takes the box off first.
+- **API.** `toggleTaskList`, `setTaskChecked`, `toggleTaskChecked`,
+  `taskCheckedAt` and `isTask`.
+- **Markdown.** Import reads `[ ]`, `[x]` or `[X]` and then whitespace or the
+  line's end at the start of a list item's body; export writes `[ ] ` or `[x] `
+  after the item's marker, and escapes an item's text that would read as a box.
+  Typing `[ ] ` or `[x] ` at a list item's start makes it a task.
+- **HTML.** A task exports as GitHub writes one, an `<li class=
+  "task-list-item">` led by a disabled checkbox. A checkbox in a list item, or
+  Google Docs' `<li role="checkbox" aria-checked>`, imports as a task.
 
 ## Derived run state
 
