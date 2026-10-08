@@ -250,7 +250,7 @@ class CommonMarkSyntaxTest {
 	}
 
 	@Test
-	fun `a rule is three or more of one of - * _, spaced or not, and outranks a list item`() = runTest {
+	fun `a rule is three or more dashes, stars or underscores, spaced or not, and outranks a list item`() = runTest {
 		for ((markdown, expected) in listOf(
 			"___\n\n- - -\n\n **  * ** * ** * **\n\n-     -      -      -\n\n_____________________________________" to "---\n---\n---\n---\n---",
 			"* Foo\n* * *\n* Bar" to "- Foo\n---\n- Bar",
