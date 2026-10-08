@@ -6,6 +6,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.SyncAlt
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.Text
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material.icons.filled.FileOpen
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -110,6 +115,7 @@ fun TextEditorDemoUi(
 	}
 
 	var options by remember { mutableStateOf(EditorOptions()) }
+	var importing by remember { mutableStateOf(false) }
 	val editable = options.enabled && !options.readOnly
 	LaunchedEffect(state, options.limited) {
 		state.inputFilter = if (options.limited) EditorInputFilter.maxLength(280) else null
@@ -129,6 +135,16 @@ fun TextEditorDemoUi(
 		if (options.markdownShortcuts) state.editBehaviors.add(0, MarkdownShortcuts())
 	}
 
+	if (importing && markdownExtension != null) {
+		MarkdownImportDialog(
+			onImport = {
+				markdownExtension.importMarkdown(it)
+				importing = false
+			},
+			onDismiss = { importing = false },
+		)
+	}
+
 	DemoScaffold(
 		demo = demo,
 		onBack = onBack,
@@ -137,6 +153,7 @@ fun TextEditorDemoUi(
 			// The editor's enabled and read-only flags gate user input only; the toolbar and
 			// the round trip act on the state directly, so they hide with them.
 			if (editable && markdownExtension != null) {
+				ActionButton(Icons.Default.FileOpen, "Import markdown") { importing = true }
 				ActionButton(Icons.Default.SyncAlt, "Markdown round trip") {
 					val markdown = markdownExtension.exportAsMarkdown()
 					println("Roundtrip export:\n$markdown")
@@ -286,3 +303,25 @@ private val NO_SMART_PUNCTUATION = SmartPunctuation(
 	enDashes = false,
 	ellipses = false,
 )
+
+/** A dialog to paste markdown into, which replaces the document with it. */
+@Composable
+private fun MarkdownImportDialog(onImport: (String) -> Unit, onDismiss: () -> Unit) {
+	var markdown by remember { mutableStateOf("") }
+	AlertDialog(
+		onDismissRequest = onDismiss,
+		title = { Text("Import markdown") },
+		text = {
+			OutlinedTextField(
+				value = markdown,
+				onValueChange = { markdown = it },
+				label = { Text("Markdown") },
+				minLines = 8,
+				maxLines = 16,
+				modifier = Modifier.fillMaxWidth(),
+			)
+		},
+		confirmButton = { TextButton(onClick = { onImport(markdown) }, enabled = markdown.isNotEmpty()) { Text("Import") } },
+		dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+	)
+}
