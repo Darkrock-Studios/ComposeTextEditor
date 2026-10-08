@@ -195,7 +195,7 @@ class StyledRoundTripTest {
 			MarkdownConfiguration.DEFAULT.copy(highlightSyntax = HighlightSyntax.MARK_TAG),
 			MarkdownConfiguration.DEFAULT.copy(paragraphSeparator = ParagraphSeparator.NEWLINE),
 		)
-		val prefixes = listOf("", "", "", "- ", "1. ", "> ", "# ", "- [ ] ", "1. [x] ", "  - ", "## ", "> - ", "    ")
+		val prefixes = listOf("", "", "", "- ", "1. ", "> ", "# ", "- [ ] ", "1. [x] ", "  - ", "## ", "> - ", "&nbsp;&nbsp;&nbsp;&nbsp;")
 		for ((alphabet, seeds) in listOf("ab cd.,!?'\"()-" to 1..400, "ab c*_~`[]<>&#\\!.=|" to 401..800)) for (seed in seeds) {
 			val random = Random(seed)
 			val lines = List(random.nextInt(1, 5)) {

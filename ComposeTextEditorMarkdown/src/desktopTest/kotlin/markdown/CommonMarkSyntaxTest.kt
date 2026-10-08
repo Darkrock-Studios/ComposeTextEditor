@@ -254,7 +254,7 @@ class CommonMarkSyntaxTest {
 		for ((markdown, expected) in listOf(
 			"___\n\n- - -\n\n **  * ** * ** * **\n\n-     -      -      -\n\n_____________________________________" to "---\n---\n---\n---\n---",
 			"* Foo\n* * *\n* Bar" to "- Foo\n---\n- Bar",
-			"--\n\n**\n\n    ***" to "--\n**\n\n    ***",
+			"--\n\n**\n\n    ***" to "--\n**\n``` ***",
 		)) {
 			assertEquals(expected, imported(markdown).editorState.blockLines(), markdown)
 		}
@@ -372,13 +372,34 @@ class CommonMarkSyntaxTest {
 	}
 
 	@Test
+	fun `a line indented four columns is code, unless a paragraph or list item takes it`() = runTest {
+		for ((markdown, expected) in listOf(
+			"    a\n      b\n\n\n    c" to "``` a\n```   b\n``` \n``` \n``` c",
+			"\tfoo\tbar\n  \tbaz" to "``` foo\tbar\n``` baz",
+			"# Heading\n    foo\n\npara\n    lazy" to "# Heading\n``` foo\npara\nlazy",
+			" -    one\n\n     two" to "- one\n```  two",
+			"1. a\n\n  2. b\n\n    3. c" to "1. a\n1. b\n``` \\3. c",
+			"- a\n\n    b" to "- a\nb",
+		)) {
+			assertEquals(expected, imported(markdown).editorState.blockLines(), markdown)
+		}
+	}
+
+	@Test
+	fun `under single newlines an indented line is text, as export before 3_0 wrote an indent`() = runTest {
+		val markdown = markdown()
+		markdown.importMarkdown("para\n\n    indented", ParagraphSeparator.NEWLINE)
+		assertEquals("para\n\n    indented", markdown.editorState.blockLines())
+	}
+
+	@Test
 	fun `up to three spaces before a heading or quote marker are no text`() = runTest {
 		for ((markdown, expected) in listOf(
 			" ### foo\n\n  ## foo\n\n   # foo" to "### foo\n## foo\n# foo",
 			"   > # Foo\n   > bar" to "> # Foo\n> bar",
 			" > a\n >\n > b" to "> a\n> b",
 			">> Foo\n>> ===" to "> # Foo",
-			"    # foo" to "    # foo",
+			"    # foo" to "``` \\# foo",
 		)) {
 			assertEquals(expected, imported(markdown).editorState.blockLines(), markdown)
 		}

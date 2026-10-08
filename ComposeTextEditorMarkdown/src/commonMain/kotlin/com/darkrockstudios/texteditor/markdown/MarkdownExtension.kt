@@ -122,6 +122,99 @@ private fun stripCodeFences(markdown: String): CodeFenceStripResult {
 	)
 }
 
+private val LIST_ITEM_MARKER = Regex("""^([-*+]|\d{1,9}[.)])([ \t]*)""")
+
+/**
+ * [strip] with each indented code block's lines fenced, four columns of indent off: a run
+ * of lines indented four or more, through blank lines between them, that starts where a
+ * paragraph is not open to take it as its text. One inside a quote or a list item, which a
+ * fence cannot stack with, stays as it is. Export never writes such a line: it writes a
+ * leading indent as entities. Only under [ParagraphSeparator.BLANK_LINE]: export before
+ * 3.0 wrote a leading indent as it is.
+ */
+private fun withIndentedCode(strip: CodeFenceStripResult): CodeFenceStripResult {
+	val lines = strip.text.lines()
+	if (lines.none { columnsOf(it).first >= 4 }) return strip
+	val code = HashMap<Int, String>()
+	// Content columns of the open list items, outermost first.
+	val itemColumns = ArrayList<Int>()
+	var paragraphOpen = false
+	var index = 0
+	while (index < lines.size) {
+		val line = lines[index]
+		if (index in strip.fencedLines) {
+			paragraphOpen = false
+			index++
+			continue
+		}
+		if (line.isBlank()) {
+			paragraphOpen = false
+			index++
+			continue
+		}
+		val (indent, indentChars) = columnsOf(line)
+		val body = line.substring(indentChars)
+		val inItem = itemColumns.isNotEmpty() && indent >= itemColumns.first()
+		if (indent >= 4 && !inItem && !paragraphOpen) {
+			var end = index
+			var last = index
+			while (end < lines.size && end !in strip.fencedLines && (lines[end].isBlank() || columnsOf(lines[end]).first >= 4)) {
+				if (lines[end].isNotBlank()) last = end
+				end++
+			}
+			for (taken in index..last) code[taken] = withoutColumns(lines[taken], 4)
+			itemColumns.clear()
+			index = last + 1
+			continue
+		}
+		val marker = if (indent - (itemColumns.lastOrNull { it <= indent } ?: 0) < 4) LIST_ITEM_MARKER.find(body) else null
+		val markerIsItem = marker != null && (marker.groupValues[2].isNotEmpty() || marker.value.length == body.length)
+		when {
+			markerIsItem && !isThematicBreak(line) -> {
+				val spaces = columnsOf(marker!!.groupValues[2]).first
+				val width = marker.groupValues[1].length + if (spaces in 1..4 && marker.value.length < body.length) spaces else 1
+				while (itemColumns.isNotEmpty() && itemColumns.last() > indent) itemColumns.removeAt(itemColumns.lastIndex)
+				itemColumns += indent + width
+				paragraphOpen = marker.value.length < body.length
+			}
+			paragraphOpen && SETEXT_UNDERLINE_LINE.matches(line) -> paragraphOpen = false
+			else -> {
+				// A line outside every item ends the list, unless it is a paragraph's lazy text.
+				if (!inItem && !paragraphOpen) itemColumns.clear()
+				paragraphOpen = splitQuote(body).second.let(::isParagraphText)
+			}
+		}
+		index++
+	}
+	if (code.isEmpty()) return strip
+	return strip.copy(
+		text = lines.mapIndexed { line, text -> code[line] ?: text }.joinToString("\n"),
+		fencedLines = strip.fencedLines + code.keys,
+	)
+}
+
+/** How many columns [line]'s leading spaces and tabs span, a tab to the next multiple of four, and how many characters they are. */
+private fun columnsOf(line: String): Pair<Int, Int> {
+	var columns = 0
+	var chars = 0
+	while (chars < line.length && (line[chars] == ' ' || line[chars] == '\t')) {
+		columns = if (line[chars] == '\t') columns + 4 - columns % 4 else columns + 1
+		chars++
+	}
+	return columns to chars
+}
+
+/** [line] without its first [columns] columns of indent, as many as it has. */
+private fun withoutColumns(line: String, columns: Int): String {
+	var at = 0
+	var column = 0
+	while (at < line.length && column < columns && (line[at] == ' ' || line[at] == '\t')) {
+		column = if (line[at] == '\t') column + 4 - column % 4 else column + 1
+		at++
+	}
+	return line.substring(at)
+}
+
 /**
  * [strip] with each setext heading (a paragraph's lines, then a line of `=` or `-`)
  * written as an ATX heading per line, of level 1 or 2, its underline dropped, so the
@@ -410,12 +503,6 @@ private val RESIDUAL_QUOTE_MARKER = Regex("""^>""")
 
 /** A quoted line with nothing in it; the marker sits at column 0, as the peel needs it. */
 private val QUOTE_BLANK_LINE = Regex("""^>\s*$""")
-
-/**
- * A line CommonMark reads as an indented code block when a block can start there. One of
- * only spaces and tabs is blank, and starts none.
- */
-private val INDENTED_CODE_LINE = Regex("""^(?: {4}|\t)[ \t]*[^ \t]""")
 
 /**
  * Escapes a marker-shaped lead left in a peeled body. The peel already consumed
@@ -779,8 +866,9 @@ class MarkdownExtension(
 		// were inside a fence. Fence content needs to skip the per-line block
 		// detection (it's literal code, not markdown) and its specials need to be
 		// escaped so the parser doesn't reinterpret `*foo*` as italic etc.
-		val (withoutDefinitions, linkDefinitions) = withoutLinkDefinitions(withSingleQuoteMarkers(stripCodeFences(markdownText)))
 		val blankLineParagraphs = paragraphSeparator == ParagraphSeparator.BLANK_LINE
+		val fenced = stripCodeFences(markdownText).let { if (blankLineParagraphs) withIndentedCode(it) else it }
+		val (withoutDefinitions, linkDefinitions) = withoutLinkDefinitions(withSingleQuoteMarkers(fenced))
 		val fenceStrip = withSetextHeadings(withoutDefinitions, dashUnderlines = blankLineParagraphs)
 			.let { if (blankLineParagraphs) withLazyQuoteLines(it) else it }
 		// Stage 2: take the blank line export puts after each block away again,
@@ -1062,9 +1150,8 @@ class MarkdownExtension(
 	/**
 	 * Whether the blank line at [index], which follows a block, is the one
 	 * export writes there rather than the editor's own: export writes none
-	 * between two fenced lines, a bare `>` only between two quoted lines and an
-	 * empty line otherwise, and the editor never writes a line indented like
-	 * code, whose block needs the blank line before it. Export writes none
+	 * between two fenced lines, and a bare `>` only between two quoted lines and an
+	 * empty line otherwise. Export writes none
 	 * between two list items either, and one there is CommonMark's loose list,
 	 * whose items are one list: it is left out too.
 	 */
@@ -1074,7 +1161,6 @@ class MarkdownExtension(
 		val nextLine = lines.getOrNull(next)
 		val nextFenced = next in fencedLines
 		val quotedBlank = lines[index].isNotBlank()
-		if (nextLine != null && !nextFenced && INDENTED_CODE_LINE.containsMatchIn(nextLine)) return false
 		if (previous in fencedLines) return !nextFenced && !quotedBlank
 		val previousLine = lines[previous]
 		val nextQuoted = nextLine != null && !nextFenced && nextLine.startsWith(">")

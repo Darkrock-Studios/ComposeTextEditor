@@ -14,7 +14,9 @@ import com.darkrockstudios.texteditor.richstyle.applyDocumentBlocks
 import com.darkrockstudios.texteditor.state.TextEditorState
 import io.mockk.mockk
 import kotlin.test.Test
+import com.darkrockstudios.texteditor.state.isCodeFence
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
 
@@ -172,10 +174,11 @@ class ParagraphSeparationTest {
 	}
 
 	@Test
-	fun `a blank line before an indented code line is kept`() = runTest {
+	fun `indented code after a blank line is a code block`() = runTest {
 		val e = extension()
 		e.importMarkdown("para\n\n    val x = *y*")
-		assertEquals(listOf("para", "", "    val x = *y*"), e.lines())
+		assertEquals(listOf("para", "val x = *y*"), e.lines())
+		assertTrue(e.editorState.isCodeFence(1))
 	}
 
 	@Test
@@ -189,10 +192,11 @@ class ParagraphSeparationTest {
 	}
 
 	@Test
-	fun `indented code after a line of only spaces still follows a blank line`() = runTest {
+	fun `indented code after a line of only spaces is a code block`() = runTest {
 		val e = extension()
 		e.importMarkdown("para\n\n    \n    code")
-		assertEquals(listOf("para", "    ", "    code"), e.lines())
+		assertEquals(listOf("para", "    ", "code"), e.lines())
+		assertTrue(e.editorState.isCodeFence(2))
 	}
 
 	@Test

@@ -11,7 +11,9 @@ import com.darkrockstudios.texteditor.richstyle.applyDocumentBlocks
 import com.darkrockstudios.texteditor.state.TextEditorState
 import io.mockk.mockk
 import kotlin.test.Test
+import com.darkrockstudios.texteditor.state.isCodeFence
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
 import utils.linesWith
@@ -168,8 +170,8 @@ class NestedListSerializationTest {
 		val e = extension()
 		e.importMarkdown("text\n\n    - not a bullet")
 		assertEquals(emptyList(), e.listLines())
-		// The blank line before an indented code line is content, not a separator.
-		assertEquals("text\n\n    - not a bullet", e.editorState.getAllText().text)
+		assertEquals("text\n- not a bullet", e.editorState.getAllText().text)
+		assertTrue(e.editorState.isCodeFence(1))
 
 		e.importMarkdown("- a\n      - code, not a child")
 		assertEquals(listOf(Triple(0, "b", 0)), e.listLines())
