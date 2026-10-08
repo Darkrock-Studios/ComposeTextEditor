@@ -165,6 +165,11 @@ private fun withSetextHeadings(strip: CodeFenceStripResult, dashUnderlines: Bool
 			first--
 		}
 		if (first == index) continue
+		// Text after an item's line is the item's, and an underline is never a lazy line of it.
+		if (first > 0 && !literal(first - 1)) {
+			val (itemQuote, item) = splitQuote(lines[first - 1])
+			if (itemQuote == quote && LIST_ITEM_START.containsMatchIn(item)) continue
+		}
 		val level = if (underline.trim().startsWith('=')) 1 else 2
 		for (line in first until index) levels[line] = level
 		underlines += index
@@ -809,8 +814,19 @@ class MarkdownExtension(
 		// Whether the line before is a paragraph's, quoted or not, null when it is none:
 		// only some blocks may interrupt a paragraph.
 		var paragraphQuote: Boolean? = null
+		// Whether that paragraph is a list item's text, quoted or not: a sibling item may follow it.
+		var itemQuote: Boolean? = null
+		var afterBlank = false
 		val processedLines = keptLines.mapIndexed { index, line ->
 			if (index in codeFenceLineIndices || index in imported.cells) paragraphQuote = null
+			if (index in imported.cells) itemQuote = null
+			// An item's fence leaves it open to the indented text after the fence.
+			if (index in codeFenceLineIndices) afterBlank = true
+			// A separator taken away is a blank line before this one.
+			if (index > 0 && imported.sources[index] - imported.sources[index - 1] > 1) {
+				paragraphQuote = null
+				afterBlank = true
+			}
 			if (index in codeFenceLineIndices) {
 				nesting.close()
 				return@mapIndexed line.escapeMarkdownSpecials()
@@ -828,16 +844,27 @@ class MarkdownExtension(
 				blockHits.getOrPut(block.style) { mutableListOf() } += index
 			}
 			val (quote, unquoted) = splitQuote(line)
+			val quoted = quote.isNotEmpty()
+			val blank = unquoted.isBlank()
+			// Past a blank line, only indented text is still an item's.
+			if (afterBlank && !blank && !unquoted.startsWith(' ') && !unquoted.startsWith('\t')) itemQuote = null
+			afterBlank = blank
+			val isItem = peeled.blocks.any { it.isList }
 			// A rule outranks a list item: `* * *` is a rule, not an item holding `* *`.
-			val ruleNotItem = peeled.blocks.any { it.isList } && isThematicBreak(unquoted)
-			// An item interrupts a paragraph only with text, ordered only numbered 1: else it
-			// is the paragraph's text. Export writes an empty item with a space after its marker.
-			val notItem = paragraphQuote == quote.isNotEmpty() && peeled.blocks.any { it.isList } && (
+			val ruleNotItem = isItem && isThematicBreak(unquoted)
+			// A list's first item interrupts a paragraph only with text, ordered only numbered 1:
+			// else it is the paragraph's text. Export writes an empty item with a space after its marker.
+			val notItem = paragraphQuote == quoted && itemQuote != quoted && isItem && (
 				BARE_LIST_MARKER.matches(unquoted) ||
 					(peeled.blocks.any { it.style is OrderedListSpanStyle } && ORDERED_ITEM_NUMBER.find(unquoted)?.groupValues?.get(1)?.toIntOrNull() != 1)
 				)
 			val paragraph = notItem || (peeled.blocks.none { it.style !== BlockquoteSpanStyle } && isParagraphText(unquoted))
-			paragraphQuote = if (paragraph) quote.isNotEmpty() else null
+			paragraphQuote = if (paragraph) quoted else null
+			itemQuote = when {
+				isItem && !notItem && !ruleNotItem -> quoted
+				blank || (paragraph && itemQuote == quoted) -> itemQuote
+				else -> null
+			}
 			when {
 				notItem -> {
 					nesting.close()
@@ -925,6 +952,7 @@ class MarkdownExtension(
 		val fenced = HashSet<Int>()
 		val infoStrings = HashMap<Int, String>()
 		val cells = HashMap<Int, TableCellSpanStyle>()
+		val sources = ArrayList<Int>(imported.lines.size)
 		var index = 0
 		while (index < imported.lines.size) {
 			val source = imported.sources[index]
@@ -933,6 +961,7 @@ class MarkdownExtension(
 				if (index in imported.fencedLines) fenced += lines.size
 				imported.infoStrings[index]?.let { infoStrings[lines.size] = it }
 				lines += imported.lines[index]
+				sources += source
 				index++
 				continue
 			}
@@ -941,11 +970,12 @@ class MarkdownExtension(
 				row.forEachIndexed { column, text ->
 					cells[lines.size] = TableCellSpanStyle.of(column, read.alignments.getOrElse(column) { TableAlignment.NONE })
 					lines += text
+					sources += source
 				}
 			}
 			while (index < imported.lines.size && imported.sources[index] < source + span) index++
 		}
-		return ImportedLines(lines, fenced, infoStrings, cells)
+		return ImportedLines(lines, fenced, infoStrings, cells, sources)
 	}
 
 	/**

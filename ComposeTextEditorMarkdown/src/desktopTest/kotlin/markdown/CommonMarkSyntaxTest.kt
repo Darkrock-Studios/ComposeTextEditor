@@ -288,6 +288,23 @@ class CommonMarkSyntaxTest {
 	}
 
 	@Test
+	fun `an item after a blank line or an item's own text is no paragraph's interruption`() = runTest {
+		for ((markdown, expected) in listOf(
+			"para\n\n2. x" to "para\n1. x",
+			"1. a\n   wrapped\n2. b" to "1. a\nwrapped\n1. b",
+			"1. a\nlazy\n2. b" to "1. a\nlazy\n1. b",
+			"1. a\n\n   more\n\n2. b" to "1. a\nmore\n1. b",
+			"> 1. a\n>    wrapped\n> 2. b" to "> 1. a\n> wrapped\n> 1. b",
+			"1. a\n\n   ```\n   code\n   ```\n\n   after\n2. b" to "1. a\n``` code\nafter\n1. b",
+			"1. a\n\nnot the item's\n2. b" to "1. a\nnot the item's\n\\2. b",
+			"1. a\n```\ncode\n```\npara\n2. b" to "1. a\n``` code\npara\n\\2. b",
+			"- a\n  wrapped\n-\n- b" to "- a\nwrapped\n- \n- b",
+		)) {
+			assertEquals(expected, imported(markdown).editorState.blockLines(), markdown)
+		}
+	}
+
+	@Test
 	fun `a reference link takes its definition's destination, and the definition is no line`() = runTest {
 		for ((markdown, text, url) in listOf(
 			Triple("[foo][bar]\n\n[bar]: /url \"title\"", "foo", "/url"),
