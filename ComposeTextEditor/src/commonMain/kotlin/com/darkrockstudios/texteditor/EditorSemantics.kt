@@ -1,5 +1,7 @@
 package com.darkrockstudios.texteditor
 
+import com.darkrockstudios.texteditor.state.toggleTaskChecked
+import com.darkrockstudios.texteditor.state.taskCheckedAt
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.geometry.Offset
@@ -10,7 +12,9 @@ import androidx.compose.ui.layout.findRootCoordinates
 import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.SemanticsPropertyKey
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.SemanticsPropertyReceiver
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.copyText
 import androidx.compose.ui.semantics.cutText
@@ -121,6 +125,15 @@ private fun SemanticsPropertyReceiver.editorSemanticsEdits(
 	if (!enabled) {
 		disabled()
 	} else if (editable) {
+		// A task's box answers to an accessibility action, as it does to a tap.
+		state.taskCheckedAt(state.cursorPosition.line)?.let { checked ->
+			customActions = listOf(
+				CustomAccessibilityAction(if (checked) "Uncheck task" else "Check task") {
+					state.asEditor(editor()) { state.toggleTaskChecked(state.cursorPosition.line) }
+					true
+				}
+			)
+		}
 		setText { newText ->
 			state.asEditor(editor()) { state.replaceAllAsEdit(newText) }
 			true

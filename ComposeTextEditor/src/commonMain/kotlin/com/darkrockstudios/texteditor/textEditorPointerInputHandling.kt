@@ -21,6 +21,9 @@ import com.darkrockstudios.texteditor.input.KeyBindings
 import com.darkrockstudios.texteditor.input.MacKeyBindings
 import com.darkrockstudios.texteditor.input.platformKeyBindings
 import com.darkrockstudios.texteditor.richstyle.LinkSpanStyle
+import com.darkrockstudios.texteditor.richstyle.TaskSpanStyle
+import com.darkrockstudios.texteditor.state.taskCheckedAt
+import com.darkrockstudios.texteditor.state.toggleTaskChecked
 import com.darkrockstudios.texteditor.richstyle.RichSpan
 import com.darkrockstudios.texteditor.state.CaretAffinity
 import com.darkrockstudios.texteditor.state.PointerHit
@@ -255,6 +258,7 @@ private fun Modifier.handleMouseInput(
 				// The second and third press of a multi-click select; only a plain first
 				// press can become a click on what is under it.
 				val pressed = if (placesCaret) ClickTarget.at(state, downAt) else null
+				val pressedTask = if (placesCaret && !readOnly) state.taskCheckboxAt(downAt) else null
 				val held = pressed != null && selectionDrag != null && state.selectionContains(downAt)
 				val outcome = if (held) {
 					selectionDrag.holdPress()
@@ -294,6 +298,10 @@ private fun Modifier.handleMouseInput(
 				// A drag inside the slop that still selected something is a drag too.
 				if (pressed == null || state.selector.hasSelection()) return@awaitEachGesture
 				val releasedAt = release.inContent(origin)
+				if (pressedTask != null && state.taskCheckboxAt(releasedAt) == pressedTask) {
+					state.toggleTaskChecked(pressedTask)
+					return@awaitEachGesture
+				}
 				val released = ClickTarget.at(state, releasedAt)
 				val modifiers = currentEvent.keyboardModifiers
 				if (pressed.span != null && pressed.span == released.span) {
@@ -451,6 +459,23 @@ private suspend fun AwaitPointerEventScope.followDrag(
 }
 
 /** What a click at a point would act on: the span that answers it, and any link there. */
+/**
+ * The line of the task whose box is under [offset], in the coordinates [characterAt]
+ * takes, or null: the box's first row, from a little before the box to the text.
+ */
+private fun TextEditorState.taskCheckboxAt(offset: Offset): Int? {
+	val rows = lineOffsets
+	val y = offset.y + scrollState.value
+	val row = rows.getOrNull(rows.rowAtPoint(offset.x + scrollX, y)) ?: return null
+	if (row.virtualLineIndex != 0 || taskCheckedAt(row.line) == null) return null
+	val (box, size) = TaskSpanStyle.checkboxBounds(row.textLayoutResult, density ?: return null)
+	val x = offset.x + scrollX - row.offset.x
+	val slop = size.width / 2f
+	val inside = x >= box.x - slop && x <= box.x + size.width + slop &&
+		y >= row.offset.y && y <= row.offset.y + row.effectiveHeight
+	return row.line.takeIf { inside }
+}
+
 private class ClickTarget(val span: RichSpan?, val link: String?) {
 	companion object {
 		fun at(state: TextEditorState, offset: Offset): ClickTarget = ClickTarget(
@@ -909,6 +934,7 @@ private fun Modifier.handleTouchInteractions(
 				var longPressSelection: PointerSelection? = null
 				var showToolbarOnRelease = false
 				val pressed = ClickTarget.at(state, downAt)
+				val pressedTask = if (!readOnly) state.taskCheckboxAt(downAt) else null
 				val existingSelection = state.selector.selection
 				val longPressJob = state.scope.launch {
 					delay(longPressTimeout)
@@ -956,6 +982,11 @@ private fun Modifier.handleTouchInteractions(
 							if (!didLongPress && !wasDrag) {
 								touchToolbar?.hide()
 								val releasedAt = change.inContent(origin)
+								// A tap on a task's box checks it, and leaves the caret and the keyboard as they were.
+								if (pressedTask != null && state.taskCheckboxAt(releasedAt) == pressedTask) {
+									state.toggleTaskChecked(pressedTask)
+									break
+								}
 								val placed = touchedHandle(releasedAt, state, handles) == null && handleSpanInteraction(
 									state,
 									releasedAt,

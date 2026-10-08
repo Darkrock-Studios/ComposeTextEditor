@@ -16,6 +16,7 @@ import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.annotatedstring.normalizeLineEndings
 import com.darkrockstudios.texteditor.RichTextStyles
 import com.darkrockstudios.texteditor.richstyle.BlockquoteSpanStyle
+import com.darkrockstudios.texteditor.richstyle.TaskSpanStyle
 import com.darkrockstudios.texteditor.richstyle.BulletListSpanStyle
 import com.darkrockstudios.texteditor.richstyle.CodeFenceSpanStyle
 import com.darkrockstudios.texteditor.richstyle.HR_PLACEHOLDER
@@ -394,6 +395,15 @@ private class HtmlSpanBuilder(
 				return
 			}
 
+			// A checkbox opening a list item is the item's task box, GitHub's task list markup.
+			"input" -> {
+				val atLineStart = pendingNewlines() > 0 || out.isEmpty() || out.last() == '\n'
+				if (element.attr("type").equals("checkbox", ignoreCase = true) && scope.listBlock != null && atLineStart) {
+					blockRanges += BlockRange(TaskSpanStyle.of(element.hasAttr("checked")), out.length, out.length, pendingNewlines())
+				}
+				return
+			}
+
 			"img" -> {
 				if (!includeImages) return
 				val source = element.attr("src")
@@ -450,6 +460,10 @@ private class HtmlSpanBuilder(
 		)
 
 		val block = blockStyleFor(name, scope)
+		// Google Docs writes a checklist item as an item in the checkbox role.
+		if (name == "li" && element.attr("role").equals("checkbox", ignoreCase = true)) {
+			blockRanges += BlockRange(TaskSpanStyle.of(element.attr("aria-checked").equals("true", ignoreCase = true)), out.length, out.length, pendingNewlines())
+		}
 		val href = if (name == "a") sanitizeLinkUrl(element.attr("href"), allowedLinkSchemes) else null
 		val start = out.length
 		val spansAtEntry = spans.size

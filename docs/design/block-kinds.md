@@ -23,6 +23,10 @@ collapsible sections) is meant to test it before it is opened to hosts.
 | `beforePastedBlocks`, `settlePasted` | paste and drop | | | own lines, broken tables as text |
 | `repair` | `normalizeLineBlocks` | | language spans | |
 
+Task lists (`line-blocks.md`, "Task lists") are a kind with no facts of their own
+that uses one hook: `TaskKind`'s `repair` takes a task off a line that is no list
+item.
+
 Two hooks live elsewhere because they are not about one kind:
 
 - **`EditBehavior`** claims keys before the default edit: Enter, Backspace,

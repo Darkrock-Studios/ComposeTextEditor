@@ -1,5 +1,7 @@
 package com.darkrockstudios.texteditor.html
 
+import com.darkrockstudios.texteditor.richstyle.TaskChecked
+import com.darkrockstudios.texteditor.richstyle.TaskUnchecked
 import com.darkrockstudios.texteditor.richstyle.TableAlignment
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
@@ -200,7 +202,14 @@ internal fun renderHtmlFragment(
  * An element wrapping lines; an `<li>` is told apart from its siblings by the [item]
  * line it opens on, and carries that line's paragraph format as its [style].
  */
-private data class HtmlContainer(val tag: String, val item: Int = -1, val style: String? = null)
+private data class HtmlContainer(
+	val tag: String,
+	val item: Int = -1,
+	val style: String? = null,
+	val classes: String? = null,
+	/** Markup written inside the element as it opens, before its line: a task item's checkbox. */
+	val lead: String? = null,
+)
 
 /**
  * The elements wrapping each line, asked of in order. A list item is an `<li>` of its
@@ -245,7 +254,20 @@ private class HtmlContainers(
 					containers += item
 				}
 				val listContainer = HtmlContainer(if (list.spanStyle is OrderedListSpanStyle) "ol" else "ul")
-				val item = HtmlContainer("li", line, formats[line]?.toCss())
+				val task = when {
+					blocks.has(line, TaskChecked) -> true
+					blocks.has(line, TaskUnchecked) -> false
+					else -> null
+				}
+				val item = HtmlContainer(
+					"li",
+					line,
+					formats[line]?.toCss(),
+					classes = task?.let { "task-list-item" },
+					lead = task?.let { checked ->
+						"<input type=\"checkbox\" class=\"task-list-item-checkbox\" disabled${if (checked) " checked" else ""}> "
+					},
+				)
 				containers += listContainer
 				containers += item
 				openItems += Triple(listContainer, item, level)
@@ -356,8 +378,10 @@ private class HtmlWriter {
 			// blank first line of the code block.
 			if (container.tag != "code") separate()
 			builder.append('<').append(container.tag)
+			container.classes?.let { builder.append(" class=\"").append(it.escapeHtmlAttribute()).append('"') }
 			container.style?.let { builder.append(" style=\"").append(it.escapeHtmlAttribute()).append('"') }
 			builder.append('>')
+			container.lead?.let { builder.append(it) }
 			open = open + container
 		}
 		// Only the line that opens the fence sits flush against `<code>`; every

@@ -20,6 +20,7 @@ import com.darkrockstudios.texteditor.richstyle.RichSpan
 import com.darkrockstudios.texteditor.richstyle.RichSpanStyle
 import com.darkrockstudios.texteditor.richstyle.TableAlignment
 import com.darkrockstudios.texteditor.richstyle.TableCellSpanStyle
+import com.darkrockstudios.texteditor.richstyle.TaskSpanStyle
 import com.darkrockstudios.texteditor.richstyle.TextEditorTable
 import com.darkrockstudios.texteditor.richstyle.tableAt
 import com.darkrockstudios.texteditor.richstyle.applyDocumentBlocks
@@ -209,7 +210,10 @@ private class ListNesting {
 		val markerWidth = if (spaces in 1..4 && result.body.isNotEmpty()) consumed else marker.trimEnd().length + 1
 		while (contentOffsets.size > level) contentOffsets.removeAt(contentOffsets.size - 1)
 		contentOffsets += indent + markerWidth
-		return PeeledLine(result.body, result.blocks.map { if (it.isList) it.atListLevel(level) else it })
+		val blocks = result.blocks.map { if (it.isList) it.atListLevel(level) else it }
+		// A task's box opens the item's body.
+		val task = TASK_MARKER.matchEntire(result.body) ?: return PeeledLine(result.body, blocks)
+		return PeeledLine(task.groupValues[2], blocks + taskSyntax(task.groupValues[1] != " "))
 	}
 }
 
@@ -550,6 +554,12 @@ class MarkdownExtension(
 				sb.append(prefix)
 				while (contentOffsets.size > level) contentOffsets.removeAt(contentOffsets.size - 1)
 				contentOffsets += indent + prefix.length
+			}
+			val task = stylesOn(lineIndex).firstNotNullOfOrNull { it as? TaskSpanStyle }
+			when {
+				list != null && task != null -> sb.append(taskSyntax(task.checked).prefix(0))
+				// An item's text that reads as a task's box is escaped.
+				list != null && TASK_MARKER.containsMatchIn(lineMarkdown) -> sb.append('\\')
 			}
 			sb.append(lineMarkdown)
 			cursor = end + 1

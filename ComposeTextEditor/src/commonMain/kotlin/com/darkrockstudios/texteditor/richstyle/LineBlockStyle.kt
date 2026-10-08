@@ -23,12 +23,15 @@ import kotlin.concurrent.Volatile
  *
  * [textStyle] is applied to the line text at apply time and stripped at
  * demote time: `CodeFence` bakes monospace, a heading its configured style.
- * Null for blocks that don't change the line's text style.
+ * Null for blocks that don't change the line's text style. [continuesAs] is the
+ * block a line Enter splits off takes in this one's place, as a checked task's
+ * next item is unchecked; null for this block itself.
  */
 internal data class LineBlockStyle(
 	val spanStyle: RichSpanStyle,
 	val paragraphStyle: ParagraphStyle,
 	val textStyle: SpanStyle? = null,
+	val continuesAs: LineBlockStyle? = null,
 )
 
 internal val Blockquote = LineBlockStyle(
@@ -102,6 +105,17 @@ internal val CodeFence = LineBlockStyle(
 	textStyle = SpanStyle(fontFamily = FontFamily.Monospace),
 )
 
+/** The task blocks: unchecked, then checked, whose next item is unchecked. */
+internal val TaskUnchecked = LineBlockStyle(spanStyle = TaskSpanStyle.UNCHECKED, paragraphStyle = TASK_PARAGRAPH_STYLE)
+internal val TaskChecked = LineBlockStyle(spanStyle = TaskSpanStyle.CHECKED, paragraphStyle = TASK_PARAGRAPH_STYLE, continuesAs = TaskUnchecked)
+
+/** The task block for [checked]. */
+internal fun taskBlock(checked: Boolean): LineBlockStyle = if (checked) TaskChecked else TaskUnchecked
+
+/** Whether this block is a task's, checked or not. */
+internal val LineBlockStyle.isTask: Boolean
+	get() = spanStyle is TaskSpanStyle
+
 /** The table-cell blocks, by column and then alignment, as [TableCellSpanStyle.ALL] lists them. */
 internal val TABLE_CELLS: List<LineBlockStyle> = TableCellSpanStyle.ALL.map {
 	LineBlockStyle(spanStyle = it, paragraphStyle = tableCellParagraphStyle(it.alignment))
@@ -141,8 +155,9 @@ internal fun lineBlockFor(style: RichSpanStyle, styles: RichTextStyles): LineBlo
 
 /**
  * Every line block's span style, in the order a line's blocks resolve: the
- * blockquote, the six headings, the two list kinds at level 0 and then at each
- * deeper level, the code fence, and the table cells, which no line marker writes.
+ * blockquote, the two task states, the six headings, the two list kinds at level 0
+ * and then at each deeper level, the code fence, and the table cells, which no line
+ * marker writes.
  * A format addon that peels block markers off a line peels in this order, so a
  * stack lands as the editor resolves it.
  */
@@ -175,7 +190,9 @@ private class LineBlockRegistry(styles: RichTextStyles) {
 	val prefixBlocks: List<LineBlockStyle> =
 		listOf(Blockquote) + headers + listOf(OrderedList, BulletList)
 	val allBlocks: List<LineBlockStyle> =
-		prefixBlocks + ORDERED_LISTS.drop(1) + BULLET_LISTS.drop(1) + CodeFence + TABLE_CELLS
+		// A task resolves ahead of its list, so Backspace at an item's start takes the box first.
+		listOf(Blockquote, TaskUnchecked, TaskChecked) + prefixBlocks.drop(1) + ORDERED_LISTS.drop(1) + BULLET_LISTS.drop(1) +
+			CodeFence + TABLE_CELLS
 
 	/** Each block by its span style, which is a per-level singleton compared by identity. */
 	val byStyle: Map<RichSpanStyle, LineBlockStyle> = allBlocks.associateBy { it.spanStyle }
@@ -285,6 +302,8 @@ private fun registryFor(styles: RichTextStyles): LineBlockRegistry {
  * - A blockquote stacks with lists and headings (`> - item` and `> # Title`).
  * - A code fence stacks with nothing; quoted or listed code blocks aren't
  *   meaningful in the editor's model and the visual treatments would conflict.
+ * - A task stacks with a list item, whose box it is, and a quote; it takes no
+ *   heading, and its two states exclude each other.
  * - An inline-only block ([RichSpanStyle.inlineOnly], a table cell) stacks with
  *   nothing, another column's cell included: GFM holds only inline content in a
  *   cell. Unlike the others, it is not the block that gives way: putting another
@@ -300,6 +319,8 @@ fun lineBlocksConflict(a: RichSpanStyle, b: RichSpanStyle): Boolean {
 	return when {
 		a === CodeFenceSpanStyle || b === CodeFenceSpanStyle -> true
 		a.inlineOnly || b.inlineOnly -> true
+		a is TaskSpanStyle -> b is TaskSpanStyle || b is HeaderSpanStyle
+		b is TaskSpanStyle -> a is HeaderSpanStyle
 		a is HeaderSpanStyle -> b is HeaderSpanStyle || bList
 		b is HeaderSpanStyle -> aList
 		else -> aList && bList

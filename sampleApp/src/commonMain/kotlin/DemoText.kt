@@ -167,6 +167,12 @@ Ordered lists number themselves automatically — add or remove items and the nu
 2. Second step with **bold** and *italic*
 3. A third item that wraps onto a second visual line so we can confirm the hanging indent lines up under the text rather than the numeral
 
+Task lists are GFM's checklists: click a box to check it, and the task list button turns lines into tasks:
+
+- [x] Read the design
+- [ ] Try the checkboxes
+  - [ ] Nested tasks work too
+
 Fenced code blocks render with monospace text on a tinted card with a hairline border on all four sides, so they stand apart from the body without being mistaken for a blockquote:
 
 ```

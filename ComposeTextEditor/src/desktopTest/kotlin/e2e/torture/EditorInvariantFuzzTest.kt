@@ -66,6 +66,19 @@ class EditorInvariantFuzzTest {
 	@Test
 	fun `narrow invariant fuzz seed 777`() = narrowFuzz(777)
 
+	private fun tasksFuzz(seed: Long, width: androidx.compose.ui.unit.Dp) = invariantFuzz(
+		seed = fuzzSeed(seed),
+		count = 100,
+		width = width,
+		startBlockLines = "intro\n- [ ] open task that wraps onto more lines\n- [x] done\n  - [ ] nested\n1. [x] numbered\n> - [ ] quoted\nend",
+	)
+
+	@Test
+	fun `invariant fuzz with tasks seed 1`() = tasksFuzz(1, WIDTH)
+
+	@Test
+	fun `invariant fuzz with tasks seed 42`() = tasksFuzz(42, 120.dp)
+
 	@Test
 	fun `invariant fuzz with tables seed 7`() = tablesFuzz(7)
 

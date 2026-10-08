@@ -62,7 +62,9 @@ open class OrderedListSpanStyle private constructor(val level: Int) : RichSpanSt
 		// laid-out text position rather than hardcoding the gutter makes the
 		// marker track whatever indent the platform actually applied.
 		val rightPad = GUTTER_RIGHT_PAD_SP.sp.toPx()
-		val textLeft = layoutResult.lineTextLeft(lineWrap.virtualLineIndex, this)
+		// A task's box sits between the numeral and the text.
+		val taskGutter = if (lineWrap.isTask) TaskSpanStyle.GUTTER_SP.sp.toPx() else 0f
+		val textLeft = layoutResult.lineTextLeft(lineWrap.virtualLineIndex, this) - taskGutter
 		val markerWidth = measured.size.width.toFloat()
 		val x = (textLeft - rightPad - markerWidth).coerceAtLeast(0f)
 

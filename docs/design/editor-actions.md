@@ -164,12 +164,14 @@ by equality, as `addStyleSpan` and `removeStyleSpan` do.
 | Inline code | Ctrl+E | Cmd+E |
 | Clear formatting | Ctrl+\ | Cmd+\ |
 | Unlink | none | none |
+| Toggle task | none | none |
 
 Strikethrough follows Google Docs on macOS, Slack and Teams; the other common
 choice, Shift+S, is Save As in most hosts. Inline code follows GitHub and
 Notion. Clear formatting follows Google Docs; Word's Ctrl+Space switches the
 input method on Windows, Linux and macOS. Unlink has no chord common enough to
-claim.
+claim. Toggle task's, Ctrl+Enter in Obsidian and Notion, is left to the host:
+Ctrl+Enter often sends or submits, and a bound chord is consumed even off a task.
 
 `editor.clearFormatting` (`TextEditorState.clearFormatting`) takes every
 character style off the selection except those structure puts there: a

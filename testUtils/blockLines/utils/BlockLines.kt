@@ -15,6 +15,7 @@ import com.darkrockstudios.texteditor.richstyle.OrderedListSpanStyle
 import com.darkrockstudios.texteditor.richstyle.RichSpanStyle
 import com.darkrockstudios.texteditor.richstyle.TableAlignment
 import com.darkrockstudios.texteditor.richstyle.TableCellSpanStyle
+import com.darkrockstudios.texteditor.richstyle.TaskSpanStyle
 import com.darkrockstudios.texteditor.richstyle.applyDocumentBlocks
 import com.darkrockstudios.texteditor.state.TextEditorState
 
@@ -33,6 +34,7 @@ import com.darkrockstudios.texteditor.state.TextEditorState
  * | `---` alone                           | horizontal rule                      |
  * | `![alt](source)` alone                | image, when a provider is given      |
  * | `|`, column, alignment, `| `          | table cell in that column            |
+ * | `[ ] ` or `[x] ` after a list marker  | task, unchecked or checked           |
  *
  * A `\` after the markers keeps the rest as text (`\- not a list`), and is written
  * wherever the text would read as a marker. Unlike markdown there is no inline syntax,
@@ -103,12 +105,13 @@ fun TextEditorState.blockLines(): String {
 		)
 		// The blocks never stack these, and the notation reads one of them per line.
 		check(markers.size <= 1) { "line $index stacks blocks the notation cannot write: $styles" }
-		val prefix = (if (BlockquoteSpanStyle in styles) "> " else "") + markers.joinToString("")
+		val task = styles.firstNotNullOfOrNull { it as? TaskSpanStyle }?.let { if (it.checked) "[x] " else "[ ] " }
+		val prefix = (if (BlockquoteSpanStyle in styles) "> " else "") + markers.joinToString("") + task.orEmpty()
 		val image = styles.firstNotNullOfOrNull { it as? ImageBlockSpanStyle }
 		val body = when {
 			HorizontalRuleSpanStyle in styles -> HR_MARKER
 			image != null -> "![${image.alt}](${image.source})"
-			readsAsMarker(line.text) -> "\\" + line.text
+			readsAsMarker(line.text) || (task == null && TASK.containsMatchIn(line.text) && styles.any { it is BulletListSpanStyle || it is OrderedListSpanStyle }) -> "\\" + line.text
 			else -> line.text
 		}
 		prefix + body
@@ -157,6 +160,10 @@ private fun parseBlockLine(line: String): ParsedBlockLine {
 			val level = list.groupValues[1].length / 2
 			blocks += if (list.groupValues[2] == "-") BulletListSpanStyle.of(level) else OrderedListSpanStyle.of(level)
 			rest = rest.substring(list.range.last + 1)
+			TASK.find(rest)?.let { task ->
+				blocks += TaskSpanStyle.of(task.groupValues[1] == "x")
+				rest = rest.substring(task.range.last + 1)
+			}
 		}
 
 		rest.startsWith("$FENCE_MARKER ") -> {
@@ -178,6 +185,7 @@ private const val FENCE_MARKER = "```"
 private const val HR_MARKER = "---"
 private val HEADING = Regex("^(#{1,6}) ")
 private val LIST_ITEM = Regex("^((?:  )*)(-|\\d+\\.) ")
+private val TASK = Regex("""^\[([ x])] """)
 private val TABLE_CELL = Regex("""^\|(\d+)([<^>]?)\| """)
 private val ALIGNMENT_MARKS = mapOf(
 	TableAlignment.NONE to "",

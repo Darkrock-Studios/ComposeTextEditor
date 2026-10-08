@@ -219,6 +219,24 @@ The table API is in `com.darkrockstudios.texteditor.state`: `insertTable`,
 and `tableCellAt` to read one. `TextEditorStyle` gains `tableBorderColor` and
 `tableHeaderBackgroundColor`.
 
+## Task lists
+
+After 3.0.3, GFM's task list items are tasks (`docs/design/line-blocks.md`, "Task
+lists"): a `TaskSpanStyle` on a list item, drawn as a checkbox. Nothing needs code,
+but a host may notice:
+
+- **Markdown.** `- [ ] item` and `- [x] item` import as tasks where their boxes
+  were the items' text, and are written back so.
+- **HTML.** A checkbox at a list item's start, and Google Docs' checklist items,
+  import as tasks; a task exports as GitHub's task list markup.
+- **Editing.** A click or a tap on a task's box checks it; Enter after a checked
+  item starts an unchecked one. A new built-in action, `ToggleTask`, bound to no
+  key, checks the caret's tasks. `LINE_BLOCK_STYLES` lists the two task styles
+  after the blockquote.
+
+The task API is in `com.darkrockstudios.texteditor.state`: `toggleTaskList`,
+`setTaskChecked`, `toggleTaskChecked`, `taskCheckedAt` and `isTask`.
+
 ## Keyboard content on Android
 
 An Android host can take the GIFs, stickers and images a keyboard commits by

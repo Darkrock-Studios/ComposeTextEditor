@@ -99,7 +99,7 @@ internal interface LineShaping {
 }
 
 /** The kinds the editor lays out and edits, in the order their hooks are asked. */
-internal val BLOCK_KINDS: List<BlockKind<*>> = listOf(OrderedListKind, CodeFenceKind, TableKind)
+internal val BLOCK_KINDS: List<BlockKind<*>> = listOf(OrderedListKind, CodeFenceKind, TableKind, TaskKind)
 
 /**
  * Every [BlockKind]'s facts for one line, by its place in [BLOCK_KINDS], which the

@@ -22,6 +22,8 @@ import com.darkrockstudios.texteditor.state.setTableColumnAlignment
 import com.darkrockstudios.texteditor.state.tableAt
 import com.darkrockstudios.texteditor.state.tableCellAt
 import com.darkrockstudios.texteditor.state.toggleBlockquote
+import com.darkrockstudios.texteditor.state.toggleTaskChecked
+import com.darkrockstudios.texteditor.state.toggleTaskList
 import com.darkrockstudios.texteditor.state.toggleBulletList
 import com.darkrockstudios.texteditor.state.toggleCodeFence
 import com.darkrockstudios.texteditor.state.toggleOrderedList
@@ -61,6 +63,15 @@ sealed class FuzzOp {
 
 	/** Only in a script generated with tables: copies, or cuts, [a, b) and pastes it at [slot], inside the editor. */
 	data class CopyPaste(val a: Int, val b: Int, val slot: Int, val cut: Boolean) : FuzzOp()
+
+	/** Only in a script generated with tasks: toggles a task list on the lines from [lineSeed], or checks the task there when [check]. */
+	data class ToggleTask(val lineSeed: Int, val extent: Int, val check: Boolean) : FuzzOp()
+}
+
+/** Applies a [FuzzOp.ToggleTask]: a task list toggled over its lines, or the task at its first checked. */
+fun TextEditorState.applyTaskToggle(op: FuzzOp.ToggleTask) {
+	val start = op.lineSeed % textLines.size
+	if (op.check) toggleTaskChecked(start) else toggleTaskList(start..minOf(start + op.extent, textLines.lastIndex))
 }
 
 /** The number of [FuzzOp.TableEdit] kinds; see [applyTableEdit]. */
@@ -102,19 +113,25 @@ private fun FuzzOp.historyCost(): Int = when (this) {
  * (per keystroke, see [historyCost]) reach [mutatingBudget], which keeps a whole
  * script inside the 100-entry undo cap so the undo-to-origin invariant is honest;
  * the rest are navigation and undo/redo. With [tables], some ops are table operations,
- * Tab and in-editor copy and paste; without, a seed's script is as it always was.
+ * Tab and in-editor copy and paste, and with [tasks] some toggle task lists or check a
+ * task; without either, a seed's script is as it always was.
  */
 fun generateFuzzScript(
 	seed: Long,
 	count: Int,
 	mutatingBudget: Int = Int.MAX_VALUE,
 	tables: Boolean = false,
+	tasks: Boolean = false,
 ): List<FuzzOp> {
 	val random = Random(seed)
 	var budget = mutatingBudget
 	val script = mutableListOf<FuzzOp>()
 	while (script.size < count) {
-		val op = if (tables && random.nextInt(100) < 20) randomTableOp(random) else randomOp(random)
+		val op = when {
+			tasks && random.nextInt(100) < 10 -> FuzzOp.ToggleTask(random.nextInt(1024), random.nextInt(3), random.nextInt(2) == 0)
+			tables && random.nextInt(100) < 20 -> randomTableOp(random)
+			else -> randomOp(random)
+		}
 		if (op.isMutating()) {
 			val cost = op.historyCost()
 			if (cost > budget) {
@@ -361,6 +378,8 @@ class StateFuzzInterpreter(
 			}
 
 			is FuzzOp.InsertTable -> state.insertTable(op.rows, op.columns)
+
+			is FuzzOp.ToggleTask -> state.applyTaskToggle(op)
 
 			is FuzzOp.TableEdit -> state.applyTableEdit(op.kind, offset(op.slot).line)
 
