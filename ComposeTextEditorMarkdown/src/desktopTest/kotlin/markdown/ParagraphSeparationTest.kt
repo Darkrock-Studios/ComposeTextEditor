@@ -139,11 +139,11 @@ class ParagraphSeparationTest {
 	}
 
 	@Test
-	fun `a quote followed by a paragraph without a blank line keeps both`() = runTest {
+	fun `a paragraph line right after a quote's continues the quote`() = runTest {
 		val e = extension()
 		e.importMarkdown("> a\nb")
 		assertEquals(listOf("a", "b"), e.lines())
-		assertEquals("> a\n\nb", e.exportAsMarkdown())
+		assertEquals("> a\n>\n> b", e.exportAsMarkdown())
 	}
 
 	@Test

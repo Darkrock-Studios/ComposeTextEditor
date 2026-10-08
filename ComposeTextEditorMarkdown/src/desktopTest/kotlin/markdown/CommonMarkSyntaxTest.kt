@@ -328,6 +328,43 @@ class CommonMarkSyntaxTest {
 	}
 
 	@Test
+	fun `up to three spaces before a heading or quote marker are no text`() = runTest {
+		for ((markdown, expected) in listOf(
+			" ### foo\n\n  ## foo\n\n   # foo" to "### foo\n## foo\n# foo",
+			"   > # Foo\n   > bar" to "> # Foo\n> bar",
+			"    # foo" to "    # foo",
+		)) {
+			assertEquals(expected, imported(markdown).editorState.blockLines(), markdown)
+		}
+	}
+
+	@Test
+	fun `nested quote markers are one quote`() = runTest {
+		for ((markdown, expected) in listOf(
+			"> > > foo" to "> foo",
+			">>> foo\n> bar\n>>baz" to "> foo\n> bar\n> baz",
+		)) {
+			assertEquals(expected, imported(markdown).editorState.blockLines(), markdown)
+		}
+	}
+
+	@Test
+	fun `a paragraph line right after a quoted one continues the quote, under blank-line paragraphs`() = runTest {
+		for ((markdown, expected) in listOf(
+			"> bar\nbaz\n> foo" to "> bar\n> baz\n> foo",
+			"> # Foo\nbar" to "> # Foo\nbar",
+			"> foo\n---" to "> foo\n---",
+			"> foo\n- bar" to "> foo\n- bar",
+			"> bar\n\nbaz" to "> bar\nbaz",
+		)) {
+			assertEquals(expected, imported(markdown).editorState.blockLines(), markdown)
+		}
+		val newlineMarkdown = MarkdownExtension(TextEditorState(scope = this, measurer = mockk(relaxed = true)), newlines)
+		newlineMarkdown.importMarkdown("> bar\nbaz")
+		assertEquals("> bar\nbaz", newlineMarkdown.editorState.blockLines())
+	}
+
+	@Test
 	fun `a heading's closing sequence is not its text, nor is the whitespace around it`() = runTest {
 		for ((markdown, expected) in listOf(
 			"## foo ##" to "## foo",

@@ -40,7 +40,7 @@ class BlockquoteSerializationTest {
 	@Test
 	fun `import attaches blockquote span on quoted line`() = runTest {
 		val extension = createMarkdownExtension()
-		extension.importMarkdown("before\n> a quote\nafter")
+		extension.importMarkdown("before\n\n> a quote\n\nafter")
 
 		assertEquals(listOf(1), extension.blockquoteLines())
 		// The `> ` prefix is stripped so the underlying text is the quote body.
@@ -92,7 +92,7 @@ class BlockquoteSerializationTest {
 	@Test
 	fun `export emits gt prefix for blockquote line`() = runTest {
 		val extension = createMarkdownExtension()
-		extension.importMarkdown("before\n> a quote\nafter")
+		extension.importMarkdown("before\n\n> a quote\n\nafter")
 		assertEquals("before\n\n> a quote\n\nafter", extension.exportAsMarkdown())
 	}
 
@@ -153,7 +153,7 @@ class BlockquoteSerializationTest {
 	@Test
 	fun `toggleBlockquote across mixed range turns all on`() = runTest {
 		val extension = createMarkdownExtension()
-		extension.importMarkdown("> quoted\nplain")
+		extension.importMarkdown("> quoted\n\nplain")
 
 		extension.editorState.toggleBlockquote(0..1)
 		assertEquals(listOf(0, 1), extension.blockquoteLines())

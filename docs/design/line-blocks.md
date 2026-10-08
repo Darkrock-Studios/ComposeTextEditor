@@ -422,7 +422,7 @@ consequences of its own.
 
 ## Known limitations
 
-- A nested `> > ` quote collapses one level per import pass; only lists nest.
+- A nested `> > ` quote imports as one quote; only lists nest.
 - Exporting a document whose last line is a heading appends a trailing blank
   line that survives re-import (stable at one extra line).
 - Toggling a style off after a blanket apply does not restore the styles lines

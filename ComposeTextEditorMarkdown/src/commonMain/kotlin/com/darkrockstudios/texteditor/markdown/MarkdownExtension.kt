@@ -238,6 +238,45 @@ private fun withoutLinkDefinitions(strip: CodeFenceStripResult): Pair<CodeFenceS
 
 private val QUOTE_PREFIX = Regex("""^>\s?""")
 
+/**
+ * [strip] with each paragraph line right after a quoted paragraph line quoted too: it
+ * continues that paragraph, which CommonMark lets drop the marker. Only under
+ * [ParagraphSeparator.BLANK_LINE]: single-newline export writes a quoted line and a
+ * plain one after it so.
+ */
+private fun withLazyQuoteLines(strip: CodeFenceStripResult): CodeFenceStripResult {
+	val lines = strip.text.lines()
+	val tableLines = findTables(lines, strip.fencedLines).flatMapTo(HashSet()) { it }
+	val lazy = HashSet<Int>()
+	var quotedParagraph = false
+	lines.forEachIndexed { index, raw ->
+		if (index in strip.fencedLines || index in tableLines) {
+			quotedParagraph = false
+			return@forEachIndexed
+		}
+		val (quote, body) = splitQuote(withSingleQuoteMarker(raw))
+		val paragraph = isParagraphText(body)
+		if (quote.isEmpty() && paragraph && quotedParagraph) lazy += index
+		quotedParagraph = paragraph && (quote.isNotEmpty() || index in lazy)
+	}
+	if (lazy.isEmpty()) return strip
+	return strip.rewritten(lines, dropped = emptySet()) { index, line -> if (index in lazy) "> $line" else line }
+}
+
+private val NESTED_QUOTE_MARKERS = Regex("""^(?: {0,3}> ?)* {0,3}(?=>)""")
+private val INDENTED_HEADING = Regex("""^ {1,3}(?=#{1,6}(?:[ \t]|$))""")
+
+/**
+ * [line] with its quote markers as one, the editor holding a single level, and the up to
+ * three spaces CommonMark allows before a quote or heading marker taken off: export
+ * writes neither, an indent being entities and a quote marker in the text escaped.
+ */
+private fun withSingleQuoteMarker(line: String): String =
+	line.replaceFirst(NESTED_QUOTE_MARKERS, "").let { quoted ->
+		val (quote, body) = splitQuote(quoted)
+		quote + body.replaceFirst(INDENTED_HEADING, "")
+	}
+
 /** [line]'s quote marker (empty when it has none) and the rest. */
 private fun splitQuote(line: String): Pair<String, String> {
 	val quote = QUOTE_PREFIX.find(line)?.value.orEmpty()
@@ -267,8 +306,8 @@ private data class PeeledLine(
  * each at most once, and only when it can stack with everything already
  * peeled ([lineBlocksConflict]). `> - item` peels quote then bullet;
  * `- 1990. plans` peels only the bullet, because the two list styles are
- * mutually exclusive, so `1990. ` stays in the body text. A nested
- * `> > quoted` keeps its second level as body text.
+ * mutually exclusive, so `1990. ` stays in the body text. Import reads a nested
+ * `> > quoted` as one quote before the peel.
  */
 private fun peelLineBlocks(line: String, syntax: List<MarkdownBlockSyntax>): PeeledLine {
 	var body = line
@@ -737,10 +776,9 @@ class MarkdownExtension(
 		// detection (it's literal code, not markdown) and its specials need to be
 		// escaped so the parser doesn't reinterpret `*foo*` as italic etc.
 		val (withoutDefinitions, linkDefinitions) = withoutLinkDefinitions(stripCodeFences(markdownText))
-		val fenceStrip = withSetextHeadings(
-			withoutDefinitions,
-			dashUnderlines = paragraphSeparator == ParagraphSeparator.BLANK_LINE,
-		)
+		val blankLineParagraphs = paragraphSeparator == ParagraphSeparator.BLANK_LINE
+		val fenceStrip = withSetextHeadings(withoutDefinitions, dashUnderlines = blankLineParagraphs)
+			.let { if (blankLineParagraphs) withLazyQuoteLines(it) else it }
 		// Stage 2: take the blank line export puts after each block away again,
 		// so a paragraph per line comes back as a line per paragraph.
 		// Stage 3: a table's rows become a line per cell. Tables are found first: the blank
@@ -763,16 +801,17 @@ class MarkdownExtension(
 		// Whether the line before is a paragraph's, quoted or not, null when it is none:
 		// only some blocks may interrupt a paragraph.
 		var paragraphQuote: Boolean? = null
-		val processedLines = keptLines.mapIndexed { index, line ->
+		val processedLines = keptLines.mapIndexed { index, source ->
 			if (index in codeFenceLineIndices || index in imported.cells) paragraphQuote = null
 			if (index in codeFenceLineIndices) {
 				nesting.close()
-				return@mapIndexed line.escapeMarkdownSpecials()
+				return@mapIndexed source.escapeMarkdownSpecials()
 			}
 			if (index in imported.cells) {
 				nesting.close()
-				return@mapIndexed "$cellLead$line"
+				return@mapIndexed "$cellLead$source"
 			}
+			val line = withSingleQuoteMarker(source)
 			// Markers peel before the body is classified, so a rule or image keeps
 			// a stacked blockquote (`> ---`), and a `- ---` line comes back as the
 			// rule it once was rather than a bullet holding literal dashes.
