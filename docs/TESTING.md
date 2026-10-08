@@ -14,6 +14,7 @@
 | iOS simulator smoke (Mac only) | `xcodebuild test -project sampleAppiOS/SampleAppiOS.xcodeproj -scheme SampleAppiOS -destination 'platform=iOS Simulator,name=iPhone 17 Pro'` | Typing in the running sample app reaches the editor and reads back through accessibility |
 | Browser | `cd browserTests && npx playwright test` | Real key presses and input method compositions in Chromium against the built wasm demo |
 | Gradle check | `./gradlew check` | The JVM and host suites and lint, as the Ubuntu `build` job runs it |
+| Markdown spec support (opt-in) | `CTE_SPEC=1 ./gradlew :ComposeTextEditorMarkdown:desktopTest --tests 'markdown.SpecComplianceTest' --rerun` | Scores import against the CommonMark spec and GFM's extensions, and redraws the README's charts (see below) |
 
 The iOS smoke test lives in the shared `SampleAppiOS` scheme. Xcode prefers a
 personal copy of a scheme in `xcuserdata` over the shared one, and an older personal
@@ -26,6 +27,17 @@ Narrow a run while iterating with `--tests`, for example
 Core's tests stand on core alone: the block tests build and read their
 documents in block lines (below), and what tests markdown is in the markdown
 module's suite.
+
+## Spec support
+
+`SpecComplianceTest` fetches the CommonMark spec and GFM's spec at pinned versions,
+imports each example, and counts it supported when the document matches what importing
+the spec's expected HTML gives. A failing example is raw HTML, which this project does not
+aim to render, when it is in the spec's HTML sections or a tag of its markdown appears in
+its expected HTML as written; any other failure is not supported yet. It prints the totals
+and the unsupported examples by what they are missing, and rewrites
+`docs/images/commonmark-support.svg` and `docs/images/gfm-support.svg`. Update the
+README's counts and lists from its output.
 
 ## Block lines
 
