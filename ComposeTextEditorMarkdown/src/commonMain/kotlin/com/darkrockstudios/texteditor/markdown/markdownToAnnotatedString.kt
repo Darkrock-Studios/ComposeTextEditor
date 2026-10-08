@@ -54,8 +54,10 @@ internal fun String.parseMarkdownWithLinks(
 ): MarkdownParseResult {
 	val normalized = normalizeLineEndings()
 	val standIns = IndentStandIns.forSource(normalized)
-	val source = (standIns?.substitute(normalized) { literalLines ?: normalized.fencedLineIndices() } ?: normalized)
+	val literal by lazy { literalLines ?: normalized.fencedLineIndices() }
+	val source = (standIns?.substitute(normalized) { literal } ?: normalized)
 		.withHighlightTags()
+		.let { withUndefinedReferencesEscaped(it, linkDefinitions, literal) }
 	val flavour = GFMFlavourDescriptor()
 	val parsedTree = MarkdownParser(flavour).buildMarkdownTreeFromString(source)
 	val context = MarkdownRenderContext(styles, allowedLinkSchemes, source.lineStarts(literalLines.orEmpty()), linkDefinitions)

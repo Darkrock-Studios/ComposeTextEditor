@@ -138,9 +138,10 @@ internal fun markdownEscapes(
 		var lineEnd = lineStart
 		while (!isLineEnd(lineEnd)) lineEnd++
 		escapeLineStart(text, lineStart, lineEnd, escape)
-		findLinkOpeners(text, lineStart, lineEnd, markerBoundaries, linkOpeners, bracketClosers)
 		lineStart = lineEnd + 1
 	}
+	// Import parses a document's lines as one paragraph's, so brackets pair across lines.
+	findLinkOpeners(text, 0, text.length, markerBoundaries, linkOpeners, bracketClosers)
 
 	var i = 0
 	while (i < text.length) {
@@ -260,7 +261,7 @@ private fun escapeLineStart(text: CharSequence, start: Int, end: Int, escape: Bo
 }
 
 /**
- * Adds to [openers] the index of each `[` on the line [start] until [end]
+ * Adds to [openers] the index of each `[` in [start] until [end]
  * that a `]` followed by `(` or `[` pairs with, innermost first as CommonMark
  * pairs them. A pair around one of the emitter's delimiters ([markerBoundaries]),
  * which the parser will not pair across the brackets, adds its `]` to

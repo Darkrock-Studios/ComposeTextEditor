@@ -548,7 +548,7 @@ class MarkdownExtension(
 		// list item, heading or fenced line is a block of its own. The same
 		// definition the editor nests by, read from the snapshot.
 		fun isBlankLine(line: Int): Boolean =
-			isNestingBlank(lines[line], spansByLine[line].orEmpty())
+			isNestingBlank(lines[line], spansByLine[line].orEmpty()) && linkSpansByLine[line].isNullOrEmpty()
 
 		// Whether a blank line goes between [line] and the next. Every block gets
 		// one, except that a list's items and a fence's lines stay together, and

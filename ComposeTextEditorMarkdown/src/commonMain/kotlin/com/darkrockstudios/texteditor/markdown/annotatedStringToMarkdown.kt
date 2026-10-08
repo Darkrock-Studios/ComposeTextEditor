@@ -139,6 +139,14 @@ internal fun AnnotatedString.toMarkdown(
 			// anyway.
 			runs = runs.flatMap { run -> subtractRuns(run, codeRuns) }
 		}
+		if (marker == CODE_MARKER) {
+			// A code span takes link syntax literally, so code splits at the edges of a
+			// link inside it, and the link encloses its piece: `` `a`[`b`](url)`c` ``.
+			val linkEdges = linkRuns.flatMap { listOf(it.start, it.end) }
+			runs = runs.flatMap { (start, end) ->
+				(listOf(start) + linkEdges.filter { it in start + 1 until end }.distinct().sorted() + end).zipWithNext()
+			}
+		}
 		if (marker == DOUBLE_EQUALS_MARKER) {
 			// The `==` pre-pass on import pairs delimiters within one line, so a
 			// highlight over a line break is written as one per line.
@@ -278,8 +286,10 @@ private class WrittenDelimiters(val marker: StyleMarkerPair, val openStart: Int)
  * pairs as meant only as `*` and `**` together, a run of three that can both open and
  * close (`**a***b*`); after any other closer it is written as tags, as is a run with
  * an escaped delimiter of its own character beside it, which the parser does not
- * pair. A tag ends a run of delimiters it was part of, which changes how the rest of
- * the run reads, so the delimiters are read again until no more are swapped.
+ * pair. Strikethrough beside a `*` delimiter is written as tags too: the parser misreads
+ * `~~` and `*` written side by side. A tag ends a run of delimiters it was part of, which
+ * changes how the rest of the run reads, so the delimiters are read again until no more
+ * are swapped.
  */
 private fun withUnflankedEmphasisAsTags(markdown: String, delimiters: List<WrittenDelimiters>): String {
 	val swaps = HashSet<WrittenDelimiters>()
@@ -322,14 +332,28 @@ private fun withUnflankedEmphasisAsTags(markdown: String, delimiters: List<Writt
 				(charAt(last + 1) == '\\' && charAt(last + 2) == char)
 		}
 
+		fun IntRange.besideStar() = delimiterAt[first - 1] == '*' || delimiterAt[last + 1] == '*'
+
 		val more = delimiters.filter { written ->
 			if (written in swaps) return@filter false
 			val opener = runAround(written.openStart, written.openStart + written.marker.openMarker.length)
 			val closer = runAround(written.closeStart, written.closeStart + written.marker.closeMarker.length)
+			if (written.marker == STRIKETHROUGH_MARKER && (opener.besideStar() || closer.besideStar())) return@filter true
 			val afterCloser = written.openStart in closerEnds && delimiterAt[written.openStart - 1] == markdown[written.openStart]
 			val pairsAfterCloser = !afterCloser || (opener.count() == 3 && opener.rightFlanking())
 			!pairsAfterCloser || !opener.leftFlanking() || !closer.rightFlanking() ||
 				opener.besideEscapedOwn() || closer.besideEscapedOwn()
+		}.ifEmpty {
+			// Each pair can open and close where it stands; the parser may still pair a
+			// delimiter with another run's (`***a* *b*` by the rule of 3).
+			val matches = delimiterMatches(delimiterAt) { run -> run.leftFlanking() to run.rightFlanking() }
+			delimiters.filter { written ->
+				if (written in swaps) return@filter false
+				val positions = (written.openStart until written.openStart + written.marker.openMarker.length) +
+					(written.closeStart until written.closeStart + written.marker.closeMarker.length)
+				val match = matches[positions.first()]
+				match == null || positions.any { matches[it] != match } || matches.values.count { it == match } != positions.size
+			}
 		}
 		swaps += more
 	} while (more.isNotEmpty())
@@ -348,6 +372,59 @@ private fun withUnflankedEmphasisAsTags(markdown: String, delimiters: List<Writt
 		from = at + length
 	}
 	return out.append(markdown, from, markdown.length).toString()
+}
+
+/**
+ * Which delimiters CommonMark's emphasis pass pairs, by position: the positions of one
+ * match share a number. [delimiterAt] holds each delimiter character by position, side
+ * by side ones of a character one run, and [flanking] says whether a run can open and
+ * close. A `~` run pairs only with one of its own length, as GFM has it.
+ */
+private fun delimiterMatches(delimiterAt: Map<Int, Char>, flanking: (IntRange) -> Pair<Boolean, Boolean>): Map<Int, Int> {
+	class Run(val char: Char, val start: Int, val length: Int, val canOpen: Boolean, val canClose: Boolean) {
+		var left = start
+		var right = start + length
+		var active = true
+		val remaining get() = right - left
+	}
+
+	val runs = ArrayList<Run>()
+	var index = 0
+	val positions = delimiterAt.keys.sorted()
+	while (index < positions.size) {
+		val start = positions[index]
+		val char = delimiterAt.getValue(start)
+		var end = start + 1
+		while (delimiterAt[end] == char) end++
+		val (canOpen, canClose) = flanking(start until end)
+		runs += Run(char, start, end - start, canOpen, canClose)
+		while (index < positions.size && positions[index] < end) index++
+	}
+	val matches = HashMap<Int, Int>()
+	var match = 0
+	runs.forEachIndexed { closerIndex, closer ->
+		if (!closer.canClose) return@forEachIndexed
+		while (closer.remaining > 0) {
+			val openerIndex = (closerIndex - 1 downTo 0).firstOrNull { i ->
+				val opener = runs[i]
+				opener.active && opener.canOpen && opener.char == closer.char && opener.remaining > 0 && when (closer.char) {
+					'~' -> opener.remaining == closer.remaining
+					else -> !((opener.canClose || closer.canOpen) && (opener.length + closer.length) % 3 == 0 &&
+						!(opener.length % 3 == 0 && closer.length % 3 == 0))
+				}
+			} ?: break
+			val opener = runs[openerIndex]
+			val used = if (closer.char == '~' || (opener.remaining >= 2 && closer.remaining >= 2)) minOf(2, closer.remaining) else 1
+			match++
+			for (at in opener.right - used until opener.right) matches[at] = match
+			for (at in closer.left until closer.left + used) matches[at] = match
+			opener.right -= used
+			closer.left += used
+			for (between in openerIndex + 1 until closerIndex) runs[between].active = false
+		}
+		if (!closer.canOpen) closer.active = false
+	}
+	return matches
 }
 
 /**

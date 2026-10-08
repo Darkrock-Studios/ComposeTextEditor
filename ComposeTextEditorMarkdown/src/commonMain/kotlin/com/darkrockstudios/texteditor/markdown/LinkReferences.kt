@@ -111,3 +111,82 @@ private fun lineEndAfter(text: String, from: Int): Int? {
 	while (i < text.length && (text[i] == ' ' || text[i] == '\t')) i++
 	return if (i == text.length || text[i] == '\n') i else null
 }
+
+/**
+ * [source] with the brackets of each reference link no definition in [definitions]
+ * has written escaped, both, so the brackets around them still pair. CommonMark reads such brackets as text, so emphasis and tags pair
+ * across them, but the parser makes a reference link of any bracketed label and reads
+ * no inline syntax in it. Code spans, tags, autolinks and escaped brackets pair with
+ * nothing, and a `]` before `(` is left to the parser as an inline link. The
+ * [literalLines] are code, left as written. An escaped bracket can pair the ones around
+ * it, so the pass repeats until no bracket is escaped.
+ */
+internal fun withUndefinedReferencesEscaped(source: String, definitions: Map<String, String>, literalLines: Set<Int>): String {
+	var text = source
+	while (true) text = undefinedReferencesEscapedOnce(text, definitions, literalLines) ?: return text
+}
+
+/** [source] with the undefined references' brackets escaped, or null when none is. */
+private fun undefinedReferencesEscapedOnce(source: String, definitions: Map<String, String>, literalLines: Set<Int>): String? {
+	val escaped = ArrayList<Int>()
+	val openers = ArrayList<Int>()
+	val literal = BooleanArray(source.length)
+	if (literalLines.isNotEmpty()) {
+		var line = 0
+		for (index in source.indices) {
+			if (line in literalLines) literal[index] = true
+			if (source[index] == '\n') line++
+		}
+	}
+	var i = 0
+	while (i < source.length) {
+		if (literal[i]) {
+			i++
+			continue
+		}
+		when (source[i]) {
+			'\\' -> i++
+			'`' -> {
+				var ticks = i
+				while (ticks < source.length && source[ticks] == '`') ticks++
+				val run = source.substring(i, ticks)
+				var close = source.indexOf(run, ticks)
+				while (close >= 0 && (source.getOrNull(close + run.length) == '`' || source.getOrNull(close - 1) == '`')) {
+					var past = close
+					while (past < source.length && source[past] == '`') past++
+					close = source.indexOf(run, past)
+				}
+				i = if (close >= 0) close + run.length - 1 else ticks - 1
+			}
+			'<' -> INLINE_TAG.matchAt(source, i)?.let { i = it.range.last }
+			'[' -> openers += i
+			']' -> {
+				val opener = openers.removeLastOrNull()
+				if (opener != null && source.getOrNull(i + 1) != '(') {
+					val text = source.substring(opener + 1, i)
+					val labelEnd = if (source.getOrNull(i + 1) == '[') source.indexOf(']', i + 2) else -1
+					val label = if (labelEnd < 0) text else source.substring(i + 2, labelEnd).ifBlank { text }
+					when {
+						normalizeLinkLabel(label) !in definitions -> {
+							escaped += opener
+							escaped += i
+						}
+						// A full or collapsed reference's label is its own, no reference of its own.
+						labelEnd >= 0 -> i = labelEnd
+					}
+				}
+			}
+		}
+		i++
+	}
+	if (escaped.isEmpty()) return null
+	val out = StringBuilder(source.length + escaped.size)
+	var from = 0
+	escaped.sorted().forEach { at ->
+		out.append(source, from, at).append('\\')
+		from = at
+	}
+	return out.append(source, from, source.length).toString()
+}
+
+private val INLINE_TAG = Regex("""<[A-Za-z/!?][^<>\n]*>""")
