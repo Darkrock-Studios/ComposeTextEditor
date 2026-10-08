@@ -255,6 +255,8 @@ private class HtmlSpanBuilder(
 	private var lastWasSpace = true
 	private var trailingSpaceIsLiteral = false
 	private var dropLeadingNewline = false
+	/** A block has held a line, so a block break separates the next from it even with no text written yet. */
+	private var lineHeld = false
 
 	fun build(body: Element): HtmlDocument {
 		visitChildren(body, HtmlScope.ROOT)
@@ -430,6 +432,8 @@ private class HtmlSpanBuilder(
 			element.children().none { it.tagName().lowercase() in BLOCK_TAGS } ||
 			name == "li" && element.startsWithList()
 		if (occupiesALine) flushPendingBreaks()
+		// Only a newline straight after `<pre>` is formatting; after `<pre><code>` it is content.
+		if (name != "pre") dropLeadingNewline = false
 
 		val style = element.attr("style")
 		val nestedPre = scope.preformatted || name == "pre" || isPreformatted(style)
@@ -483,9 +487,14 @@ private class HtmlSpanBuilder(
 			formatRanges += FormatRange(format, start, out.length, pendingAtEntry, firstLineOnly = name == "li" && element.holdsList())
 		}
 		if (href != null) recordLink(href, start, spansAtEntry)
-		// A `<pre>` holding no text never consumes the flag, and leaving it armed
-		// would eat a real newline from the next preformatted run.
-		if (name == "pre") dropLeadingNewline = false
+		if (occupiesALine) lineHeld = true
+		if (name == "pre") {
+			// A `<pre>` holding no text never consumes the flag, and leaving it armed
+			// would eat a real newline from the next preformatted run.
+			dropLeadingNewline = false
+			// The newline ending the last line is not a line of its own, as browsers draw it.
+			if (out.length > start + pendingAtEntry && out.last() == '\n') out.deleteAt(out.length - 1)
+		}
 
 		if (isBlock) requestBlockBreak() else if (isCell) requestCellBreak()
 	}
@@ -618,9 +627,12 @@ private class HtmlSpanBuilder(
 		else -> null
 	}
 
-	/** Puts [placeholder] on a line of its own and reports the offset it landed at. */
+	/**
+	 * Puts [placeholder] on a line of its own and reports the offset it landed at. A line its
+	 * block has just opened, with nothing on it yet, is its own: `<p><img></p>` is one line.
+	 */
 	private inline fun appendOwnLine(placeholder: String, record: (Int) -> Unit) {
-		requestBlockBreak()
+		if (!atLineStart() || pendingNewlines() > 0 || pendingCellBreak) requestBlockBreak()
 		flushPendingBreaks()
 		sync(HtmlScope.ROOT)
 		record(out.length)
@@ -850,7 +862,7 @@ private class HtmlSpanBuilder(
 	}
 
 	private fun requestBlockBreak() {
-		if (out.isNotEmpty()) pendingBlockBreak = true
+		if (out.isNotEmpty() || lineHeld) pendingBlockBreak = true
 		pendingCellBreak = false
 		lastWasSpace = true
 	}
