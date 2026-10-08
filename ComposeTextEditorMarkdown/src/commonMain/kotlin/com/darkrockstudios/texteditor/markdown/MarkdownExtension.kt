@@ -47,7 +47,6 @@ import com.darkrockstudios.texteditor.state.toggleCodeFence
 import com.darkrockstudios.texteditor.state.toggleHeader
 import com.darkrockstudios.texteditor.state.toggleOrderedList
 
-
 /**
  * Matches a line whose entire content is a single markdown image, optionally
  * surrounded by whitespace. Captures alt text (group 1) and URL (group 2).
@@ -220,7 +219,9 @@ private fun withoutLinkDefinitions(strip: CodeFenceStripResult): Pair<CodeFenceS
 		val literal = index in strip.fencedLines || index in tableLines
 		val definition = if (blockStart && !literal) readLinkDefinition(lines, index) else null
 		if (definition == null) {
-			blockStart = literal || line.isBlank() || !isParagraphText(splitQuote(line).second)
+			// A list item's next line continues it, as a paragraph's does.
+			val body = splitQuote(line).second
+			blockStart = literal || line.isBlank() || (!isParagraphText(body) && !LIST_ITEM_START.containsMatchIn(body))
 			index++
 			continue
 		}
@@ -254,7 +255,7 @@ private fun withLazyQuoteLines(strip: CodeFenceStripResult): CodeFenceStripResul
 			quotedParagraph = false
 			return@forEachIndexed
 		}
-		val (quote, body) = splitQuote(withSingleQuoteMarker(raw))
+		val (quote, body) = splitQuote(raw)
 		val paragraph = isParagraphText(body)
 		if (quote.isEmpty() && paragraph && quotedParagraph) lazy += index
 		quotedParagraph = paragraph && (quote.isNotEmpty() || index in lazy)
@@ -265,6 +266,15 @@ private fun withLazyQuoteLines(strip: CodeFenceStripResult): CodeFenceStripResul
 
 private val NESTED_QUOTE_MARKERS = Regex("""^(?: {0,3}> ?)* {0,3}(?=>)""")
 private val INDENTED_HEADING = Regex("""^ {1,3}(?=#{1,6}(?:[ \t]|$))""")
+
+/**
+ * [strip] with each line outside a fence through [withSingleQuoteMarker], before any
+ * stage reads a line's quote.
+ */
+private fun withSingleQuoteMarkers(strip: CodeFenceStripResult): CodeFenceStripResult =
+	strip.rewritten(strip.text.lines(), dropped = emptySet()) { index, line ->
+		if (index in strip.fencedLines) line else withSingleQuoteMarker(line)
+	}
 
 /**
  * [line] with its quote markers as one, the editor holding a single level, and the up to
@@ -404,8 +414,6 @@ private val RESIDUAL_QUOTE_MARKER = Regex("""^>""")
 
 /** A quoted line with nothing in it; the marker sits at column 0, as the peel needs it. */
 private val QUOTE_BLANK_LINE = Regex("""^>\s*$""")
-
-/** A list item, quoted or not and at any indentation, as the peel recognises one. */
 
 /**
  * A line CommonMark reads as an indented code block when a block can start there. One of
@@ -775,7 +783,7 @@ class MarkdownExtension(
 		// were inside a fence. Fence content needs to skip the per-line block
 		// detection (it's literal code, not markdown) and its specials need to be
 		// escaped so the parser doesn't reinterpret `*foo*` as italic etc.
-		val (withoutDefinitions, linkDefinitions) = withoutLinkDefinitions(stripCodeFences(markdownText))
+		val (withoutDefinitions, linkDefinitions) = withoutLinkDefinitions(withSingleQuoteMarkers(stripCodeFences(markdownText)))
 		val blankLineParagraphs = paragraphSeparator == ParagraphSeparator.BLANK_LINE
 		val fenceStrip = withSetextHeadings(withoutDefinitions, dashUnderlines = blankLineParagraphs)
 			.let { if (blankLineParagraphs) withLazyQuoteLines(it) else it }
@@ -801,17 +809,16 @@ class MarkdownExtension(
 		// Whether the line before is a paragraph's, quoted or not, null when it is none:
 		// only some blocks may interrupt a paragraph.
 		var paragraphQuote: Boolean? = null
-		val processedLines = keptLines.mapIndexed { index, source ->
+		val processedLines = keptLines.mapIndexed { index, line ->
 			if (index in codeFenceLineIndices || index in imported.cells) paragraphQuote = null
 			if (index in codeFenceLineIndices) {
 				nesting.close()
-				return@mapIndexed source.escapeMarkdownSpecials()
+				return@mapIndexed line.escapeMarkdownSpecials()
 			}
 			if (index in imported.cells) {
 				nesting.close()
-				return@mapIndexed "$cellLead$source"
+				return@mapIndexed "$cellLead$line"
 			}
-			val line = withSingleQuoteMarker(source)
 			// Markers peel before the body is classified, so a rule or image keeps
 			// a stacked blockquote (`> ---`), and a `- ---` line comes back as the
 			// rule it once was rather than a bullet holding literal dashes.

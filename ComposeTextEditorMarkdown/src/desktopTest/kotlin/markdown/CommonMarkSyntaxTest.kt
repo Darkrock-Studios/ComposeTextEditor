@@ -311,6 +311,7 @@ class CommonMarkSyntaxTest {
 			"[foo] and [*bar*][baz]" to "[foo] and [bar][baz]",
 			"Foo\n[bar]: /baz\n\n[bar]" to "Foo\n[bar]: /baz\n[bar]",
 			"[foo]: /url \"title\" ok" to "[foo]: /url \"title\" ok",
+			"- a\n[foo]: /url\n\n[foo]" to "a\n[foo]: /url\n[foo]",
 		)) {
 			val markdown = imported(markdown)
 			assertEquals(text, markdown.editorState.getAllText().text)
@@ -332,6 +333,8 @@ class CommonMarkSyntaxTest {
 		for ((markdown, expected) in listOf(
 			" ### foo\n\n  ## foo\n\n   # foo" to "### foo\n## foo\n# foo",
 			"   > # Foo\n   > bar" to "> # Foo\n> bar",
+			" > a\n >\n > b" to "> a\n> b",
+			">> Foo\n>> ===" to "> # Foo",
 			"    # foo" to "    # foo",
 		)) {
 			assertEquals(expected, imported(markdown).editorState.blockLines(), markdown)

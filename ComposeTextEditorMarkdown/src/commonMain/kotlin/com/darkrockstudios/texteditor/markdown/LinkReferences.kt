@@ -13,6 +13,7 @@ internal class LinkDefinition(val label: String, val destination: String, val li
  * on the next) is read up to the blank line after it.
  */
 internal fun readLinkDefinition(lines: List<String>, start: Int): LinkDefinition? {
+	if (lines[start].trimStart(' ').firstOrNull() != '[') return null
 	var end = start
 	while (end < lines.size && lines[end].isNotBlank()) end++
 	if (end == start) return null
