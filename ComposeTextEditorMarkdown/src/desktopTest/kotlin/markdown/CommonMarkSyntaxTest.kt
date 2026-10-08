@@ -288,6 +288,32 @@ class CommonMarkSyntaxTest {
 	}
 
 	@Test
+	fun `inline syntax pairs only inside its own block`() = runTest {
+		for ((markdown, markup) in listOf(
+			"*foo\n\nbar*" to "*foo\nbar*",
+			// A heading's look is bold.
+			"# a `b\n\nc` d" to "<b>a `b</b>\nc` d",
+			"- a **b\n- c**" to "a **b\nc**",
+			"> a ~~b\n\nc~~ d" to "a ~~b\nc~~ d",
+			"Foo *bar\nbaz*\n====" to "<b>Foo <i>bar</i></b>\n<i><b>baz</i></b>",
+			"Foo *a\n===\nb* c" to "<b>Foo *a</b>\nb* c",
+			"para *a\nlazy b*" to "para <i>a</i>\n<i>lazy b</i>",
+		)) {
+			assertEquals(markup, imported(markdown).inlineMarkup(), markdown)
+		}
+	}
+
+	@Test
+	fun `an HTML block ends with its own block`() = runTest {
+		assertEquals("<img src=\"x.png\">\nThis <b>is</b> bold.", imported("<img src=\"x.png\">\n\nThis **is** bold.").inlineMarkup())
+	}
+
+	@Test
+	fun `a list item's text indented past a blank line is its text, not code`() = runTest {
+		assertEquals("> 1. one\n> two", imported("   > > 1.  one\n>>\n>>     two").editorState.blockLines())
+	}
+
+	@Test
 	fun `an item after a blank line or an item's own text is no paragraph's interruption`() = runTest {
 		for ((markdown, expected) in listOf(
 			"para\n\n2. x" to "para\n1. x",

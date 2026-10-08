@@ -238,6 +238,10 @@ quote is a block of its own, read and written whole (`docs/design/tables.md`).
    the line a placeholder carrying the compatible peels (the quote, and for an
    image one list style); anything else keeps all peels and the body goes to
    the markdown parser.
+3. **Parse each block alone**: a paragraph's or list item's lines, with the
+   lazy and indented lines that go on them and a setext heading's lines, are
+   one parse, so inline syntax pairs only inside its block and an HTML block
+   ends with it. Fenced lines and placeholders go into the text unparsed.
 
 HTML import and export share the same block attachment path and derive their
 container nesting from the same snapshot walk, so both serializers agree on
