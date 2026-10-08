@@ -5,6 +5,7 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextDirection
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.cursor.calculateCursorPosition
@@ -143,7 +144,7 @@ class VisualArrowE2eTest {
 	@Test
 	fun `a row after a wrap that ends in right-to-left text starts at its left edge`() = editorUiTest(
 		initialText = AnnotatedString(WRAPPED_AFTER_HEBREW),
-		width = 56.dp,
+		width = widthWrappingAfterHebrew(),
 	) {
 		val rowStart = state.lineOffsets[1].wrapStartsAtIndex
 		assertEquals(6, rowStart, "the row wraps after the Hebrew word")
@@ -157,6 +158,26 @@ class VisualArrowE2eTest {
 		assertEquals(0f, back.last().second, "and is back at the row's left edge")
 	}
 
+	/**
+	 * A width that wraps [WRAPPED_AFTER_HEBREW] after the Hebrew word, its sixth character:
+	 * where the text breaks depends on the platform's fonts, so its first six and seven
+	 * characters are measured as lines of their own and the text's width falls between
+	 * them, the editor's width the room it keeps beside the text more.
+	 */
+	private fun widthWrappingAfterHebrew(): Dp {
+		var reserved = 0f
+		val widths = listOf(6, 7).map { length ->
+			var width = 0f
+			editorUiTest(initialText = AnnotatedString(WRAPPED_AFTER_HEBREW.take(length))) {
+				val layout = state.lineOffsets[0].textLayoutResult
+				width = layout.getLineRight(0) - layout.getLineLeft(0)
+				reserved = 400f - layout.layoutInput.constraints.maxWidth
+			}
+			width
+		}
+		return ((widths[0] + widths[1]) / 2 + reserved).dp
+	}
+
 	private fun EditorUiTestScope.caretXAt0(): Float = state.getPositionForOffset(CharLineOffset(0, 0)).position.x
 
 	private companion object {
@@ -164,7 +185,6 @@ class VisualArrowE2eTest {
 		const val MIXED_RTL = "שלום abc עולם"
 		const val HEBREW = "שלום עולם"
 
-		/** At 56dp in the test font it wraps after the Hebrew word, at offset 6. */
 		const val WRAPPED_AFTER_HEBREW = "AéשלוםLovelace"
 	}
 }
