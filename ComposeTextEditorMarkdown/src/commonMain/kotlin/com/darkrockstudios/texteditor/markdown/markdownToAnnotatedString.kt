@@ -57,6 +57,7 @@ internal fun String.parseMarkdownWithLinks(
 	val literal by lazy { literalLines ?: normalized.fencedLineIndices() }
 	val source = (standIns?.substitute(normalized) { literal } ?: normalized)
 		.withHighlightTags()
+		.let { withInlineTagLinesInline(it, literal) }
 		.let { withUndefinedReferencesEscaped(it, linkDefinitions, literal) }
 	val flavour = GFMFlavourDescriptor()
 	val parsedTree = MarkdownParser(flavour).buildMarkdownTreeFromString(source)
@@ -85,7 +86,7 @@ private fun String.lineStarts(lines: Set<Int>): Set<Int> {
 
 /**
  * A line's leading run of space and tab entities (the form export writes an indent in,
- * see `leadingIndents`), after any block prefixes, stands through the parse as one
+ * see `leadingIndents`), after any block prefixes and opening tags, stands through the parse as one
  * [space] or [tab] per entity. Both are punctuation to the parser, as the entity's `;`
  * is to a renderer, so what follows parses as it does after the entity: not at a line's
  * start, and after punctuation for a delimiter's flanking. They are chosen from
@@ -104,7 +105,7 @@ private class IndentStandIns private constructor(val space: Char, val tab: Char)
 			val prefix = match.groups[1]!!.value
 			val run = match.groups[2]!!.value
 			prefix +
-				INDENT_ENTITY.findAll(run).joinToString("") { if (it.value.isTabEntity()) "$tab" else "$space" } +
+				run.replace(INDENT_ENTITY) { if (it.value.isTabEntity()) "$tab" else "$space" } +
 				line.substring(match.range.last + 1)
 		}.joinToString("\n")
 	}
@@ -142,10 +143,15 @@ internal fun cellLeadFor(lines: List<String>): Char {
 	return STAND_IN_CANDIDATES.asReversed().firstOrNull(::free) ?: ('\uE000'..'\uF8FF').first(::free)
 }
 
-/** Quote markers, then a list marker at any indent or a heading marker, then a run of indent entities. */
+/**
+ * Quote markers, then a list marker at any indent or a heading marker, then a run of
+ * indent entities among the markup of styles that open or close in the indent: their
+ * tags, a link's brackets and destination, and code of whitespace.
+ */
 private val LEADING_INDENT_ENTITIES = Regex(
 	"""^((?: {0,3}>[ ]?)*(?:[ \t]*(?:[-*+]|\d{1,9}[.)])[ \t]+| {0,3}#{1,6}[ \t]+)?)""" +
-		"""((?:&nbsp;|&NonBreakingSpace;|&Tab;|&emsp;|&#0*(?:160|32|9);|&#[xX]0*(?:[aA]0|20|9);)+)"""
+		"""((?:(?:</?(?:${STYLED_TAGS.joinToString("|")})(?:\s[^<>]*)?>|\[|\]\((?:<[^<>\n]*>|[^)\s]*)\)|(`+)[ \t]*\3)*""" +
+		"""(?:&nbsp;|&NonBreakingSpace;|&Tab;|&emsp;|&#0*(?:160|32|9);|&#[xX]0*(?:[aA]0|20|9);))+)"""
 )
 private val INDENT_ENTITY = Regex("""&[^;]+;""")
 

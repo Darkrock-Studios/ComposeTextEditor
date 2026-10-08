@@ -214,8 +214,13 @@ literal `- ` at the start of a plain paragraph exports as `\- ` and survives,
 `*not*` in dialogue is escaped by CommonMark's flanking rules, and an
 apostrophe, a hyphen mid-sentence, an underscore inside a word or an asterisk
 between spaces is written as typed. Emphasis whose delimiters could not open
-or close where they stand, by the same rules (`**Note:**text`), is written as
-`<em>`, `<strong>` or `<del>`, which import reads back. Line-start rules read
+or close where they stand, by the same rules (`**Note:**text`), or would not
+pair as written by CommonMark's own pairing pass, is written as `<em>`,
+`<strong>` or `<del>`, which import reads back; so is a strike or highlight
+with whitespace at an edge, where it shows (bold and italic shrink onto their
+text), and code another style covers is written as `<code>`. An indent stays
+entities inside a style that opens in it. Whatever is styled in the editor
+reads back as the same text and styles (`StyledRoundTripTest`). Line-start rules read
 the body, so a marker shape at the start of a list item's body
 (`- 1990. plans`) is escaped as well, since it would otherwise nest a list. Unsupported syntax kept as
 literal text on import (a task list's `[ ]`, a table inside a quote) is written

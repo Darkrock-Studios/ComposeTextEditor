@@ -14,7 +14,8 @@ import com.darkrockstudios.texteditor.html.parseCssColor
  * syntax for: `<u>` for underline, `<mark>` for a highlight, and
  * `<span style="color:...;font-size:...">` for colour and size; and `<em>`,
  * `<strong>` and `<del>` for emphasis whose delimiters could not open or close
- * where it stands. Every CommonMark renderer passes these through, so a
+ * where it stands or that has whitespace at an edge, and `<code>` for code another
+ * style covers. Every CommonMark renderer passes these through, so a
  * document keeps its styling outside this editor.
  */
 
@@ -49,6 +50,7 @@ internal fun parseInlineHtmlTag(tag: String, styles: RichTextStyles): InlineHtml
 		"del", "s", "strike" -> styles.strikethroughStyle
 		"u", "ins" -> styles.underlineStyle
 		"mark" -> styles.highlightStyle
+		"code" -> styles.codeStyle
 		"span" -> attributes["style"]?.let(::cssColorAndSize)
 		"font" -> attributes["color"]?.let(::parseCssColor)?.let { SpanStyle(color = it) }
 		else -> null
@@ -56,7 +58,7 @@ internal fun parseInlineHtmlTag(tag: String, styles: RichTextStyles): InlineHtml
 	return InlineHtmlTag.Open(name, style)
 }
 
-private val STYLED_TAGS = setOf("em", "i", "strong", "b", "del", "s", "strike", "u", "ins", "mark", "span", "font")
+internal val STYLED_TAGS = setOf("em", "i", "strong", "b", "del", "s", "strike", "u", "ins", "mark", "code", "span", "font")
 
 /** The opening `<span style="...">` for a colour. */
 internal fun colorSpanTag(color: Color): String = "<span style=\"color:${color.toCssHex()}\">"
@@ -80,3 +82,24 @@ private fun TextUnit.toCssFontSize(): String? = when {
 	else -> null
 }
 
+
+/**
+ * [source] with the whitespace right after a styled tag that opens a line written as an
+ * entity, where text follows on the line. CommonMark starts an HTML block only at a tag
+ * alone on its line; the parser starts one at a tag followed by whitespace, and reads the
+ * lines to the next blank one as raw HTML. The [literalLines] are code, left as written.
+ */
+internal fun withInlineTagLinesInline(source: String, literalLines: Set<Int>): String {
+	if (!source.contains('<')) return source
+	return source.split('\n').mapIndexed { index, line ->
+		if (index in literalLines) return@mapIndexed line
+		val match = TAG_LINE_START.find(line) ?: return@mapIndexed line
+		val whitespace = match.groups[1]!!.value
+		line.substring(0, match.value.length - 1) + (if (whitespace == "\t") "&#9;" else "&#32;") + line.substring(match.value.length)
+	}.joinToString("\n")
+}
+
+private val TAG_LINE_START = Regex(
+	"""^(?:\s{0,3}>\s?)*\s{0,3}(?:<(?:${STYLED_TAGS.joinToString("|")})(?:\s[^<>]*)?>)+([ \t])(?=[ \t]*\S)""",
+	RegexOption.IGNORE_CASE,
+)

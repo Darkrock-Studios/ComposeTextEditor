@@ -116,18 +116,25 @@ class LeadingIndentTest {
 	}
 
 	@Test
-	fun `a styled indented line keeps its indent outside the markup`() = runTest {
+	fun `a styled indented line keeps its indent as entities, inside a style that shows on it`() = runTest {
 		val e = extension()
 		val red = androidx.compose.ui.text.SpanStyle(color = androidx.compose.ui.graphics.Color.Red)
-		listOf(config.underlineStyle, red, config.highlightStyle, config.boldStyle).forEach { style ->
+		listOf(
+			config.underlineStyle to "<u>&nbsp;&nbsp;&nbsp;&nbsp;Chapter one</u>",
+			red to "<span style=\"color:#ff0000\">&nbsp;&nbsp;&nbsp;&nbsp;Chapter one</span>",
+			config.highlightStyle to "<mark>&nbsp;&nbsp;&nbsp;&nbsp;Chapter one</mark>",
+			// Bold looks the same on whitespace, so it is written on the text alone.
+			config.boldStyle to "&nbsp;&nbsp;&nbsp;&nbsp;**Chapter one**",
+		).forEach { (style, expected) ->
 			val text = buildAnnotatedString { withStyle(style) { append("    Chapter one") } }
 			e.editorState.setText(text)
 			val markdown = e.exportAsMarkdown()
-			assertEquals(true, markdown.startsWith("&nbsp;&nbsp;&nbsp;&nbsp;"), markdown)
+			assertEquals(expected, markdown)
 			e.importMarkdown(markdown)
 			val line = e.editorState.textLines[0]
 			assertEquals("    Chapter one", line.text, markdown)
-			assertEquals(true, line.spanStyles.any { it.item == style && it.start == 4 && it.end == 15 }, markdown)
+			val start = if (style == config.boldStyle) 4 else 0
+			assertEquals(true, line.spanStyles.any { it.item == style && it.start == start && it.end == 15 }, markdown)
 		}
 	}
 

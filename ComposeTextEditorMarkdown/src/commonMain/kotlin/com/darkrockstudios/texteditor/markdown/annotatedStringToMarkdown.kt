@@ -80,33 +80,46 @@ internal fun AnnotatedString.toMarkdown(
 	}
 
 	val codeRuns = rangesByMarker.entries
-		.firstOrNull { it.key.openMarker == "`" }
+		.firstOrNull { it.key == CODE_MARKER }
 		?.let { coalesceRuns(it.value) }
 		?: emptyList()
+	// A code span takes its text literally, so code another style covers part or all of
+	// is written as `<code>`, whose text is markdown. Bold and italic on whitespace alone
+	// are not written (see trimRun), so they cover nothing.
+	val styledRanges = rangesByMarker.filterKeys { it != CODE_MARKER && !it.isHeading }.flatMap { (marker, ranges) ->
+		if (marker != BOLD_MARKER && marker != ITALIC_MARKER) ranges
+		else ranges.flatMap { range -> range.filter { !text[it].isWhitespace() }.map { it..it } }
+	}
+	val taggedCode = codeRuns.filter { (start, end) -> styledRanges.any { it.first < end && it.last + 1 > start } }
 
-	// Shrinks a run onto its text: CommonMark emphasis cannot open before or close
-	// after whitespace ("**word **" is literal asterisks to any parser, and
-	// re-importing it escalates into escaped garbage). Null once nothing is left.
+	// CommonMark emphasis cannot open before or close after whitespace ("**word **" is
+	// literal asterisks to any parser). Bold and italic look the same on whitespace, so
+	// their runs shrink onto the text; a strike or highlight shows on it, so its run is
+	// written as tags. Null once nothing is left.
 	fun trimRun(run: MarkerRun): MarkerRun? {
 		if (!run.marker.trimsWhitespaceEdges) return run
+		val showsOnWhitespace = run.marker == STRIKETHROUGH_MARKER || run.marker == DOUBLE_EQUALS_MARKER
 		var start = run.start
 		var end = run.end
-		while (start < end && text[start].isWhitespace()) start++
-		while (end > start && text[end - 1].isWhitespace()) end--
-		return if (start >= end) null else MarkerRun(start, end, run.marker)
+		while (start < end && text[start].isWhitespace() && (!showsOnWhitespace || text[start] == '\n')) start++
+		while (end > start && text[end - 1].isWhitespace() && (!showsOnWhitespace || text[end - 1] == '\n')) end--
+		if (start >= end) return null
+		val marker = if (text[start].isWhitespace() || text[end - 1].isWhitespace()) run.marker.asTags() else run.marker
+		return MarkerRun(start, end, marker)
 	}
 
-	// An indent is written as entities at the line's very start, where import reads it
-	// (see leadingIndents), so no marker opens or closes inside one: a run starting in
-	// an indent starts after it, and one ending in a later line's indent closes at the
-	// end of the line before. The indent's own styling is not kept.
+	// An indent is written as entities at the line's start, where import reads it (see
+	// leadingIndents), after any tag or link opening there: a run opening in its line's
+	// indent keeps it, and one ending in a later line's indent closes at the end of the
+	// line before.
 	val indents = leadingIndents(text)
 	fun outsideIndents(run: MarkerRun): MarkerRun? {
-		var start = run.start
-		while (start < run.end && indents[start]) start++
 		var end = run.end
-		if (end > start && indents[end - 1]) end = text.lastIndexOf('\n', end - 1).coerceAtLeast(start)
-		return if (start >= end) null else MarkerRun(start, end, run.marker)
+		if (end > run.start && indents[end - 1]) {
+			val lineEnd = text.lastIndexOf('\n', end - 1)
+			if (run.start <= lineEnd) end = lineEnd
+		}
+		return if (run.start >= end) null else MarkerRun(run.start, end, run.marker)
 	}
 
 	// The destination is emitted verbatim inside `(...)`; a URL whose characters
@@ -131,14 +144,6 @@ internal fun AnnotatedString.toMarkdown(
 	val styleRuns = mutableListOf<MarkerRun>()
 	rangesByMarker.forEach { (marker, ranges) ->
 		var runs = coalesceRuns(ranges)
-		if (marker.splitsAroundCode) {
-			// CommonMark code spans take their content literally, so an emphasis run
-			// or a tag crossing one would open its markers inside the backticks and
-			// corrupt on the next import. The run splits around code spans; markdown
-			// cannot express styled code, so the overlap itself is unrepresentable
-			// anyway.
-			runs = runs.flatMap { run -> subtractRuns(run, codeRuns) }
-		}
 		if (marker == CODE_MARKER) {
 			// A code span takes link syntax literally, so code splits at the edges of a
 			// link inside it, and the link encloses its piece: `` `a`[`b`](url)`c` ``.
@@ -157,7 +162,8 @@ internal fun AnnotatedString.toMarkdown(
 			}
 		}
 		runs.forEach { (start, end) ->
-			outsideIndents(MarkerRun(start, end, marker))?.let(::trimRun)?.let { styleRuns += it }
+			val written = if (marker == CODE_MARKER && taggedCode.any { (from, to) -> start >= from && end <= to }) CODE_TAG_MARKER else marker
+			outsideIndents(MarkerRun(start, end, written))?.let(::trimRun)?.let { styleRuns += it }
 		}
 	}
 
@@ -168,7 +174,12 @@ internal fun AnnotatedString.toMarkdown(
 	val resolved = resolveCrossings(
 		resolveCrossings(styleRuns, linkRuns).mapNotNull(::trimRun),
 		linkRuns,
-	)
+	).let { runs ->
+		// Import reads `====` as no delimiter, so a highlight that starts where another
+		// ends is written as tags.
+		val highlightEnds = runs.filter { it.marker == DOUBLE_EQUALS_MARKER }.mapTo(HashSet()) { it.end }
+		runs.map { if (it.marker == DOUBLE_EQUALS_MARKER && it.start in highlightEnds) it.copy(marker = MARK_TAG_MARKER) else it }
+	}
 
 	// Outermost first at a shared start: longer runs, then links, so a link
 	// encloses the emphasis inside it. Closing is LIFO off the stack below, which
@@ -198,27 +209,43 @@ internal fun AnnotatedString.toMarkdown(
 		markerBoundaries = ordered.flatMapTo(HashSet()) { listOf(it.start, it.end) },
 	)
 
-	// A `=` beside a `==` highlight delimiter the emitter writes must be escaped
-	// or it merges with the delimiter and shifts the highlight on re-import:
-	// [afterHighlightMarker] says one was just written, [nextMarker] is the
-	// marker written right after the text up to [target]. A `==` in the text
-	// itself is the positional pass's concern.
+	// A run of `=` beside a `==` highlight delimiter the emitter writes is escaped,
+	// every one, or it merges with the delimiter or leaves a `==` of its own and
+	// shifts the highlight on re-import: [afterHighlightMarker] says one was just
+	// written and the run since continues, [nextMarker] is the marker written
+	// right after the text up to [target]. A `==` in the text itself is the
+	// positional pass's concern.
 	var afterHighlightMarker = false
+	// On a line of only whitespace that a run is written on, the whitespace before the run
+	// is written as entities: a line loses the whitespace it starts with.
+	val whitespaceEntities = BooleanArray(text.length)
+	var lineStart = 0
+	while (lineStart < text.length) {
+		val lineEnd = text.indexOf('\n', lineStart).let { if (it < 0) text.length else it }
+		val firstRun = ordered.filter { it.start < lineEnd && it.end > lineStart }.minOfOrNull { it.start }
+		if (firstRun != null && (lineStart until lineEnd).all { text[it] == ' ' || text[it] == '\t' }) {
+			for (i in lineStart until firstRun) whitespaceEntities[i] = true
+		}
+		lineStart = lineEnd + 1
+	}
 	fun appendTextTo(target: Int, nextMarker: StyleMarkerPair? = null) {
 		// CommonMark code spans take their content literally (backslash escapes do
 		// not apply), so raw characters are emitted inside a code span; escaping
 		// them would double the escapes on each export.
 		while (currentIndex < target) {
 			val ch = text[currentIndex]
-			val besideMarker = ch == '=' &&
-				(afterHighlightMarker || (currentIndex + 1 == target && nextMarker == DOUBLE_EQUALS_MARKER))
+			val besideMarker = ch == '=' && (
+				afterHighlightMarker ||
+					(nextMarker == DOUBLE_EQUALS_MARKER && (currentIndex until target).all { text[it] == '=' })
+				)
 			when {
 				codeSpanDepth > 0 -> result.append(ch)
+				whitespaceEntities[currentIndex] -> result.append(if (ch == '\t') "&#9;" else "&#32;")
 				indents[currentIndex] -> result.append(leadingIndentEntity(ch))
 				besideMarker || escapes[currentIndex] -> result.append('\\').append(ch)
 				else -> result.append(ch)
 			}
-			afterHighlightMarker = false
+			afterHighlightMarker = besideMarker && afterHighlightMarker
 			currentIndex++
 		}
 	}
@@ -486,26 +513,6 @@ private fun resolveCrossings(runs: List<MarkerRun>, fixed: List<MarkerRun>): Lis
 	return out
 }
 
-/** Splits [run] into the segments left after removing every overlap with [holes]. */
-private fun subtractRuns(
-	run: Pair<Int, Int>,
-	holes: List<Pair<Int, Int>>,
-): List<Pair<Int, Int>> {
-	var segments = listOf(run)
-	holes.forEach { (holeStart, holeEnd) ->
-		segments = segments.flatMap { (start, end) ->
-			when {
-				holeEnd <= start || holeStart >= end -> listOf(start to end)
-				else -> buildList {
-					if (start < holeStart) add(start to holeStart)
-					if (holeEnd < end) add(holeEnd to end)
-				}
-			}
-		}
-	}
-	return segments
-}
-
 /**
  * Every marker pair [style] means: one per inline semantic it carries, HTML
  * tags first so they enclose the CommonMark delimiters they share a range with.
@@ -574,6 +581,7 @@ private fun configuredMarkers(style: SpanStyle, config: RichTextStyles, syntax: 
 private val BOLD_MARKER = StyleMarkerPair("**", "**")
 private val ITALIC_MARKER = StyleMarkerPair("*", "*")
 private val CODE_MARKER = StyleMarkerPair("`", "`")
+private val CODE_TAG_MARKER = StyleMarkerPair("<code>", "</code>")
 private val STRIKETHROUGH_MARKER = StyleMarkerPair("~~", "~~")
 private val UNDERLINE_MARKER = StyleMarkerPair("<u>", "</u>")
 private val DOUBLE_EQUALS_MARKER = StyleMarkerPair("==", "==")
@@ -618,8 +626,10 @@ private data class StyleMarkerPair(
 			else -> null
 		}
 
-	/** Whether the run must stay outside code spans: everything but code itself and a heading. */
-	val splitsAroundCode: Boolean
-		get() = openMarker != "`" && !isHeading
+	/** These delimiters as the HTML tags they stand for, which take whitespace at their edges. */
+	fun asTags(): StyleMarkerPair = when (this) {
+		DOUBLE_EQUALS_MARKER -> MARK_TAG_MARKER
+		else -> htmlTag?.let { StyleMarkerPair("<$it>", "</$it>") } ?: this
+	}
 }
 
