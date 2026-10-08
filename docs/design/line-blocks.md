@@ -255,12 +255,13 @@ after each block (a fenced line, or any line that is not blank; a bare `>`
 line is blank) the one blank line export would have written there is left
 out, and the rest are the editor's. Import reads the same line kinds as
 export, so it leaves out only what export writes: nothing between two fenced
-lines or two list items, a bare `>` only between two quoted lines, an empty
-line otherwise; and it keeps a blank line before a line indented like code,
-which the editor never writes and whose block needs it. The mapping is a
-bijection on the editor's own output, so the round trip is exact; a foreign
-file's single blank line between two fences, list items or quotes stays and
-keeps them apart, its single soft break still imports as two lines and is
+lines, a bare `>` only between two quoted lines, an empty line otherwise;
+and it keeps a blank line before a line indented like code, which the editor
+never writes and whose block needs it. Between two list items it leaves one
+out too, which export never writes there: a single one is CommonMark's loose
+list, whose items are one list. The mapping is a bijection on the editor's
+own output, so the round trip is exact; a foreign file's single blank line
+between two fences or quotes stays and keeps them apart, its single soft break still imports as two lines and is
 written back as two paragraphs, and its extra blank lines beyond the first
 are kept as editor blank lines. A blank line is a line with blank text and no
 block but a quote: an empty list item, heading or fenced line is a block.

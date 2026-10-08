@@ -261,6 +261,33 @@ class CommonMarkSyntaxTest {
 	}
 
 	@Test
+	fun `list items read as CommonMark's, loose, numbered with a parenthesis, or empty`() = runTest {
+		for ((markdown, expected) in listOf(
+			"- foo\n\n- bar\n\n\n- baz" to "- foo\n- bar\n\n- baz",
+			"1. a\n\n  2. b\n\n   3) c" to "1. a\n1. b\n1. c",
+			"> - a\n>\n> - b" to "> - a\n> - b",
+			"* a\n*\n\n* c" to "- a\n- \n- c",
+			"123456789. ok\n\n1234567890. not ok" to "1. ok\n\\1234567890. not ok",
+		)) {
+			assertEquals(expected, imported(markdown).editorState.blockLines(), markdown)
+		}
+	}
+
+	@Test
+	fun `an item interrupts a paragraph only with text, and ordered only numbered 1`() = runTest {
+		for ((markdown, expected) in listOf(
+			"foo\n*\n\nfoo\n1." to "foo\n*\nfoo\n1.",
+			"foo\n- " to "## foo",
+			"The number of windows in my house is\n14.  The number of doors is 6." to "The number of windows in my house is\n\\14.  The number of doors is 6.",
+			"The number of windows in my house is\n1.  The number of doors is 6." to "The number of windows in my house is\n1. The number of doors is 6.",
+			"> quoted\n> 2) text" to "> quoted\n> 2) text",
+			"text\n> 2. item" to "text\n> 1. item",
+		)) {
+			assertEquals(expected, imported(markdown).editorState.blockLines(), markdown)
+		}
+	}
+
+	@Test
 	fun `a heading's closing sequence is not its text, nor is the whitespace around it`() = runTest {
 		for ((markdown, expected) in listOf(
 			"## foo ##" to "## foo",

@@ -201,6 +201,8 @@ private fun splitQuote(line: String): Pair<String, String> {
 	return quote to line.substring(quote.length)
 }
 
+private val BARE_LIST_MARKER = Regex("""[ \t]*(?:[-*+]|\d{1,9}[.)])""")
+private val ORDERED_ITEM_NUMBER = Regex("""^[ \t]*(\d{1,9})[.)]""")
 private val LIST_ITEM_START = Regex("""^[ \t]*(?:[-*+]|\d{1,9}[.)])(?:[ \t]|$)""")
 private val ATX_HEADING_START = Regex("""^ {0,3}#{1,6}(?:[ \t]|$)""")
 
@@ -322,7 +324,6 @@ private val RESIDUAL_QUOTE_MARKER = Regex("""^>""")
 private val QUOTE_BLANK_LINE = Regex("""^>\s*$""")
 
 /** A list item, quoted or not and at any indentation, as the peel recognises one. */
-private val LIST_ITEM_LINE = Regex("""^(?:>\s?)?[ \t]*(?:[-*+]|\d+\.)\s""")
 
 /**
  * A line CommonMark reads as an indented code block when a block can start there. One of
@@ -715,7 +716,11 @@ class MarkdownExtension(
 		val blockHits = mutableMapOf<RichSpanStyle, MutableList<Int>>()
 		val provider = imageProvider
 		val nesting = ListNesting()
+		// Whether the line before is a paragraph's, quoted or not, null when it is none:
+		// only some blocks may interrupt a paragraph.
+		var paragraphQuote: Boolean? = null
 		val processedLines = keptLines.mapIndexed { index, line ->
+			if (index in codeFenceLineIndices || index in imported.cells) paragraphQuote = null
 			if (index in codeFenceLineIndices) {
 				nesting.close()
 				return@mapIndexed line.escapeMarkdownSpecials()
@@ -732,9 +737,24 @@ class MarkdownExtension(
 			fun record(blocks: List<MarkdownBlockSyntax>) = blocks.forEach { block ->
 				blockHits.getOrPut(block.style) { mutableListOf() } += index
 			}
+			val (quote, unquoted) = splitQuote(line)
 			// A rule outranks a list item: `* * *` is a rule, not an item holding `* *`.
-			val ruleNotItem = peeled.blocks.any { it.isList } && isThematicBreak(splitQuote(line).second)
+			val ruleNotItem = peeled.blocks.any { it.isList } && isThematicBreak(unquoted)
+			// An item interrupts a paragraph only with text, ordered only numbered 1: else it
+			// is the paragraph's text. Export writes an empty item with a space after its marker.
+			val notItem = paragraphQuote == quote.isNotEmpty() && peeled.blocks.any { it.isList } && (
+				BARE_LIST_MARKER.matches(unquoted) ||
+					(peeled.blocks.any { it.style is OrderedListSpanStyle } && ORDERED_ITEM_NUMBER.find(unquoted)?.groupValues?.get(1)?.toIntOrNull() != 1)
+				)
+			val paragraph = notItem || (peeled.blocks.none { it.style !== BlockquoteSpanStyle } && isParagraphText(unquoted))
+			paragraphQuote = if (paragraph) quote.isNotEmpty() else null
 			when {
+				notItem -> {
+					nesting.close()
+					record(peeled.blocks.filterNot { it.isList })
+					unquoted.escapeResidualMarker()
+				}
+
 				ruleNotItem || isThematicBreak(peeled.body) -> {
 					hrLineIndices += index
 					if (ruleNotItem) nesting.close()
@@ -880,8 +900,8 @@ class MarkdownExtension(
 	 * editor's k - 1. A block is a fenced line or one that is not blank; a bare
 	 * `>` line is blank, as export has it. Only a blank line export would have
 	 * written there is left out (see [isParagraphSeparator]), so a foreign
-	 * file's blank line between two fences, two list items or two quotes, which
-	 * export never writes, stays and keeps them apart. Under either rule the blank
+	 * file's blank line between two fences or two quotes, which export never
+	 * writes, stays and keeps them apart. Under either rule the blank
 	 * line after one of [tables] is left out, export writing it to end the table, and
 	 * under [ParagraphSeparator.NEWLINE] the one before it too. [stripped] is the
 	 * fence-stripped text's lines.
@@ -923,9 +943,11 @@ class MarkdownExtension(
 	/**
 	 * Whether the blank line at [index], which follows a block, is the one
 	 * export writes there rather than the editor's own: export writes none
-	 * between two fenced lines or two list items, a bare `>` only between two
-	 * quoted lines and an empty line otherwise, and the editor never writes a
-	 * line indented like code, whose block needs the blank line before it.
+	 * between two fenced lines, a bare `>` only between two quoted lines and an
+	 * empty line otherwise, and the editor never writes a line indented like
+	 * code, whose block needs the blank line before it. Export writes none
+	 * between two list items either, and one there is CommonMark's loose list,
+	 * whose items are one list: it is left out too.
 	 */
 	private fun isParagraphSeparator(lines: List<String>, fencedLines: Set<Int>, index: Int): Boolean {
 		val previous = index - 1
@@ -938,9 +960,6 @@ class MarkdownExtension(
 		val previousLine = lines[previous]
 		val nextQuoted = nextLine != null && !nextFenced && nextLine.startsWith(">")
 		if (quotedBlank != (previousLine.startsWith(">") && nextQuoted)) return false
-		if (LIST_ITEM_LINE.containsMatchIn(previousLine)) {
-			return nextLine == null || nextFenced || !LIST_ITEM_LINE.containsMatchIn(nextLine)
-		}
 		return true
 	}
 

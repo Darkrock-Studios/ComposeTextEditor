@@ -184,11 +184,11 @@ class NestedListSerializationTest {
 	}
 
 	@Test
-	fun `a foreign loose nested list keeps its blank line`() = runTest {
+	fun `a foreign loose nested list is one list`() = runTest {
 		val e = extension()
 		e.importMarkdown("- a\n\n  - b\n\n- c")
-		assertEquals(listOf("a", "", "b", "", "c"), e.editorState.getAllText().text.split("\n"))
-		assertEquals(listOf(Triple(0, "b", 0), Triple(2, "b", 1), Triple(4, "b", 0)), e.listLines())
+		assertEquals(listOf("a", "b", "c"), e.editorState.getAllText().text.split("\n"))
+		assertEquals(listOf(Triple(0, "b", 0), Triple(1, "b", 1), Triple(2, "b", 0)), e.listLines())
 	}
 
 	@Test

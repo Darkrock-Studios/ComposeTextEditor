@@ -57,8 +57,8 @@ internal val BLOCK_SYNTAX: List<MarkdownBlockSyntax> by lazy {
 			is BulletListSpanStyle -> MarkdownBlockSyntax(
 				style,
 				prefix = { "- " },
-				// `-`, `*`, or `+` followed by at least one space.
-				pattern = if (style.level == 0) Regex("""^[-*+]\s+(.*)$""") else null,
+				// `-`, `*`, or `+` followed by at least one space, or alone: an empty item.
+				pattern = if (style.level == 0) Regex("""^[-*+](?:\s+(.*))?$""") else null,
 			)
 
 			is OrderedListSpanStyle -> MarkdownBlockSyntax(
@@ -66,8 +66,8 @@ internal val BLOCK_SYNTAX: List<MarkdownBlockSyntax> by lazy {
 				// Always numbered from 1: renderers normalise any starting digit, and
 				// `1. 2. 3.` is what a reader of the source expects.
 				prefix = { pos -> "${pos + 1}. " },
-				// Any digit run followed by `.` and at least one space.
-				pattern = if (style.level == 0) Regex("""^\d+\.\s+(.*)$""") else null,
+				// One to nine digits and `.` or `)`, followed by at least one space or nothing.
+				pattern = if (style.level == 0) Regex("""^\d{1,9}[.)](?:\s+(.*))?$""") else null,
 			)
 
 			CodeFenceSpanStyle -> MarkdownBlockSyntax(style, prefix = { "" }, pattern = null)

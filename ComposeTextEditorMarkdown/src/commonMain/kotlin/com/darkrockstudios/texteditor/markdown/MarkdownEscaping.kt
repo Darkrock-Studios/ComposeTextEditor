@@ -3,13 +3,13 @@ package com.darkrockstudios.texteditor.markdown
 import com.fleeksoft.ksoup.nodes.Entities
 
 /**
- * Escapes "1." / "2." etc. at line starts to prevent ordered list parsing.
+ * Escapes "1." / "2)" etc. at line starts to prevent ordered list parsing.
  * Import uses this on a peeled body whose lead still looks like a marker.
  */
-private val ORDERED_LIST_REGEX = Regex("(?m)^(\\d+)\\.")
+private val ORDERED_LIST_REGEX = Regex("(?m)^(\\d+)([.)])")
 
 internal fun escapeOrderedListMarkers(markdown: String): String {
-	return markdown.replace(ORDERED_LIST_REGEX, "$1\\\\.")
+	return markdown.replace(ORDERED_LIST_REGEX, "$1\\\\$2")
 }
 
 /**
