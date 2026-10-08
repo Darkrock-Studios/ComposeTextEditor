@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="30" viewBox="0 0 640 30" role="img" aria-label="CommonMark: 418 supported, 162 not yet, 72 raw HTML (a non-goal)">
+<title>CommonMark: 418 supported, 162 not yet, 72 raw HTML (a non-goal)</title>
+<clipPath id="r"><rect width="640" height="30" rx="6"/></clipPath>
+<g clip-path="url(#r)">
+<rect x="0.0" y="0" width="410.3" height="30" fill="#2da44e"/>
+<rect x="410.3" y="0" width="159.0" height="30" fill="#d4a72c"/>
+<rect x="569.3" y="0" width="70.7" height="30" fill="#8c959f"/>
+</g>
+<g font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="600">
+<text x="205.2" y="19.5" fill="#ffffff" text-anchor="middle">418 supported</text>
+<text x="489.8" y="19.5" fill="#1f2328" text-anchor="middle">162 not yet</text>
+<text x="604.7" y="19.5" fill="#ffffff" text-anchor="middle">72 HTML</text>
+</g>
+</svg>

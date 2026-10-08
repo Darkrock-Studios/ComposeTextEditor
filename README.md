@@ -36,10 +36,7 @@ And now, it's working, and at this point, working pretty well.
 - ✅ Screen readers
 - ✅ HTML import, export and clipboard
 - ☑️ Markdown, as an addon
-  - CommonMark: 416 of the spec's 652 examples. The largest share of the rest is raw
-    HTML, which is a non-goal: rendering freeform HTML would mean building an HTML
-    rendering engine, so HTML beyond the style tags below is kept as text. Indented code
-    blocks and multi-paragraph list items are not supported yet.
+  - CommonMark: 418 of the spec's 652 examples ([spec support](#markdown-spec-support))
   - GitHub Flavored Markdown: tables, task lists and strikethrough
   - Underline (`<u>`), highlight (`==text==` or `<mark>`), colour and size (`<span style>`)
   - Opt-in shortcuts that format as you type (`# `, `- `, `**bold**`)
@@ -66,6 +63,32 @@ the [API reference & recipes](https://darkrock-studios.github.io/ComposeTextEdit
 - Read-only, single line, max length, input filters and no-wrap modes
 - State that survives process death, or lives in your view model
 - Opt-in smart punctuation and auto-linking ([docs/design/behaviors.md](docs/design/behaviors.md))
+
+#### Markdown spec support
+
+Green is supported and yellow is not supported yet. Grey is raw HTML, which is a non-goal:
+rendering freeform HTML would mean building an HTML rendering engine, so HTML beyond the
+style tags above is kept as text.
+
+**CommonMark**: 418 of the spec's 652 examples
+
+![CommonMark: 418 supported, 162 not yet, 72 raw HTML](docs/images/commonmark-support.svg)
+
+- List items holding more than one paragraph or block (41)
+- Link titles and unusual link destinations (21)
+- Indented code blocks and tab indentation (20)
+- Code span spacing, and line breaks inside a paragraph (19)
+- Images with a title, inside text, or by reference (17)
+- Block quotes holding other blocks (10)
+- Smaller edge cases (34)
+
+**GitHub Flavored Markdown extensions**: 12 of 24 examples
+
+![GFM extensions: 12 supported, 11 not yet, 1 raw HTML](docs/images/gfm-support.svg)
+
+- Tables, task lists and strikethrough are supported
+- Bare links (`www.example.com`, `user@example.com`) are not made links yet (11)
+- Filtering raw HTML tags (1): raw HTML is kept as text, so there is nothing to filter
 
 #### Platforms
 
