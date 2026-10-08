@@ -171,26 +171,69 @@ private fun withSetextHeadings(strip: CodeFenceStripResult, dashUnderlines: Bool
 		underlines += index
 	}
 	if (underlines.isEmpty()) return strip
+	return strip.rewritten(lines, dropped = underlines) { index, line ->
+		val level = levels[index] ?: return@rewritten line
+		val (quote, body) = splitQuote(line)
+		val text = body.trim()
+		val closing = ATX_CLOSING_SEQUENCE.find(text)
+		val escaped = if (closing == null) text else text.substring(0, closing.range.first) + closing.value.replaceFirst("#", "\\#")
+		quote + "#".repeat(level) + " " + escaped
+	}
+}
 
-	val out = ArrayList<String>(lines.size - underlines.size)
+/**
+ * This result's [lines] without the [dropped] ones, each kept line through [rewrite],
+ * the fence data renumbered onto the lines left.
+ */
+private fun CodeFenceStripResult.rewritten(
+	lines: List<String>,
+	dropped: Set<Int>,
+	rewrite: (index: Int, line: String) -> String = { _, line -> line },
+): CodeFenceStripResult {
+	val out = ArrayList<String>(lines.size - dropped.size)
 	val fenced = HashSet<Int>()
-	val infoStrings = HashMap<Int, String>()
+	val infos = HashMap<Int, String>()
 	lines.forEachIndexed { index, line ->
-		if (index in underlines) return@forEachIndexed
-		if (index in strip.fencedLines) fenced += out.size
-		strip.infoStrings[index]?.let { infoStrings[out.size] = it }
-		val level = levels[index]
-		out += if (level == null) {
-			line
-		} else {
-			val (quote, body) = splitQuote(line)
-			val text = body.trim()
-			val closing = ATX_CLOSING_SEQUENCE.find(text)
-			val escaped = if (closing == null) text else text.substring(0, closing.range.first) + closing.value.replaceFirst("#", "\\#")
-			quote + "#".repeat(level) + " " + escaped
+		if (index in dropped) return@forEachIndexed
+		if (index in fencedLines) fenced += out.size
+		infoStrings[index]?.let { infos[out.size] = it }
+		out += rewrite(index, line)
+	}
+	return CodeFenceStripResult(out.joinToString("\n"), fenced, infos)
+}
+
+/**
+ * [strip] without its link reference definitions, each with the blank line after it
+ * that set it apart, and the definitions by label, the first of a label kept. A
+ * definition starts a block: not inside a paragraph, a quote or a list item.
+ */
+private fun withoutLinkDefinitions(strip: CodeFenceStripResult): Pair<CodeFenceStripResult, Map<String, String>> {
+	val lines = strip.text.lines()
+	if (lines.none { '[' in it }) return strip to emptyMap()
+	val tableLines = findTables(lines, strip.fencedLines).flatMapTo(HashSet()) { it }
+	val definitions = LinkedHashMap<String, String>()
+	val dropped = HashSet<Int>()
+	var index = 0
+	var blockStart = true
+	while (index < lines.size) {
+		val line = lines[index]
+		val literal = index in strip.fencedLines || index in tableLines
+		val definition = if (blockStart && !literal) readLinkDefinition(lines, index) else null
+		if (definition == null) {
+			blockStart = literal || line.isBlank() || !isParagraphText(splitQuote(line).second)
+			index++
+			continue
+		}
+		definitions.getOrPut(definition.label) { definition.destination }
+		for (taken in index until index + definition.lines) dropped += taken
+		index += definition.lines
+		if (lines.getOrNull(index)?.isBlank() == true) {
+			dropped += index
+			index++
 		}
 	}
-	return CodeFenceStripResult(out.joinToString("\n"), fenced, infoStrings)
+	if (dropped.isEmpty()) return strip to emptyMap()
+	return strip.rewritten(lines, dropped) to definitions
 }
 
 private val QUOTE_PREFIX = Regex("""^>\s?""")
@@ -693,8 +736,9 @@ class MarkdownExtension(
 		// were inside a fence. Fence content needs to skip the per-line block
 		// detection (it's literal code, not markdown) and its specials need to be
 		// escaped so the parser doesn't reinterpret `*foo*` as italic etc.
+		val (withoutDefinitions, linkDefinitions) = withoutLinkDefinitions(stripCodeFences(markdownText))
 		val fenceStrip = withSetextHeadings(
-			stripCodeFences(markdownText),
+			withoutDefinitions,
 			dashUnderlines = paragraphSeparator == ParagraphSeparator.BLANK_LINE,
 		)
 		// Stage 2: take the blank line export puts after each block away again,
@@ -794,6 +838,7 @@ class MarkdownExtension(
 			editorState.richTextStyles,
 			literalLines = codeFenceLineIndices,
 			allowedLinkSchemes = editorState.allowedLinkSchemes,
+			linkDefinitions = linkDefinitions,
 		)
 		val (annotatedString, links) = withoutCellLeads(parsed, imported.cells.keys, cellLead)
 		// setText publishes the text with no spans and applyDocumentBlocks attaches them

@@ -288,6 +288,46 @@ class CommonMarkSyntaxTest {
 	}
 
 	@Test
+	fun `a reference link takes its definition's destination, and the definition is no line`() = runTest {
+		for ((markdown, text, url) in listOf(
+			Triple("[foo][bar]\n\n[bar]: /url \"title\"", "foo", "/url"),
+			Triple("[bar]: /url\n\n[foo][BaR]", "foo", "/url"),
+			Triple("[Foo bar]:\n<my url>\n'title'\n\n[Foo bar]", "Foo bar", "my url"),
+			Triple("[ẞ]\n\n[SS]: /url", "ẞ", "/url"),
+			Triple("[foo][]\n\n[foo]: /f&ouml;\\*", "foo", "/fö*"),
+			Triple("[foo]: /url1\n\n[foo]: /url2\n\n[foo]", "foo", "/url1"),
+			Triple("[link *foo*][ref]\n\n[ref]: /uri", "link foo", "/uri"),
+		)) {
+			val markdown = imported(markdown)
+			assertEquals(text, markdown.editorState.getAllText().text, markdown.exportAsMarkdown())
+			assertEquals(url, markdown.editorState.linkAt(CharLineOffset(0, 0)), markdown.exportAsMarkdown())
+			assertEquals(text, imported(markdown.exportAsMarkdown()).editorState.getAllText().text)
+		}
+	}
+
+	@Test
+	fun `a reference with no definition, or a definition that cannot start there, is text`() = runTest {
+		for ((markdown, text) in listOf(
+			"[foo] and [*bar*][baz]" to "[foo] and [bar][baz]",
+			"Foo\n[bar]: /baz\n\n[bar]" to "Foo\n[bar]: /baz\n[bar]",
+			"[foo]: /url \"title\" ok" to "[foo]: /url \"title\" ok",
+		)) {
+			val markdown = imported(markdown)
+			assertEquals(text, markdown.editorState.getAllText().text)
+			assertEquals(null, markdown.editorState.linkAt(CharLineOffset(0, 1)))
+		}
+		assertEquals("[foo] and [<i>bar</i>][baz]", imported("[foo] and [*bar*][baz]").inlineMarkup())
+	}
+
+	@Test
+	fun `a reference link whose text holds a link is text, its label the link`() = runTest {
+		val markdown = imported("[foo [bar](/a)][ref]\n\n[ref]: /b")
+		assertEquals("[foo bar]ref", markdown.editorState.getAllText().text)
+		assertEquals("/a", markdown.editorState.linkAt(CharLineOffset(0, 5)))
+		assertEquals("/b", markdown.editorState.linkAt(CharLineOffset(0, 10)))
+	}
+
+	@Test
 	fun `a heading's closing sequence is not its text, nor is the whitespace around it`() = runTest {
 		for ((markdown, expected) in listOf(
 			"## foo ##" to "## foo",

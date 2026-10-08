@@ -50,6 +50,7 @@ internal fun String.parseMarkdownWithLinks(
 	styles: RichTextStyles,
 	literalLines: Set<Int>? = null,
 	allowedLinkSchemes: Set<String>,
+	linkDefinitions: Map<String, String> = emptyMap(),
 ): MarkdownParseResult {
 	val normalized = normalizeLineEndings()
 	val standIns = IndentStandIns.forSource(normalized)
@@ -57,7 +58,7 @@ internal fun String.parseMarkdownWithLinks(
 		.withHighlightTags()
 	val flavour = GFMFlavourDescriptor()
 	val parsedTree = MarkdownParser(flavour).buildMarkdownTreeFromString(source)
-	val context = MarkdownRenderContext(styles, allowedLinkSchemes, source.lineStarts(literalLines.orEmpty()))
+	val context = MarkdownRenderContext(styles, allowedLinkSchemes, source.lineStarts(literalLines.orEmpty()), linkDefinitions)
 	val annotated = buildAnnotatedString {
 		appendMarkdownChildren(source, parsedTree, context)
 	}
@@ -329,6 +330,8 @@ internal class MarkdownRenderContext(
 	val allowedLinkSchemes: Set<String>,
 	/** Where the lines read as written (a fence's, its markers stripped) start in the source. */
 	val literalLineStarts: Set<Int> = emptySet(),
+	/** The destinations of the document's link reference definitions, by normalized label. */
+	val linkDefinitions: Map<String, String> = emptyMap(),
 ) {
 	val links = mutableListOf<ParsedLink>()
 
@@ -430,6 +433,40 @@ internal fun AnnotatedString.Builder.appendMarkdownChildren(
 		}
 		appendMarkdownNode(original, children[i], context)
 		i++
+	}
+}
+
+/** The destination the reference link [node]'s label has a definition for, or null. */
+private fun referenceUrl(original: String, node: ASTNode, context: MarkdownRenderContext): String? {
+	val label = node.children.firstOrNull { it.type == MarkdownElementTypes.LINK_LABEL } ?: return null
+	return context.linkDefinitions[normalizeLinkLabel(label.getTextInNode(original).toString().removeSurrounding("[", "]"))]
+}
+
+/** Whether [node] holds a link: an inline one, an autolink, or a reference with a definition. */
+private fun containsLink(original: String, node: ASTNode, context: MarkdownRenderContext): Boolean = node.children.any { child ->
+	when (child.type) {
+		MarkdownElementTypes.INLINE_LINK, MarkdownElementTypes.AUTOLINK -> true
+		MarkdownElementTypes.FULL_REFERENCE_LINK, MarkdownElementTypes.SHORT_REFERENCE_LINK -> referenceUrl(original, child, context) != null
+		else -> containsLink(original, child, context)
+	}
+}
+
+/**
+ * The link text [textNode] (its first and last children the brackets) as a link to
+ * [url]; one the allowlist refuses, or none, keeps its text alone.
+ */
+private fun AnnotatedString.Builder.appendLink(original: String, textNode: ASTNode, url: String?, context: MarkdownRenderContext) {
+	val allowed = url?.takeIf { sanitizeLinkUrl(it, context.allowedLinkSchemes) != null }
+	if (allowed != null) pushStyle(context.styles.linkStyle)
+	val textStart = length
+	context.scope(this) {
+		textNode.children.forEachIndexed { i, child ->
+			if (i != 0 && i != textNode.children.lastIndex) appendMarkdownNode(original, child, context)
+		}
+	}
+	if (allowed != null) {
+		pop()
+		if (length > textStart) context.links += ParsedLink(textStart, length, allowed)
 	}
 }
 
@@ -545,8 +582,7 @@ private fun AnnotatedString.Builder.appendMarkdownNode(
 			// A bare destination parses as LINK_DESTINATION; the GFM flavour
 			// reads an angle-bracketed one as an AUTOLINK child instead. Both
 			// carry any angle brackets in the node text. The URL is read as a
-			// renderer reads it, escapes and entities decoded; one the allowlist
-			// refuses keeps its text alone.
+			// renderer reads it, escapes and entities decoded.
 			val url = node.children
 				.firstOrNull {
 					it.type == MarkdownElementTypes.LINK_DESTINATION ||
@@ -555,26 +591,31 @@ private fun AnnotatedString.Builder.appendMarkdownNode(
 				?.getTextInNode(original)?.toString()
 				?.removeSurrounding("<", ">")
 				?.decodeMarkdownText()
-				?.takeIf { sanitizeLinkUrl(it, context.allowedLinkSchemes) != null }
-			if (url != null) pushStyle(styles.linkStyle)
-			val textStart = length
-			node.children.forEach { child ->
-				if (child.type == MarkdownElementTypes.LINK_TEXT) {
-					// The first and last children are the bracket tokens; the
-					// nodes between them are the link text, styles and all.
-					context.scope(this) {
-						child.children.forEachIndexed { i, gc ->
-							if (i != 0 && i != child.children.lastIndex) appendMarkdownNode(original, gc, context)
-						}
-					}
+			node.children.firstOrNull { it.type == MarkdownElementTypes.LINK_TEXT }
+				?.let { appendLink(original, it, url, context) }
+		}
+
+		// `[text][label]`, `[label][]` and `[label]`: a link where a definition has the label,
+		// else its brackets and text as written, the text's styles read.
+		MarkdownElementTypes.FULL_REFERENCE_LINK,
+		MarkdownElementTypes.SHORT_REFERENCE_LINK -> {
+			val label = node.children.firstOrNull { it.type == MarkdownElementTypes.LINK_LABEL }
+			val url = referenceUrl(original, node, context)
+			val text = node.children.firstOrNull { it.type == MarkdownElementTypes.LINK_TEXT }
+			when {
+				label == null || url == null -> appendMarkdownChildren(original, node, context)
+				// A link holds no link: its text is text, and its label a link of its own.
+				text != null && containsLink(original, text, context) -> {
+					appendMarkdownNode(original, text, context)
+					appendLink(original, label, url, context)
 				}
-			}
-			val textEnd = length
-			if (url != null) pop()
-			if (url != null && textEnd > textStart) {
-				context.links += ParsedLink(textStart, textEnd, url)
+
+				else -> appendLink(original, text ?: label, url, context)
 			}
 		}
+
+		MarkdownElementTypes.LINK_TEXT,
+		MarkdownElementTypes.LINK_LABEL -> appendMarkdownChildren(original, node, context)
 
 		MarkdownElementTypes.ORDERED_LIST,
 		MarkdownElementTypes.UNORDERED_LIST -> {
