@@ -4,6 +4,8 @@ import androidx.compose.ui.text.AnnotatedString
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.RichTextStyles
+import com.darkrockstudios.texteditor.state.BLOCK_KINDS
+import com.darkrockstudios.texteditor.state.BlockKind
 import com.darkrockstudios.texteditor.state.DocumentSnapshot
 import com.darkrockstudios.texteditor.state.LineSplice
 
@@ -13,8 +15,10 @@ import com.darkrockstudios.texteditor.state.LineSplice
  * [Blockquote]; an image may also carry one list style; anything else is a
  * marker with nothing to decorate that cannot survive a serialization round
  * trip. Violating spans are removed and their lines rebuilt without the
- * orphaned indent. Then every line of a fence run gets a language span if the
- * run has a language (see [repairFenceLanguages]).
+ * orphaned indent. Before that, an inline-only line, a table cell's, keeps its line
+ * for its marker (see [repairInlineOnly]). Then each [BlockKind] repairs its own
+ * ([BlockKind.repair]): every line of a fence run gets a language span if the run has
+ * a language (see [repairFenceLanguages]).
  *
  * Runs on every publish, from [com.darkrockstudios.texteditor.state.TextEditorState],
  * so the invariant holds no matter which path attached the span: a toggle, an
@@ -25,7 +29,8 @@ import com.darkrockstudios.texteditor.state.LineSplice
  * removed or lost, or a line came or went: a keystroke inside a fenced line moves
  * no language. The repair is deterministic and outside the undo history; since
  * only blank lines classify as placeholders, the most it ever discards is a
- * marker on empty content, or a fence language that cannot be written.
+ * marker on empty content, a marker or format put on an inline-only line, or a fence
+ * language that cannot be written.
  * Returns the snapshot unchanged (no line allocation) when the document is
  * already valid, the overwhelmingly common case.
  */
@@ -36,9 +41,48 @@ internal fun normalizeLineBlocks(
 	spansChanged: Boolean,
 ): DocumentSnapshot {
 	if (changed.isEmpty()) return snapshot
-	val placeholders = repairPlaceholders(snapshot, config, changed)
-	// A placeholder repair can drop a fence span, which leaves its language span to drop too.
-	return if (spansChanged || placeholders !== snapshot) repairFenceLanguages(placeholders, changed) else placeholders
+	val inlineOnly = if (spansChanged) repairInlineOnly(snapshot, config, changed) else snapshot
+	val placeholders = repairPlaceholders(inlineOnly, config, changed)
+	// A repair can drop a fence span, which leaves its language span to drop too.
+	return BLOCK_KINDS.fold(placeholders) { current, kind -> kind.repair(current, config, changed, spansChanged || current !== snapshot) }
+}
+
+/**
+ * Keeps every inline-only line ([RichSpanStyle.inlineOnly], a table cell's) for its
+ * marker alone, so no path, the public span API included, can stack a block on it and
+ * break, say, its table: another block, a rule or an image, a paragraph format, or a
+ * second inline-only marker (of two cells, the lowest column's stays) is removed, a
+ * block's indent and look with it. Such a line only meets one of them when a span is
+ * added or a line comes or goes, so this runs only then.
+ */
+private fun repairInlineOnly(
+	snapshot: DocumentSnapshot,
+	config: RichTextStyles,
+	changed: IntRange,
+): DocumentSnapshot {
+	val removed = ArrayList<RichSpan>()
+	var lines = snapshot.lineList
+	var rebuiltFirst = Int.MAX_VALUE
+	var rebuiltLast = -1
+	for (line in changed) {
+		val starting = snapshot.spansOn(line).filter { it.range.start.line == line }
+		val kept = starting.filter { it.style.inlineOnly }
+			.minByOrNull { (it.style as? TableCellSpanStyle)?.column ?: 0 } ?: continue
+		for (span in starting) {
+			if (span === kept) continue
+			val block = lineBlockFor(span.style, config)
+			if (block == null && span.style !is BlockSpanStyle && !span.style.boundToParagraph && !span.style.inlineOnly) continue
+			removed += span
+			if (block != null) {
+				lines = lines.splice(line, line + 1, listOf(rebuildWithoutBlock(lines[line], block)))
+				rebuiltFirst = minOf(rebuiltFirst, line)
+				rebuiltLast = maxOf(rebuiltLast, line)
+			}
+		}
+	}
+	if (removed.isEmpty()) return snapshot
+	val splice = if (rebuiltLast < 0) null else LineSplice(rebuiltFirst, lines.size - 1 - rebuiltLast)
+	return snapshot.withLines(lines, splice).withSpanIndex(snapshot.spanIndex.minus(removed))
 }
 
 private fun repairPlaceholders(
@@ -46,13 +90,12 @@ private fun repairPlaceholders(
 	config: RichTextStyles,
 	changed: IntRange,
 ): DocumentSnapshot {
-	val registry = allBlockStyles(config)
 	val violations = ArrayList<Pair<RichSpan, LineBlockStyle>>()
 	for (line in changed) {
 		val kind = placeholderKindOf(snapshot, line) ?: continue
 		for (span in snapshot.spansOn(line)) {
 			if (span.range.start.line != line) continue
-			val block = registry.firstOrNull { it.spanStyle === span.style } ?: continue
+			val block = lineBlockFor(span.style, config) ?: continue
 			if (!block.allowedOn(kind)) violations += span to block
 		}
 	}
@@ -87,7 +130,7 @@ private fun repairPlaceholders(
  * Examines the lines in [changed] and the fence runs they touch, walked out
  * to their ends: a language can only be missing or misplaced there.
  */
-private fun repairFenceLanguages(snapshot: DocumentSnapshot, changed: IntRange): DocumentSnapshot {
+internal fun repairFenceLanguages(snapshot: DocumentSnapshot, changed: IntRange): DocumentSnapshot {
 	fun fenced(line: Int) = snapshot.spansOn(line).any { it.style === CodeFenceSpanStyle && it.range.start.line == line }
 	var first = changed.first.coerceAtLeast(0)
 	var last = changed.last.coerceAtMost(snapshot.lines.size - 1)

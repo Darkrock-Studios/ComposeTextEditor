@@ -18,6 +18,10 @@ import com.darkrockstudios.texteditor.richstyle.MAX_LIST_LEVEL
 import com.darkrockstudios.texteditor.richstyle.OrderedListSpanStyle
 import com.darkrockstudios.texteditor.richstyle.RichSpan
 import com.darkrockstudios.texteditor.richstyle.RichSpanStyle
+import com.darkrockstudios.texteditor.richstyle.TableAlignment
+import com.darkrockstudios.texteditor.richstyle.TableCellSpanStyle
+import com.darkrockstudios.texteditor.richstyle.TextEditorTable
+import com.darkrockstudios.texteditor.richstyle.tableAt
 import com.darkrockstudios.texteditor.richstyle.applyDocumentBlocks
 import com.darkrockstudios.texteditor.richstyle.isListBlock
 import com.darkrockstudios.texteditor.richstyle.isNestingBlank
@@ -344,7 +348,7 @@ class MarkdownExtension(
 		// empty quote line is `> `, not nothing.
 		val hasBlocks = content.richSpans.any { span ->
 			val style = span.style
-			style === HorizontalRuleSpanStyle || style is ImageBlockSpanStyle || BLOCK_SYNTAX.any { it.style === style }
+			style === HorizontalRuleSpanStyle || style is ImageBlockSpanStyle || hasBlockSyntax(style)
 		}
 		if (text.isEmpty() && !hasBlocks) return ""
 
@@ -367,15 +371,72 @@ class MarkdownExtension(
 		// one, except that a list's items and a fence's lines stay together, and
 		// an editor's own blank line is written as itself, one more than the
 		// separator before it. See ParagraphSeparator.
-		// A table kept as literal text stays one block for other renderers.
-		val tableRows = tableRowIndices(lines.map { it.text })
+		val cellsByLine = Array(lines.size) { line -> stylesOn(line).firstNotNullOfOrNull { it as? TableCellSpanStyle } }
+		fun cellOf(line: Int): TableCellSpanStyle? = cellsByLine[line]
+		// A quoted table, which the editor holds as literal text, stays one block for other renderers.
+		val literalTableRows = tableRowIndices(lines.mapIndexed { line, text -> if (isQuoted(line)) text.text else "" })
 		fun needsSeparator(line: Int): Boolean {
-			if (!separateParagraphs || line + 1 >= lines.size || isBlankLine(line)) return false
+			if (line + 1 >= lines.size) return false
 			val next = line + 1
+			// A table runs on to the next blank line, and without one before it could join
+			// the list item or quote above, so under single newlines it has one either side.
+			if (!separateParagraphs) return (cellOf(line) != null) != (cellOf(next) != null)
+			if (isBlankLine(line)) return false
+			if (cellOf(line) != null) return cellOf(next) == null
 			if (isFence(line) && isFence(next)) return false
 			if (isList(line) && isList(next)) return false
-			if (line in tableRows && next in tableRows) return false
+			if (line in literalTableRows && next in literalTableRows) return false
 			return true
+		}
+		// Plain lines one after another that would read as a table do not, by their delimiter row's pipes.
+		val accidentalDelimiterRows = if (separateParagraphs) emptySet() else {
+			findTables(lines.mapIndexed { line, text -> if (isQuoted(line) || cellOf(line) != null || isFence(line)) "" else text.text })
+				.mapTo(HashSet()) { it.first + 1 }
+		}
+		val lineStarts = IntArray(lines.size).also { starts ->
+			for (line in 1 until lines.size) starts[line] = starts[line - 1] + lines[line - 1].length + 1
+		}
+
+		/**
+		 * The markdown of [line]'s text, its links and styles written, before any block
+		 * prefix; [trimmed], without the spaces and tabs at either end.
+		 */
+		fun inlineMarkdownOf(line: Int, baked: Collection<SpanStyle>, trimmed: Boolean = false): String {
+			val lineText = lines[line].text
+			val from = if (trimmed) lineText.indexOfFirst { it != ' ' && it != '\t' }.let { if (it < 0) lineText.length else it } else 0
+			val to = if (trimmed) maxOf(from, lineText.indexOfLast { it != ' ' && it != '\t' } + 1) else lineText.length
+			val lineLength = to - from
+			val start = lineStarts[line] + from
+			// Link spans live on the state, not in the AnnotatedString, so
+			// the serializer is handed this line's links in line-local
+			// character offsets.
+			val links = linkSpansByLine[line].orEmpty().mapNotNull { span ->
+				val linkStart = (span.range.start.char - from).coerceIn(0, lineLength)
+				val endChar = when (span.range.end.line) {
+					line -> (span.range.end.char - from).coerceIn(linkStart, lineLength)
+					else -> lineLength
+				}
+				if (endChar > linkStart) {
+					(linkStart until endChar) to (span.style as LinkSpanStyle).url
+				} else {
+					null
+				}
+			}
+			return annotated.subSequence(start, start + lineLength)
+				.withoutSpanStyles(baked)
+				.toMarkdown(markdownConfiguration, links, styles, retiredStyles, headingsBySize = false)
+		}
+
+		/** A table row's markdown, from the row of [table] that starts at [line], and the delimiter row after the header. */
+		fun tableRowMarkdown(table: TextEditorTable, line: Int): String {
+			val rowIndex = table.rowOf(line)
+			val columns = table.lines.maxOf { table.cellAt(it).column } + 1
+			// GFM trims a cell, so its spaces at either end are not written.
+			val cells = List(columns) { column -> table.cellLine(rowIndex, column)?.let { inlineMarkdownOf(it, emptyList(), trimmed = true) } ?: "" }
+			val row = tableRow(cells)
+			if (rowIndex != 0) return row
+			val alignments = List(columns) { column -> table.cellLine(0, column)?.let { table.cellAt(it).alignment } ?: TableAlignment.NONE }
+			return row + "\n" + tableDelimiterRow(alignments)
 		}
 
 		val sb = StringBuilder()
@@ -393,10 +454,18 @@ class MarkdownExtension(
 		// Code fences wrap a contiguous run with ` ``` ` markers rather than
 		// per-line prefixes; track open/close state across iterations.
 		var inCodeFence = false
+		var table: TextEditorTable? = null
 		for (lineIndex in lines.indices) {
 			val lineLength = lines[lineIndex].length
 			val end = cursor + lineLength
 			val isFenceLine = isFence(lineIndex)
+			val cell = cellOf(lineIndex)
+			if (cell != null && table?.lines?.contains(lineIndex) != true) table = content.tableAt(lineIndex)
+			// A table row is written whole at its first cell.
+			if (cell != null && table != null && table.rows[table.rowOf(lineIndex)].first != lineIndex) {
+				cursor = end + 1
+				continue
+			}
 
 			if (lineIndex > 0) {
 				sb.append('\n')
@@ -434,26 +503,12 @@ class MarkdownExtension(
 				// backticks. Inside a fence the content is literal anyway.
 				isFenceLine -> text.substring(cursor, end)
 
+				cell != null && table != null -> tableRowMarkdown(table, lineIndex)
+
 				else -> {
 					val baked = headingLevel?.let { bakedHeadingLooks[it.coerceIn(1, 6) - 1] }.orEmpty()
-					// Link spans live on the state, not in the AnnotatedString, so
-					// the serializer is handed this line's links in line-local
-					// character offsets.
-					val links = linkSpansByLine[lineIndex].orEmpty().mapNotNull { span ->
-						val start = span.range.start.char.coerceIn(0, lineLength)
-						val endChar = when (span.range.end.line) {
-							lineIndex -> span.range.end.char.coerceIn(start, lineLength)
-							else -> lineLength
-						}
-						if (endChar > start) {
-							(start until endChar) to (span.style as LinkSpanStyle).url
-						} else {
-							null
-						}
-					}
-					annotated.subSequence(cursor, end)
-						.withoutSpanStyles(baked)
-						.toMarkdown(markdownConfiguration, links, styles, retiredStyles, headingsBySize = false)
+					val written = inlineMarkdownOf(lineIndex, baked)
+					if (lineIndex in accidentalDelimiterRows) written.replace("|", "\\|") else written
 				}
 			}
 			// CommonMark reads a marker followed by whitespace alone as an empty
@@ -524,10 +579,17 @@ class MarkdownExtension(
 		val fenceStrip = stripCodeFences(markdownText)
 		// Stage 2: take the blank line export puts after each block away again,
 		// so a paragraph per line comes back as a line per paragraph.
-		val imported = withoutParagraphSeparators(fenceStrip, paragraphSeparator)
+		// Stage 3: a table's rows become a line per cell. Tables are found first: the blank
+		// line that ends one is a separator stage 2 takes away.
+		val strippedLines = fenceStrip.text.lines()
+		val tables = readTables(strippedLines, fenceStrip.fencedLines)
+		val imported = withTableCells(withoutParagraphSeparators(fenceStrip, strippedLines, paragraphSeparator, tables), tables)
 		val keptLines = imported.lines
 		val codeFenceLineIndices = imported.fencedLines
 		val fenceInfoStrings = imported.infoStrings
+		// A cell is inline content alone: led by a character the parser reads as text,
+		// nothing in it starts a block. Taken out again after the parse.
+		val cellLead = cellLeadFor(keptLines)
 
 		val hrLineIndices = mutableListOf<Int>()
 		val imageLines = mutableListOf<Pair<Int, ImageBlockSpanStyle>>()
@@ -538,6 +600,10 @@ class MarkdownExtension(
 			if (index in codeFenceLineIndices) {
 				nesting.close()
 				return@mapIndexed line.escapeMarkdownSpecials()
+			}
+			if (index in imported.cells) {
+				nesting.close()
+				return@mapIndexed "$cellLead$line"
 			}
 			// Markers peel before the body is classified, so a rule or image keeps
 			// a stacked blockquote (`> ---`), and a `- ---` line comes back as the
@@ -585,7 +651,7 @@ class MarkdownExtension(
 			literalLines = codeFenceLineIndices,
 			allowedLinkSchemes = editorState.allowedLinkSchemes,
 		)
-		val annotatedString = parsed.annotatedString
+		val (annotatedString, links) = withoutCellLeads(parsed, imported.cells.keys, cellLead)
 		// setText publishes the text with no spans and applyDocumentBlocks attaches them
 		// afterwards. As one revision, so a concurrent export can't catch the document
 		// fully loaded but entirely unstyled.
@@ -594,18 +660,95 @@ class MarkdownExtension(
 			editorState.applyDocumentBlocks(
 				horizontalRuleLines = hrLineIndices,
 				imageLines = imageLines.toMap(),
-				blockLines = blockHits + (CodeFenceSpanStyle to codeFenceLineIndices),
-				richSpans = linkSpans(parsed.links, annotatedString.text) + fenceLanguageSpans(fenceInfoStrings),
+				blockLines = blockHits + (CodeFenceSpanStyle to codeFenceLineIndices) +
+					imported.cells.entries.groupBy({ it.value }, { it.key }),
+				richSpans = linkSpans(links, annotatedString.text) + fenceLanguageSpans(fenceInfoStrings),
 			)
 		}
 	}
 
-	/** The fence-stripped lines that are document lines, with the fence data renumbered onto them. */
+	/**
+	 * The fence-stripped lines that are document lines, with the fence data renumbered
+	 * onto them, and the table cells among them, each line's text its cell's markdown.
+	 */
 	private class ImportedLines(
 		val lines: List<String>,
 		val fencedLines: Set<Int>,
 		val infoStrings: Map<Int, String>,
+		val cells: Map<Int, TableCellSpanStyle> = emptyMap(),
+		/** Each line's index among the fence-stripped lines it came from. */
+		val sources: List<Int> = lines.indices.toList(),
 	)
+
+	/**
+	 * [imported] with each of [tables] (keyed by the fence-stripped line it starts on) read
+	 * into a line per cell, the fence data renumbered.
+	 */
+	private fun withTableCells(imported: ImportedLines, tables: Map<Int, Pair<ImportedTable, Int>>): ImportedLines {
+		if (tables.isEmpty()) return imported
+		val lines = ArrayList<String>(imported.lines.size)
+		val fenced = HashSet<Int>()
+		val infoStrings = HashMap<Int, String>()
+		val cells = HashMap<Int, TableCellSpanStyle>()
+		var index = 0
+		while (index < imported.lines.size) {
+			val source = imported.sources[index]
+			val table = tables[source]
+			if (table == null) {
+				if (index in imported.fencedLines) fenced += lines.size
+				imported.infoStrings[index]?.let { infoStrings[lines.size] = it }
+				lines += imported.lines[index]
+				index++
+				continue
+			}
+			val (read, span) = table
+			for (row in read.rows) {
+				row.forEachIndexed { column, text ->
+					cells[lines.size] = TableCellSpanStyle.of(column, read.alignments.getOrElse(column) { TableAlignment.NONE })
+					lines += text
+				}
+			}
+			while (index < imported.lines.size && imported.sources[index] < source + span) index++
+		}
+		return ImportedLines(lines, fenced, infoStrings, cells)
+	}
+
+	/**
+	 * [parsed] with the [lead] taken off the start of each of the [cells] lines, the
+	 * styles and links moved back by it.
+	 */
+	private fun withoutCellLeads(parsed: MarkdownParseResult, cells: Set<Int>, lead: Char): Pair<AnnotatedString, List<ParsedLink>> {
+		if (cells.isEmpty()) return parsed.annotatedString to parsed.links
+		val text = parsed.annotatedString
+		val removed = ArrayList<Int>()
+		var line = 0
+		var start = 0
+		while (start <= text.length) {
+			if (line in cells && text.getOrNull(start) == lead) removed += start
+			val end = text.indexOf('\n', start)
+			if (end < 0) break
+			line++
+			start = end + 1
+		}
+		fun moved(offset: Int): Int {
+			var before = removed.binarySearch(offset)
+			if (before < 0) before = -before - 1
+			return offset - before
+		}
+		val kept = StringBuilder(text.length - removed.size)
+		var from = 0
+		for (at in removed) {
+			kept.append(text, from, at)
+			from = at + 1
+		}
+		kept.append(text, from, text.length)
+		val stripped = AnnotatedString(
+			kept.toString(),
+			text.spanStyles.map { AnnotatedString.Range(it.item, moved(it.start), moved(it.end)) },
+			text.paragraphStyles.map { AnnotatedString.Range(it.item, moved(it.start), moved(it.end)) },
+		)
+		return stripped to parsed.links.map { ParsedLink(moved(it.start), moved(it.end), it.url) }
+	}
 
 	/**
 	 * Leaves out, under [ParagraphSeparator.BLANK_LINE], the one blank line
@@ -614,33 +757,43 @@ class MarkdownExtension(
 	 * `>` line is blank, as export has it. Only a blank line export would have
 	 * written there is left out (see [isParagraphSeparator]), so a foreign
 	 * file's blank line between two fences, two list items or two quotes, which
-	 * export never writes, stays and keeps them apart.
+	 * export never writes, stays and keeps them apart. Under either rule the blank
+	 * line after one of [tables] is left out, export writing it to end the table, and
+	 * under [ParagraphSeparator.NEWLINE] the one before it too. [stripped] is the
+	 * fence-stripped text's lines.
 	 */
 	private fun withoutParagraphSeparators(
 		strip: CodeFenceStripResult,
+		stripped: List<String>,
 		separator: ParagraphSeparator,
+		tables: Map<Int, Pair<ImportedTable, Int>>,
 	): ImportedLines {
-		val stripped = strip.text.lines()
-		if (separator == ParagraphSeparator.NEWLINE) {
-			return ImportedLines(stripped, strip.fencedLines, strip.infoStrings)
-		}
+		// A table ends at a blank line, which export writes after one under either rule,
+		// and under single newlines before one too.
+		val tableEnds = tables.mapTo(HashSet()) { (start, table) -> start + table.second - 1 }
 		val lines = ArrayList<String>(stripped.size)
+		val sources = ArrayList<Int>(stripped.size)
 		val fenced = HashSet<Int>()
 		val infoStrings = HashMap<Int, String>()
 		var afterBlock = false
 		stripped.forEachIndexed { index, line ->
 			val isFenced = index in strip.fencedLines
 			val blank = !isFenced && (line.isBlank() || QUOTE_BLANK_LINE.matches(line))
-			if (blank && afterBlock && isParagraphSeparator(stripped, strip.fencedLines, index)) {
+			val separates = when (separator) {
+				ParagraphSeparator.NEWLINE -> blank && (index - 1 in tableEnds || index + 1 in tables)
+				ParagraphSeparator.BLANK_LINE -> blank && afterBlock && isParagraphSeparator(stripped, strip.fencedLines, index)
+			}
+			if (separates) {
 				afterBlock = false
 				return@forEachIndexed
 			}
 			if (isFenced) fenced += lines.size
 			strip.infoStrings[index]?.let { infoStrings[lines.size] = it }
 			lines += line
+			sources += index
 			afterBlock = !blank
 		}
-		return ImportedLines(lines, fenced, infoStrings)
+		return ImportedLines(lines, fenced, infoStrings, sources = sources)
 	}
 
 	/**

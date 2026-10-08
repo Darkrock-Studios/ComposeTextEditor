@@ -67,6 +67,12 @@ class GoldenScreenshotTest {
 		}
 
 	@Test
+	fun table() = golden("table", "", width = 300.dp) {
+		state.setBlockLines("Totals\n|0| Name\n|1^| Qty\n|0| A widget that wraps\n|1^| 3\nafter")
+		state.selector.updateSelection(CharLineOffset(3, 2), CharLineOffset(4, 1))
+	}
+
+	@Test
 	fun squiggles() = golden("squiggles", "Speling is hard to get rihgt") {
 		state.addRichSpan(CharLineOffset(0, 0), CharLineOffset(0, 7), SpellCheckStyle)
 		state.addRichSpan(CharLineOffset(0, 23), CharLineOffset(0, 28), SpellCheckStyle)

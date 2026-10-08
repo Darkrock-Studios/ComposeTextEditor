@@ -122,9 +122,8 @@ class ProseEscapingTest {
 	@Test
 	fun `a table continues through a pipe-less line, as GFM has it`() = runTest {
 		val e = extension()
-		val table = "| a | b |\n|---|---|\n| 1 | 2 |\nnote"
-		e.importMarkdown(table)
-		assertEquals(table, e.exportAsMarkdown())
+		e.importMarkdown("| a | b |\n|---|---|\n| 1 | 2 |\nnote")
+		assertEquals("| a | b |\n| --- | --- |\n| 1 | 2 |\n| note |  |", e.exportAsMarkdown())
 	}
 
 	@Test
@@ -163,11 +162,10 @@ class ProseEscapingTest {
 	}
 
 	@Test
-	fun `a table and a task list kept as literal text pass through unchanged`() = runTest {
+	fun `a table is written in the editor's form, and a task list kept as literal text passes through unchanged`() = runTest {
 		val e = extension()
-		val table = "| Name | Qty |\n|------|----:|\n| Nuts | 12 |"
-		e.importMarkdown(table)
-		assertEquals(table, e.exportAsMarkdown())
+		e.importMarkdown("| Name | Qty |\n|------|----:|\n| Nuts | 12 |")
+		assertEquals("| Name | Qty |\n| --- | --: |\n| Nuts | 12 |", e.exportAsMarkdown())
 
 		val tasks = "- [ ] write the tests\n- [x] pass them"
 		e.importMarkdown(tasks)

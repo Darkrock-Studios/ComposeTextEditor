@@ -186,6 +186,39 @@ A `SpellCheckStyle` or `DiagnosticStyle` given a layer of the host's own is
 left to the host: spell check and diagnostics neither clear it nor treat it as
 one of their flags.
 
+## Tables
+
+After 3.0.3, tables are a block (`docs/design/tables.md`): a table is a run of cell lines,
+each carrying a `TableCellSpanStyle`, laid out side by side. Nothing needs code,
+but a host may notice:
+
+- **Markdown.** A GFM pipe table outside a quote imports as a table where it
+  imported as literal lines, and is written back in the editor's form
+  (`| a | b |`, a `---` delimiter row, a blank line after it). A document that
+  held a pipe table on purpose as text now shows it as a table. A table inside a
+  quote stays literal text.
+- **HTML.** A pasted or imported `<table>` becomes a table where its cells were
+  tab-separated lines, and `toAnnotatedStringFromHtml` gives a cell a line.
+- **Editing.** `editBehaviors` starts with `TableEditBehavior` ahead of
+  `LineBlockEditBehavior`, and Tab in a cell goes to the next cell through the
+  new `EditBehavior.onIndent`. A deletion or replace (`delete`, `replace`) across
+  a table's cells clears them rather than joining them, and line breaks landing
+  in a cell become spaces, ahead of a host's `inputFilter`.
+- **Styles.** `RichSpanStyle` gains `inlineOnly`, which a cell sets; a custom
+  line marker that sets it gets a cell's rules (no other block on its line, line
+  breaks as spaces, pastes bringing inline styles only).
+  `isInlineOnlyLine` reads it. A `LineWrap` laid out beside others carries its
+  `box`, and a cell's its `tableCell`; every `LineWrap` carries its line's
+  `spaceBefore`, `spaceAfter` and `blockFacts`.
+- **Layout.** A line stacking a quote and a list is indented by both, where the
+  list's indent alone placed its text and marker on the quote's bar.
+
+The table API is in `com.darkrockstudios.texteditor.state`: `insertTable`,
+`insertTableRow`, `deleteTableRow`, `insertTableColumn`, `deleteTableColumn`,
+`setTableColumnAlignment`, `convertTableToText`, `deleteTable`, and `tableAt`
+and `tableCellAt` to read one. `TextEditorStyle` gains `tableBorderColor` and
+`tableHeaderBackgroundColor`.
+
 ## Keyboard content on Android
 
 An Android host can take the GIFs, stickers and images a keyboard commits by

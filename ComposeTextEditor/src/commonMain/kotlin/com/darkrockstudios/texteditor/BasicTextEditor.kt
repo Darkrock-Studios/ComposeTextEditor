@@ -212,7 +212,7 @@ fun BasicTextEditor(
 	// Derived, so layout is invalidated only when the height of the rows changes, not on
 	// every edit.
 	val contentHeightPx = remember(state) {
-		derivedStateOf { state.lineOffsets.lastOrNull()?.let { ceil(it.offset.y + it.effectiveHeight).toInt() } ?: 0 }
+		derivedStateOf { state.lineOffsets.lastOrNull()?.let { ceil(it.bandBottom).toInt() } ?: 0 }
 	}
 	val verticalPaddingPx = with(density) {
 		contentPadding.calculateTopPadding().roundToPx() + contentPadding.calculateBottomPadding().roundToPx()
@@ -348,6 +348,8 @@ fun BasicTextEditor(
 		style.orderedListMarkerColor,
 		style.codeFenceBackgroundColor,
 		style.codeFenceBorderColor,
+		style.tableBorderColor,
+		style.tableHeaderBackgroundColor,
 	) {
 		state.bulletColor = style.bulletColor
 		state.blockquoteBarColor = style.blockquoteBarColor
@@ -355,6 +357,8 @@ fun BasicTextEditor(
 		state.orderedListMarkerColor = style.orderedListMarkerColor
 		state.codeFenceBackgroundColor = style.codeFenceBackgroundColor
 		state.codeFenceBorderColor = style.codeFenceBorderColor
+		state.tableBorderColor = style.tableBorderColor
+		state.tableHeaderBackgroundColor = style.tableHeaderBackgroundColor
 	}
 
 	LaunchedEffect(style.paragraphSpacing) {

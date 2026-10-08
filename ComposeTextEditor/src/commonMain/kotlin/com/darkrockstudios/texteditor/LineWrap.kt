@@ -3,6 +3,7 @@ package com.darkrockstudios.texteditor
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.text.TextLayoutResult
 import com.darkrockstudios.texteditor.richstyle.RichSpan
+import com.darkrockstudios.texteditor.state.BlockFacts
 import com.darkrockstudios.texteditor.state.TextEditorState
 
 /**
@@ -57,7 +58,49 @@ data class LineWrap(
 	 * draw-time work is just a flag check. Repeated across virtual sub-lines.
 	 */
 	val codeFenceBoundary: CodeFenceBoundary? = null,
+	/**
+	 * The box this row's line is placed in when it sits beside other lines rather than
+	 * below the one before it, or null for a line in the document's flow. Repeated
+	 * across a wrapped line's rows.
+	 */
+	val box: LineBox? = null,
+	/** Where this row's line sits in its table, for the cell's style to draw; null outside a table. */
+	val tableCell: TableCellPlace? = null,
+	/**
+	 * The space above the line's first row and below its last, outside every row: its
+	 * paragraph spacing and what its blocks add (a callout's title), or for a line in a
+	 * [box], its padding inside the box. A style drawing a card across several lines
+	 * covers it to close the gaps between them. Repeated across a wrapped line's rows.
+	 */
+	val spaceBefore: Float = 0f,
+	val spaceAfter: Float = 0f,
+	/** What the editor's multi-line blocks derive for this row's line, for their styles to draw by. */
+	val blockFacts: BlockFacts = BlockFacts.NONE,
 )
+
+/**
+ * A line's box in content space, the coordinates [LineWrap.offset] is in, when it is
+ * laid out beside other lines, as a table row's cells are. The lines laid out together
+ * share a band from [top], [height] tall: as tall as the tallest of them, and moving the
+ * lines after it down by that once. [startsBand] and [endsBand] tell its first and last lines.
+ */
+data class LineBox(
+	val left: Float,
+	val top: Float,
+	val width: Float,
+	val height: Float,
+	val startsBand: Boolean,
+	val endsBand: Boolean,
+)
+
+/** A cell's table [row] (0 is the header) and [column], and whether its row is the table's last. */
+data class TableCellPlace(
+	val row: Int,
+	val column: Int,
+	val isLastRow: Boolean,
+) {
+	val isHeader: Boolean get() = row == 0
+}
 
 /**
  * Where a fenced line sits inside its run. [Only] is the single-line case (the
@@ -69,6 +112,18 @@ enum class CodeFenceBoundary { First, Middle, Last, Only }
 val LineWrap.effectiveHeight: Float
 	get() = blockHeight
 		?: textLayoutResult.multiParagraph.getLineHeight(virtualLineIndex)
+
+/**
+ * The top of the band this row is ordered by: a boxed line's rows span their whole
+ * band ([LineBox]), so rows' bands run top to bottom in row order though a boxed line's
+ * own rows sit beside the next line's. Its own top for any other row.
+ */
+internal val LineWrap.bandTop: Float
+	get() = box?.top ?: offset.y
+
+/** The bottom of this row's band (see [bandTop]). */
+internal val LineWrap.bandBottom: Float
+	get() = box?.let { it.top + it.height } ?: (offset.y + effectiveHeight)
 
 fun LineWrap.wrapStartToCharacterIndex(state: TextEditorState): Int {
 	return state.wrapStartToCharacterIndex(this)

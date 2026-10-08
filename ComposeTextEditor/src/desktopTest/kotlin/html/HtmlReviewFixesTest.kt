@@ -63,15 +63,15 @@ class HtmlReviewFixesTest {
 	}
 
 	@Test
-	fun `table cells are separated by tabs`() {
+	fun `table cells are a line each`() {
 		val html = "<table><tr><td>Alice</td><td>Bob</td><td>30</td></tr></table>"
-		assertEquals("Alice\tBob\t30", html.toAnnotatedStringFromHtml(config).text)
+		assertEquals("Alice\nBob\n30", html.toAnnotatedStringFromHtml(config).text)
 	}
 
 	@Test
-	fun `table rows are separated by lines`() {
+	fun `table rows follow one another a cell a line`() {
 		val html = "<table><tr><td>a</td><td>b</td></tr><tr><td>c</td><td>d</td></tr></table>"
-		assertEquals("a\tb\nc\td", html.toAnnotatedStringFromHtml(config).text)
+		assertEquals("a\nb\nc\nd", html.toAnnotatedStringFromHtml(config).text)
 	}
 
 	@Test

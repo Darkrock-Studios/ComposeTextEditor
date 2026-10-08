@@ -82,6 +82,16 @@ private class MaxLengthFilter(private val max: Int) : EditorInputFilter {
 }
 
 /** Same length, so every character style keeps its range; paragraph styles would break the line again. */
+/**
+ * Keeps an inline-only line (a table cell) one line: line breaks in text landing in it
+ * (a paste, a dictated phrase, a host's insert) become spaces. Enter is screened first
+ * too, and lands as nothing of the kind when an edit behavior takes it, as a table's
+ * does to the cell below. Screens ahead of every other filter.
+ */
+internal val InlineOnlyLineBreaks: EditorInputFilter = EditorInputFilter { state, range, text ->
+	if ('\n' !in text.text || !state.isInlineOnlyLine(range.start.line)) text else text.replacingLineBreaks()
+}
+
 private fun AnnotatedString.replacingLineBreaks(): AnnotatedString = AnnotatedString(text.replace('\n', ' '), spanStyles)
 
 /**
@@ -92,7 +102,7 @@ private fun AnnotatedString.replacingLineBreaks(): AnnotatedString = AnnotatedSt
  */
 internal fun TextEditorState.screenInput(range: TextEditorRange, text: AnnotatedString): AnnotatedString? {
 	val normalized = text.normalizeLineEndings()
-	val filter = effectiveInputFilter ?: return normalized
+	val filter = effectiveInputFilter
 	return filter.filter(this, range, normalized)?.normalizeLineEndings()
 }
 

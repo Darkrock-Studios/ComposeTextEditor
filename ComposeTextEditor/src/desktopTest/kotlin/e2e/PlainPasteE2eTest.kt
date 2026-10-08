@@ -103,7 +103,7 @@ class PlainPasteE2eTest {
 		assertEquals(emptyList(), stylesAt(0))
 
 		press(Key.V, ctrl = true)
-		assertEquals("a | ba\tb", text, "a rich paste still reads the markup")
+		assertEquals("a | b\na\nb", text, "a rich paste still reads the markup, a table on lines of its own")
 	}
 
 	@Test

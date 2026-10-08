@@ -5,6 +5,8 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextDirection
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.cursor.calculateCursorPosition
 import utils.EditorUiTestScope
@@ -139,11 +141,50 @@ class VisualArrowE2eTest {
 		assertEquals(List(7) { it + 1 }, walk(Key.DirectionRight, 7).map { it.first })
 	}
 
+	@Test
+	fun `a row after a wrap that ends in right-to-left text starts at its left edge`() = editorUiTest(
+		initialText = AnnotatedString(WRAPPED_AFTER_HEBREW),
+		width = widthWrappingAfterHebrew(),
+	) {
+		val rowStart = state.lineOffsets[1].wrapStartsAtIndex
+		assertEquals(6, rowStart, "the row wraps after the Hebrew word")
+		placeCaret(0, rowStart)
+		assertEquals(0f, caretX(), "the caret at the row's start is at its left edge")
+		val right = walk(Key.DirectionRight, 3)
+		assertStrictly(listOf(0f) + right.map { it.second }, increasing = true, message = "each Right moves the caret right")
+
+		val back = walk(Key.DirectionLeft, 3)
+		assertEquals(listOf(rowStart + 2, rowStart + 1, rowStart), back.map { it.first }, "Left retraces the steps")
+		assertEquals(0f, back.last().second, "and is back at the row's left edge")
+	}
+
+	/**
+	 * A width that wraps [WRAPPED_AFTER_HEBREW] after the Hebrew word, its sixth character:
+	 * where the text breaks depends on the platform's fonts, so its first six and seven
+	 * characters are measured as lines of their own and the text's width falls between
+	 * them, the editor's width the room it keeps beside the text more.
+	 */
+	private fun widthWrappingAfterHebrew(): Dp {
+		var reserved = 0f
+		val widths = listOf(6, 7).map { length ->
+			var width = 0f
+			editorUiTest(initialText = AnnotatedString(WRAPPED_AFTER_HEBREW.take(length))) {
+				val layout = state.lineOffsets[0].textLayoutResult
+				width = layout.getLineRight(0) - layout.getLineLeft(0)
+				reserved = 400f - layout.layoutInput.constraints.maxWidth
+			}
+			width
+		}
+		return ((widths[0] + widths[1]) / 2 + reserved).dp
+	}
+
 	private fun EditorUiTestScope.caretXAt0(): Float = state.getPositionForOffset(CharLineOffset(0, 0)).position.x
 
 	private companion object {
 		const val MIXED = "abc אבג def"
 		const val MIXED_RTL = "שלום abc עולם"
 		const val HEBREW = "שלום עולם"
+
+		const val WRAPPED_AFTER_HEBREW = "AéשלוםLovelace"
 	}
 }

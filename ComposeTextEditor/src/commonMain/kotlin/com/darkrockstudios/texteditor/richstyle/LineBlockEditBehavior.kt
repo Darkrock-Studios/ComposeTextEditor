@@ -8,8 +8,8 @@ import com.darkrockstudios.texteditor.state.TextEditorState
  * exits the block (a nested list item un-nests instead), Enter at a heading's
  * end, empty or not, starts body text, backspace at its start demotes it (a
  * nested list item un-nests), and a split keeps the gutter marker on both
- * halves. See the "Smart editing" and "Nested lists" sections of
- * `docs/design/line-blocks.md`.
+ * halves. An inline-only line (a table cell) is left to its own behavior. See the "Smart
+ * editing" and "Nested lists" sections of `docs/design/line-blocks.md`.
  *
  * Registered on every [TextEditorState] by default. Remove it from
  * [TextEditorState.editBehaviors] for an editor that wants plain line breaks.
@@ -20,6 +20,7 @@ object LineBlockEditBehavior : EditBehavior {
 		val line = state.cursorPosition.line
 		val blocks = state.lineBlocks(line)
 		val block = blocks.firstOrNull() ?: return false
+		if (block.spanStyle.inlineOnly) return false
 		val text = state.textLines.getOrNull(line)?.text.orEmpty()
 		val atHeadingEnd = blocks.any { it.isHeading } && state.cursorPosition.char >= text.length
 
@@ -71,6 +72,7 @@ object LineBlockEditBehavior : EditBehavior {
 		val position = state.cursorPosition
 		if (position.char != 0) return false
 		val activeBlock = state.detectLineBlock(position.line) ?: return false
+		if (activeBlock.spanStyle.inlineOnly) return false
 		if ((state.listBlockAt(position.line)?.listLevel ?: 0) > 0) {
 			state.unnestListItems(position.line..position.line)
 			return true

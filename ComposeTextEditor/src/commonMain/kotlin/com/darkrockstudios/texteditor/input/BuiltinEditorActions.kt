@@ -1,5 +1,6 @@
 package com.darkrockstudios.texteditor.input
 
+import com.darkrockstudios.texteditor.state.isInlineOnlyLine
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -239,7 +240,7 @@ private fun TextEditorState.landPaste(
 	val text = screenAtSelection(sized) ?: return
 	val screened = text != sized
 	preserveCopiedRichSpansThroughNextEdit()
-	withAtomicEdit {
+	val landed = withAtomicEdit {
 		editManager.alreadyScreened {
 			if (curSelection != null) {
 				replace(curSelection, applyStyleForEditAt(curSelection.start, text))
@@ -255,7 +256,7 @@ private fun TextEditorState.landPaste(
 		settleLanded(insertPosition, text, richSpans, htmlDocument.takeIf { !screened })
 	}
 	selector.clearSelection()
-	pasteLanded(text.text, TextEditorRange(insertPosition, text.endWhenInsertedAt(insertPosition)))
+	pasteLanded(text.text, TextEditorRange(landed, text.endWhenInsertedAt(landed)))
 }
 
 private fun TextEditorState.handleDelete() {
@@ -294,8 +295,15 @@ private fun TextEditorState.deleteByMotion(kill: Kill? = null, locateRangeEdge: 
 	}
 	val origin = cursorPosition
 	locateRangeEdge()
-	val edge = cursorPosition
-	if (edge == origin) return
+	// A word or line motion crosses an inline-only line's edge (a cell's); the deletion stops there.
+	val edge = cursorPosition.let {
+		if (it.line == origin.line || (!isInlineOnlyLine(it.line) && !isInlineOnlyLine(origin.line))) it
+		else if (it < origin) CharLineOffset(origin.line, 0) else CharLineOffset(origin.line, textLines[origin.line].length)
+	}
+	if (edge == origin) {
+		cursor.updatePosition(origin)
+		return
+	}
 
 	val range = if (edge < origin) {
 		TextEditorRange(edge, origin)
@@ -358,6 +366,7 @@ private fun TextEditorState.deleteToParagraphEnd() {
 }
 
 private fun TextEditorState.handleIndent() = editGroup {
+	if (indentClaimed(outdent = false)) return@editGroup
 	val selection = selector.selection
 	if (selection != null && selection.start.line != selection.end.line) {
 		indentLineRange(selection.start.line, selection.end.line)
@@ -397,6 +406,7 @@ private fun TextEditorState.takesIndentForNest(line: Int): Boolean =
 	listBlockAt(line)?.listLevel == 0 && textLines[line].isNotBlank()
 
 private fun TextEditorState.handleOutdent() = editGroup {
+	if (indentClaimed(outdent = true)) return@editGroup
 	val selection = selector.selection
 	if (selection != null) {
 		unnestListItems(selection.start.line..selection.end.line)

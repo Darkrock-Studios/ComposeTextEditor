@@ -226,6 +226,7 @@ class TextEditManager(private val state: TextEditorState) {
 		// Undo and redo replay edits the filter already let through. What a filter
 		// returns is normalised again.
 		val screened = if (addToHistory) screen(normalized)?.withNormalizedLineEndings() ?: return null else normalized
+		if (addToHistory && structuralEditDepth == 0) keepingBlockStructure(screened)?.let { return it }
 		// Resolved before anything reads it, so what is applied, recorded, and
 		// announced is one and the same operation.
 		val operation = when {
@@ -266,6 +267,13 @@ class TextEditManager(private val state: TextEditorState) {
 			if (!isSpanOperation && state.selector.selection != null) {
 				state.selector.clearSelection()
 			}
+			// Breaking an empty line carries its markers onto the lines it makes, which
+			// deleting the text again does not bring back, so undo writes the line back.
+			val brokenLine = if (addToHistory && operation is TextEditOperation.Insert && operation.text.contains('\n')) {
+				OperationMetadata().withLinesBefore(TextEditorRange(operation.position, operation.position), breaks = true)
+			} else {
+				null
+			}
 			val metadata = when (operation) {
 				is TextEditOperation.Insert -> applyInsert(operation)
 				is TextEditOperation.Delete -> applyDelete(addToHistory, operation)
@@ -285,7 +293,7 @@ class TextEditManager(private val state: TextEditorState) {
 			if (addToHistory && !isDecoration) {
 				history.recordEdit(
 					operation,
-					metadata ?: OperationMetadata(),
+					metadata ?: brokenLine ?: OperationMetadata(),
 					typing = typingOverride,
 					rewritesComposition = rewritingComposition,
 				)
@@ -378,7 +386,9 @@ class TextEditManager(private val state: TextEditorState) {
 		operation: TextEditOperation.Replace
 	): OperationMetadata? {
 		val metadata = if (addToHistory) {
-			state.captureMetadata(operation.range).withLinesBefore(operation.range, operation.newText.contains('\n'))
+			state.captureMetadata(operation.range)
+				.withLinesBefore(operation.range, operation.newText.contains('\n'))
+				.withStylesBefore(operation.range)
 		} else {
 			null
 		}
@@ -418,7 +428,7 @@ class TextEditManager(private val state: TextEditorState) {
 		// (undo of an insert, redo of a delete) are exactly where spans would
 		// otherwise be dropped.
 		val metadata = state.captureMetadata(operation.range).let {
-			if (addToHistory) it.withLinesBefore(operation.range, breaks = false) else it
+			if (addToHistory) it.withLinesBefore(operation.range, breaks = false).withStylesBefore(operation.range) else it
 		}
 
 		when {
@@ -459,6 +469,28 @@ class TextEditManager(private val state: TextEditorState) {
 			linesBefore = lines.filter { it in state.textLines.indices }.map {
 				LineBefore(it - range.start.line, state.textLines[it], state.lineBlockSpanStyles(it))
 			}
+		)
+	}
+
+	/**
+	 * With the styles of the line a single-line edit of [range] changes. Text put back
+	 * into a line takes the styles around it, which a delete may have joined (the
+	 * unstyled gap between two bold runs), so undo writes the line's styles back.
+	 */
+	private fun OperationMetadata.withStylesBefore(range: TextEditorRange): OperationMetadata {
+		val line = range.start.line
+		if (!range.isSingleLine() || line !in state.textLines.indices) return this
+		return copy(spanStylesBefore = mapOf(line to state.textLines[line].spanStyles))
+	}
+
+	/** Gives each line in [styles] its character styles back, once its text is back as long as it was. */
+	private fun restoreStylesBefore(styles: Map<Int, List<AnnotatedString.Range<SpanStyle>>>) {
+		state.writeLines(
+			styles.mapNotNull { (line, spans) ->
+				val text = state.textLines.getOrNull(line) ?: return@mapNotNull null
+				if (spans.any { it.end > text.length }) return@mapNotNull null
+				line to AnnotatedString(text.text, spans, text.paragraphStyles)
+			}.toMap()
 		)
 	}
 
@@ -515,6 +547,68 @@ class TextEditManager(private val state: TextEditorState) {
 		else -> false
 	}
 
+	private var structuralEditDepth = 0
+
+	/** Runs [block], a block's own edit that removes or joins its lines on purpose (a table's), without [keepingBlockStructure]. */
+	internal fun <T> editingStructure(block: () -> T): T {
+		structuralEditDepth++
+		try {
+			return block()
+		} finally {
+			structuralEditDepth--
+		}
+	}
+
+	/**
+	 * [operation], a deletion or replace whose range a [BlockKind] splits to keep its
+	 * structure ([BlockKind.deletionPieces]: a range across a table's edge or between its
+	 * cells), each kind splitting the pieces the kinds before it left, applied a piece at
+	 * a time, last first, with a replace's text going in at the range's start, as one
+	 * edit group. Null for any other operation, which applies as it is.
+	 */
+	private fun keepingBlockStructure(operation: TextEditOperation): TextEditOperation? {
+		val range = when (operation) {
+			is TextEditOperation.Delete -> operation.range
+			is TextEditOperation.Replace -> operation.range
+			else -> return null
+		}
+		var split = false
+		val pieces = BLOCK_KINDS.fold(listOf(range)) { pieces, kind ->
+			pieces.flatMap { piece -> kind.deletionPieces(state, piece)?.also { split = true } ?: listOf(piece) }
+		}
+		if (!split) return null
+		// A replace that inherits takes the styles of the text where it lands, as a replace of nothing there would.
+		val newText = (operation as? TextEditOperation.Replace)?.let { replace ->
+			if (!replace.inheritStyle) replace.newText
+			else resolveInheritedStyle(replace.copy(range = TextEditorRange(range.start, range.start), oldText = AnnotatedString(""))).newText
+		} ?: AnnotatedString("")
+		state.withAtomicEdit {
+			state.selector.clearSelection()
+			editingStructure {
+				for (piece in pieces.asReversed()) {
+					applyLanded(TextEditOperation.Delete(piece, cursorBefore = operation.cursorBefore, cursorAfter = piece.start))
+					if (piece.end.line != piece.start.line) BLOCK_KINDS.forEach { it.afterJoin(state, piece.start.line) }
+				}
+				if (newText.isNotEmpty()) {
+					alreadyScreened {
+						applyLanded(TextEditOperation.Insert(range.start, newText, cursorBefore = range.start, cursorAfter = newText.endWhenInsertedAt(range.start)))
+					}
+				}
+			}
+			state.cursor.updatePosition(if (newText.isEmpty()) range.start else newText.endWhenInsertedAt(range.start))
+		}
+		return when (operation) {
+			is TextEditOperation.Replace -> TextEditOperation.Replace(
+				range = TextEditorRange(range.start, range.start),
+				newText = newText,
+				oldText = AnnotatedString(""),
+				cursorBefore = operation.cursorBefore,
+				cursorAfter = newText.endWhenInsertedAt(range.start),
+			)
+			else -> operation
+		}
+	}
+
 	private var alreadyScreened = 0
 
 	/**
@@ -538,7 +632,7 @@ class TextEditManager(private val state: TextEditorState) {
 	 */
 	private fun screen(operation: TextEditOperation): TextEditOperation? {
 		if (alreadyScreened > 0) return operation
-		val filter = state.effectiveInputFilter ?: return operation
+		val filter = state.effectiveInputFilter
 		val (range, text) = when (operation) {
 			is TextEditOperation.Insert -> TextEditorRange(operation.position, operation.position) to operation.text
 			is TextEditOperation.Replace -> operation.range to operation.newText
@@ -851,6 +945,7 @@ class TextEditManager(private val state: TextEditorState) {
                 }
                 // Coalesce adjacent/overlapping runs of the SAME paragraph style so each
                 // style contributes a single continuous run to the joined line.
+                val coalesced = mutableListOf<Triple<ParagraphStyle, Int, Int>>()
                 paragraphRuns
                     .groupBy { it.first }
                     .forEach { (style, runs) ->
@@ -861,13 +956,25 @@ class TextEditManager(private val state: TextEditorState) {
                             if (start <= runEnd) {
                                 runEnd = maxOf(runEnd, end)
                             } else {
-                                addStyle(style, runStart, runEnd)
+                                coalesced += Triple(style, runStart, runEnd)
                                 runStart = start
                                 runEnd = end
                             }
                         }
-                        addStyle(style, runStart, runEnd)
+                        coalesced += Triple(style, runStart, runEnd)
                     }
+                // Lines stacking different blocks leave runs that cover part of the joined
+                // line over one another, which Compose rejects: the line whose looks win the
+                // join (see lastLine) gives its styles to the whole line instead.
+                val overlapping = coalesced.any { a ->
+                    coalesced.any { b -> a !== b && a.second < b.third && b.second < a.third && (a.second != b.second || a.third != b.third) }
+                }
+                if (overlapping) {
+                    val winner = if (startChar > 0) firstLine else lastLine
+                    winner.paragraphStyles.map { it.item }.distinct().forEach { addStyle(it, 0, mergedLength) }
+                } else {
+                    coalesced.forEach { (style, start, end) -> addStyle(style, start, end) }
+                }
 			}
 
 			state.replaceLines(startLine, endLine, listOf(newText))
@@ -1060,12 +1167,14 @@ class TextEditManager(private val state: TextEditorState) {
 	 *
 	 * Acts on the in-range lines that can carry [block]: placeholder lines count
 	 * for the styles that stack on them (blockquote on any, a list style on an
-	 * image, nothing else). The toggle direction is decided from the same set, so
-	 * a rule inside the selection cannot wedge a list toggle into always-apply.
+	 * image, nothing else), and an inline-only line (a table cell) takes no other
+	 * block. The toggle direction is decided from the same set, so a rule inside
+	 * the selection cannot wedge a list toggle into always-apply.
 	 */
 	internal fun toggleLineBlock(lines: IntRange, block: LineBlockStyle) = state.withAtomicEdit {
 		val targets = lines.filter { line ->
-			line in state.textLines.indices && block.allowedOn(placeholderKindOf(state.workingContent, line))
+			line in state.textLines.indices && block.allowedOn(placeholderKindOf(state.workingContent, line)) &&
+				(block.spanStyle.inlineOnly || !state.isInlineOnlyLine(line))
 		}
 		if (targets.isEmpty()) return@withAtomicEdit
 		// A list toggle asks for a kind at any nesting level: a nested item has
@@ -1261,6 +1370,7 @@ class TextEditManager(private val state: TextEditorState) {
 				operation.range.start
 			)
 			restoreLinesBefore(entry.metadata.linesBefore, operation.range.start.line)
+			restoreStylesBefore(entry.metadata.spanStylesBefore)
 		}
 	}
 
@@ -1283,6 +1393,7 @@ class TextEditManager(private val state: TextEditorState) {
 					operation.range.start
 				)
 				restoreLinesBefore(entry.metadata.linesBefore, operation.range.start.line)
+				restoreStylesBefore(entry.metadata.spanStylesBefore)
 			}
 		}
 	}
@@ -1306,14 +1417,17 @@ class TextEditManager(private val state: TextEditorState) {
 		}
 
 		val range = TextEditorRange(operation.position, endPosition)
-		applyOperation(
-			TextEditOperation.Delete(
-				range = range,
-				cursorBefore = entry.operation.cursorAfter,
-				cursorAfter = entry.operation.cursorBefore,
-			),
-			addToHistory = false
-		)
+		state.withAtomicEdit {
+			applyOperation(
+				TextEditOperation.Delete(
+					range = range,
+					cursorBefore = entry.operation.cursorAfter,
+					cursorAfter = entry.operation.cursorBefore,
+				),
+				addToHistory = false
+			)
+			restoreLinesBefore(entry.metadata.linesBefore, operation.position.line)
+		}
 	}
 
 	/**

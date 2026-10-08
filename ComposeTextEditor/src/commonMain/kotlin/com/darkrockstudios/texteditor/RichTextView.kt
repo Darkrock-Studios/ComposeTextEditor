@@ -208,9 +208,7 @@ private fun RichTextViewBody(
 			}
 		}
 
-		val contentHeightPx = state.lineOffsets.lastOrNull()?.let { last ->
-			last.offset.y + last.effectiveHeight
-		} ?: 0f
+		val contentHeightPx = state.lineOffsets.lastOrNull()?.bandBottom ?: 0f
 
 		// The padding goes below the pointer input so presses in it still reach the text.
 		val contentOrigin by rememberUpdatedState(

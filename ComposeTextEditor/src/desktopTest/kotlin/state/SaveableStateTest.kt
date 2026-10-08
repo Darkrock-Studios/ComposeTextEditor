@@ -210,6 +210,27 @@ class SaveableStateTest {
 	}
 
 	@Test
+	fun `a table survives a restore`() = runComposeUiTest {
+		val restorer = Restorer(this)
+		lateinit var state: TextEditorState
+		restorer.setContent {
+			state = rememberSaveableTextEditorState()
+			BasicTextEditor(state = state, modifier = Modifier.size(400.dp, 300.dp))
+		}
+		val document = "intro\n|0| Name\n|1>| Age\n|0^| Ada\n|1>| 36\nafter"
+		lateinit var linesBefore: List<AnnotatedString>
+		runOnIdle {
+			state.setBlockLines(document)
+			linesBefore = state.snapshot().lines
+		}
+
+		restorer.saveAndRestore()
+
+		assertEquals(document, state.blockLines())
+		assertEquals(linesBefore.map { it.paragraphStyles }, state.textLines.map { it.paragraphStyles })
+	}
+
+	@Test
 	fun `a saver that saves what cannot be saved says so`() = runComposeUiTest {
 		val restorer = Restorer(this)
 		lateinit var state: TextEditorState

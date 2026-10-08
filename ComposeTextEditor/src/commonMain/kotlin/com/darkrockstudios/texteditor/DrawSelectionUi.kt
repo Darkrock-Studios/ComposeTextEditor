@@ -34,12 +34,12 @@ private fun DrawScope.drawSelectedRows(state: TextEditorState, selection: TextEd
 
 	// Rows run top to bottom and line by line, so the first one to draw is a binary search.
 	var index = rows.firstRowWhere { wrap ->
-		wrap.line >= selection.start.line && wrap.offset.y + wrap.effectiveHeight >= scroll
+		wrap.line >= selection.start.line && wrap.bandBottom >= scroll
 	}
 	while (index < rows.size) {
 		val wrap = rows[index]
 		val top = wrap.offset.y - scroll
-		if (wrap.line > selection.end.line || top > size.height) break
+		if (wrap.line > selection.end.line || wrap.bandTop - scroll > size.height) break
 
 		val layout = wrap.textLayoutResult
 		val row = wrap.virtualLineIndex
@@ -58,11 +58,18 @@ private fun DrawScope.drawSelectedRows(state: TextEditorState, selection: TextEd
 
 		val boxes = if (hasText) layout.getRunBoxes(row, from, to) else emptyList()
 		val stretches = if (selectsLineBreak) withLineBreak(boxes, wrap, state.lineBreakWidth) else boxes
+		// A boxed line's selection stays in its box, a selected line break's sliver too.
+		val box = wrap.box
+		val minX = if (box == null) Float.NEGATIVE_INFINITY else box.left
+		val maxX = if (box == null) Float.POSITIVE_INFINITY else box.left + box.width
 		for (stretch in stretches) {
+			val left = (wrap.offset.x + stretch.left).coerceIn(minX, maxX)
+			val right = (wrap.offset.x + stretch.right).coerceIn(minX, maxX)
+			if (right <= left) continue
 			drawRect(
 				color = selectionColor,
-				topLeft = Offset(stretch.left, top),
-				size = Size(stretch.width, wrap.effectiveHeight),
+				topLeft = Offset(left, top),
+				size = Size(right - left, wrap.effectiveHeight),
 			)
 		}
 	}

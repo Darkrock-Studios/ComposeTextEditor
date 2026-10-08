@@ -37,9 +37,11 @@ fun TextLayoutResult.lineTextLeft(lineIndex: Int, density: Density?): Float {
 		return getPathForRange(lineStart, getLineEnd(lineIndex, visibleEnd = true)).getBounds().left
 	}
 
+	// The first glyph's box, not the caret position at the row's start: after a wrap that
+	// ends in right-to-left text, that answers with the end of that run on the row above.
 	val measured = max(
 		getLineLeft(lineIndex),
-		getHorizontalPosition(lineStart, usePrimaryDirection = true)
+		if (lineStart < layoutInput.text.length) getBoundingBox(lineStart).left else getHorizontalPosition(lineStart, usePrimaryDirection = true)
 	)
 	if (layoutInput.text.isNotEmpty() || density == null) return measured
 

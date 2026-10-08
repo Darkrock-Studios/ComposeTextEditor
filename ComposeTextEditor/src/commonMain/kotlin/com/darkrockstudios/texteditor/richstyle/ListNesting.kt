@@ -17,7 +17,8 @@ import com.darkrockstudios.texteditor.state.TextEditorState
 fun isNestingBlank(text: AnnotatedString, spansOnLine: Iterable<RichSpan>): Boolean =
 	text.isBlank() && spansOnLine.none { span ->
 		val style = span.style
-		style.listBlock() != null || style is BlockSpanStyle || style === CodeFenceSpanStyle || style is HeaderSpanStyle
+		style.listBlock() != null || style is BlockSpanStyle || style === CodeFenceSpanStyle || style is HeaderSpanStyle ||
+			style.inlineOnly
 	}
 
 internal fun TextEditorState.isNestingBlank(line: Int): Boolean =
@@ -132,6 +133,16 @@ internal fun TextEditorState.recordListEdit(targets: List<Int>, mutate: (ListMov
 	val lastLevel = last?.let { listBlockAt(it)!!.listLevel!! }
 	val quoted = last?.let { isQuotedLine(it) }
 	mutate(moves)
+	// A target moved into another quote can be left deeper than the items before it
+	// there allow: from each run of targets in one quote, the items come up together.
+	var runReleveled = false
+	targets.forEachIndexed { index, line ->
+		val quote = isQuotedLine(line)
+		if (index == 0 || targets[index - 1] != line - 1 || isQuotedLine(line - 1) != quote) runReleveled = false
+		if (runReleveled || moves.blockAt(line) == null) return@forEachIndexed
+		relevelListFollowers(line, editedLevel = -1, quote, previousListLevel(line, quote, moves), moves)
+		runReleveled = true
+	}
 	if (last != null && lastLevel != null && quoted != null) {
 		val previousLevel = when {
 			isQuotedLine(last) != quoted -> -1

@@ -70,8 +70,8 @@ internal fun TextEditorState.dropText(
 			at
 		}
 		// Once a move's source is gone, against the lines as they end up.
-		settleLanded(insertAt, normalized, spans, document)
-		val placed = TextEditorRange(insertAt, normalized.endWhenInsertedAt(insertAt))
+		val landed = settleLanded(insertAt, normalized, spans, document)
+		val placed = TextEditorRange(landed, normalized.endWhenInsertedAt(landed))
 		selector.updateSelection(placed.start, placed.end)
 		placed
 	}

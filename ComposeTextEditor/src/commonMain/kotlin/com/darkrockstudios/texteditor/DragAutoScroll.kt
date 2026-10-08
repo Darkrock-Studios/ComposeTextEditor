@@ -151,24 +151,24 @@ internal class DragAutoScroll(
 		// Rows run top to bottom, so both searches are binary.
 		val row = if (overflow > 0f) {
 			val last = rows.lastOrNull() ?: return position
-			if (last.offset.y + last.effectiveHeight <= bottom) {
+			if (last.bandBottom <= bottom) {
 				// With the last row in view, far right of it is the document's end.
-				return Offset(DOCUMENT_EDGE_X, last.offset.y + last.effectiveHeight / 2f - top)
+				return Offset(DOCUMENT_EDGE_X, last.bandMiddle - top)
 			}
-			val pastBottom = rows.firstRowWhere { it.offset.y + it.effectiveHeight > bottom }
+			val pastBottom = rows.firstRowWhere { it.bandBottom > bottom }
 			// A row taller than the viewport is never wholly inside it; take the one at the edge.
-			rows.getOrNull(pastBottom - 1)?.takeIf { it.offset.y >= top } ?: rows.getOrNull(pastBottom)
+			rows.getOrNull(pastBottom - 1)?.takeIf { it.bandTop >= top } ?: rows.getOrNull(pastBottom)
 		} else {
 			val firstRow = rows.firstOrNull() ?: return position
-			if (firstRow.offset.y >= top) {
+			if (firstRow.bandTop >= top) {
 				// With the first row in view, far left of it is the document's start.
-				return Offset(-DOCUMENT_EDGE_X, firstRow.offset.y + firstRow.effectiveHeight / 2f - top)
+				return Offset(-DOCUMENT_EDGE_X, firstRow.bandMiddle - top)
 			}
-			val firstBelowTop = rows.firstRowWhere { it.offset.y >= top }
+			val firstBelowTop = rows.firstRowWhere { it.bandTop >= top }
 			val first = rows.getOrNull(firstBelowTop)
-			first?.takeIf { it.offset.y + it.effectiveHeight <= bottom } ?: rows.getOrNull(firstBelowTop - 1)
+			first?.takeIf { it.bandBottom <= bottom } ?: rows.getOrNull(firstBelowTop - 1)
 		}
-		val y = row?.let { it.offset.y + it.effectiveHeight / 2f - top }
+		val y = row?.let { it.bandMiddle - top }
 			?: position.y.coerceIn(0f, (state.viewportSize.height - 1f).coerceAtLeast(0f))
 		return clampSideways(position.copy(y = y))
 	}
@@ -181,9 +181,9 @@ internal class DragAutoScroll(
 		val top = state.scrollState.value.toFloat()
 		val y = position.y + top
 		return when {
-			y < first.offset.y -> Offset(-DOCUMENT_EDGE_X, first.offset.y + first.effectiveHeight / 2f - top)
-			y >= last.offset.y + last.effectiveHeight ->
-				Offset(DOCUMENT_EDGE_X, last.offset.y + last.effectiveHeight / 2f - top)
+			y < first.bandTop -> Offset(-DOCUMENT_EDGE_X, first.bandMiddle - top)
+			y >= last.bandBottom ->
+				Offset(DOCUMENT_EDGE_X, last.bandMiddle - top)
 			else -> null
 		}
 	}
@@ -197,3 +197,6 @@ internal class DragAutoScroll(
 		const val DOCUMENT_EDGE_X = 1_000_000f
 	}
 }
+
+/** The middle of a row's band (see [bandTop]). */
+private val LineWrap.bandMiddle: Float get() = (bandTop + bandBottom) / 2f

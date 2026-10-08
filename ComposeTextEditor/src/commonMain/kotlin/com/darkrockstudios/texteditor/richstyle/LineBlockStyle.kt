@@ -102,6 +102,22 @@ internal val CodeFence = LineBlockStyle(
 	textStyle = SpanStyle(fontFamily = FontFamily.Monospace),
 )
 
+/** The table-cell blocks, by column and then alignment, as [TableCellSpanStyle.ALL] lists them. */
+internal val TABLE_CELLS: List<LineBlockStyle> = TableCellSpanStyle.ALL.map {
+	LineBlockStyle(spanStyle = it, paragraphStyle = tableCellParagraphStyle(it.alignment))
+}
+
+/** The table-cell block whose span style is [style]. */
+internal fun tableCellBlock(style: TableCellSpanStyle): LineBlockStyle =
+	TABLE_CELLS[style.column * TableAlignment.entries.size + style.alignment.ordinal]
+
+/**
+ * Whether a line holding [present] refuses this block: an inline-only block (a cell) is
+ * never demoted by another, or a table would lose a cell to a toolbar button.
+ */
+internal fun LineBlockStyle.refusedBy(present: Collection<LineBlockStyle>): Boolean =
+	!spanStyle.inlineOnly && present.any { it.spanStyle.inlineOnly }
+
 /** The heading block for [level] under [styles]' display styles, from the shared registry. */
 internal fun headerBlock(level: Int, styles: RichTextStyles): LineBlockStyle =
 	registryFor(styles).headers[level.coerceIn(1, 6) - 1]
@@ -126,8 +142,9 @@ internal fun lineBlockFor(style: RichSpanStyle, styles: RichTextStyles): LineBlo
 /**
  * Every line block's span style, in the order a line's blocks resolve: the
  * blockquote, the six headings, the two list kinds at level 0 and then at each
- * deeper level, and the code fence. A format addon that peels block markers
- * off a line peels in this order, so a stack lands as the editor resolves it.
+ * deeper level, the code fence, and the table cells, which no line marker writes.
+ * A format addon that peels block markers off a line peels in this order, so a
+ * stack lands as the editor resolves it.
  */
 val LINE_BLOCK_STYLES: List<RichSpanStyle> by lazy {
 	registryFor(RichTextStyles.DEFAULT).allBlocks.map { it.spanStyle }
@@ -158,7 +175,7 @@ private class LineBlockRegistry(styles: RichTextStyles) {
 	val prefixBlocks: List<LineBlockStyle> =
 		listOf(Blockquote) + headers + listOf(OrderedList, BulletList)
 	val allBlocks: List<LineBlockStyle> =
-		prefixBlocks + ORDERED_LISTS.drop(1) + BULLET_LISTS.drop(1) + CodeFence
+		prefixBlocks + ORDERED_LISTS.drop(1) + BULLET_LISTS.drop(1) + CodeFence + TABLE_CELLS
 
 	/** Each block by its span style, which is a per-level singleton compared by identity. */
 	val byStyle: Map<RichSpanStyle, LineBlockStyle> = allBlocks.associateBy { it.spanStyle }
@@ -268,6 +285,10 @@ private fun registryFor(styles: RichTextStyles): LineBlockRegistry {
  * - A blockquote stacks with lists and headings (`> - item` and `> # Title`).
  * - A code fence stacks with nothing; quoted or listed code blocks aren't
  *   meaningful in the editor's model and the visual treatments would conflict.
+ * - An inline-only block ([RichSpanStyle.inlineOnly], a table cell) stacks with
+ *   nothing, another column's cell included: GFM holds only inline content in a
+ *   cell. Unlike the others, it is not the block that gives way: putting another
+ *   block on its line does nothing.
  *
  * An importer peels a line's markers by this predicate, so it never places a
  * stack the editor would demote.
@@ -278,6 +299,7 @@ fun lineBlocksConflict(a: RichSpanStyle, b: RichSpanStyle): Boolean {
 	val bList = b is BulletListSpanStyle || b is OrderedListSpanStyle
 	return when {
 		a === CodeFenceSpanStyle || b === CodeFenceSpanStyle -> true
+		a.inlineOnly || b.inlineOnly -> true
 		a is HeaderSpanStyle -> b is HeaderSpanStyle || bList
 		b is HeaderSpanStyle -> aList
 		else -> aList && bList
@@ -362,7 +384,8 @@ internal class ResolvedLineBlock(
 
 /**
  * Resolves [block] against a line holding [present] with content [text], or
- * returns null when [block] is already there and there is nothing to do.
+ * returns null when there is nothing to do: [block] is already there, or the line
+ * holds an inline-only block (a table cell) and [block] is not one.
  *
  * The one place [lineBlocksConflict] is turned into an actual demotion and rebuild:
  * the per-line toggle and the batched importer both resolve through this, so a
@@ -375,6 +398,7 @@ internal fun resolveLineBlock(
 	text: AnnotatedString,
 ): ResolvedLineBlock? {
 	if (block in present) return null
+	if (block.refusedBy(present)) return null
 	// Demote any conflicting block before applying — otherwise the new
 	// paragraph-style indent would overlap the old one and Compose blanks the
 	// line on the next measure pass.

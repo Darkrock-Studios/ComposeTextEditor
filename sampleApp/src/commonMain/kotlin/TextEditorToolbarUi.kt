@@ -18,11 +18,23 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.PopupProperties
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.html.sanitizeLinkUrl
 import com.darkrockstudios.texteditor.richstyle.*
 import com.darkrockstudios.texteditor.state.TextEditorState
+import com.darkrockstudios.texteditor.state.convertTableToText
+import com.darkrockstudios.texteditor.state.deleteTable
+import com.darkrockstudios.texteditor.state.deleteTableColumn
+import com.darkrockstudios.texteditor.state.deleteTableRow
+import com.darkrockstudios.texteditor.state.insertTable
+import com.darkrockstudios.texteditor.state.insertTableColumn
+import com.darkrockstudios.texteditor.state.insertTableRow
+import com.darkrockstudios.texteditor.state.isInlineOnlyLine
+import com.darkrockstudios.texteditor.state.isTableCell
+import com.darkrockstudios.texteditor.state.setTableColumnAlignment
+import com.darkrockstudios.texteditor.state.tableCellAt
 import com.darkrockstudios.texteditor.state.getRichSpansAtPosition
 import com.darkrockstudios.texteditor.state.getRichSpansInRange
 import com.darkrockstudios.texteditor.state.hasStyleThroughout
@@ -55,6 +67,14 @@ fun TextEditorToolbar(
 	var isOrderedListActive by remember { mutableStateOf(false) }
 	var isCodeFenceActive by remember { mutableStateOf(false) }
 	var currentHeaderLevel by remember { mutableStateOf(0) }
+	var tableLine by remember { mutableStateOf<Int?>(null) }
+	var selectionEndsInTable by remember { mutableStateOf(false) }
+	var blocksRefused by remember { mutableStateOf(false) }
+
+	fun readCaretLine(line: Int) {
+		tableLine = line.takeIf { state.isTableCell(it) }
+		blocksRefused = state.isInlineOnlyLine(line)
+	}
 	var isHighlightActive by remember { mutableStateOf(false) }
 	var linkDialogState by remember { mutableStateOf<LinkDialogRequest?>(null) }
 	val isLinkActive = existingLinkSpan != null
@@ -90,12 +110,19 @@ fun TextEditorToolbar(
 			isOrderedListActive = richSpans.any { it.style is OrderedListSpanStyle }
 			isCodeFenceActive = richSpans.any { it.style === CodeFenceSpanStyle }
 			currentHeaderLevel = state.headerLevel(position.line) ?: 0
+			readCaretLine(position.line)
+			// The rule replaces the selection, which would clear the cells it takes in.
+			selectionEndsInTable = selected != null && (state.isTableCell(selected.start.line) || state.isTableCell(selected.end.line))
 			isHighlightActive = isActive(state.richTextStyles.highlightStyle)
 		}
 	}
 
 	LaunchedEffect(Unit) {
-		state.editOperations.collect { reconcileHorizontalRules(state) }
+		state.editOperations.collect {
+			reconcileHorizontalRules(state)
+			// A table edit can leave the caret where it was.
+			readCaretLine(state.cursorPosition.line)
+		}
 	}
 
 	Surface(
@@ -198,6 +225,7 @@ fun TextEditorToolbar(
 						else
 							"Header H$currentHeaderLevel — click to cycle",
 						isActive = currentHeaderLevel != 0,
+						enabled = !blocksRefused,
 					)
 
 					Spacer(modifier = Modifier.width(2.dp))
@@ -207,6 +235,7 @@ fun TextEditorToolbar(
 						icon = Icons.Default.FormatQuote,
 						contentDescription = "Blockquote",
 						isActive = isBlockquoteActive,
+						enabled = !blocksRefused,
 					)
 
 					Spacer(modifier = Modifier.width(2.dp))
@@ -216,6 +245,7 @@ fun TextEditorToolbar(
 						icon = Icons.Default.FormatListBulleted,
 						contentDescription = "Bullet list",
 						isActive = isBulletListActive,
+						enabled = !blocksRefused,
 					)
 
 					Spacer(modifier = Modifier.width(2.dp))
@@ -225,6 +255,7 @@ fun TextEditorToolbar(
 						icon = Icons.Default.FormatListNumbered,
 						contentDescription = "Ordered list",
 						isActive = isOrderedListActive,
+						enabled = !blocksRefused,
 					)
 
 					Spacer(modifier = Modifier.width(2.dp))
@@ -234,6 +265,7 @@ fun TextEditorToolbar(
 						icon = Icons.Default.Terminal,
 						contentDescription = "Code block",
 						isActive = isCodeFenceActive,
+						enabled = !blocksRefused,
 					)
 
 					Spacer(modifier = Modifier.width(2.dp))
@@ -242,7 +274,12 @@ fun TextEditorToolbar(
 						onClick = { insertHorizontalRule(state) },
 						icon = Icons.Default.HorizontalRule,
 						contentDescription = "Horizontal rule",
+						enabled = !blocksRefused && !selectionEndsInTable,
 					)
+
+					Spacer(modifier = Modifier.width(2.dp))
+
+					TableMenu(state, tableLine)
 
 					ToolbarDivider()
 
@@ -447,6 +484,51 @@ private fun reconcileHorizontalRules(state: TextEditorState) {
 	}
 }
 
+/**
+ * The table button: off a table it inserts one; in a table it adds and removes rows
+ * and columns, aligns the caret's column, or turns the table back into text.
+ */
+@Composable
+private fun TableMenu(state: TextEditorState, tableLine: Int?) {
+	var open by remember { mutableStateOf(false) }
+	Box {
+		FormatButton(
+			onClick = { open = true },
+			icon = Icons.Default.TableChart,
+			contentDescription = "Table",
+			isActive = tableLine != null,
+		)
+		// Not focusable, so the editor keeps focus and typing goes on in the table.
+		DropdownMenu(expanded = open, onDismissRequest = { open = false }, properties = PopupProperties(focusable = false)) {
+			@Composable
+			fun item(label: String, action: () -> Unit) = DropdownMenuItem(text = { Text(label) }, onClick = {
+				open = false
+				action()
+			})
+			val line = tableLine
+			if (line == null) {
+				item("Insert 2 × 2 table") { state.insertTable(rows = 2, columns = 2) }
+				item("Insert 3 × 3 table") { state.insertTable(rows = 3, columns = 3) }
+			} else {
+				val column = state.tableCellAt(line)?.column ?: 0
+				item("Row above") { state.insertTableRow(line, below = false) }
+				item("Row below") { state.insertTableRow(line, below = true) }
+				item("Column left") { state.insertTableColumn(line, after = false) }
+				item("Column right") { state.insertTableColumn(line, after = true) }
+				HorizontalDivider()
+				item("Align column left") { state.setTableColumnAlignment(line, column, TableAlignment.LEFT) }
+				item("Align column center") { state.setTableColumnAlignment(line, column, TableAlignment.CENTER) }
+				item("Align column right") { state.setTableColumnAlignment(line, column, TableAlignment.RIGHT) }
+				HorizontalDivider()
+				item("Delete row") { state.deleteTableRow(line) }
+				item("Delete column") { state.deleteTableColumn(line) }
+				item("Convert to text") { state.convertTableToText(line) }
+				item("Delete table") { state.deleteTable(line) }
+			}
+		}
+	}
+}
+
 // Cycles none -> H1 -> H2 -> ... -> H6 -> none over the selected lines (or the
 // cursor's line). Headings are semantic line blocks: toggling the same level
 // removes it, toggling a new level swaps it.
@@ -540,11 +622,13 @@ private fun TextLabelButton(
 	label: String,
 	contentDescription: String,
 	isActive: Boolean,
+	enabled: Boolean = true,
 ) {
 	ToolbarTooltip(contentDescription) {
 		IconToggleButton(
 			checked = isActive,
 			onCheckedChange = { onClick() },
+			enabled = enabled,
 			shapes = IconButtonDefaults.toggleableShapes(),
 			colors = toolbarToggleColors(),
 			modifier = Unfocusable.semantics { this.contentDescription = contentDescription },

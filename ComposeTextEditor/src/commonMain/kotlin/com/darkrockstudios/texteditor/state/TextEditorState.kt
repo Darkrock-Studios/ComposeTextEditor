@@ -18,6 +18,7 @@ import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextIndent
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
@@ -38,7 +39,9 @@ import com.darkrockstudios.texteditor.cursor.getWrappedLineIndex
 import com.darkrockstudios.texteditor.effectiveHeight
 import com.darkrockstudios.texteditor.html.DEFAULT_LINK_SCHEMES
 import com.darkrockstudios.texteditor.html.REFUSED_LINK_SCHEMES
-import com.darkrockstudios.texteditor.lastRowAtOrAbove
+import com.darkrockstudios.texteditor.bandBottom
+import com.darkrockstudios.texteditor.bandTop
+import com.darkrockstudios.texteditor.rowAtPoint
 import com.darkrockstudios.texteditor.rowAt
 import com.darkrockstudios.texteditor.rowIndexOf
 import com.darkrockstudios.texteditor.input.EditorActionRegistry
@@ -56,11 +59,12 @@ import com.darkrockstudios.texteditor.richstyle.anchorsToLine
 import com.darkrockstudios.texteditor.richstyle.paintsOnly
 import com.darkrockstudios.texteditor.richstyle.HeaderSpanStyle
 import com.darkrockstudios.texteditor.richstyle.LineBlockEditBehavior
+import com.darkrockstudios.texteditor.richstyle.TableEditBehavior
 import com.darkrockstudios.texteditor.richstyle.LinkSpanStyle
 import com.darkrockstudios.texteditor.richstyle.ParagraphFormatSpanStyle
 import com.darkrockstudios.texteditor.richstyle.RichSpan
 import com.darkrockstudios.texteditor.richstyle.RichSpanStyle
-import com.darkrockstudios.texteditor.richstyle.allBlockRegistry
+import com.darkrockstudios.texteditor.richstyle.lineBlockFor
 import com.darkrockstudios.texteditor.richstyle.demoteLineBlock
 import com.darkrockstudios.texteditor.richstyle.headerBlock
 import com.darkrockstudios.texteditor.richstyle.lineBlocksConflict
@@ -373,6 +377,10 @@ class TextEditorState private constructor(
 	var codeFenceBackgroundColor: Color by mutableStateOf(Color.Unspecified)
 		internal set
 	var codeFenceBorderColor: Color by mutableStateOf(Color.Unspecified)
+		internal set
+	var tableBorderColor: Color by mutableStateOf(Color.Unspecified)
+		internal set
+	var tableHeaderBackgroundColor: Color by mutableStateOf(Color.Unspecified)
 		internal set
 
 	/**
@@ -901,18 +909,20 @@ class TextEditorState private constructor(
 	val richSpanManager = RichSpanManager(this)
 
 	/**
-	 * Behaviors consulted before [insertNewlineAtCursor], [backspaceAtCursor] and
-	 * [deleteAtCursor], and told after typed text ([insertTypedString] and the IME's
-	 * commits), a line break or a paste has landed, in order; the first to claim an
-	 * edit wins. Every input path reaches these, hardware keys and IME alike.
+	 * Behaviors consulted before [insertNewlineAtCursor], [backspaceAtCursor],
+	 * [deleteAtCursor] and Tab's indent, and told after typed text
+	 * ([insertTypedString] and the IME's commits), a line break or a paste has
+	 * landed, in order; the first to claim an edit wins. Every input path reaches
+	 * these, hardware keys and IME alike.
 	 *
-	 * Pre-loaded with [LineBlockEditBehavior] at index 0, which claims every
-	 * newline and column-0 backspace on a block line, so a behavior appended
-	 * after it is not asked before those edits, though it is told where a line
-	 * break landed. Use `add(0, behavior)` to run first, or remove it outright for
+	 * Pre-loaded with [TableEditBehavior], which claims Enter, Backspace and Delete
+	 * at a table cell's edges and Tab in a cell, and [LineBlockEditBehavior], which
+	 * claims every newline and column-0 backspace on a block line, so a behavior
+	 * appended after them is not asked before those edits, though it is told where
+	 * a line break landed. Use `add(0, behavior)` to run first, or remove one outright for
 	 * plain line breaks.
 	 */
-	val editBehaviors: MutableList<EditBehavior> = mutableListOf(LineBlockEditBehavior)
+	val editBehaviors: MutableList<EditBehavior> = mutableListOf(TableEditBehavior, LineBlockEditBehavior)
 
 	/** Depth of the behavior chain currently dispatching, to break recursion. */
 	private var behaviorDepth = 0
@@ -932,6 +942,9 @@ class TextEditorState private constructor(
 		if (claimed) requestImeResync()
 		return claimed
 	}
+
+	/** Offers Tab's indent, or Shift+Tab's outdent, to the behaviors; a key only, so the IME needs no resync. */
+	internal fun indentClaimed(outdent: Boolean): Boolean = runBehaviors { it.onIndent(this, outdent) }
 
 	private fun runBehaviors(hook: (EditBehavior) -> Boolean): Boolean {
 		if (behaviorDepth > 0) return false
@@ -1305,10 +1318,10 @@ class TextEditorState private constructor(
 	/** [isSingleLine] for the keyboard, which is always the focused editor's, whatever an edit is aimed at. */
 	internal val keyboardIsSingleLine: Boolean get() = focusedEditor?.singleLine ?: (singleLineEditors > 0)
 
-	internal val effectiveInputFilter: EditorInputFilter?
+	internal val effectiveInputFilter: EditorInputFilter
 		get() {
-			if (!isSingleLine) return inputFilter
-			return inputFilter?.let { EditorInputFilter.SingleLine then it } ?: EditorInputFilter.SingleLine
+			val lines = if (isSingleLine) InlineOnlyLineBreaks then EditorInputFilter.SingleLine else InlineOnlyLineBreaks
+			return inputFilter?.let { lines then it } ?: lines
 		}
 
 	/**
@@ -1675,7 +1688,9 @@ class TextEditorState private constructor(
 
 	/**
 	 * Deletes the text covered by [range], leaving the cursor at the range start.
-	 * A collapsed [range] covers nothing and is no edit at all.
+	 * A collapsed [range] covers nothing and is no edit at all. A range across a table's
+	 * cells clears each cell it covers rather than joining them, and one taking a whole
+	 * table and more deletes the table; see `docs/design/tables.md`.
 	 */
 	fun delete(range: TextEditorRange) = delete(range, cursorBefore = cursorPosition)
 
@@ -1706,7 +1721,9 @@ class TextEditorState private constructor(
 
 	/**
 	 * Replaces the text in [range] with [newText], preserving the latter's
-	 * character-level spans and moving the cursor to the end of the inserted text.
+	 * character-level spans and moving the cursor to the end of the inserted text. A
+	 * [range] across a table's cells is deleted as [delete] has it and [newText] goes in
+	 * at its start, its line breaks spaces when that is a cell.
 	 * @param inheritStyle when true, each inserted character also adopts the style of
 	 * the replaced character at its position, and any beyond them (or all, when
 	 * [range] is empty) the style an insert at the range's end would take.
@@ -1970,7 +1987,7 @@ class TextEditorState private constructor(
 		val currentWrappedLine = lineOffsets.getWrapForDrawing(position, affinity)
 			?: return CursorMetrics(position = Offset.Zero, height = 0f)
 
-		val cursorX = currentWrappedLine.caretX(position.char, caretRunSide(position, affinity)) - scrollX
+		val cursorX = currentWrappedLine.offset.x + currentWrappedLine.caretX(position.char, caretRunSide(position, affinity)) - scrollX
 		val cursorY = currentWrappedLine.offset.y - scrollState.value
 
 		val lineHeight = currentWrappedLine.effectiveHeight
@@ -1987,7 +2004,7 @@ class TextEditorState private constructor(
 
 	/** [getPositionForOffset]'s x in content, which no scroll moves; null with no row for [position]. */
 	internal fun caretContentX(position: CharLineOffset, affinity: CaretAffinity): Float? =
-		lineOffsets.getWrapForDrawing(position, affinity)?.caretX(position.char, caretRunSide(position, affinity))
+		lineOffsets.getWrapForDrawing(position, affinity)?.let { it.offset.x + it.caretX(position.char, caretRunSide(position, affinity)) }
 
 	/**
 	 * Maps a pixel [Offset] within the editor (e.g. a tap location) to the nearest
@@ -2008,7 +2025,7 @@ class TextEditorState private constructor(
 
 		val contentY = offset.y + scrollState.value
 		val contentX = offset.x + scrollX
-		val row = rows[rows.lastRowAtOrAbove(contentY).coerceAtLeast(0)]
+		val row = rows[rows.rowAtPoint(contentX, contentY).coerceAtLeast(0)]
 		val lineLength = textLines.getOrNull(row.line)?.length
 			?: return downstreamHit(CharLineOffset(textLines.lastIndex, textLines.last().length))
 		val lineText = textLines[row.line].text
@@ -2048,7 +2065,7 @@ class TextEditorState private constructor(
 		val first = _lineOffsets.firstOrNull() ?: return null
 		val last = _lineOffsets.last()
 		val contentY = offset.y + scrollState.value
-		if (contentY < first.offset.y || contentY >= last.offset.y + last.effectiveHeight) return null
+		if (contentY < first.bandTop || contentY >= last.bandBottom) return null
 		if (offset.x < 0f || offset.x > viewportSize.width) return null
 		return findSpanAtPosition(pointerHitAt(offset).character)
 	}
@@ -2251,13 +2268,16 @@ class TextEditorState private constructor(
 	 * offset within it the settling started with, so what is on screen stays where it is;
 	 * an animated scroll under way would write over that, so it is stopped.
 	 */
-	private fun reshapeLines(first: Int, last: Int) {
+	private fun reshapeLines(from: Int, to: Int) {
 		val current = rows ?: return
+		// A band's lines share its height, so a band is shaped whole.
+		val first = current.bandStart(from)
+		val last = current.bandEnd(to)
 		val content = content
 		val lines = content.lineList
 		val spans = content.spanIndex
-		val shaper = LineShaper()
 		val inputs = lineInputs()
+		val shaper = LineShaper(inputs)
 		val scrollBefore = scrollState.value
 		// Derived afresh once anything else has scrolled.
 		val anchor = settleAnchor?.takeIf { it.scroll == scrollBefore && it.line < current.lineCount } ?: run {
@@ -2268,8 +2288,10 @@ class TextEditorState private constructor(
 		for (line in first..last) {
 			val onLine = spans.spansOn(line)
 			val format = onLine.paragraphFormat(line)
-			layouts += current.layoutOf(line).reshaped(shaper.shape(lines[line], format), line, onLine, format, inputs, layoutInputGeneration)
+			val old = current.layoutOf(line)
+			layouts += old.reshaped(shaper.shape(lines[line], format, old.facts), line, onLine, format, inputs, layoutInputGeneration)
 		}
+		finishBands(layouts)
 		val settled = current.splice(first, last + 1, layouts, spans)
 		publishRows(settled)
 		val target = (settled.lineTop(anchor.line) + anchor.offset).roundToInt()
@@ -2374,39 +2396,44 @@ class TextEditorState private constructor(
 		// Invisible, so a provisional row drawn before its line is shaped shows nothing
 		// rather than the longest line's text.
 		val text = lines[longest].text
-		val sentinel = LineShaper().shape(AnnotatedString(text, listOf(AnnotatedString.Range(SpanStyle(color = Color.Transparent), 0, text.length))))
-		val facts = LineFacts(spans)
 		val inputs = lineInputs()
+		val sentinel = LineShaper(inputs).shape(AnnotatedString(text, listOf(AnnotatedString.Range(SpanStyle(color = Color.Transparent), 0, text.length))))
+		val facts = LineFacts(spans)
 		val layouts = ArrayList<LineLayout>(lines.size)
 		for (line in 0 until lines.size) {
 			facts.next(line)
 			val onLine = spans.spansOn(line)
 			layouts += LineLayout.provisional(sentinel, lengths[line], line, onLine, onLine.paragraphFormat(line), inputs, facts)
 		}
+		finishBands(layouts)
 		val provisional = RowList.of(layouts, spans)
 		return provisional.takeIf { it.lastRowBottom() > 3 * viewportSize.height }
 	}
 
 	/** A full pass: every line shaped, every fact derived in line order. */
 	private fun layoutAll(lines: LineList, spans: SpanIndex): RowList {
-		val shaper = LineShaper()
-		val facts = LineFacts(spans)
 		val inputs = lineInputs()
+		val shaper = LineShaper(inputs)
+		val facts = LineFacts(spans)
 		val layouts = ArrayList<LineLayout>(lines.size)
 		for (line in 0 until lines.size) {
 			facts.next(line)
 			val onLine = spans.spansOn(line)
 			val format = onLine.paragraphFormat(line)
-			layouts += LineLayout.of(shaper.shape(lines[line], format), line, onLine, format, inputs, facts, layoutInputGeneration)
+			layouts += LineLayout.of(shaper.shape(lines[line], format, facts.facts), line, onLine, format, inputs, facts, layoutInputGeneration)
 		}
+		finishBands(layouts)
 		return RowList.of(layouts, spans)
 	}
 
 	/**
-	 * A partial pass: [update]'s lines shaped or re-resolved, with a line each side for
-	 * the fence edges, then the lines after them walked until one keeps its layout and
-	 * its list counters, past which nothing can change; the result is spliced over
-	 * [previous]. Every other line keeps its layout and moves with its chunk.
+	 * A partial pass: [update]'s lines shaped or re-resolved, the walk starting where
+	 * every [BlockKind] can derive them afresh ([BlockKind.walkStart]: a line before for
+	 * the fence edges, the table row before), then the lines after them walked until one
+	 * that ends its band, or is in none, keeps its layout and its facts, past which
+	 * nothing can change; the result is spliced over [previous]. Every other line keeps
+	 * its layout and moves with its chunk. A line whose facts shape it differently (a
+	 * header row that became a body row, a column count that changed) is shaped again.
 	 */
 	private fun layoutPartial(
 		previous: RowList,
@@ -2423,33 +2450,35 @@ class TextEditorState private constructor(
 		val respans = spansFirst <= spansLast
 		if (!shapes && !respans) return previous.withSpans(spans)
 
-		val first = (minOf(if (shapes) shapeFirst else Int.MAX_VALUE, if (respans) spansFirst else Int.MAX_VALUE) - 1).coerceAtLeast(0)
+		val edited = minOf(if (shapes) shapeFirst else Int.MAX_VALUE, if (respans) spansFirst else Int.MAX_VALUE)
+		val first = BLOCK_KINDS.minOf { it.walkStart(spans, edited) }
 		val end = (maxOf(if (shapes) shapeLast else -1, if (respans) spansLast else -1) + 1).coerceAtMost(lastLine)
 		// A line after the shaped range had its layout at its pre-edit index.
 		fun oldIndex(line: Int) = if (shapes && line > shapeLast) line - update.lineDelta else line
 
 		val facts = LineFacts(spans)
-		if (first > 0) facts.resume(previous.layoutOf(oldIndex(first - 1)).counters)
-		val shaper = LineShaper()
+		if (first > 0) facts.resume(previous.layoutOf(oldIndex(first - 1)))
 		val inputs = lineInputs()
+		val shaper = LineShaper(inputs)
 		val layouts = ArrayList<LineLayout>(end - first + 2)
 		var line = first
 		while (line <= lastLine) {
-			facts.next(line)
 			val old = if (line in shapeFirst..shapeLast) null else previous.layoutOf(oldIndex(line))
+			facts.next(line, was = old?.facts)
 			val layout = when {
-				old == null -> {
+				old == null || old.shapesDifferentlyUnder(facts) -> {
 					val onLine = spans.spansOn(line)
 					val format = onLine.paragraphFormat(line)
-					LineLayout.of(shaper.shape(lines[line], format), line, onLine, format, inputs, facts, layoutInputGeneration)
+					LineLayout.of(shaper.shape(lines[line], format, facts.facts), line, onLine, format, inputs, facts, layoutInputGeneration)
 				}
 				line in spansFirst..spansLast -> old.withSpans(line, spans.spansOn(line), inputs, facts)
-				else -> old.withFacts(facts)
+				else -> old.withFacts(facts, inputs)
 			}
 			layouts += layout
-			if (line >= end && layout === old) break
+			if (line >= end && layout === old && layout.placement?.endsBand != false) break
 			line++
 		}
+		finishBands(layouts)
 		// The walk never stops inside the shaped range, whose old lines end at its last line's pre-edit index.
 		val stop = minOf(line, lastLine)
 		val oldEnd = if (shapes && stop >= shapeLast) stop - update.lineDelta + 1 else stop + 1
@@ -2457,7 +2486,7 @@ class TextEditorState private constructor(
 	}
 
 	/** Shapes lines with the style, indent baking and width of one layout pass. */
-	private inner class LineShaper {
+	private inner class LineShaper(override val inputs: LineInputs) : LineShaping {
 		// Compose Android doesn't reliably honor per-paragraph ParagraphStyle
 		// .textIndent overriding an editor-wide TextStyle.textIndent, so we
 		// sidestep the merge: strip the indent from the outer style and bake it
@@ -2487,19 +2516,22 @@ class TextEditorState private constructor(
 		/**
 		 * Shapes [line], with [format]'s alignment, indents and line height over the
 		 * paragraph style the line carries (a block's indent) or the baked one. A line
-		 * holds one paragraph style, so the merged one replaces it for measuring only.
+		 * holds one paragraph style, so the merged one replaces it for measuring only. A
+		 * kind whose [facts] are on the line can shape it its own way ([BlockKind.shape]).
 		 */
-		fun shape(line: AnnotatedString, format: ParagraphFormatSpanStyle? = null): TextLayoutResult {
+		fun shape(line: AnnotatedString, format: ParagraphFormatSpanStyle? = null, facts: BlockFacts = BlockFacts.NONE): TextLayoutResult {
+			facts.firstOf { kind, value -> kind.shape(value, line, this) }?.let { return it }
+			val stacked = line.withStackedIndents()
 			val measureLine = when {
 				format != null && format.shapesText -> {
-					val base = line.paragraphStyles.firstOrNull()?.item ?: bakedIndentStyle
+					val base = stacked.paragraphStyles.firstOrNull()?.item ?: bakedIndentStyle
 					AnnotatedString(line.text, line.spanStyles, listOf(AnnotatedString.Range(format.paragraphStyleOver(base), 0, line.length)))
 				}
 				// Skip if the line already has a ParagraphStyle (block line):
 				// Compose forbids overlapping ParagraphStyle ranges.
 				bakedIndentStyle != null && line.paragraphStyles.isEmpty() ->
 					buildAnnotatedString { withStyle(bakedIndentStyle) { append(line) } }
-				else -> line
+				else -> stacked
 			}
 			return try {
 				val layout = textMeasurer.measure(text = measureLine, style = measureStyle, softWrap = softWrap, constraints = constraints)
@@ -2507,6 +2539,30 @@ class TextEditorState private constructor(
 			} catch (_: IllegalArgumentException) {
 				// If measurement fails, create an empty layout result
 				textMeasurer.measure(text = AnnotatedString(""), style = measureStyle, softWrap = softWrap, constraints = constraints)
+			}
+		}
+
+		/**
+		 * This line with the paragraph styles of its stacked blocks (a quote's and a list's)
+		 * as one, their indents added, for measuring only: nested over one line, Compose
+		 * lets the innermost indent replace the rest, and the list's text and marker would
+		 * sit on the quote's bar.
+		 */
+		private fun AnnotatedString.withStackedIndents(): AnnotatedString {
+			val stack = paragraphStyles
+			if (stack.size < 2 || stack.any { it.start != 0 || it.end != length }) return this
+			val indents = stack.mapNotNull { it.item.textIndent }
+			if (indents.any { !it.firstLine.isSp || !it.restLine.isSp }) return this
+			val indent = TextIndent(indents.sumOf { it.firstLine.value.toDouble() }.toFloat().sp, indents.sumOf { it.restLine.value.toDouble() }.toFloat().sp)
+			val merged = stack.fold(ParagraphStyle()) { all, it -> all.merge(it.item) }.copy(textIndent = indent)
+			return AnnotatedString(text, spanStyles, listOf(AnnotatedString.Range(merged, 0, length)))
+		}
+
+		override fun measureWrapped(line: AnnotatedString, width: Int): TextLayoutResult {
+			return try {
+				textMeasurer.measure(text = line, style = measureStyle, softWrap = true, constraints = Constraints.fixedWidth(width))
+			} catch (_: IllegalArgumentException) {
+				textMeasurer.measure(text = AnnotatedString(""), style = measureStyle, softWrap = true, constraints = Constraints.fixedWidth(width))
 			}
 		}
 
@@ -2854,9 +2910,11 @@ class TextEditorState private constructor(
 			) {
 				return@forEach
 			}
+			// An inline-only line takes no other block or format, nor another column's marker.
+			if ((preserved.style.anchorsToLine || preserved.style.boundToParagraph) && isInlineOnlyLine(startPos.line)) return@forEach
 			// A copied block takes a line it covers whole from whatever block there refuses
 			// to share it, a list the paste continued onto a pasted heading.
-			val block = allBlockRegistry.firstOrNull { it.spanStyle === preserved.style }
+			val block = lineBlockFor(preserved.style, richTextStyles)
 			if (block != null) {
 				val refusing = lineBlocks(startPos.line).filter { lineBlocksConflict(block.spanStyle, it.spanStyle) }
 				if (refusing.isNotEmpty()) {

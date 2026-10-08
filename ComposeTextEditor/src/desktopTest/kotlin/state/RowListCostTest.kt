@@ -25,7 +25,7 @@ import com.darkrockstudios.texteditor.richstyle.OrderedListSpanStyle
 import com.darkrockstudios.texteditor.richstyle.RichSpan
 import com.darkrockstudios.texteditor.richstyle.RichSpanStyle
 import com.darkrockstudios.texteditor.rowIndexOf
-import com.darkrockstudios.texteditor.state.LineFacts
+import com.darkrockstudios.texteditor.state.BlockFacts
 import com.darkrockstudios.texteditor.state.LineLayout
 import com.darkrockstudios.texteditor.state.RowList
 import com.darkrockstudios.texteditor.state.SpanIndex
@@ -257,9 +257,7 @@ class RowListCostTest {
 			rowEnds = IntArray(rows) { it * 10 + 10 },
 			rowTops = FloatArray(rows + 1) { it * height },
 			blockHeights = FloatArray(rows) { height },
-			orderedListNumber = null,
-			codeFenceBoundary = null,
-			counters = LineFacts.NO_COUNTERS,
+			facts = BlockFacts.NONE,
 			generation = 0,
 			spaceBefore = 0f,
 			spaceAfter = 0f,

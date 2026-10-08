@@ -631,10 +631,19 @@ class RichSpanManager(
 			addTransformed(joinOffset(start), joinOffset(end))
 		} else {
 			// Regular delete operation
-			addTransformed(
-				operation.transformOffset(start, state),
-				operation.transformOffset(end, state),
-			)
+			val newStart = operation.transformOffset(start, state)
+			var newEnd = operation.transformOffset(end, state)
+			// A line's marker covering its whole line covers the tail a multi-line deletion
+			// joins onto it too, as an insert splitting the line left it covering the head.
+			// A deletion from the line's start takes the line, and its marker goes with it.
+			val deleted = metadata.deletedText?.text
+			if (span.style.stickyAtStart && deleted != null && !operation.range.isSingleLine() &&
+				operation.range.start.char > 0 && start.line == operation.range.start.line && end.line == start.line &&
+				end.char >= operation.range.start.char + deleted.indexOf('\n').let { if (it < 0) deleted.length else it }
+			) {
+				newEnd = CharLineOffset(newEnd.line, state.textLines.getOrNull(newEnd.line)?.length ?: newEnd.char)
+			}
+			addTransformed(newStart, newEnd)
 		}
 	}
 

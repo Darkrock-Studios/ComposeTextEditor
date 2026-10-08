@@ -3,6 +3,8 @@ package utils
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.Dp
+import com.darkrockstudios.texteditor.bandBottom
+import com.darkrockstudios.texteditor.bandTop
 import com.darkrockstudios.texteditor.cursor.calculateCursorPosition
 import com.darkrockstudios.texteditor.state.caretParagraphIsRtl
 import com.darkrockstudios.texteditor.utils.hasRightToLeft
@@ -29,7 +31,9 @@ enum class EditorInvariant(vararg val needs: ParityGap) {
 	 * Without a selection, Down moves to the next visual row, or stays on the last
 	 * one. Rows are the ones the caret is drawn on
 	 * ([com.darkrockstudios.texteditor.state.TextEditorState.cursorRowIndex]), so a
-	 * caret at the end of a wrapped row counts on that row.
+	 * caret at the end of a wrapped row counts on that row. In a document with a
+	 * table, whose cells sit side by side, Down goes by position instead: to a row
+	 * lower down, when there is one below the caret's table row or in its cell.
 	 */
 	DownMovesOneRow(ParityGap.VerticalMotion),
 
@@ -107,13 +111,25 @@ fun EditorUiTestScope.checkInvariants(invariants: Set<EditorInvariant>) {
 		val position = state.cursorPosition
 		val affinity = state.cursor.affinity
 		val row = state.cursorRowIndex()
+		val rows = state.lineOffsets
 		send(Down)
-		val expected = minOf(row + 1, state.lineOffsets.lastIndex)
-		assertEquals(
-			expected,
-			state.cursorRowIndex(),
-			"DownMovesOneRow: from row $row at $snapshot, landed at ${state.editSnapshot()}",
-		)
+		if (rows.any { it.box != null }) {
+			val from = rows[row]
+			val below = rows.any { it.bandTop >= from.bandBottom - 0.5f || (it.line == from.line && it.offset.y > from.offset.y) }
+			val landed = state.lineOffsets[state.cursorRowIndex()]
+			assertTrue(
+				if (below) landed.offset.y > from.offset.y else landed.offset.y >= from.offset.y,
+				"DownMovesOneRow: from row $row (line ${from.line}, y ${from.offset.y}) at $snapshot, " +
+					"landed on line ${landed.line} at y ${landed.offset.y}, ${state.editSnapshot()}",
+			)
+		} else {
+			val expected = minOf(row + 1, state.lineOffsets.lastIndex)
+			assertEquals(
+				expected,
+				state.cursorRowIndex(),
+				"DownMovesOneRow: from row $row at $snapshot, landed at ${state.editSnapshot()}",
+			)
+		}
 		state.cursor.updatePosition(position, affinity)
 		waitForIdle()
 	}
@@ -140,7 +156,12 @@ internal fun invariantFuzz(
 	startText: String = FUZZ_START_TEXT,
 	invariants: Set<EditorInvariant> = EditorInvariant.active(),
 	sideways: Boolean = false,
+	startBlockLines: String? = null,
 ) = editorUiTest(initialText = AnnotatedString(startText), width = width, softWrap = !sideways) {
+	startBlockLines?.let {
+		state.setBlockLines(it)
+		waitForIdle()
+	}
 	val script = generateStrokeScript(seed, count)
 	val scrolls = sidewaysScrolls(seed)
 	if (sideways) scrollSidewaysAtRandom(scrolls)

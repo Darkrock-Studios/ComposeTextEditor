@@ -1,5 +1,6 @@
 package texteditor
 
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.ParagraphStyle
 import androidx.compose.ui.text.TextLayoutResult
@@ -37,6 +38,7 @@ class LineTextLeftTest {
 		every { layout.getLineStart(any()) } returns 0
 		every { layout.getLineLeft(any()) } returns lineLeft
 		every { layout.getHorizontalPosition(0, true) } returns horizontalAtLineStart
+		every { layout.getBoundingBox(0) } returns Rect(horizontalAtLineStart, 0f, horizontalAtLineStart + 8f, 16f)
 		every { layout.multiParagraph.getParagraphDirection(any()) } returns ResolvedTextDirection.Ltr
 		every { layout.getBidiRunDirection(any()) } returns ResolvedTextDirection.Ltr
 		every { layout.layoutInput.text } returns text

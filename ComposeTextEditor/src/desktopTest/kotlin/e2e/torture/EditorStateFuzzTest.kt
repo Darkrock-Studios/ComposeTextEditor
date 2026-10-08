@@ -4,6 +4,7 @@ import com.darkrockstudios.texteditor.state.TextEditorState
 import io.mockk.mockk
 import kotlinx.coroutines.test.TestScope
 import utils.StateFuzzInterpreter
+import utils.TABLE_FUZZ_START
 import utils.checkCheapInvariants
 import utils.fuzzSeed
 import utils.generateFuzzScript
@@ -50,6 +51,69 @@ class EditorStateFuzzTest {
 		)
 	}
 
+	/** [undoToOrigin] from a document with tables, the script with table operations, Tab and copy and paste. */
+	private fun tablesUndoToOrigin(seed: Long) {
+		val scope = TestScope()
+		val state = TextEditorState(scope = scope, measurer = mockk(relaxed = true))
+		state.setBlockLines(TABLE_FUZZ_START)
+		val origin = snapshotOf(state)
+		val script = generateFuzzScript(seed = fuzzSeed(seed), count = 250, mutatingBudget = 80, tables = true)
+		val interpreter = StateFuzzInterpreter(state, scope)
+
+		runFuzzScript(fuzzSeed(seed), script) { op ->
+			interpreter.apply(op)
+			checkCheapInvariants(state)
+		}
+
+		while (state.canUndo) state.undo()
+		assertEquals(origin, snapshotOf(state), "table fuzz seed=${fuzzSeed(seed)}: undoing every edit must restore the origin exactly")
+	}
+
+	/**
+	 * [undoToOrigin] from a document that stacks quotes on lists and has fences and a
+	 * table, with table operations: joins of lines whose stacked blocks differ.
+	 */
+	private fun blocksUndoToOrigin(seed: Long) {
+		val scope = TestScope()
+		val state = TextEditorState(scope = scope, measurer = mockk(relaxed = true))
+		state.setBlockLines(BLOCKS_START)
+		val origin = snapshotOf(state)
+		val script = generateFuzzScript(seed = fuzzSeed(seed), count = 120, mutatingBudget = 60, tables = true)
+		val interpreter = StateFuzzInterpreter(state, scope)
+
+		runFuzzScript(fuzzSeed(seed), script) { op ->
+			interpreter.apply(op)
+			checkCheapInvariants(state)
+		}
+
+		while (state.canUndo) state.undo()
+		assertEquals(origin, snapshotOf(state), "blocks fuzz seed=${fuzzSeed(seed)}: undoing every edit must restore the origin exactly")
+	}
+
+	@Test
+	fun `undo to origin with stacked blocks seed 1137`() = blocksUndoToOrigin(1137)
+
+	@Test
+	fun `undo to origin with stacked blocks seed 2198`() = blocksUndoToOrigin(2198)
+
+	@Test
+	fun `undo to origin with tables seed 1`() = tablesUndoToOrigin(1)
+
+	@Test
+	fun `undo to origin with tables seed 42`() = tablesUndoToOrigin(42)
+
+	@Test
+	fun `undo to origin with tables seed 777`() = tablesUndoToOrigin(777)
+
+	@Test
+	fun `undo to origin with tables seed 4243`() = tablesUndoToOrigin(4243)
+
+	@Test
+	fun `undo to origin with tables seed 20261007`() = tablesUndoToOrigin(20261007)
+
+	@Test
+	fun `undo to origin with tables seed 24`() = tablesUndoToOrigin(24)
+
 	@Test
 	fun `undo to origin seed 1`() = undoToOrigin(1)
 
@@ -77,3 +141,8 @@ class EditorStateFuzzTest {
 	@Test
 	fun `undo to origin seed 359`() = undoToOrigin(359)
 }
+
+private val BLOCKS_START = listOf(
+	"intro", "1. one", "1. two", "  1. nested", "  - bullet", "1. three", "``` code", "``` more", "between",
+	"|0| Name", "|1>| Age", "|0| Ada Lovelace", "|1>| 36", "after", "- b", "1. x", "|0^| solo", "``` f", "end",
+).joinToString("\n")

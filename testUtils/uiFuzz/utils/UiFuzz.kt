@@ -3,6 +3,7 @@ package utils
 import androidx.compose.ui.input.key.Key
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.state.TextEditorState
+import com.darkrockstudios.texteditor.state.insertTable
 
 /** What a composed editor harness offers the fuzz script: a module's own harness implements it. */
 interface FuzzUiDriver {
@@ -11,8 +12,8 @@ interface FuzzUiDriver {
 	/** Types through real desktop key events; `\n` and `\t` become Enter and Tab. */
 	fun typeText(text: String)
 
-	/** Presses [key], with Ctrl held when [ctrl], and waits for the editor to settle. */
-	fun sendKey(key: Key, ctrl: Boolean = false)
+	/** Presses [key], with Ctrl held when [ctrl] and Shift when [shift], and waits for the editor to settle. */
+	fun sendKey(key: Key, ctrl: Boolean = false, shift: Boolean = false)
 
 	/** Seeds the clipboard with unstyled text, as another application would. */
 	fun setPlainClipboardText(value: String)
@@ -98,6 +99,32 @@ fun FuzzUiDriver.applyFuzzOpUi(op: FuzzOp) {
 		is FuzzOp.SelectAllType -> {
 			sendKey(Key.A, ctrl = true)
 			typeText(op.text)
+		}
+
+		is FuzzOp.InsertTable -> {
+			runOnIdle { state.insertTable(op.rows, op.columns) }
+			waitForIdle()
+		}
+
+		is FuzzOp.TableEdit -> {
+			runOnIdle { state.applyTableEdit(op.kind, state.getOffsetAtCharacter(clampIndex(op.slot)).line) }
+			waitForIdle()
+		}
+
+		is FuzzOp.Tab -> sendKey(Key.Tab, shift = op.backward)
+
+		is FuzzOp.CopyPaste -> {
+			val a = clampIndex(op.a)
+			val b = clampIndex(op.b)
+			if (a == b) return
+			selectChars(minOf(a, b), maxOf(a, b))
+			sendKey(if (op.cut) Key.X else Key.C, ctrl = true)
+			val at = state.getOffsetAtCharacter(op.slot % (state.getAllText().text.length + 1))
+			runOnIdle {
+				state.selector.clearSelection()
+				state.cursor.updatePosition(at)
+			}
+			sendKey(Key.V, ctrl = true)
 		}
 	}
 }

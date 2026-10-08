@@ -115,8 +115,7 @@ private class IndentStandIns private constructor(val space: Char, val tab: Char)
 	}
 
 	companion object {
-		/** The Supplemental Punctuation block's punctuation, which markdown gives no meaning. */
-		private val CANDIDATES = ('\u2E00'..'\u2E7F').filter { it.category == CharCategory.OTHER_PUNCTUATION }
+		private val CANDIDATES = STAND_IN_CANDIDATES
 
 		/** Stand-ins for [source], or null when it has no leading indent entity to stand in for. */
 		fun forSource(source: String): IndentStandIns? {
@@ -125,6 +124,20 @@ private class IndentStandIns private constructor(val space: Char, val tab: Char)
 			return if (free.size >= 2) IndentStandIns(free[0], free[1]) else null
 		}
 	}
+}
+
+/** The Supplemental Punctuation block's punctuation, which markdown gives no meaning. */
+private val STAND_IN_CANDIDATES = ('\u2E00'..'\u2E7F').filter { it.category == CharCategory.OTHER_PUNCTUATION }
+
+/**
+ * A character none of [lines] holds, which the parser reads as plain text: what leads a
+ * table cell's line through the parse, so nothing in the cell starts a block. Taken
+ * from the end of the stand-ins [IndentStandIns] takes from the start, or the private
+ * use area when the lines hold them all.
+ */
+internal fun cellLeadFor(lines: List<String>): Char {
+	fun free(c: Char) = lines.none { c in it }
+	return STAND_IN_CANDIDATES.asReversed().firstOrNull(::free) ?: ('\uE000'..'\uF8FF').first(::free)
 }
 
 /** Quote markers, then a list marker at any indent or a heading marker, then a run of indent entities. */

@@ -98,6 +98,15 @@ interface RichSpanStyle {
 
 	/** Whether adding or removing a span of this style changes how its line is shaped. */
 	val reshapesLine: Boolean get() = false
+
+	/**
+	 * Whether a line marked with this style holds inline content alone, as a table cell
+	 * does: no other block or paragraph format goes on it, a line break landing in it is
+	 * a space, what is pasted or dropped there brings only inline styles and links, a
+	 * typed block marker stays text, and a word or line deletion stops at its edges.
+	 * Only meaningful for a line marker ([stickyAtStart]).
+	 */
+	val inlineOnly: Boolean get() = false
 }
 
 /**

@@ -39,6 +39,39 @@ internal class DocumentBlocks(
 		}
 		byLine
 	}
+
+	/** The cell on [line], or null when it is no table cell. */
+	fun tableCellAt(line: Int): TableCellSpanStyle? = cellsByLine[line]
+
+	/** The first line of the table [line] is a cell of; the cells before it must be among these blocks. */
+	fun tableStart(line: Int): Int = cellStarts[line]?.first ?: line
+
+	/** The first line of the table row [line] is a cell of. */
+	fun tableRowStart(line: Int): Int = cellStarts[line]?.second ?: line
+
+	/** Each cell line's table start and row start, in one pass down the cells. */
+	private val cellStarts: Map<Int, Pair<Int, Int>> by lazy {
+		val starts = HashMap<Int, Pair<Int, Int>>()
+		var tableStart = -1
+		var rowStart = -1
+		for (line in cellsByLine.keys.sorted()) {
+			val cell = cellsByLine.getValue(line)
+			val previous = cellsByLine[line - 1]
+			if (previous == null) tableStart = line
+			if (startsTableRow(cell, previous)) rowStart = line
+			starts[line] = tableStart to rowStart
+		}
+		starts
+	}
+
+	private val cellsByLine: Map<Int, TableCellSpanStyle> by lazy {
+		val byLine = HashMap<Int, TableCellSpanStyle>()
+		blockLines.forEach { (block, lines) ->
+			val cell = block.spanStyle as? TableCellSpanStyle ?: return@forEach
+			lines.forEach { byLine[it] = cell }
+		}
+		byLine
+	}
 }
 
 /** Collects every line-anchored decoration currently attached to this document. */
@@ -69,13 +102,18 @@ internal fun documentBlocksOf(
 				span.range.start.line to style
 			}
 			.toMap(),
-		blockLines = allBlockStyles(styles).associateWith { block ->
-			allSpans.asSequence()
-				.filter { it.style === block.spanStyle }
-				.map { it.range.start.line }
-				.toHashSet()
-		},
+		blockLines = blockLinesOf(allSpans, styles),
 	)
+}
+
+/** The lines each block of [styles]' registry is on among [allSpans], in one pass over them. */
+private fun blockLinesOf(allSpans: Set<RichSpan>, styles: RichTextStyles): Map<LineBlockStyle, Set<Int>> {
+	val lines = allBlockStyles(styles).associateWithTo(LinkedHashMap()) { HashSet<Int>() }
+	for (span in allSpans) {
+		val block = lineBlockFor(span.style, styles) ?: continue
+		lines.getValue(block) += span.range.start.line
+	}
+	return lines
 }
 
 /**

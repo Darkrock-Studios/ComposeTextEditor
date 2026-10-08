@@ -177,6 +177,14 @@ fun greet(name: String): String {
 
 Markdown specials inside a fence — `*foo*`, `# heading`, `> quote` — render as literal text rather than being reinterpreted by the parser.
 
+Tables are GFM pipe tables, a line per cell laid out side by side. Tab moves to the next cell, Enter to the one below, and the table button adds and removes rows and columns:
+
+| Block | Markdown | Notes |
+| :-- | :-: | --: |
+| Quote | `>` | a bar in the gutter |
+| List | `-` or `1.` | **nests** with Tab |
+| Table | pipes | a cell that wraps keeps its row as tall as it needs, so long text like this stays readable |
+
 ## Escapes & Literal Syntax
 
 Every markdown special character can appear as literal text by escaping it with a backslash. This sentence contains all of them — \* \_ \` \# \+ \- \! \[ \] \( \) \{ \} \< \> \| \\ — and they all survive a save-and-reload round trip unchanged.
