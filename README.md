@@ -36,8 +36,10 @@ And now, it's working, and at this point, working pretty well.
 - ✅ Screen readers
 - ✅ HTML import, export and clipboard
 - ☑️ Markdown, as an addon
-  - CommonMark: 411 of the spec's 652 examples. Raw HTML, indented code blocks and
-    multi-paragraph list items are not supported yet.
+  - CommonMark: 416 of the spec's 652 examples. The largest share of the rest is raw
+    HTML, which is a non-goal: rendering freeform HTML would mean building an HTML
+    rendering engine, so HTML beyond the style tags below is kept as text. Indented code
+    blocks and multi-paragraph list items are not supported yet.
   - GitHub Flavored Markdown: tables, task lists and strikethrough
   - Underline (`<u>`), highlight (`==text==` or `<mark>`), colour and size (`<span style>`)
   - Opt-in shortcuts that format as you type (`# `, `- `, `**bold**`)
