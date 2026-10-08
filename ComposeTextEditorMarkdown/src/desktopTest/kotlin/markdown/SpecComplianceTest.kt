@@ -9,6 +9,7 @@ import kotlinx.coroutines.test.TestScope
 import org.junit.Assume.assumeTrue
 import java.io.File
 import java.net.URI
+import java.net.URLDecoder
 import kotlin.test.Test
 
 /**
@@ -20,15 +21,18 @@ import kotlin.test.Test
  *
  * An example is supported when importing its markdown gives the document importing its
  * expected HTML does, that HTML also read with a line per soft line break, since an editor
- * line is a paragraph. A failing example is raw HTML, a non-goal, when it is in the spec's
- * HTML sections or a tag of its markdown is in its expected HTML as written. The totals and
- * what is missing go to standard output (the test report's).
+ * line is a paragraph. The two are compared as a browser shows them ([asRendered]), since
+ * the editor keeps the source's whitespace and URLs as written.
+ *
+ * A failing example is not planned when it is raw HTML (in the spec's HTML sections, or a
+ * tag of its markdown is in its expected HTML as written) or is in [NOT_PLANNED]. The
+ * totals and what is missing go to standard output (the test report's).
  */
 class SpecComplianceTest {
 
 	private class Example(val number: Int, val section: String, val label: String, val markdown: String, val html: String)
 
-	private enum class Result { SUPPORTED, NOT_YET, RAW_HTML }
+	private enum class Result { SUPPORTED, NOT_YET, NOT_PLANNED }
 
 	@Test
 	fun scoreAndDraw() {
@@ -39,22 +43,26 @@ class SpecComplianceTest {
 		val commonMarkResults = commonMark.associateWith { example ->
 			when {
 				supported(example) -> Result.SUPPORTED
-				example.section in HTML_SECTIONS || HTML_CONSTRUCT.findAll(example.markdown).any { it.value in example.html } -> Result.RAW_HTML
+				notPlanned(example) != null -> Result.NOT_PLANNED
 				else -> Result.NOT_YET
 			}
 		}
-		report("CommonMark $COMMONMARK_VERSION", commonMarkResults) { COMMONMARK_GROUPS[it.section] ?: "Smaller edge cases" }
+		report("CommonMark $COMMONMARK_VERSION", commonMarkResults) { example, result ->
+			if (result == Result.NOT_PLANNED) notPlanned(example)!! else NOT_YET.entries.firstOrNull { example.number in it.value }?.key ?: "Smaller edge cases"
+		}
 		drawBar(File(root, "docs/images/commonmark-support.svg"), "CommonMark", commonMarkResults.values)
 
 		val gfm = examples(fetch(GFM_SPEC, "gfm-$GFM_VERSION.txt")).filter { it.label.isNotEmpty() }
 		val gfmResults = gfm.associateWith { example ->
 			when {
-				example.label == "tagfilter" -> Result.RAW_HTML
+				example.label == "tagfilter" -> Result.NOT_PLANNED
 				supported(example) -> Result.SUPPORTED
 				else -> Result.NOT_YET
 			}
 		}
-		report("GFM $GFM_VERSION extensions", gfmResults) { GFM_GROUPS[it.label] ?: it.label }
+		report("GFM $GFM_VERSION extensions", gfmResults) { example, result ->
+			if (result == Result.NOT_PLANNED) RAW_HTML else GFM_GROUPS[example.label] ?: example.label
+		}
 		drawBar(File(root, "docs/images/gfm-support.svg"), "GFM extensions", gfmResults.values)
 	}
 
@@ -93,16 +101,46 @@ class SpecComplianceTest {
 		return out
 	}
 
+	/** Why [example], a CommonMark one, is not planned, or null when it is. */
+	private fun notPlanned(example: Example): String? = when {
+		example.section in HTML_SECTIONS || HTML_CONSTRUCT.findAll(example.markdown).any { it.value in example.html } -> RAW_HTML
+		else -> NOT_PLANNED.entries.firstOrNull { example.number in it.value }?.key
+	}
+
 	private fun state() = TextEditorState(scope = TestScope(), measurer = mockk(relaxed = true))
 
 	private fun supported(example: Example): Boolean = runCatching {
 		val imported = state().also { MarkdownExtension(it, imageProvider = InMemoryImageProvider()).importMarkdown(example.markdown) }
-		val written = HtmlExtension(imported, InMemoryImageProvider()).exportAsHtml()
+		val written = asRendered(HtmlExtension(imported, InMemoryImageProvider()).exportAsHtml())
 		listOf(example.html, linesAsBreaks(example.html)).any { html ->
 			val reference = state().also { HtmlExtension(it, InMemoryImageProvider()).importHtml(html) }
-			HtmlExtension(reference, InMemoryImageProvider()).exportAsHtml() == written
+			asRendered(HtmlExtension(reference, InMemoryImageProvider()).exportAsHtml()) == written
 		}
 	}.getOrDefault(false)
+
+	/**
+	 * [html] as a browser shows it: link and image URLs decoded, and outside `<pre>` a no-break
+	 * space an ordinary one, each run of spaces one, and none at a line's ends.
+	 */
+	private fun asRendered(html: String): String {
+		val out = StringBuilder()
+		var from = 0
+		fun inline(part: String) {
+			val text = PRESERVED_WHITESPACE.replace(part, "$1").replace("&nbsp;", " ").replace('\u00a0', ' ').replace(WHITESPACE_RUN, " ")
+			out.append(text.replace(SPACE_BEFORE_LINE_END, "").replace(SPACE_AFTER_LINE_START, "$1"))
+		}
+		for (pre in PRE.findAll(html)) {
+			inline(html.substring(from, pre.range.first))
+			out.append(pre.value)
+			from = pre.range.last + 1
+		}
+		inline(html.substring(from))
+		return URL_ATTRIBUTE.replace(out) { match ->
+			val url = match.groupValues[2].replace("&amp;", "&").replace("&quot;", "\"")
+			val decoded = runCatching { URLDecoder.decode(url.replace("+", "%2B"), "UTF-8") }.getOrDefault(url)
+			"${match.groupValues[1]}=\"${decoded.replace('\u00a0', ' ')}\""
+		}
+	}
 
 	/** [html] with each soft line break written as a `<br>`, the editor's line per source line. */
 	private fun linesAsBreaks(html: String): String {
@@ -111,7 +149,6 @@ class SpecComplianceTest {
 		for ((index, char) in html.withIndex()) {
 			if (html.startsWith("<pre", index)) inPre = true
 			if (html.startsWith("</pre>", index)) inPre = false
-			if (char == '\n' && inPre && html.startsWith("</code></pre>", index + 1)) continue
 			val softBreak = char == '\n' && !inPre && index + 1 < html.length &&
 				!BLOCK_TAG_START.containsMatchIn(html.substring(index + 1)) && !BLOCK_TAG_END.containsMatchIn(out)
 			if (softBreak) out.append("<br>") else out.append(char)
@@ -119,24 +156,26 @@ class SpecComplianceTest {
 		return out.toString()
 	}
 
-	private fun report(name: String, results: Map<Example, Result>, group: (Example) -> String) {
+	private fun report(name: String, results: Map<Example, Result>, group: (Example, Result) -> String) {
 		val counts = Result.entries.associateWith { result -> results.values.count { it == result } }
-		println("SPEC $name: ${counts[Result.SUPPORTED]} of ${results.size} supported, ${counts[Result.NOT_YET]} not yet, ${counts[Result.RAW_HTML]} raw HTML")
-		results.filterValues { it == Result.NOT_YET }.keys.groupBy(group).entries.sortedByDescending { it.value.size }.forEach { (label, examples) ->
-			println("SPEC   not yet: $label (${examples.size}): ${examples.joinToString(" ") { "#${it.number}" }}")
+		println("SPEC $name: ${counts[Result.SUPPORTED]} of ${results.size} supported, ${counts[Result.NOT_YET]} not yet, ${counts[Result.NOT_PLANNED]} not planned")
+		for (result in listOf(Result.NOT_YET, Result.NOT_PLANNED)) {
+			results.filterValues { it == result }.keys.groupBy { group(it, result) }.entries.sortedByDescending { it.value.size }.forEach { (label, examples) ->
+				println("SPEC   ${result.name.lowercase().replace('_', ' ')}: $label (${examples.size}): ${examples.joinToString(" ") { "#${it.number}" }}")
+			}
 		}
 	}
 
-	/** A bar of the [results]: supported in green, not yet in yellow, raw HTML in grey, each labelled with its count where it fits. */
+	/** A bar of the [results]: supported in green, not yet in yellow, not planned in grey, each labelled with its count where it fits. */
 	private fun drawBar(file: File, name: String, results: Collection<Result>) {
 		val width = 640
 		val height = 30
 		val parts = listOf(
 			Triple(results.count { it == Result.SUPPORTED }, listOf("supported"), "#2da44e" to "#ffffff"),
 			Triple(results.count { it == Result.NOT_YET }, listOf("not yet"), "#d4a72c" to "#1f2328"),
-			Triple(results.count { it == Result.RAW_HTML }, listOf("raw HTML", "HTML"), "#8c959f" to "#ffffff"),
+			Triple(results.count { it == Result.NOT_PLANNED }, listOf("not planned"), "#8c959f" to "#ffffff"),
 		)
-		val title = "$name: " + parts.joinToString(", ") { (count, words, _) -> "$count ${words.first()}" } + " (a non-goal)"
+		val title = "$name: " + parts.joinToString(", ") { (count, words, _) -> "$count ${words.first()}" }
 		val rects = StringBuilder()
 		val labels = StringBuilder()
 		var x = 0.0
@@ -174,25 +213,43 @@ class SpecComplianceTest {
 		const val EXAMPLE_FENCE = "$FENCE example"
 		val HEADING = Regex("""#{1,6} (.*)""")
 
+		const val RAW_HTML = "Raw HTML"
 		val HTML_SECTIONS = setOf("HTML blocks", "Raw HTML")
 		val HTML_CONSTRUCT = Regex("""(?<!\\)(<[A-Za-z][A-Za-z0-9-]*(?:\s[^<>]*)?/?>|</[A-Za-z][A-Za-z0-9-]*\s*>|<!--|<\?|<![A-Z]|<!\[CDATA\[)""")
+
+		/**
+		 * The examples the editor's line model cannot hold, by why. A line carries one stack of
+		 * blocks, a quote around a list item around its text, so containers nested any other way
+		 * do not fit, and an image is a line of its own. The editor keeps every empty line, which
+		 * markdown can only write as a blank line that a renderer drops.
+		 */
+		val NOT_PLANNED = mapOf(
+			"Blocks inside list items or block quotes" to
+				setOf(5, 6, 7, 236, 252, 254, 259, 263, 264, 270, 271, 273, 274, 278, 286, 287, 288, 290, 292, 293, 298, 299, 300, 320, 321, 324),
+			"List items holding more than one paragraph" to setOf(4, 108, 256, 258, 262, 277, 307, 316, 319, 325),
+			"Blank lines kept as empty lines" to setOf(97, 113, 117, 221, 227, 240, 241, 242, 249, 306),
+			"Images inside text or links" to setOf(517, 531, 579),
+		)
+
+		val PRE = Regex("""<pre>.*?</pre>""", RegexOption.DOT_MATCHES_ALL)
+		val URL_ATTRIBUTE = Regex("""(href|src)="([^"]*)"""")
+		val PRESERVED_WHITESPACE = Regex("""<span style="white-space:pre-wrap">([^<]*)</span>""")
+		val WHITESPACE_RUN = Regex("""[ \t]+""")
+		const val INLINE_TAGS = "em|strong|code|s|u|mark|a|span"
+		val SPACE_BEFORE_LINE_END = Regex(""" (?=(?:</(?:$INLINE_TAGS)>)*(?:</(?:p|li|h[1-6]|td|th)>|<br>|\n|$))""")
+		val SPACE_AFTER_LINE_START = Regex("""((?:^|\n|<br>|<(?:p|li|h[1-6]|td|th)>)(?:<(?:$INLINE_TAGS)(?: [^>]*)?>)*) """)
 
 		val BLOCK_TAG_START = Regex("""^</?(p|li|ul|ol|blockquote|h[1-6]|hr|pre|table|thead|tbody|tr|th|td|div)\b""", RegexOption.IGNORE_CASE)
 		val BLOCK_TAG_END = Regex("""(</?(p|li|ul|ol|blockquote|h[1-6]|pre|table|thead|tbody|tr|th|td|div)\b[^>]*>|<hr\s*/?>|<br\s*/?>)$""", RegexOption.IGNORE_CASE)
 
-		/** The README's names for what each CommonMark section's unsupported examples are missing. */
-		val COMMONMARK_GROUPS = mapOf(
-			"List items" to "List items holding more than one paragraph or block",
-			"Lists" to "List items holding more than one paragraph or block",
-			"Links" to "Link titles and unusual link destinations",
-			"Link reference definitions" to "Link titles and unusual link destinations",
-			"Indented code blocks" to "Indented code blocks and tab indentation",
-			"Tabs" to "Indented code blocks and tab indentation",
-			"Code spans" to "Code span spacing, and line breaks inside a paragraph",
-			"Hard line breaks" to "Code span spacing, and line breaks inside a paragraph",
-			"Soft line breaks" to "Code span spacing, and line breaks inside a paragraph",
-			"Images" to "Images with a title, inside text, or by reference",
-			"Block quotes" to "Block quotes holding other blocks",
+		/** What the CommonMark examples not supported yet are missing, as the README groups them. */
+		val NOT_YET = mapOf(
+			"Image titles, reference images, and links or images in alt text" to
+				setOf(572, 573, 574, 575, 576, 577, 580, 582, 583, 584, 585, 586, 587, 588, 589, 591),
+			"Nested links, and spaces in a link destination" to setOf(488, 518, 519, 520, 533, 568),
+			"Code spans across lines" to setOf(121, 335, 336, 337, 640, 641),
+			"Escaped delimiters and symbols in emphasis" to setOf(354, 437, 440, 449, 452),
+			"Lines continuing a list item or quote" to setOf(93, 238, 279, 291, 312),
 		)
 
 		val GFM_GROUPS = mapOf(

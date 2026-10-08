@@ -36,7 +36,7 @@ And now, it's working, and at this point, working pretty well.
 - ✅ Screen readers
 - ✅ HTML import, export and clipboard
 - ☑️ Markdown, as an addon
-  - CommonMark: 418 of the spec's 652 examples ([spec support](#markdown-spec-support))
+  - CommonMark: 483 of the spec's 652 examples ([spec support](#markdown-spec-support))
   - GitHub Flavored Markdown: tables, task lists and strikethrough
   - Underline (`<u>`), highlight (`==text==` or `<mark>`), colour and size (`<span style>`)
   - Opt-in shortcuts that format as you type (`# `, `- `, `**bold**`)
@@ -66,29 +66,38 @@ the [API reference & recipes](https://darkrock-studios.github.io/ComposeTextEdit
 
 #### Markdown spec support
 
-Green is supported and yellow is not supported yet. Grey is raw HTML, which is a non-goal:
-rendering freeform HTML would mean building an HTML rendering engine, so HTML beyond the
-style tags above is kept as text.
+Green is supported and yellow is not supported yet. Grey is not planned:
 
-**CommonMark**: 418 of the spec's 652 examples
+- Raw HTML. Rendering freeform HTML would mean building an HTML rendering engine, so HTML
+  beyond the style tags above is kept as text.
+- What the editor's line model cannot hold. A line is a paragraph with one stack of blocks
+  (a quote around a list item around its text), so blocks nested any other way, such as
+  a code block inside a list item, lose their nesting but keep their content. The editor
+  also keeps every empty line, which markdown can only write as a blank line a renderer
+  drops.
 
-![CommonMark: 418 supported, 162 not yet, 72 raw HTML](docs/images/commonmark-support.svg)
+**CommonMark**: 483 of the spec's 652 examples
 
-- List items holding more than one paragraph or block (41)
-- Link titles and unusual link destinations (21)
-- Indented code blocks and tab indentation (20)
-- Code span spacing, and line breaks inside a paragraph (19)
-- Images with a title, inside text, or by reference (17)
-- Block quotes holding other blocks (10)
-- Smaller edge cases (34)
+![CommonMark: 483 supported, 48 not yet, 121 not planned](docs/images/commonmark-support.svg)
+
+- Image titles, reference images, and links or images in alt text (16)
+- Code spans across lines (6)
+- Nested links, and spaces in a link destination (6)
+- Lines continuing a list item or quote (5)
+- Escaped delimiters and symbols in emphasis (5)
+- Smaller edge cases (10)
+
+Not planned: raw HTML (72), blocks inside list items or block quotes (26), list items
+holding more than one paragraph (10), blank lines kept as empty lines (10), and images
+inside text or links (3).
 
 **GitHub Flavored Markdown extensions**: 12 of 24 examples
 
-![GFM extensions: 12 supported, 11 not yet, 1 raw HTML](docs/images/gfm-support.svg)
+![GFM extensions: 12 supported, 11 not yet, 1 not planned](docs/images/gfm-support.svg)
 
 - Tables, task lists and strikethrough are supported
 - Bare links (`www.example.com`, `user@example.com`) are not made links yet (11)
-- Filtering raw HTML tags (1): raw HTML is kept as text, so there is nothing to filter
+- Not planned: filtering raw HTML tags (1), since raw HTML is kept as text
 
 #### Platforms
 

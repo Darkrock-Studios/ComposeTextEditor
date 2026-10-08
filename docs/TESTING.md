@@ -32,10 +32,12 @@ module's suite.
 
 `SpecComplianceTest` fetches the CommonMark spec and GFM's spec at pinned versions,
 imports each example, and counts it supported when the document matches what importing
-the spec's expected HTML gives. A failing example is raw HTML, which this project does not
-aim to render, when it is in the spec's HTML sections or a tag of its markdown appears in
-its expected HTML as written; any other failure is not supported yet. It prints the totals
-and the unsupported examples by what they are missing, and rewrites
+the spec's expected HTML gives, both compared as a browser shows them (URLs decoded,
+collapsible whitespace collapsed). A failing example is not planned when it is raw HTML (in
+the spec's HTML sections, or a tag of its markdown appears in its expected HTML as written)
+or is listed in the test's `NOT_PLANNED`, what the editor's line model cannot hold; any
+other failure is not supported yet. It prints the totals and the failing examples by what
+they are missing, and rewrites
 `docs/images/commonmark-support.svg` and `docs/images/gfm-support.svg`. Update the
 README's counts and lists from its output.
 
