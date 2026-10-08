@@ -60,6 +60,12 @@ internal fun parseInlineHtmlTag(tag: String, styles: RichTextStyles): InlineHtml
 
 internal val STYLED_TAGS = setOf("em", "i", "strong", "b", "del", "s", "strike", "u", "ins", "mark", "code", "span", "font")
 
+/** An opening or closing tag of the [STYLED_TAGS], as a regex fragment. */
+internal val STYLED_TAG = """</?(?:${STYLED_TAGS.joinToString("|")})(?:\s[^<>]*)?>"""
+
+/** The quote markers and then a list or heading marker a line's body can follow, as a regex fragment. */
+internal const val BLOCK_PREFIX = """(?: {0,3}>[ ]?)*(?:[ \t]*(?:[-*+]|\d{1,9}[.)])[ \t]+| {0,3}#{1,6}[ \t]+)?"""
+
 /** The opening `<span style="...">` for a colour. */
 internal fun colorSpanTag(color: Color): String = "<span style=\"color:${color.toCssHex()}\">"
 
@@ -84,8 +90,8 @@ private fun TextUnit.toCssFontSize(): String? = when {
 
 
 /**
- * [source] with the whitespace right after a styled tag that opens a line written as an
- * entity, where text follows on the line. CommonMark starts an HTML block only at a tag
+ * [source] with the whitespace right after a styled tag that opens a line's body written
+ * as an entity, where text follows on the line. CommonMark starts an HTML block only at a tag
  * alone on its line; the parser starts one at a tag followed by whitespace, and reads the
  * lines to the next blank one as raw HTML. The [literalLines] are code, left as written.
  */
@@ -99,7 +105,4 @@ internal fun withInlineTagLinesInline(source: String, literalLines: Set<Int>): S
 	}.joinToString("\n")
 }
 
-private val TAG_LINE_START = Regex(
-	"""^(?:\s{0,3}>\s?)*\s{0,3}(?:<(?:${STYLED_TAGS.joinToString("|")})(?:\s[^<>]*)?>)+([ \t])(?=[ \t]*\S)""",
-	RegexOption.IGNORE_CASE,
-)
+private val TAG_LINE_START = Regex("""^$BLOCK_PREFIX {0,3}(?:$STYLED_TAG)+([ \t])(?=[ \t]*\S)""", RegexOption.IGNORE_CASE)

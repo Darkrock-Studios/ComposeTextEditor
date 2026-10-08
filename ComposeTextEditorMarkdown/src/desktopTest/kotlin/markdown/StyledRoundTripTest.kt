@@ -10,7 +10,11 @@ import androidx.compose.ui.text.style.TextDecoration
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.RichTextStyles
 import com.darkrockstudios.texteditor.TextEditorRange
+import com.darkrockstudios.texteditor.markdown.HighlightSyntax
+import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
 import com.darkrockstudios.texteditor.markdown.MarkdownExtension
+import com.darkrockstudios.texteditor.markdown.ParagraphSeparator
+import com.darkrockstudios.texteditor.markdown.toAnnotatedStringFromMarkdown
 import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.linkAt
 import com.darkrockstudios.texteditor.state.setLink
@@ -26,10 +30,15 @@ class StyledRoundTripTest {
 
 	private val styles = RichTextStyles.DEFAULT
 
-	private fun TestScope.markdown(): MarkdownExtension =
-		MarkdownExtension(TextEditorState(scope = this, measurer = mockk(relaxed = true)))
+	private fun TestScope.markdown(configuration: MarkdownConfiguration = MarkdownConfiguration.DEFAULT): MarkdownExtension =
+		MarkdownExtension(TextEditorState(scope = this, measurer = mockk(relaxed = true)), configuration)
 
-	/** Each character, with `b`, `i`, `c`, `s`, `u`, `h` and `L` for bold, italic, code, struck, underlined, highlighted and linked. */
+	private val red = SpanStyle(color = Color.Red)
+
+	/**
+	 * Each character, with `b`, `i`, `c`, `s`, `u`, `h`, `r` and `L` for bold, italic, code,
+	 * struck, underlined, highlighted, red and linked, a link's destination after its `L`.
+	 */
 	private fun MarkdownExtension.styledText(): String {
 		val text = editorState.getAllText()
 		val lines = text.text.split('\n')
@@ -45,9 +54,11 @@ class StyledRoundTripTest {
 						"s".takeIf { span.item.textDecoration?.contains(TextDecoration.LineThrough) == true },
 						"u".takeIf { span.item.textDecoration?.contains(TextDecoration.Underline) == true },
 						"h".takeIf { span.item.background != Color.Unspecified },
+						"r".takeIf { span.item.color == Color.Red },
 					)
-				} + listOfNotNull("L".takeIf { editorState.linkAt(CharLineOffset(line, column)) != null })
-				if (tags.isEmpty()) "$char" else "[$char:${tags.sorted().distinct().joinToString("")}]"
+				}.sorted().distinct().joinToString("") +
+					(editorState.linkAt(CharLineOffset(line, column))?.let { "|L$it" } ?: "")
+				if (tags.isEmpty()) "$char" else "[$char:$tags]"
 			}.joinToString("")
 		}.joinToString("\n")
 	}
@@ -157,8 +168,33 @@ class StyledRoundTripTest {
 	}
 
 	@Test
+	fun `a link opening in an indent keeps the entity-like text of its destination`() = runTest {
+		val markdown = markdown()
+		markdown.importMarkdown("[&nbsp;](https://x.test/?a=1&b=2;c)&nbsp;text")
+		assertEquals("  text", markdown.editorState.getAllText().text)
+		assertEquals("https://x.test/?a=1&b=2;c", markdown.editorState.linkAt(CharLineOffset(0, 0)))
+	}
+
+	@Test
+	fun `a style tag opening a list item's body before whitespace is inline`() {
+		val text = "- <u> x</u>\n- **y**".toAnnotatedStringFromMarkdown()
+		assertEquals(false, "<u>" in text.text, text.text)
+	}
+
+	@Test
+	fun `a string's reference links take its definitions, which are no text`() {
+		val text = "see [b]\n\n[b]: /u".toAnnotatedStringFromMarkdown()
+		assertEquals("see b", text.text.trimEnd())
+	}
+
+	@Test
 	fun `random styled lines read back with every style that shows`() = runTest {
-		val kinds = listOf(styles.boldStyle, styles.italicStyle, styles.codeStyle, styles.strikethroughStyle, styles.underlineStyle, styles.highlightStyle)
+		val kinds = listOf(styles.boldStyle, styles.italicStyle, styles.codeStyle, styles.strikethroughStyle, styles.underlineStyle, styles.highlightStyle, red)
+		val configurations = listOf(
+			MarkdownConfiguration.DEFAULT,
+			MarkdownConfiguration.DEFAULT.copy(highlightSyntax = HighlightSyntax.MARK_TAG),
+			MarkdownConfiguration.DEFAULT.copy(paragraphSeparator = ParagraphSeparator.NEWLINE),
+		)
 		val prefixes = listOf("", "", "", "- ", "1. ", "> ", "# ", "- [ ] ", "1. [x] ", "  - ", "## ", "> - ", "    ")
 		for ((alphabet, seeds) in listOf("ab cd.,!?'\"()-" to 1..400, "ab c*_~`[]<>&#\\!.=|" to 401..800)) for (seed in seeds) {
 			val random = Random(seed)
@@ -166,7 +202,8 @@ class StyledRoundTripTest {
 				val body = String(CharArray(random.nextInt(2, 18)) { alphabet[random.nextInt(alphabet.length)] })
 				prefixes[random.nextInt(prefixes.size)] + body.map { if (it.isLetterOrDigit() || it == ' ') "$it" else "\\$it" }.joinToString("")
 			}
-			val first = markdown().apply { importMarkdown(lines.joinToString(if (random.nextBoolean()) "\n" else "\n\n")) }
+			val configuration = configurations[seed % configurations.size]
+			val first = markdown(configuration).apply { importMarkdown(lines.joinToString(if (random.nextBoolean()) "\n" else "\n\n")) }
 			val editorLines = first.editorState.getAllText().text.split('\n')
 			repeat(random.nextInt(1, 4)) {
 				val line = random.nextInt(editorLines.size)
@@ -179,18 +216,19 @@ class StyledRoundTripTest {
 			}
 			if (random.nextInt(3) == 0 && editorLines[0].length >= 2) {
 				val start = random.nextInt(editorLines[0].length - 1)
-				first.editorState.setLink(TextEditorRange(CharLineOffset(0, start), CharLineOffset(0, start + 1 + random.nextInt(editorLines[0].length - start - 1))), "https://x.test")
+				val url = listOf("https://x.test", "https://x.test/?a=1&b=2;c", "https://x.test/a_(b)")[random.nextInt(3)]
+				first.editorState.setLink(TextEditorRange(CharLineOffset(0, start), CharLineOffset(0, start + 1 + random.nextInt(editorLines[0].length - start - 1))), url)
 			}
 			val written = first.exportAsMarkdown()
-			val again = markdown().apply { importMarkdown(written) }
+			val again = markdown(configuration).apply { importMarkdown(written) }
 			assertEquals(first.styledText().withoutWhitespaceEmphasis(), again.styledText().withoutWhitespaceEmphasis(), "seed $seed: $written")
 		}
 	}
 
 	/** Bold and italic look the same on whitespace and are not written there. */
 	private fun String.withoutWhitespaceEmphasis(): String =
-		replace(Regex("""\[(\s):([a-zA-Z]+)]""")) { match ->
-			val tags = match.groupValues[2].filter { it != 'b' && it != 'i' }
+		replace(Regex("""\[(\s):([a-z]*)((?:\|L[^\]]*)?)]""")) { match ->
+			val tags = match.groupValues[2].filter { it != 'b' && it != 'i' } + match.groupValues[3]
 			if (tags.isEmpty()) match.groupValues[1] else "[${match.groupValues[1]}:$tags]"
 		}
 }

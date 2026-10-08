@@ -39,7 +39,11 @@ internal class MarkdownParseResult(
 fun String.toAnnotatedStringFromMarkdown(
 	styles: RichTextStyles = RichTextStyles.DEFAULT,
 	allowedLinkSchemes: Set<String> = DEFAULT_LINK_SCHEMES,
-): AnnotatedString = parseMarkdownWithLinks(styles, allowedLinkSchemes = allowedLinkSchemes).annotatedString
+): AnnotatedString {
+	val normalized = normalizeLineEndings()
+	val (markdown, definitions) = withoutLinkDefinitions(normalized, normalized.fencedLineIndices())
+	return markdown.parseMarkdownWithLinks(styles, allowedLinkSchemes = allowedLinkSchemes, linkDefinitions = definitions).annotatedString
+}
 
 /**
  * Parses like [toAnnotatedStringFromMarkdown] but also reports every inline
@@ -105,7 +109,13 @@ private class IndentStandIns private constructor(val space: Char, val tab: Char)
 			val prefix = match.groups[1]!!.value
 			val run = match.groups[2]!!.value
 			prefix +
-				run.replace(INDENT_ENTITY) { if (it.value.isTabEntity()) "$tab" else "$space" } +
+				run.replace(INDENT_RUN_TOKEN) { token ->
+					when {
+						token.groups[2] == null -> token.value
+						token.value.isTabEntity() -> "$tab"
+						else -> "$space"
+					}
+				} +
 				line.substring(match.range.last + 1)
 		}.joinToString("\n")
 	}
@@ -148,12 +158,12 @@ internal fun cellLeadFor(lines: List<String>): Char {
  * indent entities among the markup of styles that open or close in the indent: their
  * tags, a link's brackets and destination, and code of whitespace.
  */
-private val LEADING_INDENT_ENTITIES = Regex(
-	"""^((?: {0,3}>[ ]?)*(?:[ \t]*(?:[-*+]|\d{1,9}[.)])[ \t]+| {0,3}#{1,6}[ \t]+)?)""" +
-		"""((?:(?:</?(?:${STYLED_TAGS.joinToString("|")})(?:\s[^<>]*)?>|\[|\]\((?:<[^<>\n]*>|[^)\s]*)\)|(`+)[ \t]*\3)*""" +
-		"""(?:&nbsp;|&NonBreakingSpace;|&Tab;|&emsp;|&#0*(?:160|32|9);|&#[xX]0*(?:[aA]0|20|9);))+)"""
-)
-private val INDENT_ENTITY = Regex("""&[^;]+;""")
+private const val INDENT_ENTITY_PATTERN = """&nbsp;|&NonBreakingSpace;|&Tab;|&emsp;|&#0*(?:160|32|9);|&#[xX]0*(?:[aA]0|20|9);"""
+private val INDENT_MARKUP = """$STYLED_TAG|\[|\]\((?:<[^<>\n]*>|[^)\s]*)\)|`+[ \t]*`+"""
+private val LEADING_INDENT_ENTITIES = Regex("""^($BLOCK_PREFIX)((?:(?:$INDENT_MARKUP)*(?:$INDENT_ENTITY_PATTERN))+)""")
+
+/** In a leading indent run, the markup as written (group 1) or an indent entity (group 2). */
+private val INDENT_RUN_TOKEN = Regex("""($INDENT_MARKUP)|($INDENT_ENTITY_PATTERN)""")
 
 private val TAB_ENTITY = Regex("""&(?:Tab|emsp|#0*9|#[xX]0*9);""")
 

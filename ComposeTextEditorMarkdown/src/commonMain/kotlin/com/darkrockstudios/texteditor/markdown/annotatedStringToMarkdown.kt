@@ -84,11 +84,14 @@ internal fun AnnotatedString.toMarkdown(
 		?.let { coalesceRuns(it.value) }
 		?: emptyList()
 	// A code span takes its text literally, so code another style covers part or all of
-	// is written as `<code>`, whose text is markdown. Bold and italic on whitespace alone
-	// are not written (see trimRun), so they cover nothing.
+	// is written as `<code>`, whose text is markdown. Bold and italic shrink off the
+	// whitespace at their edges (see trimRun), so they cover only what is between.
 	val styledRanges = rangesByMarker.filterKeys { it != CODE_MARKER && !it.isHeading }.flatMap { (marker, ranges) ->
 		if (marker != BOLD_MARKER && marker != ITALIC_MARKER) ranges
-		else ranges.flatMap { range -> range.filter { !text[it].isWhitespace() }.map { it..it } }
+		else ranges.mapNotNull { range ->
+			val first = range.firstOrNull { !text[it].isWhitespace() } ?: return@mapNotNull null
+			first..range.last { !text[it].isWhitespace() }
+		}
 	}
 	val taggedCode = codeRuns.filter { (start, end) -> styledRanges.any { it.first < end && it.last + 1 > start } }
 

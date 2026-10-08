@@ -242,6 +242,12 @@ private fun withoutLinkDefinitions(strip: CodeFenceStripResult): Pair<CodeFenceS
 	return strip.rewritten(lines, dropped) to definitions
 }
 
+/** [markdown] without its link reference definitions, and the definitions by label (see [withoutLinkDefinitions]). */
+internal fun withoutLinkDefinitions(markdown: String, fencedLines: Set<Int>): Pair<String, Map<String, String>> {
+	val (strip, definitions) = withoutLinkDefinitions(CodeFenceStripResult(markdown, fencedLines, emptyMap()))
+	return strip.text to definitions
+}
+
 private val QUOTE_PREFIX = Regex("""^>\s?""")
 
 /**

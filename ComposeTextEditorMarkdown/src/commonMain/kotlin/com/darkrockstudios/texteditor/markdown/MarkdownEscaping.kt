@@ -140,7 +140,7 @@ internal fun markdownEscapes(
 		escapeLineStart(text, lineStart, lineEnd, escape)
 		lineStart = lineEnd + 1
 	}
-	// Import parses a document's lines as one paragraph's, so brackets pair across lines.
+	// The text's lines are one paragraph to a renderer, so brackets pair across them.
 	findLinkOpeners(text, 0, text.length, markerBoundaries, linkOpeners, bracketClosers)
 
 	var i = 0

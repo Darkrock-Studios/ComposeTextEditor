@@ -118,16 +118,9 @@ private fun lineEndAfter(text: String, from: Int): Int? {
  * across them, but the parser makes a reference link of any bracketed label and reads
  * no inline syntax in it. Code spans, tags, autolinks and escaped brackets pair with
  * nothing, and a `]` before `(` is left to the parser as an inline link. The
- * [literalLines] are code, left as written. An escaped bracket can pair the ones around
- * it, so the pass repeats until no bracket is escaped.
+ * [literalLines] are code, left as written.
  */
 internal fun withUndefinedReferencesEscaped(source: String, definitions: Map<String, String>, literalLines: Set<Int>): String {
-	var text = source
-	while (true) text = undefinedReferencesEscapedOnce(text, definitions, literalLines) ?: return text
-}
-
-/** [source] with the undefined references' brackets escaped, or null when none is. */
-private fun undefinedReferencesEscapedOnce(source: String, definitions: Map<String, String>, literalLines: Set<Int>): String? {
 	val escaped = ArrayList<Int>()
 	val openers = ArrayList<Int>()
 	val literal = BooleanArray(source.length)
@@ -138,6 +131,8 @@ private fun undefinedReferencesEscapedOnce(source: String, definitions: Map<Stri
 			if (source[index] == '\n') line++
 		}
 	}
+	// Lengths of backtick strings no closer follows from where one was last looked for.
+	val unclosed = HashSet<Int>()
 	var i = 0
 	while (i < source.length) {
 		if (literal[i]) {
@@ -150,12 +145,13 @@ private fun undefinedReferencesEscapedOnce(source: String, definitions: Map<Stri
 				var ticks = i
 				while (ticks < source.length && source[ticks] == '`') ticks++
 				val run = source.substring(i, ticks)
-				var close = source.indexOf(run, ticks)
+				var close = if (run.length in unclosed) -1 else source.indexOf(run, ticks)
 				while (close >= 0 && (source.getOrNull(close + run.length) == '`' || source.getOrNull(close - 1) == '`')) {
 					var past = close
 					while (past < source.length && source[past] == '`') past++
 					close = source.indexOf(run, past)
 				}
+				if (close < 0) unclosed += run.length
 				i = if (close >= 0) close + run.length - 1 else ticks - 1
 			}
 			'<' -> INLINE_TAG.matchAt(source, i)?.let { i = it.range.last }
@@ -179,7 +175,7 @@ private fun undefinedReferencesEscapedOnce(source: String, definitions: Map<Stri
 		}
 		i++
 	}
-	if (escaped.isEmpty()) return null
+	if (escaped.isEmpty()) return source
 	val out = StringBuilder(source.length + escaped.size)
 	var from = 0
 	escaped.sorted().forEach { at ->
