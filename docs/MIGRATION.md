@@ -186,6 +186,69 @@ A `SpellCheckStyle` or `DiagnosticStyle` given a layer of the host's own is
 left to the host: spell check and diagnostics neither clear it nor treat it as
 one of their flags.
 
+## Tables
+
+In 3.1.0, tables are a block (`docs/design/tables.md`): a table is a run of cell lines,
+each carrying a `TableCellSpanStyle`, laid out side by side. Nothing needs code,
+but a host may notice:
+
+- **Markdown.** A GFM pipe table outside a quote imports as a table where it
+  imported as literal lines, and is written back in the editor's form
+  (`| a | b |`, a `---` delimiter row, a blank line after it). A document that
+  held a pipe table on purpose as text now shows it as a table. A table inside a
+  quote stays literal text.
+- **HTML.** A pasted or imported `<table>` becomes a table where its cells were
+  tab-separated lines, and `toAnnotatedStringFromHtml` gives a cell a line.
+- **Editing.** `editBehaviors` starts with `TableEditBehavior` ahead of
+  `LineBlockEditBehavior`, and Tab in a cell goes to the next cell through the
+  new `EditBehavior.onIndent`. A deletion or replace (`delete`, `replace`) across
+  a table's cells clears them rather than joining them, and line breaks landing
+  in a cell become spaces, ahead of a host's `inputFilter`.
+- **Styles.** `RichSpanStyle` gains `inlineOnly`, which a cell sets; a custom
+  line marker that sets it gets a cell's rules (no other block on its line, line
+  breaks as spaces, pastes bringing inline styles only).
+  `isInlineOnlyLine` reads it. A `LineWrap` laid out beside others carries its
+  `box`, and a cell's its `tableCell`; every `LineWrap` carries its line's
+  `spaceBefore`, `spaceAfter` and `blockFacts`.
+- **Layout.** A line stacking a quote and a list is indented by both, where the
+  list's indent alone placed its text and marker on the quote's bar.
+
+The table API is in `com.darkrockstudios.texteditor.state`: `insertTable`,
+`insertTableRow`, `deleteTableRow`, `insertTableColumn`, `deleteTableColumn`,
+`setTableColumnAlignment`, `convertTableToText`, `deleteTable`, and `tableAt`
+and `tableCellAt` to read one. `TextEditorStyle` gains `tableBorderColor` and
+`tableHeaderBackgroundColor`.
+
+## Task lists
+
+In 3.1.0, GFM's task list items are tasks (`docs/design/line-blocks.md`, "Task
+lists"): a `TaskSpanStyle` on a list item, drawn as a checkbox. Nothing needs code,
+but a host may notice:
+
+- **Markdown.** `- [ ] item` and `- [x] item` import as tasks where their boxes
+  were the items' text, and are written back so.
+- **HTML.** A checkbox at a list item's start, and Google Docs' checklist items,
+  import as tasks; a task exports as GitHub's task list markup.
+- **Editing.** A click or a tap on a task's box checks it; Enter after a checked
+  item starts an unchecked one. A new built-in action, `ToggleTask`, bound to no
+  key, checks the caret's tasks. `LINE_BLOCK_STYLES` lists the two task styles
+  after the blockquote.
+
+The task API is in `com.darkrockstudios.texteditor.state`: `toggleTaskList`,
+`setTaskChecked`, `toggleTaskChecked`, `taskCheckedAt` and `isTask`.
+
+## Code fences
+
+In 3.1.0, a code fence's text holds no inline style or link, which markdown cannot write
+inside a fence (`docs/design/line-blocks.md`, "Stacking rules"). Nothing needs code, but
+a host may notice:
+
+- **Editing.** A style added over fence lines skips them, text landing on one keeps only
+  the fence's monospace, and making lines a fence takes their styles and links off, in
+  the same undo step.
+- **Links.** `setLink` answers false for a range on a fence line.
+- **HTML.** Import keeps no inline style or link inside a `<pre>`.
+
 ## Keyboard content on Android
 
 An Android host can take the GIFs, stickers and images a keyboard commits by

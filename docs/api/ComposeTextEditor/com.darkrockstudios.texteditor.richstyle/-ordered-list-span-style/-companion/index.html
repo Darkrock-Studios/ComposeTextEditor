@@ -93,7 +93,7 @@
   <div class="breadcrumbs"><a href="../../../index.html">Editor</a><span class="delimiter">/</span><a href="../../index.html">com.darkrockstudios.texteditor.richstyle</a><span class="delimiter">/</span><a href="../index.html">OrderedListSpanStyle</a><span class="delimiter">/</span><span class="current">Companion</span></div>
   <div class="cover ">
     <h1 class="cover"><span><span>Companion</span></span></h1>
-    <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">object </span><a href="index.html">Companion</a> : <a href="../index.html">OrderedListSpanStyle</a><span class="source-link-wrapper"><span class="source-link" data-element-type="source-link">(<a href="https://github.com/Darkrock-Studios/ComposeTextEditor/blob/main/ComposeTextEditor/src/commonMain/kotlin/com/darkrockstudios/texteditor/richstyle/OrderedListSpanStyle.kt#L85">source</a>)</span></span></div></div></div>
+    <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">object </span><a href="index.html">Companion</a> : <a href="../index.html">OrderedListSpanStyle</a><span class="source-link-wrapper"><span class="source-link" data-element-type="source-link">(<a href="https://github.com/Darkrock-Studios/ComposeTextEditor/blob/main/ComposeTextEditor/src/commonMain/kotlin/com/darkrockstudios/texteditor/richstyle/OrderedListSpanStyle.kt#L87">source</a>)</span></span></div></div></div>
   </div>
   <div class="tabbedcontent">
     <div class="tabs-section" tabs-section="tabs-section"><button class="section-tab" data-active="" data-togglable="CONSTRUCTOR,TYPE,PROPERTY,FUNCTION">Members</button><button class="section-tab" data-togglable="CONSTRUCTOR,TYPE,PROPERTY,FUNCTION,EXTENSION_PROPERTY,EXTENSION_FUNCTION">Members &amp; Extensions</button></div>
@@ -111,6 +111,21 @@
               <div>
                 <div class="title">
                   <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">val </span><a href="../../-rich-span-style/bound-to-paragraph.html">boundToParagraph</a><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html">Boolean</a></div><div class="brief "><p class="paragraph">Whether a span of this style belongs to one paragraph: it covers its line and no other, an Enter at the paragraph's start or end carries a copy onto the new paragraph (an Enter inside it splits it), and a multi-line insert inside it keeps it on its own line; one at the paragraph's start keeps it on the first line and the paragraph's own text after the last. A paragraph's format is one; a block marker is not, since the block behavior continues it with its indent.</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-1544683169%2FProperties%2F-556598459" anchor-label="inlineOnly" id="-1544683169%2FProperties%2F-556598459" data-filterable-set=":ComposeTextEditor/commonMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":ComposeTextEditor/commonMain" data-filterable-set=":ComposeTextEditor/commonMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="../../-rich-span-style/inline-only.html"><span>inline</span><wbr><span><span>Only</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-1544683169%2FProperties%2F-556598459"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">val </span><a href="../../-rich-span-style/inline-only.html">inlineOnly</a><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html">Boolean</a></div><div class="brief "><p class="paragraph">Whether a line marked with this style holds inline content alone, as a table cell does: no other block or paragraph format goes on it, a line break landing in it is a space, what is pasted or dropped there brings only inline styles and links, a typed block marker stays text, and a word or line deletion stops at its edges. Only meaningful for a line marker (<a href="../../-rich-span-style/sticky-at-start.html">stickyAtStart</a>).</p></div></div></div>
                 </div>
               </div>
             </div>

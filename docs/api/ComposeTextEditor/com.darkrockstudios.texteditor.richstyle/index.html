@@ -290,7 +290,7 @@
                   </span></span></div>
               <div>
                 <div class="title">
-                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">object </span><a href="-line-block-edit-behavior/index.html">LineBlockEditBehavior</a> : <a href="../com.darkrockstudios.texteditor.state/-edit-behavior/index.html">EditBehavior</a></div><div class="brief "><p class="paragraph">Smart editing for lines carrying a <a href="../../ComposeTextEditor/com.darkrockstudios.texteditor.richstyle/-line-block-style/index.html">LineBlockStyle</a>: Enter on an empty item exits the block (a nested list item un-nests instead), Enter at a heading's end, empty or not, starts body text, backspace at its start demotes it (a nested list item un-nests), and a split keeps the gutter marker on both halves. See the "Smart editing" and "Nested lists" sections of <code class="lang-kotlin">docs/design/line-blocks.md</code>.</p></div></div></div>
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">object </span><a href="-line-block-edit-behavior/index.html">LineBlockEditBehavior</a> : <a href="../com.darkrockstudios.texteditor.state/-edit-behavior/index.html">EditBehavior</a></div><div class="brief "><p class="paragraph">Smart editing for lines carrying a <a href="../../ComposeTextEditor/com.darkrockstudios.texteditor.richstyle/-line-block-style/index.html">LineBlockStyle</a>: Enter on an empty item exits the block (a nested list item un-nests instead), Enter at a heading's end, empty or not, starts body text, backspace at its start demotes it (a nested list item un-nests), and a split keeps the gutter marker on both halves. An inline-only line (a table cell) is left to its own behavior. See the "Smart editing" and "Nested lists" sections of <code class="lang-kotlin">docs/design/line-blocks.md</code>.</p></div></div></div>
                 </div>
               </div>
             </div>
@@ -381,6 +381,81 @@
               <div>
                 <div class="title">
                   <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">class </span><a href="-spell-check-style/index.html">SpellCheckStyle</a> : <a href="../com.darkrockstudios.texteditor.decoration/-decoration-style/index.html">DecorationStyle</a></div><div class="brief "><p class="paragraph">A <a href="../com.darkrockstudios.texteditor.decoration/-decoration-style/index.html">DecorationStyle</a> that draws a red wavy underline beneath misspelled text, on <a href="../../ComposeTextEditor/com.darkrockstudios.texteditor.richstyle/-spell-check-style/--root--.html">layer</a>.</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="1263466695%2FClasslikes%2F-556598459" anchor-label="TableAlignment" id="1263466695%2FClasslikes%2F-556598459" data-filterable-set=":ComposeTextEditor/commonMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":ComposeTextEditor/commonMain" data-filterable-set=":ComposeTextEditor/commonMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="-table-alignment/index.html"><span>Table</span><wbr><span><span>Alignment</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="1263466695%2FClasslikes%2F-556598459"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">enum </span><a href="-table-alignment/index.html">TableAlignment</a> : <a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-enum/index.html">Enum</a><span class="token operator">&lt;</span><a href="-table-alignment/index.html">TableAlignment</a><span class="token operator">&gt; </span></div><div class="brief "><p class="paragraph">How a table column's cells align their text, as a GFM delimiter row writes it.</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-929898715%2FClasslikes%2F-556598459" anchor-label="TableCellSpanStyle" id="-929898715%2FClasslikes%2F-556598459" data-filterable-set=":ComposeTextEditor/commonMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":ComposeTextEditor/commonMain" data-filterable-set=":ComposeTextEditor/commonMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="-table-cell-span-style/index.html"><span>Table</span><wbr><span>Cell</span><wbr><span>Span</span><wbr><span><span>Style</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-929898715%2FClasslikes%2F-556598459"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">class </span><a href="-table-cell-span-style/index.html">TableCellSpanStyle</a> : <a href="-rich-span-style/index.html">RichSpanStyle</a></div><div class="brief "><p class="paragraph">Marks a line as one cell of a table: the cell in <a href="../../ComposeTextEditor/com.darkrockstudios.texteditor.richstyle/-table-cell-span-style/--root--.html">column</a> of its table row, its text aligned by <a href="../../ComposeTextEditor/com.darkrockstudios.texteditor.richstyle/-table-cell-span-style/--root--.html">alignment</a>. A table is a run of consecutive cell lines in row-major order: a cell starts a table row when the line before it is no cell or holds a cell of the same or a later column, and continues the row otherwise. The row's cells sit side by side, and the table's first row is its header. Which table row a cell is in, whether it is the header, and how many columns its table has are derived when the document is laid out, as list numerals are, never stored; see <code class="lang-kotlin">docs/design/tables.md</code>.</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="400133500%2FClasslikes%2F-556598459" anchor-label="TableEditBehavior" id="400133500%2FClasslikes%2F-556598459" data-filterable-set=":ComposeTextEditor/commonMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":ComposeTextEditor/commonMain" data-filterable-set=":ComposeTextEditor/commonMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="-table-edit-behavior/index.html"><span>Table</span><wbr><span>Edit</span><wbr><span><span>Behavior</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="400133500%2FClasslikes%2F-556598459"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">object </span><a href="-table-edit-behavior/index.html">TableEditBehavior</a> : <a href="../com.darkrockstudios.texteditor.state/-edit-behavior/index.html">EditBehavior</a></div><div class="brief "><p class="paragraph">Editing at a table cell's edges, as Google Docs has it for what GFM can hold: a cell is one line, so Enter goes to the cell below, adding a row from the last one; Backspace at a cell's start and Delete at its end join nothing, and Backspace in the first cell of an empty row deletes the row. Backspace at the start of the line after a table steps into its last cell, deleting that line when it is empty, and Delete at the end of the line before a table leaves it apart. Tab and Shift+Tab move to the next and previous cell (<code class="lang-kotlin">moveToTableCell</code>), and line breaks typed or pasted into a cell become spaces (<code class="lang-kotlin">InlineOnlyLineBreaks</code>). See <code class="lang-kotlin">docs/design/tables.md</code>.</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-1345463324%2FClasslikes%2F-556598459" anchor-label="TaskSpanStyle" id="-1345463324%2FClasslikes%2F-556598459" data-filterable-set=":ComposeTextEditor/commonMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":ComposeTextEditor/commonMain" data-filterable-set=":ComposeTextEditor/commonMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="-task-span-style/index.html"><span>Task</span><wbr><span>Span</span><wbr><span><span>Style</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-1345463324%2FClasslikes%2F-556598459"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">class </span><a href="-task-span-style/index.html">TaskSpanStyle</a> : <a href="-rich-span-style/index.html">RichSpanStyle</a></div><div class="brief "><p class="paragraph">Marks a list item as a task, GFM's <code class="lang-kotlin">- [ ]</code> and <code class="lang-kotlin">- [x]</code>: a checkbox drawn in the item's gutter, in place of a bullet or after a numeral, <a href="../../ComposeTextEditor/com.darkrockstudios.texteditor.richstyle/-task-span-style/--root--.html">checked</a> or not. A task is always a list item's, bullet or ordered, at any level; on a line that is no list item it is taken off by normalization. Its indent adds to the list's, making room for the box. See <code class="lang-kotlin">docs/design/line-blocks.md</code>, "Task lists".</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="562602098%2FClasslikes%2F-556598459" anchor-label="TextEditorTable" id="562602098%2FClasslikes%2F-556598459" data-filterable-set=":ComposeTextEditor/commonMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":ComposeTextEditor/commonMain" data-filterable-set=":ComposeTextEditor/commonMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="-text-editor-table/index.html"><span>Text</span><wbr><span>Editor</span><wbr><span><span>Table</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="562602098%2FClasslikes%2F-556598459"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">class </span><a href="-text-editor-table/index.html">TextEditorTable</a></div><div class="brief "><p class="paragraph">One table in a document: its cell lines, row by row, as derived from the cells' columns (see <a href="-table-cell-span-style/index.html">TableCellSpanStyle</a>). The first row is the header.</p></div></div></div>
                 </div>
               </div>
             </div>
@@ -504,7 +579,7 @@
                   </span></span></div>
               <div>
                 <div class="title">
-                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">val </span><a href="-l-i-n-e_-b-l-o-c-k_-s-t-y-l-e-s.html">LINE_BLOCK_STYLES</a><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/-list/index.html">List</a><span class="token operator">&lt;</span><a href="-rich-span-style/index.html">RichSpanStyle</a><span class="token operator">&gt;</span></div><div class="brief "><p class="paragraph">Every line block's span style, in the order a line's blocks resolve: the blockquote, the six headings, the two list kinds at level 0 and then at each deeper level, and the code fence. A format addon that peels block markers off a line peels in this order, so a stack lands as the editor resolves it.</p></div></div></div>
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">val </span><a href="-l-i-n-e_-b-l-o-c-k_-s-t-y-l-e-s.html">LINE_BLOCK_STYLES</a><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/-list/index.html">List</a><span class="token operator">&lt;</span><a href="-rich-span-style/index.html">RichSpanStyle</a><span class="token operator">&gt;</span></div><div class="brief "><p class="paragraph">Every line block's span style, in the order a line's blocks resolve: the blockquote, the two task states, the six headings, the two list kinds at level 0 and then at each deeper level, the code fence, and the table cells, which no line marker writes. A format addon that peels block markers off a line peels in this order, so a stack lands as the editor resolves it.</p></div></div></div>
                 </div>
               </div>
             </div>
@@ -539,6 +614,21 @@
               </div>
             </div>
           </div>
+<a data-name="-276174042%2FProperties%2F-556598459" anchor-label="MAX_TABLE_COLUMNS" id="-276174042%2FProperties%2F-556598459" data-filterable-set=":ComposeTextEditor/commonMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":ComposeTextEditor/commonMain" data-filterable-set=":ComposeTextEditor/commonMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="-m-a-x_-t-a-b-l-e_-c-o-l-u-m-n-s.html"><span>MAX_</span><wbr><span>TABLE_</span><wbr><span>COLUMNS</span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-276174042%2FProperties%2F-556598459"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">const </span><span class="token keyword">val </span><a href="-m-a-x_-t-a-b-l-e_-c-o-l-u-m-n-s.html">MAX_TABLE_COLUMNS</a><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a><span class="token operator"> = </span><span class="token constant">16</span></div><div class="brief "><p class="paragraph">The most columns a table can have.</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
 <a data-name="-1995012238%2FProperties%2F-556598459" anchor-label="ORDERED_LIST_PARAGRAPH_STYLE" id="-1995012238%2FProperties%2F-556598459" data-filterable-set=":ComposeTextEditor/commonMain"></a>
           <div class="table-row table-row_content" data-filterable-current=":ComposeTextEditor/commonMain" data-filterable-set=":ComposeTextEditor/commonMain">
             <div class="main-subrow keyValue ">
@@ -550,6 +640,21 @@
               <div>
                 <div class="title">
                   <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">val </span><a href="-o-r-d-e-r-e-d_-l-i-s-t_-p-a-r-a-g-r-a-p-h_-s-t-y-l-e.html">ORDERED_LIST_PARAGRAPH_STYLE</a><span class="token operator">: </span><a href="https://developer.android.com/reference/kotlin/androidx/compose/ui/text/ParagraphStyle.html">ParagraphStyle</a></div><div class="brief "><p class="paragraph">The indent of a top-level ordered item: <a href="list-paragraph-style.html">listParagraphStyle</a> at level 0.</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-120175395%2FProperties%2F-556598459" anchor-label="TASK_PARAGRAPH_STYLE" id="-120175395%2FProperties%2F-556598459" data-filterable-set=":ComposeTextEditor/commonMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":ComposeTextEditor/commonMain" data-filterable-set=":ComposeTextEditor/commonMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="-t-a-s-k_-p-a-r-a-g-r-a-p-h_-s-t-y-l-e.html"><span>TASK_</span><wbr><span>PARAGRAPH_</span><wbr><span>STYLE</span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-120175395%2FProperties%2F-556598459"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">val </span><a href="-t-a-s-k_-p-a-r-a-g-r-a-p-h_-s-t-y-l-e.html">TASK_PARAGRAPH_STYLE</a><span class="token operator">: </span><a href="https://developer.android.com/reference/kotlin/androidx/compose/ui/text/ParagraphStyle.html">ParagraphStyle</a></div><div class="brief "><p class="paragraph">The indent a task takes inside its list item, so the text clears the box.</p></div></div></div>
                 </div>
               </div>
             </div>
@@ -704,6 +809,51 @@
               <div>
                 <div class="title">
                   <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">fun </span><a href="print-text-layout-result.html"><span class="token function">printTextLayoutResult</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">textLayoutResult<span class="token operator">: </span><a href="https://developer.android.com/reference/kotlin/androidx/compose/ui/text/TextLayoutResult.html">TextLayoutResult</a></span></span><span class="token punctuation">)</span></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-1929424005%2FFunctions%2F-556598459" anchor-label="tableAt" id="-1929424005%2FFunctions%2F-556598459" data-filterable-set=":ComposeTextEditor/commonMain"></a>
+          <div class="table-row table-row_content" data-togglable="EXTENSION_FUNCTION" data-filterable-current=":ComposeTextEditor/commonMain" data-filterable-set=":ComposeTextEditor/commonMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="table-at.html"><span>table</span><wbr><span><span>At</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-1929424005%2FFunctions%2F-556598459"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">fun </span><a href="../com.darkrockstudios.texteditor.state/-document-snapshot/index.html">DocumentSnapshot</a><span class="token punctuation">.</span><a href="table-at.html"><span class="token function">tableAt</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">line<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a></span></span><span class="token punctuation">)</span><span class="token operator">: </span><a href="-text-editor-table/index.html">TextEditorTable</a><span class="token operator">?</span></div><div class="brief "><p class="paragraph">The table holding <a href="table-at.html">line</a> in this revision, or null when <a href="table-at.html">line</a> is no table cell.</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="1316255869%2FFunctions%2F-556598459" anchor-label="tableCellAt" id="1316255869%2FFunctions%2F-556598459" data-filterable-set=":ComposeTextEditor/commonMain"></a>
+          <div class="table-row table-row_content" data-togglable="EXTENSION_FUNCTION" data-filterable-current=":ComposeTextEditor/commonMain" data-filterable-set=":ComposeTextEditor/commonMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="table-cell-at.html"><span>table</span><wbr><span>Cell</span><wbr><span><span>At</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="1316255869%2FFunctions%2F-556598459"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">fun </span><a href="../com.darkrockstudios.texteditor.state/-document-snapshot/index.html">DocumentSnapshot</a><span class="token punctuation">.</span><a href="table-cell-at.html"><span class="token function">tableCellAt</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">line<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a></span></span><span class="token punctuation">)</span><span class="token operator">: </span><a href="-table-cell-span-style/index.html">TableCellSpanStyle</a><span class="token operator">?</span></div><div class="brief "><p class="paragraph">The cell marker on <a href="table-cell-at.html">line</a> in this revision, or null when it is no table cell.</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-644891851%2FFunctions%2F-556598459" anchor-label="tableCellParagraphStyle" id="-644891851%2FFunctions%2F-556598459" data-filterable-set=":ComposeTextEditor/commonMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":ComposeTextEditor/commonMain" data-filterable-set=":ComposeTextEditor/commonMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="table-cell-paragraph-style.html"><span>table</span><wbr><span>Cell</span><wbr><span>Paragraph</span><wbr><span><span>Style</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-644891851%2FFunctions%2F-556598459"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">fun </span><a href="table-cell-paragraph-style.html"><span class="token function">tableCellParagraphStyle</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">alignment<span class="token operator">: </span><a href="-table-alignment/index.html">TableAlignment</a></span></span><span class="token punctuation">)</span><span class="token operator">: </span><a href="https://developer.android.com/reference/kotlin/androidx/compose/ui/text/ParagraphStyle.html">ParagraphStyle</a></div><div class="brief "><p class="paragraph">The paragraph style a cell aligned by <a href="table-cell-paragraph-style.html">alignment</a> carries: the alignment and nothing else.</p></div></div></div>
                 </div>
               </div>
             </div>

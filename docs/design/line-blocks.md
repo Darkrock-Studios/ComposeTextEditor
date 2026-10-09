@@ -61,7 +61,15 @@ Which blocks may share a line is defined in one predicate (`lineBlocksConflict`,
 - Headings exclude each other and both list styles (`- # item` is a bullet
   holding literal text, not a bulleted heading).
 - Blockquote stacks with lists and headings (`> - item`, `> # Title`).
-- Code fence stacks with nothing.
+- A task stacks with a list item, whose box it is, and a quote; it takes no
+  heading, and its two states exclude each other (see "Task lists").
+- Code fence stacks with nothing, and its text is code: it holds no inline style or
+  link, which markdown cannot write inside a fence. An edit does not put one there:
+  a style added over a fence line skips it, text landing on one keeps only the
+  fence's monospace and the body style, and what a toggle or join brings onto one is
+  taken off inside the same undo step. HTML import keeps none inside a `<pre>`.
+- A table cell stacks with nothing, and unlike the others it never gives way:
+  putting another block on a cell line does nothing (`docs/design/tables.md`).
 
 One resolution point (`resolveLineBlock`) turns the predicate into an actual
 demotion and rebuild: applying a block first demotes whatever conflicts with
@@ -102,7 +110,8 @@ followers where they are, its former children now its siblings, as Google
 Docs does; un-nesting a line (Shift+Tab), making it body text (toggle,
 heading, Backspace at level 0), re-quoting it or exiting the list brings the
 items nested under it up to what it now allows, the subtree moving together
-and ending at its first sibling. A selection moves only its own items, as in
+and ending at its first sibling; quoting nested items brings them up to what
+the items before them in the quote allow. A selection moves only its own items, as in
 Docs; the items under the last of them follow it.
 
 **Markdown.** Export indents a level-k item by the content offset of its
@@ -208,13 +217,24 @@ character would start or end syntax in its position (`markdownEscapes`): a
 literal `- ` at the start of a plain paragraph exports as `\- ` and survives,
 `*not*` in dialogue is escaped by CommonMark's flanking rules, and an
 apostrophe, a hyphen mid-sentence, an underscore inside a word or an asterisk
-between spaces is written as typed. Line-start rules read the body, so a
-marker shape at the start of a list item's body (`- 1990. plans`) is escaped
-as well, since it would otherwise nest a list. Unsupported syntax kept as
-literal text on import (a table, a task list's `[ ]`) is written back as it
-was, and a table's rows are kept together.
+between spaces is written as typed. Emphasis whose delimiters could not open
+or close where they stand, by the same rules (`**Note:**text`), or would not
+pair as written by CommonMark's own pairing pass, is written as `<em>`,
+`<strong>` or `<del>`, which import reads back; so is a strike or highlight
+with whitespace at an edge, where it shows (bold and italic shrink onto their
+text), and code another style covers is written as `<code>`. An indent stays
+entities inside a style that opens in it. Whatever is styled in the editor
+reads back as the same text and styles (`StyledRoundTripTest`). Line-start rules read
+the body, so a marker shape at the start of a list item's body
+(`- 1990. plans`) is escaped as well, since it would otherwise nest a list. Unsupported syntax kept as
+literal text on import (a task list's `[ ]`, a table inside a quote) is written
+back as it was, and a quoted table's rows are kept together. A table outside a
+quote is a block of its own, read and written whole (`docs/design/tables.md`).
 
-**Import** runs peel-then-classify on each raw line, after fence stripping:
+**Import** runs peel-then-classify on each raw line, after fence stripping. An
+indented code block, a run of lines indented four columns where no paragraph or
+list item takes them, is stripped as a fence is, its indent off; export never
+writes one, since it writes a leading indent as entities.
 
 1. **Peel** stacked markers in registry order, each style at most once, a
    style eligible only while it does not conflict with anything already
@@ -225,6 +245,15 @@ was, and a table's rows are kept together.
    the line a placeholder carrying the compatible peels (the quote, and for an
    image one list style); anything else keeps all peels and the body goes to
    the markdown parser.
+3. **Parse each block alone**: a paragraph's or list item's lines, with the
+   lazy and indented lines that go on them and a setext heading's lines, are
+   one parse, so inline syntax pairs only inside its block and an HTML block
+   ends with it. Fenced lines and placeholders go into the text unparsed. A
+   paragraph keeps a line per source line. Under `BLANK_LINE`, a list item, which
+   has one line, takes its lazy and indented lines onto it, their line breaks
+   spaces, and a code span across lines is one line, as CommonMark reads both.
+   Under `NEWLINE` every source line is a paragraph of its own, as that export
+   wrote them.
 
 HTML import and export share the same block attachment path and derive their
 container nesting from the same snapshot walk, so both serializers agree on
@@ -247,12 +276,12 @@ after each block (a fenced line, or any line that is not blank; a bare `>`
 line is blank) the one blank line export would have written there is left
 out, and the rest are the editor's. Import reads the same line kinds as
 export, so it leaves out only what export writes: nothing between two fenced
-lines or two list items, a bare `>` only between two quoted lines, an empty
-line otherwise; and it keeps a blank line before a line indented like code,
-which the editor never writes and whose block needs it. The mapping is a
-bijection on the editor's own output, so the round trip is exact; a foreign
-file's single blank line between two fences, list items or quotes stays and
-keeps them apart, its single soft break still imports as two lines and is
+lines, a bare `>` only between two quoted lines, an empty line otherwise.
+Between two list items it leaves one
+out too, which export never writes there: a single one is CommonMark's loose
+list, whose items are one list. The mapping is a bijection on the editor's
+own output, so the round trip is exact; a foreign file's single blank line
+between two fences or quotes stays and keeps them apart, its single soft break still imports as two lines and is
 written back as two paragraphs, and its extra blank lines beyond the first
 are kept as editor blank lines. A blank line is a line with blank text and no
 block but a quote: an empty list item, heading or fenced line is a block.
@@ -323,6 +352,16 @@ gives the second run its own back, and un-fencing the first run's lines makes
 the second's the run's. A language holding a backtick or a line break cannot
 be written and is dropped.
 
+### Fence markers
+
+Export writes a run's fence one backtick longer than the longest backtick run
+a line of it starts with, so no line inside closes it early. A fence closes
+only at a marker with nothing after it, and an empty one is one empty fenced
+line. A fence a foreign file opens inside a quote or a list item, which a fence
+cannot stack with, is read as code out of its container: its lines lose the
+container's markers and indent, the fence ends with the container, and the
+item or quote line that opened it is dropped.
+
 ## Toggle semantics
 
 `toggleLineBlock` is the sweep behind every toolbar button. From one span-set
@@ -363,6 +402,34 @@ conflicting block demoted as a side effect) in one step.
   the same block, backspace merges directly, so joining two adjacent items is
   one keystroke.
 
+## Task lists
+
+GFM's task list items, `- [ ]` and `- [x]`, are list items with a box. A task
+is a line marker of its own, `TaskSpanStyle.UNCHECKED` or `CHECKED`, on a
+bullet or ordered item at any level. Its indent adds to the list's, and the
+box is drawn in the room it makes: in place of a bullet, after a numeral.
+
+- **A task needs a list.** `TaskKind`'s repair takes a task off a line that is
+  no list item, so a list toggled off, an item left with Enter, or a host's span
+  leaves no stray box. `toggleTaskList` makes plain lines bullet items first.
+- **Editing.** A click or a tap on the box checks or unchecks it, one undo step,
+  except in a read-only editor; elsewhere on the line it places the caret as
+  ever. The `ToggleTask` action does it for the caret's or the selection's tasks,
+  bound to no key by default (Ctrl+Enter, which apps use for it, is a host's),
+  and an accessibility action, "Check task" or "Uncheck task", for the caret's.
+  Enter after a checked item starts an unchecked one (`LineBlockStyle.
+  continuesAs`); on an empty task it leaves the list. Backspace at an item's
+  start takes the box off first, whatever the item follows or is nested in.
+- **API.** `toggleTaskList`, `setTaskChecked`, `toggleTaskChecked`,
+  `taskCheckedAt` and `isTask`.
+- **Markdown.** Import reads `[ ]`, `[x]` or `[X]` and then whitespace or the
+  line's end at the start of a list item's body; export writes `[ ] ` or `[x] `
+  after the item's marker, and escapes an item's text that would read as a box.
+  Typing `[ ] ` or `[x] ` at a list item's start makes it a task.
+- **HTML.** A task exports as GitHub writes one, an `<li class=
+  "task-list-item">` led by a disabled checkbox. A checkbox in a list item, or
+  Google Docs' `<li role="checkbox" aria-checked>`, imports as a task.
+
 ## Derived run state
 
 Ordered-list numerals and fence grouping are not stored. Layout derives them
@@ -375,14 +442,15 @@ consequences of its own.
 
 ## Known limitations
 
-- A nested `> > ` quote collapses one level per import pass; only lists nest.
+- A nested `> > ` quote imports as one quote; only lists nest.
 - Exporting a document whose last line is a heading appends a trailing blank
   line that survives re-import (stable at one extra line).
 - Toggling a style off after a blanket apply does not restore the styles lines
   carried before the apply; undo does. This matches conventional toolbar
   behavior.
-- A table is literal text: import unescapes a `\|` inside a cell and export
-  writes the pipe bare, so such a cell splits in two for other renderers.
+- A table cell's spaces at either end are not written: GFM trims them.
+- An ordered task item's numeral shares the gutter with the box, so a numeral of
+  three digits or more runs into it.
 - A fence language filled in by normalization is outside undo history: joining
   a fence that has a language with one that has none tags the second with the
   first's, and undoing the join leaves that tag in place.

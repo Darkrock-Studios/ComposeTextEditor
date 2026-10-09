@@ -101,7 +101,7 @@
   <div class="breadcrumbs"><a href="../../index.html">Editor</a><span class="delimiter">/</span><a href="../index.html">com.darkrockstudios.texteditor.state</a><span class="delimiter">/</span><span class="current">TextEditorState</span></div>
   <div class="cover ">
     <h1 class="cover"><span>Text</span><wbr><span>Editor</span><wbr><span><span>State</span></span></h1>
-    <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">class </span><a href="index.html">TextEditorState</a><span class="source-link-wrapper"><span class="source-link" data-element-type="source-link">(<a href="https://github.com/Darkrock-Studios/ComposeTextEditor/blob/main/ComposeTextEditor/src/commonMain/kotlin/com/darkrockstudios/texteditor/state/TextEditorState.kt#L116">source</a>)</span></span></div><p class="paragraph">The single source of truth for a <a href="../../com.darkrockstudios.texteditor/-text-editor.html">com.darkrockstudios.texteditor.TextEditor</a>: the document text, cursor, selection, rich spans, scroll position, and undo history. Create one with <a href="../remember-text-editor-state.html">rememberTextEditorState</a> and hoist it so you can drive the editor from outside.</p><p class="paragraph">Content lives in <a href="text-lines.html">textLines</a> (one <a href="https://developer.android.com/reference/kotlin/androidx/compose/ui/text/AnnotatedString.html">AnnotatedString</a> per line); replace it wholesale with <a href="set-text.html">setText</a> or read it back with <a href="get-all-text.html">getAllText</a>. Edit it through the cursor-aware operations (<a href="insert-string-at-cursor.html">insertStringAtCursor</a>, <a href="backspace-at-cursor.html">backspaceAtCursor</a>, …) or by range (<a href="replace.html">replace</a>, <a href="delete.html">delete</a>). Character styling goes through <a href="add-style-span.html">addStyleSpan</a>/<a href="remove-style-span.html">removeStyleSpan</a>, while block decorations (lists, blockquotes, code fences, highlights) go through the <code class="lang-kotlin">RichSpan</code> API (<a href="add-rich-span.html">addRichSpan</a>/<a href="remove-rich-span.html">removeRichSpan</a>). <a href="undo.html">undo</a>/<a href="redo.html">redo</a> walk the edit history, gated by <a href="can-undo.html">canUndo</a>/<a href="can-redo.html">canRedo</a>.</p><p class="paragraph">Related concerns are delegated to focused sub-objects exposed as properties: <a href="cursor.html">cursor</a> (caret position and movement), <a href="selector.html">selector</a> (selection), <a href="scroll-manager.html">scrollManager</a> (scrolling and visible range), and <a href="rich-span-manager.html">richSpanManager</a> (rich-span book-keeping). Observe changes reactively via <a href="cursor-data-flow.html">cursorDataFlow</a>, <a href="edit-operations.html">editOperations</a> and <a href="document-generation.html">documentGeneration</a>.</p><p class="paragraph">Coordinates are <a href="../../com.darkrockstudios.texteditor/-char-line-offset/index.html">CharLineOffset</a>s and <a href="../../com.darkrockstudios.texteditor/-text-editor-range/index.html">TextEditorRange</a>s; convert to and from flat character indices with <a href="get-character-index.html">getCharacterIndex</a>/<a href="get-offset-at-character.html">getOffsetAtCharacter</a>.</p><p class="paragraph">Inside composition, <a href="../remember-text-editor-state.html">rememberTextEditorState</a> creates one. A host that holds the document outside composition (a view model) creates one with the constructor that takes only the text, loads and edits it there, and passes it to the editor later.</p></div></div>
+    <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">class </span><a href="index.html">TextEditorState</a><span class="source-link-wrapper"><span class="source-link" data-element-type="source-link">(<a href="https://github.com/Darkrock-Studios/ComposeTextEditor/blob/main/ComposeTextEditor/src/commonMain/kotlin/com/darkrockstudios/texteditor/state/TextEditorState.kt#L120">source</a>)</span></span></div><p class="paragraph">The single source of truth for a <a href="../../com.darkrockstudios.texteditor/-text-editor.html">com.darkrockstudios.texteditor.TextEditor</a>: the document text, cursor, selection, rich spans, scroll position, and undo history. Create one with <a href="../remember-text-editor-state.html">rememberTextEditorState</a> and hoist it so you can drive the editor from outside.</p><p class="paragraph">Content lives in <a href="text-lines.html">textLines</a> (one <a href="https://developer.android.com/reference/kotlin/androidx/compose/ui/text/AnnotatedString.html">AnnotatedString</a> per line); replace it wholesale with <a href="set-text.html">setText</a> or read it back with <a href="get-all-text.html">getAllText</a>. Edit it through the cursor-aware operations (<a href="insert-string-at-cursor.html">insertStringAtCursor</a>, <a href="backspace-at-cursor.html">backspaceAtCursor</a>, …) or by range (<a href="replace.html">replace</a>, <a href="delete.html">delete</a>). Character styling goes through <a href="add-style-span.html">addStyleSpan</a>/<a href="remove-style-span.html">removeStyleSpan</a>, while block decorations (lists, blockquotes, code fences, highlights) go through the <code class="lang-kotlin">RichSpan</code> API (<a href="add-rich-span.html">addRichSpan</a>/<a href="remove-rich-span.html">removeRichSpan</a>). <a href="undo.html">undo</a>/<a href="redo.html">redo</a> walk the edit history, gated by <a href="can-undo.html">canUndo</a>/<a href="can-redo.html">canRedo</a>.</p><p class="paragraph">Related concerns are delegated to focused sub-objects exposed as properties: <a href="cursor.html">cursor</a> (caret position and movement), <a href="selector.html">selector</a> (selection), <a href="scroll-manager.html">scrollManager</a> (scrolling and visible range), and <a href="rich-span-manager.html">richSpanManager</a> (rich-span book-keeping). Observe changes reactively via <a href="cursor-data-flow.html">cursorDataFlow</a>, <a href="edit-operations.html">editOperations</a> and <a href="document-generation.html">documentGeneration</a>.</p><p class="paragraph">Coordinates are <a href="../../com.darkrockstudios.texteditor/-char-line-offset/index.html">CharLineOffset</a>s and <a href="../../com.darkrockstudios.texteditor/-text-editor-range/index.html">TextEditorRange</a>s; convert to and from flat character indices with <a href="get-character-index.html">getCharacterIndex</a>/<a href="get-offset-at-character.html">getOffsetAtCharacter</a>.</p><p class="paragraph">Inside composition, <a href="../remember-text-editor-state.html">rememberTextEditorState</a> creates one. A host that holds the document outside composition (a view model) creates one with the constructor that takes only the text, loads and edits it there, and passes it to the editor later.</p></div></div>
   </div>
   <div class="tabbedcontent">
     <div class="tabs-section" tabs-section="tabs-section"><button class="section-tab" data-active="" data-togglable="CONSTRUCTOR,TYPE,PROPERTY,FUNCTION">Members</button><button class="section-tab" data-togglable="CONSTRUCTOR,TYPE,PROPERTY,FUNCTION,EXTENSION_PROPERTY,EXTENSION_FUNCTION">Members &amp; Extensions</button></div>
@@ -377,7 +377,7 @@
                   </span></span></div>
               <div>
                 <div class="title">
-                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">val </span><a href="edit-behaviors.html">editBehaviors</a><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/-mutable-list/index.html">MutableList</a><span class="token operator">&lt;</span><a href="../-edit-behavior/index.html">EditBehavior</a><span class="token operator">&gt;</span></div><div class="brief "><p class="paragraph">Behaviors consulted before <a href="insert-newline-at-cursor.html">insertNewlineAtCursor</a>, <a href="backspace-at-cursor.html">backspaceAtCursor</a> and <a href="delete-at-cursor.html">deleteAtCursor</a>, and told after typed text (<a href="../insert-typed-string.html">insertTypedString</a> and the IME's commits), a line break or a paste has landed, in order; the first to claim an edit wins. Every input path reaches these, hardware keys and IME alike.</p></div></div></div>
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">val </span><a href="edit-behaviors.html">editBehaviors</a><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/-mutable-list/index.html">MutableList</a><span class="token operator">&lt;</span><a href="../-edit-behavior/index.html">EditBehavior</a><span class="token operator">&gt;</span></div><div class="brief "><p class="paragraph">Behaviors consulted before <a href="insert-newline-at-cursor.html">insertNewlineAtCursor</a>, <a href="backspace-at-cursor.html">backspaceAtCursor</a>, <a href="delete-at-cursor.html">deleteAtCursor</a> and Tab's indent, and told after typed text (<a href="../insert-typed-string.html">insertTypedString</a> and the IME's commits), a line break or a paste has landed, in order; the first to claim an edit wins. Every input path reaches these, hardware keys and IME alike.</p></div></div></div>
                 </div>
               </div>
             </div>
@@ -731,6 +731,36 @@
               </div>
             </div>
           </div>
+<a data-name="-105080509%2FProperties%2F-556598459" anchor-label="tableBorderColor" id="-105080509%2FProperties%2F-556598459" data-filterable-set=":ComposeTextEditor/commonMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":ComposeTextEditor/commonMain" data-filterable-set=":ComposeTextEditor/commonMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="table-border-color.html"><span>table</span><wbr><span>Border</span><wbr><span><span>Color</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-105080509%2FProperties%2F-556598459"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">var </span><a href="table-border-color.html">tableBorderColor</a><span class="token operator">: </span><a href="https://developer.android.com/reference/kotlin/androidx/compose/ui/graphics/Color.html">Color</a></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="1718376498%2FProperties%2F-556598459" anchor-label="tableHeaderBackgroundColor" id="1718376498%2FProperties%2F-556598459" data-filterable-set=":ComposeTextEditor/commonMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":ComposeTextEditor/commonMain" data-filterable-set=":ComposeTextEditor/commonMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="table-header-background-color.html"><span>table</span><wbr><span>Header</span><wbr><span>Background</span><wbr><span><span>Color</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="1718376498%2FProperties%2F-556598459"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">var </span><a href="table-header-background-color.html">tableHeaderBackgroundColor</a><span class="token operator">: </span><a href="https://developer.android.com/reference/kotlin/androidx/compose/ui/graphics/Color.html">Color</a></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
 <a data-name="1940497206%2FProperties%2F-556598459" anchor-label="tabSettings" id="1940497206%2FProperties%2F-556598459" data-filterable-set=":ComposeTextEditor/commonMain"></a>
           <div class="table-row table-row_content" data-filterable-current=":ComposeTextEditor/commonMain" data-filterable-set=":ComposeTextEditor/commonMain">
             <div class="main-subrow keyValue ">
@@ -990,6 +1020,21 @@
               </div>
             </div>
           </div>
+<a data-name="-1555816831%2FFunctions%2F-556598459" anchor-label="convertTableToText" id="-1555816831%2FFunctions%2F-556598459" data-filterable-set=":ComposeTextEditor/commonMain"></a>
+          <div class="table-row table-row_content" data-togglable="EXTENSION_FUNCTION" data-filterable-current=":ComposeTextEditor/commonMain" data-filterable-set=":ComposeTextEditor/commonMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="../convert-table-to-text.html"><span>convert</span><wbr><span>Table</span><wbr><span>To</span><wbr><span><span>Text</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-1555816831%2FFunctions%2F-556598459"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">fun </span><a href="index.html">TextEditorState</a><span class="token punctuation">.</span><a href="../convert-table-to-text.html"><span class="token function">convertTableToText</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">line<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a></span></span><span class="token punctuation">)</span></div><div class="brief "><p class="paragraph">Turns the table holding <a href="../convert-table-to-text.html">line</a> into plain lines, one a cell, keeping their text, as one undo step. Does nothing off a table.</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
 <a data-name="57269006%2FFunctions%2F-556598459" anchor-label="copyRichSpans" id="57269006%2FFunctions%2F-556598459" data-filterable-set=":ComposeTextEditor/commonMain"></a>
           <div class="table-row table-row_content" data-filterable-current=":ComposeTextEditor/commonMain" data-filterable-set=":ComposeTextEditor/commonMain">
             <div class="main-subrow keyValue ">
@@ -1075,7 +1120,7 @@
                   </span></span></div>
               <div>
                 <div class="title">
-                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">fun </span><a href="delete.html"><span class="token function">delete</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">range<span class="token operator">: </span><a href="../../com.darkrockstudios.texteditor/-text-editor-range/index.html">TextEditorRange</a></span></span><span class="token punctuation">)</span></div><div class="brief "><p class="paragraph">Deletes the text covered by <a href="delete.html">range</a>, leaving the cursor at the range start. A collapsed <a href="delete.html">range</a> covers nothing and is no edit at all.</p></div></div></div>
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">fun </span><a href="delete.html"><span class="token function">delete</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">range<span class="token operator">: </span><a href="../../com.darkrockstudios.texteditor/-text-editor-range/index.html">TextEditorRange</a></span></span><span class="token punctuation">)</span></div><div class="brief "><p class="paragraph">Deletes the text covered by <a href="delete.html">range</a>, leaving the cursor at the range start. A collapsed <a href="delete.html">range</a> covers nothing and is no edit at all. A range across a table's cells clears each cell it covers rather than joining them, and one taking a whole table and more deletes the table; see <code class="lang-kotlin">docs/design/tables.md</code>.</p></div></div></div>
                 </div>
               </div>
             </div>
@@ -1091,6 +1136,51 @@
               <div>
                 <div class="title">
                   <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">fun </span><a href="delete-at-cursor.html"><span class="token function">deleteAtCursor</span></a><span class="token punctuation">(</span><span class="token punctuation">)</span></div><div class="brief "><p class="paragraph">Deletes the grapheme cluster after the cursor, merging the next line into the current one when at end of line (forward delete), unless an <a href="../-edit-behavior/index.html">EditBehavior</a> claims the edit first.</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="1900666189%2FFunctions%2F-556598459" anchor-label="deleteTable" id="1900666189%2FFunctions%2F-556598459" data-filterable-set=":ComposeTextEditor/commonMain"></a>
+          <div class="table-row table-row_content" data-togglable="EXTENSION_FUNCTION" data-filterable-current=":ComposeTextEditor/commonMain" data-filterable-set=":ComposeTextEditor/commonMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="../delete-table.html"><span>delete</span><wbr><span><span>Table</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="1900666189%2FFunctions%2F-556598459"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">fun </span><a href="index.html">TextEditorState</a><span class="token punctuation">.</span><a href="../delete-table.html"><span class="token function">deleteTable</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">line<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a></span></span><span class="token punctuation">)</span></div><div class="brief "><p class="paragraph">Deletes the table holding <a href="../delete-table.html">line</a>, its text with it, as one undo step; the caret goes to the line that takes its place. Does nothing off a table.</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-155691305%2FFunctions%2F-556598459" anchor-label="deleteTableColumn" id="-155691305%2FFunctions%2F-556598459" data-filterable-set=":ComposeTextEditor/commonMain"></a>
+          <div class="table-row table-row_content" data-togglable="EXTENSION_FUNCTION" data-filterable-current=":ComposeTextEditor/commonMain" data-filterable-set=":ComposeTextEditor/commonMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="../delete-table-column.html"><span>delete</span><wbr><span>Table</span><wbr><span><span>Column</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-155691305%2FFunctions%2F-556598459"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">fun </span><a href="index.html">TextEditorState</a><span class="token punctuation">.</span><a href="../delete-table-column.html"><span class="token function">deleteTableColumn</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">line<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a></span></span><span class="token punctuation">)</span></div><div class="brief "><p class="paragraph">Deletes the column of cell <a href="../delete-table-column.html">line</a> from every row, and the whole table when it is its only column, as one undo step. Does nothing off a table.</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="1451465485%2FFunctions%2F-556598459" anchor-label="deleteTableRow" id="1451465485%2FFunctions%2F-556598459" data-filterable-set=":ComposeTextEditor/commonMain"></a>
+          <div class="table-row table-row_content" data-togglable="EXTENSION_FUNCTION" data-filterable-current=":ComposeTextEditor/commonMain" data-filterable-set=":ComposeTextEditor/commonMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="../delete-table-row.html"><span>delete</span><wbr><span>Table</span><wbr><span><span>Row</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="1451465485%2FFunctions%2F-556598459"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">fun </span><a href="index.html">TextEditorState</a><span class="token punctuation">.</span><a href="../delete-table-row.html"><span class="token function">deleteTableRow</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">line<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a></span></span><span class="token punctuation">)</span></div><div class="brief "><p class="paragraph">Deletes the table row holding <a href="../delete-table-row.html">line</a>, and the whole table when it is its only row, as one undo step; the caret goes to the row that takes its place, or the one above. Does nothing off a table.</p></div></div></div>
                 </div>
               </div>
             </div>
@@ -1455,6 +1545,51 @@
               </div>
             </div>
           </div>
+<a data-name="-1567548126%2FFunctions%2F-556598459" anchor-label="insertTable" id="-1567548126%2FFunctions%2F-556598459" data-filterable-set=":ComposeTextEditor/commonMain"></a>
+          <div class="table-row table-row_content" data-togglable="EXTENSION_FUNCTION" data-filterable-current=":ComposeTextEditor/commonMain" data-filterable-set=":ComposeTextEditor/commonMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="../insert-table.html"><span>insert</span><wbr><span><span>Table</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-1567548126%2FFunctions%2F-556598459"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">fun </span><a href="index.html">TextEditorState</a><span class="token punctuation">.</span><a href="../insert-table.html"><span class="token function">insertTable</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">rows<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a><span class="token punctuation">, </span></span><span class="parameter ">columns<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a></span></span><span class="token punctuation">)</span></div><div class="brief "><p class="paragraph">Inserts an empty table of <a href="../insert-table.html">rows</a> rows (the first is the header) and <a href="../insert-table.html">columns</a> columns (1 to <a href="../../com.darkrockstudios.texteditor.richstyle/-m-a-x_-t-a-b-l-e_-c-o-l-u-m-n-s.html">MAX_TABLE_COLUMNS</a>) after the caret's line, or in its place when that line is empty and carries no block, and puts the caret in its first cell. A table that would end the document, or meet another table, gets an empty line after it, and one never takes the place of a line right after another table. Does nothing with the caret in a table, since a cell holds no block.</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-1927103361%2FFunctions%2F-556598459" anchor-label="insertTableColumn" id="-1927103361%2FFunctions%2F-556598459" data-filterable-set=":ComposeTextEditor/commonMain"></a>
+          <div class="table-row table-row_content" data-togglable="EXTENSION_FUNCTION" data-filterable-current=":ComposeTextEditor/commonMain" data-filterable-set=":ComposeTextEditor/commonMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="../insert-table-column.html"><span>insert</span><wbr><span>Table</span><wbr><span><span>Column</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-1927103361%2FFunctions%2F-556598459"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">fun </span><a href="index.html">TextEditorState</a><span class="token punctuation">.</span><a href="../insert-table-column.html"><span class="token function">insertTableColumn</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">line<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a><span class="token punctuation">, </span></span><span class="parameter ">after<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html">Boolean</a><span class="token operator"> = </span><span class="token boolean">true</span></span></span><span class="token punctuation">)</span></div><div class="brief "><p class="paragraph">Inserts an empty column before or <a href="../insert-table-column.html">after</a> the column of cell <a href="../insert-table-column.html">line</a>, in every row, and puts the caret in its cell on <a href="../insert-table-column.html">line</a>'s row, as one undo step. Does nothing off a table or in one of <a href="../../com.darkrockstudios.texteditor.richstyle/-m-a-x_-t-a-b-l-e_-c-o-l-u-m-n-s.html">MAX_TABLE_COLUMNS</a> columns.</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="320995685%2FFunctions%2F-556598459" anchor-label="insertTableRow" id="320995685%2FFunctions%2F-556598459" data-filterable-set=":ComposeTextEditor/commonMain"></a>
+          <div class="table-row table-row_content" data-togglable="EXTENSION_FUNCTION" data-filterable-current=":ComposeTextEditor/commonMain" data-filterable-set=":ComposeTextEditor/commonMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="../insert-table-row.html"><span>insert</span><wbr><span>Table</span><wbr><span><span>Row</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="320995685%2FFunctions%2F-556598459"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">fun </span><a href="index.html">TextEditorState</a><span class="token punctuation">.</span><a href="../insert-table-row.html"><span class="token function">insertTableRow</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">line<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a><span class="token punctuation">, </span></span><span class="parameter ">below<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html">Boolean</a><span class="token operator"> = </span><span class="token boolean">true</span></span></span><span class="token punctuation">)</span></div><div class="brief "><p class="paragraph">Inserts an empty table row above or <a href="../insert-table-row.html">below</a> the row holding <a href="../insert-table-row.html">line</a>, its cells aligned as the table's columns are, and puts the caret in its cell under <a href="../insert-table-row.html">line</a>'s column, as one undo step. A row above the header becomes the header. Does nothing off a table.</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
 <a data-name="-1593003759%2FFunctions%2F-556598459" anchor-label="insertTypedCharacter" id="-1593003759%2FFunctions%2F-556598459" data-filterable-set=":ComposeTextEditor/commonMain"></a>
           <div class="table-row table-row_content" data-togglable="EXTENSION_FUNCTION" data-filterable-current=":ComposeTextEditor/commonMain" data-filterable-set=":ComposeTextEditor/commonMain">
             <div class="main-subrow keyValue ">
@@ -1560,6 +1695,21 @@
               </div>
             </div>
           </div>
+<a data-name="2052891073%2FFunctions%2F-556598459" anchor-label="isInlineOnlyLine" id="2052891073%2FFunctions%2F-556598459" data-filterable-set=":ComposeTextEditor/commonMain"></a>
+          <div class="table-row table-row_content" data-togglable="EXTENSION_FUNCTION" data-filterable-current=":ComposeTextEditor/commonMain" data-filterable-set=":ComposeTextEditor/commonMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="../is-inline-only-line.html"><span>is</span><wbr><span>Inline</span><wbr><span>Only</span><wbr><span><span>Line</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="2052891073%2FFunctions%2F-556598459"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">fun </span><a href="index.html">TextEditorState</a><span class="token punctuation">.</span><a href="../is-inline-only-line.html"><span class="token function">isInlineOnlyLine</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">line<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a></span></span><span class="token punctuation">)</span><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html">Boolean</a></div><div class="brief "><p class="paragraph">Whether <a href="../is-inline-only-line.html">line</a> holds inline content alone, as a table cell does; see <a href="../../com.darkrockstudios.texteditor.richstyle/-rich-span-style/inline-only.html">RichSpanStyle.inlineOnly</a>.</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
 <a data-name="-1210581041%2FFunctions%2F-556598459" anchor-label="isOrderedList" id="-1210581041%2FFunctions%2F-556598459" data-filterable-set=":ComposeTextEditor/commonMain"></a>
           <div class="table-row table-row_content" data-togglable="EXTENSION_FUNCTION" data-filterable-current=":ComposeTextEditor/commonMain" data-filterable-set=":ComposeTextEditor/commonMain">
             <div class="main-subrow keyValue ">
@@ -1571,6 +1721,36 @@
               <div>
                 <div class="title">
                   <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">fun </span><a href="index.html">TextEditorState</a><span class="token punctuation">.</span><a href="../is-ordered-list.html"><span class="token function">isOrderedList</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">line<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a></span></span><span class="token punctuation">)</span><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html">Boolean</a></div><div class="brief "><p class="paragraph">Whether <a href="../is-ordered-list.html">line</a> is rendered as an ordered-list item, at any nesting level.</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="17238666%2FFunctions%2F-556598459" anchor-label="isTableCell" id="17238666%2FFunctions%2F-556598459" data-filterable-set=":ComposeTextEditor/commonMain"></a>
+          <div class="table-row table-row_content" data-togglable="EXTENSION_FUNCTION" data-filterable-current=":ComposeTextEditor/commonMain" data-filterable-set=":ComposeTextEditor/commonMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="../is-table-cell.html"><span>is</span><wbr><span>Table</span><wbr><span><span>Cell</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="17238666%2FFunctions%2F-556598459"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">fun </span><a href="index.html">TextEditorState</a><span class="token punctuation">.</span><a href="../is-table-cell.html"><span class="token function">isTableCell</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">line<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a></span></span><span class="token punctuation">)</span><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html">Boolean</a></div><div class="brief "><p class="paragraph">Whether <a href="../is-table-cell.html">line</a> is a table cell.</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-1850131915%2FFunctions%2F-556598459" anchor-label="isTask" id="-1850131915%2FFunctions%2F-556598459" data-filterable-set=":ComposeTextEditor/commonMain"></a>
+          <div class="table-row table-row_content" data-togglable="EXTENSION_FUNCTION" data-filterable-current=":ComposeTextEditor/commonMain" data-filterable-set=":ComposeTextEditor/commonMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="../is-task.html"><span>is</span><wbr><span><span>Task</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-1850131915%2FFunctions%2F-556598459"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">fun </span><a href="index.html">TextEditorState</a><span class="token punctuation">.</span><a href="../is-task.html"><span class="token function">isTask</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">line<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a></span></span><span class="token punctuation">)</span><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html">Boolean</a></div><div class="brief "><p class="paragraph">Whether <a href="../is-task.html">line</a> is a task item, checked or not.</p></div></div></div>
                 </div>
               </div>
             </div>
@@ -1840,7 +2020,7 @@
                   </span></span></div>
               <div>
                 <div class="title">
-                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">fun </span><a href="replace.html"><span class="token function">replace</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">range<span class="token operator">: </span><a href="../../com.darkrockstudios.texteditor/-text-editor-range/index.html">TextEditorRange</a><span class="token punctuation">, </span></span><span class="parameter ">newText<span class="token operator">: </span><a href="https://developer.android.com/reference/kotlin/androidx/compose/ui/text/AnnotatedString.html">AnnotatedString</a><span class="token punctuation">, </span></span><span class="parameter ">inheritStyle<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html">Boolean</a><span class="token operator"> = </span><span class="token boolean">false</span></span></span><span class="token punctuation">)</span><span class="token operator">: </span><a href="../../com.darkrockstudios.texteditor/-text-editor-range/index.html">TextEditorRange</a><span class="token operator">?</span></div><div class="brief "><p class="paragraph">Replaces the text in <a href="replace.html">range</a> with <a href="replace.html">newText</a>, preserving the latter's character-level spans and moving the cursor to the end of the inserted text.</p></div><div class="symbol monospace"><span class="token keyword">fun </span><a href="replace.html"><span class="token function">replace</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">range<span class="token operator">: </span><a href="../../com.darkrockstudios.texteditor/-text-editor-range/index.html">TextEditorRange</a><span class="token punctuation">, </span></span><span class="parameter ">newText<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html">String</a><span class="token punctuation">, </span></span><span class="parameter ">inheritStyle<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html">Boolean</a><span class="token operator"> = </span><span class="token boolean">false</span></span></span><span class="token punctuation">)</span><span class="token operator">: </span><a href="../../com.darkrockstudios.texteditor/-text-editor-range/index.html">TextEditorRange</a><span class="token operator">?</span></div><div class="brief "><p class="paragraph">Replaces the text in <a href="replace.html">range</a> with plain <a href="replace.html">newText</a>.</p></div></div></div>
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">fun </span><a href="replace.html"><span class="token function">replace</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">range<span class="token operator">: </span><a href="../../com.darkrockstudios.texteditor/-text-editor-range/index.html">TextEditorRange</a><span class="token punctuation">, </span></span><span class="parameter ">newText<span class="token operator">: </span><a href="https://developer.android.com/reference/kotlin/androidx/compose/ui/text/AnnotatedString.html">AnnotatedString</a><span class="token punctuation">, </span></span><span class="parameter ">inheritStyle<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html">Boolean</a><span class="token operator"> = </span><span class="token boolean">false</span></span></span><span class="token punctuation">)</span><span class="token operator">: </span><a href="../../com.darkrockstudios.texteditor/-text-editor-range/index.html">TextEditorRange</a><span class="token operator">?</span></div><div class="brief "><p class="paragraph">Replaces the text in <a href="replace.html">range</a> with <a href="replace.html">newText</a>, preserving the latter's character-level spans and moving the cursor to the end of the inserted text. A <a href="replace.html">range</a> across a table's cells is deleted as <a href="delete.html">delete</a> has it and <a href="replace.html">newText</a> goes in at its start, its line breaks spaces when that is a cell.</p></div><div class="symbol monospace"><span class="token keyword">fun </span><a href="replace.html"><span class="token function">replace</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">range<span class="token operator">: </span><a href="../../com.darkrockstudios.texteditor/-text-editor-range/index.html">TextEditorRange</a><span class="token punctuation">, </span></span><span class="parameter ">newText<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html">String</a><span class="token punctuation">, </span></span><span class="parameter ">inheritStyle<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html">Boolean</a><span class="token operator"> = </span><span class="token boolean">false</span></span></span><span class="token punctuation">)</span><span class="token operator">: </span><a href="../../com.darkrockstudios.texteditor/-text-editor-range/index.html">TextEditorRange</a><span class="token operator">?</span></div><div class="brief "><p class="paragraph">Replaces the text in <a href="replace.html">range</a> with plain <a href="replace.html">newText</a>.</p></div></div></div>
                 </div>
               </div>
             </div>
@@ -1945,7 +2125,7 @@
                   </span></span></div>
               <div>
                 <div class="title">
-                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">fun </span><a href="index.html">TextEditorState</a><span class="token punctuation">.</span><a href="../set-link.html"><span class="token function">setLink</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">range<span class="token operator">: </span><a href="../../com.darkrockstudios.texteditor/-text-editor-range/index.html">TextEditorRange</a><span class="token punctuation">, </span></span><span class="parameter ">url<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html">String</a></span></span><span class="token punctuation">)</span><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html">Boolean</a></div><div class="brief "><p class="paragraph">Makes <a href="../set-link.html">range</a> a hyperlink to <a href="../set-link.html">url</a>: bakes the configured link style over the text and attaches the <a href="../../com.darkrockstudios.texteditor.richstyle/-link-span-style/index.html">LinkSpanStyle</a> that carries the destination through serialization, as one undo step. A link to elsewhere over some of <a href="../set-link.html">range</a> keeps only its parts outside it. A destination <a href="../../com.darkrockstudios.texteditor.html/sanitize-link-url.html">sanitizeLinkUrl</a> refuses under <a href="allowed-link-schemes.html">TextEditorState.allowedLinkSchemes</a> (<code class="lang-kotlin">javascript:</code>, <code class="lang-kotlin">data:</code>, <code class="lang-kotlin">vbscript:</code>, <code class="lang-kotlin">file:</code> always) is not set, and answers false.</p></div></div></div>
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">fun </span><a href="index.html">TextEditorState</a><span class="token punctuation">.</span><a href="../set-link.html"><span class="token function">setLink</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">range<span class="token operator">: </span><a href="../../com.darkrockstudios.texteditor/-text-editor-range/index.html">TextEditorRange</a><span class="token punctuation">, </span></span><span class="parameter ">url<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html">String</a></span></span><span class="token punctuation">)</span><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html">Boolean</a></div><div class="brief "><p class="paragraph">Makes <a href="../set-link.html">range</a> a hyperlink to <a href="../set-link.html">url</a>: bakes the configured link style over the text and attaches the <a href="../../com.darkrockstudios.texteditor.richstyle/-link-span-style/index.html">LinkSpanStyle</a> that carries the destination through serialization, as one undo step. A link to elsewhere over some of <a href="../set-link.html">range</a> keeps only its parts outside it. A destination <a href="../../com.darkrockstudios.texteditor.html/sanitize-link-url.html">sanitizeLinkUrl</a> refuses under <a href="allowed-link-schemes.html">TextEditorState.allowedLinkSchemes</a> (<code class="lang-kotlin">javascript:</code>, <code class="lang-kotlin">data:</code>, <code class="lang-kotlin">vbscript:</code>, <code class="lang-kotlin">file:</code> always) is not set, and answers false, as does a <a href="../set-link.html">range</a> on a code fence line, whose text is code.</p></div></div></div>
                 </div>
               </div>
             </div>
@@ -1960,7 +2140,37 @@
                   </span></span></div>
               <div>
                 <div class="title">
-                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">fun </span><a href="index.html">TextEditorState</a><span class="token punctuation">.</span><a href="../set-paragraph-format.html"><span class="token function">setParagraphFormat</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">range<span class="token operator">: </span><a href="../../com.darkrockstudios.texteditor/-text-editor-range/index.html">TextEditorRange</a><span class="token punctuation">, </span></span><span class="parameter ">format<span class="token operator">: </span><a href="../../com.darkrockstudios.texteditor.richstyle/-paragraph-format-span-style/index.html">ParagraphFormatSpanStyle</a><span class="token operator">?</span></span></span><span class="token punctuation">)</span></div><div class="brief "><p class="paragraph"><a href="../set-paragraph-format.html">setParagraphFormat</a> over the lines <a href="../set-paragraph-format.html">range</a> touches.</p></div><div class="symbol monospace"><span class="token keyword">fun </span><a href="index.html">TextEditorState</a><span class="token punctuation">.</span><a href="../set-paragraph-format.html"><span class="token function">setParagraphFormat</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">lines<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.ranges/-int-range/index.html">IntRange</a><span class="token punctuation">, </span></span><span class="parameter ">format<span class="token operator">: </span><a href="../../com.darkrockstudios.texteditor.richstyle/-paragraph-format-span-style/index.html">ParagraphFormatSpanStyle</a><span class="token operator">?</span></span></span><span class="token punctuation">)</span></div><div class="brief "><p class="paragraph">Gives every line in <a href="../set-paragraph-format.html">lines</a> the paragraph <a href="../set-paragraph-format.html">format</a>, replacing the one it had; null restores the editor's defaults. One undo step.</p></div></div></div>
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">fun </span><a href="index.html">TextEditorState</a><span class="token punctuation">.</span><a href="../set-paragraph-format.html"><span class="token function">setParagraphFormat</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">range<span class="token operator">: </span><a href="../../com.darkrockstudios.texteditor/-text-editor-range/index.html">TextEditorRange</a><span class="token punctuation">, </span></span><span class="parameter ">format<span class="token operator">: </span><a href="../../com.darkrockstudios.texteditor.richstyle/-paragraph-format-span-style/index.html">ParagraphFormatSpanStyle</a><span class="token operator">?</span></span></span><span class="token punctuation">)</span></div><div class="brief "><p class="paragraph"><a href="../set-paragraph-format.html">setParagraphFormat</a> over the lines <a href="../set-paragraph-format.html">range</a> touches.</p></div><div class="symbol monospace"><span class="token keyword">fun </span><a href="index.html">TextEditorState</a><span class="token punctuation">.</span><a href="../set-paragraph-format.html"><span class="token function">setParagraphFormat</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">lines<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.ranges/-int-range/index.html">IntRange</a><span class="token punctuation">, </span></span><span class="parameter ">format<span class="token operator">: </span><a href="../../com.darkrockstudios.texteditor.richstyle/-paragraph-format-span-style/index.html">ParagraphFormatSpanStyle</a><span class="token operator">?</span></span></span><span class="token punctuation">)</span></div><div class="brief "><p class="paragraph">Gives every line in <a href="../set-paragraph-format.html">lines</a> the paragraph <a href="../set-paragraph-format.html">format</a>, replacing the one it had; null restores the editor's defaults. An inline-only line (a table cell) takes no format. One undo step.</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="637294312%2FFunctions%2F-556598459" anchor-label="setTableColumnAlignment" id="637294312%2FFunctions%2F-556598459" data-filterable-set=":ComposeTextEditor/commonMain"></a>
+          <div class="table-row table-row_content" data-togglable="EXTENSION_FUNCTION" data-filterable-current=":ComposeTextEditor/commonMain" data-filterable-set=":ComposeTextEditor/commonMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="../set-table-column-alignment.html"><span>set</span><wbr><span>Table</span><wbr><span>Column</span><wbr><span><span>Alignment</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="637294312%2FFunctions%2F-556598459"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">fun </span><a href="index.html">TextEditorState</a><span class="token punctuation">.</span><a href="../set-table-column-alignment.html"><span class="token function">setTableColumnAlignment</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">line<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a><span class="token punctuation">, </span></span><span class="parameter ">column<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a><span class="token punctuation">, </span></span><span class="parameter ">alignment<span class="token operator">: </span><a href="../../com.darkrockstudios.texteditor.richstyle/-table-alignment/index.html">TableAlignment</a></span></span><span class="token punctuation">)</span></div><div class="brief "><p class="paragraph">Sets the alignment of <a href="../set-table-column-alignment.html">column</a> in the table holding <a href="../set-table-column-alignment.html">line</a>, every cell of the column, as one undo step. Does nothing off a table or past its columns.</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="1709609152%2FFunctions%2F-556598459" anchor-label="setTaskChecked" id="1709609152%2FFunctions%2F-556598459" data-filterable-set=":ComposeTextEditor/commonMain"></a>
+          <div class="table-row table-row_content" data-togglable="EXTENSION_FUNCTION" data-filterable-current=":ComposeTextEditor/commonMain" data-filterable-set=":ComposeTextEditor/commonMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="../set-task-checked.html"><span>set</span><wbr><span>Task</span><wbr><span><span>Checked</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="1709609152%2FFunctions%2F-556598459"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">fun </span><a href="index.html">TextEditorState</a><span class="token punctuation">.</span><a href="../set-task-checked.html"><span class="token function">setTaskChecked</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">line<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a><span class="token punctuation">, </span></span><span class="parameter ">checked<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html">Boolean</a></span></span><span class="token punctuation">)</span></div><div class="brief "><p class="paragraph">Checks or unchecks the task on <a href="../set-task-checked.html">line</a>. Does nothing off a task.</p></div></div></div>
                 </div>
               </div>
             </div>
@@ -1991,6 +2201,51 @@
               <div>
                 <div class="title">
                   <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">fun </span><a href="snapshot.html"><span class="token function">snapshot</span></a><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token operator">: </span><a href="../-document-snapshot/index.html">DocumentSnapshot</a></div><div class="brief "><p class="paragraph">Returns the document's text and rich spans as they stood after the same edit.</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-1143983409%2FFunctions%2F-556598459" anchor-label="tableAt" id="-1143983409%2FFunctions%2F-556598459" data-filterable-set=":ComposeTextEditor/commonMain"></a>
+          <div class="table-row table-row_content" data-togglable="EXTENSION_FUNCTION" data-filterable-current=":ComposeTextEditor/commonMain" data-filterable-set=":ComposeTextEditor/commonMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="../table-at.html"><span>table</span><wbr><span><span>At</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-1143983409%2FFunctions%2F-556598459"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">fun </span><a href="index.html">TextEditorState</a><span class="token punctuation">.</span><a href="../table-at.html"><span class="token function">tableAt</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">line<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a></span></span><span class="token punctuation">)</span><span class="token operator">: </span><a href="../../com.darkrockstudios.texteditor.richstyle/-text-editor-table/index.html">TextEditorTable</a><span class="token operator">?</span></div><div class="brief "><p class="paragraph">The table holding <a href="../table-at.html">line</a>, or null when <a href="../table-at.html">line</a> is no table cell.</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="285910925%2FFunctions%2F-556598459" anchor-label="tableCellAt" id="285910925%2FFunctions%2F-556598459" data-filterable-set=":ComposeTextEditor/commonMain"></a>
+          <div class="table-row table-row_content" data-togglable="EXTENSION_FUNCTION" data-filterable-current=":ComposeTextEditor/commonMain" data-filterable-set=":ComposeTextEditor/commonMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="../table-cell-at.html"><span>table</span><wbr><span>Cell</span><wbr><span><span>At</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="285910925%2FFunctions%2F-556598459"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">fun </span><a href="index.html">TextEditorState</a><span class="token punctuation">.</span><a href="../table-cell-at.html"><span class="token function">tableCellAt</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">line<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a></span></span><span class="token punctuation">)</span><span class="token operator">: </span><a href="../../com.darkrockstudios.texteditor.richstyle/-table-cell-span-style/index.html">TableCellSpanStyle</a><span class="token operator">?</span></div><div class="brief "><p class="paragraph">The cell marker on <a href="../table-cell-at.html">line</a>, or null when <a href="../table-cell-at.html">line</a> is no table cell.</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="443271739%2FFunctions%2F-556598459" anchor-label="taskCheckedAt" id="443271739%2FFunctions%2F-556598459" data-filterable-set=":ComposeTextEditor/commonMain"></a>
+          <div class="table-row table-row_content" data-togglable="EXTENSION_FUNCTION" data-filterable-current=":ComposeTextEditor/commonMain" data-filterable-set=":ComposeTextEditor/commonMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="../task-checked-at.html"><span>task</span><wbr><span>Checked</span><wbr><span><span>At</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="443271739%2FFunctions%2F-556598459"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">fun </span><a href="index.html">TextEditorState</a><span class="token punctuation">.</span><a href="../task-checked-at.html"><span class="token function">taskCheckedAt</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">line<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a></span></span><span class="token punctuation">)</span><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html">Boolean</a><span class="token operator">?</span></div><div class="brief "><p class="paragraph">Whether the task on <a href="../task-checked-at.html">line</a> is checked, or null when <a href="../task-checked-at.html">line</a> is no task item.</p></div></div></div>
                 </div>
               </div>
             </div>
@@ -2111,6 +2366,51 @@
               <div>
                 <div class="title">
                   <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">fun </span><a href="index.html">TextEditorState</a><span class="token punctuation">.</span><a href="../toggle-span-style.html"><span class="token function">toggleSpanStyle</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">style<span class="token operator">: </span><a href="https://developer.android.com/reference/kotlin/androidx/compose/ui/text/SpanStyle.html">SpanStyle</a></span></span><span class="token punctuation">)</span></div><div class="brief "><p class="paragraph">Toggles <a href="../toggle-span-style.html">style</a> the way the built-in formatting actions do, for toolbars and host code that want the same behaviour:</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="1332322018%2FFunctions%2F-556598459" anchor-label="toggleTaskChecked" id="1332322018%2FFunctions%2F-556598459" data-filterable-set=":ComposeTextEditor/commonMain"></a>
+          <div class="table-row table-row_content" data-togglable="EXTENSION_FUNCTION" data-filterable-current=":ComposeTextEditor/commonMain" data-filterable-set=":ComposeTextEditor/commonMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="../toggle-task-checked.html"><span>toggle</span><wbr><span>Task</span><wbr><span><span>Checked</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="1332322018%2FFunctions%2F-556598459"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">fun </span><a href="index.html">TextEditorState</a><span class="token punctuation">.</span><a href="../toggle-task-checked.html"><span class="token function">toggleTaskChecked</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">line<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a></span></span><span class="token punctuation">)</span></div><div class="brief "><p class="paragraph">Checks the task on <a href="../toggle-task-checked.html">line</a> when it is unchecked, and unchecks it when it is checked.</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-340370314%2FFunctions%2F-556598459" anchor-label="toggleTaskList" id="-340370314%2FFunctions%2F-556598459" data-filterable-set=":ComposeTextEditor/commonMain"></a>
+          <div class="table-row table-row_content" data-togglable="EXTENSION_FUNCTION" data-filterable-current=":ComposeTextEditor/commonMain" data-filterable-set=":ComposeTextEditor/commonMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="../toggle-task-list.html"><span>toggle</span><wbr><span>Task</span><wbr><span><span>List</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-340370314%2FFunctions%2F-556598459"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">fun </span><a href="index.html">TextEditorState</a><span class="token punctuation">.</span><a href="../toggle-task-list.html"><span class="token function">toggleTaskList</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">lines<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.ranges/-int-range/index.html">IntRange</a></span></span><span class="token punctuation">)</span></div><div class="brief "><p class="paragraph">Makes <a href="../toggle-task-list.html">lines</a> unchecked tasks, a line that is no list item a bullet item first, or, when every one already is a task, takes their boxes off, leaving the list items. A task keeps its state. A rule, an image or a table cell keeps its line.</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="305188160%2FFunctions%2F-556598459" anchor-label="toggleTasksChecked" id="305188160%2FFunctions%2F-556598459" data-filterable-set=":ComposeTextEditor/commonMain"></a>
+          <div class="table-row table-row_content" data-togglable="EXTENSION_FUNCTION" data-filterable-current=":ComposeTextEditor/commonMain" data-filterable-set=":ComposeTextEditor/commonMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="../toggle-tasks-checked.html"><span>toggle</span><wbr><span>Tasks</span><wbr><span><span>Checked</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="305188160%2FFunctions%2F-556598459"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">fun </span><a href="index.html">TextEditorState</a><span class="token punctuation">.</span><a href="../toggle-tasks-checked.html"><span class="token function">toggleTasksChecked</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">lines<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.ranges/-int-range/index.html">IntRange</a></span></span><span class="token punctuation">)</span></div><div class="brief "><p class="paragraph">Checks every task in <a href="../toggle-tasks-checked.html">lines</a>, or unchecks them when every one is checked, as one undo step. Lines that are no task are left alone.</p></div></div></div>
                 </div>
               </div>
             </div>
