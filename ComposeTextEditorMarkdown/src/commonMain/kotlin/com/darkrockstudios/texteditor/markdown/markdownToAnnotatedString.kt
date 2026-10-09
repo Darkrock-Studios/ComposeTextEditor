@@ -52,13 +52,16 @@ fun String.toAnnotatedStringFromMarkdown(
 /**
  * Parses like [toAnnotatedStringFromMarkdown] but also reports every inline
  * link's text range and destination, so an importer can attach the semantic
- * link spans the [AnnotatedString] itself cannot carry.
+ * link spans the [AnnotatedString] itself cannot carry. Without
+ * [joinCodeSpanLines] a code span across lines keeps its line breaks, each of the
+ * source's lines its own.
  */
 internal fun String.parseMarkdownWithLinks(
 	styles: RichTextStyles,
 	literalLines: Set<Int>? = null,
 	allowedLinkSchemes: Set<String>,
 	linkDefinitions: Map<String, String> = emptyMap(),
+	joinCodeSpanLines: Boolean = true,
 ): MarkdownParseResult {
 	val normalized = normalizeLineEndings()
 	val standIns = IndentStandIns.forSource(normalized)
@@ -74,7 +77,7 @@ internal fun String.parseMarkdownWithLinks(
 		.let { withEscapedDelimitersAsEntities(it, literal) }
 	val flavour = GFMFlavourDescriptor()
 	val parsedTree = MarkdownParser(flavour).buildMarkdownTreeFromString(source)
-	val context = MarkdownRenderContext(styles, allowedLinkSchemes, source.lineStarts(literalLines.orEmpty()), linkDefinitions)
+	val context = MarkdownRenderContext(styles, allowedLinkSchemes, source.lineStarts(literalLines.orEmpty()), linkDefinitions, joinCodeSpanLines)
 	val annotated = buildAnnotatedString {
 		appendMarkdownChildren(source, parsedTree, context)
 	}
@@ -364,6 +367,8 @@ internal class MarkdownRenderContext(
 	val literalLineStarts: Set<Int> = emptySet(),
 	/** The destinations of the document's link reference definitions, by normalized label. */
 	val linkDefinitions: Map<String, String> = emptyMap(),
+	/** Whether a code span's line breaks are spaces, its lines one, or each of its lines stays its own. */
+	val joinCodeSpanLines: Boolean = true,
 ) {
 	val links = mutableListOf<ParsedLink>()
 
@@ -561,12 +566,12 @@ private fun AnnotatedString.Builder.appendMarkdownNode(
 		}
 
 		MarkdownElementTypes.CODE_SPAN -> {
-			if ('\n' in nodeText) {
+			if ('\n' in nodeText && context.joinCodeSpanLines) {
 				var line = (0 until node.startOffset).count { original[it] == '\n' }
 				nodeText.forEach { if (it == '\n') context.joinedLines += ++line }
 			}
 			pushStyle(styles.codeStyle)
-			append(codeSpanContent(nodeText))
+			append(codeSpanContent(nodeText, context.joinCodeSpanLines))
 			pop()
 		}
 
@@ -807,12 +812,13 @@ private val LINE_BREAK_AND_INDENT = Regex("""\n[ \t]*""")
 
 /**
  * A code span's text as CommonMark reads it: inside its backtick strings, each line break
- * a space (the next line's indent off, as a paragraph's lines lose theirs), less one space
- * at each end when both ends have one and it is not all spaces.
+ * a space when [joinLines] (the next line's indent off, as a paragraph's lines lose
+ * theirs), less one space at each end when both ends have one and it is not all spaces.
  */
-private fun codeSpanContent(node: String): String {
+private fun codeSpanContent(node: String, joinLines: Boolean): String {
 	val fence = node.takeWhile { it == '`' }.length
-	val code = node.substring(fence, (node.length - fence).coerceAtLeast(fence)).replace(LINE_BREAK_AND_INDENT, " ")
+	val inside = node.substring(fence, (node.length - fence).coerceAtLeast(fence))
+	val code = if (joinLines) inside.replace(LINE_BREAK_AND_INDENT, " ") else inside
 	val padded = code.length >= 2 && code.first() == ' ' && code.last() == ' ' && code.any { it != ' ' }
 	return if (padded) code.substring(1, code.length - 1) else code
 }

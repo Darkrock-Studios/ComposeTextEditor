@@ -1056,6 +1056,8 @@ class MarkdownExtension(
 						literalLines = emptySet(),
 						allowedLinkSchemes = editorState.allowedLinkSchemes,
 						linkDefinitions = linkDefinitions,
+						// Under single newlines each source line is a paragraph of the editor's.
+						joinCodeSpanLines = blankLineParagraphs,
 					)
 					var text = parsed.annotatedString
 					var blockLinks = parsed.links
