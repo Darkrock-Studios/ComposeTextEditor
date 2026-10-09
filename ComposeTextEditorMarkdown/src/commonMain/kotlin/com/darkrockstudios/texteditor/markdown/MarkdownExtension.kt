@@ -2,6 +2,7 @@ package com.darkrockstudios.texteditor.markdown
 
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.richstyle.BlockquoteSpanStyle
@@ -47,36 +48,6 @@ import com.darkrockstudios.texteditor.state.toggleCodeFence
 import com.darkrockstudios.texteditor.state.toggleHeader
 import com.darkrockstudios.texteditor.state.toggleOrderedList
 
-/**
- * Matches a line whose entire content is a single markdown image, optionally
- * surrounded by whitespace. Captures alt text (group 1) and URL (group 2).
- * URL must not contain whitespace or close-paren; alt text must not contain
- * close-bracket.
- */
-private val STANDALONE_IMAGE_REGEX =
-	Regex("""^\s*!\[([^\]]*)\]\(([^)\s]+)\)\s*$""")
-
-/**
- * Markdown special characters that need escaping inside fenced code lines so
- * the parser treats them as literal text. Includes `\` itself so a literal
- * backslash survives, and `&` so an entity reference does. The parser strips the
- * preceding `\` via `decodeMarkdownText`, leaving the original character in the
- * output.
- */
-private val MARKDOWN_ESCAPE_CHARS: Set<Char> = setOf(
-	'\\', '`', '*', '_', '{', '}', '[', ']', '(', ')',
-	'#', '+', '-', '.', '!', '|', '>', '~', '<', '=', '&',
-)
-
-private fun String.escapeMarkdownSpecials(): String {
-	val sb = StringBuilder(length + 4)
-	for (c in this) {
-		if (c in MARKDOWN_ESCAPE_CHARS) sb.append('\\')
-		sb.append(c)
-	}
-	return sb.toString()
-}
-
 private data class CodeFenceStripResult(
 	/** Markdown text with all ` ``` ` marker lines removed. */
 	val text: String,
@@ -84,6 +55,8 @@ private data class CodeFenceStripResult(
 	val fencedLines: Set<Int>,
 	/** The info string of the fence each fenced line belongs to, keyed by its index in [text]. */
 	val infoStrings: Map<Int, String>,
+	/** Indices into [text]'s lines that go on the setext heading on the line before: one heading's text. */
+	val headingContinuations: Set<Int> = emptySet(),
 )
 
 /**
@@ -140,15 +113,110 @@ private fun stripCodeFences(markdown: String): CodeFenceStripResult {
 	)
 }
 
+private val LIST_ITEM_MARKER = Regex("""^([-*+]|\d{1,9}[.)])([ \t]*)""")
+
+/**
+ * [strip] with each indented code block's lines fenced, four columns of indent off: a run
+ * of lines indented four or more, through blank lines between them, that starts where a
+ * paragraph is not open to take it as its text. One inside a quote or a list item, which a
+ * fence cannot stack with, stays as it is. Export never writes such a line: it writes a
+ * leading indent as entities. Only under [ParagraphSeparator.BLANK_LINE]: export before
+ * 3.0 wrote a leading indent as it is.
+ */
+private fun withIndentedCode(strip: CodeFenceStripResult): CodeFenceStripResult {
+	val lines = strip.text.lines()
+	if (lines.none { columnsOf(it).first >= 4 }) return strip
+	val code = HashMap<Int, String>()
+	// Content columns of the open list items, outermost first.
+	val itemColumns = ArrayList<Int>()
+	var paragraphOpen = false
+	var index = 0
+	while (index < lines.size) {
+		val line = lines[index]
+		if (index in strip.fencedLines) {
+			paragraphOpen = false
+			index++
+			continue
+		}
+		if (line.isBlank()) {
+			paragraphOpen = false
+			index++
+			continue
+		}
+		val (indent, indentChars) = columnsOf(line)
+		val body = line.substring(indentChars)
+		val inItem = itemColumns.isNotEmpty() && indent >= itemColumns.first()
+		if (indent >= 4 && !inItem && !paragraphOpen) {
+			var end = index
+			var last = index
+			while (end < lines.size && end !in strip.fencedLines && (lines[end].isBlank() || columnsOf(lines[end]).first >= 4)) {
+				if (lines[end].isNotBlank()) last = end
+				end++
+			}
+			for (taken in index..last) code[taken] = withoutColumns(lines[taken], 4)
+			itemColumns.clear()
+			index = last + 1
+			continue
+		}
+		val marker = if (indent - (itemColumns.lastOrNull { it <= indent } ?: 0) < 4) LIST_ITEM_MARKER.find(body) else null
+		val markerIsItem = marker != null && (marker.groupValues[2].isNotEmpty() || marker.value.length == body.length)
+		when {
+			markerIsItem && !isThematicBreak(line) -> {
+				val spaces = columnsOf(marker!!.groupValues[2]).first
+				val width = marker.groupValues[1].length + if (spaces in 1..4 && marker.value.length < body.length) spaces else 1
+				while (itemColumns.isNotEmpty() && itemColumns.last() > indent) itemColumns.removeAt(itemColumns.lastIndex)
+				itemColumns += indent + width
+				paragraphOpen = marker.value.length < body.length
+			}
+			paragraphOpen && SETEXT_UNDERLINE_LINE.matches(line) -> paragraphOpen = false
+			else -> {
+				// A line outside every item ends the list, unless it is a paragraph's lazy text.
+				if (!inItem && !paragraphOpen) itemColumns.clear()
+				paragraphOpen = splitQuote(body).second.let(::isParagraphText)
+			}
+		}
+		index++
+	}
+	if (code.isEmpty()) return strip
+	return strip.copy(
+		text = lines.mapIndexed { line, text -> code[line] ?: text }.joinToString("\n"),
+		fencedLines = strip.fencedLines + code.keys,
+	)
+}
+
+/** How many columns [line]'s leading spaces and tabs span, a tab to the next multiple of four, and how many characters they are. */
+private fun columnsOf(line: String): Pair<Int, Int> {
+	var columns = 0
+	var chars = 0
+	while (chars < line.length && (line[chars] == ' ' || line[chars] == '\t')) {
+		columns = if (line[chars] == '\t') columns + 4 - columns % 4 else columns + 1
+		chars++
+	}
+	return columns to chars
+}
+
+/** [line] without its first [columns] columns of indent, as many as it has. */
+private fun withoutColumns(line: String, columns: Int): String {
+	var at = 0
+	var column = 0
+	while (at < line.length && column < columns && (line[at] == ' ' || line[at] == '\t')) {
+		column = if (line[at] == '\t') column + 4 - column % 4 else column + 1
+		at++
+	}
+	return line.substring(at)
+}
+
 /**
  * [strip] with each setext heading (a paragraph's lines, then a line of `=` or `-`)
  * written as an ATX heading per line, of level 1 or 2, its underline dropped, so the
  * peel reads the lines as headings. The fence data is renumbered onto the lines left.
  * A paragraph line stays in a quote it is in; a table's rows are no paragraph. Without
  * [dashUnderlines] a `-` line is a rule: under [ParagraphSeparator.NEWLINE] export
- * once wrote a rule right under a paragraph's line so.
+ * once wrote a rule right under a paragraph's line so. With [lazyQuotes], text right
+ * after a quoted paragraph is that paragraph's lazy text, which no underline makes a
+ * heading (see [withLazyQuoteLines]).
  */
-private fun withSetextHeadings(strip: CodeFenceStripResult, dashUnderlines: Boolean): CodeFenceStripResult {
+private fun withSetextHeadings(strip: CodeFenceStripResult, dashUnderlines: Boolean, lazyQuotes: Boolean): CodeFenceStripResult {
 	val lines = strip.text.lines()
 	val tableLines = findTables(lines, strip.fencedLines).flatMapTo(HashSet()) { it }
 	fun literal(index: Int) = index in strip.fencedLines || index in tableLines
@@ -169,13 +237,15 @@ private fun withSetextHeadings(strip: CodeFenceStripResult, dashUnderlines: Bool
 		if (first > 0 && !literal(first - 1)) {
 			val (itemQuote, item) = splitQuote(lines[first - 1])
 			if (itemQuote == quote && LIST_ITEM_START.containsMatchIn(item)) continue
+			if (lazyQuotes && quote.isEmpty() && itemQuote.isNotEmpty() && isParagraphText(item)) continue
 		}
 		val level = if (underline.trim().startsWith('=')) 1 else 2
 		for (line in first until index) levels[line] = level
 		underlines += index
 	}
 	if (underlines.isEmpty()) return strip
-	return strip.rewritten(lines, dropped = underlines) { index, line ->
+	val continuations = levels.keys.filterTo(HashSet()) { it - 1 in levels }
+	return strip.copy(headingContinuations = strip.headingContinuations + continuations).rewritten(lines, dropped = underlines) { index, line ->
 		val level = levels[index] ?: return@rewritten line
 		val (quote, body) = splitQuote(line)
 		val text = body.trim()
@@ -187,7 +257,7 @@ private fun withSetextHeadings(strip: CodeFenceStripResult, dashUnderlines: Bool
 
 /**
  * This result's [lines] without the [dropped] ones, each kept line through [rewrite],
- * the fence data renumbered onto the lines left.
+ * the fence and heading data renumbered onto the lines left.
  */
 private fun CodeFenceStripResult.rewritten(
 	lines: List<String>,
@@ -197,19 +267,22 @@ private fun CodeFenceStripResult.rewritten(
 	val out = ArrayList<String>(lines.size - dropped.size)
 	val fenced = HashSet<Int>()
 	val infos = HashMap<Int, String>()
+	val continuations = HashSet<Int>()
 	lines.forEachIndexed { index, line ->
 		if (index in dropped) return@forEachIndexed
 		if (index in fencedLines) fenced += out.size
+		if (index in headingContinuations) continuations += out.size
 		infoStrings[index]?.let { infos[out.size] = it }
 		out += rewrite(index, line)
 	}
-	return CodeFenceStripResult(out.joinToString("\n"), fenced, infos)
+	return CodeFenceStripResult(out.joinToString("\n"), fenced, infos, continuations)
 }
 
 /**
  * [strip] without its link reference definitions, each with the blank line after it
  * that set it apart, and the definitions by label, the first of a label kept. A
- * definition starts a block: not inside a paragraph, a quote or a list item.
+ * definition starts a block: not inside a paragraph or a list item. One on a line of
+ * its own opening a quote's block leaves the quote an empty line.
  */
 private fun withoutLinkDefinitions(strip: CodeFenceStripResult): Pair<CodeFenceStripResult, Map<String, String>> {
 	val lines = strip.text.lines()
@@ -217,12 +290,24 @@ private fun withoutLinkDefinitions(strip: CodeFenceStripResult): Pair<CodeFenceS
 	val tableLines = findTables(lines, strip.fencedLines).flatMapTo(HashSet()) { it }
 	val definitions = LinkedHashMap<String, String>()
 	val dropped = HashSet<Int>()
+	val emptied = HashSet<Int>()
 	var index = 0
 	var blockStart = true
+	var quoteBlockStart = true
 	while (index < lines.size) {
 		val line = lines[index]
 		val literal = index in strip.fencedLines || index in tableLines
 		val definition = if (blockStart && !literal) readLinkDefinition(lines, index) else null
+		val (quote, quoted) = splitQuote(line)
+		if (definition == null && quote.isNotEmpty() && quoteBlockStart && !literal) {
+			readLinkDefinition(listOf(quoted), 0)?.let { inQuote ->
+				definitions.getOrPut(inQuote.label) { inQuote.destination }
+				emptied += index
+				index++
+				continue
+			}
+		}
+		quoteBlockStart = quote.isEmpty() || quoted.isBlank() || !isParagraphText(quoted)
 		if (definition == null) {
 			// A list item's next line continues it, as a paragraph's does.
 			val body = splitQuote(line).second
@@ -238,8 +323,8 @@ private fun withoutLinkDefinitions(strip: CodeFenceStripResult): Pair<CodeFenceS
 			index++
 		}
 	}
-	if (dropped.isEmpty()) return strip to emptyMap()
-	return strip.rewritten(lines, dropped) to definitions
+	if (dropped.isEmpty() && emptied.isEmpty()) return strip to emptyMap()
+	return strip.rewritten(lines, dropped) { line, text -> if (line in emptied) ">" else text } to definitions
 }
 
 /** [markdown] without its link reference definitions, and the definitions by label (see [withoutLinkDefinitions]). */
@@ -252,7 +337,9 @@ private val QUOTE_PREFIX = Regex("""^>\s?""")
 
 /**
  * [strip] with each paragraph line right after a quoted paragraph line quoted too: it
- * continues that paragraph, which CommonMark lets drop the marker. Only under
+ * continues that paragraph, which CommonMark lets drop the marker. A line indented four
+ * columns is one too, since it starts no block there, and an underline is the
+ * paragraph's text, escaped, as a lazy line is no heading's. Only under
  * [ParagraphSeparator.BLANK_LINE]: single-newline export writes a quoted line and a
  * plain one after it so.
  */
@@ -267,12 +354,18 @@ private fun withLazyQuoteLines(strip: CodeFenceStripResult): CodeFenceStripResul
 			return@forEachIndexed
 		}
 		val (quote, body) = splitQuote(raw)
-		val paragraph = isParagraphText(body)
+		val paragraph = isParagraphText(body) || quote.isEmpty() && raw.isNotBlank() && columnsOf(raw).first >= 4
 		if (quote.isEmpty() && paragraph && quotedParagraph) lazy += index
 		quotedParagraph = paragraph && (quote.isNotEmpty() || index in lazy)
 	}
 	if (lazy.isEmpty()) return strip
-	return strip.rewritten(lines, dropped = emptySet()) { index, line -> if (index in lazy) "> $line" else line }
+	return strip.rewritten(lines, dropped = emptySet()) { index, line ->
+		when {
+			index !in lazy -> line
+			SETEXT_UNDERLINE_LINE.matches(line) -> "> \\${line.trimStart()}"
+			else -> "> $line"
+		}
+	}
 }
 
 private val NESTED_QUOTE_MARKERS = Regex("""^(?: {0,3}> ?)* {0,3}(?=>)""")
@@ -313,7 +406,7 @@ private val ATX_HEADING_START = Regex("""^ {0,3}#{1,6}(?:[ \t]|$)""")
 private fun isParagraphText(body: String): Boolean =
 	body.isNotBlank() && !body.startsWith("    ") && !body.startsWith("\t") && !body.trimStart().startsWith(">") &&
 		!LIST_ITEM_START.containsMatchIn(body) && !ATX_HEADING_START.containsMatchIn(body) &&
-		!isThematicBreak(body) && !STANDALONE_IMAGE_REGEX.matches(body)
+		!isThematicBreak(body) && readImageSyntax(body)?.destination == null
 
 /** A line's body once its stacked block markers are peeled, and the blocks peeled. */
 private data class PeeledLine(
@@ -425,12 +518,6 @@ private val RESIDUAL_QUOTE_MARKER = Regex("""^>""")
 
 /** A quoted line with nothing in it; the marker sits at column 0, as the peel needs it. */
 private val QUOTE_BLANK_LINE = Regex("""^>\s*$""")
-
-/**
- * A line CommonMark reads as an indented code block when a block can start there. One of
- * only spaces and tabs is blank, and starts none.
- */
-private val INDENTED_CODE_LINE = Regex("""^(?: {4}|\t)[ \t]*[^ \t]""")
 
 /**
  * Escapes a marker-shaped lead left in a peeled body. The peel already consumed
@@ -700,7 +787,7 @@ class MarkdownExtension(
 				has(lineIndex, HorizontalRuleSpanStyle) -> if (underParagraph(lineIndex)) "***" else "---"
 				imageLines.containsKey(lineIndex) -> {
 					val style = imageLines.getValue(lineIndex)
-					"![${style.alt}](${style.source})"
+					"![${escapeImageAlt(style.alt)}](${markdownLinkDestination(style.source)})"
 				}
 
 				// Fenced lines emit their text raw: going through `toMarkdown` would
@@ -794,9 +881,10 @@ class MarkdownExtension(
 		// were inside a fence. Fence content needs to skip the per-line block
 		// detection (it's literal code, not markdown) and its specials need to be
 		// escaped so the parser doesn't reinterpret `*foo*` as italic etc.
-		val (withoutDefinitions, linkDefinitions) = withoutLinkDefinitions(withSingleQuoteMarkers(stripCodeFences(markdownText)))
 		val blankLineParagraphs = paragraphSeparator == ParagraphSeparator.BLANK_LINE
-		val fenceStrip = withSetextHeadings(withoutDefinitions, dashUnderlines = blankLineParagraphs)
+		val fenced = stripCodeFences(markdownText).let { if (blankLineParagraphs) withIndentedCode(it) else it }
+		val (withoutDefinitions, linkDefinitions) = withoutLinkDefinitions(withSingleQuoteMarkers(fenced))
+		val fenceStrip = withSetextHeadings(withoutDefinitions, dashUnderlines = blankLineParagraphs, lazyQuotes = blankLineParagraphs)
 			.let { if (blankLineParagraphs) withLazyQuoteLines(it) else it }
 		// Stage 2: take the blank line export puts after each block away again,
 		// so a paragraph per line comes back as a line per paragraph.
@@ -811,6 +899,18 @@ class MarkdownExtension(
 		// A cell is inline content alone: led by a character the parser reads as text,
 		// nothing in it starts a block. Taken out again after the parse.
 		val cellLead = cellLeadFor(keptLines)
+		// Lines written into the text as they are, not parsed: code and placeholders.
+		val unparsed = BooleanArray(keptLines.size)
+		// Lines that go on the text of the paragraph or list item on the line before,
+		// parsed with it. Every other line starts a block of its own.
+		val continuesBlock = BooleanArray(keptLines.size)
+		// The quote status of a paragraph or list item a next paragraph line can go on.
+		var openBlockQuote: Boolean? = null
+		// Lines that open a list item, whose next lines' text goes on its line.
+		val opensItem = BooleanArray(keptLines.size)
+		// The column an empty item's text starts at, when the line before is one: only a
+		// line indented that far is its text.
+		var emptyItemColumn: Int? = null
 
 		val hrLineIndices = mutableListOf<Int>()
 		val imageLines = mutableListOf<Pair<Int, ImageBlockSpanStyle>>()
@@ -824,18 +924,23 @@ class MarkdownExtension(
 		var itemQuote: Boolean? = null
 		var afterBlank = false
 		val processedLines = keptLines.mapIndexed { index, line ->
-			if (index in codeFenceLineIndices || index in imported.cells) paragraphQuote = null
+			if (index in codeFenceLineIndices || index in imported.cells) {
+				paragraphQuote = null
+				openBlockQuote = null
+			}
 			if (index in imported.cells) itemQuote = null
 			// An item's fence leaves it open to the indented text after the fence.
 			if (index in codeFenceLineIndices) afterBlank = true
 			// A separator taken away is a blank line before this one.
 			if (index > 0 && imported.sources[index] - imported.sources[index - 1] > 1) {
 				paragraphQuote = null
+				openBlockQuote = null
 				afterBlank = true
 			}
 			if (index in codeFenceLineIndices) {
 				nesting.close()
-				return@mapIndexed line.escapeMarkdownSpecials()
+				unparsed[index] = true
+				return@mapIndexed line
 			}
 			if (index in imported.cells) {
 				nesting.close()
@@ -845,7 +950,7 @@ class MarkdownExtension(
 			// a stacked blockquote (`> ---`), and a `- ---` line comes back as the
 			// rule it once was rather than a bullet holding literal dashes.
 			val peeled = nesting.peel(line)
-			val imageMatch = STANDALONE_IMAGE_REGEX.matchEntire(peeled.body)
+			val image = readImageSyntax(peeled.body)?.takeIf { it.source(linkDefinitions) != null }
 			fun record(blocks: List<MarkdownBlockSyntax>) = blocks.forEach { block ->
 				blockHits.getOrPut(block.style) { mutableListOf() } += index
 			}
@@ -854,6 +959,7 @@ class MarkdownExtension(
 			val blank = unquoted.isBlank()
 			// Past a blank line, only indented text is still an item's.
 			if (afterBlank && !blank && !unquoted.startsWith(' ') && !unquoted.startsWith('\t')) itemQuote = null
+			val afterBlankItemText = afterBlank && itemQuote == quoted
 			afterBlank = blank
 			val isItem = peeled.blocks.any { it.isList }
 			// A rule outranks a list item: `* * *` is a rule, not an item holding `* *`.
@@ -865,7 +971,26 @@ class MarkdownExtension(
 					(peeled.blocks.any { it.style is OrderedListSpanStyle } && ORDERED_ITEM_NUMBER.find(unquoted)?.groupValues?.get(1)?.toIntOrNull() != 1)
 				)
 			val paragraph = notItem || (peeled.blocks.none { it.style !== BlockquoteSpanStyle } && isParagraphText(unquoted))
+			// Indented text cannot interrupt a paragraph, so it goes on one as its text.
+			val indentedText = !blank && peeled.blocks.none { it.style !== BlockquoteSpanStyle } &&
+				(unquoted.startsWith("    ") || unquoted.startsWith('\t'))
+			// A list item's indented text past a blank line is its text, not code.
+			val itemText = indentedText && afterBlankItemText
+			val afterEmptyItem = emptyItemColumn
+			emptyItemColumn = null
+			val continuesText = (paragraph || indentedText) && openBlockQuote == quoted &&
+				(afterEmptyItem == null || columnsOf(unquoted).first >= afterEmptyItem)
+			val continuesHeading = imported.sources[index] in fenceStrip.headingContinuations &&
+				index > 0 && imported.sources[index - 1] == imported.sources[index] - 1
+			continuesBlock[index] = continuesText || continuesHeading
+			openBlockQuote = if (paragraph || continuesText || (isItem && !ruleNotItem)) quoted else null
 			paragraphQuote = if (paragraph) quoted else null
+			if (isItem && !notItem && !ruleNotItem) {
+				opensItem[index] = true
+				if (peeled.body.isBlank()) emptyItemColumn = columnsOf(unquoted).let { (columns, chars) ->
+					columns + (LIST_ITEM_START.find(unquoted)?.value?.trimEnd()?.length ?: chars) - chars + 1
+				}
+			}
 			itemQuote = when {
 				isItem && !notItem && !ruleNotItem -> quoted
 				blank || (paragraph && itemQuote == quoted) -> itemQuote
@@ -884,20 +1009,20 @@ class MarkdownExtension(
 					// A rule takes only a stacked quote; normalization drops any other
 					// peeled marker from the placeholder line it lands on.
 					record(if (ruleNotItem) peeled.blocks.filterNot { it.isList } else peeled.blocks)
+					unparsed[index] = true
 					HR_PLACEHOLDER
 				}
 
-				imageMatch != null && provider != null -> {
-					val alt = imageMatch.groupValues[1]
-					val url = imageMatch.groupValues[2]
+				image != null && provider != null -> {
 					imageLines += index to ImageBlockSpanStyle(
-						source = url,
-						alt = alt,
+						source = image.source(linkDefinitions)!!,
+						alt = image.alt(linkDefinitions),
 						provider = provider,
 					)
 					// An image can be a quoted line or a list item (`1. ![shot](url)`);
 					// normalization drops what else was peeled.
 					record(peeled.blocks)
+					unparsed[index] = true
 					IMAGE_PLACEHOLDER
 				}
 
@@ -910,29 +1035,105 @@ class MarkdownExtension(
 				}
 
 				else -> line.withoutIndentOnlyText()
+			}.let { if (itemText && !continuesBlock[index]) it.trimStart().escapeResidualMarker() else it }
+		}
+		// Each block is parsed alone, so no inline syntax pairs across blocks and no HTML
+		// block runs past its own.
+		val links = ArrayList<ParsedLink>()
+		// Lines a code span ran onto, which its text puts on the line before.
+		val joined = BooleanArray(processedLines.size)
+		val annotatedString = buildAnnotatedString {
+			var start = 0
+			while (start < processedLines.size) {
+				var end = start + 1
+				if (!unparsed[start]) while (end < processedLines.size && continuesBlock[end]) end++
+				if (start > 0) append('\n')
+				if (unparsed[start]) {
+					append(processedLines[start])
+				} else {
+					val parsed = processedLines.subList(start, end).joinToString("\n").parseMarkdownWithLinks(
+						editorState.richTextStyles,
+						literalLines = emptySet(),
+						allowedLinkSchemes = editorState.allowedLinkSchemes,
+						linkDefinitions = linkDefinitions,
+					)
+					var text = parsed.annotatedString
+					var blockLinks = parsed.links
+					parsed.joinedLines.forEach { joined[start + it] = true }
+					if (start in imported.cells && text.text.firstOrNull() == cellLead) {
+						text = text.subSequence(1, text.length)
+						blockLinks = blockLinks.map { ParsedLink(it.start - 1, it.end - 1, it.url) }
+					}
+					// Under single newlines export wrote an item and a line after it so.
+					if (blankLineParagraphs && opensItem[start] && end > start + 1) {
+						val oneLine = asOneLine(text, editorState.richTextStyles.codeStyle)
+						text = oneLine.text
+						blockLinks = blockLinks.map { ParsedLink(oneLine.moved(it.start), oneLine.moved(it.end), it.url) }
+						for (line in start + 1 until end) joined[line] = true
+					}
+					val offset = length
+					blockLinks.forEach { links += ParsedLink(it.start + offset, it.end + offset, it.url) }
+					append(text)
+				}
+				start = end
 			}
 		}
-		val processedMarkdown = processedLines.joinToString("\n")
-		val parsed = processedMarkdown.parseMarkdownWithLinks(
-			editorState.richTextStyles,
-			literalLines = codeFenceLineIndices,
-			allowedLinkSchemes = editorState.allowedLinkSchemes,
-			linkDefinitions = linkDefinitions,
-		)
-		val (annotatedString, links) = withoutCellLeads(parsed, imported.cells.keys, cellLead)
+		// Each line's index once the joined lines are on the lines before them.
+		val lineOf = IntArray(processedLines.size)
+		for (line in 1 until lineOf.size) lineOf[line] = lineOf[line - 1] + if (joined[line]) 0 else 1
+		fun kept(line: Int) = !joined[line]
 		// setText publishes the text with no spans and applyDocumentBlocks attaches them
 		// afterwards. As one revision, so a concurrent export can't catch the document
 		// fully loaded but entirely unstyled.
 		editorState.editGroup {
 			editorState.setText(annotatedString)
 			editorState.applyDocumentBlocks(
-				horizontalRuleLines = hrLineIndices,
-				imageLines = imageLines.toMap(),
-				blockLines = blockHits + (CodeFenceSpanStyle to codeFenceLineIndices) +
-					imported.cells.entries.groupBy({ it.value }, { it.key }),
-				richSpans = linkSpans(links, annotatedString.text) + fenceLanguageSpans(fenceInfoStrings),
+				horizontalRuleLines = hrLineIndices.map { lineOf[it] },
+				imageLines = imageLines.associate { (line, image) -> lineOf[line] to image },
+				blockLines = (blockHits + (CodeFenceSpanStyle to codeFenceLineIndices) + imported.cells.entries.groupBy({ it.value }, { it.key }))
+					.mapValues { (_, lines) -> lines.filter(::kept).map { lineOf[it] } },
+				richSpans = linkSpans(links, annotatedString.text) + fenceLanguageSpans(fenceInfoStrings.mapKeys { lineOf[it.key] }),
 			)
 		}
+	}
+
+	/** A text made one line by [asOneLine], and where each of the source's offsets went. */
+	private class OneLine(val text: AnnotatedString, private val offsets: IntArray) {
+		fun moved(offset: Int): Int = offsets[offset]
+	}
+
+	/**
+	 * A list item's [text] as the one paragraph a renderer shows: each line break a space,
+	 * the spaces and tabs a hard break leaves before one dropped (but in [code], whose
+	 * spaces are its own), and a blank first line, an empty item's, dropped with its break.
+	 */
+	private fun asOneLine(text: AnnotatedString, code: SpanStyle): OneLine {
+		val source = text.text
+		val inCode = BooleanArray(source.length)
+		text.spanStyles.forEach { if (it.item == code) for (i in it.start until it.end) inCode[i] = true }
+		val firstBreak = source.indexOf('\n')
+		val skipped = if (firstBreak >= 0 && source.substring(0, firstBreak).isBlank()) firstBreak + 1 else 0
+		val beforeBreak = BooleanArray(source.length)
+		var trailing = false
+		for (i in source.indices.reversed()) {
+			val c = source[i]
+			trailing = c == '\n' || (trailing && (c == ' ' || c == '\t') && !inCode[i])
+			beforeBreak[i] = trailing && c != '\n'
+		}
+		val out = StringBuilder(source.length)
+		val offsets = IntArray(source.length + 1)
+		for (i in source.indices) {
+			offsets[i] = out.length
+			when {
+				i < skipped || beforeBreak[i] -> {}
+				source[i] == '\n' -> out.append(' ')
+				else -> out.append(source[i])
+			}
+		}
+		offsets[source.length] = out.length
+		fun <T> moved(ranges: List<AnnotatedString.Range<T>>) =
+			ranges.map { AnnotatedString.Range(it.item, offsets[it.start], offsets[it.end]) }.filter { it.start < it.end }
+		return OneLine(AnnotatedString(out.toString(), moved(text.spanStyles), moved(text.paragraphStyles)), offsets)
 	}
 
 	/**
@@ -985,43 +1186,6 @@ class MarkdownExtension(
 	}
 
 	/**
-	 * [parsed] with the [lead] taken off the start of each of the [cells] lines, the
-	 * styles and links moved back by it.
-	 */
-	private fun withoutCellLeads(parsed: MarkdownParseResult, cells: Set<Int>, lead: Char): Pair<AnnotatedString, List<ParsedLink>> {
-		if (cells.isEmpty()) return parsed.annotatedString to parsed.links
-		val text = parsed.annotatedString
-		val removed = ArrayList<Int>()
-		var line = 0
-		var start = 0
-		while (start <= text.length) {
-			if (line in cells && text.getOrNull(start) == lead) removed += start
-			val end = text.indexOf('\n', start)
-			if (end < 0) break
-			line++
-			start = end + 1
-		}
-		fun moved(offset: Int): Int {
-			var before = removed.binarySearch(offset)
-			if (before < 0) before = -before - 1
-			return offset - before
-		}
-		val kept = StringBuilder(text.length - removed.size)
-		var from = 0
-		for (at in removed) {
-			kept.append(text, from, at)
-			from = at + 1
-		}
-		kept.append(text, from, text.length)
-		val stripped = AnnotatedString(
-			kept.toString(),
-			text.spanStyles.map { AnnotatedString.Range(it.item, moved(it.start), moved(it.end)) },
-			text.paragraphStyles.map { AnnotatedString.Range(it.item, moved(it.start), moved(it.end)) },
-		)
-		return stripped to parsed.links.map { ParsedLink(moved(it.start), moved(it.end), it.url) }
-	}
-
-	/**
 	 * Leaves out, under [ParagraphSeparator.BLANK_LINE], the one blank line
 	 * export writes after each block, so k blank lines after a block are the
 	 * editor's k - 1. A block is a fenced line or one that is not blank; a bare
@@ -1052,7 +1216,9 @@ class MarkdownExtension(
 			val blank = !isFenced && (line.isBlank() || QUOTE_BLANK_LINE.matches(line))
 			val separates = when (separator) {
 				ParagraphSeparator.NEWLINE -> blank && (index - 1 in tableEnds || index + 1 in tables)
-				ParagraphSeparator.BLANK_LINE -> blank && afterBlock && isParagraphSeparator(stripped, strip.fencedLines, index)
+				// A file's last line break after a bare `>`, which export never ends one with, ends it.
+				ParagraphSeparator.BLANK_LINE -> blank && (afterBlock && isParagraphSeparator(stripped, strip.fencedLines, index) ||
+					index == stripped.lastIndex && line.isEmpty() && stripped.getOrNull(index - 1) == ">")
 			}
 			if (separates) {
 				afterBlock = false
@@ -1070,9 +1236,8 @@ class MarkdownExtension(
 	/**
 	 * Whether the blank line at [index], which follows a block, is the one
 	 * export writes there rather than the editor's own: export writes none
-	 * between two fenced lines, a bare `>` only between two quoted lines and an
-	 * empty line otherwise, and the editor never writes a line indented like
-	 * code, whose block needs the blank line before it. Export writes none
+	 * between two fenced lines, and a bare `>` only between two quoted lines and an
+	 * empty line otherwise. Export writes none
 	 * between two list items either, and one there is CommonMark's loose list,
 	 * whose items are one list: it is left out too.
 	 */
@@ -1082,7 +1247,6 @@ class MarkdownExtension(
 		val nextLine = lines.getOrNull(next)
 		val nextFenced = next in fencedLines
 		val quotedBlank = lines[index].isNotBlank()
-		if (nextLine != null && !nextFenced && INDENTED_CODE_LINE.containsMatchIn(nextLine)) return false
 		if (previous in fencedLines) return !nextFenced && !quotedBlank
 		val previousLine = lines[previous]
 		val nextQuoted = nextLine != null && !nextFenced && nextLine.startsWith(">")

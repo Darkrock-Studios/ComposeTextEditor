@@ -254,7 +254,7 @@ class CommonMarkSyntaxTest {
 		for ((markdown, expected) in listOf(
 			"___\n\n- - -\n\n **  * ** * ** * **\n\n-     -      -      -\n\n_____________________________________" to "---\n---\n---\n---\n---",
 			"* Foo\n* * *\n* Bar" to "- Foo\n---\n- Bar",
-			"--\n\n**\n\n    ***" to "--\n**\n\n    ***",
+			"--\n\n**\n\n    ***" to "--\n**\n``` ***",
 		)) {
 			assertEquals(expected, imported(markdown).editorState.blockLines(), markdown)
 		}
@@ -288,17 +288,45 @@ class CommonMarkSyntaxTest {
 	}
 
 	@Test
+	fun `inline syntax pairs only inside its own block`() = runTest {
+		for ((markdown, markup) in listOf(
+			"*foo\n\nbar*" to "*foo\nbar*",
+			// A heading's look is bold.
+			"# a `b\n\nc` d" to "<b>a `b</b>\nc` d",
+			"- a **b\n- c**" to "a **b\nc**",
+			"> a ~~b\n\nc~~ d" to "a ~~b\nc~~ d",
+			"Foo *bar\nbaz*\n====" to "<b>Foo <i>bar</i></b>\n<i><b>baz</i></b>",
+			"Foo *a\n===\nb* c" to "<b>Foo *a</b>\nb* c",
+			"para *a\nlazy b*" to "para <i>a</i>\n<i>lazy b</i>",
+		)) {
+			assertEquals(markup, imported(markdown).inlineMarkup(), markdown)
+		}
+	}
+
+	@Test
+	fun `an HTML block ends with its own block`() = runTest {
+		assertEquals("<img src=\"x.png\">\nThis <b>is</b> bold.", imported("<img src=\"x.png\">\n\nThis **is** bold.").inlineMarkup())
+	}
+
+	@Test
+	fun `a list item's text indented past a blank line is its text, not code`() = runTest {
+		assertEquals("> 1. one\n> two", imported("   > > 1.  one\n>>\n>>     two").editorState.blockLines())
+	}
+
+	@Test
 	fun `an item after a blank line or an item's own text is no paragraph's interruption`() = runTest {
 		for ((markdown, expected) in listOf(
 			"para\n\n2. x" to "para\n1. x",
-			"1. a\n   wrapped\n2. b" to "1. a\nwrapped\n1. b",
-			"1. a\nlazy\n2. b" to "1. a\nlazy\n1. b",
+			"1. a\n   wrapped\n2. b" to "1. a wrapped\n1. b",
+			"1. a\nlazy\n2. b" to "1. a lazy\n1. b",
 			"1. a\n\n   more\n\n2. b" to "1. a\nmore\n1. b",
-			"> 1. a\n>    wrapped\n> 2. b" to "> 1. a\n> wrapped\n> 1. b",
+			"> 1. a\n>    wrapped\n> 2. b" to "> 1. a wrapped\n> 1. b",
 			"1. a\n\n   ```\n   code\n   ```\n\n   after\n2. b" to "1. a\n``` code\nafter\n1. b",
 			"1. a\n\nnot the item's\n2. b" to "1. a\nnot the item's\n\\2. b",
 			"1. a\n```\ncode\n```\npara\n2. b" to "1. a\n``` code\npara\n\\2. b",
-			"- a\n  wrapped\n-\n- b" to "- a\nwrapped\n- \n- b",
+			"- a\n  wrapped\n-\n- b" to "- a wrapped\n- \n- b",
+			"-   \n  foo\n-\nbar" to "- foo\n- \nbar",
+			"- a  \n  b\\\n  `c `\n  d" to "- a b c  d",
 		)) {
 			assertEquals(expected, imported(markdown).editorState.blockLines(), markdown)
 		}
@@ -328,7 +356,7 @@ class CommonMarkSyntaxTest {
 			"[foo] and [*bar*][baz]" to "[foo] and [bar][baz]",
 			"Foo\n[bar]: /baz\n\n[bar]" to "Foo\n[bar]: /baz\n[bar]",
 			"[foo]: /url \"title\" ok" to "[foo]: /url \"title\" ok",
-			"- a\n[foo]: /url\n\n[foo]" to "a\n[foo]: /url\n[foo]",
+			"- a\n[foo]: /url\n\n[foo]" to "a [foo]: /url\n[foo]",
 		)) {
 			val markdown = imported(markdown)
 			assertEquals(text, markdown.editorState.getAllText().text)
@@ -346,13 +374,111 @@ class CommonMarkSyntaxTest {
 	}
 
 	@Test
+	fun `a line break entity is a space, a file's last break after a bare quote marker ends it, and a quote may open with a definition`() = runTest {
+		for ((markdown, expected) in listOf(
+			"foo&#10;&#10;bar\n> baz" to "foo  bar\n> baz",
+			">\n" to "> ",
+			"[foo]\n\n> [foo]: /url" to "foo\n> ",
+		)) {
+			assertEquals(expected, imported(markdown).editorState.blockLines(), markdown)
+		}
+		assertEquals("/url", imported("[foo]\n\n> [foo]: /url").editorState.linkAt(CharLineOffset(0, 0)))
+	}
+
+	@Test
+	fun `an autolink takes any scheme and its backslashes, and a code span starting first outranks a tag or autolink`() = runTest {
+		for ((markdown, text, link) in listOf(
+			Triple("<a+b+c:d>", "a+b+c:d", null),
+			Triple("<https://example.com/\\[\\>", "https://example.com/\\[\\", "https://example.com/\\[\\"),
+			Triple("[a](<https://x.test/a_(b)>)", "a", "https://x.test/a_(b)"),
+			Triple("a](<made-up:x>)", "a](made-up:x)", null),
+		)) {
+			val imported = imported(markdown)
+			assertEquals(text, imported.editorState.getAllText().text, markdown)
+			assertEquals(link, imported.editorState.linkAt(CharLineOffset(0, 0)), markdown)
+		}
+		assertInline("`<a href=\"`\">`", "<code><a href=\"</code>\">`")
+		assertInline("`<https://foo.bar.`baz>`", "<code><https://foo.bar.</code>baz>`")
+	}
+
+	@Test
+	fun `a link holds no link, and a destination with a space is none`() = runTest {
+		for ((markdown, text, links) in listOf(
+			Triple("[link](/my uri)", "[link](/my uri)", listOf(0 to null)),
+			Triple("[foo](not a link)\n\n[foo]: /url1", "foo(not a link)", listOf(0 to "/url1", 4 to null)),
+			Triple("[foo [bar](/uri)](/uri)", "[foo bar](/uri)", listOf(0 to null, 5 to "/uri", 9 to null)),
+			Triple("[a](<b c>) [d](e \"t\")", "a d", listOf(0 to "b c", 2 to "e")),
+		)) {
+			val imported = imported(markdown)
+			assertEquals(text, imported.editorState.getAllText().text, markdown)
+			assertEquals(links, links.map { (at, _) -> at to imported.editorState.linkAt(CharLineOffset(0, at)) }, markdown)
+		}
+	}
+
+	@Test
+	fun `emphasis holds an escaped delimiter, and a symbol beside a delimiter is punctuation`() = runTest {
+		assertInline("foo *\\**", "foo <i>*</i>")
+		assertInline("foo __\\___", "foo <b>_</b>")
+		assertInline("*a\\*b* and `c\\*d`", "<i>a*b</i> and <code>c\\*d</code>")
+		assertInline("*£*bravo and *€*charlie", "*£*bravo and *€*charlie")
+		assertInline("a *€ b*", "a <i>€ b</i>")
+		val linked = imported("[a](/€_x) *b*")
+		assertEquals("/€_x", linked.editorState.linkAt(CharLineOffset(0, 0)))
+	}
+
+	@Test
+	fun `a quoted paragraph's lazy text may be indented, and an underline under it is text`() = runTest {
+		for ((markdown, expected) in listOf(
+			"> foo\n    - bar" to "> foo\n> \\- bar",
+			"> foo\nbar\n===" to "> foo\n> bar\n> ===",
+			"> foo\nbar\n---" to "> foo\n> bar\n---",
+		)) {
+			assertEquals(expected, imported(markdown).editorState.blockLines(), markdown)
+		}
+	}
+
+	@Test
+	fun `a code span across lines is one line, its line breaks spaces`() = runTest {
+		assertInline("a `b\nc` d\nnext", "a <code>b c</code> d\nnext")
+		assertInline("``\nfoo\nbar  \nbaz\n``", "<code>foo bar   baz</code>")
+		for ((markdown, expected) in listOf(
+			"> a `b\n> c` d\n> e" to "> a b c d\n> e",
+			"- `a\n  b`\n- c" to "- a b\n- c",
+			"`a\nb`\n\n# Heading\n\n```\ncode\n```" to "a b\n# Heading\n``` code",
+		)) {
+			assertEquals(expected, imported(markdown).editorState.blockLines(), markdown)
+		}
+	}
+
+	@Test
+	fun `a line indented four columns is code, unless a paragraph or list item takes it`() = runTest {
+		for ((markdown, expected) in listOf(
+			"    a\n      b\n\n\n    c" to "``` a\n```   b\n``` \n``` \n``` c",
+			"\tfoo\tbar\n  \tbaz" to "``` foo\tbar\n``` baz",
+			"# Heading\n    foo\n\npara\n    lazy" to "# Heading\n``` foo\npara\nlazy",
+			" -    one\n\n     two" to "- one\n```  two",
+			"1. a\n\n  2. b\n\n    3. c" to "1. a\n1. b\n``` \\3. c",
+			"- a\n\n    b" to "- a\nb",
+		)) {
+			assertEquals(expected, imported(markdown).editorState.blockLines(), markdown)
+		}
+	}
+
+	@Test
+	fun `under single newlines an indented line is text, as export before 3_0 wrote an indent`() = runTest {
+		val markdown = markdown()
+		markdown.importMarkdown("para\n\n    indented", ParagraphSeparator.NEWLINE)
+		assertEquals("para\n\n    indented", markdown.editorState.blockLines())
+	}
+
+	@Test
 	fun `up to three spaces before a heading or quote marker are no text`() = runTest {
 		for ((markdown, expected) in listOf(
 			" ### foo\n\n  ## foo\n\n   # foo" to "### foo\n## foo\n# foo",
 			"   > # Foo\n   > bar" to "> # Foo\n> bar",
 			" > a\n >\n > b" to "> a\n> b",
 			">> Foo\n>> ===" to "> # Foo",
-			"    # foo" to "    # foo",
+			"    # foo" to "``` \\# foo",
 		)) {
 			assertEquals(expected, imported(markdown).editorState.blockLines(), markdown)
 		}

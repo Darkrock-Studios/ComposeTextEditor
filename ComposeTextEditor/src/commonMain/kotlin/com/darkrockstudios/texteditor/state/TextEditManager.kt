@@ -19,7 +19,10 @@ import com.darkrockstudios.texteditor.richstyle.RichSpan
 import com.darkrockstudios.texteditor.richstyle.RichSpanStyle
 import com.darkrockstudios.texteditor.richstyle.allowedOn
 import com.darkrockstudios.texteditor.richstyle.atListLevel
+import com.darkrockstudios.texteditor.richstyle.CodeFence
 import com.darkrockstudios.texteditor.richstyle.bakedLooks
+import com.darkrockstudios.texteditor.richstyle.fenceStyles
+import com.darkrockstudios.texteditor.richstyle.withOnlyFenceStylesOn
 import com.darkrockstudios.texteditor.richstyle.demoteLineBlock
 import com.darkrockstudios.texteditor.richstyle.hasLineBlock
 import com.darkrockstudios.texteditor.richstyle.isHeading
@@ -235,7 +238,7 @@ class TextEditManager(private val state: TextEditorState) {
 			// A replay carries the look it was recorded with.
 			addToHistory -> withLookOfLinkAround(screened)
 			else -> screened
-		}
+		}.let { if (addToHistory) withOnlyFenceStyles(it) else it }
 		// An edit of no characters (an IME committing "", an empty selection
 		// deleted) changes nothing, so nothing is applied, recorded, or announced.
 		if (operation.isNoOp()) return operation
@@ -311,8 +314,50 @@ class TextEditManager(private val state: TextEditorState) {
 			if (!isDecoration) announce(operation)
 
 			if (addToHistory) continueLineBlocks(operation)
+			if (addToHistory && !isDecoration) settleFenceLines(linesLandedOn(operation))
 		}
 		return operation
+	}
+
+	/** [operation] with the text it lands on a code fence line holding only the fence's styles. */
+	private fun withOnlyFenceStyles(operation: TextEditOperation): TextEditOperation = when (operation) {
+		is TextEditOperation.Insert -> state.withOnlyFenceStylesOn(operation.position.line, operation.text)
+			.let { if (it === operation.text) operation else operation.copy(text = it) }
+		is TextEditOperation.Replace -> state.withOnlyFenceStylesOn(operation.range.start.line, operation.newText)
+			.let { if (it === operation.newText) operation else operation.copy(newText = it) }
+		else -> operation
+	}
+
+	/** The lines [operation] put text, a style, a link or a block on, as they stand after it. */
+	private fun linesLandedOn(operation: TextEditOperation): IntRange = when (operation) {
+		is TextEditOperation.Insert -> operation.position.line..operation.textEnd.line
+		is TextEditOperation.Delete -> operation.range.start.line..operation.range.start.line
+		is TextEditOperation.Replace -> operation.range.start.line..operation.newTextEnd.line
+		is TextEditOperation.StyleSpan -> if (operation.isAdd) operation.range.start.line..operation.range.end.line else IntRange.EMPTY
+		is TextEditOperation.RichSpan -> if (operation.isAdd) operation.range.start.line..operation.range.end.line else IntRange.EMPTY
+		is TextEditOperation.LineBlock -> operation.lines.minOf { it.lineIndex }..operation.lines.maxOf { it.lineIndex }
+	}
+
+	/**
+	 * Takes the inline styles and links off the code fence lines among [lines], as removals
+	 * recorded in the edit's own transaction, so undo brings them back: a fence's text is
+	 * code, which markdown writes without styles. Only the fence's own styles stay.
+	 */
+	private fun settleFenceLines(lines: IntRange) {
+		for (line in lines) {
+			if (line !in state.textLines.indices || !state.hasLineBlock(line, CodeFence)) continue
+			val kept = state.fenceStyles()
+			fun on(start: Int, end: Int) = TextEditorRange(CharLineOffset(line, start), CharLineOffset(line, end))
+			state.textLines[line].spanStyles.filter { it.item !in kept }.forEach { removeStyleSpan(on(it.start, it.end), it.item) }
+			state.richSpanManager.spansOnLine(line).filter { it.style is LinkSpanStyle }.forEach { link ->
+				removeRichSpan(link.range, link.style)
+				// Its parts on other lines are not code, and stay a link.
+				if (link.range.start.line < line) {
+					addRichSpan(TextEditorRange(link.range.start, CharLineOffset(line - 1, state.textLines[line - 1].length)), link.style)
+				}
+				if (link.range.end.line > line) addRichSpan(TextEditorRange(CharLineOffset(line + 1, 0), link.range.end), link.style)
+			}
+		}
 	}
 
 	private fun applyInsert(operation: TextEditOperation.Insert): OperationMetadata? {
@@ -1012,6 +1057,8 @@ class TextEditManager(private val state: TextEditorState) {
 		val startLine = operation.range.start.line
 		val endLine = operation.range.end.line
 		for (lineIndex in startLine..endLine) {
+			// A fence's text is code, which takes no style but the fence's own.
+			if (operation.isAdd && state.hasLineBlock(lineIndex, CodeFence) && operation.style !in state.fenceStyles()) continue
 			val line = styled[lineIndex] ?: state.textLines[lineIndex]
 			val start = if (lineIndex == startLine) operation.range.start.char else 0
 			val end = if (lineIndex == endLine) operation.range.end.char else line.length

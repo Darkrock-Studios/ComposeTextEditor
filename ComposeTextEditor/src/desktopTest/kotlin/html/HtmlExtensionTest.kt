@@ -9,6 +9,7 @@ import com.darkrockstudios.texteditor.html.HtmlExtension
 import com.darkrockstudios.texteditor.richstyle.BlockquoteSpanStyle
 import com.darkrockstudios.texteditor.richstyle.BulletListSpanStyle
 import com.darkrockstudios.texteditor.richstyle.CodeFenceSpanStyle
+import com.darkrockstudios.texteditor.richstyle.HeaderSpanStyle
 import com.darkrockstudios.texteditor.richstyle.HorizontalRuleSpanStyle
 import com.darkrockstudios.texteditor.richstyle.ImageBlockSpanStyle
 import com.darkrockstudios.texteditor.richstyle.InMemoryImageProvider
@@ -89,6 +90,25 @@ class HtmlExtensionTest {
 
 		assertEquals("val a = 1\nval b = 2", extension.editorState.getAllText().text)
 		assertEquals(listOf(0, 1), extension.linesWith(CodeFenceSpanStyle))
+	}
+
+	@Test
+	fun `import of a code block drops the newline ending its last line, and keeps one after its code tag`() = runTest {
+		val extension = createHtmlExtension()
+		extension.importHtml("<pre><code>\nval a = 1\n</code></pre><p>after</p>")
+
+		assertEquals("\nval a = 1\nafter", extension.editorState.getAllText().text)
+		assertEquals(listOf(0, 1), extension.linesWith(CodeFenceSpanStyle))
+	}
+
+	@Test
+	fun `import keeps empty blocks at the start of a document as lines`() = runTest {
+		val extension = createHtmlExtension()
+		extension.importHtml("<h2></h2><ul><li></li></ul><p>foo</p>")
+
+		assertEquals("\n\nfoo", extension.editorState.getAllText().text)
+		assertEquals(listOf(0), extension.linesWith(HeaderSpanStyle.of(2)))
+		assertEquals(listOf(1), extension.linesWith(BulletListSpanStyle))
 	}
 
 	@Test
@@ -305,8 +325,8 @@ class HtmlExtensionTest {
 		val extension = createHtmlExtension()
 		extension.importHtml("<pre></pre><div style=\"white-space:pre\">\nkeep me</div>")
 
-		// The empty `<pre>` must not consume the div's own leading newline.
-		assertEquals("\nkeep me", extension.editorState.getAllText().text)
+		// The empty `<pre>` is an empty line, and must not consume the div's own leading newline.
+		assertEquals("\n\nkeep me", extension.editorState.getAllText().text)
 	}
 
 	@Test

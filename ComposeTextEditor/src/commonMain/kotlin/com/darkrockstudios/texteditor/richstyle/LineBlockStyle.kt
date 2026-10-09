@@ -4,6 +4,8 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.ParagraphStyle
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
+import com.darkrockstudios.texteditor.annotatedstring.withSpanStyles
+import com.darkrockstudios.texteditor.state.fallbackBodyStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.withStyle
 import com.darkrockstudios.texteditor.CharLineOffset
@@ -532,6 +534,31 @@ internal fun TextEditorState.bakedLooks(line: Int): Set<SpanStyle> {
 	val registry = registryFor(richTextStyles)
 	return registry.bakedLooks(registry.blocksOf(richSpanManager.getRichSpansStartingOn(line))).toSet()
 }
+
+/**
+ * [text], landing on [line], with only the styles a code fence line holds ([fenceStyles])
+ * over its part on [line] when [line] is a fence's: a fence's text is code, which markdown
+ * writes without styles, so no inline style or link lives on one. Its lines after a break
+ * are left as they are, for whichever lines they land on to decide. Returned as it is
+ * anywhere else.
+ */
+internal fun TextEditorState.withOnlyFenceStylesOn(line: Int, text: AnnotatedString): AnnotatedString {
+	if (text.spanStyles.isEmpty() || !hasLineBlock(line, CodeFence)) return text
+	val kept = fenceStyles()
+	val onLine = text.text.indexOf('\n').let { if (it < 0) text.length else it }
+	if (text.spanStyles.all { it.item in kept || it.start >= onLine }) return text
+	return text.withSpanStyles(text.spanStyles.mapNotNull { span ->
+		when {
+			span.item in kept || span.start >= onLine -> span
+			span.end > onLine -> AnnotatedString.Range(span.item, onLine, span.end)
+			else -> null
+		}
+	})
+}
+
+/** The styles a code fence line holds: the fence's monospace and the body text style. */
+internal fun TextEditorState.fenceStyles(): Set<SpanStyle> =
+	setOfNotNull(lineBlockFor(CodeFenceSpanStyle, richTextStyles)?.textStyle, fallbackBodyStyle)
 
 /** Every look [bakedLooks] can answer for a line under this state's styles. */
 internal val TextEditorState.everyBakedLook: Set<SpanStyle>

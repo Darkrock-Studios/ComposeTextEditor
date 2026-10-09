@@ -255,6 +255,8 @@ private class HtmlSpanBuilder(
 	private var lastWasSpace = true
 	private var trailingSpaceIsLiteral = false
 	private var dropLeadingNewline = false
+	/** A block has held a line, so a block break separates the next from it even with no text written yet. */
+	private var lineHeld = false
 
 	fun build(body: Element): HtmlDocument {
 		visitChildren(body, HtmlScope.ROOT)
@@ -430,6 +432,8 @@ private class HtmlSpanBuilder(
 			element.children().none { it.tagName().lowercase() in BLOCK_TAGS } ||
 			name == "li" && element.startsWithList()
 		if (occupiesALine) flushPendingBreaks()
+		// Only a newline straight after `<pre>` is formatting; after `<pre><code>` it is content.
+		if (name != "pre") dropLeadingNewline = false
 
 		val style = element.attr("style")
 		val nestedPre = scope.preformatted || name == "pre" || isPreformatted(style)
@@ -464,7 +468,7 @@ private class HtmlSpanBuilder(
 		if (name == "li" && element.attr("role").equals("checkbox", ignoreCase = true)) {
 			blockRanges += BlockRange(TaskSpanStyle.of(element.attr("aria-checked").equals("true", ignoreCase = true)), out.length, out.length, pendingNewlines())
 		}
-		val href = if (name == "a") sanitizeLinkUrl(element.attr("href"), allowedLinkSchemes) else null
+		val href = if (name == "a" && !nestedInPreElement) sanitizeLinkUrl(element.attr("href"), allowedLinkSchemes) else null
 		val start = out.length
 		val spansAtEntry = spans.size
 		val pendingAtEntry = pendingNewlines()
@@ -483,9 +487,14 @@ private class HtmlSpanBuilder(
 			formatRanges += FormatRange(format, start, out.length, pendingAtEntry, firstLineOnly = name == "li" && element.holdsList())
 		}
 		if (href != null) recordLink(href, start, spansAtEntry)
-		// A `<pre>` holding no text never consumes the flag, and leaving it armed
-		// would eat a real newline from the next preformatted run.
-		if (name == "pre") dropLeadingNewline = false
+		if (occupiesALine) lineHeld = true
+		if (name == "pre") {
+			// A `<pre>` holding no text never consumes the flag, and leaving it armed
+			// would eat a real newline from the next preformatted run.
+			dropLeadingNewline = false
+			// The newline ending the last line is not a line of its own, as browsers draw it.
+			if (out.length > start + pendingAtEntry && out.last() == '\n') out.deleteAt(out.length - 1)
+		}
 
 		if (isBlock) requestBlockBreak() else if (isCell) requestCellBreak()
 	}
@@ -618,9 +627,12 @@ private class HtmlSpanBuilder(
 		else -> null
 	}
 
-	/** Puts [placeholder] on a line of its own and reports the offset it landed at. */
+	/**
+	 * Puts [placeholder] on a line of its own and reports the offset it landed at. A line its
+	 * block has just opened, with nothing on it yet, is its own: `<p><img></p>` is one line.
+	 */
 	private inline fun appendOwnLine(placeholder: String, record: (Int) -> Unit) {
-		requestBlockBreak()
+		if (!atLineStart() || pendingNewlines() > 0 || pendingCellBreak) requestBlockBreak()
 		flushPendingBreaks()
 		sync(HtmlScope.ROOT)
 		record(out.length)
@@ -777,12 +789,11 @@ private class HtmlSpanBuilder(
 		active: Set<HtmlTag>,
 		inPreElement: Boolean,
 	): Set<HtmlTag> {
+		// A `<pre>` is a code fence, whose text is code: it takes no inline style, and its
+		// own monospace is the fence's to bake.
+		if (inPreElement) return emptySet()
 		val result = LinkedHashSet(active)
 		TAG_STYLES[name]?.let { result += it }
-		// `<pre><code>` is one code block, not a block containing an inline code
-		// run. The fence bakes in its own monospace, and a span layered on top
-		// would outlive the fence being toggled off.
-		if (inPreElement) result -= HtmlTag.CODE
 		if (style.isEmpty()) return result
 
 		// Each directive settles its own tag in both directions, so an inline style
@@ -807,10 +818,8 @@ private class HtmlSpanBuilder(
 				}
 
 				"font-family" -> if (
-					!inPreElement && (
-						value.contains("monospace") || value.contains("courier") ||
-							value.contains("consolas") || value.contains("menlo")
-						)
+					value.contains("monospace") || value.contains("courier") ||
+					value.contains("consolas") || value.contains("menlo")
 				) {
 					result += HtmlTag.CODE
 				}
@@ -850,7 +859,7 @@ private class HtmlSpanBuilder(
 	}
 
 	private fun requestBlockBreak() {
-		if (out.isNotEmpty()) pendingBlockBreak = true
+		if (out.isNotEmpty() || lineHeld) pendingBlockBreak = true
 		pendingCellBreak = false
 		lastWasSpace = true
 	}

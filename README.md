@@ -36,9 +36,8 @@ And now, it's working, and at this point, working pretty well.
 - ✅ Screen readers
 - ✅ HTML import, export and clipboard
 - ☑️ Markdown, as an addon
-  - CommonMark: 411 of the spec's 652 examples. Raw HTML, indented code blocks and
-    multi-paragraph list items are not supported yet.
-  - GitHub Flavored Markdown: tables, task lists and strikethrough
+  - CommonMark: 532 of the spec's 652 examples, and every other one not planned ([spec support](#markdown-spec-support))
+  - GitHub Flavored Markdown: tables, task lists and strikethrough; bare links are not planned
   - Underline (`<u>`), highlight (`==text==` or `<mark>`), colour and size (`<span style>`)
   - Opt-in shortcuts that format as you type (`# `, `- `, `**bold**`)
 
@@ -64,6 +63,35 @@ the [API reference & recipes](https://darkrock-studios.github.io/ComposeTextEdit
 - Read-only, single line, max length, input filters and no-wrap modes
 - State that survives process death, or lives in your view model
 - Opt-in smart punctuation and auto-linking ([docs/design/behaviors.md](docs/design/behaviors.md))
+
+#### Markdown spec support
+
+Green is supported and yellow is not supported yet. Grey is not planned:
+
+- Raw HTML. Rendering freeform HTML would mean building an HTML rendering engine, so HTML
+  beyond the style tags above is kept as text.
+- What the editor's line model cannot hold. A line is a paragraph with one stack of blocks
+  (a quote around a list item around its text), so blocks nested any other way, such as
+  a code block inside a list item, lose their nesting but keep their content. The editor
+  also keeps every empty line, which markdown can only write as a blank line a renderer
+  drops.
+
+**CommonMark**: 532 of the spec's 652 examples
+
+![CommonMark: 532 supported, 0 not yet, 120 not planned](docs/images/commonmark-support.svg)
+
+Not planned: raw HTML (71), blocks inside list items or block quotes (26), list items
+holding more than one paragraph (10), blank lines kept as empty lines (10), and images
+inside text or links (3).
+
+**GitHub Flavored Markdown extensions**: 12 of 24 examples
+
+![GFM extensions: 12 supported, 0 not yet, 12 not planned](docs/images/gfm-support.svg)
+
+- Tables, task lists and strikethrough are supported
+- Not planned: bare links (11), since a URL typed as text would read back as a link
+  (the editor's opt-in auto-linking makes them as you type), and filtering raw HTML
+  tags (1), since raw HTML is kept as text
 
 #### Platforms
 

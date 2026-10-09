@@ -601,7 +601,7 @@ private fun highlightMarker(syntax: MarkdownConfiguration): StyleMarkerPair =
  * a character CommonMark cannot take in a bare destination, and escaped where
  * import would decode it (see [escapeLinkDestination]).
  */
-private fun markdownLinkDestination(url: String): String {
+internal fun markdownLinkDestination(url: String): String {
 	val angled = url.any { it == ')' || it == ' ' || it == '\n' }
 	val escaped = escapeLinkDestination(url, angled)
 	return if (angled) "<$escaped>" else escaped

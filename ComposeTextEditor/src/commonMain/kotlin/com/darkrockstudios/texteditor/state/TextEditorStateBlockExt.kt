@@ -148,10 +148,13 @@ private fun TextEditorState.fenceRunContaining(line: Int): IntRange? {
  * serialization, as one undo step. A link to elsewhere over some of [range] keeps
  * only its parts outside it. A destination [sanitizeLinkUrl] refuses under
  * [TextEditorState.allowedLinkSchemes] (`javascript:`, `data:`, `vbscript:`, `file:`
- * always) is not set, and answers false.
+ * always) is not set, and answers false, as does a [range] on a code fence line,
+ * whose text is code.
  */
 fun TextEditorState.setLink(range: TextEditorRange, url: String): Boolean {
 	if (sanitizeLinkUrl(url, allowedLinkSchemes) == null) return false
+	val lastLine = if (range.end.char == 0 && range.end.line > range.start.line) range.end.line - 1 else range.end.line
+	if ((range.start.line..lastLine).any { isCodeFence(it) }) return false
 	editGroup {
 		addStyleSpan(range, richTextStyles.linkStyle)
 		val link = LinkSpanStyle(url)

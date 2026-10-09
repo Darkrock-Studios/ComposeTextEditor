@@ -51,7 +51,7 @@ class OrderedListSerializationTest {
 	@Test
 	fun `import attaches ordered-list span on numbered line`() = runTest {
 		val extension = createMarkdownExtension()
-		extension.importMarkdown("before\n1. item\nafter")
+		extension.importMarkdown("before\n1. item\n\nafter")
 
 		assertEquals(listOf(1), extension.orderedLines())
 		// The `1. ` prefix is stripped so the underlying text is just the body.
@@ -223,7 +223,7 @@ class OrderedListSerializationTest {
 	@Test
 	fun `toggleOrderedList across mixed range turns all on and numbers them`() = runTest {
 		val extension = createMarkdownExtension()
-		extension.importMarkdown("1. one\nplain")
+		extension.importMarkdown("1. one\n\nplain")
 
 		extension.editorState.toggleOrderedList(0..1)
 		assertEquals(listOf(0, 1), extension.orderedLines())

@@ -63,7 +63,11 @@ Which blocks may share a line is defined in one predicate (`lineBlocksConflict`,
 - Blockquote stacks with lists and headings (`> - item`, `> # Title`).
 - A task stacks with a list item, whose box it is, and a quote; it takes no
   heading, and its two states exclude each other (see "Task lists").
-- Code fence stacks with nothing.
+- Code fence stacks with nothing, and its text is code: it holds no inline style or
+  link, which markdown cannot write inside a fence. An edit does not put one there:
+  a style added over a fence line skips it, text landing on one keeps only the
+  fence's monospace and the body style, and what a toggle or join brings onto one is
+  taken off inside the same undo step. HTML import keeps none inside a `<pre>`.
 - A table cell stacks with nothing, and unlike the others it never gives way:
   putting another block on a cell line does nothing (`docs/design/tables.md`).
 
@@ -227,7 +231,10 @@ literal text on import (a task list's `[ ]`, a table inside a quote) is written
 back as it was, and a quoted table's rows are kept together. A table outside a
 quote is a block of its own, read and written whole (`docs/design/tables.md`).
 
-**Import** runs peel-then-classify on each raw line, after fence stripping:
+**Import** runs peel-then-classify on each raw line, after fence stripping. An
+indented code block, a run of lines indented four columns where no paragraph or
+list item takes them, is stripped as a fence is, its indent off; export never
+writes one, since it writes a leading indent as entities.
 
 1. **Peel** stacked markers in registry order, each style at most once, a
    style eligible only while it does not conflict with anything already
@@ -238,6 +245,14 @@ quote is a block of its own, read and written whole (`docs/design/tables.md`).
    the line a placeholder carrying the compatible peels (the quote, and for an
    image one list style); anything else keeps all peels and the body goes to
    the markdown parser.
+3. **Parse each block alone**: a paragraph's or list item's lines, with the
+   lazy and indented lines that go on them and a setext heading's lines, are
+   one parse, so inline syntax pairs only inside its block and an HTML block
+   ends with it. Fenced lines and placeholders go into the text unparsed. A
+   paragraph keeps a line per source line, but a list item, which has one line,
+   takes its lazy and indented lines onto it, their line breaks spaces (under
+   `BLANK_LINE` only: single-newline export wrote an item and a plain line after
+   it so), and a code span across lines is one line, as CommonMark reads it.
 
 HTML import and export share the same block attachment path and derive their
 container nesting from the same snapshot walk, so both serializers agree on
@@ -260,9 +275,8 @@ after each block (a fenced line, or any line that is not blank; a bare `>`
 line is blank) the one blank line export would have written there is left
 out, and the rest are the editor's. Import reads the same line kinds as
 export, so it leaves out only what export writes: nothing between two fenced
-lines, a bare `>` only between two quoted lines, an empty line otherwise;
-and it keeps a blank line before a line indented like code, which the editor
-never writes and whose block needs it. Between two list items it leaves one
+lines, a bare `>` only between two quoted lines, an empty line otherwise.
+Between two list items it leaves one
 out too, which export never writes there: a single one is CommonMark's loose
 list, whose items are one list. The mapping is a bijection on the editor's
 own output, so the round trip is exact; a foreign file's single blank line

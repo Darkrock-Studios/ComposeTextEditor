@@ -37,7 +37,7 @@ class RichSpanManager(
 		spansOnLine(line).filter { it.range.start.line == line }
 
 	/** Every span covering [line], from the snapshot's per-line index. */
-	private fun spansOnLine(line: Int): List<RichSpan> = index.spansOn(line)
+	internal fun spansOnLine(line: Int): List<RichSpan> = index.spansOn(line)
 
 	internal fun addRichSpan(range: TextEditorRange, style: RichSpanStyle) {
 		addRichSpans(listOf(RichSpan(range, style)))

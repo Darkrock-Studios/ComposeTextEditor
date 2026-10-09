@@ -21,10 +21,14 @@ import org.intellij.markdown.parser.MarkdownParser
  */
 internal data class ParsedLink(val start: Int, val end: Int, val url: String)
 
-/** A parse's styled text together with the links found inside it. */
+/**
+ * A parse's styled text together with the links found inside it, and the [joinedLines]
+ * of the source a code span ran onto, which its text puts on the line before.
+ */
 internal class MarkdownParseResult(
 	val annotatedString: AnnotatedString,
 	val links: List<ParsedLink>,
+	val joinedLines: Set<Int> = emptySet(),
 )
 
 /**
@@ -59,17 +63,27 @@ internal fun String.parseMarkdownWithLinks(
 	val normalized = normalizeLineEndings()
 	val standIns = IndentStandIns.forSource(normalized)
 	val literal by lazy { literalLines ?: normalized.fencedLineIndices() }
-	val source = (standIns?.substitute(normalized) { literal } ?: normalized)
+	val indented = standIns?.substitute(normalized) { literal } ?: normalized
+	val symbols = SymbolStandIns.forSource(indented, taken = setOfNotNull(standIns?.space, standIns?.tab))
+	val symbolled = symbols?.substitute(indented) ?: indented
+	val lessThan = lazy { STAND_IN_CANDIDATES.firstOrNull { it !in symbolled && it != standIns?.space && it != standIns?.tab } }
+	val source = withInlinePrecedence(symbolled, literal, lessThan)
 		.withHighlightTags()
 		.let { withInlineTagLinesInline(it, literal) }
-		.let { withUndefinedReferencesEscaped(it, linkDefinitions, literal) }
+		.let { withNonLinkBracketsEscaped(it, linkDefinitions, literal) }
+		.let { withEscapedDelimitersAsEntities(it, literal) }
 	val flavour = GFMFlavourDescriptor()
 	val parsedTree = MarkdownParser(flavour).buildMarkdownTreeFromString(source)
 	val context = MarkdownRenderContext(styles, allowedLinkSchemes, source.lineStarts(literalLines.orEmpty()), linkDefinitions)
 	val annotated = buildAnnotatedString {
 		appendMarkdownChildren(source, parsedTree, context)
 	}
-	return MarkdownParseResult(standIns?.restore(annotated) ?: annotated, context.links)
+	val restored = (standIns?.restore(annotated) ?: annotated).let { symbols?.restore(it) ?: it }.let { text ->
+		val standIn = if (lessThan.isInitialized()) lessThan.value else null
+		if (standIn == null || standIn !in text.text) text else AnnotatedString(text.text.replace(standIn, '<'), text.spanStyles, text.paragraphStyles)
+	}
+	val links = if (symbols == null) context.links else context.links.map { it.copy(url = symbols.restore(it.url)) }
+	return MarkdownParseResult(restored, links, context.joinedLines)
 }
 
 /** Where each of the [lines] starts in this string. */
@@ -140,7 +154,7 @@ private class IndentStandIns private constructor(val space: Char, val tab: Char)
 }
 
 /** The Supplemental Punctuation block's punctuation, which markdown gives no meaning. */
-private val STAND_IN_CANDIDATES = ('\u2E00'..'\u2E7F').filter { it.category == CharCategory.OTHER_PUNCTUATION }
+internal val STAND_IN_CANDIDATES = ('\u2E00'..'\u2E7F').filter { it.category == CharCategory.OTHER_PUNCTUATION }
 
 /**
  * A character none of [lines] holds, which the parser reads as plain text: what leads a
@@ -353,6 +367,9 @@ internal class MarkdownRenderContext(
 ) {
 	val links = mutableListOf<ParsedLink>()
 
+	/** The source lines a code span ran onto: its line breaks are spaces, so they go on the line before. */
+	val joinedLines = HashSet<Int>()
+
 	private var paragraph = false
 
 	/** Whether the tokens read so far in a paragraph end a line. */
@@ -544,6 +561,10 @@ private fun AnnotatedString.Builder.appendMarkdownNode(
 		}
 
 		MarkdownElementTypes.CODE_SPAN -> {
+			if ('\n' in nodeText) {
+				var line = (0 until node.startOffset).count { original[it] == '\n' }
+				nodeText.forEach { if (it == '\n') context.joinedLines += ++line }
+			}
 			pushStyle(styles.codeStyle)
 			append(codeSpanContent(nodeText))
 			pop()
@@ -782,13 +803,16 @@ private fun AnnotatedString.Builder.handleHeader(
 	pop()
 }
 
+private val LINE_BREAK_AND_INDENT = Regex("""\n[ \t]*""")
+
 /**
- * A code span's text as CommonMark reads it: inside its backtick strings, less one space
+ * A code span's text as CommonMark reads it: inside its backtick strings, each line break
+ * a space (the next line's indent off, as a paragraph's lines lose theirs), less one space
  * at each end when both ends have one and it is not all spaces.
  */
 private fun codeSpanContent(node: String): String {
 	val fence = node.takeWhile { it == '`' }.length
-	val code = node.substring(fence, (node.length - fence).coerceAtLeast(fence))
+	val code = node.substring(fence, (node.length - fence).coerceAtLeast(fence)).replace(LINE_BREAK_AND_INDENT, " ")
 	val padded = code.length >= 2 && code.first() == ' ' && code.last() == ' ' && code.any { it != ' ' }
 	return if (padded) code.substring(1, code.length - 1) else code
 }
