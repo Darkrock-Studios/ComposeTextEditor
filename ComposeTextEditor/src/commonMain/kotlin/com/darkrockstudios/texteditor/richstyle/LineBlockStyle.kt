@@ -4,6 +4,8 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.ParagraphStyle
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
+import com.darkrockstudios.texteditor.annotatedstring.withSpanStyles
+import com.darkrockstudios.texteditor.state.fallbackBodyStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.withStyle
 import com.darkrockstudios.texteditor.CharLineOffset
@@ -532,6 +534,22 @@ internal fun TextEditorState.bakedLooks(line: Int): Set<SpanStyle> {
 	val registry = registryFor(richTextStyles)
 	return registry.bakedLooks(registry.blocksOf(richSpanManager.getRichSpansStartingOn(line))).toSet()
 }
+
+/**
+ * [text], landing on [line], with only the styles a code fence line holds ([fenceStyles])
+ * when [line] is a fence's: a fence's text is code, which markdown writes without
+ * styles, so no inline style or link lives on one. Returned as it is anywhere else.
+ */
+internal fun TextEditorState.withOnlyFenceStylesOn(line: Int, text: AnnotatedString): AnnotatedString {
+	if (text.spanStyles.isEmpty() || !hasLineBlock(line, CodeFence)) return text
+	val kept = fenceStyles()
+	if (text.spanStyles.all { it.item in kept }) return text
+	return text.withSpanStyles(text.spanStyles.filter { it.item in kept })
+}
+
+/** The styles a code fence line holds: the fence's monospace and the body text style. */
+internal fun TextEditorState.fenceStyles(): Set<SpanStyle> =
+	setOfNotNull(lineBlockFor(CodeFenceSpanStyle, richTextStyles)?.textStyle, fallbackBodyStyle)
 
 /** Every look [bakedLooks] can answer for a line under this state's styles. */
 internal val TextEditorState.everyBakedLook: Set<SpanStyle>

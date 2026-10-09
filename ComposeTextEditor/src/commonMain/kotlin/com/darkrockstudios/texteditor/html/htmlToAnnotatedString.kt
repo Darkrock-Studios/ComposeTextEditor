@@ -468,7 +468,7 @@ private class HtmlSpanBuilder(
 		if (name == "li" && element.attr("role").equals("checkbox", ignoreCase = true)) {
 			blockRanges += BlockRange(TaskSpanStyle.of(element.attr("aria-checked").equals("true", ignoreCase = true)), out.length, out.length, pendingNewlines())
 		}
-		val href = if (name == "a") sanitizeLinkUrl(element.attr("href"), allowedLinkSchemes) else null
+		val href = if (name == "a" && !nestedInPreElement) sanitizeLinkUrl(element.attr("href"), allowedLinkSchemes) else null
 		val start = out.length
 		val spansAtEntry = spans.size
 		val pendingAtEntry = pendingNewlines()
@@ -789,12 +789,11 @@ private class HtmlSpanBuilder(
 		active: Set<HtmlTag>,
 		inPreElement: Boolean,
 	): Set<HtmlTag> {
+		// A `<pre>` is a code fence, whose text is code: it takes no inline style, and its
+		// own monospace is the fence's to bake.
+		if (inPreElement) return emptySet()
 		val result = LinkedHashSet(active)
 		TAG_STYLES[name]?.let { result += it }
-		// `<pre><code>` is one code block, not a block containing an inline code
-		// run. The fence bakes in its own monospace, and a span layered on top
-		// would outlive the fence being toggled off.
-		if (inPreElement) result -= HtmlTag.CODE
 		if (style.isEmpty()) return result
 
 		// Each directive settles its own tag in both directions, so an inline style
@@ -819,10 +818,8 @@ private class HtmlSpanBuilder(
 				}
 
 				"font-family" -> if (
-					!inPreElement && (
-						value.contains("monospace") || value.contains("courier") ||
-							value.contains("consolas") || value.contains("menlo")
-						)
+					value.contains("monospace") || value.contains("courier") ||
+					value.contains("consolas") || value.contains("menlo")
 				) {
 					result += HtmlTag.CODE
 				}

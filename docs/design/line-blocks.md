@@ -63,7 +63,11 @@ Which blocks may share a line is defined in one predicate (`lineBlocksConflict`,
 - Blockquote stacks with lists and headings (`> - item`, `> # Title`).
 - A task stacks with a list item, whose box it is, and a quote; it takes no
   heading, and its two states exclude each other (see "Task lists").
-- Code fence stacks with nothing.
+- Code fence stacks with nothing, and its text is code: it holds no inline style or
+  link, which markdown cannot write inside a fence. An edit does not put one there:
+  a style added over a fence line skips it, text landing on one keeps only the
+  fence's monospace and the body style, and what a toggle or join brings onto one is
+  taken off inside the same undo step. HTML import keeps none inside a `<pre>`.
 - A table cell stacks with nothing, and unlike the others it never gives way:
   putting another block on a cell line does nothing (`docs/design/tables.md`).
 
