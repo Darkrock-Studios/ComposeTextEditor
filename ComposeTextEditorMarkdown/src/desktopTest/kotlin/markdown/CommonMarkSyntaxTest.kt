@@ -326,6 +326,7 @@ class CommonMarkSyntaxTest {
 			"1. a\n```\ncode\n```\npara\n2. b" to "1. a\n``` code\npara\n\\2. b",
 			"- a\n  wrapped\n-\n- b" to "- a wrapped\n- \n- b",
 			"-   \n  foo\n-\nbar" to "- foo\n- \nbar",
+			"- a  \n  b\\\n  `c `\n  d" to "- a b c  d",
 		)) {
 			assertEquals(expected, imported(markdown).editorState.blockLines(), markdown)
 		}

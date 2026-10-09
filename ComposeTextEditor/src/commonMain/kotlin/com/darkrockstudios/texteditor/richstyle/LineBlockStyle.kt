@@ -537,14 +537,23 @@ internal fun TextEditorState.bakedLooks(line: Int): Set<SpanStyle> {
 
 /**
  * [text], landing on [line], with only the styles a code fence line holds ([fenceStyles])
- * when [line] is a fence's: a fence's text is code, which markdown writes without
- * styles, so no inline style or link lives on one. Returned as it is anywhere else.
+ * over its part on [line] when [line] is a fence's: a fence's text is code, which markdown
+ * writes without styles, so no inline style or link lives on one. Its lines after a break
+ * are left as they are, for whichever lines they land on to decide. Returned as it is
+ * anywhere else.
  */
 internal fun TextEditorState.withOnlyFenceStylesOn(line: Int, text: AnnotatedString): AnnotatedString {
 	if (text.spanStyles.isEmpty() || !hasLineBlock(line, CodeFence)) return text
 	val kept = fenceStyles()
-	if (text.spanStyles.all { it.item in kept }) return text
-	return text.withSpanStyles(text.spanStyles.filter { it.item in kept })
+	val onLine = text.text.indexOf('\n').let { if (it < 0) text.length else it }
+	if (text.spanStyles.all { it.item in kept || it.start >= onLine }) return text
+	return text.withSpanStyles(text.spanStyles.mapNotNull { span ->
+		when {
+			span.item in kept || span.start >= onLine -> span
+			span.end > onLine -> AnnotatedString.Range(span.item, onLine, span.end)
+			else -> null
+		}
+	})
 }
 
 /** The styles a code fence line holds: the fence's monospace and the body text style. */

@@ -47,41 +47,22 @@ internal fun readImageSyntax(body: String): ImageSyntax? {
 	var i = close + 1
 	return when (text.getOrNull(i)) {
 		'(' -> {
-			i = skipSpaces(text, i + 1)
-			val destinationStart = i
-			val destination: String
-			if (text.getOrNull(i) == '<') {
-				i++
-				while (i < text.length && text[i] != '>') {
-					if (text[i] == '<') return null
-					if (text[i] == '\\') i++
-					i++
-				}
-				if (i >= text.length) return null
-				destination = text.substring(destinationStart + 1, i)
-				i++
-			} else {
-				var depth = 0
-				while (i < text.length && !text[i].isWhitespace() && text[i].code >= 0x20) {
-					when (text[i]) {
-						'\\' -> i++
-						'(' -> depth++
-						')' -> if (depth-- == 0) break
-					}
-					i++
-				}
-				if (depth > 0) return null
-				destination = text.substring(destinationStart, minOf(i, text.length))
-			}
-			val afterDestination = skipSpaces(text, i)
-			i = if (afterDestination > i) readTitle(text, afterDestination)?.let { skipSpaces(text, it) } ?: afterDestination else afterDestination
+			val (destination, destinationEnd) = readLinkDestination(text, skipSpace(text, i + 1, newlines = 0), inParentheses = true) ?: return null
+			val afterDestination = skipSpace(text, destinationEnd, newlines = 0)
+			i = if (afterDestination > destinationEnd) readTitle(text, afterDestination)?.let { skipSpace(text, it, newlines = 0) } ?: afterDestination else afterDestination
 			if (text.getOrNull(i) != ')' || i != text.lastIndex) return null
 			ImageSyntax(description, destination, label = null)
 		}
 
 		'[' -> {
-			val labelEnd = text.indexOf(']', i + 1)
-			if (labelEnd != text.lastIndex || '[' in text.substring(i + 1, labelEnd).replace("\\[", "")) return null
+			// A label holds no unescaped bracket, and ends the line.
+			var labelEnd = i + 1
+			while (labelEnd < text.length && text[labelEnd] != ']') {
+				if (text[labelEnd] == '[') return null
+				if (text[labelEnd] == '\\') labelEnd++
+				labelEnd++
+			}
+			if (labelEnd != text.lastIndex) return null
 			ImageSyntax(description, destination = null, label = text.substring(i + 1, labelEnd).ifBlank { description })
 		}
 
@@ -109,12 +90,6 @@ private fun closingBracket(text: String, from: Int): Int? {
 		i++
 	}
 	return null
-}
-
-private fun skipSpaces(text: String, from: Int): Int {
-	var i = from
-	while (i < text.length && (text[i] == ' ' || text[i] == '\t')) i++
-	return i
 }
 
 /**

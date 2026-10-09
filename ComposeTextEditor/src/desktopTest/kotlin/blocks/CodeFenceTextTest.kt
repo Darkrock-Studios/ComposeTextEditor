@@ -1,6 +1,8 @@
 package blocks
 
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.font.FontWeight
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
@@ -109,5 +111,37 @@ class CodeFenceTextTest {
 		assertTrue(state.isCodeFence(0))
 		assertFalse(isBold(0))
 		assertEquals(emptyList(), links())
+	}
+
+	@Test
+	fun `text pasted from a fence line onto lines past it keeps its styles there`() {
+		state.setText("code")
+		state.toggleCodeFence(0..0)
+		state.cursor.updatePosition(CharLineOffset(0, 4))
+		state.insertStringAtCursor(buildAnnotatedString {
+			withStyle(bold) { append("x") }
+			append("\n")
+			withStyle(bold) { append("bold") }
+		})
+
+		assertFalse(isBold(0))
+		assertEquals(!state.isCodeFence(1), isBold(1))
+	}
+
+	@Test
+	fun `a link up to a fence line's start is set`() {
+		state.setText("text\ncode")
+		state.toggleCodeFence(1..1)
+
+		assertTrue(state.setLink(range(0, 0, 1, 0), "https://x.test"))
+	}
+
+	@Test
+	fun `a link running into a fence keeps its part outside it`() {
+		state.setText("text\ncode")
+		assertTrue(state.setLink(range(0, 0, 1, 4), "https://x.test"))
+		state.toggleCodeFence(1..1)
+
+		assertEquals(listOf(0 to 0), links().map { it.range.start.line to it.range.end.line })
 	}
 }

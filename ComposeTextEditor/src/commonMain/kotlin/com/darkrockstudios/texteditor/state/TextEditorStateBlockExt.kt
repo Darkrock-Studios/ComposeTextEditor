@@ -153,7 +153,8 @@ private fun TextEditorState.fenceRunContaining(line: Int): IntRange? {
  */
 fun TextEditorState.setLink(range: TextEditorRange, url: String): Boolean {
 	if (sanitizeLinkUrl(url, allowedLinkSchemes) == null) return false
-	if ((range.start.line..range.end.line).any { isCodeFence(it) }) return false
+	val lastLine = if (range.end.char == 0 && range.end.line > range.start.line) range.end.line - 1 else range.end.line
+	if ((range.start.line..lastLine).any { isCodeFence(it) }) return false
 	editGroup {
 		addStyleSpan(range, richTextStyles.linkStyle)
 		val link = LinkSpanStyle(url)

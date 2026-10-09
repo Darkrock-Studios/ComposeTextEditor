@@ -349,7 +349,14 @@ class TextEditManager(private val state: TextEditorState) {
 			val kept = state.fenceStyles()
 			fun on(start: Int, end: Int) = TextEditorRange(CharLineOffset(line, start), CharLineOffset(line, end))
 			state.textLines[line].spanStyles.filter { it.item !in kept }.forEach { removeStyleSpan(on(it.start, it.end), it.item) }
-			state.richSpanManager.spansOnLine(line).filter { it.style is LinkSpanStyle }.forEach { removeRichSpan(it.range, it.style) }
+			state.richSpanManager.spansOnLine(line).filter { it.style is LinkSpanStyle }.forEach { link ->
+				removeRichSpan(link.range, link.style)
+				// Its parts on other lines are not code, and stay a link.
+				if (link.range.start.line < line) {
+					addRichSpan(TextEditorRange(link.range.start, CharLineOffset(line - 1, state.textLines[line - 1].length)), link.style)
+				}
+				if (link.range.end.line > line) addRichSpan(TextEditorRange(CharLineOffset(line + 1, 0), link.range.end), link.style)
+			}
 		}
 	}
 

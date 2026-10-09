@@ -136,6 +136,7 @@ class ImageBlockSerializationTest {
 			"![foo][]\n\n[foo]: /url" to ("foo" to "/url"),
 			"![Foo]\n\n[foo]: /url" to ("Foo" to "/url"),
 			"![foo ![bar](/url)](/url2)" to ("foo bar" to "/url2"),
+			"![foo][b\\]c]\n\n[b\\]c]: /url" to ("foo" to "/url"),
 		)) {
 			val extension = createMarkdownExtension()
 			extension.importMarkdown(markdown)

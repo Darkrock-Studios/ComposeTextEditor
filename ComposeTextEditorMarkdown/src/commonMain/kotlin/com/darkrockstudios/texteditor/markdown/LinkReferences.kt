@@ -36,32 +36,7 @@ internal fun readLinkDefinition(lines: List<String>, start: Int): LinkDefinition
 	if (text.getOrNull(i) != ':') return null
 	i = skipSpace(text, i + 1, newlines = 1)
 
-	val destinationStart = i
-	val destination: String
-	if (text.getOrNull(i) == '<') {
-		i++
-		while (i < text.length && text[i] != '>') {
-			if (text[i] == '\n' || text[i] == '<') return null
-			if (text[i] == '\\') i++
-			i++
-		}
-		if (i >= text.length) return null
-		destination = text.substring(destinationStart + 1, i)
-		i++
-	} else {
-		var depth = 0
-		while (i < text.length && !text[i].isWhitespace() && text[i].code >= 0x20) {
-			when (text[i]) {
-				'\\' -> i++
-				'(' -> depth++
-				')' -> if (--depth < 0) return null
-			}
-			i++
-		}
-		if (i == destinationStart || depth != 0) return null
-		destination = text.substring(destinationStart, minOf(i, text.length))
-	}
-	val destinationEnd = i
+	val (destination, destinationEnd) = readLinkDestination(text, i, inParentheses = false) ?: return null
 
 	// A title, after whitespace, may follow; without one the destination ends its line.
 	val titleStart = skipSpace(text, destinationEnd, newlines = 1)
@@ -80,8 +55,42 @@ internal fun normalizeLinkLabel(label: String): String =
 
 private val WHITESPACE_RUN = Regex("""\s+""")
 
+/**
+ * The link destination starting at [start] in [text], as written (its angle brackets off),
+ * and the index after it, or null when none starts there. A bare one ends at whitespace,
+ * or [inParentheses] at a `)` its own parentheses leave unmatched, and only there may it
+ * be empty.
+ */
+internal fun readLinkDestination(text: String, start: Int, inParentheses: Boolean): Pair<String, Int>? {
+	var i = start
+	if (text.getOrNull(i) == '<') {
+		i++
+		while (i < text.length && text[i] != '>') {
+			if (text[i] == '\n' || text[i] == '<') return null
+			if (text[i] == '\\') i++
+			i++
+		}
+		if (i >= text.length) return null
+		return text.substring(start + 1, i) to i + 1
+	}
+	var depth = 0
+	while (i < text.length && !text[i].isWhitespace() && text[i].code >= 0x20) {
+		when (text[i]) {
+			'\\' -> i++
+			'(' -> depth++
+			')' -> if (--depth < 0) {
+				if (!inParentheses) return null
+				break
+			}
+		}
+		i++
+	}
+	if (depth > 0 || (!inParentheses && i == start)) return null
+	return text.substring(start, minOf(i, text.length)) to minOf(i, text.length)
+}
+
 /** The index after the spaces and tabs from [from], and up to [newlines] line breaks among them. */
-private fun skipSpace(text: String, from: Int, newlines: Int): Int {
+internal fun skipSpace(text: String, from: Int, newlines: Int): Int {
 	var i = from
 	var breaks = 0
 	while (i < text.length && (text[i] == ' ' || text[i] == '\t' || (text[i] == '\n' && breaks++ < newlines))) i++

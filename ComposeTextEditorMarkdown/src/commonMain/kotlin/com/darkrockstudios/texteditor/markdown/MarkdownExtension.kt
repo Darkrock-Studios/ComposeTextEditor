@@ -1045,20 +1045,22 @@ class MarkdownExtension(
 						linkDefinitions = linkDefinitions,
 					)
 					var text = parsed.annotatedString
-					var lead = if (start in imported.cells && text.text.firstOrNull() == cellLead) 1 else 0
+					var blockLinks = parsed.links
 					parsed.joinedLines.forEach { joined[start + it] = true }
-					// An item's text is one paragraph on its line, as a renderer shows it:
-					// its line breaks are spaces, and an empty first line holds none of it.
+					if (start in imported.cells && text.text.firstOrNull() == cellLead) {
+						text = text.subSequence(1, text.length)
+						blockLinks = blockLinks.map { ParsedLink(it.start - 1, it.end - 1, it.url) }
+					}
 					// Under single newlines export wrote an item and a line after it so.
 					if (blankLineParagraphs && opensItem[start] && end > start + 1) {
-						val firstBreak = text.text.indexOf('\n')
-						if (firstBreak >= 0 && text.text.substring(0, firstBreak).isBlank()) lead = firstBreak + 1
-						text = AnnotatedString(text.text.replace('\n', ' '), text.spanStyles, text.paragraphStyles)
+						val oneLine = asOneLine(text, editorState.richTextStyles.codeStyle)
+						text = oneLine.text
+						blockLinks = blockLinks.map { ParsedLink(oneLine.moved(it.start), oneLine.moved(it.end), it.url) }
 						for (line in start + 1 until end) joined[line] = true
 					}
-					val offset = length - lead
-					parsed.links.forEach { links += ParsedLink(it.start + offset, it.end + offset, it.url) }
-					append(if (lead == 0) text else text.subSequence(lead, text.length))
+					val offset = length
+					blockLinks.forEach { links += ParsedLink(it.start + offset, it.end + offset, it.url) }
+					append(text)
 				}
 				start = end
 			}
@@ -1080,6 +1082,45 @@ class MarkdownExtension(
 				richSpans = linkSpans(links, annotatedString.text) + fenceLanguageSpans(fenceInfoStrings.mapKeys { lineOf[it.key] }),
 			)
 		}
+	}
+
+	/** A text made one line by [asOneLine], and where each of the source's offsets went. */
+	private class OneLine(val text: AnnotatedString, private val offsets: IntArray) {
+		fun moved(offset: Int): Int = offsets[offset]
+	}
+
+	/**
+	 * A list item's [text] as the one paragraph a renderer shows: each line break a space,
+	 * the spaces and tabs a hard break leaves before one dropped (but in [code], whose
+	 * spaces are its own), and a blank first line, an empty item's, dropped with its break.
+	 */
+	private fun asOneLine(text: AnnotatedString, code: SpanStyle): OneLine {
+		val source = text.text
+		val inCode = BooleanArray(source.length)
+		text.spanStyles.forEach { if (it.item == code) for (i in it.start until it.end) inCode[i] = true }
+		val firstBreak = source.indexOf('\n')
+		val skipped = if (firstBreak >= 0 && source.substring(0, firstBreak).isBlank()) firstBreak + 1 else 0
+		val beforeBreak = BooleanArray(source.length)
+		var trailing = false
+		for (i in source.indices.reversed()) {
+			val c = source[i]
+			trailing = c == '\n' || (trailing && (c == ' ' || c == '\t') && !inCode[i])
+			beforeBreak[i] = trailing && c != '\n'
+		}
+		val out = StringBuilder(source.length)
+		val offsets = IntArray(source.length + 1)
+		for (i in source.indices) {
+			offsets[i] = out.length
+			when {
+				i < skipped || beforeBreak[i] -> {}
+				source[i] == '\n' -> out.append(' ')
+				else -> out.append(source[i])
+			}
+		}
+		offsets[source.length] = out.length
+		fun <T> moved(ranges: List<AnnotatedString.Range<T>>) =
+			ranges.map { AnnotatedString.Range(it.item, offsets[it.start], offsets[it.end]) }.filter { it.start < it.end }
+		return OneLine(AnnotatedString(out.toString(), moved(text.spanStyles), moved(text.paragraphStyles)), offsets)
 	}
 
 	/**
