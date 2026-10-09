@@ -132,60 +132,51 @@ private fun lineEndAfter(text: String, from: Int): Int? {
  * an inline link's destination is read past. The [literalLines] are code, left as written.
  */
 internal fun withNonLinkBracketsEscaped(source: String, definitions: Map<String, String>, literalLines: Set<Int>): String {
+	if ('[' !in source) return source
 	val escaped = ArrayList<Int>()
 	val openers = ArrayList<Int>()
 	// Openers a link inside made inactive: escaped, they make no link of their own.
 	val inactive = HashSet<Int>()
-	val literal = BooleanArray(source.length)
-	if (literalLines.isNotEmpty()) {
-		var line = 0
-		for (index in source.indices) {
-			if (line in literalLines) literal[index] = true
-			if (source[index] == '\n') line++
-		}
-	}
-	// Lengths of backtick strings no closer follows from where one was last looked for.
-	val unclosed = HashSet<Int>()
-	var i = 0
-	while (i < source.length) {
-		if (literal[i]) {
-			i++
-			continue
-		}
-		when (source[i]) {
-			'\\' -> i++
-			'`' -> i = codeSpanEnd(source, i, unclosed)
-			'<' -> INLINE_TAG.matchAt(source, i)?.let { i = it.range.last }
-			'[' -> openers += i
+	scanInline(source, literalLines) { token, start, _ ->
+		if (token != InlineToken.CHAR) return@scanInline null
+		when (source[start]) {
+			'[' -> {
+				openers += start
+				null
+			}
+
 			']' -> {
 				val opener = openers.removeLastOrNull()
-				if (opener != null && opener !in inactive) {
-					val inlineEnd = if (source.getOrNull(i + 1) == '(') inlineLinkTailEnd(source, i + 1) else null
-					var link = inlineEnd != null
-					if (inlineEnd != null) {
-						i = inlineEnd
-					} else {
-						if (source.getOrNull(i + 1) == '(') escaped += i + 1
-						val text = source.substring(opener + 1, i)
-						val labelEnd = if (source.getOrNull(i + 1) == '[') source.indexOf(']', i + 2) else -1
-						val label = if (labelEnd < 0) text else source.substring(i + 2, labelEnd).ifBlank { text }
-						if (normalizeLinkLabel(label) !in definitions) {
-							escaped += opener
-							escaped += i
-						} else {
-							link = true
-							// A full or collapsed reference's label is its own, no reference of its own.
-							if (labelEnd >= 0) i = labelEnd
-						}
+				if (opener == null || opener in inactive) return@scanInline null
+				var next: Int? = null
+				val inlineEnd = if (source.getOrNull(start + 1) == '(') inlineLinkTailEnd(source, start + 1) else null
+				val link = if (inlineEnd != null) {
+					next = inlineEnd + 1
+					true
+				} else {
+					if (source.getOrNull(start + 1) == '(') escaped += start + 1
+					val text = source.substring(opener + 1, start)
+					val labelEnd = if (source.getOrNull(start + 1) == '[') source.indexOf(']', start + 2) else -1
+					val label = if (labelEnd < 0) text else source.substring(start + 2, labelEnd).ifBlank { text }
+					val defined = normalizeLinkLabel(label) in definitions
+					if (!defined) {
+						escaped += opener
+						escaped += start
+					} else if (labelEnd >= 0) {
+						// A full or collapsed reference's label is its own, no reference of its own.
+						next = labelEnd + 1
 					}
-					// An image may hold a link; a link holds none, and leaves an image around it one.
-					if (link && source.getOrNull(opener - 1) != '!') {
-						for (open in openers) if (source.getOrNull(open - 1) != '!' && inactive.add(open)) escaped += open
-					}
+					defined
 				}
+				// An image may hold a link; a link holds none, and leaves an image around it one.
+				if (link && source.getOrNull(opener - 1) != '!') {
+					for (open in openers) if (source.getOrNull(open - 1) != '!' && inactive.add(open)) escaped += open
+				}
+				next
 			}
+
+			else -> null
 		}
-		i++
 	}
 	if (escaped.isEmpty()) return source
 	val out = StringBuilder(source.length + escaped.size)
@@ -210,25 +201,3 @@ internal fun inlineLinkTailEnd(source: String, open: Int): Int? {
 	if (i > destinationEnd) readTitle(source, i)?.let { i = skipSpace(source, it, newlines = 1) }
 	return i.takeIf { source.getOrNull(it) == ')' }
 }
-
-/**
- * The index of the last character of the code span whose opening backtick string starts
- * at [start] in [source], or of that backtick string when no closer follows. [unclosed]
- * holds the lengths no closer follows, found so far, so a scan looks for each once.
- */
-internal fun codeSpanEnd(source: String, start: Int, unclosed: MutableSet<Int>): Int {
-	var ticks = start
-	while (ticks < source.length && source[ticks] == '`') ticks++
-	val run = source.substring(start, ticks)
-	var close = if (run.length in unclosed) -1 else source.indexOf(run, ticks)
-	while (close >= 0 && (source.getOrNull(close + run.length) == '`' || source.getOrNull(close - 1) == '`')) {
-		var past = close
-		while (past < source.length && source[past] == '`') past++
-		close = source.indexOf(run, past)
-	}
-	if (close < 0) unclosed += run.length
-	return if (close >= 0) close + run.length - 1 else ticks - 1
-}
-
-/** An HTML tag or an autolink: its text is as written. */
-internal val INLINE_TAG = Regex("""<[A-Za-z/!?][^<>\n]*>""")

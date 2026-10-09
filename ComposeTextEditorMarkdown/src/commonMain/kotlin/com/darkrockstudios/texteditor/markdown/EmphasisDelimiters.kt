@@ -11,29 +11,13 @@ import androidx.compose.ui.text.AnnotatedString
 internal fun withEscapedDelimitersAsEntities(source: String, literalLines: Set<Int>): String {
 	if (!source.contains("\\*") && !source.contains("\\_")) return source
 	val out = StringBuilder(source.length + 8)
-	val unclosed = HashSet<Int>()
-	var line = 0
 	var from = 0
-	var i = 0
-	while (i < source.length) {
-		when (source[i]) {
-			'\n' -> line++
-			'\\' -> {
-				val next = source.getOrNull(i + 1)
-				if ((next == '*' || next == '_') && line !in literalLines) {
-					out.append(source, from, i).append(if (next == '*') "&#42;" else "&#95;")
-					from = i + 2
-				}
-				if (next != '\n') i++
-			}
-			'`' -> if (line !in literalLines) {
-				val end = codeSpanEnd(source, i, unclosed)
-				line += (i..end).count { source[it] == '\n' }
-				i = end
-			}
-			'<' -> INLINE_TAG.matchAt(source, i)?.let { i = it.range.last }
+	scanInline(source, literalLines) { token, start, end ->
+		if (token == InlineToken.ESCAPE && (source[end] == '*' || source[end] == '_')) {
+			out.append(source, from, start).append(if (source[end] == '*') "&#42;" else "&#95;")
+			from = end + 1
 		}
-		i++
+		null
 	}
 	return out.append(source, from, source.length).toString()
 }

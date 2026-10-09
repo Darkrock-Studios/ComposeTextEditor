@@ -15,50 +15,45 @@ private val URI_AUTOLINK = Regex("""<([A-Za-z][A-Za-z0-9+.-]{1,31}:[^ <>\u0000-\
 internal fun withInlinePrecedence(source: String, literalLines: Set<Int>, lessThan: Lazy<Char?>): String {
 	if ('<' !in source) return source
 	val out = StringBuilder(source.length + 16)
-	val unclosed = HashSet<Int>()
 	var openers = 0
-	var line = 0
 	var from = 0
-	var i = 0
-	while (i < source.length) {
-		val literal = line in literalLines
-		when (source[i]) {
-			'\n' -> line++
-			'\\' -> if (source.getOrNull(i + 1) != '\n') i++
-			'[' -> if (!literal) openers++
-			// A link's destination is its own, read with the link: no autolink.
-			']' -> if (!literal && openers > 0) {
-				openers--
-				if (source.getOrNull(i + 1) == '(') inlineLinkTailEnd(source, i + 1)?.let { end ->
-					line += (i..end).count { source[it] == '\n' }
-					i = end
+	scanInline(source, literalLines) { token, start, end ->
+		when (token) {
+			InlineToken.CHAR -> when {
+				source[start] == '[' -> {
+					openers++
+					null
 				}
+				// A link's destination is its own, read with the link: no autolink.
+				source[start] == ']' && openers > 0 -> {
+					openers--
+					if (source.getOrNull(start + 1) == '(') inlineLinkTailEnd(source, start + 1)?.let { it + 1 } else null
+				}
+				else -> null
 			}
-			'`' -> if (!literal) {
-				val end = codeSpanEnd(source, i, unclosed)
-				val standIn = if (source.getOrNull(end) == '`' && end > i && (i..end).any { source[it] == '<' }) lessThan.value else null
+
+			InlineToken.CODE_SPAN -> {
+				val standIn = if ((start..end).any { source[it] == '<' }) lessThan.value else null
 				if (standIn != null) {
-					out.append(source, from, i)
-					for (at in i..end) out.append(if (source[at] == '<') standIn else source[at])
+					out.append(source, from, start)
+					for (at in start..end) out.append(if (source[at] == '<') standIn else source[at])
 					from = end + 1
 				}
-				line += (i..end).count { source[it] == '\n' }
-				i = end
+				null
 			}
-			'<' -> if (!literal) {
-				val autolink = URI_AUTOLINK.matchAt(source, i)
-				if (autolink != null) {
+
+			InlineToken.TAG -> {
+				URI_AUTOLINK.matchAt(source, start)?.takeIf { it.range.last == end }?.let { autolink ->
 					val uri = autolink.groupValues[1]
-					out.append(source, from, i)
+					out.append(source, from, start)
 						.append('[').append(escapeLinkText(uri)).append("](<").append(escapeLinkDestination(uri, angled = true)).append(">)")
-					from = autolink.range.last + 1
-					i = autolink.range.last
-				} else {
-					INLINE_TAG.matchAt(source, i)?.let { i = it.range.last }
+					from = end + 1
 				}
+				null
 			}
+
+			InlineToken.ESCAPE -> null
 		}
-		i++
 	}
 	if (from == 0) return source
 	return out.append(source, from, source.length).toString()
