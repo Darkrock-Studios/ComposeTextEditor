@@ -188,7 +188,7 @@ one of their flags.
 
 ## Tables
 
-After 3.0.3, tables are a block (`docs/design/tables.md`): a table is a run of cell lines,
+In 3.1.0, tables are a block (`docs/design/tables.md`): a table is a run of cell lines,
 each carrying a `TableCellSpanStyle`, laid out side by side. Nothing needs code,
 but a host may notice:
 
@@ -221,7 +221,7 @@ and `tableCellAt` to read one. `TextEditorStyle` gains `tableBorderColor` and
 
 ## Task lists
 
-After 3.0.3, GFM's task list items are tasks (`docs/design/line-blocks.md`, "Task
+In 3.1.0, GFM's task list items are tasks (`docs/design/line-blocks.md`, "Task
 lists"): a `TaskSpanStyle` on a list item, drawn as a checkbox. Nothing needs code,
 but a host may notice:
 
@@ -236,6 +236,18 @@ but a host may notice:
 
 The task API is in `com.darkrockstudios.texteditor.state`: `toggleTaskList`,
 `setTaskChecked`, `toggleTaskChecked`, `taskCheckedAt` and `isTask`.
+
+## Code fences
+
+In 3.1.0, a code fence's text holds no inline style or link, which markdown cannot write
+inside a fence (`docs/design/line-blocks.md`, "Stacking rules"). Nothing needs code, but
+a host may notice:
+
+- **Editing.** A style added over fence lines skips them, text landing on one keeps only
+  the fence's monospace, and making lines a fence takes their styles and links off, in
+  the same undo step.
+- **Links.** `setLink` answers false for a range on a fence line.
+- **HTML.** Import keeps no inline style or link inside a `<pre>`.
 
 ## Keyboard content on Android
 

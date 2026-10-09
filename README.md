@@ -106,24 +106,24 @@ inside text or links (3).
 
 Text Editor:
 
-`implementation("com.darkrockstudios:composetexteditor:3.0.3")`
+`implementation("com.darkrockstudios:composetexteditor:3.1.0")`
 
 Markdown addon, to use the editor as a markdown editor (`state.withMarkdown()`):
 
-`implementation("com.darkrockstudios:composetexteditor-markdown:3.0.3")`
+`implementation("com.darkrockstudios:composetexteditor-markdown:3.1.0")`
 
 Spell Checking addon:
 
-`implementation("com.darkrockstudios:composetexteditor-spellcheck:3.0.3")`
+`implementation("com.darkrockstudios:composetexteditor-spellcheck:3.1.0")`
 
 Find & Replace addon:
 
-`implementation("com.darkrockstudios:composetexteditor-find:3.0.3")`
+`implementation("com.darkrockstudios:composetexteditor-find:3.1.0")`
 
 Or take the BOM and leave the versions off the modules, so they always match:
 
 ```kotlin
-implementation(platform("com.darkrockstudios:composetexteditor-bom:3.0.3")
+implementation(platform("com.darkrockstudios:composetexteditor-bom:3.1.0")
 implementation("com.darkrockstudios:composetexteditor")
 implementation("com.darkrockstudios:composetexteditor-markdown")
 implementation("com.darkrockstudios:composetexteditor-spellcheck")
