@@ -281,7 +281,8 @@ private fun CodeFenceStripResult.rewritten(
 /**
  * [strip] without its link reference definitions, each with the blank line after it
  * that set it apart, and the definitions by label, the first of a label kept. A
- * definition starts a block: not inside a paragraph, a quote or a list item.
+ * definition starts a block: not inside a paragraph or a list item. One on a line of
+ * its own opening a quote's block leaves the quote an empty line.
  */
 private fun withoutLinkDefinitions(strip: CodeFenceStripResult): Pair<CodeFenceStripResult, Map<String, String>> {
 	val lines = strip.text.lines()
@@ -289,12 +290,24 @@ private fun withoutLinkDefinitions(strip: CodeFenceStripResult): Pair<CodeFenceS
 	val tableLines = findTables(lines, strip.fencedLines).flatMapTo(HashSet()) { it }
 	val definitions = LinkedHashMap<String, String>()
 	val dropped = HashSet<Int>()
+	val emptied = HashSet<Int>()
 	var index = 0
 	var blockStart = true
+	var quoteBlockStart = true
 	while (index < lines.size) {
 		val line = lines[index]
 		val literal = index in strip.fencedLines || index in tableLines
 		val definition = if (blockStart && !literal) readLinkDefinition(lines, index) else null
+		val (quote, quoted) = splitQuote(line)
+		if (definition == null && quote.isNotEmpty() && quoteBlockStart && !literal) {
+			readLinkDefinition(listOf(quoted), 0)?.let { inQuote ->
+				definitions.getOrPut(inQuote.label) { inQuote.destination }
+				emptied += index
+				index++
+				continue
+			}
+		}
+		quoteBlockStart = quote.isEmpty() || quoted.isBlank() || !isParagraphText(quoted)
 		if (definition == null) {
 			// A list item's next line continues it, as a paragraph's does.
 			val body = splitQuote(line).second
@@ -310,8 +323,8 @@ private fun withoutLinkDefinitions(strip: CodeFenceStripResult): Pair<CodeFenceS
 			index++
 		}
 	}
-	if (dropped.isEmpty()) return strip to emptyMap()
-	return strip.rewritten(lines, dropped) to definitions
+	if (dropped.isEmpty() && emptied.isEmpty()) return strip to emptyMap()
+	return strip.rewritten(lines, dropped) { line, text -> if (line in emptied) ">" else text } to definitions
 }
 
 /** [markdown] without its link reference definitions, and the definitions by label (see [withoutLinkDefinitions]). */
@@ -1203,7 +1216,9 @@ class MarkdownExtension(
 			val blank = !isFenced && (line.isBlank() || QUOTE_BLANK_LINE.matches(line))
 			val separates = when (separator) {
 				ParagraphSeparator.NEWLINE -> blank && (index - 1 in tableEnds || index + 1 in tables)
-				ParagraphSeparator.BLANK_LINE -> blank && afterBlock && isParagraphSeparator(stripped, strip.fencedLines, index)
+				// A file's last line break after a bare `>`, which export never ends one with, ends it.
+				ParagraphSeparator.BLANK_LINE -> blank && (afterBlock && isParagraphSeparator(stripped, strip.fencedLines, index) ||
+					index == stripped.lastIndex && line.isEmpty() && stripped.getOrNull(index - 1) == ">")
 			}
 			if (separates) {
 				afterBlock = false

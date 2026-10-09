@@ -79,6 +79,9 @@ private fun decodeEntity(entity: String): String? {
 	val hex = body.length > 1 && (body[1] == 'x' || body[1] == 'X')
 	val code = (if (hex) body.substring(2).toIntOrNull(16) else body.substring(1).toIntOrNull()) ?: return null
 	val valid = code in 1..0x10FFFF && code !in 0xD800..0xDFFF
+	// A line break is whitespace in a paragraph, which a renderer shows as a space; in the
+	// text it would be a line the source does not have.
+	if (code == '\n'.code || code == '\r'.code) return " "
 	return buildString { appendCodePoint(if (valid) code else 0xFFFD) }
 }
 

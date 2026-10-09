@@ -374,6 +374,18 @@ class CommonMarkSyntaxTest {
 	}
 
 	@Test
+	fun `a line break entity is a space, a file's last break after a bare quote marker ends it, and a quote may open with a definition`() = runTest {
+		for ((markdown, expected) in listOf(
+			"foo&#10;&#10;bar\n> baz" to "foo  bar\n> baz",
+			">\n" to "> ",
+			"[foo]\n\n> [foo]: /url" to "foo\n> ",
+		)) {
+			assertEquals(expected, imported(markdown).editorState.blockLines(), markdown)
+		}
+		assertEquals("/url", imported("[foo]\n\n> [foo]: /url").editorState.linkAt(CharLineOffset(0, 0)))
+	}
+
+	@Test
 	fun `a link holds no link, and a destination with a space is none`() = runTest {
 		for ((markdown, text, links) in listOf(
 			Triple("[link](/my uri)", "[link](/my uri)", listOf(0 to null)),
