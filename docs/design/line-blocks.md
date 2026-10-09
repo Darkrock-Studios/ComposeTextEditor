@@ -213,9 +213,16 @@ character would start or end syntax in its position (`markdownEscapes`): a
 literal `- ` at the start of a plain paragraph exports as `\- ` and survives,
 `*not*` in dialogue is escaped by CommonMark's flanking rules, and an
 apostrophe, a hyphen mid-sentence, an underscore inside a word or an asterisk
-between spaces is written as typed. Line-start rules read the body, so a
-marker shape at the start of a list item's body (`- 1990. plans`) is escaped
-as well, since it would otherwise nest a list. Unsupported syntax kept as
+between spaces is written as typed. Emphasis whose delimiters could not open
+or close where they stand, by the same rules (`**Note:**text`), or would not
+pair as written by CommonMark's own pairing pass, is written as `<em>`,
+`<strong>` or `<del>`, which import reads back; so is a strike or highlight
+with whitespace at an edge, where it shows (bold and italic shrink onto their
+text), and code another style covers is written as `<code>`. An indent stays
+entities inside a style that opens in it. Whatever is styled in the editor
+reads back as the same text and styles (`StyledRoundTripTest`). Line-start rules read
+the body, so a marker shape at the start of a list item's body
+(`- 1990. plans`) is escaped as well, since it would otherwise nest a list. Unsupported syntax kept as
 literal text on import (a task list's `[ ]`, a table inside a quote) is written
 back as it was, and a quoted table's rows are kept together. A table outside a
 quote is a block of its own, read and written whole (`docs/design/tables.md`).
@@ -253,12 +260,13 @@ after each block (a fenced line, or any line that is not blank; a bare `>`
 line is blank) the one blank line export would have written there is left
 out, and the rest are the editor's. Import reads the same line kinds as
 export, so it leaves out only what export writes: nothing between two fenced
-lines or two list items, a bare `>` only between two quoted lines, an empty
-line otherwise; and it keeps a blank line before a line indented like code,
-which the editor never writes and whose block needs it. The mapping is a
-bijection on the editor's own output, so the round trip is exact; a foreign
-file's single blank line between two fences, list items or quotes stays and
-keeps them apart, its single soft break still imports as two lines and is
+lines, a bare `>` only between two quoted lines, an empty line otherwise;
+and it keeps a blank line before a line indented like code, which the editor
+never writes and whose block needs it. Between two list items it leaves one
+out too, which export never writes there: a single one is CommonMark's loose
+list, whose items are one list. The mapping is a bijection on the editor's
+own output, so the round trip is exact; a foreign file's single blank line
+between two fences or quotes stays and keeps them apart, its single soft break still imports as two lines and is
 written back as two paragraphs, and its extra blank lines beyond the first
 are kept as editor blank lines. A blank line is a line with blank text and no
 block but a quote: an empty list item, heading or fenced line is a block.
@@ -328,6 +336,16 @@ per fence, so joining two runs writes the first run's, but undoing the join
 gives the second run its own back, and un-fencing the first run's lines makes
 the second's the run's. A language holding a backtick or a line break cannot
 be written and is dropped.
+
+### Fence markers
+
+Export writes a run's fence one backtick longer than the longest backtick run
+a line of it starts with, so no line inside closes it early. A fence closes
+only at a marker with nothing after it, and an empty one is one empty fenced
+line. A fence a foreign file opens inside a quote or a list item, which a fence
+cannot stack with, is read as code out of its container: its lines lose the
+container's markers and indent, the fence ends with the container, and the
+item or quote line that opened it is dropped.
 
 ## Toggle semantics
 
@@ -409,7 +427,7 @@ consequences of its own.
 
 ## Known limitations
 
-- A nested `> > ` quote collapses one level per import pass; only lists nest.
+- A nested `> > ` quote imports as one quote; only lists nest.
 - Exporting a document whose last line is a heading appends a trailing blank
   line that survives re-import (stable at one extra line).
 - Toggling a style off after a blanket apply does not restore the styles lines

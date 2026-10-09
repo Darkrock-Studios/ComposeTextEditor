@@ -29,18 +29,16 @@ And now, it's working, and at this point, working pretty well.
 
 - ✅ 100% Compose Multiplatform
 - ✅ Behaves like each platform's own text fields: keys, mouse, touch, IME, clipboard
-- ✅ Efficient rendering and editing of long-form text
+- ✅ Fast on long documents
 - ✅ Rich text with custom spans
-- ✅ Expose scroll state
-- ✅ Spell checking
-- ✅ Decoration layers: your own highlights (find, syntax colours) kept out of undo and export
+- ✅ Block structure: headings, nested lists, task lists, quotes, code fences, tables, rules, images, links
+- ✅ Spell check, find & replace, and diagnostics from your own checker
 - ✅ Screen readers
-- ✅ Diagnostics from your own checker (grammar, style), underlined with a menu of fixes
-- ✅ Block structure: headings, nested lists, blockquotes, code fences, tables, rules, images, links
 - ✅ HTML import, export and clipboard
-- ☑️ Markdown, as an addon (CommonMark, partial)
-  - Inline styles (bold, italics, etc.)
-  - Block styles (code fence with its language tag, nested lists, GFM tables, images)
+- ☑️ Markdown, as an addon
+  - CommonMark: 411 of the spec's 652 examples. Raw HTML, indented code blocks and
+    multi-paragraph list items are not supported yet.
+  - GitHub Flavored Markdown: tables, task lists and strikethrough
   - Underline (`<u>`), highlight (`==text==` or `<mark>`), colour and size (`<span style>`)
   - Opt-in shortcuts that format as you type (`# `, `- `, `**bold**`)
 
@@ -52,48 +50,20 @@ the [API reference & recipes](https://darkrock-studios.github.io/ComposeTextEdit
 
 ### Features:
 
-- Rich text rendering and editable
-  - Only what is visible is drawn, and lines are stored in chunks
-  - A long document lays out the viewport first and settles the rest between frames:
-    a 200,000 character document loads in about 7 ms on desktop
-- Keyboard, mouse and touch behave like the platform's own text fields: grapheme-aware
-  caret and word motion, multi-click selection, the platform's shortcuts (macOS's
-  Emacs-style chords, Linux's primary selection, shortcuts that follow the active
-  keyboard layout), touch handles, magnifier and toolbar, and right-to-left text
-- Input methods: dead keys, CJK composition, autocorrect, and on Android stylus
-  handwriting and keyboard GIFs and stickers (handed to the host)
-- Clipboard with rich text (HTML) on every platform, paste as plain text, and drag and
-  drop on desktop, Android and the web
-- Undo and redo, one step per user action, with an API to group your own edits
-- Paragraph formatting: spacing, alignment, indents and line height
+- Only what is visible is drawn: a 200,000 character document opens in about 7 ms on desktop
 - Exposed scroll state, so we can render scroll bars (_BTF1 can't do this_)
-- Doesn't copy and return full contents on each edit, so again better for longer form text. (_BTF2
-  also works this way, but BTF2 doesn't support AnnotatedString for rich content_)
-- Support custom Rich Span drawing (_this allows us to render the traditional Spell Check red
-  squiggle_)
-- Emits edit events: so if a single character is inserted, you can collect a Flow, and know exactly
-  what change was made. This makes managing Spell Check much more efficient as you can just
-  respell-check the single word that was changed, rather than everything. (_BTF2 now finally offers this!_)
-- Decoration layers: host-owned spans for highlights such as find matches, spell check
-  or syntax colours, which stay out of undo, copies, exports and the text revision.
-- Find & Replace UI: case, whole word, regex, within the selection, F3 and Ctrl+G.
-- Spell check menu with suggestions, Ignore and Add to dictionary.
-- Screen reader support: the editor and `RichTextView` publish their text, selection,
-  links and clipboard actions as `BasicTextField` does, with character bounds on
-  Android and iOS.
-- Word count, by the same word segmentation as word motion and spell check.
-- `rememberSaveableTextEditorState`: the document, caret, selection and scroll survive
-  configuration changes and process death (the undo history does not).
-- `TextEditorState(initialText)`: a view model can create, load and edit the document
-  outside composition, and hand it to the editor later.
-- Editor configuration: read-only with a caret, sizing to the text between minimum
-  and maximum lines, single line (one row that scrolls sideways), maximum length and
-  input filters, and wrapping off (`softWrap = false`) for code: each line one row,
-  the editor scrolling sideways.
-- Opt-in writer conveniences: smart punctuation (curly quotes and apostrophes, em
-  and en dashes, ellipses), each substitution switchable, and auto-linking of typed
-  and pasted URLs, each undone in one step
-  ([docs/design/behaviors.md](docs/design/behaviors.md)).
+- Doesn't copy and return full contents on each edit, so better for longer form text (_BTF2
+  also works this way, but doesn't support AnnotatedString for rich content_)
+- Custom Rich Span drawing (_this lets us render the traditional Spell Check red squiggle_)
+- Emits edit events: collect a Flow and know exactly what changed, so spell check only
+  re-checks the word that was edited (_BTF2 now finally offers this!_)
+- Undo and redo, one step per user action
+- Decoration layers: highlights such as find matches or syntax colours that stay out of
+  undo and export
+- Paragraph formatting: spacing, alignment, indents and line height
+- Read-only, single line, max length, input filters and no-wrap modes
+- State that survives process death, or lives in your view model
+- Opt-in smart punctuation and auto-linking ([docs/design/behaviors.md](docs/design/behaviors.md))
 
 #### Platforms
 

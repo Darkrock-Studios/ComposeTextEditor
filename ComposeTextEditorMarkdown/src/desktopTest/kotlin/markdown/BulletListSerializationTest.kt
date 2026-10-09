@@ -164,13 +164,12 @@ class BulletListSerializationTest {
 	}
 
 	@Test
-	fun `import keeps a nested blockquote marker as body text`() = runTest {
-		// Each style peels at most once; a second quote level is not representable,
-		// so its marker stays in the body.
+	fun `import reads a nested blockquote as one quote`() = runTest {
+		// A second quote level is not representable, so the levels are one quote.
 		val extension = createMarkdownExtension()
 		extension.importMarkdown("> > quoted")
 
-		assertEquals("> quoted", extension.editorState.getAllText().text)
+		assertEquals("quoted", extension.editorState.getAllText().text)
 		assertTrue(extension.bulletLines().isEmpty())
 	}
 

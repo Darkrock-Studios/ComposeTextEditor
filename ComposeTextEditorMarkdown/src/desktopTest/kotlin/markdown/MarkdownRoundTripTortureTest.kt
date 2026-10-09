@@ -45,7 +45,7 @@ class MarkdownRoundTripTortureTest {
 	fun `a bulleted horizontal rule survives a round trip`() = runTest {
 		val markdown = editor()
 		val state = markdown.editorState
-		markdown.importMarkdown("a\n---\nb")
+		markdown.importMarkdown("a\n\n---\n\nb")
 		assertEquals(listOf(1), state.linesWith(HorizontalRuleSpanStyle))
 
 		state.toggleBulletList(0..2)
@@ -62,7 +62,7 @@ class MarkdownRoundTripTortureTest {
 	fun `the second generation export of a bulleted rule is a fixpoint`() = runTest {
 		val markdown = editor()
 		val state = markdown.editorState
-		markdown.importMarkdown("a\n---\nb")
+		markdown.importMarkdown("a\n\n---\n\nb")
 		state.toggleBulletList(0..2)
 
 		val first = markdown.exportAsMarkdown()

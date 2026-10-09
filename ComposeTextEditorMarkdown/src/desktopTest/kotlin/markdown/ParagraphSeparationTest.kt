@@ -139,23 +139,23 @@ class ParagraphSeparationTest {
 	}
 
 	@Test
-	fun `a quote followed by a paragraph without a blank line keeps both`() = runTest {
+	fun `a paragraph line right after a quote's continues the quote`() = runTest {
 		val e = extension()
 		e.importMarkdown("> a\nb")
 		assertEquals(listOf("a", "b"), e.lines())
-		assertEquals("> a\n\nb", e.exportAsMarkdown())
+		assertEquals("> a\n>\n> b", e.exportAsMarkdown())
 	}
 
 	@Test
-	fun `a foreign blank line between two fences, list items or quotes keeps them apart`() = runTest {
+	fun `a foreign blank line between two fences or quotes keeps them apart, and between list items is a loose list`() = runTest {
 		val e = extension()
 		e.importMarkdown("```kotlin\na\n```\n\n```java\nb\n```")
 		assertEquals(listOf("a", "", "b"), e.lines())
 		assertEquals("```kotlin\na\n```\n\n\n```java\nb\n```", e.exportAsMarkdown())
 
 		e.importMarkdown("- a\n\n- b")
-		assertEquals(listOf("a", "", "b"), e.lines())
-		assertEquals("- a\n\n\n- b", e.exportAsMarkdown())
+		assertEquals(listOf("a", "b"), e.lines())
+		assertEquals("- a\n- b", e.exportAsMarkdown())
 
 		e.importMarkdown("> a\n\n> b")
 		assertEquals(listOf("a", "", "b"), e.lines())

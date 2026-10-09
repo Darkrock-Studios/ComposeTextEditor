@@ -6,7 +6,6 @@ import com.darkrockstudios.texteditor.RichTextStyles
 import com.darkrockstudios.texteditor.annotatedstring.normalizeLineEndings
 import com.darkrockstudios.texteditor.html.DEFAULT_LINK_SCHEMES
 import com.darkrockstudios.texteditor.html.sanitizeLinkUrl
-import com.fleeksoft.ksoup.nodes.Entities
 import org.intellij.markdown.MarkdownElementTypes
 import org.intellij.markdown.MarkdownTokenTypes
 import org.intellij.markdown.ast.ASTNode
@@ -40,7 +39,11 @@ internal class MarkdownParseResult(
 fun String.toAnnotatedStringFromMarkdown(
 	styles: RichTextStyles = RichTextStyles.DEFAULT,
 	allowedLinkSchemes: Set<String> = DEFAULT_LINK_SCHEMES,
-): AnnotatedString = parseMarkdownWithLinks(styles, allowedLinkSchemes = allowedLinkSchemes).annotatedString
+): AnnotatedString {
+	val normalized = normalizeLineEndings()
+	val (markdown, definitions) = withoutLinkDefinitions(normalized, normalized.fencedLineIndices())
+	return markdown.parseMarkdownWithLinks(styles, allowedLinkSchemes = allowedLinkSchemes, linkDefinitions = definitions).annotatedString
+}
 
 /**
  * Parses like [toAnnotatedStringFromMarkdown] but also reports every inline
@@ -51,14 +54,18 @@ internal fun String.parseMarkdownWithLinks(
 	styles: RichTextStyles,
 	literalLines: Set<Int>? = null,
 	allowedLinkSchemes: Set<String>,
+	linkDefinitions: Map<String, String> = emptyMap(),
 ): MarkdownParseResult {
 	val normalized = normalizeLineEndings()
 	val standIns = IndentStandIns.forSource(normalized)
-	val source = (standIns?.substitute(normalized) { literalLines ?: normalized.fencedLineIndices() } ?: normalized)
+	val literal by lazy { literalLines ?: normalized.fencedLineIndices() }
+	val source = (standIns?.substitute(normalized) { literal } ?: normalized)
 		.withHighlightTags()
+		.let { withInlineTagLinesInline(it, literal) }
+		.let { withUndefinedReferencesEscaped(it, linkDefinitions, literal) }
 	val flavour = GFMFlavourDescriptor()
 	val parsedTree = MarkdownParser(flavour).buildMarkdownTreeFromString(source)
-	val context = MarkdownRenderContext(styles, allowedLinkSchemes, source.lineStarts(literalLines.orEmpty()))
+	val context = MarkdownRenderContext(styles, allowedLinkSchemes, source.lineStarts(literalLines.orEmpty()), linkDefinitions)
 	val annotated = buildAnnotatedString {
 		appendMarkdownChildren(source, parsedTree, context)
 	}
@@ -83,7 +90,7 @@ private fun String.lineStarts(lines: Set<Int>): Set<Int> {
 
 /**
  * A line's leading run of space and tab entities (the form export writes an indent in,
- * see `leadingIndents`), after any block prefixes, stands through the parse as one
+ * see `leadingIndents`), after any block prefixes and opening tags, stands through the parse as one
  * [space] or [tab] per entity. Both are punctuation to the parser, as the entity's `;`
  * is to a renderer, so what follows parses as it does after the entity: not at a line's
  * start, and after punctuation for a delimiter's flanking. They are chosen from
@@ -102,7 +109,13 @@ private class IndentStandIns private constructor(val space: Char, val tab: Char)
 			val prefix = match.groups[1]!!.value
 			val run = match.groups[2]!!.value
 			prefix +
-				INDENT_ENTITY.findAll(run).joinToString("") { if (it.value.isTabEntity()) "$tab" else "$space" } +
+				run.replace(INDENT_RUN_TOKEN) { token ->
+					when {
+						token.groups[2] == null -> token.value
+						token.value.isTabEntity() -> "$tab"
+						else -> "$space"
+					}
+				} +
 				line.substring(match.range.last + 1)
 		}.joinToString("\n")
 	}
@@ -140,34 +153,25 @@ internal fun cellLeadFor(lines: List<String>): Char {
 	return STAND_IN_CANDIDATES.asReversed().firstOrNull(::free) ?: ('\uE000'..'\uF8FF').first(::free)
 }
 
-/** Quote markers, then a list marker at any indent or a heading marker, then a run of indent entities. */
-private val LEADING_INDENT_ENTITIES = Regex(
-	"""^((?: {0,3}>[ ]?)*(?:[ \t]*(?:[-*+]|\d{1,9}[.)])[ \t]+| {0,3}#{1,6}[ \t]+)?)""" +
-		"""((?:&nbsp;|&NonBreakingSpace;|&Tab;|&emsp;|&#0*(?:160|32|9);|&#[xX]0*(?:[aA]0|20|9);)+)"""
-)
-private val INDENT_ENTITY = Regex("""&[^;]+;""")
+/**
+ * Quote markers, then a list marker at any indent or a heading marker, then a run of
+ * indent entities among the markup of styles that open or close in the indent: their
+ * tags, a link's brackets and destination, and code of whitespace.
+ */
+private const val INDENT_ENTITY_PATTERN = """&nbsp;|&NonBreakingSpace;|&Tab;|&emsp;|&#0*(?:160|32|9);|&#[xX]0*(?:[aA]0|20|9);"""
+private val INDENT_MARKUP = """$STYLED_TAG|\[|\]\((?:<[^<>\n]*>|[^)\s]*)\)|`+[ \t]*`+"""
+private val LEADING_INDENT_ENTITIES = Regex("""^($BLOCK_PREFIX)((?:(?:$INDENT_MARKUP)*(?:$INDENT_ENTITY_PATTERN))+)""")
+
+/** In a leading indent run, the markup as written (group 1) or an indent entity (group 2). */
+private val INDENT_RUN_TOKEN = Regex("""($INDENT_MARKUP)|($INDENT_ENTITY_PATTERN)""")
 
 private val TAB_ENTITY = Regex("""&(?:Tab|emsp|#0*9|#[xX]0*9);""")
 
 private fun String.isTabEntity(): Boolean = TAB_ENTITY.matches(this)
 
-private val QUOTE_MARKERS = Regex("""^(?: {0,3}> ?)*""")
-
-/** The lines inside a fence, a quoted one too, whose text is literal. */
-private fun String.fencedLineIndices(): Set<Int> {
-	val fenced = HashSet<Int>()
-	var fence: String? = null
-	lines().forEachIndexed { index, line ->
-		val marker = codeFenceMarker(line.replaceFirst(QUOTE_MARKERS, ""))
-		val open = fence
-		when {
-			open == null && marker != null -> fence = marker
-			open != null && marker != null && marker[0] == open[0] && marker.length >= open.length -> fence = null
-			open != null -> fenced += index
-		}
-	}
-	return fenced
-}
+/** The lines inside a fence, a quoted one or a list item's too, whose text is literal. */
+private fun String.fencedLineIndices(): Set<Int> =
+	walkFences(lines()).withIndex().filter { it.value is FenceLine.Code }.mapTo(HashSet()) { it.index }
 
 /**
  * Rewrites `==text==` highlights as `<mark>text</mark>` so the GFM parser,
@@ -184,24 +188,14 @@ private fun String.withHighlightTags(): String {
 	val lines = lines()
 	val out = StringBuilder(length + 16)
 	val tableRows = tableRowIndices(lines)
-	var fence: String? = null
+	val fences = walkFences(lines)
 	var inIndentedCode = false
 	var previousBlank = true
 	lines.forEachIndexed { index, line ->
 		if (index > 0) out.append('\n')
-		val marker = codeFenceMarker(line)
 		val indented = line.startsWith("    ") || line.startsWith("\t")
-		val openFence = fence
 		when {
-			openFence != null -> {
-				if (marker != null && marker[0] == openFence[0] && marker.length >= openFence.length) fence = null
-				out.append(line)
-			}
-
-			marker != null -> {
-				fence = marker
-				out.append(line)
-			}
+			fences[index] != FenceLine.Outside -> out.append(line)
 
 			line.isBlank() -> out.append(line)
 
@@ -354,6 +348,8 @@ internal class MarkdownRenderContext(
 	val allowedLinkSchemes: Set<String>,
 	/** Where the lines read as written (a fence's, its markers stripped) start in the source. */
 	val literalLineStarts: Set<Int> = emptySet(),
+	/** The destinations of the document's link reference definitions, by normalized label. */
+	val linkDefinitions: Map<String, String> = emptyMap(),
 ) {
 	val links = mutableListOf<ParsedLink>()
 
@@ -440,7 +436,72 @@ internal fun AnnotatedString.Builder.appendMarkdownChildren(
 	node: ASTNode,
 	context: MarkdownRenderContext,
 ) = context.scope(this) {
-	node.children.forEach { child -> appendMarkdownNode(original, child, context) }
+	val children = node.children
+	var i = 0
+	while (i < children.size) {
+		// `<me@example.com>` parses as its brackets beside an email token.
+		val email = children.getOrNull(i + 1)
+		if (children[i].type == MarkdownTokenTypes.LT && email?.type == MarkdownTokenTypes.EMAIL_AUTOLINK &&
+			children.getOrNull(i + 2)?.type == MarkdownTokenTypes.GT && context.keeps(email)
+		) {
+			val address = email.getTextInNode(original).toString()
+			appendAutolink(address, "mailto:$address", context)
+			i += 3
+			continue
+		}
+		appendMarkdownNode(original, children[i], context)
+		i++
+	}
+}
+
+/** The destination the reference link [node]'s label has a definition for, or null. */
+private fun referenceUrl(original: String, node: ASTNode, context: MarkdownRenderContext): String? {
+	val label = node.children.firstOrNull { it.type == MarkdownElementTypes.LINK_LABEL } ?: return null
+	return context.linkDefinitions[normalizeLinkLabel(label.getTextInNode(original).toString().removeSurrounding("[", "]"))]
+}
+
+/** Whether [node] holds a link: an inline one, an autolink, or a reference with a definition. */
+private fun containsLink(original: String, node: ASTNode, context: MarkdownRenderContext): Boolean = node.children.any { child ->
+	when (child.type) {
+		MarkdownElementTypes.INLINE_LINK, MarkdownElementTypes.AUTOLINK -> true
+		MarkdownElementTypes.FULL_REFERENCE_LINK, MarkdownElementTypes.SHORT_REFERENCE_LINK -> referenceUrl(original, child, context) != null
+		else -> containsLink(original, child, context)
+	}
+}
+
+/**
+ * The link text [textNode] (its first and last children the brackets) as a link to
+ * [url]; one the allowlist refuses, or none, keeps its text alone.
+ */
+private fun AnnotatedString.Builder.appendLink(original: String, textNode: ASTNode, url: String?, context: MarkdownRenderContext) {
+	val allowed = url?.takeIf { sanitizeLinkUrl(it, context.allowedLinkSchemes) != null }
+	if (allowed != null) pushStyle(context.styles.linkStyle)
+	val textStart = length
+	context.scope(this) {
+		textNode.children.forEachIndexed { i, child ->
+			if (i != 0 && i != textNode.children.lastIndex) appendMarkdownNode(original, child, context)
+		}
+	}
+	if (allowed != null) {
+		pop()
+		if (length > textStart) context.links += ParsedLink(textStart, length, allowed)
+	}
+}
+
+/** An autolink's URI as CommonMark has it: a scheme of 2 to 32 characters, a colon, then no space or angle bracket. */
+private val URI_AUTOLINK = Regex("""[A-Za-z][A-Za-z0-9+.-]{1,31}:[^\s<>\u0000-\u001F]*""")
+
+/** [text] as a link to [url], or as plain text when the allowlist refuses it. */
+private fun AnnotatedString.Builder.appendAutolink(text: String, url: String, context: MarkdownRenderContext) {
+	if (sanitizeLinkUrl(url, context.allowedLinkSchemes) == null) {
+		append(text)
+		return
+	}
+	val start = length
+	pushStyle(context.styles.linkStyle)
+	append(text)
+	pop()
+	context.links += ParsedLink(start, length, url)
 }
 
 private fun AnnotatedString.Builder.appendMarkdownNode(
@@ -464,31 +525,32 @@ private fun AnnotatedString.Builder.appendMarkdownNode(
 
 		MarkdownElementTypes.EMPH -> {
 			pushStyle(styles.italicStyle)
-			appendStyledContent(node, original, context)
+			appendStyledContent(node, original, context, delimiters = 1)
 			pop()
 		}
 
 		MarkdownElementTypes.STRONG -> {
 			pushStyle(styles.boldStyle)
-			appendStyledContent(node, original, context)
+			appendStyledContent(node, original, context, delimiters = 2)
 			pop()
 		}
 
 		GFMElementTypes.STRIKETHROUGH -> {
 			pushStyle(styles.strikethroughStyle)
-			appendStyledContent(node, original, context)
+			val leading = node.children.takeWhile { it.type == GFMTokenTypes.TILDE }.size
+			val trailing = node.children.takeLastWhile { it.type == GFMTokenTypes.TILDE }.size
+			appendStyledContent(node, original, context, delimiters = minOf(leading, trailing, 2))
 			pop()
 		}
 
 		MarkdownElementTypes.CODE_SPAN -> {
 			pushStyle(styles.codeStyle)
-			val codeText = nodeText.removeSurrounding("`")
-			append(codeText)
+			append(codeSpanContent(nodeText))
 			pop()
 		}
 
 		MarkdownTokenTypes.ESCAPED_BACKTICKS -> {
-			append(nodeText.removeMarkdownEscapes())
+			append(nodeText.decodeMarkdownText())
 		}
 
 		MarkdownTokenTypes.HTML_TAG -> {
@@ -537,9 +599,8 @@ private fun AnnotatedString.Builder.appendMarkdownNode(
 		MarkdownElementTypes.INLINE_LINK -> {
 			// A bare destination parses as LINK_DESTINATION; the GFM flavour
 			// reads an angle-bracketed one as an AUTOLINK child instead. Both
-			// carry any angle brackets in the node text; the URL itself is
-			// what round-trips. One the allowlist refuses, read as a renderer reads
-			// it (entities and escapes decoded), keeps its text alone.
+			// carry any angle brackets in the node text. The URL is read as a
+			// renderer reads it, escapes and entities decoded.
 			val url = node.children
 				.firstOrNull {
 					it.type == MarkdownElementTypes.LINK_DESTINATION ||
@@ -547,26 +608,32 @@ private fun AnnotatedString.Builder.appendMarkdownNode(
 				}
 				?.getTextInNode(original)?.toString()
 				?.removeSurrounding("<", ">")
-				?.takeIf { sanitizeLinkUrl(it.decodedDestination(), context.allowedLinkSchemes) != null }
-			if (url != null) pushStyle(styles.linkStyle)
-			val textStart = length
-			node.children.forEach { child ->
-				if (child.type == MarkdownElementTypes.LINK_TEXT) {
-					// The first and last children are the bracket tokens; the
-					// nodes between them are the link text, styles and all.
-					context.scope(this) {
-						child.children.forEachIndexed { i, gc ->
-							if (i != 0 && i != child.children.lastIndex) appendMarkdownNode(original, gc, context)
-						}
-					}
+				?.decodeMarkdownText()
+			node.children.firstOrNull { it.type == MarkdownElementTypes.LINK_TEXT }
+				?.let { appendLink(original, it, url, context) }
+		}
+
+		// `[text][label]`, `[label][]` and `[label]`: a link where a definition has the label,
+		// else its brackets and text as written, the text's styles read.
+		MarkdownElementTypes.FULL_REFERENCE_LINK,
+		MarkdownElementTypes.SHORT_REFERENCE_LINK -> {
+			val label = node.children.firstOrNull { it.type == MarkdownElementTypes.LINK_LABEL }
+			val url = referenceUrl(original, node, context)
+			val text = node.children.firstOrNull { it.type == MarkdownElementTypes.LINK_TEXT }
+			when {
+				label == null || url == null -> appendMarkdownChildren(original, node, context)
+				// A link holds no link: its text is text, and its label a link of its own.
+				text != null && containsLink(original, text, context) -> {
+					appendMarkdownNode(original, text, context)
+					appendLink(original, label, url, context)
 				}
-			}
-			val textEnd = length
-			if (url != null) pop()
-			if (url != null && textEnd > textStart) {
-				context.links += ParsedLink(textStart, textEnd, url)
+
+				else -> appendLink(original, text ?: label, url, context)
 			}
 		}
+
+		MarkdownElementTypes.LINK_TEXT,
+		MarkdownElementTypes.LINK_LABEL -> appendMarkdownChildren(original, node, context)
 
 		MarkdownElementTypes.ORDERED_LIST,
 		MarkdownElementTypes.UNORDERED_LIST -> {
@@ -593,11 +660,22 @@ private fun AnnotatedString.Builder.appendMarkdownNode(
 
 		MarkdownTokenTypes.TEXT -> {
 			// Remove escape sequences from text content
-			append(nodeText.removeMarkdownEscapes())
+			append(nodeText.decodeMarkdownText())
 		}
 
 		MarkdownTokenTypes.EOL -> {
 			append(nodeText)
+		}
+
+		// A backslash before a line's end breaks the line, which the line break after it does.
+		MarkdownTokenTypes.HARD_LINE_BREAK -> if (nodeText != "\\") append(nodeText)
+
+		// `<https://...>`: its text, taken literally, is the link's text and destination.
+		// The parser takes some the spec does not, which stay as written.
+		MarkdownElementTypes.AUTOLINK -> {
+			val url = node.children.firstOrNull { it.type == MarkdownElementTypes.AUTOLINK }
+				?.getTextInNode(original)?.toString() ?: nodeText.removeSurrounding("<", ">")
+			if (URI_AUTOLINK.matches(url)) appendAutolink(url, url, context) else append(nodeText)
 		}
 
 		MarkdownElementTypes.MARKDOWN_FILE -> {
@@ -607,7 +685,7 @@ private fun AnnotatedString.Builder.appendMarkdownNode(
 		else -> {
 			// For any unhandled node types, append text with escapes removed
 			if (nodeText.isNotEmpty()) {
-				append(nodeText.removeMarkdownEscapes())
+				append(nodeText.decodeMarkdownText())
 			} else {
 				appendMarkdownChildren(original, node, context)
 			}
@@ -615,32 +693,34 @@ private fun AnnotatedString.Builder.appendMarkdownNode(
 	}
 }
 
+/**
+ * The content of an emphasis or strikethrough [node], whose first and last [delimiters]
+ * children are its delimiter tokens; a delimiter token between them is literal text.
+ */
 private fun AnnotatedString.Builder.appendStyledContent(
 	node: ASTNode,
 	original: String,
 	context: MarkdownRenderContext,
+	delimiters: Int,
 ) = context.scope(this) {
 	var currentText = StringBuilder()
+	val contentEnd = node.children.size - delimiters
 
-	node.children.forEach { child ->
-		// At this level we should only be dealing with tokens, not elements
-		when (child.type) {
-			// Accumulate actual content
-			MarkdownTokenTypes.TEXT,
-			MarkdownTokenTypes.WHITE_SPACE -> {
+	node.children.forEachIndexed { index, child ->
+		when {
+			index < delimiters || index >= contentEnd -> context.keeps(child)
+
+			child.type == MarkdownTokenTypes.TEXT ||
+				child.type == MarkdownTokenTypes.WHITE_SPACE ||
+				child.type == MarkdownTokenTypes.EMPH ||
+				child.type == MarkdownTokenTypes.BACKTICK ||
+				child.type == GFMTokenTypes.TILDE -> {
 				if (context.keeps(child)) currentText.append(child.getTextInNode(original))
 			}
-			// Skip markdown syntax tokens, though they end a line's start
-			MarkdownTokenTypes.EMPH,
-			MarkdownTokenTypes.BACKTICK,
-			GFMTokenTypes.TILDE -> {
-				context.keeps(child)
-			}
-			// Handle any nested elements by recursing
 			else -> {
 				// Flush accumulated text first
 				if (currentText.isNotEmpty()) {
-					append(currentText.toString().removeMarkdownEscapes())
+					append(currentText.toString().decodeMarkdownText())
 					currentText.clear()
 				}
 				appendMarkdownNode(original, child, context)
@@ -650,7 +730,7 @@ private fun AnnotatedString.Builder.appendStyledContent(
 
 	// Flush any remaining text
 	if (currentText.isNotEmpty()) {
-		append(currentText.toString().removeMarkdownEscapes())
+		append(currentText.toString().decodeMarkdownText())
 	}
 }
 
@@ -702,7 +782,14 @@ private fun AnnotatedString.Builder.handleHeader(
 	pop()
 }
 
-private val DESTINATION_ESCAPE = Regex("""\\([!-/:-@\[-`{-~])""")
+/**
+ * A code span's text as CommonMark reads it: inside its backtick strings, less one space
+ * at each end when both ends have one and it is not all spaces.
+ */
+private fun codeSpanContent(node: String): String {
+	val fence = node.takeWhile { it == '`' }.length
+	val code = node.substring(fence, (node.length - fence).coerceAtLeast(fence))
+	val padded = code.length >= 2 && code.first() == ' ' && code.last() == ' ' && code.any { it != ' ' }
+	return if (padded) code.substring(1, code.length - 1) else code
+}
 
-/** A link destination as CommonMark reads it: backslash escapes and entity references decoded. */
-private fun String.decodedDestination(): String = Entities.unescape(replace(DESTINATION_ESCAPE, "$1"))

@@ -52,7 +52,7 @@ class ImportRelayoutCostTest {
 		// A horizontal rule attaches a span without rebuilding any line, and its height
 		// is resolved from that span during book-keeping. Skipping the layout pass
 		// whenever no line changed would leave the rule unmeasured.
-		val withRule = "before\n---\nafter"
+		val withRule = "before\n\n---\n\nafter"
 		val state = TextEditorState(scope = this, measurer = countingMeasurer(MeasureCounter()))
 
 		assertEquals(decoratedImportPasses * 3, measuresToImport(withRule))

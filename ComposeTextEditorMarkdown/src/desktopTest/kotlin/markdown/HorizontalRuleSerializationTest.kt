@@ -37,7 +37,7 @@ class HorizontalRuleSerializationTest {
 	@Test
 	fun `import adds HR rich span on --- line`() = runTest {
 		val extension = createMarkdownExtension()
-		extension.importMarkdown("before\n---\nafter")
+		extension.importMarkdown("before\n\n---\n\nafter")
 
 		assertEquals(listOf(1), extension.hrSpanLines())
 		// HR line is replaced with the placeholder space.
@@ -61,14 +61,14 @@ class HorizontalRuleSerializationTest {
 	@Test
 	fun `import handles HR token with surrounding whitespace`() = runTest {
 		val extension = createMarkdownExtension()
-		extension.importMarkdown("a\n  ---  \nb")
+		extension.importMarkdown("a\n\n  ---  \n\nb")
 		assertEquals(listOf(1), extension.hrSpanLines())
 	}
 
 	@Test
 	fun `import handles multiple HRs`() = runTest {
 		val extension = createMarkdownExtension()
-		extension.importMarkdown("---\nmid\n---")
+		extension.importMarkdown("---\n\nmid\n\n---")
 		assertEquals(listOf(0, 2), extension.hrSpanLines())
 	}
 
@@ -83,7 +83,7 @@ class HorizontalRuleSerializationTest {
 	@Test
 	fun `export emits --- for HR rich span line`() = runTest {
 		val extension = createMarkdownExtension()
-		extension.importMarkdown("before\n---\nafter")
+		extension.importMarkdown("before\n\n---\n\nafter")
 		assertEquals("before\n\n---\n\nafter", extension.exportAsMarkdown())
 	}
 
