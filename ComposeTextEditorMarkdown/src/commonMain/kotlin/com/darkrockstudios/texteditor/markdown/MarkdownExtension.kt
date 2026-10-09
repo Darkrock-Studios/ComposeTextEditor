@@ -212,9 +212,11 @@ private fun withoutColumns(line: String, columns: Int): String {
  * peel reads the lines as headings. The fence data is renumbered onto the lines left.
  * A paragraph line stays in a quote it is in; a table's rows are no paragraph. Without
  * [dashUnderlines] a `-` line is a rule: under [ParagraphSeparator.NEWLINE] export
- * once wrote a rule right under a paragraph's line so.
+ * once wrote a rule right under a paragraph's line so. With [lazyQuotes], text right
+ * after a quoted paragraph is that paragraph's lazy text, which no underline makes a
+ * heading (see [withLazyQuoteLines]).
  */
-private fun withSetextHeadings(strip: CodeFenceStripResult, dashUnderlines: Boolean): CodeFenceStripResult {
+private fun withSetextHeadings(strip: CodeFenceStripResult, dashUnderlines: Boolean, lazyQuotes: Boolean): CodeFenceStripResult {
 	val lines = strip.text.lines()
 	val tableLines = findTables(lines, strip.fencedLines).flatMapTo(HashSet()) { it }
 	fun literal(index: Int) = index in strip.fencedLines || index in tableLines
@@ -235,6 +237,7 @@ private fun withSetextHeadings(strip: CodeFenceStripResult, dashUnderlines: Bool
 		if (first > 0 && !literal(first - 1)) {
 			val (itemQuote, item) = splitQuote(lines[first - 1])
 			if (itemQuote == quote && LIST_ITEM_START.containsMatchIn(item)) continue
+			if (lazyQuotes && quote.isEmpty() && itemQuote.isNotEmpty() && isParagraphText(item)) continue
 		}
 		val level = if (underline.trim().startsWith('=')) 1 else 2
 		for (line in first until index) levels[line] = level
@@ -321,7 +324,9 @@ private val QUOTE_PREFIX = Regex("""^>\s?""")
 
 /**
  * [strip] with each paragraph line right after a quoted paragraph line quoted too: it
- * continues that paragraph, which CommonMark lets drop the marker. Only under
+ * continues that paragraph, which CommonMark lets drop the marker. A line indented four
+ * columns is one too, since it starts no block there, and an underline is the
+ * paragraph's text, escaped, as a lazy line is no heading's. Only under
  * [ParagraphSeparator.BLANK_LINE]: single-newline export writes a quoted line and a
  * plain one after it so.
  */
@@ -336,12 +341,18 @@ private fun withLazyQuoteLines(strip: CodeFenceStripResult): CodeFenceStripResul
 			return@forEachIndexed
 		}
 		val (quote, body) = splitQuote(raw)
-		val paragraph = isParagraphText(body)
+		val paragraph = isParagraphText(body) || quote.isEmpty() && raw.isNotBlank() && columnsOf(raw).first >= 4
 		if (quote.isEmpty() && paragraph && quotedParagraph) lazy += index
 		quotedParagraph = paragraph && (quote.isNotEmpty() || index in lazy)
 	}
 	if (lazy.isEmpty()) return strip
-	return strip.rewritten(lines, dropped = emptySet()) { index, line -> if (index in lazy) "> $line" else line }
+	return strip.rewritten(lines, dropped = emptySet()) { index, line ->
+		when {
+			index !in lazy -> line
+			SETEXT_UNDERLINE_LINE.matches(line) -> "> \\${line.trimStart()}"
+			else -> "> $line"
+		}
+	}
 }
 
 private val NESTED_QUOTE_MARKERS = Regex("""^(?: {0,3}> ?)* {0,3}(?=>)""")
@@ -860,7 +871,7 @@ class MarkdownExtension(
 		val blankLineParagraphs = paragraphSeparator == ParagraphSeparator.BLANK_LINE
 		val fenced = stripCodeFences(markdownText).let { if (blankLineParagraphs) withIndentedCode(it) else it }
 		val (withoutDefinitions, linkDefinitions) = withoutLinkDefinitions(withSingleQuoteMarkers(fenced))
-		val fenceStrip = withSetextHeadings(withoutDefinitions, dashUnderlines = blankLineParagraphs)
+		val fenceStrip = withSetextHeadings(withoutDefinitions, dashUnderlines = blankLineParagraphs, lazyQuotes = blankLineParagraphs)
 			.let { if (blankLineParagraphs) withLazyQuoteLines(it) else it }
 		// Stage 2: take the blank line export puts after each block away again,
 		// so a paragraph per line comes back as a line per paragraph.
@@ -882,6 +893,11 @@ class MarkdownExtension(
 		val continuesBlock = BooleanArray(keptLines.size)
 		// The quote status of a paragraph or list item a next paragraph line can go on.
 		var openBlockQuote: Boolean? = null
+		// Lines that open a list item, whose next lines' text goes on its line.
+		val opensItem = BooleanArray(keptLines.size)
+		// The column an empty item's text starts at, when the line before is one: only a
+		// line indented that far is its text.
+		var emptyItemColumn: Int? = null
 
 		val hrLineIndices = mutableListOf<Int>()
 		val imageLines = mutableListOf<Pair<Int, ImageBlockSpanStyle>>()
@@ -947,12 +963,21 @@ class MarkdownExtension(
 				(unquoted.startsWith("    ") || unquoted.startsWith('\t'))
 			// A list item's indented text past a blank line is its text, not code.
 			val itemText = indentedText && afterBlankItemText
-			val continuesText = (paragraph || indentedText) && openBlockQuote == quoted
+			val afterEmptyItem = emptyItemColumn
+			emptyItemColumn = null
+			val continuesText = (paragraph || indentedText) && openBlockQuote == quoted &&
+				(afterEmptyItem == null || columnsOf(unquoted).first >= afterEmptyItem)
 			val continuesHeading = imported.sources[index] in fenceStrip.headingContinuations &&
 				index > 0 && imported.sources[index - 1] == imported.sources[index] - 1
 			continuesBlock[index] = continuesText || continuesHeading
 			openBlockQuote = if (paragraph || continuesText || (isItem && !ruleNotItem)) quoted else null
 			paragraphQuote = if (paragraph) quoted else null
+			if (isItem && !notItem && !ruleNotItem) {
+				opensItem[index] = true
+				if (peeled.body.isBlank()) emptyItemColumn = columnsOf(unquoted).let { (columns, chars) ->
+					columns + (LIST_ITEM_START.find(unquoted)?.value?.trimEnd()?.length ?: chars) - chars + 1
+				}
+			}
 			itemQuote = when {
 				isItem && !notItem && !ruleNotItem -> quoted
 				blank || (paragraph && itemQuote == quoted) -> itemQuote
@@ -1019,23 +1044,32 @@ class MarkdownExtension(
 						allowedLinkSchemes = editorState.allowedLinkSchemes,
 						linkDefinitions = linkDefinitions,
 					)
-					val text = parsed.annotatedString
-					val lead = if (start in imported.cells && text.text.firstOrNull() == cellLead) 1 else 0
+					var text = parsed.annotatedString
+					var lead = if (start in imported.cells && text.text.firstOrNull() == cellLead) 1 else 0
+					parsed.joinedLines.forEach { joined[start + it] = true }
+					// An item's text is one paragraph on its line, as a renderer shows it:
+					// its line breaks are spaces, and an empty first line holds none of it.
+					// Under single newlines export wrote an item and a line after it so.
+					if (blankLineParagraphs && opensItem[start] && end > start + 1) {
+						val firstBreak = text.text.indexOf('\n')
+						if (firstBreak >= 0 && text.text.substring(0, firstBreak).isBlank()) lead = firstBreak + 1
+						text = AnnotatedString(text.text.replace('\n', ' '), text.spanStyles, text.paragraphStyles)
+						for (line in start + 1 until end) joined[line] = true
+					}
 					val offset = length - lead
 					parsed.links.forEach { links += ParsedLink(it.start + offset, it.end + offset, it.url) }
-					parsed.joinedLines.forEach { joined[start + it] = true }
 					append(if (lead == 0) text else text.subSequence(lead, text.length))
 				}
 				start = end
 			}
 		}
-		// setText publishes the text with no spans and applyDocumentBlocks attaches them
-		// afterwards. As one revision, so a concurrent export can't catch the document
-		// fully loaded but entirely unstyled.
 		// Each line's index once the joined lines are on the lines before them.
 		val lineOf = IntArray(processedLines.size)
 		for (line in 1 until lineOf.size) lineOf[line] = lineOf[line - 1] + if (joined[line]) 0 else 1
 		fun kept(line: Int) = !joined[line]
+		// setText publishes the text with no spans and applyDocumentBlocks attaches them
+		// afterwards. As one revision, so a concurrent export can't catch the document
+		// fully loaded but entirely unstyled.
 		editorState.editGroup {
 			editorState.setText(annotatedString)
 			editorState.applyDocumentBlocks(

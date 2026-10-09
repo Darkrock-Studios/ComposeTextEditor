@@ -248,7 +248,11 @@ writes one, since it writes a leading indent as entities.
 3. **Parse each block alone**: a paragraph's or list item's lines, with the
    lazy and indented lines that go on them and a setext heading's lines, are
    one parse, so inline syntax pairs only inside its block and an HTML block
-   ends with it. Fenced lines and placeholders go into the text unparsed.
+   ends with it. Fenced lines and placeholders go into the text unparsed. A
+   paragraph keeps a line per source line, but a list item, which has one line,
+   takes its lazy and indented lines onto it, their line breaks spaces (under
+   `BLANK_LINE` only: single-newline export wrote an item and a plain line after
+   it so), and a code span across lines is one line, as CommonMark reads it.
 
 HTML import and export share the same block attachment path and derive their
 container nesting from the same snapshot walk, so both serializers agree on

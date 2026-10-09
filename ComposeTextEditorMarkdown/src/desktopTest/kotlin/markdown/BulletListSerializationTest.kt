@@ -41,7 +41,7 @@ class BulletListSerializationTest {
 	@Test
 	fun `import attaches bullet span on dash line`() = runTest {
 		val extension = createMarkdownExtension()
-		extension.importMarkdown("before\n- item\nafter")
+		extension.importMarkdown("before\n- item\n\nafter")
 
 		assertEquals(listOf(1), extension.bulletLines())
 		// The `- ` prefix is stripped so the underlying text is the item body.
@@ -108,7 +108,7 @@ class BulletListSerializationTest {
 	@Test
 	fun `export emits dash prefix for bullet line`() = runTest {
 		val extension = createMarkdownExtension()
-		extension.importMarkdown("before\n- item\nafter")
+		extension.importMarkdown("before\n- item\n\nafter")
 		assertEquals("before\n\n- item\n\nafter", extension.exportAsMarkdown())
 	}
 
@@ -251,7 +251,7 @@ class BulletListSerializationTest {
 	@Test
 	fun `toggleBulletList across mixed range turns all on`() = runTest {
 		val extension = createMarkdownExtension()
-		extension.importMarkdown("- one\nplain")
+		extension.importMarkdown("- one\n\nplain")
 
 		extension.editorState.toggleBulletList(0..1)
 		assertEquals(listOf(0, 1), extension.bulletLines())

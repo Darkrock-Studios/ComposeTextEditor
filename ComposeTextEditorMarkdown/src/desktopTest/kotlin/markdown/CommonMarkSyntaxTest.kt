@@ -317,14 +317,15 @@ class CommonMarkSyntaxTest {
 	fun `an item after a blank line or an item's own text is no paragraph's interruption`() = runTest {
 		for ((markdown, expected) in listOf(
 			"para\n\n2. x" to "para\n1. x",
-			"1. a\n   wrapped\n2. b" to "1. a\nwrapped\n1. b",
-			"1. a\nlazy\n2. b" to "1. a\nlazy\n1. b",
+			"1. a\n   wrapped\n2. b" to "1. a wrapped\n1. b",
+			"1. a\nlazy\n2. b" to "1. a lazy\n1. b",
 			"1. a\n\n   more\n\n2. b" to "1. a\nmore\n1. b",
-			"> 1. a\n>    wrapped\n> 2. b" to "> 1. a\n> wrapped\n> 1. b",
+			"> 1. a\n>    wrapped\n> 2. b" to "> 1. a wrapped\n> 1. b",
 			"1. a\n\n   ```\n   code\n   ```\n\n   after\n2. b" to "1. a\n``` code\nafter\n1. b",
 			"1. a\n\nnot the item's\n2. b" to "1. a\nnot the item's\n\\2. b",
 			"1. a\n```\ncode\n```\npara\n2. b" to "1. a\n``` code\npara\n\\2. b",
-			"- a\n  wrapped\n-\n- b" to "- a\nwrapped\n- \n- b",
+			"- a\n  wrapped\n-\n- b" to "- a wrapped\n- \n- b",
+			"-   \n  foo\n-\nbar" to "- foo\n- \nbar",
 		)) {
 			assertEquals(expected, imported(markdown).editorState.blockLines(), markdown)
 		}
@@ -354,7 +355,7 @@ class CommonMarkSyntaxTest {
 			"[foo] and [*bar*][baz]" to "[foo] and [bar][baz]",
 			"Foo\n[bar]: /baz\n\n[bar]" to "Foo\n[bar]: /baz\n[bar]",
 			"[foo]: /url \"title\" ok" to "[foo]: /url \"title\" ok",
-			"- a\n[foo]: /url\n\n[foo]" to "a\n[foo]: /url\n[foo]",
+			"- a\n[foo]: /url\n\n[foo]" to "a [foo]: /url\n[foo]",
 		)) {
 			val markdown = imported(markdown)
 			assertEquals(text, markdown.editorState.getAllText().text)
@@ -369,6 +370,17 @@ class CommonMarkSyntaxTest {
 		assertEquals("[foo bar]ref", markdown.editorState.getAllText().text)
 		assertEquals("/a", markdown.editorState.linkAt(CharLineOffset(0, 5)))
 		assertEquals("/b", markdown.editorState.linkAt(CharLineOffset(0, 10)))
+	}
+
+	@Test
+	fun `a quoted paragraph's lazy text may be indented, and an underline under it is text`() = runTest {
+		for ((markdown, expected) in listOf(
+			"> foo\n    - bar" to "> foo\n> \\- bar",
+			"> foo\nbar\n===" to "> foo\n> bar\n> ===",
+			"> foo\nbar\n---" to "> foo\n> bar\n---",
+		)) {
+			assertEquals(expected, imported(markdown).editorState.blockLines(), markdown)
+		}
 	}
 
 	@Test
