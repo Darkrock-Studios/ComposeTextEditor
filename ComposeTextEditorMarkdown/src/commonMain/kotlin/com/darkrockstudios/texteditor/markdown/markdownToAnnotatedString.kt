@@ -21,10 +21,14 @@ import org.intellij.markdown.parser.MarkdownParser
  */
 internal data class ParsedLink(val start: Int, val end: Int, val url: String)
 
-/** A parse's styled text together with the links found inside it. */
+/**
+ * A parse's styled text together with the links found inside it, and the [joinedLines]
+ * of the source a code span ran onto, which its text puts on the line before.
+ */
 internal class MarkdownParseResult(
 	val annotatedString: AnnotatedString,
 	val links: List<ParsedLink>,
+	val joinedLines: Set<Int> = emptySet(),
 )
 
 /**
@@ -69,7 +73,7 @@ internal fun String.parseMarkdownWithLinks(
 	val annotated = buildAnnotatedString {
 		appendMarkdownChildren(source, parsedTree, context)
 	}
-	return MarkdownParseResult(standIns?.restore(annotated) ?: annotated, context.links)
+	return MarkdownParseResult(standIns?.restore(annotated) ?: annotated, context.links, context.joinedLines)
 }
 
 /** Where each of the [lines] starts in this string. */
@@ -353,6 +357,9 @@ internal class MarkdownRenderContext(
 ) {
 	val links = mutableListOf<ParsedLink>()
 
+	/** The source lines a code span ran onto: its line breaks are spaces, so they go on the line before. */
+	val joinedLines = HashSet<Int>()
+
 	private var paragraph = false
 
 	/** Whether the tokens read so far in a paragraph end a line. */
@@ -544,6 +551,10 @@ private fun AnnotatedString.Builder.appendMarkdownNode(
 		}
 
 		MarkdownElementTypes.CODE_SPAN -> {
+			if ('\n' in nodeText) {
+				var line = (0 until node.startOffset).count { original[it] == '\n' }
+				nodeText.forEach { if (it == '\n') context.joinedLines += ++line }
+			}
 			pushStyle(styles.codeStyle)
 			append(codeSpanContent(nodeText))
 			pop()
@@ -782,13 +793,16 @@ private fun AnnotatedString.Builder.handleHeader(
 	pop()
 }
 
+private val LINE_BREAK_AND_INDENT = Regex("""\n[ \t]*""")
+
 /**
- * A code span's text as CommonMark reads it: inside its backtick strings, less one space
+ * A code span's text as CommonMark reads it: inside its backtick strings, each line break
+ * a space (the next line's indent off, as a paragraph's lines lose theirs), less one space
  * at each end when both ends have one and it is not all spaces.
  */
 private fun codeSpanContent(node: String): String {
 	val fence = node.takeWhile { it == '`' }.length
-	val code = node.substring(fence, (node.length - fence).coerceAtLeast(fence))
+	val code = node.substring(fence, (node.length - fence).coerceAtLeast(fence)).replace(LINE_BREAK_AND_INDENT, " ")
 	val padded = code.length >= 2 && code.first() == ' ' && code.last() == ' ' && code.any { it != ' ' }
 	return if (padded) code.substring(1, code.length - 1) else code
 }

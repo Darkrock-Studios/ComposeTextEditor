@@ -245,7 +245,6 @@ class SpecComplianceTest {
 		/** What the CommonMark examples not supported yet are missing, as the README groups them. */
 		val NOT_YET = mapOf(
 			"Nested links, and spaces in a link destination" to setOf(488, 518, 519, 520, 533, 568),
-			"Code spans across lines" to setOf(121, 335, 336, 337, 640, 641),
 			"Escaped delimiters and symbols in emphasis" to setOf(354, 437, 440, 449, 452),
 			"Lines continuing a list item or quote" to setOf(93, 238, 279, 291, 312),
 		)

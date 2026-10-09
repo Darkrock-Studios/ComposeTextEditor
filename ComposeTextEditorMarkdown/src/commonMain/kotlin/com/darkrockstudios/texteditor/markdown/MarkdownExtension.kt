@@ -1002,6 +1002,8 @@ class MarkdownExtension(
 		// Each block is parsed alone, so no inline syntax pairs across blocks and no HTML
 		// block runs past its own.
 		val links = ArrayList<ParsedLink>()
+		// Lines a code span ran onto, which its text puts on the line before.
+		val joined = BooleanArray(processedLines.size)
 		val annotatedString = buildAnnotatedString {
 			var start = 0
 			while (start < processedLines.size) {
@@ -1021,6 +1023,7 @@ class MarkdownExtension(
 					val lead = if (start in imported.cells && text.text.firstOrNull() == cellLead) 1 else 0
 					val offset = length - lead
 					parsed.links.forEach { links += ParsedLink(it.start + offset, it.end + offset, it.url) }
+					parsed.joinedLines.forEach { joined[start + it] = true }
 					append(if (lead == 0) text else text.subSequence(lead, text.length))
 				}
 				start = end
@@ -1029,14 +1032,18 @@ class MarkdownExtension(
 		// setText publishes the text with no spans and applyDocumentBlocks attaches them
 		// afterwards. As one revision, so a concurrent export can't catch the document
 		// fully loaded but entirely unstyled.
+		// Each line's index once the joined lines are on the lines before them.
+		val lineOf = IntArray(processedLines.size)
+		for (line in 1 until lineOf.size) lineOf[line] = lineOf[line - 1] + if (joined[line]) 0 else 1
+		fun kept(line: Int) = !joined[line]
 		editorState.editGroup {
 			editorState.setText(annotatedString)
 			editorState.applyDocumentBlocks(
-				horizontalRuleLines = hrLineIndices,
-				imageLines = imageLines.toMap(),
-				blockLines = blockHits + (CodeFenceSpanStyle to codeFenceLineIndices) +
-					imported.cells.entries.groupBy({ it.value }, { it.key }),
-				richSpans = linkSpans(links, annotatedString.text) + fenceLanguageSpans(fenceInfoStrings),
+				horizontalRuleLines = hrLineIndices.map { lineOf[it] },
+				imageLines = imageLines.associate { (line, image) -> lineOf[line] to image },
+				blockLines = (blockHits + (CodeFenceSpanStyle to codeFenceLineIndices) + imported.cells.entries.groupBy({ it.value }, { it.key }))
+					.mapValues { (_, lines) -> lines.filter(::kept).map { lineOf[it] } },
+				richSpans = linkSpans(links, annotatedString.text) + fenceLanguageSpans(fenceInfoStrings.mapKeys { lineOf[it.key] }),
 			)
 		}
 	}

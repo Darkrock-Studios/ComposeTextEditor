@@ -372,6 +372,19 @@ class CommonMarkSyntaxTest {
 	}
 
 	@Test
+	fun `a code span across lines is one line, its line breaks spaces`() = runTest {
+		assertInline("a `b\nc` d\nnext", "a <code>b c</code> d\nnext")
+		assertInline("``\nfoo\nbar  \nbaz\n``", "<code>foo bar   baz</code>")
+		for ((markdown, expected) in listOf(
+			"> a `b\n> c` d\n> e" to "> a b c d\n> e",
+			"- `a\n  b`\n- c" to "- a b\n- c",
+			"`a\nb`\n\n# Heading\n\n```\ncode\n```" to "a b\n# Heading\n``` code",
+		)) {
+			assertEquals(expected, imported(markdown).editorState.blockLines(), markdown)
+		}
+	}
+
+	@Test
 	fun `a line indented four columns is code, unless a paragraph or list item takes it`() = runTest {
 		for ((markdown, expected) in listOf(
 			"    a\n      b\n\n\n    c" to "``` a\n```   b\n``` \n``` \n``` c",
