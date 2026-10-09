@@ -57,7 +57,7 @@ private val WHITESPACE_RUN = Regex("""\s+""")
 
 /**
  * The link destination starting at [start] in [text], as written (its angle brackets off),
- * and the index after it, or null when none starts there. A bare one ends at whitespace,
+ * and the index after it, or null when none starts there. A bare one ends at a space,
  * or [inParentheses] at a `)` its own parentheses leave unmatched, and only there may it
  * be empty.
  */
@@ -74,7 +74,8 @@ internal fun readLinkDestination(text: String, start: Int, inParentheses: Boolea
 		return text.substring(start + 1, i) to i + 1
 	}
 	var depth = 0
-	while (i < text.length && !text[i].isWhitespace() && text[i].code >= 0x20) {
+	// Only a space or an ASCII control character ends one: a no-break space is its text.
+	while (i < text.length && text[i] != ' ' && text[i].code >= 0x20 && text[i].code != 0x7F) {
 		when (text[i]) {
 			'\\' -> i++
 			'(' -> depth++
@@ -122,16 +123,19 @@ private fun lineEndAfter(text: String, from: Int): Int? {
 }
 
 /**
- * [source] with the brackets of each reference link no definition in [definitions]
- * has written escaped, both, so the brackets around them still pair. CommonMark reads such brackets as text, so emphasis and tags pair
- * across them, but the parser makes a reference link of any bracketed label and reads
- * no inline syntax in it. Code spans, tags, autolinks and escaped brackets pair with
- * nothing, and a `]` before `(` is left to the parser as an inline link. The
- * [literalLines] are code, left as written.
+ * [source] with each bracket that makes no link escaped, as CommonMark reads them, so the
+ * parser, which reads a link wider, makes none either and pairs emphasis and tags across
+ * them: both brackets of a reference no definition in [definitions] has written; the `(`
+ * after a `]` that no destination, title and `)` follow, which opens no inline link (the
+ * brackets may still be a reference's); and every `[` still open around a link, since a
+ * link holds none. Code spans, tags, autolinks and escaped brackets pair with nothing, and
+ * an inline link's destination is read past. The [literalLines] are code, left as written.
  */
-internal fun withUndefinedReferencesEscaped(source: String, definitions: Map<String, String>, literalLines: Set<Int>): String {
+internal fun withNonLinkBracketsEscaped(source: String, definitions: Map<String, String>, literalLines: Set<Int>): String {
 	val escaped = ArrayList<Int>()
 	val openers = ArrayList<Int>()
+	// Openers a link inside made inactive: escaped, they make no link of their own.
+	val inactive = HashSet<Int>()
 	val literal = BooleanArray(source.length)
 	if (literalLines.isNotEmpty()) {
 		var line = 0
@@ -155,17 +159,28 @@ internal fun withUndefinedReferencesEscaped(source: String, definitions: Map<Str
 			'[' -> openers += i
 			']' -> {
 				val opener = openers.removeLastOrNull()
-				if (opener != null && source.getOrNull(i + 1) != '(') {
-					val text = source.substring(opener + 1, i)
-					val labelEnd = if (source.getOrNull(i + 1) == '[') source.indexOf(']', i + 2) else -1
-					val label = if (labelEnd < 0) text else source.substring(i + 2, labelEnd).ifBlank { text }
-					when {
-						normalizeLinkLabel(label) !in definitions -> {
+				if (opener != null && opener !in inactive) {
+					val inlineEnd = if (source.getOrNull(i + 1) == '(') inlineLinkTailEnd(source, i + 1) else null
+					var link = inlineEnd != null
+					if (inlineEnd != null) {
+						i = inlineEnd
+					} else {
+						if (source.getOrNull(i + 1) == '(') escaped += i + 1
+						val text = source.substring(opener + 1, i)
+						val labelEnd = if (source.getOrNull(i + 1) == '[') source.indexOf(']', i + 2) else -1
+						val label = if (labelEnd < 0) text else source.substring(i + 2, labelEnd).ifBlank { text }
+						if (normalizeLinkLabel(label) !in definitions) {
 							escaped += opener
 							escaped += i
+						} else {
+							link = true
+							// A full or collapsed reference's label is its own, no reference of its own.
+							if (labelEnd >= 0) i = labelEnd
 						}
-						// A full or collapsed reference's label is its own, no reference of its own.
-						labelEnd >= 0 -> i = labelEnd
+					}
+					// An image may hold a link; a link holds none.
+					if (link && source.getOrNull(opener - 1) != '!') {
+						for (open in openers) if (inactive.add(open)) escaped += open
 					}
 				}
 			}
@@ -175,11 +190,25 @@ internal fun withUndefinedReferencesEscaped(source: String, definitions: Map<Str
 	if (escaped.isEmpty()) return source
 	val out = StringBuilder(source.length + escaped.size)
 	var from = 0
-	escaped.sorted().forEach { at ->
+	escaped.distinct().sorted().forEach { at ->
 		out.append(source, from, at).append('\\')
 		from = at
 	}
 	return out.append(source, from, source.length).toString()
+}
+
+/**
+ * The index of the `)` closing the inline link tail whose `(` is at [open] in [source]:
+ * a destination, then a title after whitespace, each optional, then `)`; or null when
+ * none does.
+ */
+private fun inlineLinkTailEnd(source: String, open: Int): Int? {
+	var i = skipSpace(source, open + 1, newlines = 1)
+	if (source.getOrNull(i) == ')') return i
+	val (_, destinationEnd) = readLinkDestination(source, i, inParentheses = true) ?: return null
+	i = skipSpace(source, destinationEnd, newlines = 1)
+	if (i > destinationEnd) readTitle(source, i)?.let { i = skipSpace(source, it, newlines = 1) }
+	return i.takeIf { source.getOrNull(it) == ')' }
 }
 
 /**

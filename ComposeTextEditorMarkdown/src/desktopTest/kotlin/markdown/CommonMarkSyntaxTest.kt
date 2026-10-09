@@ -374,6 +374,20 @@ class CommonMarkSyntaxTest {
 	}
 
 	@Test
+	fun `a link holds no link, and a destination with a space is none`() = runTest {
+		for ((markdown, text, links) in listOf(
+			Triple("[link](/my uri)", "[link](/my uri)", listOf(0 to null)),
+			Triple("[foo](not a link)\n\n[foo]: /url1", "foo(not a link)", listOf(0 to "/url1", 4 to null)),
+			Triple("[foo [bar](/uri)](/uri)", "[foo bar](/uri)", listOf(0 to null, 5 to "/uri", 9 to null)),
+			Triple("[a](<b c>) [d](e \"t\")", "a d", listOf(0 to "b c", 2 to "e")),
+		)) {
+			val imported = imported(markdown)
+			assertEquals(text, imported.editorState.getAllText().text, markdown)
+			assertEquals(links, links.map { (at, _) -> at to imported.editorState.linkAt(CharLineOffset(0, at)) }, markdown)
+		}
+	}
+
+	@Test
 	fun `emphasis holds an escaped delimiter, and a symbol beside a delimiter is punctuation`() = runTest {
 		assertInline("foo *\\**", "foo <i>*</i>")
 		assertInline("foo __\\___", "foo <b>_</b>")

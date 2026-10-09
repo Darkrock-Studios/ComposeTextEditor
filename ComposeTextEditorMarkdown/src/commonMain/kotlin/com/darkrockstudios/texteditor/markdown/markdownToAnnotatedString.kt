@@ -68,7 +68,7 @@ internal fun String.parseMarkdownWithLinks(
 	val source = (symbols?.substitute(indented) ?: indented)
 		.withHighlightTags()
 		.let { withInlineTagLinesInline(it, literal) }
-		.let { withUndefinedReferencesEscaped(it, linkDefinitions, literal) }
+		.let { withNonLinkBracketsEscaped(it, linkDefinitions, literal) }
 		.let { withEscapedDelimitersAsEntities(it, literal) }
 	val flavour = GFMFlavourDescriptor()
 	val parsedTree = MarkdownParser(flavour).buildMarkdownTreeFromString(source)

@@ -243,9 +243,7 @@ class SpecComplianceTest {
 		val BLOCK_TAG_END = Regex("""(</?(p|li|ul|ol|blockquote|h[1-6]|pre|table|thead|tbody|tr|th|td|div)\b[^>]*>|<hr\s*/?>|<br\s*/?>)$""", RegexOption.IGNORE_CASE)
 
 		/** What the CommonMark examples not supported yet are missing, as the README groups them. */
-		val NOT_YET = mapOf(
-			"Nested links, and spaces in a link destination" to setOf(488, 518, 519, 520, 533, 568),
-		)
+		val NOT_YET = mapOf<String, Set<Int>>()
 
 		val GFM_GROUPS = mapOf(
 			"table" to "Tables",
