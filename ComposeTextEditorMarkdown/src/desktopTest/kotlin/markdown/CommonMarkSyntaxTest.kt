@@ -391,6 +391,7 @@ class CommonMarkSyntaxTest {
 			Triple("<a+b+c:d>", "a+b+c:d", null),
 			Triple("<https://example.com/\\[\\>", "https://example.com/\\[\\", "https://example.com/\\[\\"),
 			Triple("[a](<https://x.test/a_(b)>)", "a", "https://x.test/a_(b)"),
+			Triple("a](<made-up:x>)", "a](made-up:x)", null),
 		)) {
 			val imported = imported(markdown)
 			assertEquals(text, imported.editorState.getAllText().text, markdown)

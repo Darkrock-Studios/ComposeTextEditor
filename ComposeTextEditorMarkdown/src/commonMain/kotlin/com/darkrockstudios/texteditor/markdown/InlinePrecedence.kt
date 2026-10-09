@@ -8,14 +8,15 @@ private val URI_AUTOLINK = Regex("""<([A-Za-z][A-Za-z0-9+.-]{1,31}:[^ <>\u0000-\
  * parser, which reads them otherwise: whichever starts first wins. An autolink
  * (`<scheme:...>`) is written as an inline link to itself, its text and destination
  * escaped so both read as written (a backslash in it is its own); a `<` in a code span is
- * written as [lessThan], which starts no tag or autolink, to be put back after the parse.
- * Tags pair with nothing, an inline link's destination is read past, and the
- * [literalLines] are left as written.
+ * written as the [lessThan] stand-in, which starts no tag or autolink, to be put back
+ * after the parse (left as it is when the source holds every candidate). Tags pair with
+ * nothing, a link's destination is read past, and the [literalLines] are left as written.
  */
-internal fun withInlinePrecedence(source: String, literalLines: Set<Int>, lessThan: Char): String {
+internal fun withInlinePrecedence(source: String, literalLines: Set<Int>, lessThan: Lazy<Char?>): String {
 	if ('<' !in source) return source
 	val out = StringBuilder(source.length + 16)
 	val unclosed = HashSet<Int>()
+	var openers = 0
 	var line = 0
 	var from = 0
 	var i = 0
@@ -24,16 +25,21 @@ internal fun withInlinePrecedence(source: String, literalLines: Set<Int>, lessTh
 		when (source[i]) {
 			'\n' -> line++
 			'\\' -> if (source.getOrNull(i + 1) != '\n') i++
-			// An inline link's destination is its own, read with the link: no autolink.
-			']' -> if (!literal && source.getOrNull(i + 1) == '(') inlineLinkTailEnd(source, i + 1)?.let { end ->
-				line += (i..end).count { source[it] == '\n' }
-				i = end
+			'[' -> if (!literal) openers++
+			// A link's destination is its own, read with the link: no autolink.
+			']' -> if (!literal && openers > 0) {
+				openers--
+				if (source.getOrNull(i + 1) == '(') inlineLinkTailEnd(source, i + 1)?.let { end ->
+					line += (i..end).count { source[it] == '\n' }
+					i = end
+				}
 			}
 			'`' -> if (!literal) {
 				val end = codeSpanEnd(source, i, unclosed)
-				if (source.getOrNull(end) == '`' && end > i && (i..end).any { source[it] == '<' }) {
+				val standIn = if (source.getOrNull(end) == '`' && end > i && (i..end).any { source[it] == '<' }) lessThan.value else null
+				if (standIn != null) {
 					out.append(source, from, i)
-					for (at in i..end) out.append(if (source[at] == '<') lessThan else source[at])
+					for (at in i..end) out.append(if (source[at] == '<') standIn else source[at])
 					from = end + 1
 				}
 				line += (i..end).count { source[it] == '\n' }

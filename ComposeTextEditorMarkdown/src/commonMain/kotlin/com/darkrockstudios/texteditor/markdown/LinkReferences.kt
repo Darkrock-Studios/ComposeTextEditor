@@ -178,9 +178,9 @@ internal fun withNonLinkBracketsEscaped(source: String, definitions: Map<String,
 							if (labelEnd >= 0) i = labelEnd
 						}
 					}
-					// An image may hold a link; a link holds none.
+					// An image may hold a link; a link holds none, and leaves an image around it one.
 					if (link && source.getOrNull(opener - 1) != '!') {
-						for (open in openers) if (inactive.add(open)) escaped += open
+						for (open in openers) if (source.getOrNull(open - 1) != '!' && inactive.add(open)) escaped += open
 					}
 				}
 			}
