@@ -38,7 +38,7 @@ internal class SymbolStandIns private constructor(private val standIns: Map<Char
 	fun restore(text: AnnotatedString): AnnotatedString =
 		AnnotatedString(restore(text.text), text.spanStyles, text.paragraphStyles)
 
-	fun restore(text: String): String = String(CharArray(text.length) { symbols[text[it]] ?: text[it] })
+	fun restore(text: String): String = CharArray(text.length) { symbols[text[it]] ?: text[it] }.concatToString()
 
 	companion object {
 		/** Stand-ins for [source]'s symbols beside a delimiter, none of the [taken] characters, or null when it has none. */

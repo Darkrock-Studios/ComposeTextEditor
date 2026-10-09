@@ -441,6 +441,9 @@ class CommonMarkSyntaxTest {
 	fun `a code span across lines is one line, its line breaks spaces`() = runTest {
 		assertInline("a `b\nc` d\nnext", "a <code>b c</code> d\nnext")
 		assertInline("``\nfoo\nbar  \nbaz\n``", "<code>foo bar   baz</code>")
+		// Under single newlines each source line is a paragraph of its own, as before.
+		val newline = markdown().apply { importMarkdown("a `b\nc` d", ParagraphSeparator.NEWLINE) }
+		assertEquals("a <code>b</code>\n<code>c</code> d", newline.inlineMarkup())
 		for ((markdown, expected) in listOf(
 			"> a `b\n> c` d\n> e" to "> a b c d\n> e",
 			"- `a\n  b`\n- c" to "- a b\n- c",
