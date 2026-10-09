@@ -150,19 +150,7 @@ internal fun withUndefinedReferencesEscaped(source: String, definitions: Map<Str
 		}
 		when (source[i]) {
 			'\\' -> i++
-			'`' -> {
-				var ticks = i
-				while (ticks < source.length && source[ticks] == '`') ticks++
-				val run = source.substring(i, ticks)
-				var close = if (run.length in unclosed) -1 else source.indexOf(run, ticks)
-				while (close >= 0 && (source.getOrNull(close + run.length) == '`' || source.getOrNull(close - 1) == '`')) {
-					var past = close
-					while (past < source.length && source[past] == '`') past++
-					close = source.indexOf(run, past)
-				}
-				if (close < 0) unclosed += run.length
-				i = if (close >= 0) close + run.length - 1 else ticks - 1
-			}
+			'`' -> i = codeSpanEnd(source, i, unclosed)
 			'<' -> INLINE_TAG.matchAt(source, i)?.let { i = it.range.last }
 			'[' -> openers += i
 			']' -> {
@@ -194,4 +182,24 @@ internal fun withUndefinedReferencesEscaped(source: String, definitions: Map<Str
 	return out.append(source, from, source.length).toString()
 }
 
-private val INLINE_TAG = Regex("""<[A-Za-z/!?][^<>\n]*>""")
+/**
+ * The index of the last character of the code span whose opening backtick string starts
+ * at [start] in [source], or of that backtick string when no closer follows. [unclosed]
+ * holds the lengths no closer follows, found so far, so a scan looks for each once.
+ */
+internal fun codeSpanEnd(source: String, start: Int, unclosed: MutableSet<Int>): Int {
+	var ticks = start
+	while (ticks < source.length && source[ticks] == '`') ticks++
+	val run = source.substring(start, ticks)
+	var close = if (run.length in unclosed) -1 else source.indexOf(run, ticks)
+	while (close >= 0 && (source.getOrNull(close + run.length) == '`' || source.getOrNull(close - 1) == '`')) {
+		var past = close
+		while (past < source.length && source[past] == '`') past++
+		close = source.indexOf(run, past)
+	}
+	if (close < 0) unclosed += run.length
+	return if (close >= 0) close + run.length - 1 else ticks - 1
+}
+
+/** An HTML tag or an autolink: its text is as written. */
+internal val INLINE_TAG = Regex("""<[A-Za-z/!?][^<>\n]*>""")

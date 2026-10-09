@@ -374,6 +374,17 @@ class CommonMarkSyntaxTest {
 	}
 
 	@Test
+	fun `emphasis holds an escaped delimiter, and a symbol beside a delimiter is punctuation`() = runTest {
+		assertInline("foo *\\**", "foo <i>*</i>")
+		assertInline("foo __\\___", "foo <b>_</b>")
+		assertInline("*a\\*b* and `c\\*d`", "<i>a*b</i> and <code>c\\*d</code>")
+		assertInline("*£*bravo and *€*charlie", "*£*bravo and *€*charlie")
+		assertInline("a *€ b*", "a <i>€ b</i>")
+		val linked = imported("[a](/€_x) *b*")
+		assertEquals("/€_x", linked.editorState.linkAt(CharLineOffset(0, 0)))
+	}
+
+	@Test
 	fun `a quoted paragraph's lazy text may be indented, and an underline under it is text`() = runTest {
 		for ((markdown, expected) in listOf(
 			"> foo\n    - bar" to "> foo\n> \\- bar",

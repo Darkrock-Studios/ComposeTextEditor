@@ -63,17 +63,22 @@ internal fun String.parseMarkdownWithLinks(
 	val normalized = normalizeLineEndings()
 	val standIns = IndentStandIns.forSource(normalized)
 	val literal by lazy { literalLines ?: normalized.fencedLineIndices() }
-	val source = (standIns?.substitute(normalized) { literal } ?: normalized)
+	val indented = standIns?.substitute(normalized) { literal } ?: normalized
+	val symbols = SymbolStandIns.forSource(indented, taken = setOfNotNull(standIns?.space, standIns?.tab))
+	val source = (symbols?.substitute(indented) ?: indented)
 		.withHighlightTags()
 		.let { withInlineTagLinesInline(it, literal) }
 		.let { withUndefinedReferencesEscaped(it, linkDefinitions, literal) }
+		.let { withEscapedDelimitersAsEntities(it, literal) }
 	val flavour = GFMFlavourDescriptor()
 	val parsedTree = MarkdownParser(flavour).buildMarkdownTreeFromString(source)
 	val context = MarkdownRenderContext(styles, allowedLinkSchemes, source.lineStarts(literalLines.orEmpty()), linkDefinitions)
 	val annotated = buildAnnotatedString {
 		appendMarkdownChildren(source, parsedTree, context)
 	}
-	return MarkdownParseResult(standIns?.restore(annotated) ?: annotated, context.links, context.joinedLines)
+	val restored = (standIns?.restore(annotated) ?: annotated).let { symbols?.restore(it) ?: it }
+	val links = if (symbols == null) context.links else context.links.map { it.copy(url = symbols.restore(it.url)) }
+	return MarkdownParseResult(restored, links, context.joinedLines)
 }
 
 /** Where each of the [lines] starts in this string. */
@@ -144,7 +149,7 @@ private class IndentStandIns private constructor(val space: Char, val tab: Char)
 }
 
 /** The Supplemental Punctuation block's punctuation, which markdown gives no meaning. */
-private val STAND_IN_CANDIDATES = ('\u2E00'..'\u2E7F').filter { it.category == CharCategory.OTHER_PUNCTUATION }
+internal val STAND_IN_CANDIDATES = ('\u2E00'..'\u2E7F').filter { it.category == CharCategory.OTHER_PUNCTUATION }
 
 /**
  * A character none of [lines] holds, which the parser reads as plain text: what leads a

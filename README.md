@@ -36,7 +36,7 @@ And now, it's working, and at this point, working pretty well.
 - ✅ Screen readers
 - ✅ HTML import, export and clipboard
 - ☑️ Markdown, as an addon
-  - CommonMark: 510 of the spec's 652 examples ([spec support](#markdown-spec-support))
+  - CommonMark: 515 of the spec's 652 examples ([spec support](#markdown-spec-support))
   - GitHub Flavored Markdown: tables, task lists and strikethrough
   - Underline (`<u>`), highlight (`==text==` or `<mark>`), colour and size (`<span style>`)
   - Opt-in shortcuts that format as you type (`# `, `- `, `**bold**`)
@@ -76,12 +76,11 @@ Green is supported and yellow is not supported yet. Grey is not planned:
   also keeps every empty line, which markdown can only write as a blank line a renderer
   drops.
 
-**CommonMark**: 510 of the spec's 652 examples
+**CommonMark**: 515 of the spec's 652 examples
 
-![CommonMark: 510 supported, 21 not yet, 121 not planned](docs/images/commonmark-support.svg)
+![CommonMark: 515 supported, 16 not yet, 121 not planned](docs/images/commonmark-support.svg)
 
 - Nested links, and spaces in a link destination (6)
-- Escaped delimiters and symbols in emphasis (5)
 - Smaller edge cases (10)
 
 Not planned: raw HTML (72), blocks inside list items or block quotes (26), list items
