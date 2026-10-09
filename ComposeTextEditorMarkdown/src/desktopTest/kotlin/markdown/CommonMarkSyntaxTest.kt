@@ -386,6 +386,21 @@ class CommonMarkSyntaxTest {
 	}
 
 	@Test
+	fun `an autolink takes any scheme and its backslashes, and a code span starting first outranks a tag or autolink`() = runTest {
+		for ((markdown, text, link) in listOf(
+			Triple("<a+b+c:d>", "a+b+c:d", null),
+			Triple("<https://example.com/\\[\\>", "https://example.com/\\[\\", "https://example.com/\\[\\"),
+			Triple("[a](<https://x.test/a_(b)>)", "a", "https://x.test/a_(b)"),
+		)) {
+			val imported = imported(markdown)
+			assertEquals(text, imported.editorState.getAllText().text, markdown)
+			assertEquals(link, imported.editorState.linkAt(CharLineOffset(0, 0)), markdown)
+		}
+		assertInline("`<a href=\"`\">`", "<code><a href=\"</code>\">`")
+		assertInline("`<https://foo.bar.`baz>`", "<code><https://foo.bar.</code>baz>`")
+	}
+
+	@Test
 	fun `a link holds no link, and a destination with a space is none`() = runTest {
 		for ((markdown, text, links) in listOf(
 			Triple("[link](/my uri)", "[link](/my uri)", listOf(0 to null)),

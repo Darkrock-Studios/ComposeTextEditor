@@ -202,7 +202,7 @@ internal fun withNonLinkBracketsEscaped(source: String, definitions: Map<String,
  * a destination, then a title after whitespace, each optional, then `)`; or null when
  * none does.
  */
-private fun inlineLinkTailEnd(source: String, open: Int): Int? {
+internal fun inlineLinkTailEnd(source: String, open: Int): Int? {
 	var i = skipSpace(source, open + 1, newlines = 1)
 	if (source.getOrNull(i) == ')') return i
 	val (_, destinationEnd) = readLinkDestination(source, i, inParentheses = true) ?: return null

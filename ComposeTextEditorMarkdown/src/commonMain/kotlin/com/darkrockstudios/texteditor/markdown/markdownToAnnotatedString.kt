@@ -65,7 +65,9 @@ internal fun String.parseMarkdownWithLinks(
 	val literal by lazy { literalLines ?: normalized.fencedLineIndices() }
 	val indented = standIns?.substitute(normalized) { literal } ?: normalized
 	val symbols = SymbolStandIns.forSource(indented, taken = setOfNotNull(standIns?.space, standIns?.tab))
-	val source = (symbols?.substitute(indented) ?: indented)
+	val symbolled = symbols?.substitute(indented) ?: indented
+	val lessThan = STAND_IN_CANDIDATES.firstOrNull { it !in symbolled && it != standIns?.space && it != standIns?.tab } ?: '\uE000'
+	val source = withInlinePrecedence(symbolled, literal, lessThan)
 		.withHighlightTags()
 		.let { withInlineTagLinesInline(it, literal) }
 		.let { withNonLinkBracketsEscaped(it, linkDefinitions, literal) }
@@ -76,7 +78,9 @@ internal fun String.parseMarkdownWithLinks(
 	val annotated = buildAnnotatedString {
 		appendMarkdownChildren(source, parsedTree, context)
 	}
-	val restored = (standIns?.restore(annotated) ?: annotated).let { symbols?.restore(it) ?: it }
+	val restored = (standIns?.restore(annotated) ?: annotated).let { symbols?.restore(it) ?: it }.let { text ->
+		if (lessThan !in text.text) text else AnnotatedString(text.text.replace(lessThan, '<'), text.spanStyles, text.paragraphStyles)
+	}
 	val links = if (symbols == null) context.links else context.links.map { it.copy(url = symbols.restore(it.url)) }
 	return MarkdownParseResult(restored, links, context.joinedLines)
 }

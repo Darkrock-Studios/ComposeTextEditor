@@ -247,9 +247,7 @@ class SpecComplianceTest {
 		val BLOCK_TAG_END = Regex("""(</?(p|li|ul|ol|blockquote|h[1-6]|pre|table|thead|tbody|tr|th|td|div)\b[^>]*>|<hr\s*/?>|<br\s*/?>)$""", RegexOption.IGNORE_CASE)
 
 		/** What the CommonMark examples not supported yet are missing, as the README groups them. */
-		val NOT_YET = mapOf(
-			"Code spans beside tags and autolinks, and autolinks of any scheme" to setOf(343, 345, 598, 599, 603),
-		)
+		val NOT_YET = mapOf<String, Set<Int>>()
 
 		val GFM_GROUPS = mapOf(
 			"table" to "Tables",
