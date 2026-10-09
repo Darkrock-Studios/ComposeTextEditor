@@ -37,7 +37,7 @@ And now, it's working, and at this point, working pretty well.
 - ✅ HTML import, export and clipboard
 - ☑️ Markdown, as an addon
   - CommonMark: 532 of the spec's 652 examples, and every other one not planned ([spec support](#markdown-spec-support))
-  - GitHub Flavored Markdown: tables, task lists and strikethrough
+  - GitHub Flavored Markdown: tables, task lists and strikethrough; bare links are not planned
   - Underline (`<u>`), highlight (`==text==` or `<mark>`), colour and size (`<span style>`)
   - Opt-in shortcuts that format as you type (`# `, `- `, `**bold**`)
 
@@ -86,11 +86,12 @@ inside text or links (3).
 
 **GitHub Flavored Markdown extensions**: 12 of 24 examples
 
-![GFM extensions: 12 supported, 11 not yet, 1 not planned](docs/images/gfm-support.svg)
+![GFM extensions: 12 supported, 0 not yet, 12 not planned](docs/images/gfm-support.svg)
 
 - Tables, task lists and strikethrough are supported
-- Bare links (`www.example.com`, `user@example.com`) are not made links yet (11)
-- Not planned: filtering raw HTML tags (1), since raw HTML is kept as text
+- Not planned: bare links (11), since a URL typed as text would read back as a link
+  (the editor's opt-in auto-linking makes them as you type), and filtering raw HTML
+  tags (1), since raw HTML is kept as text
 
 #### Platforms
 

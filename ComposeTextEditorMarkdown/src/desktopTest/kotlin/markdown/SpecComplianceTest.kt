@@ -55,13 +55,14 @@ class SpecComplianceTest {
 		val gfm = examples(fetch(GFM_SPEC, "gfm-$GFM_VERSION.txt")).filter { it.label.isNotEmpty() }
 		val gfmResults = gfm.associateWith { example ->
 			when {
-				example.label == "tagfilter" -> Result.NOT_PLANNED
+				// A bare URL the editor holds as text would read back as a link.
+				example.label in GFM_NOT_PLANNED -> Result.NOT_PLANNED
 				supported(example) -> Result.SUPPORTED
 				else -> Result.NOT_YET
 			}
 		}
 		report("GFM $GFM_VERSION extensions", gfmResults) { example, result ->
-			if (result == Result.NOT_PLANNED) RAW_HTML else GFM_GROUPS[example.label] ?: example.label
+			if (result == Result.NOT_PLANNED) GFM_NOT_PLANNED.getValue(example.label) else GFM_GROUPS[example.label] ?: example.label
 		}
 		drawBar(File(root, "docs/images/gfm-support.svg"), "GFM extensions", gfmResults.values)
 	}
@@ -249,11 +250,12 @@ class SpecComplianceTest {
 		/** What the CommonMark examples not supported yet are missing, as the README groups them. */
 		val NOT_YET = mapOf<String, Set<Int>>()
 
+		val GFM_NOT_PLANNED = mapOf("tagfilter" to RAW_HTML, "autolink" to "Bare links")
+
 		val GFM_GROUPS = mapOf(
 			"table" to "Tables",
 			"disabled" to "Task lists",
 			"strikethrough" to "Strikethrough",
-			"autolink" to "Bare links",
 		)
 	}
 }
