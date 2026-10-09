@@ -89,7 +89,7 @@ private fun skipSpace(text: String, from: Int, newlines: Int): Int {
 }
 
 /** The index after the title starting at [start], or null when none does. */
-private fun readTitle(text: String, start: Int): Int? {
+internal fun readTitle(text: String, start: Int): Int? {
 	val close = when (text.getOrNull(start)) {
 		'"' -> '"'
 		'\'' -> '\''

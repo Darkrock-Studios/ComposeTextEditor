@@ -1,6 +1,7 @@
 package markdown
 
 import androidx.compose.ui.text.AnnotatedString
+import com.darkrockstudios.texteditor.html.HtmlExtension
 import com.darkrockstudios.texteditor.markdown.MarkdownConfiguration
 import com.darkrockstudios.texteditor.markdown.MarkdownExtension
 import com.darkrockstudios.texteditor.richstyle.IMAGE_PLACEHOLDER
@@ -124,5 +125,42 @@ class ImageBlockSerializationTest {
 		val original = "**bold** text\n\n![pic](u.png)\n\nmore **bold**"
 		extension.importMarkdown(original)
 		assertEquals(original, extension.exportAsMarkdown())
+	}
+
+	@Test
+	fun `import reads an image's title, angle-bracketed source and reference forms`() = runTest {
+		for ((markdown, expected) in listOf(
+			"![foo](/url \"title\")" to ("foo" to "/url"),
+			"![foo](<my url>)" to ("foo" to "my url"),
+			"![foo *bar*][ref]\n\n[REF]: train.jpg \"tracks\"" to ("foo bar" to "train.jpg"),
+			"![foo][]\n\n[foo]: /url" to ("foo" to "/url"),
+			"![Foo]\n\n[foo]: /url" to ("Foo" to "/url"),
+			"![foo ![bar](/url)](/url2)" to ("foo bar" to "/url2"),
+		)) {
+			val extension = createMarkdownExtension()
+			extension.importMarkdown(markdown)
+			assertEquals(listOf(0 to expected), extension.imageSpans().map { (line, style) -> line to (style.alt to style.source) }, markdown)
+		}
+	}
+
+	@Test
+	fun `a reference image with no definition is text`() = runTest {
+		val extension = createMarkdownExtension()
+		extension.importMarkdown("![foo][missing]")
+		assertTrue(extension.imageSpans().isEmpty())
+		assertEquals("![foo][missing]", extension.editorState.getAllText().text)
+	}
+
+	@Test
+	fun `an image whose alt holds markdown syntax and whose source holds spaces and parentheses reads back`() = runTest {
+		val provider = InMemoryImageProvider()
+		val first = createMarkdownExtension(provider = provider)
+		HtmlExtension(first.editorState, provider).importHtml("<img src=\"my pic (1).png\" alt=\"*a* [b] `c` &amp;amp; d_e ==f== ~g~ <h> \\i\">")
+		val written = first.exportAsMarkdown()
+
+		val again = createMarkdownExtension(provider = provider)
+		again.importMarkdown(written)
+		assertEquals(first.imageSpans().map { it.second.alt to it.second.source }, again.imageSpans().map { it.second.alt to it.second.source }, written)
+		assertEquals("*a* [b] `c` &amp; d_e ==f== ~g~ <h> \\i", again.imageSpans().single().second.alt)
 	}
 }

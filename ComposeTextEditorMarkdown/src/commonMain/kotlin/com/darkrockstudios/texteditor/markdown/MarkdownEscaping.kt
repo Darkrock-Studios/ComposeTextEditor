@@ -65,6 +65,9 @@ internal fun escapeLinkDestination(url: String, angled: Boolean): String = build
 	}
 }
 
+/** Whether an entity reference (`&copy;`, `&#35;`) starts at [index] of [text]. */
+internal fun startsEntity(text: CharSequence, index: Int): Boolean = ENTITY_REGEX.matchesAt(text, index)
+
 /** What the entity reference [entity] (`&name;` or `&#...;`) stands for, or null for an unknown name. */
 private fun decodeEntity(entity: String): String? {
 	val body = entity.substring(1, entity.length - 1)

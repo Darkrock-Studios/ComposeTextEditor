@@ -48,15 +48,6 @@ import com.darkrockstudios.texteditor.state.toggleCodeFence
 import com.darkrockstudios.texteditor.state.toggleHeader
 import com.darkrockstudios.texteditor.state.toggleOrderedList
 
-/**
- * Matches a line whose entire content is a single markdown image, optionally
- * surrounded by whitespace. Captures alt text (group 1) and URL (group 2).
- * URL must not contain whitespace or close-paren; alt text must not contain
- * close-bracket.
- */
-private val STANDALONE_IMAGE_REGEX =
-	Regex("""^\s*!\[([^\]]*)\]\(([^)\s]+)\)\s*$""")
-
 private data class CodeFenceStripResult(
 	/** Markdown text with all ` ``` ` marker lines removed. */
 	val text: String,
@@ -391,7 +382,7 @@ private val ATX_HEADING_START = Regex("""^ {0,3}#{1,6}(?:[ \t]|$)""")
 private fun isParagraphText(body: String): Boolean =
 	body.isNotBlank() && !body.startsWith("    ") && !body.startsWith("\t") && !body.trimStart().startsWith(">") &&
 		!LIST_ITEM_START.containsMatchIn(body) && !ATX_HEADING_START.containsMatchIn(body) &&
-		!isThematicBreak(body) && !STANDALONE_IMAGE_REGEX.matches(body)
+		!isThematicBreak(body) && readImageSyntax(body)?.destination == null
 
 /** A line's body once its stacked block markers are peeled, and the blocks peeled. */
 private data class PeeledLine(
@@ -772,7 +763,7 @@ class MarkdownExtension(
 				has(lineIndex, HorizontalRuleSpanStyle) -> if (underParagraph(lineIndex)) "***" else "---"
 				imageLines.containsKey(lineIndex) -> {
 					val style = imageLines.getValue(lineIndex)
-					"![${style.alt}](${style.source})"
+					"![${escapeImageAlt(style.alt)}](${markdownLinkDestination(style.source)})"
 				}
 
 				// Fenced lines emit their text raw: going through `toMarkdown` would
@@ -930,7 +921,7 @@ class MarkdownExtension(
 			// a stacked blockquote (`> ---`), and a `- ---` line comes back as the
 			// rule it once was rather than a bullet holding literal dashes.
 			val peeled = nesting.peel(line)
-			val imageMatch = STANDALONE_IMAGE_REGEX.matchEntire(peeled.body)
+			val image = readImageSyntax(peeled.body)?.takeIf { it.source(linkDefinitions) != null }
 			fun record(blocks: List<MarkdownBlockSyntax>) = blocks.forEach { block ->
 				blockHits.getOrPut(block.style) { mutableListOf() } += index
 			}
@@ -984,12 +975,10 @@ class MarkdownExtension(
 					HR_PLACEHOLDER
 				}
 
-				imageMatch != null && provider != null -> {
-					val alt = imageMatch.groupValues[1]
-					val url = imageMatch.groupValues[2]
+				image != null && provider != null -> {
 					imageLines += index to ImageBlockSpanStyle(
-						source = url,
-						alt = alt,
+						source = image.source(linkDefinitions)!!,
+						alt = image.alt(linkDefinitions),
 						provider = provider,
 					)
 					// An image can be a quoted line or a list item (`1. ![shot](url)`);
