@@ -55,6 +55,7 @@ import com.darkrockstudios.texteditor.input.isWithinDocument
 import com.darkrockstudios.texteditor.RichTextStyles
 import com.darkrockstudios.texteditor.SemanticsLayout
 import com.darkrockstudios.texteditor.richstyle.BlockSpanStyle
+import com.darkrockstudios.texteditor.richstyle.ImageBlockSize
 import com.darkrockstudios.texteditor.richstyle.anchorsToLine
 import com.darkrockstudios.texteditor.richstyle.paintsOnly
 import com.darkrockstudios.texteditor.richstyle.HeaderSpanStyle
@@ -383,6 +384,15 @@ class TextEditorState private constructor(
 	var tableBorderColor: Color by mutableStateOf(Color.Unspecified)
 		internal set
 	var tableHeaderBackgroundColor: Color by mutableStateOf(Color.Unspecified)
+		internal set
+
+	/**
+	 * The bounds an image block is drawn within, mirrored from
+	 * [TextEditorStyle.imageSize][com.darkrockstudios.texteditor.TextEditorStyle.imageSize].
+	 * An [ImageBlockSpanStyle.size][com.darkrockstudios.texteditor.richstyle.ImageBlockSpanStyle.size]
+	 * replaces them for one image.
+	 */
+	var imageSize: ImageBlockSize by mutableStateOf(ImageBlockSize.DEFAULT)
 		internal set
 
 	/**
@@ -2379,8 +2389,8 @@ class TextEditorState private constructor(
 		if (isProvisional(current, line)) reshapeLines(line, line)
 	}
 
-	/** The inputs of one pass besides the shaping: density, viewport width, the paragraph spacing in pixels and the wrapping. */
-	private fun lineInputs() = LineInputs(density, viewportSize.width, density?.run { paragraphSpacing.toPx() } ?: 0f, softWrap)
+	/** The inputs of one pass besides the shaping: density, viewport, the paragraph spacing in pixels, the wrapping and the image bounds. */
+	private fun lineInputs() = LineInputs(density, viewportSize.width, density?.run { paragraphSpacing.toPx() } ?: 0f, softWrap, viewportSize.height, imageSize)
 
 	/**
 	 * A long document's pass without the shaping: every line gets a provisional layout

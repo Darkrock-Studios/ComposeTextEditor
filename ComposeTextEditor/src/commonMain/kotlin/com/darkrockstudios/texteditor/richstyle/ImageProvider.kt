@@ -41,25 +41,28 @@ class InMemoryImageProvider : ImageProvider {
 	 * existing entry. Subsequent [resolve] calls for [source] return
 	 * [ImageBlockResource.Loaded].
 	 */
-	fun put(source: String, bitmap: ImageBitmap) {
-		val existing = entries[source]
-		if (existing != null) {
-			existing.value = ImageBlockResource.Loaded(bitmap)
-		} else {
-			entries[source] = mutableStateOf(ImageBlockResource.Loaded(bitmap))
-		}
-	}
+	fun put(source: String, bitmap: ImageBitmap) = set(source, ImageBlockResource.Loaded(bitmap))
+
+	/**
+	 * Marks [source] as still loading, overwriting any existing entry, for a bitmap
+	 * [put] later. Subsequent [resolve] calls for [source] return
+	 * [ImageBlockResource.Loading] until then.
+	 */
+	fun loading(source: String) = set(source, ImageBlockResource.Loading)
 
 	/**
 	 * Marks [source] as failed with [reason], overwriting any existing entry.
 	 * Subsequent [resolve] calls for [source] return [ImageBlockResource.Failed].
 	 */
-	fun fail(source: String, reason: String) {
+	fun fail(source: String, reason: String) = set(source, ImageBlockResource.Failed(reason))
+
+	/** Publishes [resource] for [source] through its existing state, so a span showing it recomposes. */
+	private fun set(source: String, resource: ImageBlockResource) {
 		val existing = entries[source]
 		if (existing != null) {
-			existing.value = ImageBlockResource.Failed(reason)
+			existing.value = resource
 		} else {
-			entries[source] = mutableStateOf(ImageBlockResource.Failed(reason))
+			entries[source] = mutableStateOf(resource)
 		}
 	}
 

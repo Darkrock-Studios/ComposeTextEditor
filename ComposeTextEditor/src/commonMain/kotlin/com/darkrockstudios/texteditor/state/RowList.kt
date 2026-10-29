@@ -1,6 +1,7 @@
 package com.darkrockstudios.texteditor.state
 
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.style.ResolvedTextDirection
 import androidx.compose.ui.unit.Density
@@ -11,6 +12,7 @@ import com.darkrockstudios.texteditor.LineWrap
 import com.darkrockstudios.texteditor.LineBox
 import com.darkrockstudios.texteditor.TableCellPlace
 import com.darkrockstudios.texteditor.richstyle.BlockSpanStyle
+import com.darkrockstudios.texteditor.richstyle.ImageBlockSize
 import com.darkrockstudios.texteditor.richstyle.ParagraphFormatSpanStyle
 import com.darkrockstudios.texteditor.richstyle.RichSpan
 
@@ -168,8 +170,9 @@ internal class LineLayout(
 			facts.firstOf { kind, value -> kind.place(value, inputs, textHeight) }
 
 		/**
-		 * A block span's height applies to each row it intersects, at the viewport's
-		 * width; a paragraph format's spacing, or the editor's, goes around the rows. A
+		 * A block span's height applies to each row it intersects, within the viewport and
+		 * the editor's image bounds; a paragraph format's spacing, or the editor's, goes
+		 * around the rows. A
 		 * placed line's padding goes around its rows instead, and its band's spacing
 		 * after its band.
 		 */
@@ -193,7 +196,7 @@ internal class LineLayout(
 				for (row in 0 until rows) {
 					val height = spans.firstNotNullOfOrNull { span ->
 						if (span.intersectsRow(line, rowStarts[row], rowEnds[row])) {
-							(span.style as? BlockSpanStyle)?.blockHeight(density, width)
+							(span.style as? BlockSpanStyle)?.blockHeight(density, Size(width, inputs.viewportHeight), inputs.imageSize)
 						} else null
 					} ?: continue
 					val heights = blockHeights ?: FloatArray(rows) { Float.NaN }.also { blockHeights = it }
@@ -249,9 +252,17 @@ internal fun List<RichSpan>.paragraphFormat(line: Int): ParagraphFormatSpanStyle
 
 /**
  * The layout inputs a line's layout depends on besides its shaping: the density, the
- * viewport width, the editor's paragraph spacing in pixels and whether lines wrap.
+ * viewport, the editor's paragraph spacing in pixels, whether lines wrap and the bounds
+ * its image blocks are drawn within.
  */
-internal class LineInputs(val density: Density?, val width: Float, val paragraphSpacing: Float, val softWrap: Boolean)
+internal class LineInputs(
+	val density: Density?,
+	val width: Float,
+	val paragraphSpacing: Float,
+	val softWrap: Boolean,
+	val viewportHeight: Float,
+	val imageSize: ImageBlockSize,
+)
 
 /**
  * The laid-out rows ([TextEditorState.lineOffsets]): one [LineLayout] per logical

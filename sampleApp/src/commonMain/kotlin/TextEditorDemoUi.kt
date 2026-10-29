@@ -30,7 +30,9 @@ import com.darkrockstudios.texteditor.behaviors.AutoLink
 import com.darkrockstudios.texteditor.behaviors.SmartPunctuation
 import com.darkrockstudios.texteditor.markdown.MarkdownShortcuts
 import com.darkrockstudios.texteditor.markdown.withMarkdown
+import com.darkrockstudios.texteditor.richstyle.ImageBlockSize
 import com.darkrockstudios.texteditor.richstyle.ImageBlockSpanStyle
+import com.darkrockstudios.texteditor.richstyle.ImageLength
 import com.darkrockstudios.texteditor.richstyle.RichSpanStyle
 import com.darkrockstudios.texteditor.richstyle.SpellCheckStyle
 import com.darkrockstudios.texteditor.state.EditorInputFilter
@@ -176,7 +178,7 @@ fun TextEditorDemoUi(
 		}
 
 		val uriHandler = LocalUriHandler.current
-		val style = rememberFramedEditorStyle(placeholderText = "Enter text here")
+		val style = rememberFramedEditorStyle(placeholderText = "Enter text here", imageSize = options.imageSize)
 		// A grown editor must not be made to fill the height.
 		val fills = !options.grow && !options.singleLine
 
@@ -227,7 +229,24 @@ private data class EditorOptions(
 	val punctuation: SmartPunctuation = NO_SMART_PUNCTUATION,
 	val autoLink: AutoLink = AutoLink(typed = false, pasted = false),
 	val markdownShortcuts: Boolean = false,
-)
+	val imageWidth: ImageWidth = ImageWidth.Full,
+	val imageHeightCapped: Boolean = false,
+	val imageUpscale: Boolean = false,
+) {
+	val imageSize: ImageBlockSize
+		get() = ImageBlockSize(
+			maxWidth = imageWidth.length,
+			maxHeight = if (imageHeightCapped) ImageLength.Absolute(200.dp) else null,
+			upscale = imageUpscale,
+		)
+}
+
+private enum class ImageWidth(val label: String, val length: ImageLength) {
+	Full("Full width", ImageLength.Fraction(1f)),
+	Wide("70% of the width", ImageLength.Fraction(0.7f)),
+	Half("Half the width", ImageLength.Fraction(0.5f)),
+	Fixed("300dp wide", ImageLength.Absolute(300.dp)),
+}
 
 private fun editorOptionGroups(
 	options: EditorOptions,
@@ -289,6 +308,24 @@ private fun editorOptionGroups(
 				listOf(
 					DemoOption("Markdown shortcuts", options.markdownShortcuts, supportingText = "Format as you type: **bold**, # heading") {
 						onChange(options.copy(markdownShortcuts = it))
+					},
+				),
+			)
+		} else null,
+		if (markdown) {
+			DemoOptionGroup(
+				"Images",
+				// One width at a time: switching one on takes the others off.
+				ImageWidth.entries.map { width ->
+					DemoOption(width.label, options.imageWidth == width) { on ->
+						if (on) onChange(options.copy(imageWidth = width))
+					}
+				} + listOf(
+					DemoOption("No taller than 200dp", options.imageHeightCapped) {
+						onChange(options.copy(imageHeightCapped = it))
+					},
+					DemoOption("Enlarge small images", options.imageUpscale, supportingText = "Up to the bounds above") {
+						onChange(options.copy(imageUpscale = it))
 					},
 				),
 			)

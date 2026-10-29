@@ -52,6 +52,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import com.darkrockstudios.texteditor.TextEditorStyle
+import com.darkrockstudios.texteditor.richstyle.ImageBlockSize
 import com.darkrockstudios.texteditor.rememberTextEditorStyle
 import androidx.compose.ui.unit.dp
 
@@ -204,6 +205,7 @@ fun EditorFrame(focused: Boolean, modifier: Modifier = Modifier, content: @Compo
 fun rememberFramedEditorStyle(
 	placeholderText: String = "",
 	textStyle: TextStyle = TextStyle.Default,
+	imageSize: ImageBlockSize = ImageBlockSize.DEFAULT,
 ): TextEditorStyle = rememberTextEditorStyle(
 	placeholderText = placeholderText,
 	textColor = MaterialTheme.colorScheme.onSurface,
@@ -211,4 +213,5 @@ fun rememberFramedEditorStyle(
 	focusedBorderColor = Color.Transparent,
 	unfocusedBorderColor = Color.Transparent,
 	textStyle = textStyle,
+	imageSize = imageSize,
 )

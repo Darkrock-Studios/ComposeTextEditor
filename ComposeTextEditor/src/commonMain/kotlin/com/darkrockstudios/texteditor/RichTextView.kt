@@ -84,6 +84,7 @@ fun RichTextView(
 	}
 
 	SyncStyleToState(state, style)
+	RelayoutBlocksOnHeightChange(state)
 
 	val density = LocalDensity.current
 
