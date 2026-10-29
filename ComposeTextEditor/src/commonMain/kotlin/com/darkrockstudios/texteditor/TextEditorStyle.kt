@@ -9,6 +9,7 @@ import androidx.compose.ui.graphics.takeOrElse
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.darkrockstudios.texteditor.richstyle.ImageBlockSize
 
 /**
  * The colors and text style applied to a [TextEditor]. Any `Color.Unspecified` field
@@ -93,6 +94,12 @@ data class TextEditorStyle(
 	val tableBorderColor: Color = Color.Unspecified,
 	/** The fill behind a table's header row. `Color.Unspecified` falls back to [codeFenceBackgroundColor]'s fallback. */
 	val tableHeaderBackgroundColor: Color = Color.Unspecified,
+	/**
+	 * The bounds every image block is drawn within, the viewport's width by default. An
+	 * image's own [ImageBlockSpanStyle.size][com.darkrockstudios.texteditor.richstyle.ImageBlockSpanStyle.size]
+	 * replaces them.
+	 */
+	val imageSize: ImageBlockSize = ImageBlockSize.DEFAULT,
 )
 
 /** How the touch selection and caret handles look. */
@@ -167,12 +174,13 @@ fun rememberTextEditorStyle(
 	handleShape: SelectionHandleShape = SelectionHandleShape.Platform,
 	tableBorderColor: Color = MaterialTheme.colorScheme.outline,
 	tableHeaderBackgroundColor: Color = MaterialTheme.colorScheme.surfaceContainerHigh,
+	imageSize: ImageBlockSize = ImageBlockSize.DEFAULT,
 ): TextEditorStyle = remember(
 	textColor, backgroundColor, placeholderText, placeholderColor,
 	cursorColor, selectionColor, focusedBorderColor, unfocusedBorderColor, textStyle,
 	bulletColor, blockquoteBarColor, blockquoteBackgroundColor, orderedListMarkerColor,
 	codeFenceBackgroundColor, codeFenceBorderColor, cursorWidth, unfocusedSelectionColor, handleColor,
-	paragraphSpacing, handleShape, tableBorderColor, tableHeaderBackgroundColor,
+	paragraphSpacing, handleShape, tableBorderColor, tableHeaderBackgroundColor, imageSize,
 ) {
 	TextEditorStyle(
 		textColor = textColor,
@@ -197,5 +205,6 @@ fun rememberTextEditorStyle(
 		handleShape = handleShape,
 		tableBorderColor = tableBorderColor,
 		tableHeaderBackgroundColor = tableHeaderBackgroundColor,
+		imageSize = imageSize,
 	)
 }

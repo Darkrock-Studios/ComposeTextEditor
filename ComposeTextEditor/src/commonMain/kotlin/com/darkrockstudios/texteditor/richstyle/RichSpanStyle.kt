@@ -1,5 +1,6 @@
 package com.darkrockstudios.texteditor.richstyle
 
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextRange
@@ -123,6 +124,14 @@ interface BlockSpanStyle : RichSpanStyle {
 	 * book-keeping; should be cheap and deterministic for a given input.
 	 */
 	fun blockHeight(density: Density, viewportWidth: Float): Float
+
+	/**
+	 * The block's height in pixels in an editor whose viewport is [viewport] pixels and
+	 * whose image bounds are [imageSize]: [blockHeight] at the viewport's width, for a
+	 * block that depends on neither.
+	 */
+	fun blockHeight(density: Density, viewport: Size, imageSize: ImageBlockSize): Float =
+		blockHeight(density, viewport.width)
 
 	/**
 	 * If true, the editor skips drawing the underlying placeholder text on

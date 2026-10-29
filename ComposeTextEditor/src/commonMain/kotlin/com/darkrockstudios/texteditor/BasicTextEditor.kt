@@ -69,8 +69,6 @@ import com.darkrockstudios.texteditor.input.TextInputRequester
 import com.darkrockstudios.texteditor.input.pastePlainText
 import com.darkrockstudios.texteditor.input.placeCaretForHandwriting
 import com.darkrockstudios.texteditor.input.stylusHandwriting
-import com.darkrockstudios.texteditor.richstyle.BlockSpanStyle
-import com.darkrockstudios.texteditor.state.LayoutUpdate
 import com.darkrockstudios.texteditor.state.LocalImeInsets
 import com.darkrockstudios.texteditor.richstyle.RichSpan
 import com.darkrockstudios.texteditor.scrollbar.EditorHorizontalScrollbar
@@ -83,7 +81,6 @@ import com.darkrockstudios.texteditor.state.rememberTextEditorState
 import com.darkrockstudios.texteditor.state.updateKeyboardCover
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.launch
 import kotlin.math.ceil
@@ -339,25 +336,7 @@ fun BasicTextEditor(
 		if (!enabled) state.selector.hideCaretHandle()
 	}
 
-	// Re-run layout when an asynchronous block-state change (e.g. an image
-	// finishing its load) changes a [BlockSpanStyle]'s reported height.
-	// `updateBookKeeping` reads block heights but isn't itself snapshot-tracked,
-	// so without this effect a freshly loaded image leaves stale Y offsets —
-	// subsequent paragraphs render at the placeholder height position and
-	// overlap the image until the user scrolls or resizes.
-	LaunchedEffect(state) {
-		snapshotFlow {
-			val d = state.density ?: return@snapshotFlow emptyList<Float>()
-			val viewportWidth = state.viewportSize.width
-			state.richSpanManager.getAllRichSpans().mapNotNull { span ->
-				(span.style as? BlockSpanStyle)?.blockHeight(d, viewportWidth)
-			}
-		}
-			.distinctUntilChanged()
-			// A block height change moves Y offsets but no line content, so the
-			// pass can skip shaping entirely.
-			.collect { state.updateBookKeeping(LayoutUpdate.SpansOnly) }
-	}
+	RelayoutBlocksOnHeightChange(state)
 
 	TextEditorContextMenuProvider(
 		menuState = effectiveContextMenuState,

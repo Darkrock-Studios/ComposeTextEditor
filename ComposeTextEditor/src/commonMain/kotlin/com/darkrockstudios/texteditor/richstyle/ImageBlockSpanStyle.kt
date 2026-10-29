@@ -16,10 +16,10 @@ import com.darkrockstudios.texteditor.effectiveHeight
 import com.darkrockstudios.texteditor.state.TextEditorState
 
 /**
- * A [BlockSpanStyle] that renders a full-width image. Pair with [IMAGE_PLACEHOLDER]
- * (a single space) on a line of its own — the editor sizes the line to the image's
- * intrinsic height (fitted to viewport width, preserving aspect ratio) and the
- * style draws the bitmap into that area.
+ * A [BlockSpanStyle] that renders an image centred on its line. Pair with
+ * [IMAGE_PLACEHOLDER] (a single space) on a line of its own: the editor sizes the
+ * line to the image's height within its bounds, [size] or the editor's
+ * [TextEditorState.imageSize], and the style draws the bitmap into that area.
  *
  * The bitmap is fetched lazily from [provider]; while loading or on failure the
  * style draws a placeholder rectangle of [placeholderHeightDp].
@@ -29,25 +29,23 @@ data class ImageBlockSpanStyle(
 	val alt: String = "",
 	val provider: ImageProvider,
 	val placeholderHeightDp: Float = 200f,
+	/** This image's bounds, in place of the editor's [TextEditorState.imageSize]. */
+	val size: ImageBlockSize? = null,
 ) : BlockSpanStyle {
 
-	override fun blockHeight(density: Density, viewportWidth: Float): Float {
-		val resource = provider.resolve(source).value
-		return when (resource) {
-			is ImageBlockResource.Loaded -> {
-				val bw = resource.bitmap.width.toFloat()
-				val bh = resource.bitmap.height.toFloat()
-				if (bw <= 0f || bh <= 0f) {
-					with(density) { placeholderHeightDp.dp.toPx() }
-				} else {
-					val scale = (viewportWidth / bw).coerceAtMost(1f)
-					bh * scale
-				}
-			}
+	/** The height with [size] or [ImageBlockSize.DEFAULT], the viewport's height unknown. */
+	override fun blockHeight(density: Density, viewportWidth: Float): Float =
+		blockHeight(density, Size(viewportWidth, Float.POSITIVE_INFINITY), ImageBlockSize.DEFAULT)
 
-			is ImageBlockResource.Loading,
-			is ImageBlockResource.Failed -> with(density) { placeholderHeightDp.dp.toPx() }
-		}
+	/** The height in a viewport of [viewport] pixels, the image bounded by [size] or, without one, by [imageSize]. */
+	override fun blockHeight(density: Density, viewport: Size, imageSize: ImageBlockSize): Float =
+		drawnSize(density, viewport, imageSize)?.height ?: with(density) { placeholderHeightDp.dp.toPx() }
+
+	/** The size the loaded bitmap is drawn at, or null while there is none to draw. */
+	private fun drawnSize(density: Density, viewport: Size, imageSize: ImageBlockSize): Size? {
+		val bitmap = (provider.resolve(source).value as? ImageBlockResource.Loaded)?.bitmap ?: return null
+		if (bitmap.width <= 0 || bitmap.height <= 0) return null
+		return (size ?: imageSize).fit(bitmap.width.toFloat(), bitmap.height.toFloat(), viewport, density)
 	}
 
 	override fun DrawScope.drawCustomStyle(
@@ -62,18 +60,14 @@ data class ImageBlockSpanStyle(
 		when (val resource = provider.resolve(source).value) {
 			is ImageBlockResource.Loaded -> {
 				val bitmap = resource.bitmap
-				val bw = bitmap.width.toFloat()
-				val bh = bitmap.height.toFloat()
-				val scale = if (bw > 0f) (width / bw).coerceAtMost(1f) else 1f
-				val drawWidth = bw * scale
-				val drawHeight = bh * scale
-				val left = (width - drawWidth) / 2f
+				val drawn = drawnSize(this, state.viewportSize, state.imageSize) ?: return
+				val left = (width - drawn.width) / 2f
 				drawImage(
 					image = bitmap,
 					srcOffset = IntOffset.Zero,
 					srcSize = IntSize(bitmap.width, bitmap.height),
 					dstOffset = IntOffset(left.toInt(), 0),
-					dstSize = IntSize(drawWidth.toInt(), drawHeight.toInt()),
+					dstSize = IntSize(drawn.width.toInt(), drawn.height.toInt()),
 				)
 			}
 

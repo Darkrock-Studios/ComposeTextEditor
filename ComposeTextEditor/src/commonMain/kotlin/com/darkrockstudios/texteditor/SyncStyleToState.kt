@@ -19,5 +19,6 @@ internal fun SyncStyleToState(state: TextEditorState, style: TextEditorStyle) {
 		state.codeFenceBorderColor = style.codeFenceBorderColor
 		state.tableBorderColor = style.tableBorderColor
 		state.tableHeaderBackgroundColor = style.tableHeaderBackgroundColor
+		state.imageSize = style.imageSize
 	}
 }
