@@ -476,10 +476,15 @@ test read `paragraphTop`; scrolling keeps a row, not its gaps, in view.
 
 **Serialization.** The saver serializes the format as the built-in kind
 `paragraph` with its fields as the argument, so a saved state restores it.
-Markdown has no paragraph spacing, alignment, indent or line height: export
-writes the text without them and import reads none, so a document that
-round-trips through markdown loses its paragraph formatting. HTML carries all of it as inline styles on the paragraph's element
-(`html/ParagraphFormatCss.kt`).
+Markdown has no paragraph spacing, indent or line height: export writes the
+text without them and import reads none. A paragraph's or heading's left,
+centre, right or justified alignment goes through as a `<div align="...">`
+wrapper around each run of lines sharing it, blank lines inside its tags so
+other renderers read the markdown within (`MarkdownAlignment.kt`); a list
+item's, a quote's and a start or end alignment do not, and a table cell takes
+none, its column aligning it. `setParagraphAlignment(lines, align)` changes the
+alignment alone. HTML carries all of the format as inline styles on the
+paragraph's element (`html/ParagraphFormatCss.kt`).
 
 ## 12. Lazy load
 
