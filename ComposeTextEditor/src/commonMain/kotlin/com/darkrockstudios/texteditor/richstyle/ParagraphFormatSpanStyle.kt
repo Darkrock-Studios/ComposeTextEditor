@@ -25,8 +25,9 @@ import com.darkrockstudios.texteditor.state.TextEditorState
  * [com.darkrockstudios.texteditor.TextEditorStyle.paragraphSpacing] after, and the
  * `textStyle`'s alignment, indent and line height. The indents add to a block's own
  * (a list item's or a quote's) when both are in the same unit, else the paragraph's
- * wins. Markdown cannot carry any of this, so it is lost in a markdown round trip;
- * HTML carries it as inline CSS, and the saveable state keeps it.
+ * wins. Markdown carries a paragraph's or heading's alignment alone, as a
+ * `<div align>` wrapper; HTML carries all of it as inline CSS, and the saveable state
+ * keeps it.
  */
 data class ParagraphFormatSpanStyle(
 	val spaceBefore: Dp = Dp.Unspecified,

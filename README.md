@@ -39,6 +39,7 @@ And now, it's working, and at this point, working pretty well.
   - CommonMark: 532 of the spec's 652 examples, and every other one not planned ([spec support](#markdown-spec-support))
   - GitHub Flavored Markdown: tables, task lists and strikethrough; bare links are not planned
   - Underline (`<u>`), highlight (`==text==` or `<mark>`), colour and size (`<span style>`)
+  - Paragraph and heading alignment (`<div align="center">`)
   - Opt-in shortcuts that format as you type (`# `, `- `, `**bold**`)
 
 You can [Give it a try here](https://darkrock-studios.github.io/ComposeTextEditor/), or

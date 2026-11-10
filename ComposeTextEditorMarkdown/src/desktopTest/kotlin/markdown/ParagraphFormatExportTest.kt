@@ -14,7 +14,7 @@ import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
-/** Markdown has no form for a paragraph format, so export writes the text alone. */
+/** Markdown has no form for a paragraph format but its alignment, and none for an end alignment. */
 class ParagraphFormatExportTest {
 
 	@Test

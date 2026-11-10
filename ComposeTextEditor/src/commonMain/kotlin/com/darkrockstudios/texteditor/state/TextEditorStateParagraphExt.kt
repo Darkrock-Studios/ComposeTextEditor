@@ -1,5 +1,6 @@
 package com.darkrockstudios.texteditor.state
 
+import androidx.compose.ui.text.style.TextAlign
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.richstyle.ParagraphFormatSpanStyle
@@ -31,3 +32,22 @@ fun TextEditorState.setParagraphFormat(lines: IntRange, format: ParagraphFormatS
 /** [setParagraphFormat] over the lines [range] touches. */
 fun TextEditorState.setParagraphFormat(range: TextEditorRange, format: ParagraphFormatSpanStyle?) =
 	setParagraphFormat(range.start.line..range.end.line, format)
+
+/**
+ * Gives every line in [lines] the alignment [align], keeping the rest of each line's
+ * format; null restores the editor's default alignment. A table cell is left alone: it
+ * aligns by its column. One undo step.
+ */
+fun TextEditorState.setParagraphAlignment(lines: IntRange, align: TextAlign?) {
+	editGroup {
+		for (line in lines) {
+			if (line !in textLines.indices || isInlineOnlyLine(line)) continue
+			val format = (paragraphFormat(line) ?: ParagraphFormatSpanStyle()).copy(textAlign = align)
+			setParagraphFormat(line..line, format.takeIf { it != ParagraphFormatSpanStyle() })
+		}
+	}
+}
+
+/** [setParagraphAlignment] over the lines [range] touches. */
+fun TextEditorState.setParagraphAlignment(range: TextEditorRange, align: TextAlign?) =
+	setParagraphAlignment(range.start.line..range.end.line, align)
