@@ -1,10 +1,13 @@
 package com.darkrockstudios.texteditor.sample
 
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.FormatAlignLeft
+import androidx.compose.material.icons.automirrored.filled.FormatAlignRight
 import androidx.compose.material.icons.automirrored.filled.Redo
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.*
@@ -13,15 +16,20 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.PopupProperties
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.html.sanitizeLinkUrl
+import com.darkrockstudios.texteditor.markdown.markdownKeepsAlignment
 import com.darkrockstudios.texteditor.richstyle.*
 import com.darkrockstudios.texteditor.state.TextEditorState
 import com.darkrockstudios.texteditor.state.convertTableToText
@@ -33,6 +41,8 @@ import com.darkrockstudios.texteditor.state.insertTableColumn
 import com.darkrockstudios.texteditor.state.insertTableRow
 import com.darkrockstudios.texteditor.state.isInlineOnlyLine
 import com.darkrockstudios.texteditor.state.isTableCell
+import com.darkrockstudios.texteditor.state.paragraphFormat
+import com.darkrockstudios.texteditor.state.setParagraphAlignment
 import com.darkrockstudios.texteditor.state.setTableColumnAlignment
 import com.darkrockstudios.texteditor.state.tableCellAt
 import com.darkrockstudios.texteditor.state.getRichSpansAtPosition
@@ -51,6 +61,7 @@ import com.darkrockstudios.texteditor.state.toggleSpanStyle
 import com.darkrockstudios.texteditor.state.unlink
 import markdown.decreaseFontSize
 import markdown.increaseFontSize
+import kotlin.math.abs
 
 @Composable
 fun TextEditorToolbar(
@@ -73,11 +84,15 @@ fun TextEditorToolbar(
 	var selectionEndsInTable by remember { mutableStateOf(false) }
 	var blocksRefused by remember { mutableStateOf(false) }
 	var isTaskActive by remember { mutableStateOf(false) }
+	var currentAlignment by remember { mutableStateOf<TextAlign?>(null) }
+	var alignmentRefused by remember { mutableStateOf(false) }
 
 	fun readCaretLine(line: Int) {
 		tableLine = line.takeIf { state.isTableCell(it) }
 		blocksRefused = state.isInlineOnlyLine(line)
 		isTaskActive = state.isTask(line)
+		currentAlignment = state.paragraphFormat(line)?.textAlign
+		alignmentRefused = !state.markdownKeepsAlignment(line)
 	}
 	var isHighlightActive by remember { mutableStateOf(false) }
 	var linkDialogState by remember { mutableStateOf<LinkDialogRequest?>(null) }
@@ -134,9 +149,11 @@ fun TextEditorToolbar(
 		color = MaterialTheme.colorScheme.surfaceContainer,
 		modifier = modifier,
 	) {
+		val scroll = rememberScrollState()
 		Row(
 			modifier = Modifier
-				.horizontalScroll(rememberScrollState())
+				.wheelScrollsSideways(scroll)
+				.horizontalScroll(scroll)
 				.padding(horizontal = 8.dp, vertical = 4.dp),
 			verticalAlignment = Alignment.CenterVertically
 		) {
@@ -294,6 +311,29 @@ fun TextEditorToolbar(
 					Spacer(modifier = Modifier.width(2.dp))
 
 					TableMenu(state, tableLine)
+
+					ToolbarDivider()
+
+					// Clicking the active alignment clears it back to the default.
+					listOf(
+						Triple(TextAlign.Left, Icons.AutoMirrored.Filled.FormatAlignLeft, "Align left"),
+						Triple(TextAlign.Center, Icons.Default.FormatAlignCenter, "Center"),
+						Triple(TextAlign.Right, Icons.AutoMirrored.Filled.FormatAlignRight, "Align right"),
+						Triple(TextAlign.Justify, Icons.Default.FormatAlignJustify, "Justify"),
+					).forEach { (align, icon, label) ->
+						FormatButton(
+							onClick = {
+								val next = align.takeIf { it != currentAlignment }
+								state.setParagraphAlignment(selectedLines(state), next)
+								currentAlignment = next
+							},
+							icon = icon,
+							contentDescription = label,
+							isActive = currentAlignment == align,
+							enabled = !alignmentRefused,
+						)
+						Spacer(modifier = Modifier.width(2.dp))
+					}
 
 					ToolbarDivider()
 
@@ -661,3 +701,22 @@ private fun toolbarToggleColors() = IconButtonDefaults.iconToggleButtonColors(
 	checkedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
 	checkedContentColor = MaterialTheme.colorScheme.onSecondaryContainer,
 )
+
+/**
+ * A mouse wheel turned up or down scrolls [state] sideways: a horizontal scroll alone takes only a
+ * sideways wheel or trackpad swipe, which most mice don't have.
+ */
+private fun Modifier.wheelScrollsSideways(state: ScrollState): Modifier = pointerInput(state) {
+	awaitPointerEventScope {
+		while (true) {
+			val event = awaitPointerEvent(PointerEventPass.Initial)
+			if (event.type != PointerEventType.Scroll) continue
+			val change = event.changes.firstOrNull() ?: continue
+			val delta = change.scrollDelta
+			if (abs(delta.y) <= abs(delta.x)) continue
+			if (state.dispatchRawDelta(delta.y * WHEEL_STEP.toPx()) != 0f) change.consume()
+		}
+	}
+}
+
+private val WHEEL_STEP = 64.dp

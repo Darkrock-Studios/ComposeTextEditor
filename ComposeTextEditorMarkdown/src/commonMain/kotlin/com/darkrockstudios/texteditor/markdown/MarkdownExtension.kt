@@ -3,6 +3,7 @@ package com.darkrockstudios.texteditor.markdown
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.style.TextAlign
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.richstyle.BlockquoteSpanStyle
@@ -17,6 +18,7 @@ import com.darkrockstudios.texteditor.richstyle.ImageProvider
 import com.darkrockstudios.texteditor.richstyle.LinkSpanStyle
 import com.darkrockstudios.texteditor.richstyle.MAX_LIST_LEVEL
 import com.darkrockstudios.texteditor.richstyle.OrderedListSpanStyle
+import com.darkrockstudios.texteditor.richstyle.ParagraphFormatSpanStyle
 import com.darkrockstudios.texteditor.richstyle.RichSpan
 import com.darkrockstudios.texteditor.richstyle.RichSpanStyle
 import com.darkrockstudios.texteditor.richstyle.TableAlignment
@@ -57,6 +59,8 @@ private data class CodeFenceStripResult(
 	val infoStrings: Map<Int, String>,
 	/** Indices into [text]'s lines that go on the setext heading on the line before: one heading's text. */
 	val headingContinuations: Set<Int> = emptySet(),
+	/** The alignment each line inside an alignment wrapper takes, keyed by its index in [text]. */
+	val alignments: Map<Int, TextAlign> = emptyMap(),
 )
 
 /**
@@ -257,7 +261,7 @@ private fun withSetextHeadings(strip: CodeFenceStripResult, dashUnderlines: Bool
 
 /**
  * This result's [lines] without the [dropped] ones, each kept line through [rewrite],
- * the fence and heading data renumbered onto the lines left.
+ * the fence, heading and alignment data renumbered onto the lines left.
  */
 private fun CodeFenceStripResult.rewritten(
 	lines: List<String>,
@@ -268,14 +272,40 @@ private fun CodeFenceStripResult.rewritten(
 	val fenced = HashSet<Int>()
 	val infos = HashMap<Int, String>()
 	val continuations = HashSet<Int>()
+	val aligns = HashMap<Int, TextAlign>()
 	lines.forEachIndexed { index, line ->
 		if (index in dropped) return@forEachIndexed
 		if (index in fencedLines) fenced += out.size
 		if (index in headingContinuations) continuations += out.size
 		infoStrings[index]?.let { infos[out.size] = it }
+		alignments[index]?.let { aligns[out.size] = it }
 		out += rewrite(index, line)
 	}
-	return CodeFenceStripResult(out.joinToString("\n"), fenced, infos, continuations)
+	return CodeFenceStripResult(out.joinToString("\n"), fenced, infos, continuations, aligns)
+}
+
+/**
+ * [strip] without its alignment wrappers ([unwrapAlignment]), each line inside one taking its
+ * alignment. Under single newlines ([newlineParagraphs]) the blank line after a closing tag goes
+ * too, which export writes to end the HTML block there.
+ */
+private fun withAlignmentWrappers(strip: CodeFenceStripResult, newlineParagraphs: Boolean): CodeFenceStripResult {
+	val unwrapped = unwrapAlignment(strip.text.lines(), { it in strip.fencedLines }, dropBlankAfterClose = newlineParagraphs)
+		?: return strip
+	val fenced = HashSet<Int>()
+	val infos = HashMap<Int, String>()
+	val continuations = HashSet<Int>()
+	val aligns = HashMap<Int, TextAlign>()
+	unwrapped.forEachIndexed { index, line ->
+		if (line.whole) {
+			if (line.source in strip.fencedLines) fenced += index
+			if (line.source in strip.headingContinuations) continuations += index
+			strip.infoStrings[line.source]?.let { infos[index] = it }
+			strip.alignments[line.source]?.let { aligns[index] = it }
+		}
+		line.align?.let { aligns[index] = it }
+	}
+	return CodeFenceStripResult(unwrapped.joinToString("\n") { it.text }, fenced, infos, continuations, aligns)
 }
 
 /**
@@ -675,6 +705,33 @@ class MarkdownExtension(
 			return above >= 0 && !needsSeparator(above) && !isBlankLine(above) && isQuoted(above) == isQuoted(line) &&
 				stylesOn(above).none { it !== BlockquoteSpanStyle && (hasBlockSyntax(it) || it === HorizontalRuleSpanStyle || it is ImageBlockSpanStyle) }
 		}
+		// A paragraph's or heading's alignment is written as a wrapper around each run of lines
+		// that share it, from its first line with text to its last; a table cell aligns by its column.
+		fun alignmentTagOf(line: Int): String? {
+			if (isFence(line) || cellOf(line) != null || has(line, HorizontalRuleSpanStyle) || imageLines.containsKey(line)) return null
+			if (stylesOn(line).any { hasBlockSyntax(it) && it !is HeaderSpanStyle }) return null
+			return alignmentOpeningTag(stylesOn(line).firstNotNullOfOrNull { it as? ParagraphFormatSpanStyle }?.textAlign)
+		}
+		val alignmentTags = Array(lines.size, ::alignmentTagOf)
+		val opensAlignment = BooleanArray(lines.size)
+		val closesAlignment = BooleanArray(lines.size)
+		var runStart = 0
+		while (runStart < lines.size) {
+			val tag = alignmentTags[runStart]
+			if (tag == null || isBlankLine(runStart)) {
+				runStart++
+				continue
+			}
+			var runEnd = runStart
+			var next = runStart + 1
+			while (next < lines.size && alignmentTags[next] == tag) {
+				if (!isBlankLine(next)) runEnd = next
+				next++
+			}
+			opensAlignment[runStart] = true
+			closesAlignment[runEnd] = true
+			runStart = runEnd + 1
+		}
 		val lineStarts = IntArray(lines.size).also { starts ->
 			for (line in 1 until lines.size) starts[line] = starts[line - 1] + lines[line - 1].length + 1
 		}
@@ -820,6 +877,7 @@ class MarkdownExtension(
 			} else {
 				inlineMarkdown
 			}
+			if (opensAlignment[lineIndex]) sb.append(alignmentTags[lineIndex]).append("\n\n")
 			if (!isFenceLine) {
 				prefixBlocks.forEach { block ->
 					if (has(lineIndex, block.style)) sb.append(block.prefix(0))
@@ -857,6 +915,11 @@ class MarkdownExtension(
 				list != null && TASK_MARKER.containsMatchIn(lineMarkdown) -> sb.append('\\')
 			}
 			sb.append(lineMarkdown)
+			if (closesAlignment[lineIndex]) {
+				sb.append("\n\n").append(ALIGNMENT_CLOSING_TAG)
+				// The closing tag's HTML block runs on to a blank line, which single newlines would not write.
+				if (!separateParagraphs && lineIndex + 1 < lines.size) sb.append('\n')
+			}
 			cursor = end + 1
 		}
 		// Close an unfinished fence at EOF; the closing marker needs its own line
@@ -883,6 +946,7 @@ class MarkdownExtension(
 		// escaped so the parser doesn't reinterpret `*foo*` as italic etc.
 		val blankLineParagraphs = paragraphSeparator == ParagraphSeparator.BLANK_LINE
 		val fenced = stripCodeFences(markdownText).let { if (blankLineParagraphs) withIndentedCode(it) else it }
+			.let { withAlignmentWrappers(it, newlineParagraphs = !blankLineParagraphs) }
 		val (withoutDefinitions, linkDefinitions) = withoutLinkDefinitions(withSingleQuoteMarkers(fenced))
 		val fenceStrip = withSetextHeadings(withoutDefinitions, dashUnderlines = blankLineParagraphs, lazyQuotes = blankLineParagraphs)
 			.let { if (blankLineParagraphs) withLazyQuoteLines(it) else it }
@@ -1084,6 +1148,18 @@ class MarkdownExtension(
 		val lineOf = IntArray(processedLines.size)
 		for (line in 1 until lineOf.size) lineOf[line] = lineOf[line - 1] + if (joined[line]) 0 else 1
 		fun kept(line: Int) = !joined[line]
+		// A paragraph or heading takes its wrapper's alignment, as export writes one for those alone.
+		val unalignable = HashSet<Int>().apply {
+			addAll(codeFenceLineIndices)
+			addAll(imported.cells.keys)
+			addAll(hrLineIndices)
+			imageLines.forEach { add(it.first) }
+			blockHits.forEach { (style, lines) -> if (style !is HeaderSpanStyle) addAll(lines) }
+		}
+		val alignments = keptLines.indices.mapNotNull { index ->
+			val align = fenceStrip.alignments[imported.sources[index]] ?: return@mapNotNull null
+			if (index in unalignable || !kept(index)) null else lineOf[index] to align
+		}.toMap()
 		// setText publishes the text with no spans and applyDocumentBlocks attaches them
 		// afterwards. As one revision, so a concurrent export can't catch the document
 		// fully loaded but entirely unstyled.
@@ -1094,10 +1170,21 @@ class MarkdownExtension(
 				imageLines = imageLines.associate { (line, image) -> lineOf[line] to image },
 				blockLines = (blockHits + (CodeFenceSpanStyle to codeFenceLineIndices) + imported.cells.entries.groupBy({ it.value }, { it.key }))
 					.mapValues { (_, lines) -> lines.filter(::kept).map { lineOf[it] } },
-				richSpans = linkSpans(links, annotatedString.text) + fenceLanguageSpans(fenceInfoStrings.mapKeys { lineOf[it.key] }),
+				richSpans = linkSpans(links, annotatedString.text) + fenceLanguageSpans(fenceInfoStrings.mapKeys { lineOf[it.key] }) +
+					alignmentSpans(alignments),
 			)
 		}
 	}
+
+	/** A [ParagraphFormatSpanStyle] of each line's alignment, read against the text just set. */
+	private fun alignmentSpans(alignments: Map<Int, TextAlign>): List<RichSpan> =
+		alignments.mapNotNull { (line, align) ->
+			val length = editorState.textLines.getOrNull(line)?.length ?: return@mapNotNull null
+			RichSpan(
+				range = TextEditorRange(CharLineOffset(line, 0), CharLineOffset(line, length)),
+				style = ParagraphFormatSpanStyle(textAlign = align),
+			)
+		}
 
 	/** A text made one line by [asOneLine], and where each of the source's offsets went. */
 	private class OneLine(val text: AnnotatedString, private val offsets: IntArray) {

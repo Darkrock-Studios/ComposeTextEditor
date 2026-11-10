@@ -153,6 +153,20 @@ The `RichSpanManager` plays a **critical role** in our text editor by efficientl
 
 ![Highway at night](sample.jpg)
 
+<div align="center">
+
+### A *centred* heading
+
+Paragraphs and headings can be aligned left, center, right or justified with the toolbar.
+
+</div>
+
+<div align="right">
+
+This one sits on the right.
+
+</div>
+
 > Blockquotes render with a left bar and an indent. The text inside still supports **bold**, *italic*, and `code` markdown — anything you'd write in a normal paragraph works here too.
 
 Bullet lists exercise the same gutter-marker pattern with a hanging indent so wrapped lines stay aligned under the text:
