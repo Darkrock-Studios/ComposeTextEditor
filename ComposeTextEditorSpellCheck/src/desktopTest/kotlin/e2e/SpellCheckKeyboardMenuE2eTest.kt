@@ -3,6 +3,7 @@ package e2e
 import androidx.compose.ui.input.key.Key
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.contextmenu.ContextMenuStrings
+import com.darkrockstudios.texteditor.spellcheck.diagnostics.LineCheck
 import com.darkrockstudios.texteditor.spellcheck.diagnostics.LineDiagnostic
 import com.darkrockstudios.texteditor.spellcheck.diagnostics.TextDiagnosticsChecker
 import utils.CountingSpellChecker
@@ -59,7 +60,7 @@ class SpellCheckKeyboardMenuE2eTest {
 	fun `shift+f10 on a diagnostic offers its fixes`() {
 		val repeats = TextDiagnosticsChecker { lines ->
 			lines.map { line ->
-				Regex("the the").findAll(line).map { LineDiagnostic(it.range.first, it.range.last + 1, "Repeated word", listOf("the")) }.toList()
+				Regex("the the").findAll(line).map { LineDiagnostic(it.range.first, it.range.last + 1, "Repeated word", listOf("the")) }.toList().let(::LineCheck)
 			}
 		}
 		spellCheckUiTest(

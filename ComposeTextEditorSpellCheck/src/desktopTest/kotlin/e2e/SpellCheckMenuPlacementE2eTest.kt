@@ -3,6 +3,7 @@ package e2e
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.unit.dp
+import com.darkrockstudios.texteditor.spellcheck.diagnostics.LineCheck
 import com.darkrockstudios.texteditor.spellcheck.diagnostics.LineDiagnostic
 import com.darkrockstudios.texteditor.spellcheck.diagnostics.TextDiagnosticsChecker
 import utils.CountingSpellChecker
@@ -57,7 +58,7 @@ class SpellCheckMenuPlacementE2eTest {
 	fun `a tap on a diagnostic opens the menu at it, past the start padding`() {
 		val repeats = TextDiagnosticsChecker { lines ->
 			lines.map { line ->
-				Regex("the the").findAll(line).map { LineDiagnostic(it.range.first, it.range.last + 1, "Repeated word", listOf("the")) }.toList()
+				Regex("the the").findAll(line).map { LineDiagnostic(it.range.first, it.range.last + 1, "Repeated word", listOf("the")) }.toList().let(::LineCheck)
 			}
 		}
 		val text = "over the the hill"

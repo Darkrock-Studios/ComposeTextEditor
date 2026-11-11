@@ -11,6 +11,7 @@ import com.darkrockstudios.texteditor.richstyle.RichSpan
 import com.darkrockstudios.texteditor.spellcheck.diagnostics.DiagnosticFix
 import com.darkrockstudios.texteditor.spellcheck.diagnostics.DiagnosticSeverity
 import com.darkrockstudios.texteditor.spellcheck.diagnostics.DiagnosticStyle
+import com.darkrockstudios.texteditor.spellcheck.diagnostics.LineCheck
 import com.darkrockstudios.texteditor.spellcheck.diagnostics.LineDiagnostic
 import com.darkrockstudios.texteditor.spellcheck.diagnostics.TextDiagnosticsChecker
 import com.darkrockstudios.texteditor.spellcheck.diagnostics.TextDiagnosticsState
@@ -37,7 +38,7 @@ class TextDiagnosticsStateTest {
 	private val checker = TextDiagnosticsChecker { lines ->
 		checked += lines
 		lines.map { line ->
-			Regex("the the").findAll(line).map { LineDiagnostic(it.range.first, it.range.last + 1, "Repeated word", listOf("the")) }.toList()
+			Regex("the the").findAll(line).map { LineDiagnostic(it.range.first, it.range.last + 1, "Repeated word", listOf("the")) }.toList().let(::LineCheck)
 		}
 	}
 
@@ -261,6 +262,66 @@ class TextDiagnosticsStateTest {
 
 		state.refresh()
 		assertEquals(listOf(range(2, 4, 8)), spans().map { it.range })
+	}
+
+	@Test
+	fun `an incomplete line is underlined with what was found, and checked again on the next refresh`() = runTest {
+		textState.setText("Over the the hill.\nAnd the the dale.")
+		var offline = true
+		val state = diagnostics(TextDiagnosticsChecker { lines ->
+			val found = checker.check(lines)
+			lines.indices.map { index ->
+				found[index].copy(complete = !(offline && lines[index].startsWith("And")))
+			}
+		})
+		state.refresh()
+		assertEquals(listOf(range(0, 5, 12), range(1, 4, 11)), spans().map { it.range })
+
+		offline = false
+		state.refresh()
+		state.refresh()
+
+		assertEquals(listOf(listOf("Over the the hill.", "And the the dale."), listOf("And the the dale.")), checked)
+		assertEquals(listOf(range(0, 5, 12), range(1, 4, 11)), spans().map { it.range })
+	}
+
+	@Test
+	fun `an incomplete line's underlines follow its latest result`() = runTest {
+		textState.setText("Over the the hill.")
+		var found = true
+		val state = diagnostics(TextDiagnosticsChecker { lines ->
+			checker.check(lines).map { if (found) it.copy(complete = false) else LineCheck(emptyList(), complete = false) }
+		})
+		state.refresh()
+		found = false
+		state.refresh()
+
+		assertTrue(spans().isEmpty())
+	}
+
+	@Test
+	fun `a line the checker gave no result for is checked again`() = runTest {
+		textState.setText("Over the the hill.\nAnd the the dale.")
+		var answered = 1
+		val state = diagnostics(TextDiagnosticsChecker { lines -> checker.check(lines).take(answered) })
+		state.refresh()
+		answered = 2
+		state.refresh()
+
+		assertEquals(listOf(listOf("Over the the hill.", "And the the dale."), listOf("And the the dale.")), checked)
+		assertEquals(listOf(range(0, 5, 12), range(1, 4, 11)), spans().map { it.range })
+	}
+
+	@Test
+	fun `an incomplete line that is gone is not checked again`() = runTest {
+		textState.setText("Over the the hill.")
+		val state = diagnostics(TextDiagnosticsChecker { lines -> checker.check(lines).map { it.copy(complete = false) } })
+		state.refresh()
+		textState.setText("Fine.")
+		state.refresh()
+
+		assertEquals(listOf(listOf("Over the the hill."), listOf("Fine.")), checked)
+		assertTrue(spans().isEmpty())
 	}
 
 	@Test

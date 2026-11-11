@@ -16,6 +16,7 @@ import com.darkrockstudios.texteditor.find.FindState
 import com.darkrockstudios.texteditor.richstyle.RichSpan
 import com.darkrockstudios.texteditor.spellcheck.api.EditorSpellChecker
 import com.darkrockstudios.texteditor.spellcheck.api.Suggestion
+import com.darkrockstudios.texteditor.spellcheck.diagnostics.LineCheck
 import com.darkrockstudios.texteditor.spellcheck.diagnostics.LineDiagnostic
 import com.darkrockstudios.texteditor.spellcheck.diagnostics.TextDiagnosticsChecker
 import com.darkrockstudios.texteditor.spellcheck.diagnostics.TextDiagnosticsState
@@ -52,7 +53,7 @@ class DecorationLayerCoexistenceTest {
 	}
 
 	private fun flagging(pattern: String) = TextDiagnosticsChecker { lines ->
-		lines.map { line -> Regex(pattern).findAll(line).map { LineDiagnostic(it.range.first, it.range.last + 1, pattern, listOf("x")) }.toList() }
+		lines.map { line -> Regex(pattern).findAll(line).map { LineDiagnostic(it.range.first, it.range.last + 1, pattern, listOf("x")) }.toList().let(::LineCheck) }
 	}
 
 	private fun span(line: Int, start: Int, end: Int, style: DecorationStyle) =

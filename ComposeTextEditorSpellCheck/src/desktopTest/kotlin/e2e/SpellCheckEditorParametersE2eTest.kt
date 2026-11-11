@@ -15,6 +15,7 @@ import com.darkrockstudios.texteditor.richstyle.LinkSpanStyle
 import com.darkrockstudios.texteditor.spellcheck.SpellCheckMode
 import com.darkrockstudios.texteditor.spellcheck.api.Correction
 import com.darkrockstudios.texteditor.spellcheck.api.Suggestion
+import com.darkrockstudios.texteditor.spellcheck.diagnostics.LineCheck
 import com.darkrockstudios.texteditor.spellcheck.diagnostics.LineDiagnostic
 import com.darkrockstudios.texteditor.spellcheck.diagnostics.TextDiagnosticsChecker
 import com.darkrockstudios.texteditor.state.SpanClickType
@@ -253,7 +254,7 @@ class SpellCheckEditorParametersE2eTest {
 	private fun diagnosticMenu(readOnly: Boolean, block: (offersFix: Boolean) -> Unit) {
 		val repeats = TextDiagnosticsChecker { lines ->
 			lines.map { line ->
-				Regex("the the").findAll(line).map { LineDiagnostic(it.range.first, it.range.last + 1, "Repeated word", listOf("the")) }.toList()
+				Regex("the the").findAll(line).map { LineDiagnostic(it.range.first, it.range.last + 1, "Repeated word", listOf("the")) }.toList().let(::LineCheck)
 			}
 		}
 		spellCheckUiTest(
