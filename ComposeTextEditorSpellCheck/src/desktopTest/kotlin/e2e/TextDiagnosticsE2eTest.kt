@@ -3,6 +3,7 @@ package e2e
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.spellcheck.diagnostics.DiagnosticFix
+import com.darkrockstudios.texteditor.spellcheck.diagnostics.LineCheck
 import com.darkrockstudios.texteditor.spellcheck.diagnostics.LineDiagnostic
 import com.darkrockstudios.texteditor.spellcheck.diagnostics.TextDiagnosticsChecker
 import utils.CountingSpellChecker
@@ -19,7 +20,7 @@ class TextDiagnosticsE2eTest {
 	private val repeats = TextDiagnosticsChecker { lines ->
 		checked += lines
 		lines.map { line ->
-			Regex("the the").findAll(line).map { LineDiagnostic(it.range.first, it.range.last + 1, "Repeated word", listOf("the")) }.toList()
+			Regex("the the").findAll(line).map { LineDiagnostic(it.range.first, it.range.last + 1, "Repeated word", listOf("the")) }.toList().let(::LineCheck)
 		}
 	}
 
@@ -87,7 +88,7 @@ class TextDiagnosticsE2eTest {
 				Regex("the( the)").findAll(line).map {
 					val repeat = it.groups[1]!!.range
 					LineDiagnostic(repeat.first, repeat.last + 1, "Repeated word", listOf(DiagnosticFix("", "Remove “the”")))
-				}.toList()
+				}.toList().let(::LineCheck)
 			}
 		}
 		spellCheckUiTest(

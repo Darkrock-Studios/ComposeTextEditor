@@ -18,6 +18,7 @@ import com.darkrockstudios.texteditor.spellcheck.api.EditorSpellChecker
 import com.darkrockstudios.texteditor.spellcheck.api.Suggestion
 import com.darkrockstudios.texteditor.spellcheck.computeAffectedRanges
 import com.darkrockstudios.texteditor.spellcheck.diagnostics.DiagnosticSeverity
+import com.darkrockstudios.texteditor.spellcheck.diagnostics.LineCheck
 import com.darkrockstudios.texteditor.spellcheck.diagnostics.LineDiagnostic
 import com.darkrockstudios.texteditor.spellcheck.diagnostics.TextDiagnosticsChecker
 import com.darkrockstudios.texteditor.spellcheck.diagnostics.TextDiagnosticsState
@@ -54,7 +55,7 @@ class SpellCheckBenchmark {
 		lines.map { line ->
 			Regex("""\b(over|near)\b""").findAll(line)
 				.map { LineDiagnostic(it.range.first, it.range.last + 1, "Wordy", severity = DiagnosticSeverity.Suggestion) }
-				.toList()
+				.toList().let(::LineCheck)
 		}
 	}
 

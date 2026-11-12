@@ -25,7 +25,8 @@ val DefaultSuggestionColor = Color(0xFFB8860B)
 
 /**
  * Underlines what a [TextDiagnosticsChecker] finds in [textState], line by line. Results are kept by
- * line text, so after an edit only the lines that changed go to [TextDiagnosticsChecker.check];
+ * line text, so after an edit only the lines that changed, and those whose result was an
+ * incomplete [LineCheck], go to [TextDiagnosticsChecker.check];
  * [TextDiagnosticsChecker.checkText] sees the whole text every time. Pass it to
  * [com.darkrockstudios.texteditor.spellcheck.SpellCheckingTextEditor], which refreshes it as the text
  * changes and opens a menu of the message and fixes on an underline. The underlines are on the
@@ -63,13 +64,19 @@ class TextDiagnosticsState(
 
 	// By line text, oldest first, so the oldest go when there are too many.
 	private val checked = LinkedHashMap<String, List<LineDiagnostic>>()
+
+	// The latest refresh's incomplete results, by line text; every refresh checks these lines again.
+	private var incomplete = emptyMap<String, List<LineDiagnostic>>()
 	private val refreshing = Mutex()
 
 	/** Replaces the checker, forgetting what the old one found, and checks the whole text again. */
 	suspend fun setChecker(value: TextDiagnosticsChecker?) {
 		if (value === checker) return
 		checker = value
-		refreshing.withLock { checked.clear() }
+		refreshing.withLock {
+			checked.clear()
+			incomplete = emptyMap()
+		}
 		refresh()
 	}
 
@@ -108,12 +115,17 @@ class TextDiagnosticsState(
 		}
 		val lines = textState.textLines.map { it.text }
 		val unchecked = lines.filter { it.isNotBlank() && it !in checked }.distinct()
+		val stillIncomplete = mutableMapOf<String, List<LineDiagnostic>>()
 		if (unchecked.isNotEmpty()) {
 			val results = withContext(scanContext) { current.check(unchecked) }
 			// Replaced while this ran: the new checker's own refresh follows.
 			if (checker !== current) return@withLock
-			unchecked.forEachIndexed { index, line -> remember(line, results.getOrNull(index).orEmpty()) }
+			unchecked.forEachIndexed { index, line ->
+				val result = results.getOrNull(index) ?: LineCheck(emptyList(), complete = false)
+				if (result.complete) remember(line, result.diagnostics) else stillIncomplete[line] = result.diagnostics
+			}
 		}
+		incomplete = stillIncomplete
 		val textFound = withContext(scanContext) { current.checkText(lines) }
 		if (checker !== current) return@withLock
 		// These are by line number, which an edit made meanwhile may have shifted; the refresh after it redoes them.
@@ -158,7 +170,7 @@ class TextDiagnosticsState(
 		val remove = mutableListOf<RichSpan>()
 		val add = mutableListOf<RichSpan>()
 		textState.textLines.forEachIndexed { index, line ->
-			val byLine = checked[line.text]
+			val byLine = checked[line.text] ?: incomplete[line.text]
 			val byText = textFound?.let { it.getOrNull(index).orEmpty() }
 			if (byLine == null && byText == null) return@forEachIndexed
 			val wanted = (byLine.orEmpty() + byText.orEmpty()).mapNotNull { it.toSpan(index, line.length) }.toSet()
