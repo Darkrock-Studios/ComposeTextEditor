@@ -2,7 +2,7 @@
 
 What changes for a host, such as Hammer, upgrading from 2.8.0 to
 3.0.0 and on. Three changes need code: markdown moved into its own module, a
-host's own key bindings should match letters on `layoutKey`, and, after 3.3.0,
+host's own key bindings should match letters on `layoutKey`, and, from 3.4.0,
 diagnostics checkers return a `LineCheck` per line. The rest is new API that
 existing code does not need to touch, with notes for a host that adopts it.
 
@@ -267,7 +267,7 @@ state.keyboardContentReceiver = KeyboardContentReceiver(listOf("image/gif", "ima
 
 ## Diagnostics results per line
 
-After 3.3.0, `TextDiagnosticsChecker.check` returns a `LineCheck` per line in place of a bare
+In 3.4.0, `TextDiagnosticsChecker.check` returns a `LineCheck` per line in place of a bare
 `List<LineDiagnostic>`, so a checker can say a line was not fully checked, such as when a
 service it calls is unreachable. This needs code in every checker:
 
