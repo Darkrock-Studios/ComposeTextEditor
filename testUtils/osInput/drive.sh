@@ -68,6 +68,8 @@ for _ in $(seq 6000); do
 	sleep 0.1
 done
 [ -e "$out/ready" ] || { echo "the probe never took focus"; exit 1; }
+# Without the variant, dead keys still pass (xdotool remaps a spare keycode) but AltGr does not.
+setxkbmap -query | grep -q '^variant: *intl$' || { echo "the layout is not us(intl): $(setxkbmap -query | tr '\n' ' ')"; exit 1; }
 window=$(xdotool search --sync --onlyvisible --name '^OsInputProbe$' | head -1)
 xdotool windowactivate --sync "$window" 2>/dev/null || xdotool windowfocus --sync "$window"
 xdotool mousemove --window "$window" 200 100 click 1
