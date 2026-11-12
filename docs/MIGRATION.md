@@ -1,10 +1,10 @@
 # Migration
 
 What changes for a host, such as Hammer, upgrading from 2.8.0 to
-3.0.0. Two changes need code: markdown moved into its own module, and a
-host's own key bindings should match letters on `layoutKey`. The rest is new
-API that existing code does not need to touch, with notes for a host that
-adopts it.
+3.0.0 and on. Three changes need code: markdown moved into its own module, a
+host's own key bindings should match letters on `layoutKey`, and, from 3.4.0,
+diagnostics checkers return a `LineCheck` per line. The rest is new API that
+existing code does not need to touch, with notes for a host that adopts it.
 
 ## Markdown as a module
 
@@ -264,3 +264,21 @@ state.keyboardContentReceiver = KeyboardContentReceiver(listOf("image/gif", "ima
 	true
 }
 ```
+
+## Diagnostics results per line
+
+In 3.4.0, `TextDiagnosticsChecker.check` returns a `LineCheck` per line in place of a bare
+`List<LineDiagnostic>`, so a checker can say a line was not fully checked, such as when a
+service it calls is unreachable. This needs code in every checker:
+
+```kotlin
+// Before
+TextDiagnosticsChecker { lines -> lines.map(::issuesIn) }
+
+// After
+TextDiagnosticsChecker { lines -> lines.map { LineCheck(issuesIn(it)) } }
+```
+
+A `LineCheck` with `complete = false` is underlined as usual, but its line is not kept as
+checked: every refresh sends it to `check` again until a complete result comes back. A
+line `check` gives no result for is incomplete too. `checkText` is unchanged.
