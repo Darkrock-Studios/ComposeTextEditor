@@ -13,7 +13,12 @@ import org.intellij.markdown.ast.getTextInNode
 import org.intellij.markdown.flavours.gfm.GFMElementTypes
 import org.intellij.markdown.flavours.gfm.GFMFlavourDescriptor
 import org.intellij.markdown.flavours.gfm.GFMTokenTypes
+import org.intellij.markdown.flavours.gfm.StrikeThroughDelimiterParser
 import org.intellij.markdown.parser.MarkdownParser
+import org.intellij.markdown.parser.sequentialparsers.EmphasisLikeParser
+import org.intellij.markdown.parser.sequentialparsers.SequentialParser
+import org.intellij.markdown.parser.sequentialparsers.SequentialParserManager
+import org.intellij.markdown.parser.sequentialparsers.impl.EmphStrongDelimiterParser
 
 /**
  * A hyperlink found during a parse: [start] until [end] are flat character
@@ -75,7 +80,7 @@ internal fun String.parseMarkdownWithLinks(
 		.let { withInlineTagLinesInline(it, literal) }
 		.let { withNonLinkBracketsEscaped(it, linkDefinitions, literal) }
 		.let { withEscapedDelimitersAsEntities(it, literal) }
-	val flavour = GFMFlavourDescriptor()
+	val flavour = EditorGfmFlavour()
 	val parsedTree = MarkdownParser(flavour).buildMarkdownTreeFromString(source)
 	val context = MarkdownRenderContext(styles, allowedLinkSchemes, source.lineStarts(literalLines.orEmpty()), linkDefinitions, joinCodeSpanLines)
 	val annotated = buildAnnotatedString {
@@ -191,8 +196,26 @@ private fun String.fencedLineIndices(): Set<Int> =
 	walkFences(lines()).withIndex().filter { it.value is FenceLine.Code }.mapTo(HashSet()) { it.index }
 
 /**
+ * GFM without the parser's own `==` highlight, which [withHighlightTags] reads
+ * ahead of it. The parser's highlight delimiters also unpair strikethrough
+ * around a lone `=` (`=[ ~~c=~~` reads no strikethrough), so its emphasis-like
+ * pass keeps only emphasis and strikethrough; the rest of the sequence is
+ * upstream's. `GfmFlavourGuardTest` fails if upstream's pass gains another delimiter.
+ */
+private class EditorGfmFlavour : GFMFlavourDescriptor() {
+	private val sequence: List<SequentialParser> = super.sequentialParserManager.getParserSequence().map {
+		if (it is EmphasisLikeParser) EmphasisLikeParser(EmphStrongDelimiterParser(), StrikeThroughDelimiterParser()) else it
+	}
+
+	override val sequentialParserManager: SequentialParserManager = object : SequentialParserManager() {
+		override fun getParserSequence(): List<SequentialParser> = sequence
+	}
+}
+
+/**
  * Rewrites `==text==` highlights as `<mark>text</mark>` so the GFM parser,
- * which has no highlight syntax, hands them over as inline tags. Delimiters
+ * run without a highlight syntax ([EditorGfmFlavour]), hands them over as
+ * inline tags. Delimiters
  * pair as in markdown-it's mark plugin: a `==` can open before a non-space and
  * close after one, and a closer takes the nearest unclosed opener on its line.
  * Anything the parser would take literally or as something else is left as
