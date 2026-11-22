@@ -1,6 +1,7 @@
 package com.darkrockstudios.texteditor.html
 
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.em
@@ -79,6 +80,14 @@ fun parseCssColor(value: String): Color? {
 	val alphaValue = function.groupValues[4].toFloatOrNull()?.let { if (function.groupValues[5] == "%") it / 100f else it }
 	val alpha = alphaValue?.coerceIn(0f, 1f) ?: 1f
 	return Color(red, green, blue, (alpha * 255f).roundToInt())
+}
+
+/** [color] as [parseCssColor] reads it back: `#rrggbb`, or `#rrggbbaa` when it is translucent. */
+internal fun formatCssColor(color: Color): String {
+	val argb = color.toArgb()
+	val rgb = "#" + (argb and 0xFFFFFF).toString(16).padStart(6, '0')
+	val alpha = (argb ushr 24) and 0xFF
+	return if (alpha == 0xFF) rgb else rgb + alpha.toString(16).padStart(2, '0')
 }
 
 private val CSS_LENGTH_REGEX = Regex("""^(-?(?:\d+(?:\.\d+)?|\.\d+))\s*(px|pt|in|cm|mm|sp|em|rem|%)?$""")

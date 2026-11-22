@@ -137,6 +137,18 @@ internal class RetiredStyles(
 	/** The spans a [heading] line leaves out ([RichTextStyles.exportedHeadingLooks]). */
 	fun headingLooks(heading: HtmlTag): Set<SpanStyle> = headingLooks[HEADINGS.indexOf(heading)]
 
+	private val configured by lazy {
+		(retired + styles).flatMapTo(HashSet(styles.inlineStyles)) { config ->
+			(1..6).flatMap { level -> listOf(config.getHeaderStyle(level), config.headingLook(level)) }
+		}
+	}
+
+	/**
+	 * Whether [style], read through [asCurrent], is one of the configured styles: its colour
+	 * and size are how the configuration shows it, not formatting of the text's own.
+	 */
+	fun isConfigured(style: SpanStyle): Boolean = style in configured
+
 	fun asCurrent(style: SpanStyle): SpanStyle {
 		if (newestFirst.isEmpty() || style in current) return style
 		return read.getOrPut(style) {
