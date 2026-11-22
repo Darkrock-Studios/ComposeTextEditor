@@ -18,6 +18,7 @@ import com.darkrockstudios.texteditor.richstyle.ImageProvider
 import com.darkrockstudios.texteditor.richstyle.LinkSpanStyle
 import com.darkrockstudios.texteditor.richstyle.MAX_LIST_LEVEL
 import com.darkrockstudios.texteditor.richstyle.OrderedListSpanStyle
+import com.darkrockstudios.texteditor.richstyle.OrderedListStartSpanStyle
 import com.darkrockstudios.texteditor.richstyle.ParagraphFormatSpanStyle
 import com.darkrockstudios.texteditor.richstyle.RichSpan
 import com.darkrockstudios.texteditor.richstyle.RichSpanStyle
@@ -636,6 +637,11 @@ class MarkdownExtension(
 		val spansByLine = content.richSpans.groupBy { it.range.start.line }
 		fun stylesOn(line: Int): List<RichSpanStyle> = spansByLine[line].orEmpty().map { it.style }
 		fun has(line: Int, style: RichSpanStyle) = stylesOn(line).any { it === style }
+		// As the editor's numbering picks it: a start at the line's start, then the lowest.
+		fun listStartOn(line: Int) = spansByLine[line].orEmpty()
+			.filter { it.style is OrderedListStartSpanStyle }
+			.minWithOrNull(compareBy({ it.range.start.char != 0 }, { (it.style as OrderedListStartSpanStyle).start }))
+			?.let { (it.style as OrderedListStartSpanStyle).start }
 		val imageLines = content.richSpans
 			.mapNotNull { span -> (span.style as? ImageBlockSpanStyle)?.let { span.range.start.line to it } }
 			.toMap()
@@ -783,8 +789,9 @@ class MarkdownExtension(
 		// Ordered items number per level: a level-k item continues its level's
 		// run and restarts every deeper level; a bullet at a level or any
 		// non-list line (a blank one too, as layout has it) ends the run at and
-		// below it. A nested item is indented to its ancestor's content offset,
-		// tracked here per level.
+		// below it. A run counts from its first item's start. Each level's next
+		// number, 0 where no run is open. A nested item is indented to its
+		// ancestor's content offset, tracked here per level.
 		val orderedCounters = IntArray(MAX_LIST_LEVEL + 1)
 		val contentOffsets = ArrayList<Int>()
 		var nestingQuoted = false
@@ -897,7 +904,11 @@ class MarkdownExtension(
 				val level = minOf(list.style.listLevel!!, contentOffsets.size)
 				for (deeper in level + 1..MAX_LIST_LEVEL) orderedCounters[deeper] = 0
 				val prefix = if (list.style is OrderedListSpanStyle) {
-					list.prefix(orderedCounters[level]++)
+					// A list's first item interrupts a paragraph only numbered 1.
+					val start = if (underParagraph(lineIndex)) null else listStartOn(lineIndex)
+					val number = if (orderedCounters[level] == 0) start ?: 1 else orderedCounters[level]
+					orderedCounters[level] = number + 1
+					list.prefix(number - 1)
 				} else {
 					orderedCounters[level] = 0
 					list.prefix(0)
@@ -972,6 +983,8 @@ class MarkdownExtension(
 		var openBlockQuote: Boolean? = null
 		// Lines that open a list item, whose next lines' text goes on its line.
 		val opensItem = BooleanArray(keptLines.size)
+		// The number each ordered item is written with.
+		val itemNumbers = HashMap<Int, Int>()
 		// The column an empty item's text starts at, when the line before is one: only a
 		// line indented that far is its text.
 		var emptyItemColumn: Int? = null
@@ -1051,6 +1064,9 @@ class MarkdownExtension(
 			paragraphQuote = if (paragraph) quoted else null
 			if (isItem && !notItem && !ruleNotItem) {
 				opensItem[index] = true
+				if (peeled.blocks.any { it.style is OrderedListSpanStyle }) {
+					ORDERED_ITEM_NUMBER.find(unquoted)?.groupValues?.get(1)?.toIntOrNull()?.let { itemNumbers[index] = it }
+				}
 				if (peeled.body.isBlank()) emptyItemColumn = columnsOf(unquoted).let { (columns, chars) ->
 					columns + (LIST_ITEM_START.find(unquoted)?.value?.trimEnd()?.length ?: chars) - chars + 1
 				}
@@ -1160,6 +1176,9 @@ class MarkdownExtension(
 			val align = fenceStrip.alignments[imported.sources[index]] ?: return@mapNotNull null
 			if (index in unalignable || !kept(index)) null else lineOf[index] to align
 		}.toMap()
+		val blockLines = (blockHits + (CodeFenceSpanStyle to codeFenceLineIndices) + imported.cells.entries.groupBy({ it.value }, { it.key }))
+			.mapValues { (_, lines) -> lines.filter(::kept).map { lineOf[it] } }
+		val listStarts = listStarts(blockLines, itemNumbers.filterKeys(::kept).mapKeys { lineOf[it.key] }, lineOf.lastOrNull() ?: -1)
 		// setText publishes the text with no spans and applyDocumentBlocks attaches them
 		// afterwards. As one revision, so a concurrent export can't catch the document
 		// fully loaded but entirely unstyled.
@@ -1168,13 +1187,49 @@ class MarkdownExtension(
 			editorState.applyDocumentBlocks(
 				horizontalRuleLines = hrLineIndices.map { lineOf[it] },
 				imageLines = imageLines.associate { (line, image) -> lineOf[line] to image },
-				blockLines = (blockHits + (CodeFenceSpanStyle to codeFenceLineIndices) + imported.cells.entries.groupBy({ it.value }, { it.key }))
-					.mapValues { (_, lines) -> lines.filter(::kept).map { lineOf[it] } },
+				blockLines = blockLines,
 				richSpans = linkSpans(links, annotatedString.text) + fenceLanguageSpans(fenceInfoStrings.mapKeys { lineOf[it.key] }) +
-					alignmentSpans(alignments),
+					alignmentSpans(alignments) + listStartSpans(listStarts),
 			)
 		}
 	}
+
+	/**
+	 * The start of each list, by its first item's line among [blockLines]' up to [lastLine],
+	 * where its item's [numbers] say other than 1. A list's first item opens its level's run
+	 * as the editor numbers it: a CommonMark list's start is its first item's number.
+	 */
+	private fun listStarts(blockLines: Map<RichSpanStyle, List<Int>>, numbers: Map<Int, Int>, lastLine: Int): Map<Int, Int> {
+		if (numbers.values.all { it == 1 }) return emptyMap()
+		val listLines = HashMap<Int, RichSpanStyle>()
+		blockLines.forEach { (style, lines) -> if (style.isListBlock) lines.forEach { listLines[it] = style } }
+		val open = BooleanArray(MAX_LIST_LEVEL + 1)
+		val starts = HashMap<Int, Int>()
+		for (line in 0..lastLine) {
+			val list = listLines[line]
+			if (list == null) {
+				open.fill(false)
+				continue
+			}
+			val level = list.listLevel!!
+			for (deeper in level + 1..MAX_LIST_LEVEL) open[deeper] = false
+			if (list is OrderedListSpanStyle && !open[level]) {
+				numbers[line]?.takeIf { it != 1 && OrderedListStartSpanStyle.isValidStart(it) }?.let { starts[line] = it }
+			}
+			open[level] = list is OrderedListSpanStyle
+		}
+		return starts
+	}
+
+	/** An [OrderedListStartSpanStyle] for each list's start, read against the text just set. */
+	private fun listStartSpans(starts: Map<Int, Int>): List<RichSpan> =
+		starts.mapNotNull { (line, start) ->
+			val length = editorState.textLines.getOrNull(line)?.length ?: return@mapNotNull null
+			RichSpan(
+				range = TextEditorRange(CharLineOffset(line, 0), CharLineOffset(line, length)),
+				style = OrderedListStartSpanStyle(start),
+			)
+		}
 
 	/** A [ParagraphFormatSpanStyle] of each line's alignment, read against the text just set. */
 	private fun alignmentSpans(alignments: Map<Int, TextAlign>): List<RichSpan> =

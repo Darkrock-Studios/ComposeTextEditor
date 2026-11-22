@@ -110,6 +110,7 @@ class HtmlExtension(
 					}
 				},
 				blockLines = document.blockLines,
+				richSpans = listStartSpans(document.listStarts, 0) { editorState.textLines.getOrNull(it)?.length },
 			)
 		}
 	}
@@ -209,6 +210,8 @@ private data class HtmlContainer(
 	val classes: String? = null,
 	/** Markup written inside the element as it opens, before its line: a task item's checkbox. */
 	val lead: String? = null,
+	/** An `<ol>`'s `start`, or null for the default, 1. */
+	val start: Int? = null,
 )
 
 /**
@@ -248,12 +251,19 @@ private class HtmlContainers(
 		when {
 			list != null -> {
 				val level = list.listLevel ?: 0
-				while (openItems.isNotEmpty() && openItems.last().third >= level) openItems.removeAt(openItems.lastIndex)
+				val tag = if (list.spanStyle is OrderedListSpanStyle) "ol" else "ul"
+				var sibling: HtmlContainer? = null
+				while (openItems.isNotEmpty() && openItems.last().third >= level) {
+					val closed = openItems.removeAt(openItems.lastIndex)
+					if (closed.third == level) sibling = closed.first
+				}
 				openItems.forEach { (listContainer, item) ->
 					containers += listContainer
 					containers += item
 				}
-				val listContainer = HtmlContainer(if (list.spanStyle is OrderedListSpanStyle) "ol" else "ul")
+				// A sibling continues its list, whose start its first item set.
+				val listContainer = sibling?.takeIf { it.tag == tag }
+					?: HtmlContainer(tag, start = if (tag == "ol") blocks.listStarts[line] else null)
 				val task = when {
 					blocks.has(line, TaskChecked) -> true
 					blocks.has(line, TaskUnchecked) -> false
@@ -378,6 +388,7 @@ private class HtmlWriter {
 			// blank first line of the code block.
 			if (container.tag != "code") separate()
 			builder.append('<').append(container.tag)
+			container.start?.let { builder.append(" start=\"").append(it).append('"') }
 			container.classes?.let { builder.append(" class=\"").append(it.escapeHtmlAttribute()).append('"') }
 			container.style?.let { builder.append(" style=\"").append(it.escapeHtmlAttribute()).append('"') }
 			builder.append('>')

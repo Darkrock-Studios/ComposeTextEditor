@@ -20,9 +20,10 @@ import com.darkrockstudios.texteditor.utils.lineTextLeft
  * while the underlying text continues to render normally (no
  * [BlockSpanStyle.replacesText] semantics). The displayed number comes from
  * [LineWrap.orderedListNumber], which `updateBookKeeping` fills in from the
- * line's position in its level's run of ordered-list lines, so the rendering
- * always reflects the current document without any baked state to keep in
- * sync. Numbers are decimal at every level, as CommonMark renderers show them.
+ * line's position in its level's run of ordered-list lines, counted from the
+ * run's start (an [OrderedListStartSpanStyle] on its first item, else 1), so
+ * the rendering always reflects the current document. Numbers are decimal at
+ * every level, as CommonMark renderers show them.
  *
  * The visual indent is provided by the level's [listParagraphStyle] applied
  * to the line; this span only paints the number on the first wrapped sub-line

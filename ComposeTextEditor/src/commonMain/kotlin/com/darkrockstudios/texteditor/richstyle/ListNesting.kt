@@ -128,6 +128,7 @@ private fun TextEditorState.relevelListFollowers(
 internal fun TextEditorState.recordListEdit(targets: List<Int>, mutate: (ListMoves) -> Unit) = withAtomicEdit {
 	val cursorBefore = cursorPosition
 	val before = editManager.lineBlocksOf(targets)
+	val heldStarts = targets.mapNotNull { heldListStart(it) }
 	val moves = ListMoves(this)
 	val last = targets.lastOrNull { listBlockAt(it) != null }
 	val lastLevel = last?.let { listBlockAt(it)!!.listLevel!! }
@@ -151,9 +152,11 @@ internal fun TextEditorState.recordListEdit(targets: List<Int>, mutate: (ListMov
 		}
 		relevelListFollowers(last + 1, lastLevel, quoted, previousLevel, moves)
 	}
-	val followers = editManager.lineBlocksOf(moves.lines.filter { it !in targets })
+	val followerLines = moves.lines.filter { it !in targets }
+	val followers = editManager.lineBlocksOf(followerLines)
 	moves.write()
-	editManager.recordLineBlocksSince(before + followers, cursorBefore)
+	val heirs = handOnListStarts(heldStarts, captured = (targets + followerLines).toSet())
+	editManager.recordLineBlocksSince(before + followers + heirs, cursorBefore)
 }
 
 /**
@@ -168,7 +171,10 @@ fun TextEditorState.nestListItems(lines: IntRange): Boolean {
 	if (targets.isEmpty()) return false
 	var moved = false
 	val moves = ListMoves(this)
-	editManager.recordLineBlockChanges(targets) {
+	withAtomicEdit {
+		val cursorBefore = cursorPosition
+		val before = editManager.lineBlocksOf(targets)
+		val heldStarts = targets.mapNotNull { heldListStart(it) }
 		targets.forEach { line ->
 			val level = moves.blockAt(line)?.listLevel ?: return@forEach
 			if (level < allowedListLevel(line, moves)) {
@@ -177,6 +183,8 @@ fun TextEditorState.nestListItems(lines: IntRange): Boolean {
 			}
 		}
 		moves.write()
+		val heirs = handOnListStarts(heldStarts, captured = targets.toSet())
+		editManager.recordLineBlocksSince(before + heirs, cursorBefore)
 	}
 	return moved
 }

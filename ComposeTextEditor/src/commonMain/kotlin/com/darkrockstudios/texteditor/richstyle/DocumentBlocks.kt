@@ -4,6 +4,7 @@ import androidx.compose.ui.text.AnnotatedString
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.RichTextStyles
+import com.darkrockstudios.texteditor.state.OrderedListKind
 import com.darkrockstudios.texteditor.state.TextEditorState
 
 /**
@@ -19,6 +20,8 @@ internal class DocumentBlocks(
 	val horizontalRuleLines: Set<Int>,
 	val imageLines: Map<Int, ImageBlockSpanStyle>,
 	val blockLines: Map<LineBlockStyle, Set<Int>>,
+	/** The list start on each line holding one; it counts only where its line opens a list. */
+	val listStarts: Map<Int, Int> = emptyMap(),
 ) {
 	fun isEmpty(): Boolean =
 		horizontalRuleLines.isEmpty() && imageLines.isEmpty() &&
@@ -103,7 +106,18 @@ internal fun documentBlocksOf(
 			}
 			.toMap(),
 		blockLines = blockLinesOf(allSpans, styles),
+		listStarts = listStartsOf(allSpans),
 	)
+}
+
+/** The list start on each line among [allSpans], chosen as the numbering walk chooses it. */
+private fun listStartsOf(allSpans: Set<RichSpan>): Map<Int, Int> {
+	val byLine = HashMap<Int, MutableList<RichSpan>>()
+	for (span in allSpans) {
+		if (span.style is OrderedListStartSpanStyle) byLine.getOrPut(span.range.start.line) { ArrayList(1) } += span
+	}
+	if (byLine.isEmpty()) return emptyMap()
+	return byLine.mapValues { (line, spans) -> OrderedListKind.startValueOn(spans, line)!! }
 }
 
 /** The lines each block of [styles]' registry is on among [allSpans], in one pass over them. */

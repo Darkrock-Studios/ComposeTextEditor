@@ -40,6 +40,7 @@ object LineBlockEditBehavior : EditBehavior {
 
 		// The split and the block markers are one revision and one undo step, the
 		// markers recorded so that a redo puts them back too.
+		val atStart = state.cursorPosition.char == 0
 		state.withAtomicEdit {
 			val lineCount = state.textLines.size
 			state.insertNewlineRaw()
@@ -58,6 +59,8 @@ object LineBlockEditBehavior : EditBehavior {
 						state.applyLineBlock(line + 1, it.continuesAs ?: it)
 					}
 				}
+				// The item's text went down with its markers, leaving a new item above it.
+				if (atStart) state.moveListStartUp(line + 1, line)
 			}
 		}
 		return true

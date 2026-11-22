@@ -63,8 +63,8 @@ internal val BLOCK_SYNTAX: List<MarkdownBlockSyntax> by lazy {
 
 			is OrderedListSpanStyle -> MarkdownBlockSyntax(
 				style,
-				// Always numbered from 1: renderers normalise any starting digit, and
-				// `1. 2. 3.` is what a reader of the source expects.
+				// Numbered on from the list's start: renderers read only the first
+				// item's number, and `3. 4. 5.` is what a reader of the source expects.
 				prefix = { pos -> "${pos + 1}. " },
 				// One to nine digits and `.` or `)`, followed by at least one space or nothing.
 				pattern = if (style.level == 0) Regex("""^\d{1,9}[.)](?:\s+(.*))?$""") else null,

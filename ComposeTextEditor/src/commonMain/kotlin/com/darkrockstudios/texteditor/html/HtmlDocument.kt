@@ -1,7 +1,10 @@
 package com.darkrockstudios.texteditor.html
 
 import androidx.compose.ui.text.AnnotatedString
+import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
+import com.darkrockstudios.texteditor.richstyle.OrderedListStartSpanStyle
+import com.darkrockstudios.texteditor.richstyle.RichSpan
 import com.darkrockstudios.texteditor.richstyle.RichSpanStyle
 import com.darkrockstudios.texteditor.richstyle.ParagraphFormatSpanStyle
 
@@ -23,12 +26,25 @@ internal class HtmlDocument(
 	val links: List<Pair<TextEditorRange, String>> = emptyList(),
 	/** The paragraph format of each line whose element's inline CSS set one. */
 	val paragraphFormats: Map<Int, ParagraphFormatSpanStyle> = emptyMap(),
+	/** The start of each `<ol start>` but 1, by its first item's line. */
+	val listStarts: Map<Int, Int> = emptyMap(),
 ) {
 	/** True when the markup carried nothing but styled text. */
 	fun hasNoDecorations(): Boolean =
 		blockLines.values.all { it.isEmpty() } &&
 			horizontalRuleLines.isEmpty() && imageLines.isEmpty() && links.isEmpty() && paragraphFormats.isEmpty()
 }
+
+/**
+ * The spans of [listStarts], line to start, [offset] lines down, each over its whole
+ * line as [lineLength] measures it; a line it has no length for takes none.
+ */
+internal fun listStartSpans(listStarts: Map<Int, Int>, offset: Int, lineLength: (Int) -> Int?): List<RichSpan> =
+	listStarts.mapNotNull { (line, start) ->
+		val at = line + offset
+		val length = lineLength(at) ?: return@mapNotNull null
+		RichSpan(TextEditorRange(CharLineOffset(at, 0), CharLineOffset(at, length)), OrderedListStartSpanStyle(start))
+	}
 
 /**
  * An `<img>` the parser reserved a line for. Resolving it to a drawable span

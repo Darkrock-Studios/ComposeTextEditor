@@ -23,6 +23,7 @@ import com.darkrockstudios.texteditor.richstyle.HR_PLACEHOLDER
 import com.darkrockstudios.texteditor.richstyle.HeaderSpanStyle
 import com.darkrockstudios.texteditor.richstyle.IMAGE_PLACEHOLDER
 import com.darkrockstudios.texteditor.richstyle.OrderedListSpanStyle
+import com.darkrockstudios.texteditor.richstyle.OrderedListStartSpanStyle
 import com.darkrockstudios.texteditor.richstyle.ParagraphFormatSpanStyle
 import com.darkrockstudios.texteditor.richstyle.MAX_TABLE_COLUMNS
 import com.darkrockstudios.texteditor.richstyle.RichSpanStyle
@@ -191,7 +192,20 @@ private class BlockRange(
 	val start: Int,
 	val end: Int,
 	val pendingAtEntry: Int,
-)
+) {
+	/** The lines of [text], indexed by [lines], this block's output covers. */
+	fun lineSpan(lines: IntArray, text: String): IntRange {
+		// A container block opens before the break separating it from what came
+		// before, because that break is only written once its first child asks
+		// for a line. Those leading separators belong to the previous block.
+		val first = (start + pendingAtEntry).coerceIn(0, text.length)
+		val end = end.coerceIn(first, text.length)
+		// An empty block still owns the line it sits on: `<li></li>` is a
+		// bulleted blank line, not a block with nowhere to attach.
+		val last = if (end > first) end - 1 else first
+		return lines[first]..lines[last]
+	}
+}
 
 /** A paragraph format over a line-occupying element's output, as a [BlockRange] claims a block. */
 private class FormatRange(
@@ -245,6 +259,8 @@ private class HtmlSpanBuilder(
 	/** The line height of every element that holds a line, unspecified for one that sets none. */
 	private val lineHoldingLineHeights = mutableListOf<TextUnit>()
 	private val horizontalRuleOffsets = mutableListOf<Int>()
+	/** Each `<ol start>`'s first item, as the block it claims, and the start. */
+	private val listStartItems = mutableListOf<Pair<BlockRange, Int>>()
 	private val imageOffsets = mutableListOf<Pair<Int, HtmlImageRef>>()
 	/** Each link's output offsets, start inclusive and end exclusive, and destination. */
 	private val links = mutableListOf<Triple<Int, Int, String>>()
@@ -276,23 +292,20 @@ private class HtmlSpanBuilder(
 		// rather than whichever happens to be applied last.
 		val listClaimed = mutableSetOf<Int>()
 		blockRanges.forEach { range ->
-			// A container block opens before the break separating it from what came
-			// before, because that break is only written once its first child asks
-			// for a line. Those leading separators belong to the previous block.
-			val first = (range.start + range.pendingAtEntry).coerceIn(0, text.length)
-			val end = range.end.coerceIn(first, text.length)
-			// An empty block still owns the line it sits on: `<li></li>` is a
-			// bulleted blank line, not a block with nowhere to attach.
-			val last = if (end > first) end - 1 else first
 			val isList = range.block.isListBlock
 			val target = blockLines.getOrPut(range.block) { mutableSetOf() }
-			for (line in lines[first]..lines[last]) {
+			for (line in range.lineSpan(lines, text)) {
 				if (isList && !listClaimed.add(line)) continue
 				target += line
 			}
 		}
 		cellOffsets.forEach { (offset, cell) -> blockLines.getOrPut(cell) { mutableSetOf() } += lines[offset.coerceIn(0, text.length)] }
 		val horizontalRuleLines = horizontalRuleOffsets.mapTo(mutableSetOf()) { lines[it.coerceIn(0, text.length)] }
+		// The item's first line its own list claimed: a nested list or a bullet may hold the lines before it.
+		val listStarts = listStartItems.mapNotNull { (item, start) ->
+			val itemLines = blockLines[item.block] ?: return@mapNotNull null
+			item.lineSpan(lines, text).firstOrNull { it in itemLines }?.let { it to start }
+		}.toMap()
 		val imageLines = imageOffsets.associate { (offset, image) -> lines[offset.coerceIn(0, text.length)] to image }
 		return HtmlDocument(
 			text = AnnotatedString(text, clamped),
@@ -301,6 +314,7 @@ private class HtmlSpanBuilder(
 			imageLines = imageLines,
 			links = linksPerLine(text, lines),
 			paragraphFormats = formatsPerLine(text, lines, formatless = horizontalRuleLines + imageLines.keys + blockLines[CodeFenceSpanStyle].orEmpty()),
+			listStarts = listStarts,
 		)
 	}
 
@@ -482,7 +496,11 @@ private class HtmlSpanBuilder(
 		visitChildren(element, nested)
 		// Appended on the way out, so a nested block is recorded before the one
 		// containing it, which is what lets the innermost claim on a line win.
-		if (block != null) blockRanges += BlockRange(block, start, out.length, pendingAtEntry)
+		if (block != null) {
+			val range = BlockRange(block, start, out.length, pendingAtEntry)
+			blockRanges += range
+			if (name == "li") element.listStart()?.let { listStartItems += range to it }
+		}
 		if (format != null) {
 			formatRanges += FormatRange(format, start, out.length, pendingAtEntry, firstLineOnly = name == "li" && element.holdsList())
 		}
@@ -605,6 +623,18 @@ private class HtmlSpanBuilder(
 			"right", "end" -> TableAlignment.RIGHT
 			else -> null
 		}
+	}
+
+	/**
+	 * The start of the `<ol>` this `<li>` is the first item of, when it is one and its
+	 * `start` is a number other than 1 that a list can start at; any other is ignored.
+	 */
+	private fun Element.listStart(): Int? {
+		val list = parent() ?: return null
+		if (list.tagName().lowercase() != "ol") return null
+		if (list.children().firstOrNull { it.tagName().lowercase() == "li" } !== this) return null
+		val start = list.attr("start").trim().toIntOrNull() ?: return null
+		return start.takeIf { it != 1 && OrderedListStartSpanStyle.isValidStart(it) }
 	}
 
 	private fun Element.holdsList(): Boolean = children().any { it.tagName().lowercase().let { tag -> tag == "ul" || tag == "ol" } }

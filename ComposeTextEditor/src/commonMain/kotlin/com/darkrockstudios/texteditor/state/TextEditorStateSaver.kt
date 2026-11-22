@@ -33,6 +33,7 @@ import com.darkrockstudios.texteditor.richstyle.BULLET_LIST_PARAGRAPH_STYLE
 import com.darkrockstudios.texteditor.richstyle.BlockquoteSpanStyle
 import com.darkrockstudios.texteditor.richstyle.BulletListSpanStyle
 import com.darkrockstudios.texteditor.richstyle.CodeFenceLanguageSpanStyle
+import com.darkrockstudios.texteditor.richstyle.OrderedListStartSpanStyle
 import com.darkrockstudios.texteditor.richstyle.MAX_LIST_LEVEL
 import com.darkrockstudios.texteditor.richstyle.listParagraphStyle
 import com.darkrockstudios.texteditor.richstyle.CODE_FENCE_PARAGRAPH_STYLE
@@ -227,6 +228,7 @@ private fun RichSpanStyle.encode(scope: SaverScope, custom: Saver<RichSpanStyle,
 		is BulletListSpanStyle -> "bullet:$level" to ""
 		is OrderedListSpanStyle -> "ordered:$level" to ""
 		is CodeFenceLanguageSpanStyle -> "fence-language" to language
+		is OrderedListStartSpanStyle -> "ordered-start" to start
 		is TableCellSpanStyle -> "cell:$column:${alignment.name}" to ""
 		is TaskSpanStyle -> (if (checked) "task:checked" else "task") to ""
 		is ParagraphFormatSpanStyle -> "paragraph" to arrayListOf<Any>(
@@ -256,6 +258,7 @@ private fun decodeRichSpanStyle(kind: String, argument: Any?, custom: Saver<Rich
 		kind.startsWith("bullet:") -> kind.substringAfter(':').toIntOrNull()?.let { BulletListSpanStyle.of(it) }
 		kind.startsWith("ordered:") -> kind.substringAfter(':').toIntOrNull()?.let { OrderedListSpanStyle.of(it) }
 		kind == "fence-language" -> (argument as? String)?.let { CodeFenceLanguageSpanStyle(it) }
+		kind == "ordered-start" -> (argument as? Int)?.takeIf { OrderedListStartSpanStyle.isValidStart(it) }?.let { OrderedListStartSpanStyle(it) }
 		kind == "task" -> TaskSpanStyle.UNCHECKED
 		kind == "task:checked" -> TaskSpanStyle.CHECKED
 		kind.startsWith("cell:") -> kind.split(':').let { parts ->

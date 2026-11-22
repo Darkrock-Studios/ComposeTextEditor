@@ -430,12 +430,52 @@ box is drawn in the room it makes: in place of a bullet, after a numeral.
   "task-list-item">` led by a disabled checkbox. A checkbox in a list item, or
   Google Docs' `<li role="checkbox" aria-checked>`, imports as a task.
 
+## List starts
+
+A list that starts at a number other than 1 (HTML's `<ol start="3">`, a
+CommonMark list whose first item is `3. `) keeps that number in an
+`OrderedListStartSpanStyle` span on its first item, beside the item's
+`OrderedListSpanStyle`, as CommonMark and HTML both hold it on the list's
+first item. It paints nothing and is not a line block. Values run from 0 to
+`OrderedListStartSpanStyle.MAX_START` (CommonMark's nine digits); a list
+starting at 1 carries none.
+
+- **Numbering.** The item that opens its level's run takes the start, and the
+  items after it count on from there; each nesting level's runs have their
+  own. A start on an item that continues a run counts for nothing but is
+  kept, so joining two lists numbers the second on from the first, and
+  splitting them there again, or undoing the join, gives it its start back.
+- **Normalization.** `OrderedListKind`'s repair takes a start off a line that
+  is no ordered item and keeps one per line. A toggle's undo snapshot and a
+  join's lines-before include a line's start (`lineBlockSpanStyles`), so undo
+  brings it back.
+- **Editing keeps the start with the list.** A line break at the first item's
+  start moves the start up to the new first item. An edit that takes the first
+  item out of the list (Backspace at its start, a toggle off or to bullets,
+  leaving an empty item with Enter, nesting or un-nesting it) hands the start
+  to the item that opens the list now, in the same undo step; so does a
+  deletion or replace across lines that takes the first item away. Splitting
+  a list in the middle starts the second part at 1, as markdown and HTML read
+  two lists.
+- **API.** `orderedListStart(line)` reads the start of the list holding a line,
+  and `setOrderedListStart(line, start)` sets it on the list's first item, one
+  undo step.
+- **HTML.** Import reads `start` on an `<ol>` onto its first `<li>`, ignoring a
+  negative, non-numeric or too large value; export writes `start` on an `<ol>`
+  whose first item holds one. A copy carries the start only when it includes
+  the list's first item; pasted inside another list, the pasted items continue
+  its numbering.
+- **Markdown.** Import reads a list's start from its first item's number;
+  export numbers each list on from its start. Under single newlines a list
+  written right under a paragraph line is numbered from 1, since CommonMark
+  lets only a list starting at 1 interrupt a paragraph.
+
 ## Derived run state
 
 Ordered-list numerals and fence grouping are not stored. Layout derives them
 from contiguous runs of same-styled lines (the numbering run position and the
-fence-card edge each `LineWrap` carries), and export derives them again
-independently. This is why rule 5 exists: anything that fragments a run
+fence-card edge each `LineWrap` carries), counting a list on from its start,
+and export derives them again independently. This is why rule 5 exists: anything that fragments a run
 (a skipped line mid-selection) renumbers a list or splits a fence, and
 bridging runs across gaps would be a model change with serialization
 consequences of its own.
