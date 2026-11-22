@@ -91,4 +91,17 @@ class OrderedListStartMarkdownTest {
 		assertEquals("para\n\\3. x", e.editorState.blockLines())
 		assertEquals(listOf(null, null), e.starts())
 	}
+
+	@Test
+	fun `items after a list starting at the largest number keep to nine digits`() = runTest {
+		val e = extension()
+		e.editorState.setBlockLines("1. a\n1. b")
+		e.editorState.setOrderedListStart(0, 999_999_999)
+		val markdown = e.exportAsMarkdown()
+		assertEquals("999999999. a\n999999999. b", markdown)
+
+		e.importMarkdown(markdown)
+		assertEquals("1. a\n1. b", e.editorState.blockLines())
+		assertEquals(listOf(999_999_999, 999_999_999), e.starts())
+	}
 }

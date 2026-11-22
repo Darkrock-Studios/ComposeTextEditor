@@ -1,11 +1,11 @@
 package com.darkrockstudios.texteditor.markdown
 
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.unit.TextUnit
 import com.darkrockstudios.texteditor.RichTextStyles
 import com.darkrockstudios.texteditor.html.cssColorAndSize
+import com.darkrockstudios.texteditor.html.formatCssColor
 import com.darkrockstudios.texteditor.html.formatCssNumber
 import com.darkrockstudios.texteditor.html.parseCssColor
 
@@ -67,19 +67,11 @@ internal val STYLED_TAG = """</?(?:${STYLED_TAGS.joinToString("|")})(?:\s[^<>]*)
 internal const val BLOCK_PREFIX = """(?: {0,3}>[ ]?)*(?:[ \t]*(?:[-*+]|\d{1,9}[.)])[ \t]+| {0,3}#{1,6}[ \t]+)?"""
 
 /** The opening `<span style="...">` for a colour. */
-internal fun colorSpanTag(color: Color): String = "<span style=\"color:${color.toCssHex()}\">"
+internal fun colorSpanTag(color: Color): String = "<span style=\"color:${formatCssColor(color)}\">"
 
 /** The opening `<span style="...">` for a font size, or null for a unit CSS cannot carry. */
 internal fun fontSizeSpanTag(size: TextUnit): String? =
 	size.toCssFontSize()?.let { "<span style=\"font-size:$it\">" }
-
-/** `#rrggbb`, or `#rrggbbaa` when the colour is translucent. */
-internal fun Color.toCssHex(): String {
-	val argb = toArgb()
-	val rgb = (argb and 0xFFFFFF).toString(16).padStart(6, '0')
-	val alpha = (argb ushr 24) and 0xFF
-	return if (alpha == 0xFF) "#$rgb" else "#$rgb" + alpha.toString(16).padStart(2, '0')
-}
 
 /** A CSS length for [this] size: `px` for sp (the editor's pixel unit), `em` for em. */
 private fun TextUnit.toCssFontSize(): String? = when {

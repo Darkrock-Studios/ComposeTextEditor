@@ -80,8 +80,7 @@ internal fun String.parseMarkdownWithLinks(
 		.let { withInlineTagLinesInline(it, literal) }
 		.let { withNonLinkBracketsEscaped(it, linkDefinitions, literal) }
 		.let { withEscapedDelimitersAsEntities(it, literal) }
-	val flavour = EditorGfmFlavour()
-	val parsedTree = MarkdownParser(flavour).buildMarkdownTreeFromString(source)
+	val parsedTree = MarkdownParser(EditorGfmFlavour).buildMarkdownTreeFromString(source)
 	val context = MarkdownRenderContext(styles, allowedLinkSchemes, source.lineStarts(literalLines.orEmpty()), linkDefinitions, joinCodeSpanLines)
 	val annotated = buildAnnotatedString {
 		appendMarkdownChildren(source, parsedTree, context)
@@ -201,14 +200,15 @@ private fun String.fencedLineIndices(): Set<Int> =
  * around a lone `=` (`=[ ~~c=~~` reads no strikethrough), so its emphasis-like
  * pass keeps only emphasis and strikethrough; the rest of the sequence is
  * upstream's. `GfmFlavourGuardTest` fails if upstream's pass gains another delimiter.
+ * One instance serves every parse; the sequence is built per parse, as upstream's is.
  */
-private class EditorGfmFlavour : GFMFlavourDescriptor() {
-	private val sequence: List<SequentialParser> = super.sequentialParserManager.getParserSequence().map {
-		if (it is EmphasisLikeParser) EmphasisLikeParser(EmphStrongDelimiterParser(), StrikeThroughDelimiterParser()) else it
-	}
+private object EditorGfmFlavour : GFMFlavourDescriptor() {
+	private val upstream = super.sequentialParserManager
 
 	override val sequentialParserManager: SequentialParserManager = object : SequentialParserManager() {
-		override fun getParserSequence(): List<SequentialParser> = sequence
+		override fun getParserSequence(): List<SequentialParser> = upstream.getParserSequence().map {
+			if (it is EmphasisLikeParser) EmphasisLikeParser(EmphStrongDelimiterParser(), StrikeThroughDelimiterParser()) else it
+		}
 	}
 }
 

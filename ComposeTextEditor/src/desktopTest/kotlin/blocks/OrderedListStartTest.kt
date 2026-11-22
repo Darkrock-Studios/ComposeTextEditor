@@ -316,4 +316,20 @@ class OrderedListStartTest {
 		val restored = saver.restore(saved)!!
 		assertEquals(0, restored.orderedListStart(1))
 	}
+
+	@Test
+	fun `taking the first items out of the list together leaves the list its start`() = runTest {
+		val off = editor("1. a\n1. b\n1. c\n1. d")
+		off.setOrderedListStart(0, 3)
+		off.toggleOrderedList(0..1)
+		assertEquals(listOf(null, null, 3, 4), off.numbers())
+		assertEquals(mapOf(2 to 3), off.starts())
+		off.undo()
+		assertEquals(listOf(3, 4, 5, 6), off.numbers())
+
+		val bullets = editor("1. a\n1. b\n1. c\n1. d")
+		bullets.setOrderedListStart(0, 3)
+		bullets.toggleBulletList(0..1)
+		assertEquals(listOf(null, null, 3, 4), bullets.numbers())
+	}
 }

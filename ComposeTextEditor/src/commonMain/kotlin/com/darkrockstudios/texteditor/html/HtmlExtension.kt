@@ -110,7 +110,7 @@ class HtmlExtension(
 					}
 				},
 				blockLines = document.blockLines,
-				richSpans = listStartSpans(document.listStarts, 0) { editorState.textLines.getOrNull(it)?.length },
+				listStarts = document.listStarts,
 			)
 		}
 	}

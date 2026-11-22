@@ -3,6 +3,7 @@ package html
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.platform.ClipEntry
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.font.createFontFamilyResolver
 import androidx.compose.ui.unit.Density
@@ -159,5 +160,20 @@ class OrderedListStartHtmlTest {
 
 		assertEquals("one\ntwo\nthree", e.editorState.getAllText().text)
 		assertEquals(listOf(1, 2, 3), e.numbers())
+	}
+
+	@OptIn(ExperimentalComposeUiApi::class)
+	@Test
+	fun `a list pasted inside a line keeps counting from its start`() = runTest {
+		val e = extension()
+		e.editorState.setText(AnnotatedString("xy"))
+		e.editorState.cursor.updatePosition(CharLineOffset(0, 1))
+		val clipboard = InMemoryClipboard()
+		clipboard.seed(ClipEntry(ForeignRichTransferable("<ol start=\"5\"><li>a</li><li>b</li><li>c</li></ol>", "a\nb\nc")))
+		e.editorState.actions[EditorCommand.Action.Paste]!!.perform(EditorActionContext(e.editorState, clipboard, this))
+		testScheduler.advanceUntilIdle()
+
+		assertEquals("xa\nb\ncy", e.editorState.getAllText().text)
+		assertEquals(listOf(null, 6, null), e.numbers())
 	}
 }

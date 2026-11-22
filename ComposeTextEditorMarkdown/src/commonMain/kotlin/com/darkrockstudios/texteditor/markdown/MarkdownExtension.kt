@@ -31,6 +31,7 @@ import com.darkrockstudios.texteditor.richstyle.applyDocumentBlocks
 import com.darkrockstudios.texteditor.richstyle.isListBlock
 import com.darkrockstudios.texteditor.richstyle.isNestingBlank
 import com.darkrockstudios.texteditor.richstyle.lineBlocksConflict
+import com.darkrockstudios.texteditor.richstyle.listStartOn
 import com.darkrockstudios.texteditor.richstyle.listLevel
 import com.darkrockstudios.texteditor.richstyle.nestListItems
 import com.darkrockstudios.texteditor.richstyle.unnestListItems
@@ -637,11 +638,6 @@ class MarkdownExtension(
 		val spansByLine = content.richSpans.groupBy { it.range.start.line }
 		fun stylesOn(line: Int): List<RichSpanStyle> = spansByLine[line].orEmpty().map { it.style }
 		fun has(line: Int, style: RichSpanStyle) = stylesOn(line).any { it === style }
-		// As the editor's numbering picks it: a start at the line's start, then the lowest.
-		fun listStartOn(line: Int) = spansByLine[line].orEmpty()
-			.filter { it.style is OrderedListStartSpanStyle }
-			.minWithOrNull(compareBy({ it.range.start.char != 0 }, { (it.style as OrderedListStartSpanStyle).start }))
-			?.let { (it.style as OrderedListStartSpanStyle).start }
 		val imageLines = content.richSpans
 			.mapNotNull { span -> (span.style as? ImageBlockSpanStyle)?.let { span.range.start.line to it } }
 			.toMap()
@@ -905,10 +901,11 @@ class MarkdownExtension(
 				for (deeper in level + 1..MAX_LIST_LEVEL) orderedCounters[deeper] = 0
 				val prefix = if (list.style is OrderedListSpanStyle) {
 					// A list's first item interrupts a paragraph only numbered 1.
-					val start = if (underParagraph(lineIndex)) null else listStartOn(lineIndex)
+					val start = if (underParagraph(lineIndex)) null else content.listStartOn(lineIndex)
 					val number = if (orderedCounters[level] == 0) start ?: 1 else orderedCounters[level]
 					orderedCounters[level] = number + 1
-					list.prefix(number - 1)
+					// Renderers read only the first item's number; nine digits are all an item may have.
+					list.prefix(minOf(number, OrderedListStartSpanStyle.MAX_START) - 1)
 				} else {
 					orderedCounters[level] = 0
 					list.prefix(0)
@@ -1189,7 +1186,8 @@ class MarkdownExtension(
 				imageLines = imageLines.associate { (line, image) -> lineOf[line] to image },
 				blockLines = blockLines,
 				richSpans = linkSpans(links, annotatedString.text) + fenceLanguageSpans(fenceInfoStrings.mapKeys { lineOf[it.key] }) +
-					alignmentSpans(alignments) + listStartSpans(listStarts),
+					alignmentSpans(alignments),
+				listStarts = listStarts,
 			)
 		}
 	}
@@ -1220,16 +1218,6 @@ class MarkdownExtension(
 		}
 		return starts
 	}
-
-	/** An [OrderedListStartSpanStyle] for each list's start, read against the text just set. */
-	private fun listStartSpans(starts: Map<Int, Int>): List<RichSpan> =
-		starts.mapNotNull { (line, start) ->
-			val length = editorState.textLines.getOrNull(line)?.length ?: return@mapNotNull null
-			RichSpan(
-				range = TextEditorRange(CharLineOffset(line, 0), CharLineOffset(line, length)),
-				style = OrderedListStartSpanStyle(start),
-			)
-		}
 
 	/** A [ParagraphFormatSpanStyle] of each line's alignment, read against the text just set. */
 	private fun alignmentSpans(alignments: Map<Int, TextAlign>): List<RichSpan> =

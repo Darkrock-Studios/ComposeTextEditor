@@ -2,6 +2,7 @@ package com.darkrockstudios.texteditor.richstyle
 
 import androidx.compose.ui.text.AnnotatedString
 import com.darkrockstudios.texteditor.TextEditorRange
+import com.darkrockstudios.texteditor.state.DocumentSnapshot
 import com.darkrockstudios.texteditor.state.LayoutUpdate
 import com.darkrockstudios.texteditor.state.OrderedListKind
 import com.darkrockstudios.texteditor.state.TextEditorState
@@ -15,6 +16,12 @@ import com.darkrockstudios.texteditor.state.TextEditorState
 /** The start [line] holds, or null for none. */
 internal fun TextEditorState.listStartAt(line: Int): Int? =
 	OrderedListKind.startValueOn(richSpanManager.getRichSpansStartingOn(line), line)
+
+/**
+ * The list start [line] of this snapshot holds, as the numbering reads it, or null for
+ * none. It counts only where [line] opens its level's run of ordered items.
+ */
+fun DocumentSnapshot.listStartOn(line: Int): Int? = OrderedListKind.startValueOn(spansOn(line), line)
 
 /**
  * The first item of the ordered list [line] is an item of, or null when it is no
@@ -74,7 +81,7 @@ internal fun TextEditorState.handOnListStarts(
 		val stillOpens = now?.spanStyle is OrderedListSpanStyle && now.listLevel == start.level &&
 			heldListStart(start.line)?.start == start.start
 		if (stillOpens) continue
-		val heir = nextListItem(start.line, start.level)?.takeIf { listStartAt(it) == null && orderedListRunStart(it) == it } ?: continue
+		val heir = heirItem(start.line, start.level, captured)?.takeIf { listStartAt(it) == null && orderedListRunStart(it) == it } ?: continue
 		if (heir !in captured) written += editManager.lineBlocksOf(listOf(heir))
 		writeListStart(heir, start.start)
 		if (listStartAt(start.line) != null) writeListStart(start.line, null)
@@ -114,6 +121,25 @@ internal fun TextEditorState.listStartsTakenBy(range: TextEditorRange, breaks: I
 		val lands = if (heir == range.end.line) range.start.line + breaks else heir - (range.end.line - range.start.line) + breaks
 		HeldListStart(held.line, held.level, held.start, heirAt = lands)
 	}
+}
+
+/**
+ * The ordered item at [level] that opens the list [line] opened, now that [edited] may have
+ * taken items out of it: after [line], past the items nested deeper and the edited lines no
+ * longer at [level] in it, or null at any other line.
+ */
+private fun TextEditorState.heirItem(line: Int, level: Int, edited: Set<Int>): Int? {
+	for (next in line + 1 until textLines.size) {
+		val list = listBlockAt(next)
+		val nextLevel = list?.listLevel
+		when {
+			nextLevel != null && nextLevel > level -> continue
+			nextLevel == level && list?.spanStyle is OrderedListSpanStyle -> return next
+			next in edited -> continue
+			else -> return null
+		}
+	}
+	return null
 }
 
 /** The ordered item at [level] after [line] in its list, past the items nested deeper, or null. */

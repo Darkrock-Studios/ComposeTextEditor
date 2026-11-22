@@ -83,7 +83,7 @@ fun parseCssColor(value: String): Color? {
 }
 
 /** [color] as [parseCssColor] reads it back: `#rrggbb`, or `#rrggbbaa` when it is translucent. */
-internal fun formatCssColor(color: Color): String {
+fun formatCssColor(color: Color): String {
 	val argb = color.toArgb()
 	val rgb = "#" + (argb and 0xFFFFFF).toString(16).padStart(6, '0')
 	val alpha = (argb ushr 24) and 0xFF
