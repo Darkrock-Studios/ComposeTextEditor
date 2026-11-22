@@ -38,7 +38,7 @@ kotlin {
 	iosSimulatorArm64()
 
 	sourceSets {
-		val commonMain by getting {
+		val commonMain = getByName("commonMain") {
 			dependencies {
 				api(projects.composeTextEditor)
 
@@ -55,21 +55,21 @@ kotlin {
 		}
 
 		// SymSpell implementation (used by wasmJs, desktop, and android)
-		val symSpellMain by creating {
+		val symSpellMain = create("symSpellMain") {
 			dependsOn(commonMain)
 			dependencies {
 				implementation(libs.symspellkt)
 			}
 		}
 		// Native/Platform spell checker implementation (desktop + android)
-		val platformSpellMain by creating {
+		val platformSpellMain = create("platformSpellMain") {
 			dependsOn(commonMain)
 			dependencies {
 				implementation(libs.platform.spellchecker)
 			}
 		}
 
-		val desktopMain by getting {
+		named("desktopMain") {
 			dependsOn(symSpellMain)
 			dependsOn(platformSpellMain)
 			dependencies {
@@ -77,11 +77,11 @@ kotlin {
 				implementation(libs.kotlinx.coroutines.swing)
 			}
 		}
-		val androidMain by getting {
+		named("androidMain") {
 			dependsOn(symSpellMain)
 			dependsOn(platformSpellMain)
 		}
-		val desktopTest by getting {
+		named("desktopTest") {
 			kotlin.srcDir(rootDir.resolve("testUtils/countingMeasurer"))
 			kotlin.srcDir(rootDir.resolve("testUtils/uiTest"))
 			kotlin.srcDir(rootDir.resolve("testUtils/testFont/kotlin"))
@@ -102,11 +102,11 @@ kotlin {
 				implementation(projects.composeTextEditorFind)
 			}
 		}
-		val wasmJsMain by getting {
+		named("wasmJsMain") {
 			dependsOn(symSpellMain)
 		}
 		// iOS uses both SymSpell and platform spell checker (like Desktop and Android)
-		val iosMain by getting {
+		named("iosMain") {
 			dependsOn(symSpellMain)
 			dependsOn(platformSpellMain)
 		}

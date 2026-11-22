@@ -40,7 +40,7 @@ kotlin {
 	iosSimulatorArm64()
 
     sourceSets {
-        val commonMain by getting {
+        val commonMain = getByName("commonMain") {
             dependencies {
                 implementation(compose.runtime)
                 implementation(compose.foundation)
@@ -57,18 +57,18 @@ kotlin {
 
         // Desktop, iOS, and wasm share Compose's skiko text input API
         // (PlatformTextInputMethodRequest is the same interface on all three).
-        val skikoMain by creating {
+        val skikoMain = create("skikoMain") {
             dependsOn(commonMain)
         }
 
-        val androidMain by getting {
+        named("androidMain") {
             dependencies {
                 // AccessibilityDelegateCompat, which Compose already brings at runtime.
                 implementation(libs.androidx.core)
             }
         }
 
-        val desktopMain by getting {
+        named("desktopMain") {
             dependsOn(skikoMain)
             dependencies {
                 implementation(compose.desktop.currentOs)
@@ -76,23 +76,23 @@ kotlin {
             }
         }
 
-        val iosMain by getting {
+        named("iosMain") {
             dependsOn(skikoMain)
         }
 
-        val wasmJsMain by getting {
+        named("wasmJsMain") {
             dependsOn(skikoMain)
         }
 
         // Runs on the simulator, for what only the platform can answer (UIPasteboard).
-        val iosTest by getting {
+        named("iosTest") {
             dependencies {
                 implementation(libs.jetbrains.kotlin.test)
                 implementation(libs.kotlinx.coroutines.test)
             }
         }
 
-        val androidHostTest by getting {
+        named("androidHostTest") {
             dependencies {
                 implementation(libs.jetbrains.kotlin.test)
                 implementation(libs.jetbrains.kotlin.test.junit)
@@ -101,7 +101,7 @@ kotlin {
             }
         }
 
-        val desktopTest by getting {
+        named("desktopTest") {
             kotlin.srcDir(rootDir.resolve("testUtils/countingMeasurer"))
             kotlin.srcDir(rootDir.resolve("testUtils/blockLines"))
             kotlin.srcDir(rootDir.resolve("testUtils/stateFuzz"))

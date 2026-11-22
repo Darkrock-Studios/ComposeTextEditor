@@ -38,7 +38,7 @@ kotlin {
 	iosSimulatorArm64()
 
 	sourceSets {
-		val commonMain by getting {
+		named("commonMain") {
 			dependencies {
 				api(projects.composeTextEditor)
 
@@ -54,13 +54,13 @@ kotlin {
 			}
 		}
 
-		val desktopMain by getting {
+		named("desktopMain") {
 			dependencies {
 				implementation(compose.desktop.currentOs)
 				implementation(libs.kotlinx.coroutines.swing)
 			}
 		}
-		val desktopTest by getting {
+		named("desktopTest") {
 			kotlin.srcDir(rootDir.resolve("testUtils/testFont/kotlin"))
 			resources.srcDir(rootDir.resolve("testUtils/testFont/resources"))
 			dependencies {

@@ -39,7 +39,7 @@ kotlin {
 	iosSimulatorArm64()
 
 	sourceSets {
-		val commonMain by getting {
+		named("commonMain") {
 			dependencies {
 				api(projects.composeTextEditor)
 
@@ -50,12 +50,12 @@ kotlin {
 			}
 		}
 
-		val desktopMain by getting {
+		named("desktopMain") {
 			dependencies {
 				implementation(compose.desktop.currentOs)
 			}
 		}
-		val desktopTest by getting {
+		named("desktopTest") {
 			kotlin.srcDir(rootDir.resolve("testUtils/countingMeasurer"))
 			kotlin.srcDir(rootDir.resolve("testUtils/blockLines"))
 			kotlin.srcDir(rootDir.resolve("testUtils/stateFuzz"))

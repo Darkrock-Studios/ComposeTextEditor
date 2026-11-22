@@ -54,7 +54,7 @@ kotlin {
 
 	sourceSets {
 
-		val commonMain by getting {
+		named("commonMain") {
 			dependencies {
 				implementation(projects.composeTextEditor)
 				implementation(projects.composeTextEditorMarkdown)
@@ -75,7 +75,7 @@ kotlin {
 			}
 		}
 
-		val desktopMain by getting {
+		named("desktopMain") {
 			dependencies {
 				implementation(libs.kotlinx.coroutines.swing)
 
@@ -93,7 +93,7 @@ kotlin {
 			}
 		}
 
-		val desktopTest by getting {
+		named("desktopTest") {
 			dependencies {
 				implementation(libs.jetbrains.kotlin.test)
 				implementation(libs.jetbrains.kotlin.test.junit)
@@ -105,7 +105,7 @@ kotlin {
 			}
 		}
 
-		val androidMain by getting {
+		named("androidMain") {
 			dependencies {
 				implementation(compose.runtime)
 				implementation(compose.ui)
@@ -113,14 +113,14 @@ kotlin {
 			}
 		}
 
-		val wasmJsMain by getting {
+		named("wasmJsMain") {
 			dependencies {
 				implementation(libs.symspellkt)
 				implementation(libs.symspellkt.fdic)
 			}
 		}
 
-		val iosMain by getting {
+		named("iosMain") {
 			dependencies {
 				implementation(libs.platform.spellchecker)
 			}
