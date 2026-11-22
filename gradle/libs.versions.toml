@@ -20,7 +20,7 @@ composeBom = "2026.09.00"
 
 symspellkt = "3.4.0"
 spellcheckerkt = "1.5.0"
-highlights = "1.2.0"
+highlights = "1.0.0"
 material3-multiplatform = "1.12.0-alpha03"
 material-kolor = "5.0.1"
 
