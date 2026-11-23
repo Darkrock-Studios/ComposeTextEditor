@@ -93,7 +93,7 @@
   <div class="breadcrumbs"><a href="../../index.html">Markdown</a><span class="delimiter">/</span><a href="../index.html">com.darkrockstudios.texteditor.markdown</a><span class="delimiter">/</span><span class="current">HighlightSyntax</span></div>
   <div class="cover ">
     <h1 class="cover"><span>Highlight</span><wbr><span><span>Syntax</span></span></h1>
-    <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditorMarkdown/commonMain"><div class="symbol monospace"><span class="token keyword">enum </span><a href="index.html">HighlightSyntax</a> : <a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-enum/index.html">Enum</a><span class="token operator">&lt;</span><a href="index.html">HighlightSyntax</a><span class="token operator">&gt; </span><span class="source-link-wrapper"><span class="source-link" data-element-type="source-link">(<a href="https://github.com/Darkrock-Studios/ComposeTextEditor/blob/main/ComposeTextEditorMarkdown/src/commonMain/kotlin/com/darkrockstudios/texteditor/markdown/MarkdownConfiguration.kt#L10">source</a>)</span></span></div><p class="paragraph">The markdown written for a highlight. Both forms are read on import.</p><p class="paragraph"><a href="-d-o-u-b-l-e_-e-q-u-a-l-s/index.html">DOUBLE_EQUALS</a> is <code class="lang-kotlin">==text==</code>, the syntax Obsidian, Typora, iA Writer and markdown-it's mark plugin share; <a href="-m-a-r-k_-t-a-g/index.html">MARK_TAG</a> is the HTML <code class="lang-kotlin">&lt;mark&gt;</code> every CommonMark renderer displays, for documents that leave those editors.</p></div></div>
+    <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditorMarkdown/commonMain"><div class="symbol monospace"><span class="token keyword">enum class </span><a href="index.html">HighlightSyntax</a> : <a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-enum/index.html">Enum</a><span class="token operator">&lt;</span><a href="index.html">HighlightSyntax</a><span class="token operator">&gt; </span><span class="source-link-wrapper"><span class="source-link" data-element-type="source-link">(<a href="https://github.com/Darkrock-Studios/ComposeTextEditor/blob/main/ComposeTextEditorMarkdown/src/commonMain/kotlin/com/darkrockstudios/texteditor/markdown/MarkdownConfiguration.kt#L10">source</a>)</span></span></div><p class="paragraph">The markdown written for a highlight. Both forms are read on import.</p><p class="paragraph"><a href="-d-o-u-b-l-e_-e-q-u-a-l-s/index.html">DOUBLE_EQUALS</a> is <code class="lang-kotlin">==text==</code>, the syntax Obsidian, Typora, iA Writer and markdown-it's mark plugin share; <a href="-m-a-r-k_-t-a-g/index.html">MARK_TAG</a> is the HTML <code class="lang-kotlin">&lt;mark&gt;</code> every CommonMark renderer displays, for documents that leave those editors.</p></div></div>
   </div>
   <div class="tabbedcontent">
     <div class="tabs-section" tabs-section="tabs-section"><button class="section-tab" data-active="" data-togglable="CONSTRUCTOR,TYPE,PROPERTY,FUNCTION">Members</button><button class="section-tab" data-togglable="ENTRY">Entries</button></div>
@@ -133,23 +133,61 @@
         </div>
       </div>
       <div data-togglable="PROPERTY">
-        <h2 class="tableheader">Properties</h2>
-        <div class="table"><a data-name="-1809354934%2FProperties%2F-796721452" anchor-label="entries" id="-1809354934%2FProperties%2F-796721452" data-filterable-set=":ComposeTextEditorMarkdown/commonMain"></a>
+        <h2 class="tableheader">Companion properties</h2>
+        <div class="table"><a data-name="-1952485459%2FProperties%2F-796721452" anchor-label="entries" id="-1952485459%2FProperties%2F-796721452" data-filterable-set=":ComposeTextEditorMarkdown/commonMain"></a>
           <div class="table-row table-row_content" data-filterable-current=":ComposeTextEditorMarkdown/commonMain" data-filterable-set=":ComposeTextEditorMarkdown/commonMain">
             <div class="main-subrow keyValue ">
               <div class=""><span class="inline-flex">
                   <div><a href="entries.html"><span><span>entries</span></span></a></div>
-<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-1809354934%2FProperties%2F-796721452"></span>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-1952485459%2FProperties%2F-796721452"></span>
                     <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
                   </span></span></div>
               <div>
                 <div class="title">
-                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditorMarkdown/commonMain"><div class="symbol monospace"><span class="token keyword">val </span><a href="entries.html">entries</a><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.enums/-enum-entries/index.html">EnumEntries</a><span class="token operator">&lt;</span><a href="index.html">HighlightSyntax</a><span class="token operator">&gt;</span></div><div class="brief "><p class="paragraph">Returns a representation of an immutable list of all enum entries, in the order they're declared.</p></div></div></div>
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditorMarkdown/commonMain"><div class="symbol monospace"><span class="token keyword">val </span><a href="entries.html">entries</a><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.enums/-enum-entries/index.html">EnumEntries</a><span class="token operator">&lt;</span><a href="index.html">HighlightSyntax</a><span class="token operator">&gt;</span></div><div class="brief "><p class="paragraph">Returns an immutable <a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.enums/-enum-entries/index.html">kotlin.enums.EnumEntries</a> list containing the constants of this enum type, in the order they're declared.</p></div></div></div>
                 </div>
               </div>
             </div>
           </div>
-<a data-name="-372974862%2FProperties%2F-796721452" anchor-label="name" id="-372974862%2FProperties%2F-796721452" data-filterable-set=":ComposeTextEditorMarkdown/commonMain"></a>
+        </div>
+      </div>
+      <div data-togglable="FUNCTION">
+        <h2 class="tableheader">Companion functions</h2>
+        <div class="table"><a data-name="1672649973%2FFunctions%2F-796721452" anchor-label="valueOf" id="1672649973%2FFunctions%2F-796721452" data-filterable-set=":ComposeTextEditorMarkdown/commonMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":ComposeTextEditorMarkdown/commonMain" data-filterable-set=":ComposeTextEditorMarkdown/commonMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="value-of.html"><span>value</span><wbr><span><span>Of</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="1672649973%2FFunctions%2F-796721452"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditorMarkdown/commonMain"><div class="symbol monospace"><span class="token keyword">fun </span><a href="value-of.html"><span class="token function">valueOf</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">value<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html">String</a></span></span><span class="token punctuation">)</span><span class="token operator">: </span><a href="index.html">HighlightSyntax</a></div><div class="brief "><p class="paragraph">Returns the enum constant of this type with the specified name. The string must match exactly an identifier used to declare an enum constant in this type. (Extraneous whitespace characters are not permitted.)</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-1281871231%2FFunctions%2F-796721452" anchor-label="values" id="-1281871231%2FFunctions%2F-796721452" data-filterable-set=":ComposeTextEditorMarkdown/commonMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":ComposeTextEditorMarkdown/commonMain" data-filterable-set=":ComposeTextEditorMarkdown/commonMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="values.html"><span><span>values</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-1281871231%2FFunctions%2F-796721452"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditorMarkdown/commonMain"><div class="symbol monospace"><span class="token keyword">fun </span><a href="values.html"><span class="token function">values</span></a><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-array/index.html">Array</a><span class="token operator">&lt;</span><a href="index.html">HighlightSyntax</a><span class="token operator">&gt;</span></div><div class="brief "><p class="paragraph">Returns an array containing the constants of this enum type, in the order they're declared.</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div data-togglable="PROPERTY">
+        <h2 class="tableheader">Properties</h2>
+        <div class="table"><a data-name="-372974862%2FProperties%2F-796721452" anchor-label="name" id="-372974862%2FProperties%2F-796721452" data-filterable-set=":ComposeTextEditorMarkdown/commonMain"></a>
           <div class="table-row table-row_content" data-filterable-current=":ComposeTextEditorMarkdown/commonMain" data-filterable-set=":ComposeTextEditorMarkdown/commonMain">
             <div class="main-subrow keyValue ">
               <div class=""><span class="inline-flex">
@@ -175,40 +213,6 @@
               <div>
                 <div class="title">
                   <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditorMarkdown/commonMain"><div class="symbol monospace"><span class="token keyword">expect </span><span class="token keyword">val </span><a href="../-paragraph-separator/-n-e-w-l-i-n-e/index.html#-739389684%2FProperties%2F-796721452">ordinal</a><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a></div></div></div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-      <div data-togglable="FUNCTION">
-        <h2 class="tableheader">Functions</h2>
-        <div class="table"><a data-name="361567890%2FFunctions%2F-796721452" anchor-label="valueOf" id="361567890%2FFunctions%2F-796721452" data-filterable-set=":ComposeTextEditorMarkdown/commonMain"></a>
-          <div class="table-row table-row_content" data-filterable-current=":ComposeTextEditorMarkdown/commonMain" data-filterable-set=":ComposeTextEditorMarkdown/commonMain">
-            <div class="main-subrow keyValue ">
-              <div class=""><span class="inline-flex">
-                  <div><a href="value-of.html"><span>value</span><wbr><span><span>Of</span></span></a></div>
-<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="361567890%2FFunctions%2F-796721452"></span>
-                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
-                  </span></span></div>
-              <div>
-                <div class="title">
-                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditorMarkdown/commonMain"><div class="symbol monospace"><span class="token keyword">fun </span><a href="value-of.html"><span class="token function">valueOf</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">value<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html">String</a></span></span><span class="token punctuation">)</span><span class="token operator">: </span><a href="index.html">HighlightSyntax</a></div><div class="brief "><p class="paragraph">Returns the enum constant of this type with the specified name. The string must match exactly an identifier used to declare an enum constant in this type. (Extraneous whitespace characters are not permitted.)</p></div></div></div>
-                </div>
-              </div>
-            </div>
-          </div>
-<a data-name="1666837278%2FFunctions%2F-796721452" anchor-label="values" id="1666837278%2FFunctions%2F-796721452" data-filterable-set=":ComposeTextEditorMarkdown/commonMain"></a>
-          <div class="table-row table-row_content" data-filterable-current=":ComposeTextEditorMarkdown/commonMain" data-filterable-set=":ComposeTextEditorMarkdown/commonMain">
-            <div class="main-subrow keyValue ">
-              <div class=""><span class="inline-flex">
-                  <div><a href="values.html"><span><span>values</span></span></a></div>
-<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="1666837278%2FFunctions%2F-796721452"></span>
-                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
-                  </span></span></div>
-              <div>
-                <div class="title">
-                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditorMarkdown/commonMain"><div class="symbol monospace"><span class="token keyword">fun </span><a href="values.html"><span class="token function">values</span></a><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-array/index.html">Array</a><span class="token operator">&lt;</span><a href="index.html">HighlightSyntax</a><span class="token operator">&gt;</span></div><div class="brief "><p class="paragraph">Returns an array containing the constants of this enum type, in the order they're declared.</p></div></div></div>
                 </div>
               </div>
             </div>
