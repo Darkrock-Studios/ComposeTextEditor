@@ -16,7 +16,7 @@ import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.isEnabled
 import androidx.compose.ui.test.isFocusable
 import androidx.compose.ui.test.isNotEnabled
-import androidx.compose.ui.test.runSkikoComposeUiTest
+import androidx.compose.ui.test.v2.runSkikoComposeUiTest
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import com.darkrockstudios.texteditor.BasicTextEditor

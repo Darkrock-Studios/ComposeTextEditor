@@ -2,7 +2,7 @@ package scrollmanager
 
 import androidx.compose.runtime.State
 import androidx.compose.ui.test.ExperimentalTestApi
-import androidx.compose.ui.test.runSkikoComposeUiTest
+import androidx.compose.ui.test.v2.runSkikoComposeUiTest
 import com.darkrockstudios.texteditor.scrollbar.SCROLL_INDICATOR_FADE_DELAY_MS
 import com.darkrockstudios.texteditor.scrollbar.SCROLL_INDICATOR_FADE_MS
 import com.darkrockstudios.texteditor.scrollbar.ScrollThumb
