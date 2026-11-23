@@ -16,9 +16,6 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performKeyInput
-import androidx.compose.ui.test.pressKey
-import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.v2.runComposeUiTest
 import androidx.compose.ui.unit.dp
 import com.darkrockstudios.texteditor.sample.CodeEditorDemoUi
@@ -66,7 +63,10 @@ class CodeEditorScreenshotTest {
 			waitForIdle()
 			// The data class line wraps, and its keywords keep their colour.
 			onNodeWithText("Soft wrap").assertIsSelected()
-			onNodeWithText("Soft wrap").performKeyInput { pressKey(Key.Escape) }
+			// The test scene has no window to turn Escape into a back press, so close the
+			// menu with a click outside it, on the header.
+			onNodeWithText("Code editor").performClick()
+			onNodeWithText("Soft wrap").assertDoesNotExist()
 			waitUntil(timeoutMillis = 10_000) { keywordPixels() > 50 }
 		}
 		val file = File("build/screenshots/$name.png")
