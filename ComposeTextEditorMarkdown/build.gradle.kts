@@ -52,7 +52,7 @@ kotlin {
 
 		named("desktopMain") {
 			dependencies {
-				implementation(compose.desktop.currentOs)
+				implementation(compose.desktop.common)
 			}
 		}
 		named("desktopTest") {
