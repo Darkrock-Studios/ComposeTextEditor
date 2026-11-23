@@ -71,7 +71,7 @@ kotlin {
         named("desktopMain") {
             dependsOn(skikoMain)
             dependencies {
-                implementation(compose.desktop.currentOs)
+                implementation(compose.desktop.common)
                 implementation(libs.kotlinx.coroutines.swing)
             }
         }
