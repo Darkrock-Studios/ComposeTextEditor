@@ -2,7 +2,11 @@ package com.darkrockstudios.texteditor.html
 
 import androidx.compose.ui.text.AnnotatedString
 import com.darkrockstudios.texteditor.TextEditorRange
+import com.darkrockstudios.texteditor.richstyle.BulletListSpanStyle
+import com.darkrockstudios.texteditor.richstyle.OrderedListSpanStyle
+import com.darkrockstudios.texteditor.richstyle.OrderedListStartSpanStyle
 import com.darkrockstudios.texteditor.richstyle.RichSpanStyle
+import com.darkrockstudios.texteditor.richstyle.listLevel
 import com.darkrockstudios.texteditor.richstyle.ParagraphFormatSpanStyle
 
 /**
@@ -23,11 +27,40 @@ internal class HtmlDocument(
 	val links: List<Pair<TextEditorRange, String>> = emptyList(),
 	/** The paragraph format of each line whose element's inline CSS set one. */
 	val paragraphFormats: Map<Int, ParagraphFormatSpanStyle> = emptyMap(),
+	/** The start of each `<ol start>` but 1, by its first item's line. */
+	val listStarts: Map<Int, Int> = emptyMap(),
 ) {
 	/** True when the markup carried nothing but styled text. */
 	fun hasNoDecorations(): Boolean =
 		blockLines.values.all { it.isEmpty() } &&
 			horizontalRuleLines.isEmpty() && imageLines.isEmpty() && links.isEmpty() && paragraphFormats.isEmpty()
+}
+
+/**
+ * The [HtmlDocument.listStarts] on the lines [from] to [to]. A list whose first item
+ * comes before [from] (a paste's first line, joined into the line it lands on) hands
+ * its start to its next item at [from] or after, counted on by the items before it.
+ */
+internal fun HtmlDocument.listStartsFrom(from: Int, to: Int): Map<Int, Int> {
+	val starts = listStarts.filterKeys { it in from..to }.toMutableMap()
+	val lists = HashMap<Int, RichSpanStyle>()
+	blockLines.forEach { (style, lines) -> if (style is OrderedListSpanStyle || style is BulletListSpanStyle) lines.forEach { lists[it] = style } }
+	for ((first, start) in listStarts) {
+		if (first >= from) continue
+		val level = lists[first]?.listLevel ?: continue
+		var number = start
+		for (line in first + 1..to) {
+			val list = lists[line] ?: break
+			val lineLevel = list.listLevel!!
+			if (lineLevel > level) continue
+			if (lineLevel < level || list !is OrderedListSpanStyle) break
+			number++
+			if (line < from) continue
+			if (number != 1 && OrderedListStartSpanStyle.isValidStart(number) && line !in starts) starts[line] = number
+			break
+		}
+	}
+	return starts
 }
 
 /**

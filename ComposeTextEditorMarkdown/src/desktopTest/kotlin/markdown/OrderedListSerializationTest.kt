@@ -115,11 +115,11 @@ class OrderedListSerializationTest {
 	}
 
 	@Test
-	fun `export normalises any starting digit to incrementing from one`() = runTest {
+	fun `export counts on from the list's first number`() = runTest {
 		val extension = createMarkdownExtension()
-		// Markdown lets you write any digit — renderers normalise. We always emit 1, 2, 3.
+		// A list starts at its first item's number; renderers ignore the rest.
 		extension.importMarkdown("5. five\n9. nine\n2. two")
-		assertEquals("1. five\n2. nine\n3. two", extension.exportAsMarkdown())
+		assertEquals("5. five\n6. nine\n7. two", extension.exportAsMarkdown())
 	}
 
 	@Test

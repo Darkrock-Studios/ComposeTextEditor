@@ -28,6 +28,10 @@ import com.darkrockstudios.texteditor.richstyle.hasLineBlock
 import com.darkrockstudios.texteditor.richstyle.isHeading
 import com.darkrockstudios.texteditor.richstyle.isList
 import com.darkrockstudios.texteditor.richstyle.lineBlockSpanStyles
+import com.darkrockstudios.texteditor.richstyle.HeldListStart
+import com.darkrockstudios.texteditor.richstyle.keepListStartsAfterJoin
+import com.darkrockstudios.texteditor.richstyle.listStartsTakenBy
+import com.darkrockstudios.texteditor.richstyle.moveListStartUp
 import com.darkrockstudios.texteditor.richstyle.lineBlocks
 import com.darkrockstudios.texteditor.richstyle.listBlockAt
 import com.darkrockstudios.texteditor.richstyle.listLevel
@@ -277,6 +281,8 @@ class TextEditManager(private val state: TextEditorState) {
 			} else {
 				null
 			}
+			// A deletion across lines can take a list's first item, whose start the list keeps.
+			val heldStarts = if (addToHistory) listStartsTakenBy(operation) else emptyList()
 			val metadata = when (operation) {
 				is TextEditOperation.Insert -> applyInsert(operation)
 				is TextEditOperation.Delete -> applyDelete(addToHistory, operation)
@@ -314,9 +320,17 @@ class TextEditManager(private val state: TextEditorState) {
 			if (!isDecoration) announce(operation)
 
 			if (addToHistory) continueLineBlocks(operation)
+			if (heldStarts.isNotEmpty()) state.keepListStartsAfterJoin(heldStarts)
 			if (addToHistory && !isDecoration) settleFenceLines(linesLandedOn(operation))
 		}
 		return operation
+	}
+
+	/** The list starts [operation], a deletion or replace across lines, takes with the items it takes. */
+	private fun listStartsTakenBy(operation: TextEditOperation): List<HeldListStart> = when (operation) {
+		is TextEditOperation.Delete -> state.listStartsTakenBy(operation.range, breaks = 0)
+		is TextEditOperation.Replace -> state.listStartsTakenBy(operation.range, breaks = operation.newText.text.count { it == '\n' })
+		else -> emptyList()
 	}
 
 	/** [operation] with the text it lands on a code fence line holding only the fence's styles. */
@@ -1150,13 +1164,14 @@ class TextEditManager(private val state: TextEditorState) {
 		val touched = if (singleLine || ended.isEmpty()) targets else first + 1..last
 		if (touched.isEmpty()) return
 		// Part of the edit that broke the line, so a paste's copied spans outlive it too.
-		state.keepingCopiedRichSpans { continuationOf(touched, targets, continued, ended) }
+		state.keepingCopiedRichSpans { continuationOf(touched, targets, continued, ended, listStartFrom = if (fromLast) last else null) }
 	}
 
 	/**
 	 * Continues [continued] onto [targets], strips [ended] headings from the rest of
 	 * [touched], and first takes the blocks [demoted] names off its line, as one
-	 * recorded step.
+	 * recorded step. A list start on [listStartFrom], the line whose markers a break at
+	 * its start took down, goes up to the first of [targets], the list's first item now.
 	 */
 	private fun continuationOf(
 		touched: IntRange,
@@ -1164,8 +1179,9 @@ class TextEditManager(private val state: TextEditorState) {
 		continued: List<LineBlockStyle>,
 		ended: List<LineBlockStyle>,
 		demoted: Pair<Int, List<LineBlockStyle>>? = null,
+		listStartFrom: Int? = null,
 	) {
-		recordLineBlockChanges(touched.toList()) {
+		recordLineBlockChanges(touched.toList() + listOfNotNull(listStartFrom)) {
 			demoted?.let { (line, gone) -> gone.forEach { state.demoteLineBlock(line, it) } }
 			state.writeLineBlocks(
 				touched.mapNotNull { line ->
@@ -1193,6 +1209,7 @@ class TextEditManager(private val state: TextEditorState) {
 					}
 				}
 			)
+			listStartFrom?.let { state.moveListStartUp(it, targets.first) }
 		}
 	}
 

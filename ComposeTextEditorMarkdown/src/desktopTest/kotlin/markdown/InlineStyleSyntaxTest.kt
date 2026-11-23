@@ -101,6 +101,16 @@ class InlineStyleSyntaxTest {
 	}
 
 	@Test
+	fun `a lone equals sign leaves the strikethrough beside it intact`() {
+		listOf("=[ ~~c=~~" to "=[ c=", "=[ ~~=c~~ d" to "=[ =c d", "a = ~~c=~~ b" to "a = c= b").forEach { (markdown, text) ->
+			val parsed = markdown.toAnnotatedStringFromMarkdown(config)
+			assertEquals(text, parsed.text, markdown)
+			val struck = text.indexOf('c').let { if (text[it - 1] == '=') it - 1 else it }
+			assertEquals(listOf(Triple(struck, struck + 2, config.strikethroughStyle)), parsed.styledRanges(), markdown)
+		}
+	}
+
+	@Test
 	fun `a highlight may hold whitespace-flanked double equals`() {
 		val parsed = "==a == b==".toAnnotatedStringFromMarkdown(config)
 		assertEquals("a == b", parsed.text)

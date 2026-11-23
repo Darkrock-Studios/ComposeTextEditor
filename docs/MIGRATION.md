@@ -282,3 +282,18 @@ TextDiagnosticsChecker { lines -> lines.map { LineCheck(issuesIn(it)) } }
 A `LineCheck` with `complete = false` is underlined as usual, but its line is not kept as
 checked: every refresh sends it to `check` again until a complete result comes back. A
 line `check` gives no result for is incomplete too. `checkText` is unchanged.
+
+## Ordered list starts
+
+An ordered list keeps the number it starts at (`docs/design/line-blocks.md`, "List
+starts"): an `OrderedListStartSpanStyle` on its first item. Nothing needs code, but a
+host may notice:
+
+- **Markdown.** A list is written numbered on from its first item's number, so
+  `5. a` and `9. b` come back as `5. a` and `6. b` where they came back as `1.` and
+  `2.`.
+- **HTML.** `<ol start="3">` imports as a list starting at 3 and is written back so.
+- **Saved state.** A list's start is kept.
+
+The API is in `com.darkrockstudios.texteditor.state`: `orderedListStart` and
+`setOrderedListStart`.

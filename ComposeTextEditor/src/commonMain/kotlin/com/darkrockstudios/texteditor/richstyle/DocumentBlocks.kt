@@ -4,6 +4,7 @@ import androidx.compose.ui.text.AnnotatedString
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.RichTextStyles
+import com.darkrockstudios.texteditor.state.OrderedListKind
 import com.darkrockstudios.texteditor.state.TextEditorState
 
 /**
@@ -19,6 +20,8 @@ internal class DocumentBlocks(
 	val horizontalRuleLines: Set<Int>,
 	val imageLines: Map<Int, ImageBlockSpanStyle>,
 	val blockLines: Map<LineBlockStyle, Set<Int>>,
+	/** The list start on each line holding one; it counts only where its line opens a list. */
+	val listStarts: Map<Int, Int> = emptyMap(),
 ) {
 	fun isEmpty(): Boolean =
 		horizontalRuleLines.isEmpty() && imageLines.isEmpty() &&
@@ -103,7 +106,18 @@ internal fun documentBlocksOf(
 			}
 			.toMap(),
 		blockLines = blockLinesOf(allSpans, styles),
+		listStarts = listStartsOf(allSpans),
 	)
+}
+
+/** The list start on each line among [allSpans], chosen as the numbering walk chooses it. */
+private fun listStartsOf(allSpans: Set<RichSpan>): Map<Int, Int> {
+	val byLine = HashMap<Int, MutableList<RichSpan>>()
+	for (span in allSpans) {
+		if (span.style is OrderedListStartSpanStyle) byLine.getOrPut(span.range.start.line) { ArrayList(1) } += span
+	}
+	if (byLine.isEmpty()) return emptyMap()
+	return byLine.mapValues { (line, spans) -> OrderedListKind.startValueOn(spans, line)!! }
 }
 
 /** The lines each block of [styles]' registry is on among [allSpans], in one pass over them. */
@@ -120,9 +134,10 @@ private fun blockLinesOf(allSpans: Set<RichSpan>, styles: RichTextStyles): Map<L
  * Attaches the decorations an importer parsed out of a source document: rules on
  * [horizontalRuleLines], the images of [imageLines], the line blocks of [blockLines]
  * (keyed by the block's span style, one of [LINE_BLOCK_STYLES]; any other key is
- * refused) and [richSpans] (links, fence languages), clamped onto the lines as
- * [TextEditorState.setDocument] clamps them. A line index past the document and a
- * decoration span are ignored.
+ * refused), [richSpans] (links, fence languages), clamped onto the lines as
+ * [TextEditorState.setDocument] clamps them, and [listStarts], each list's start by
+ * its first item's line ([OrderedListStartSpanStyle]). A line index past the
+ * document, a decoration span and a start no list can take are ignored.
  *
  * Every span is published and every block line rebuilt against the current content
  * before a single relayout runs at the end. A relayout re-measures from the line it
@@ -137,6 +152,7 @@ fun TextEditorState.applyDocumentBlocks(
 	imageLines: Map<Int, ImageBlockSpanStyle> = emptyMap(),
 	blockLines: Map<RichSpanStyle, Collection<Int>> = emptyMap(),
 	richSpans: Collection<RichSpan> = emptyList(),
+	listStarts: Map<Int, Int> = emptyMap(),
 ) = withAtomicEdit {
 	val blocks = blockLines.mapKeys { (style, _) ->
 		requireNotNull(lineBlockFor(style, richTextStyles)) { "$style is not a line block's span style" }
@@ -205,11 +221,15 @@ fun TextEditorState.applyDocumentBlocks(
 	richSpanManager.removeRichSpans(removed)
 	richSpanManager.addRichSpans(added)
 	if (rebuiltAnyLine) setLines(lines)
-	richSpanManager.addRichSpansClamped(richSpans.filterNot { it.style.isDecoration })
+	val startSpans = listStarts.mapNotNull { (line, start) ->
+		val text = lines.getOrNull(line)?.takeIf { OrderedListStartSpanStyle.isValidStart(start) } ?: return@mapNotNull null
+		RichSpan(lineRange(line, text.length), OrderedListStartSpanStyle(start))
+	}
+	richSpanManager.addRichSpansClamped(richSpans.filterNot { it.style.isDecoration } + startSpans)
 	// Attaching a span is enough on its own to need the relayout, even with no line
 	// rebuilt: a rule or an image resolves its height from the spans on its line wrap,
 	// which only book-keeping works out.
-	if (added.isNotEmpty() || removed.isNotEmpty() || richSpans.isNotEmpty() || rebuiltAnyLine) updateBookKeeping()
+	if (added.isNotEmpty() || removed.isNotEmpty() || richSpans.isNotEmpty() || startSpans.isNotEmpty() || rebuiltAnyLine) updateBookKeeping()
 }
 
 /** The range covering [length] characters from the start of [line]. */

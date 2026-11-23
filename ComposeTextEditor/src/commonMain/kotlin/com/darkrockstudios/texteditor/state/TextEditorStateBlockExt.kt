@@ -12,6 +12,10 @@ import com.darkrockstudios.texteditor.richstyle.HeaderSpanStyle
 import com.darkrockstudios.texteditor.richstyle.LinkSpanStyle
 import com.darkrockstudios.texteditor.richstyle.OrderedList
 import com.darkrockstudios.texteditor.richstyle.OrderedListSpanStyle
+import com.darkrockstudios.texteditor.richstyle.OrderedListStartSpanStyle
+import com.darkrockstudios.texteditor.richstyle.listStartAt
+import com.darkrockstudios.texteditor.richstyle.orderedListRunStart
+import com.darkrockstudios.texteditor.richstyle.writeListStart
 import com.darkrockstudios.texteditor.richstyle.RichSpanStyle
 import com.darkrockstudios.texteditor.richstyle.hasLineBlock
 import com.darkrockstudios.texteditor.richstyle.headerBlock
@@ -44,7 +48,7 @@ fun TextEditorState.toggleBulletList(lines: IntRange) = editManager.toggleLineBl
 /**
  * Adds ordered-list rendering (gutter numeral and hanging indent) to each line
  * in [lines] that lacks it; removes it where every line already has it. Numbering
- * follows the contiguous run, so it is never stored.
+ * follows the contiguous run from the list's start ([orderedListStart]).
  */
 fun TextEditorState.toggleOrderedList(lines: IntRange) = editManager.toggleLineBlock(lines, OrderedList)
 
@@ -73,6 +77,32 @@ fun TextEditorState.isBulletList(line: Int): Boolean = listBlockAt(line)?.spanSt
 
 /** Whether [line] is rendered as an ordered-list item, at any nesting level. */
 fun TextEditorState.isOrderedList(line: Int): Boolean = listBlockAt(line)?.spanStyle is OrderedListSpanStyle
+
+/**
+ * The number the ordered list holding [line] starts at: 1 unless one was set (an
+ * imported `<ol start>` or `3. `, or [setOrderedListStart]), or null when [line] is
+ * no ordered item. A list is the run of ordered items at [line]'s level that its
+ * numbering counts through, the items nested in them aside.
+ */
+fun TextEditorState.orderedListStart(line: Int): Int? {
+	val first = orderedListRunStart(line) ?: return null
+	return listStartAt(first) ?: 1
+}
+
+/**
+ * Sets the number the ordered list holding [line] starts at, 0 to
+ * [OrderedListStartSpanStyle.MAX_START], or back to 1 for null. The start is kept on
+ * the list's first item. One undo step; false when [line] is no ordered item or
+ * [start] is out of range.
+ */
+fun TextEditorState.setOrderedListStart(line: Int, start: Int?): Boolean {
+	if (start != null && !OrderedListStartSpanStyle.isValidStart(start)) return false
+	val first = orderedListRunStart(line) ?: return false
+	val wanted = start?.takeIf { it != 1 }
+	if (listStartAt(first) == wanted) return true
+	editManager.recordLineBlockChanges(listOf(first)) { writeListStart(first, wanted) }
+	return true
+}
 
 /** Whether [line] is rendered as a fenced code line. */
 fun TextEditorState.isCodeFence(line: Int): Boolean = hasLineBlock(line, CodeFence)

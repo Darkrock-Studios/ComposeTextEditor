@@ -1,31 +1,31 @@
 [versions]
 android-compileSdk = "37"
 android-minSdk = "26"
-agp = "9.2.1"
+agp = "9.5.2"
 jvm = "17"
 androidx-lifecycle = "2.11.0"
-androidx-core = "1.16.0"
-compose-multiplatform = "1.12.1"
-compose-hot-reload = "1.2.0"
-kotlin = "2.4.10"
+androidx-core = "1.19.1"
+compose-multiplatform = "1.12.2"
+compose-hot-reload = "1.3.0"
+kotlin = "2.4.21"
 kotlinx-coroutines = "1.11.0"
 ksoup = "0.2.6"
-markdown = "0.7.8"
-mockk = "1.14.11"
+markdown = "0.7.18"
+mockk = "1.14.12"
 
 activity-ktx = "1.13.0"
-lifecycleRuntimeKtx = "2.11.0"
+lifecycleRuntimeKtx = "2.11.1"
 activityCompose = "1.13.0"
-composeBom = "2026.06.01"
+composeBom = "2026.09.00"
 
 symspellkt = "3.4.0"
-spellcheckerkt = "1.3.2"
+spellcheckerkt = "1.5.0"
 highlights = "1.0.0"
 material3-multiplatform = "1.12.0-alpha03"
 material-kolor = "5.0.1"
 
 maven-publish = "0.37.0"
-dokka = "2.2.0"
+dokka = "2.3.0"
 
 [libraries]
 jetbrains-kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test" }

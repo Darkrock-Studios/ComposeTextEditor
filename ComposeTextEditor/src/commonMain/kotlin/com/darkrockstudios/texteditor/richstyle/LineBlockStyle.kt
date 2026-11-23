@@ -570,12 +570,13 @@ internal fun TextEditorState.lineBlocks(line: Int): List<LineBlockStyle> =
 
 /**
  * The line-anchored block span styles currently attached to [line], with a
- * fence's language span, which a toggle off the whole fence loses to
- * normalization and an undo must bring back.
+ * fence's language span and a list's start, which a toggle off the whole fence
+ * or list loses to normalization and an undo must bring back.
  */
 internal fun TextEditorState.lineBlockSpanStyles(line: Int): List<RichSpanStyle> =
 	lineBlocks(line).map { it.spanStyle } +
-		richSpanManager.getRichSpansStartingOn(line).map { it.style }.filterIsInstance<CodeFenceLanguageSpanStyle>()
+		richSpanManager.getRichSpansStartingOn(line).map { it.style }
+			.filter { it is CodeFenceLanguageSpanStyle || it is OrderedListStartSpanStyle }
 
 /** A line's content and the line-anchored block span styles it carries, as a whole. */
 internal class LineBlockWrite(
@@ -588,7 +589,7 @@ internal class LineBlockWrite(
  * Sets each line in [writes] (one write a line) to its content and exactly its block
  * span styles: a block span of a style still wanted stays as it is while the line
  * keeps its length, any other is removed, and a missing style is added over the
- * whole line. The lines are
+ * whole line. A list's start is one of them. The lines are
  * written in a splice per run and the spans in one removal and one addition. Posts no
  * layout. A language span already on a line is left alone: normalization moved it
  * there for the run it heads, and an identical one restored on top of it collapses
@@ -599,15 +600,18 @@ internal fun TextEditorState.writeLineBlocks(writes: List<LineBlockWrite>) = wit
 	val lengthKept = writes.associate { it.line to (textLines.getOrNull(it.line)?.length == it.content.length) }
 	writeLines(writes.associate { it.line to it.content })
 	val blockStyles = allBlockRegistry.mapTo(HashSet()) { it.spanStyle }
+	fun written(style: RichSpanStyle) = style in blockStyles || style is OrderedListStartSpanStyle
+	// A list start is a value, compared by equality; every other block style is a singleton.
+	fun same(a: RichSpanStyle, b: RichSpanStyle) = a === b || (a is OrderedListStartSpanStyle && a == b)
 	val doomed = ArrayList<RichSpan>()
 	val added = ArrayList<RichSpan>()
 	for (write in writes) {
 		val whole = TextEditorRange(CharLineOffset(write.line, 0), CharLineOffset(write.line, write.content.length))
 		// A kept span stays unless the line's length changed under it.
-		val existing = richSpanManager.getRichSpansStartingOn(write.line).filter { it.style in blockStyles }
-		val kept = if (lengthKept.getValue(write.line)) existing.filter { span -> write.spanStyles.any { it === span.style } } else emptyList()
+		val existing = richSpanManager.getRichSpansStartingOn(write.line).filter { written(it.style) }
+		val kept = if (lengthKept.getValue(write.line)) existing.filter { span -> write.spanStyles.any { same(it, span.style) } } else emptyList()
 		existing.filterTo(doomed) { it !in kept }
-		write.spanStyles.filter { style -> kept.none { it.style === style } }
+		write.spanStyles.filter { style -> kept.none { same(it.style, style) } }
 			.mapTo(added) { RichSpan(whole, it) }
 	}
 	richSpanManager.removeRichSpans(doomed)
