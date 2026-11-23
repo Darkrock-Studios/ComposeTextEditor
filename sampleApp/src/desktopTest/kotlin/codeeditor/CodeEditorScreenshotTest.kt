@@ -19,7 +19,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.test.runComposeUiTest
+import androidx.compose.ui.test.v2.runComposeUiTest
 import androidx.compose.ui.unit.dp
 import com.darkrockstudios.texteditor.sample.CodeEditorDemoUi
 import com.darkrockstudios.texteditor.sample.Demo
@@ -35,6 +35,9 @@ import kotlin.test.Test
 @OptIn(ExperimentalTestApi::class)
 class CodeEditorScreenshotTest {
 
+	// The v2 runner resumes the highlighter on the UI thread after its analysis, as the app
+	// does. The v1 runner's unconfined dispatcher applies the highlights on the analysis
+	// thread, where they can race the first layout and never reach the drawn rows.
 	private fun screenshot(name: String, darkMode: Boolean, wrap: Boolean = false) = runComposeUiTest {
 		setContent {
 			MaterialTheme(colorScheme = if (darkMode) darkColorScheme() else lightColorScheme()) {
