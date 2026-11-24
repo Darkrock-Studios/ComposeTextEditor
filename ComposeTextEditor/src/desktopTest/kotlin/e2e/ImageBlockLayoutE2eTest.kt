@@ -43,45 +43,12 @@ class ImageBlockLayoutE2eTest {
 	}
 
 	@Test
-	fun `a read-only view lays its rows out again when an image loads`() = runComposeUiTest {
-		val provider = InMemoryImageProvider().apply { loading("img") }
-		lateinit var state: TextEditorState
-		setContent {
-			state = rememberTextEditorState(initialText = AnnotatedString("below"))
-			RichTextView(state = state, modifier = Modifier.width(400.dp).testTag("view"))
-		}
-		waitForIdle()
-		state.insertImageBlock(provider)
-		waitForIdle()
-		val placeholder = with(state.density!!) { 200.dp.toPx() }
-		assertEquals(placeholder, state.imageRowHeight(), "the loading placeholder's height")
-
-		provider.put("img", ImageBitmap(200, 100))
-		waitForIdle()
-
-		assertEquals(100f, state.imageRowHeight())
-	}
+	fun `a read-only view lays out again when an image inserted after first layout loads`() =
+		readOnlyViewLoadsImage(insertBeforeFirstLayout = false)
 
 	@Test
-	fun `a read-only view lays out again when an image present from the start loads`() = runComposeUiTest {
-		val provider = InMemoryImageProvider().apply { loading("img") }
-		lateinit var state: TextEditorState
-		setContent {
-			state = rememberTextEditorState(initialText = AnnotatedString("below"))
-			// Launched ahead of the view's own effects, as a host loading its document would.
-			LaunchedEffect(state) { state.insertImageBlock(provider) }
-			RichTextView(state = state, modifier = Modifier.width(400.dp).testTag("view"))
-		}
-		waitForIdle()
-		val placeholder = with(state.density!!) { 200.dp.toPx() }
-		assertEquals(placeholder, state.imageRowHeight(), "the loading placeholder's height")
-
-		provider.put("img", ImageBitmap(200, 100))
-		waitForIdle()
-
-		assertEquals(100f, state.imageRowHeight())
-		assertEquals(100f, state.lineOffsets.first { it.line == 1 }.offset.y, "the text below starts under the image")
-	}
+	fun `a read-only view lays out again when an image present from the start loads`() =
+		readOnlyViewLoadsImage(insertBeforeFirstLayout = true)
 
 	@Test
 	fun `the editor's image bounds resize a loaded image`() = editorUiTest(
@@ -97,6 +64,30 @@ class ImageBlockLayoutE2eTest {
 		test.waitForIdle()
 
 		assertEquals(viewportWidth / 4f, state.imageRowHeight())
+	}
+
+	private fun readOnlyViewLoadsImage(insertBeforeFirstLayout: Boolean) = runComposeUiTest {
+		val provider = InMemoryImageProvider().apply { loading("img") }
+		lateinit var state: TextEditorState
+		setContent {
+			state = rememberTextEditorState(initialText = AnnotatedString("below"))
+			// Launched ahead of the view's own effects, as a host loading its document would.
+			if (insertBeforeFirstLayout) LaunchedEffect(state) { state.insertImageBlock(provider) }
+			RichTextView(state = state, modifier = Modifier.width(400.dp).testTag("view"))
+		}
+		waitForIdle()
+		if (!insertBeforeFirstLayout) {
+			state.insertImageBlock(provider)
+			waitForIdle()
+		}
+		val placeholder = with(state.density!!) { 200.dp.toPx() }
+		assertEquals(placeholder, state.imageRowHeight(), "the loading placeholder's height")
+
+		provider.put("img", ImageBitmap(200, 100))
+		waitForIdle()
+
+		assertEquals(100f, state.imageRowHeight())
+		assertEquals(100f, state.lineOffsets.first { it.line == 1 }.offset.y, "the text below starts under the image")
 	}
 
 	private fun TextEditorState.insertImageBlock(provider: InMemoryImageProvider) {

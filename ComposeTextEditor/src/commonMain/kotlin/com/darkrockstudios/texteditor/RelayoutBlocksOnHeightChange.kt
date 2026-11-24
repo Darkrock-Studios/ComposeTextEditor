@@ -3,7 +3,6 @@ package com.darkrockstudios.texteditor
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.snapshotFlow
-import androidx.compose.ui.platform.LocalDensity
 import com.darkrockstudios.texteditor.richstyle.BlockSpanStyle
 import com.darkrockstudios.texteditor.state.LayoutUpdate
 import com.darkrockstudios.texteditor.state.TextEditorState
@@ -14,16 +13,9 @@ import kotlinx.coroutines.flow.distinctUntilChanged
  * image finishing its load, or the editor's image bounds changing. The layout pass reads
  * block heights but is not itself snapshot-tracked, so without this a freshly loaded image
  * would leave stale row offsets, the paragraphs below it drawn where the placeholder ended.
- *
- * Also sets the state's density, ahead of the watcher: the density is not snapshot state,
- * so a watcher whose first pass found it unset would never read the block heights.
  */
 @Composable
 internal fun RelayoutBlocksOnHeightChange(state: TextEditorState) {
-	val density = LocalDensity.current
-	LaunchedEffect(state, density) {
-		state.density = density
-	}
 	LaunchedEffect(state) {
 		snapshotFlow {
 			// The spans are not snapshot state: the revision is read so a block an edit
