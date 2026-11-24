@@ -237,10 +237,6 @@ fun BasicTextEditor(
 		}
 	}
 
-	LaunchedEffect(density) {
-		state.density = density
-	}
-
 	// A soft keyboard drawn over the window covers the bottom of the viewport: measured
 	// on the canvas's frame (measuresKeyboardCover), and again when the canvas moves
 	// (onGloballyPositioned).

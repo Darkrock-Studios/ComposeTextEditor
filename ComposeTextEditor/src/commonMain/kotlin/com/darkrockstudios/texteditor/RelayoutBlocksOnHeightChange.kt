@@ -21,6 +21,7 @@ internal fun RelayoutBlocksOnHeightChange(state: TextEditorState) {
 			// The spans are not snapshot state: the revision is read so a block an edit
 			// adds is watched from then on, not only those present at the last change.
 			state.revision
+			// Not snapshot state: SyncStyleToState sets it before this first runs.
 			val d = state.density ?: return@snapshotFlow emptyList<Float>()
 			state.richSpanManager.getAllRichSpans().mapNotNull { span ->
 				(span.style as? BlockSpanStyle)?.blockHeight(d, state.viewportSize, state.imageSize)
