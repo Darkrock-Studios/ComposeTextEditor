@@ -69,14 +69,20 @@ class ImageBlockLayoutE2eTest {
 	private fun readOnlyViewLoadsImage(insertBeforeFirstLayout: Boolean) = runComposeUiTest {
 		val provider = InMemoryImageProvider().apply { loading("img") }
 		lateinit var state: TextEditorState
+		var insertedRevision = -1
 		setContent {
 			state = rememberTextEditorState(initialText = AnnotatedString("below"))
 			// Launched ahead of the view's own effects, as a host loading its document would.
-			if (insertBeforeFirstLayout) LaunchedEffect(state) { state.insertImageBlock(provider) }
+			if (insertBeforeFirstLayout) LaunchedEffect(state) {
+				state.insertImageBlock(provider)
+				insertedRevision = state.revision
+			}
 			RichTextView(state = state, modifier = Modifier.width(400.dp).testTag("view"))
 		}
 		waitForIdle()
-		if (!insertBeforeFirstLayout) {
+		if (insertBeforeFirstLayout) {
+			assertEquals(insertedRevision, state.revision, "no later edit reruns the block height watcher")
+		} else {
 			state.insertImageBlock(provider)
 			waitForIdle()
 		}
