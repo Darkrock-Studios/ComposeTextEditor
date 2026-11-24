@@ -1,7 +1,7 @@
 package e2e
 
 import androidx.compose.foundation.layout.width
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.platform.testTag
@@ -68,10 +68,13 @@ class ImageBlockLayoutE2eTest {
 		lateinit var state: TextEditorState
 		setContent {
 			state = rememberTextEditorState(initialText = AnnotatedString("below"))
-			remember(state) { state.insertImageBlock(provider) }
+			// Launched ahead of the view's own effects, as a host loading its document would.
+			LaunchedEffect(state) { state.insertImageBlock(provider) }
 			RichTextView(state = state, modifier = Modifier.width(400.dp).testTag("view"))
 		}
 		waitForIdle()
+		val placeholder = with(state.density!!) { 200.dp.toPx() }
+		assertEquals(placeholder, state.imageRowHeight(), "the loading placeholder's height")
 
 		provider.put("img", ImageBitmap(200, 100))
 		waitForIdle()

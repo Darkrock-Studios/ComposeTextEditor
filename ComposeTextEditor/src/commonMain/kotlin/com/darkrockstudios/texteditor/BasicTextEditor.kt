@@ -237,9 +237,7 @@ fun BasicTextEditor(
 		}
 	}
 
-	LaunchedEffect(density) {
-		state.density = density
-	}
+	RelayoutBlocksOnHeightChange(state)
 
 	// A soft keyboard drawn over the window covers the bottom of the viewport: measured
 	// on the canvas's frame (measuresKeyboardCover), and again when the canvas moves
@@ -335,8 +333,6 @@ fun BasicTextEditor(
 	LaunchedEffect(enabled) {
 		if (!enabled) state.selector.hideCaretHandle()
 	}
-
-	RelayoutBlocksOnHeightChange(state)
 
 	TextEditorContextMenuProvider(
 		menuState = effectiveContextMenuState,

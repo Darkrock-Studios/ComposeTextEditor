@@ -86,12 +86,6 @@ fun RichTextView(
 	SyncStyleToState(state, style)
 	RelayoutBlocksOnHeightChange(state)
 
-	val density = LocalDensity.current
-
-	LaunchedEffect(density) {
-		state.density = density
-	}
-
 	if (isSelectable) {
 		val clipboard = LocalClipboard.current
 		val focusRequester = remember { FocusRequester() }
