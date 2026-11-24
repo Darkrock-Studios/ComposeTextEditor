@@ -889,15 +889,18 @@ class TextEditorState private constructor(
 	/**
 	 * Density used by [BlockSpanStyle] spans to convert their intrinsic size to
 	 * pixels. Set by the host composable from [androidx.compose.ui.platform.LocalDensity].
+	 * Snapshot state so a watcher that first ran before the host set it reads it again.
 	 */
-	internal var density: Density? = null
+	internal var density: Density?
+		get() = _density
 		set(value) {
-			if (field != value) {
-				field = value
+			if (_density != value) {
+				_density = value
 				invalidateLayoutInputs()
 				updateBookKeeping(LayoutUpdate.Reshape)
 			}
 		}
+	private var _density by mutableStateOf<Density?>(null)
 
 	/** Scrolling, content height, and the currently visible line range. */
 	val scrollManager = TextEditorScrollManager(

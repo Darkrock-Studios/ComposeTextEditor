@@ -1,6 +1,7 @@
 package e2e
 
 import androidx.compose.foundation.layout.width
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.platform.testTag
@@ -59,6 +60,24 @@ class ImageBlockLayoutE2eTest {
 		waitForIdle()
 
 		assertEquals(100f, state.imageRowHeight())
+	}
+
+	@Test
+	fun `a read-only view lays out again when an image present from the start loads`() = runComposeUiTest {
+		val provider = InMemoryImageProvider().apply { loading("img") }
+		lateinit var state: TextEditorState
+		setContent {
+			state = rememberTextEditorState(initialText = AnnotatedString("below"))
+			remember(state) { state.insertImageBlock(provider) }
+			RichTextView(state = state, modifier = Modifier.width(400.dp).testTag("view"))
+		}
+		waitForIdle()
+
+		provider.put("img", ImageBitmap(200, 100))
+		waitForIdle()
+
+		assertEquals(100f, state.imageRowHeight())
+		assertEquals(100f, state.lineOffsets.first { it.line == 1 }.offset.y, "the text below starts under the image")
 	}
 
 	@Test
