@@ -299,3 +299,23 @@ a host may notice:
 
 The API is in `com.darkrockstudios.texteditor.state`: `orderedListStart` and
 `setOrderedListStart`.
+
+## Image sizing as a sealed type
+
+In 3.6.0, `ImageBlockSize` is a sealed interface: `ImageBlockSize.Bounded`, the bounds it
+held, or `ImageBlockSize.Framed`, a fixed box the block takes in every load state, the
+image fitted and centred in it. Constructing it is unchanged, since `ImageBlockSize(...)`
+is now a function returning a `Bounded`. Code that reads `maxWidth`, `maxHeight` or calls
+`copy` on an `ImageBlockSize` needs a `Bounded` in hand:
+
+```kotlin
+// Before
+val bounds: ImageBlockSize = ImageBlockSize(maxWidth = ImageLength.Fraction(0.5f))
+bounds.copy(upscale = true)
+
+// After
+val bounds: ImageBlockSize.Bounded = ImageBlockSize(maxWidth = ImageLength.Fraction(0.5f))
+bounds.copy(upscale = true)
+```
+
+Code compiled against 3.5 must be recompiled.

@@ -33,34 +33,77 @@ sealed interface ImageLength {
 }
 
 /**
- * The bounds an image block is drawn within. The image keeps its aspect ratio and is
- * scaled down to fit [maxWidth], [maxHeight] and the viewport's width; it is enlarged
- * to them only with [upscale], and is otherwise drawn no larger than its bitmap.
+ * How an image block is sized: [Bounded] by limits it is fitted within, its height following
+ * the image, or [Framed] in a fixed box. Either way the image keeps its aspect ratio and is
+ * enlarged only with [upscale], otherwise drawn no larger than its bitmap.
  *
- * The editor's bounds are
+ * The editor's sizing is
  * [TextEditorStyle.imageSize][com.darkrockstudios.texteditor.TextEditorStyle.imageSize];
- * an [ImageBlockSpanStyle.size] replaces them for one image.
+ * an [ImageBlockSpanStyle.size] replaces it for one image.
  */
-data class ImageBlockSize(
-	val maxWidth: ImageLength = ImageLength.Fraction(1f),
-	val maxHeight: ImageLength? = null,
-	val upscale: Boolean = false,
-) {
+sealed interface ImageBlockSize {
+	val upscale: Boolean
+
+	/** The image is fitted within [maxWidth], [maxHeight] and the viewport's width. */
+	data class Bounded(
+		val maxWidth: ImageLength = ImageLength.Fraction(1f),
+		val maxHeight: ImageLength? = null,
+		override val upscale: Boolean = false,
+	) : ImageBlockSize
+
+	/**
+	 * A fixed box [height] tall and [width] wide, no wider than the viewport, which the block
+	 * takes whether its image is loading, loaded or failed. The image is fitted inside it and
+	 * centred. A height [ImageLength.Fraction] in a view with no bounded height leaves the
+	 * block unframed, its image fitted to [width] alone.
+	 */
+	data class Framed(
+		val height: ImageLength,
+		val width: ImageLength = ImageLength.Fraction(1f),
+		override val upscale: Boolean = false,
+	) : ImageBlockSize
+
+	/** The box the block takes in a viewport of [viewport] pixels, or null when it has none. */
+	fun frameSize(viewport: Size, density: Density): Size? {
+		if (this !is Framed) return null
+		val height = height.toPx(viewport.height, density)
+		if (!height.isFinite()) return null
+		return Size(minOf(viewport.width, width.toPx(viewport.width, density)), height)
+	}
+
 	/**
 	 * The size an image of [imageWidth] by [imageHeight] pixels is drawn at in a viewport
 	 * of [viewport] pixels.
 	 */
 	fun fit(imageWidth: Float, imageHeight: Float, viewport: Size, density: Density): Size {
 		require(imageWidth > 0f && imageHeight > 0f) { "image size must be positive: $imageWidth x $imageHeight" }
-		val widthBound = minOf(viewport.width, maxWidth.toPx(viewport.width, density))
-		val heightBound = maxHeight?.toPx(viewport.height, density) ?: Float.POSITIVE_INFINITY
-		val scale = minOf(widthBound / imageWidth, heightBound / imageHeight)
+		val widthBound: Float
+		val heightBound: Float?
+		when (this) {
+			is Bounded -> {
+				widthBound = minOf(viewport.width, maxWidth.toPx(viewport.width, density))
+				heightBound = maxHeight?.toPx(viewport.height, density)
+			}
+
+			is Framed -> {
+				widthBound = minOf(viewport.width, width.toPx(viewport.width, density))
+				heightBound = frameSize(viewport, density)?.height
+			}
+		}
+		val scale = minOf(widthBound / imageWidth, (heightBound ?: Float.POSITIVE_INFINITY) / imageHeight)
 			.let { if (upscale) it else it.coerceAtMost(1f) }
 		return Size(imageWidth * scale, imageHeight * scale)
 	}
 
 	companion object {
 		/** The viewport's width, with no height bound. */
-		val DEFAULT = ImageBlockSize()
+		val DEFAULT: ImageBlockSize = Bounded()
 	}
 }
+
+/** [ImageBlockSize.Bounded] by these limits. */
+fun ImageBlockSize(
+	maxWidth: ImageLength = ImageLength.Fraction(1f),
+	maxHeight: ImageLength? = null,
+	upscale: Boolean = false,
+): ImageBlockSize.Bounded = ImageBlockSize.Bounded(maxWidth, maxHeight, upscale)

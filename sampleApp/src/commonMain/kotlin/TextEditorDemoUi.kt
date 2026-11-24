@@ -232,13 +232,18 @@ private data class EditorOptions(
 	val imageWidth: ImageWidth = ImageWidth.Full,
 	val imageHeightCapped: Boolean = false,
 	val imageUpscale: Boolean = false,
+	val imageFramed: Boolean = false,
 ) {
 	val imageSize: ImageBlockSize
-		get() = ImageBlockSize(
-			maxWidth = imageWidth.length,
-			maxHeight = if (imageHeightCapped) ImageLength.Absolute(200.dp) else null,
-			upscale = imageUpscale,
-		)
+		get() = if (imageFramed) {
+			ImageBlockSize.Framed(height = ImageLength.Absolute(160.dp), width = ImageLength.Absolute(160.dp), upscale = imageUpscale)
+		} else {
+			ImageBlockSize.Bounded(
+				maxWidth = imageWidth.length,
+				maxHeight = if (imageHeightCapped) ImageLength.Absolute(200.dp) else null,
+				upscale = imageUpscale,
+			)
+		}
 }
 
 private enum class ImageWidth(val label: String, val length: ImageLength) {
@@ -326,6 +331,9 @@ private fun editorOptionGroups(
 					},
 					DemoOption("Enlarge small images", options.imageUpscale, supportingText = "Up to the bounds above") {
 						onChange(options.copy(imageUpscale = it))
+					},
+					DemoOption("160dp square frame", options.imageFramed, supportingText = "Same box loading or loaded; replaces the bounds above") {
+						onChange(options.copy(imageFramed = it))
 					},
 				),
 			)
