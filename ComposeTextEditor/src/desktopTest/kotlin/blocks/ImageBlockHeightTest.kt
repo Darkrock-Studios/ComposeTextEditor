@@ -146,6 +146,57 @@ class ImageBlockHeightTest {
 		assertEquals(Size(200f, 100f), bounds.fit(1000f, 500f, viewport, density))
 	}
 
+	private val square = ImageBlockSize.Framed(width = ImageLength.Absolute(160.dp), height = ImageLength.Absolute(160.dp))
+
+	@Test
+	fun `a framed block is as tall loading, loaded and failed`() {
+		val provider = InMemoryImageProvider().apply { loading("img") }
+		val style = ImageBlockSpanStyle(source = "img", provider = provider, placeholderHeightDp = 200f, size = square)
+
+		assertEquals(160f, style.blockHeight(density, viewport, ImageBlockSize.DEFAULT))
+		provider.put("img", fakeBitmap(width = 1000, height = 500))
+		assertEquals(160f, style.blockHeight(density, viewport, ImageBlockSize.DEFAULT))
+		provider.fail("img", "404")
+		assertEquals(160f, style.blockHeight(density, viewport, ImageBlockSize.DEFAULT))
+	}
+
+	@Test
+	fun `the editor's frame sizes an image without its own bounds`() {
+		val provider = InMemoryImageProvider().apply { loading("img") }
+		val style = ImageBlockSpanStyle(source = "img", provider = provider)
+
+		assertEquals(160f, style.blockHeight(density, viewport, square))
+	}
+
+	@Test
+	fun `an image is fitted inside its frame keeping its aspect ratio`() {
+		assertEquals(Size(160f, 80f), square.fit(1000f, 500f, viewport, density))
+		assertEquals(Size(80f, 160f), square.fit(500f, 1000f, viewport, density))
+	}
+
+	@Test
+	fun `a small image is enlarged to its frame only when asked`() {
+		assertEquals(Size(100f, 50f), square.fit(100f, 50f, viewport, density))
+		assertEquals(Size(160f, 80f), square.copy(upscale = true).fit(100f, 50f, viewport, density))
+	}
+
+	@Test
+	fun `a frame's width defaults to the viewport's and is bounded by it`() {
+		val tall = ImageBlockSize.Framed(height = ImageLength.Absolute(100.dp))
+		assertEquals(Size(1000f, 100f), tall.frameSize(viewport, density))
+		val wide = ImageBlockSize.Framed(width = ImageLength.Absolute(2000.dp), height = ImageLength.Absolute(100.dp))
+		assertEquals(Size(1000f, 100f), wide.frameSize(viewport, density))
+	}
+
+	@Test
+	fun `a frame height fraction with no viewport height leaves the image unframed`() {
+		val bounds = ImageBlockSize.Framed(height = ImageLength.Fraction(0.5f))
+		val unbounded = Size(400f, Float.POSITIVE_INFINITY)
+
+		assertEquals(null, bounds.frameSize(unbounded, density))
+		assertEquals(200f, loaded(1000, 500).blockHeight(density, unbounded, bounds))
+	}
+
 	@Test
 	fun `a length must be positive`() {
 		assertFailsWith<IllegalArgumentException> { ImageLength.Fraction(0f) }
