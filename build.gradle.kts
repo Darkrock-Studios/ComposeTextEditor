@@ -1,3 +1,8 @@
+import com.vanniktech.maven.publish.JavadocJar
+import com.vanniktech.maven.publish.KotlinMultiplatform
+import com.vanniktech.maven.publish.MavenPublishBaseExtension
+import com.vanniktech.maven.publish.SourcesJar
+
 plugins {
     // this is necessary to avoid the plugins to be loaded multiple times
     // in each subproject's classloader
@@ -19,6 +24,40 @@ subprojects {
 	tasks.withType<Test>().matching { it.name == "desktopTest" }.configureEach {
 		maxHeapSize = "1g"
 		systemProperty("composetexteditor.primarySelection", "false")
+	}
+}
+
+// Maven Central caps each month's release size, and a module's Dokka site is a few MB.
+// Only the root publication carries it; every per-target publication gets an empty
+// javadoc jar, which Central accepts.
+subprojects {
+	pluginManager.withPlugin("org.jetbrains.kotlin.multiplatform") {
+		pluginManager.withPlugin("com.vanniktech.maven.publish") {
+			pluginManager.withPlugin("org.jetbrains.dokka") {
+				extensions.configure<MavenPublishBaseExtension> {
+					configure(
+						KotlinMultiplatform(
+							javadocJar = JavadocJar.None(),
+							sourcesJar = SourcesJar.Sources(),
+							androidVariantsToPublish = emptyList(),
+						)
+					)
+				}
+				val dokkaHtml = tasks.named("dokkaGeneratePublicationHtml")
+				extensions.configure<PublishingExtension> {
+					publications.withType<MavenPublication>().configureEach {
+						val publicationName = name
+						// One task per publication: signing rejects a jar shared between publications.
+						val javadocJar = tasks.register<Jar>("${publicationName}JavadocJar") {
+							archiveClassifier.set("javadoc")
+							destinationDirectory.set(layout.buildDirectory.dir("javadoc-jars/$publicationName"))
+							if (publicationName == "kotlinMultiplatform") from(dokkaHtml)
+						}
+						artifact(javadocJar)
+					}
+				}
+			}
+		}
 	}
 }
 
