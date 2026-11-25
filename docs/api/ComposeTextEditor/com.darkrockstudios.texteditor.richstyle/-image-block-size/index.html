@@ -93,33 +93,29 @@
   <div class="breadcrumbs"><a href="../../index.html">Editor</a><span class="delimiter">/</span><a href="../index.html">com.darkrockstudios.texteditor.richstyle</a><span class="delimiter">/</span><span class="current">ImageBlockSize</span></div>
   <div class="cover ">
     <h1 class="cover"><span>Image</span><wbr><span>Block</span><wbr><span><span>Size</span></span></h1>
-    <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">data </span><span class="token keyword">class </span><a href="index.html">ImageBlockSize</a><span class="token punctuation">(</span><span class="parameters "><span class="parameter "><span class="token keyword">val </span>maxWidth<span class="token operator">: </span><a href="../-image-length/index.html">ImageLength</a><span class="token operator"> = </span>ImageLength.Fraction(1f)<span class="token punctuation">, </span></span><span class="parameter "><span class="token keyword">val </span>maxHeight<span class="token operator">: </span><a href="../-image-length/index.html">ImageLength</a><span class="token operator">?</span><span class="token operator"> = </span>null<span class="token punctuation">, </span></span><span class="parameter "><span class="token keyword">val </span>upscale<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html">Boolean</a><span class="token operator"> = </span><span class="token boolean">false</span></span></span><span class="token punctuation">)</span><span class="source-link-wrapper"><span class="source-link" data-element-type="source-link">(<a href="https://github.com/Darkrock-Studios/ComposeTextEditor/blob/main/ComposeTextEditor/src/commonMain/kotlin/com/darkrockstudios/texteditor/richstyle/ImageBlockSize.kt#L44">source</a>)</span></span></div><p class="paragraph">The bounds an image block is drawn within. The image keeps its aspect ratio and is scaled down to fit <a href="max-width.html">maxWidth</a>, <a href="max-height.html">maxHeight</a> and the viewport's width; it is enlarged to them only with <a href="upscale.html">upscale</a>, and is otherwise drawn no larger than its bitmap.</p><p class="paragraph">The editor's bounds are <a href="../../com.darkrockstudios.texteditor/-text-editor-style/image-size.html">TextEditorStyle.imageSize</a>; an <a href="../-image-block-span-style/size.html">ImageBlockSpanStyle.size</a> replaces them for one image.</p></div></div>
+    <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">sealed </span><span class="token keyword">interface </span><a href="index.html">ImageBlockSize</a><span class="source-link-wrapper"><span class="source-link" data-element-type="source-link">(<a href="https://github.com/Darkrock-Studios/ComposeTextEditor/blob/main/ComposeTextEditor/src/commonMain/kotlin/com/darkrockstudios/texteditor/richstyle/ImageBlockSize.kt#L44">source</a>)</span></span></div><p class="paragraph">How an image block is sized: <a href="-bounded/index.html">Bounded</a> by limits it is fitted within, its height following the image, or <a href="-framed/index.html">Framed</a> in a fixed box. Either way the image keeps its aspect ratio and is enlarged only with <a href="upscale.html">upscale</a>, otherwise drawn no larger than its bitmap.</p><p class="paragraph">The editor's sizing is <a href="../../com.darkrockstudios.texteditor/-text-editor-style/image-size.html">TextEditorStyle.imageSize</a>; an <a href="../-image-block-span-style/size.html">ImageBlockSpanStyle.size</a> replaces it for one image.</p><h4 class="tableheader">Inheritors</h4><div class="table"><div class="table-row table-row_content" data-filterable-current=":ComposeTextEditor/commonMain" data-filterable-set=":ComposeTextEditor/commonMain"><div class="main-subrow keyValue "><div class=""><span class="inline-flex"><div><a href="-bounded/index.html">Bounded</a></div></span></div><div></div></div></div><div class="table-row table-row_content" data-filterable-current=":ComposeTextEditor/commonMain" data-filterable-set=":ComposeTextEditor/commonMain"><div class="main-subrow keyValue "><div class=""><span class="inline-flex"><div><a href="-framed/index.html">Framed</a></div></span></div><div></div></div></div></div></div></div>
   </div>
   <div class="tabbedcontent">
     <div class="tabs-section" tabs-section="tabs-section"><button class="section-tab" data-active="" data-togglable="CONSTRUCTOR,TYPE,PROPERTY,FUNCTION">Members</button></div>
     <div class="tabs-section-body">
-      <div data-togglable="CONSTRUCTOR">
-        <h2 class="tableheader">Constructors</h2>
-        <div class="table"><a data-name="-1410641507%2FConstructors%2F-556598459" anchor-label="ImageBlockSize" id="-1410641507%2FConstructors%2F-556598459" data-filterable-set=":ComposeTextEditor/commonMain"></a>
-          <div class="table-row table-row_content" data-togglable="CONSTRUCTOR" data-filterable-current=":ComposeTextEditor/commonMain" data-filterable-set=":ComposeTextEditor/commonMain">
+      <div data-togglable="TYPE">
+        <h2 class="tableheader">Types</h2>
+        <div class="table"><a data-name="738583930%2FClasslikes%2F-556598459" anchor-label="Bounded" id="738583930%2FClasslikes%2F-556598459" data-filterable-set=":ComposeTextEditor/commonMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":ComposeTextEditor/commonMain" data-filterable-set=":ComposeTextEditor/commonMain">
             <div class="main-subrow keyValue ">
               <div class=""><span class="inline-flex">
-                  <div><a href="-image-block-size.html"><span>Image</span><wbr><span>Block</span><wbr><span><span>Size</span></span></a></div>
-<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-1410641507%2FConstructors%2F-556598459"></span>
+                  <div><a href="-bounded/index.html"><span><span>Bounded</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="738583930%2FClasslikes%2F-556598459"></span>
                     <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
                   </span></span></div>
               <div>
                 <div class="title">
-                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">constructor</span><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">maxWidth<span class="token operator">: </span><a href="../-image-length/index.html">ImageLength</a><span class="token operator"> = </span>ImageLength.Fraction(1f)<span class="token punctuation">, </span></span><span class="parameter ">maxHeight<span class="token operator">: </span><a href="../-image-length/index.html">ImageLength</a><span class="token operator">?</span><span class="token operator"> = </span>null<span class="token punctuation">, </span></span><span class="parameter ">upscale<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html">Boolean</a><span class="token operator"> = </span><span class="token boolean">false</span></span></span><span class="token punctuation">)</span></div></div></div>
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">data </span><span class="token keyword">class </span><a href="-bounded/index.html">Bounded</a><span class="token punctuation">(</span><span class="parameters "><span class="parameter "><span class="token keyword">val </span>maxWidth<span class="token operator">: </span><a href="../-image-length/index.html">ImageLength</a><span class="token operator"> = </span>ImageLength.Fraction(1f)<span class="token punctuation">, </span></span><span class="parameter "><span class="token keyword">val </span>maxHeight<span class="token operator">: </span><a href="../-image-length/index.html">ImageLength</a><span class="token operator">?</span><span class="token operator"> = </span>null<span class="token punctuation">, </span></span><span class="parameter "><span class="token keyword">val </span>upscale<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html">Boolean</a><span class="token operator"> = </span><span class="token boolean">false</span></span></span><span class="token punctuation">)</span> : <a href="index.html">ImageBlockSize</a></div><div class="brief "><p class="paragraph">The image is fitted within <a href="-bounded/max-width.html">maxWidth</a>, <a href="-bounded/max-height.html">maxHeight</a> and the viewport's width.</p></div></div></div>
                 </div>
               </div>
             </div>
           </div>
-        </div>
-      </div>
-      <div data-togglable="TYPE">
-        <h2 class="tableheader">Types</h2>
-        <div class="table"><a data-name="70562411%2FClasslikes%2F-556598459" anchor-label="Companion" id="70562411%2FClasslikes%2F-556598459" data-filterable-set=":ComposeTextEditor/commonMain"></a>
+<a data-name="70562411%2FClasslikes%2F-556598459" anchor-label="Companion" id="70562411%2FClasslikes%2F-556598459" data-filterable-set=":ComposeTextEditor/commonMain"></a>
           <div class="table-row table-row_content" data-filterable-current=":ComposeTextEditor/commonMain" data-filterable-set=":ComposeTextEditor/commonMain">
             <div class="main-subrow keyValue ">
               <div class=""><span class="inline-flex">
@@ -134,41 +130,26 @@
               </div>
             </div>
           </div>
+<a data-name="-1222695564%2FClasslikes%2F-556598459" anchor-label="Framed" id="-1222695564%2FClasslikes%2F-556598459" data-filterable-set=":ComposeTextEditor/commonMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":ComposeTextEditor/commonMain" data-filterable-set=":ComposeTextEditor/commonMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="-framed/index.html"><span><span>Framed</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-1222695564%2FClasslikes%2F-556598459"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">data </span><span class="token keyword">class </span><a href="-framed/index.html">Framed</a><span class="token punctuation">(</span><span class="parameters "><span class="parameter "><span class="token keyword">val </span>height<span class="token operator">: </span><a href="../-image-length/index.html">ImageLength</a><span class="token punctuation">, </span></span><span class="parameter "><span class="token keyword">val </span>width<span class="token operator">: </span><a href="../-image-length/index.html">ImageLength</a><span class="token operator"> = </span>ImageLength.Fraction(1f)<span class="token punctuation">, </span></span><span class="parameter "><span class="token keyword">val </span>upscale<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html">Boolean</a><span class="token operator"> = </span><span class="token boolean">false</span></span></span><span class="token punctuation">)</span> : <a href="index.html">ImageBlockSize</a></div><div class="brief "><p class="paragraph">A fixed box <a href="-framed/height.html">height</a> tall and <a href="-framed/width.html">width</a> wide, no wider than the viewport, which the block takes whether its image is loading, loaded or failed. The image is fitted inside it and centred. A height <a href="../-image-length/-fraction/index.html">ImageLength.Fraction</a> in a view with no bounded height leaves the block unframed, its image fitted to <a href="-framed/width.html">width</a> alone.</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
       <div data-togglable="PROPERTY">
         <h2 class="tableheader">Properties</h2>
-        <div class="table"><a data-name="578404313%2FProperties%2F-556598459" anchor-label="maxHeight" id="578404313%2FProperties%2F-556598459" data-filterable-set=":ComposeTextEditor/commonMain"></a>
-          <div class="table-row table-row_content" data-filterable-current=":ComposeTextEditor/commonMain" data-filterable-set=":ComposeTextEditor/commonMain">
-            <div class="main-subrow keyValue ">
-              <div class=""><span class="inline-flex">
-                  <div><a href="max-height.html"><span>max</span><wbr><span><span>Height</span></span></a></div>
-<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="578404313%2FProperties%2F-556598459"></span>
-                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
-                  </span></span></div>
-              <div>
-                <div class="title">
-                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">val </span><a href="max-height.html">maxHeight</a><span class="token operator">: </span><a href="../-image-length/index.html">ImageLength</a><span class="token operator">?</span></div></div></div>
-                </div>
-              </div>
-            </div>
-          </div>
-<a data-name="-80280332%2FProperties%2F-556598459" anchor-label="maxWidth" id="-80280332%2FProperties%2F-556598459" data-filterable-set=":ComposeTextEditor/commonMain"></a>
-          <div class="table-row table-row_content" data-filterable-current=":ComposeTextEditor/commonMain" data-filterable-set=":ComposeTextEditor/commonMain">
-            <div class="main-subrow keyValue ">
-              <div class=""><span class="inline-flex">
-                  <div><a href="max-width.html"><span>max</span><wbr><span><span>Width</span></span></a></div>
-<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-80280332%2FProperties%2F-556598459"></span>
-                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
-                  </span></span></div>
-              <div>
-                <div class="title">
-                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">val </span><a href="max-width.html">maxWidth</a><span class="token operator">: </span><a href="../-image-length/index.html">ImageLength</a></div></div></div>
-                </div>
-              </div>
-            </div>
-          </div>
-<a data-name="153483829%2FProperties%2F-556598459" anchor-label="upscale" id="153483829%2FProperties%2F-556598459" data-filterable-set=":ComposeTextEditor/commonMain"></a>
+        <div class="table"><a data-name="153483829%2FProperties%2F-556598459" anchor-label="upscale" id="153483829%2FProperties%2F-556598459" data-filterable-set=":ComposeTextEditor/commonMain"></a>
           <div class="table-row table-row_content" data-filterable-current=":ComposeTextEditor/commonMain" data-filterable-set=":ComposeTextEditor/commonMain">
             <div class="main-subrow keyValue ">
               <div class=""><span class="inline-flex">
@@ -178,7 +159,7 @@
                   </span></span></div>
               <div>
                 <div class="title">
-                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">val </span><a href="upscale.html">upscale</a><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html">Boolean</a></div></div></div>
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">abstract </span><span class="token keyword">val </span><a href="upscale.html">upscale</a><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html">Boolean</a></div></div></div>
                 </div>
               </div>
             </div>
@@ -197,7 +178,22 @@
                   </span></span></div>
               <div>
                 <div class="title">
-                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">fun </span><a href="fit.html"><span class="token function">fit</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">imageWidth<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-float/index.html">Float</a><span class="token punctuation">, </span></span><span class="parameter ">imageHeight<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-float/index.html">Float</a><span class="token punctuation">, </span></span><span class="parameter ">viewport<span class="token operator">: </span><a href="https://developer.android.com/reference/kotlin/androidx/compose/ui/geometry/Size.html">Size</a><span class="token punctuation">, </span></span><span class="parameter ">density<span class="token operator">: </span><a href="https://developer.android.com/reference/kotlin/androidx/compose/ui/unit/Density.html">Density</a></span></span><span class="token punctuation">)</span><span class="token operator">: </span><a href="https://developer.android.com/reference/kotlin/androidx/compose/ui/geometry/Size.html">Size</a></div><div class="brief "><p class="paragraph">The size an image of <a href="fit.html">imageWidth</a> by <a href="fit.html">imageHeight</a> pixels is drawn at in a viewport of <a href="fit.html">viewport</a> pixels.</p></div></div></div>
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">fun </span><a href="fit.html"><span class="token function">fit</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">imageWidth<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-float/index.html">Float</a><span class="token punctuation">, </span></span><span class="parameter ">imageHeight<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-float/index.html">Float</a><span class="token punctuation">, </span></span><span class="parameter ">viewport<span class="token operator">: </span><a href="https://developer.android.com/reference/kotlin/androidx/compose/ui/geometry/Size.html">Size</a><span class="token punctuation">, </span></span><span class="parameter ">density<span class="token operator">: </span><a href="https://developer.android.com/reference/kotlin/androidx/compose/ui/unit/Density.html">Density</a></span></span><span class="token punctuation">)</span><span class="token operator">: </span><a href="https://developer.android.com/reference/kotlin/androidx/compose/ui/geometry/Size.html">Size</a></div><div class="brief "><p class="paragraph">The size an image of <a href="fit.html">imageWidth</a> by <a href="fit.html">imageHeight</a> pixels is drawn at in a viewport of <a href="fit.html">viewport</a> pixels.</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="951882912%2FFunctions%2F-556598459" anchor-label="frameSize" id="951882912%2FFunctions%2F-556598459" data-filterable-set=":ComposeTextEditor/commonMain"></a>
+          <div class="table-row table-row_content" data-filterable-current=":ComposeTextEditor/commonMain" data-filterable-set=":ComposeTextEditor/commonMain">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="frame-size.html"><span>frame</span><wbr><span><span>Size</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="951882912%2FFunctions%2F-556598459"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":ComposeTextEditor/commonMain"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">fun </span><a href="frame-size.html"><span class="token function">frameSize</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">viewport<span class="token operator">: </span><a href="https://developer.android.com/reference/kotlin/androidx/compose/ui/geometry/Size.html">Size</a><span class="token punctuation">, </span></span><span class="parameter ">density<span class="token operator">: </span><a href="https://developer.android.com/reference/kotlin/androidx/compose/ui/unit/Density.html">Density</a></span></span><span class="token punctuation">)</span><span class="token operator">: </span><a href="https://developer.android.com/reference/kotlin/androidx/compose/ui/geometry/Size.html">Size</a><span class="token operator">?</span></div><div class="brief "><p class="paragraph">The box the block takes in a viewport of <a href="frame-size.html">viewport</a> pixels, or null when it has none.</p></div></div></div>
                 </div>
               </div>
             </div>
