@@ -1,29 +1,44 @@
 package e2e
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.pointer.isCtrlPressed
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.v2.runSkikoComposeUiTest
 import com.darkrockstudios.texteditor.CharLineOffset
 import com.darkrockstudios.texteditor.EditorLineLimits
 import com.darkrockstudios.texteditor.RichSpanClick
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.contextmenu.ContextMenuStrings
+import com.darkrockstudios.texteditor.contextmenu.TextEditorContextMenuState
 import com.darkrockstudios.texteditor.input.MacKeyBindings
 import com.darkrockstudios.texteditor.richstyle.HighlightSpanStyle
 import com.darkrockstudios.texteditor.richstyle.LinkSpanStyle
 import com.darkrockstudios.texteditor.spellcheck.SpellCheckMode
+import com.darkrockstudios.texteditor.spellcheck.SpellCheckStrings
+import com.darkrockstudios.texteditor.spellcheck.SpellCheckingTextEditor
 import com.darkrockstudios.texteditor.spellcheck.api.Correction
 import com.darkrockstudios.texteditor.spellcheck.api.Suggestion
 import com.darkrockstudios.texteditor.spellcheck.diagnostics.LineCheck
 import com.darkrockstudios.texteditor.spellcheck.diagnostics.LineDiagnostic
 import com.darkrockstudios.texteditor.spellcheck.diagnostics.TextDiagnosticsChecker
 import com.darkrockstudios.texteditor.state.SpanClickType
+import com.darkrockstudios.texteditor.state.TextEditorState
 import utils.CountingSpellChecker
+import utils.GatedSuggestions
+import utils.setScanningContent
 import utils.spellCheckUiTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 /** The editor parameters [com.darkrockstudios.texteditor.spellcheck.SpellCheckingTextEditor] passes on. */
@@ -273,5 +288,116 @@ class SpellCheckEditorParametersE2eTest {
 	fun `a read-only editor shows a diagnostic's message but not its fixes`() {
 		diagnosticMenu(readOnly = false) { assertTrue(it) }
 		diagnosticMenu(readOnly = true) { assertFalse(it) }
+	}
+
+	// --- a host's context menu state ----------------------------------------------
+
+	private val misspelled = "fine brokenword fine"
+	private fun suggesting() = CountingSpellChecker(correctWords = setOf("fine"), suggestions = listOf("brokenwork"))
+
+	@Test
+	fun `a host's menu state sees the spell check menu open and can close it`() {
+		val menu = TextEditorContextMenuState()
+		spellCheckUiTest(spellChecker = suggesting(), initialText = misspelled, contextMenuState = menu) {
+			assertFalse(menu.isVisible)
+
+			rightClickAtCharacter(7)
+			awaitMenuItem("brokenwork")
+			assertTrue(menu.isVisible)
+
+			test.runOnIdle { menu.dismissMenu() }
+			test.waitForIdle()
+			assertFalse(menu.isVisible)
+			assertFalse(hasMenuItem("brokenwork"))
+			assertFalse(hasMenuItem("Ignore"))
+		}
+	}
+
+	@Test
+	fun `shift+f10 fills a host's menu state with suggestions`() {
+		val menu = TextEditorContextMenuState()
+		spellCheckUiTest(spellChecker = suggesting(), initialText = misspelled, contextMenuState = menu) {
+			state.textState.cursor.updatePosition(CharLineOffset(0, 7))
+			press(Key.F10, shift = true)
+
+			awaitMenuItem("brokenwork")
+			assertTrue(menu.isVisible)
+		}
+	}
+
+	@Test
+	fun `suggestions that arrive after a host closed the menu do not reopen it`() {
+		val menu = TextEditorContextMenuState()
+		val checker = GatedSuggestions(suggesting())
+		spellCheckUiTest(spellChecker = checker, initialText = misspelled, contextMenuState = menu) {
+			rightClickAtCharacter(7)
+			awaitMenuItem(SpellCheckStrings.Default.loading)
+
+			test.runOnIdle { menu.dismissMenu() }
+			checker.release()
+			test.waitForIdle()
+
+			assertFalse(menu.isVisible)
+			assertFalse(hasMenuItem("brokenwork"))
+		}
+	}
+
+	@Test
+	fun `an editor leaving composition closes the menu on a host's state`() = runSkikoComposeUiTest {
+		val menu = TextEditorContextMenuState()
+		var shown by mutableStateOf(true)
+		val checker = suggesting()
+		setScanningContent {
+			if (shown) SpellCheckingTextEditor(spellChecker = checker, contextMenuState = menu)
+		}
+		waitForIdle()
+		assertNotNull(menu.onOpenedAtCaret)
+		runOnIdle { menu.showMenu(Offset(1f, 1f)) }
+		waitForIdle()
+
+		shown = false
+		waitForIdle()
+
+		assertFalse(menu.isVisible)
+		assertNull(menu.onOpenedAtCaret)
+	}
+
+	@Test
+	fun `a state the editor is no longer given is closed and released`() = runSkikoComposeUiTest {
+		val first = TextEditorContextMenuState()
+		val second = TextEditorContextMenuState()
+		var menu by mutableStateOf(first)
+		val checker = suggesting()
+		setScanningContent {
+			SpellCheckingTextEditor(spellChecker = checker, contextMenuState = menu)
+		}
+		waitForIdle()
+		runOnIdle { first.showMenu(Offset(1f, 1f)) }
+		waitForIdle()
+
+		menu = second
+		waitForIdle()
+
+		assertFalse(first.isVisible)
+		assertNull(first.onOpenedAtCaret)
+		assertNotNull(second.onOpenedAtCaret)
+	}
+
+	@Test
+	fun `an editor leaving composition keeps a caret handler the host set since`() = runSkikoComposeUiTest {
+		val menu = TextEditorContextMenuState()
+		val hostHandler: (TextEditorState) -> Unit = {}
+		var shown by mutableStateOf(true)
+		val checker = suggesting()
+		setScanningContent {
+			if (shown) SpellCheckingTextEditor(spellChecker = checker, contextMenuState = menu)
+		}
+		waitForIdle()
+		runOnIdle { menu.onOpenedAtCaret = hostHandler }
+
+		shown = false
+		waitForIdle()
+
+		assertSame(hostHandler, menu.onOpenedAtCaret)
 	}
 }

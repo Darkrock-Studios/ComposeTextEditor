@@ -26,6 +26,7 @@ import com.darkrockstudios.texteditor.state.DocumentSnapshot
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.delay
 import utils.CountingSpellChecker
+import utils.GatedSuggestions
 import utils.setScanningContent
 import utils.spellCheckUiTest
 import kotlin.test.Test
@@ -436,27 +437,6 @@ class SpellCheckE2eTest {
 	// --- suggestion lookup ----------------------------------------------------
 
 	private val loading = "Loading..."
-
-	/**
-	 * Holds suggestion lookups until [release], the way a platform checker answers only after
-	 * the right-click that asked has been fully handled.
-	 */
-	private class GatedSuggestions(private val delegate: EditorSpellChecker) : EditorSpellChecker by delegate {
-		private val gate = CompletableDeferred<Unit>()
-
-		fun release() {
-			gate.complete(Unit)
-		}
-
-		override suspend fun suggestions(
-			input: String,
-			scope: EditorSpellChecker.Scope,
-			closestOnly: Boolean,
-		): List<Suggestion> {
-			gate.await()
-			return delegate.suggestions(input, scope, closestOnly)
-		}
-	}
 
 	@Test
 	fun `suggestions that arrive after the click replace the placeholder in place`() {

@@ -81,6 +81,11 @@ private val DefaultContentPadding = PaddingValues(start = 8.dp)
  * @param style The [TextEditorStyle] controlling appearance.
  * @param contextMenuStrings Localized strings for the built-in context menu.
  * @param spellCheckStrings Localized strings for the spell check menu.
+ * @param contextMenuState Drives the context menu, spell check suggestions included; pass your
+ *   own to watch [TextEditorContextMenuState.isVisible] or close it with
+ *   [TextEditorContextMenuState.dismissMenu], or leave `null` for the default. One state per
+ *   editor: this editor sets its [TextEditorContextMenuState.onOpenedAtCaret] while composed,
+ *   and dismisses its menu when it leaves composition or is given another state.
  * @param onAddToDictionary Adds a word to the host's dictionary. When set, the menu on a flagged
  *   word offers "Add to dictionary", which calls this and stops flagging the word for the session,
  *   so it clears at once however the host's dictionary reaches the checker. It receives the word
@@ -117,6 +122,7 @@ fun SpellCheckingTextEditor(
 	style: TextEditorStyle = rememberTextEditorStyle(),
 	contextMenuStrings: ContextMenuStrings = ContextMenuStrings.Default,
 	spellCheckStrings: SpellCheckStrings = SpellCheckStrings.Default,
+	contextMenuState: TextEditorContextMenuState? = null,
 	onAddToDictionary: ((String) -> Unit)? = null,
 	spellCheckMenuItems: (SpellCheckItem) -> List<ContextMenuItem> = { emptyList() },
 	diagnostics: TextDiagnosticsState? = null,
@@ -133,7 +139,8 @@ fun SpellCheckingTextEditor(
 	// an item is picked too, since a menu can outlive the editability it opened with.
 	val editable = enabled && !readOnly
 	val canEdit by rememberUpdatedState(editable)
-	val contextMenuState = remember { TextEditorContextMenuState() }
+	val internalContextMenuState = remember { TextEditorContextMenuState() }
+	val effectiveContextMenuState = contextMenuState ?: internalContextMenuState
 	val wordVisibilityBuffer = dpToPx(35.dp)
 
 	// Below the click, which is in the text's coordinates, so the menu leaves the word in view.
@@ -259,9 +266,9 @@ fun SpellCheckingTextEditor(
 					val suggestions = state.getSuggestions(spellCheckItem.segment.text)
 					// Dismissed, or showing other items, while the lookup ran. The position is read
 					// back: the editor re-anchors a right-click's menu to the pointer after the click.
-					val position = contextMenuState.menuPosition.value
-					if (position == null || contextMenuState.extraItems.value !== placeholder) return@launch
-					contextMenuState.showMenu(
+					val position = effectiveContextMenuState.menuPosition.value
+					if (position == null || effectiveContextMenuState.extraItems.value !== placeholder) return@launch
+					effectiveContextMenuState.showMenu(
 						position,
 						if (canEdit) createSpellSuggestionItems(spellCheckItem, suggestions) else emptyList(),
 						hostItems,
@@ -305,7 +312,7 @@ fun SpellCheckingTextEditor(
 	// Shift+F10, the Menu key and accessibility services open the menu below the caret; a
 	// flag there fills it with its own items. A selection must lie within the flag.
 	val fillMenuAtCaret by rememberUpdatedState { text: TextEditorState ->
-		val position = contextMenuState.menuPosition.value
+		val position = effectiveContextMenuState.menuPosition.value
 		if (position != null) {
 			cancelSuggestions()
 			val selection = text.selector.selection
@@ -314,12 +321,18 @@ fun SpellCheckingTextEditor(
 					selection == null ||
 						(flag.range.start isBeforeOrEqual selection.start && flag.range.end isAfterOrEqual selection.end)
 				}
-				.any { flag -> showFlagMenu(flag) { items, trailing -> contextMenuState.showMenu(position, items, trailing) } }
+				.any { flag -> showFlagMenu(flag) { items, trailing -> effectiveContextMenuState.showMenu(position, items, trailing) } }
 		}
 	}
-	DisposableEffect(contextMenuState) {
-		contextMenuState.onOpenedAtCaret = { text -> fillMenuAtCaret(text) }
-		onDispose { contextMenuState.onOpenedAtCaret = null }
+	DisposableEffect(effectiveContextMenuState) {
+		val openedAtCaret: (TextEditorState) -> Unit = { text -> fillMenuAtCaret(text) }
+		effectiveContextMenuState.onOpenedAtCaret = openedAtCaret
+		onDispose {
+			// A host's state can outlive this editor: leave no menu open that nothing shows.
+			cancelSuggestions()
+			effectiveContextMenuState.dismissMenu()
+			if (effectiveContextMenuState.onOpenedAtCaret === openedAtCaret) effectiveContextMenuState.onOpenedAtCaret = null
+		}
 	}
 
 	fun onSpanClick(click: RichSpanClick): Boolean {
@@ -337,7 +350,7 @@ fun SpellCheckingTextEditor(
 
 		// A host span, such as a link, wins the hit test over a squiggle under it.
 		val flags = if (hostSpan) state.textState.flagsAt(state.textState.getOffsetAtPosition(offset)) else listOf(span)
-		val show: ShowMenu = { items, trailing -> contextMenuState.showMenuAtText(below(offset), items, trailing) }
+		val show: ShowMenu = { items, trailing -> effectiveContextMenuState.showMenuAtText(below(offset), items, trailing) }
 		if (flags.any { showFlagMenu(it, show) }) return true
 		// A right-click always offers a menu, falling back to the standard one. A tap only
 		// opens one on a flag: tapping a correctly spelled word means "put the caret here",
@@ -358,7 +371,7 @@ fun SpellCheckingTextEditor(
 			autoFocus = autoFocus,
 			style = style,
 			contextMenuStrings = contextMenuStrings,
-			contextMenuState = contextMenuState,
+			contextMenuState = effectiveContextMenuState,
 			// A lambda, not ::onSpanClick: references to a local function are equal across recompositions,
 			// so the editor would keep the first one and the parameters it captured.
 			onRichSpanClickEvent = { onSpanClick(it) },

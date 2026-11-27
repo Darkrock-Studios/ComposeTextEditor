@@ -34,6 +34,7 @@ import com.darkrockstudios.texteditor.RichSpanClickEventListener
 import com.darkrockstudios.texteditor.RichSpanClickListener
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.contextmenu.ContextMenuItem
+import com.darkrockstudios.texteditor.contextmenu.TextEditorContextMenuState
 import com.darkrockstudios.texteditor.input.CtrlKeyBindings
 import com.darkrockstudios.texteditor.input.KeyBindings
 import com.darkrockstudios.texteditor.rememberTextEditorStyle
@@ -53,6 +54,7 @@ import com.darkrockstudios.texteditor.spellcheck.diagnostics.TextDiagnosticsChec
 import com.darkrockstudios.texteditor.spellcheck.diagnostics.TextDiagnosticsState
 import com.darkrockstudios.texteditor.spellcheck.diagnostics.rememberTextDiagnosticsState
 import com.darkrockstudios.texteditor.spellcheck.rememberSpellCheckState
+import kotlinx.coroutines.CompletableDeferred
 import kotlin.coroutines.EmptyCoroutineContext
 
 /**
@@ -86,6 +88,7 @@ fun spellCheckUiTest(
 	contentDescription: String? = null,
 	contentPadding: PaddingValues = PaddingValues(0.dp),
 	textStyle: TextStyle = TextStyle.Default,
+	contextMenuState: TextEditorContextMenuState? = null,
 	block: SpellCheckUiTestScope.() -> Unit,
 ) = runSkikoComposeUiTest {
 	lateinit var state: SpellCheckState
@@ -110,6 +113,7 @@ fun spellCheckUiTest(
 			autoFocus = true,
 			spellCheckMenuItems = spellCheckMenuItems,
 			spellCheckStrings = spellCheckStrings,
+			contextMenuState = contextMenuState,
 			onAddToDictionary = onAddToDictionary,
 			diagnostics = diagnostics,
 			onRichSpanClick = onRichSpanClick,
@@ -281,4 +285,25 @@ class CountingSpellChecker(
 		sentence: String,
 		sentenceRange: TextEditorRange,
 	): List<Correction> = sentenceCorrections(sentence, sentenceRange)
+}
+
+/**
+ * Holds suggestion lookups until [release], the way a platform checker answers only after
+ * the right-click that asked has been fully handled.
+ */
+class GatedSuggestions(private val delegate: EditorSpellChecker) : EditorSpellChecker by delegate {
+	private val gate = CompletableDeferred<Unit>()
+
+	fun release() {
+		gate.complete(Unit)
+	}
+
+	override suspend fun suggestions(
+		input: String,
+		scope: EditorSpellChecker.Scope,
+		closestOnly: Boolean,
+	): List<Suggestion> {
+		gate.await()
+		return delegate.suggestions(input, scope, closestOnly)
+	}
 }
