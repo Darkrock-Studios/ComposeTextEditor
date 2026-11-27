@@ -319,3 +319,14 @@ bounds.copy(upscale = true)
 ```
 
 Code compiled against 3.5 must be recompiled.
+
+## A host's spell check menu state
+
+In 3.6.0, `SpellCheckingTextEditor` takes an optional `contextMenuState`, as `BasicTextEditor`
+and `TextEditor` do. Pass one to see when the spell check menu is open
+(`isVisible`) or close it (`dismissMenu()`), for example to give Esc to the menu
+before a host's own Esc handling. Use one state per editor; the editor dismisses its
+menu when it leaves composition.
+
+Source that names its arguments is unchanged. Code compiled against 3.5 that calls
+`SpellCheckingTextEditor` must be recompiled.

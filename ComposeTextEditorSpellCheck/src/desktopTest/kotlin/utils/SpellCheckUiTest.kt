@@ -54,6 +54,7 @@ import com.darkrockstudios.texteditor.spellcheck.diagnostics.TextDiagnosticsChec
 import com.darkrockstudios.texteditor.spellcheck.diagnostics.TextDiagnosticsState
 import com.darkrockstudios.texteditor.spellcheck.diagnostics.rememberTextDiagnosticsState
 import com.darkrockstudios.texteditor.spellcheck.rememberSpellCheckState
+import kotlinx.coroutines.CompletableDeferred
 import kotlin.coroutines.EmptyCoroutineContext
 
 /**
@@ -284,4 +285,25 @@ class CountingSpellChecker(
 		sentence: String,
 		sentenceRange: TextEditorRange,
 	): List<Correction> = sentenceCorrections(sentence, sentenceRange)
+}
+
+/**
+ * Holds suggestion lookups until [release], the way a platform checker answers only after
+ * the right-click that asked has been fully handled.
+ */
+class GatedSuggestions(private val delegate: EditorSpellChecker) : EditorSpellChecker by delegate {
+	private val gate = CompletableDeferred<Unit>()
+
+	fun release() {
+		gate.complete(Unit)
+	}
+
+	override suspend fun suggestions(
+		input: String,
+		scope: EditorSpellChecker.Scope,
+		closestOnly: Boolean,
+	): List<Suggestion> {
+		gate.await()
+		return delegate.suggestions(input, scope, closestOnly)
+	}
 }
