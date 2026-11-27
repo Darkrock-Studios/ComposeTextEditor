@@ -55,7 +55,14 @@ jobs:
           Xvfb :99 -screen 0 1280x800x24 &
           for _ in $(seq 50); do xdotool getdisplaygeometry >/dev/null 2>&1 && break; sleep 0.2; done
           openbox &
-          setxkbmap -layout us -variant intl
+          # The server can compile its default keymap again after the first clients
+          # connect, undoing an early setxkbmap, so set the layout until it holds.
+          for _ in $(seq 10); do
+            sleep 1
+            setxkbmap -layout us -variant intl
+            sleep 1
+            setxkbmap -query | grep -q '^variant: *intl$' && break
+          done
           setxkbmap -query
       - name: Open the probe and type into it
         run: testUtils/osInput/drive.sh "$RUNNER_TEMP/os-input"
