@@ -9,6 +9,7 @@ import com.darkrockstudios.texteditor.EditorLineLimits
 import com.darkrockstudios.texteditor.RichSpanClick
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.contextmenu.ContextMenuStrings
+import com.darkrockstudios.texteditor.contextmenu.TextEditorContextMenuState
 import com.darkrockstudios.texteditor.input.MacKeyBindings
 import com.darkrockstudios.texteditor.richstyle.HighlightSpanStyle
 import com.darkrockstudios.texteditor.richstyle.LinkSpanStyle
@@ -273,5 +274,25 @@ class SpellCheckEditorParametersE2eTest {
 	fun `a read-only editor shows a diagnostic's message but not its fixes`() {
 		diagnosticMenu(readOnly = false) { assertTrue(it) }
 		diagnosticMenu(readOnly = true) { assertFalse(it) }
+	}
+
+	@Test
+	fun `a host's menu state sees the spell check menu open and can close it`() {
+		val menu = TextEditorContextMenuState()
+		spellCheckUiTest(
+			spellChecker = CountingSpellChecker(correctWords = setOf("fine"), suggestions = listOf("brokenwork")),
+			initialText = "fine brokenword fine",
+			contextMenuState = menu,
+		) {
+			assertFalse(menu.isVisible)
+
+			rightClickAtCharacter(7)
+			awaitMenuItem("brokenwork")
+			assertTrue(menu.isVisible)
+
+			test.runOnIdle { menu.dismissMenu() }
+			test.waitForIdle()
+			assertFalse(hasMenuItem("brokenwork"))
+		}
 	}
 }

@@ -34,6 +34,7 @@ import com.darkrockstudios.texteditor.RichSpanClickEventListener
 import com.darkrockstudios.texteditor.RichSpanClickListener
 import com.darkrockstudios.texteditor.TextEditorRange
 import com.darkrockstudios.texteditor.contextmenu.ContextMenuItem
+import com.darkrockstudios.texteditor.contextmenu.TextEditorContextMenuState
 import com.darkrockstudios.texteditor.input.CtrlKeyBindings
 import com.darkrockstudios.texteditor.input.KeyBindings
 import com.darkrockstudios.texteditor.rememberTextEditorStyle
@@ -86,6 +87,7 @@ fun spellCheckUiTest(
 	contentDescription: String? = null,
 	contentPadding: PaddingValues = PaddingValues(0.dp),
 	textStyle: TextStyle = TextStyle.Default,
+	contextMenuState: TextEditorContextMenuState? = null,
 	block: SpellCheckUiTestScope.() -> Unit,
 ) = runSkikoComposeUiTest {
 	lateinit var state: SpellCheckState
@@ -110,6 +112,7 @@ fun spellCheckUiTest(
 			autoFocus = true,
 			spellCheckMenuItems = spellCheckMenuItems,
 			spellCheckStrings = spellCheckStrings,
+			contextMenuState = contextMenuState,
 			onAddToDictionary = onAddToDictionary,
 			diagnostics = diagnostics,
 			onRichSpanClick = onRichSpanClick,

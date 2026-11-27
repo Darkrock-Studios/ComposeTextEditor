@@ -81,6 +81,10 @@ private val DefaultContentPadding = PaddingValues(start = 8.dp)
  * @param style The [TextEditorStyle] controlling appearance.
  * @param contextMenuStrings Localized strings for the built-in context menu.
  * @param spellCheckStrings Localized strings for the spell check menu.
+ * @param contextMenuState Drives the context menu, spell check suggestions included; pass your
+ *   own to watch [TextEditorContextMenuState.isVisible] or close it with
+ *   [TextEditorContextMenuState.dismissMenu], or leave `null` for the default. This editor
+ *   sets its [TextEditorContextMenuState.onOpenedAtCaret] while composed.
  * @param onAddToDictionary Adds a word to the host's dictionary. When set, the menu on a flagged
  *   word offers "Add to dictionary", which calls this and stops flagging the word for the session,
  *   so it clears at once however the host's dictionary reaches the checker. It receives the word
@@ -117,6 +121,7 @@ fun SpellCheckingTextEditor(
 	style: TextEditorStyle = rememberTextEditorStyle(),
 	contextMenuStrings: ContextMenuStrings = ContextMenuStrings.Default,
 	spellCheckStrings: SpellCheckStrings = SpellCheckStrings.Default,
+	contextMenuState: TextEditorContextMenuState? = null,
 	onAddToDictionary: ((String) -> Unit)? = null,
 	spellCheckMenuItems: (SpellCheckItem) -> List<ContextMenuItem> = { emptyList() },
 	diagnostics: TextDiagnosticsState? = null,
@@ -133,7 +138,8 @@ fun SpellCheckingTextEditor(
 	// an item is picked too, since a menu can outlive the editability it opened with.
 	val editable = enabled && !readOnly
 	val canEdit by rememberUpdatedState(editable)
-	val contextMenuState = remember { TextEditorContextMenuState() }
+	val internalContextMenuState = remember { TextEditorContextMenuState() }
+	val contextMenuState = contextMenuState ?: internalContextMenuState
 	val wordVisibilityBuffer = dpToPx(35.dp)
 
 	// Below the click, which is in the text's coordinates, so the menu leaves the word in view.
